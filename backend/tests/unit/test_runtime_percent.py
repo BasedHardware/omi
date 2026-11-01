@@ -140,9 +140,96 @@ def test_nesting_clamped_at_read_time(reader):
 def test_legacy_sync_mode_and_staging_identity(reader, monkeypatch):
     outcomes, _ = reader
     monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
-    outcomes.append(ramp_doc(env='staging', legacy_sync='draining'))
+    outcomes.append(
+        ramp_doc(env='staging', legacy_sync='draining', percents={'legacy-sync': 100, 'batch-pipeline': 100})
+    )
     assert rp.legacy_sync_mode() == 'draining'
     assert rp.ramp_snapshot().env == 'staging'
+
+
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize('percent', range(101))
+def test_legacy_retirement_uses_the_deployed_batch_bucket(reader, monkeypatch, mode, percent):
+    outcomes, _ = reader
+    outcomes.append(ramp_doc(legacy_sync=mode, percents={'legacy-sync': percent, 'batch-pipeline': 100}))
+    for bucket in range(100):
+        monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt, bucket=bucket: bucket)
+        expected = mode if bucket < percent else 'on'
+        assert rp.legacy_sync_mode('synthetic-owner') == expected
+    assert rp.legacy_sync_mode() == (mode if percent == 100 else 'on')
+
+
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+def test_missing_retirement_scope_and_invalid_owner_keep_legacy_on(reader, mode):
+    outcomes, _ = reader
+    outcomes.append(ramp_doc(legacy_sync=mode))
+    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    outcomes[0] = ramp_doc(legacy_sync=mode, percents={'legacy-sync': 100, 'batch-pipeline': 100})
+    rp._cache.invalidate()
+    assert rp.legacy_sync_mode('') == 'on'
+    assert rp.legacy_sync_mode('_ramp') == 'on'
+
+
+def test_one_mode_write_rolls_every_bucket_back_without_changing_percent(reader, clock, monkeypatch):
+    outcomes, _ = reader
+    outcomes.extend(
+        [
+            ramp_doc(legacy_sync='dark', percents={'legacy-sync': 100, 'batch-pipeline': 100}),
+            ramp_doc(revision=4, legacy_sync='on', percents={'legacy-sync': 100, 'batch-pipeline': 100}),
+        ]
+    )
+    assert rp.legacy_sync_mode('synthetic-owner') == 'dark'
+    clock[0] += 31
+    for bucket in range(100):
+        monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt, bucket=bucket: bucket)
+        assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+
+
+def test_legacy_retirement_read_error_serves_on_even_with_a_dark_lkg(reader, clock, monkeypatch):
+    outcomes, _ = reader
+    monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt: 0)
+    outcomes.extend(
+        [
+            ramp_doc(legacy_sync='dark', percents={'legacy-sync': 100, 'batch-pipeline': 25}),
+            RuntimeError('synthetic read failure'),
+        ]
+    )
+    assert rp.legacy_sync_mode('synthetic-owner') == 'dark'
+    clock[0] += 31
+    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    assert rp.runtime_percent('batch-pipeline', env_default=100) == 25
+
+
+@pytest.mark.parametrize('batch_percent,legacy_percent', [(0, 0), (5, 5), (25, 25), (50, 25), (100, 50), (25, 50)])
+def test_legacy_retirement_nests_inside_real_batch_policy(reader, monkeypatch, batch_percent, legacy_percent):
+    outcomes, _ = reader
+    outcomes.append(
+        ramp_doc(legacy_sync='dark', percents={'batch-pipeline': batch_percent, 'legacy-sync': legacy_percent})
+    )
+    for uid in ('synthetic-owner', 'test-uid', 'synthetic-user'):
+        batch = resolve_batch_policy(
+            uid,
+            flags={
+                'BATCH_PIPELINE_ENABLED': 'true',
+                'BATCH_PIPELINE_PERCENT': str(batch_percent),
+            },
+        )
+        retired = rp.legacy_sync_mode(uid) == 'dark'
+        expected = batch.batch_enabled and rp.cohort_bucket(uid, rp.COHORT_SALTS['batch-pipeline']) < min(
+            batch_percent, legacy_percent
+        )
+        assert retired == expected
+        assert not retired or batch.batch_enabled
+
+
+def test_batch_percent_rollback_clamps_retirement_without_a_second_write():
+    before = store.empty_ramp_env()
+    before['percents'] = {'batch-pipeline': 50, 'legacy-sync': 25}
+    before['legacy_sync'] = 'dark'
+    after = store.apply_ramp_change(before, {'percents': {'batch-pipeline': 0}})
+    assert rp.clamp_nesting(after['percents'])['legacy-sync'] == 0
+    with pytest.raises(store.RampDocumentError, match='legacy-sync exceeds'):
+        store.apply_ramp_change(before, {'percents': {'legacy-sync': 51}})
 
 
 def test_unknown_deployment_identity_fails_safe(reader, monkeypatch):

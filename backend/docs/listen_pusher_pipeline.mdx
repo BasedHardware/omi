@@ -6,6 +6,24 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Cohort-scoped legacy sync retirement
+
+Upload admission, record-owner selection, final-pass claims, cap-hold handoff
+and sequencer dispatch resolve legacy mode for the audio owner. The runtime
+`legacy-sync` percent uses the deployed batch-percent hash and is clamped to batch admission; owners outside
+the percent keep legacy `on`. In draining/dark, admission language exclusion
+cannot refuse the owner's batch path, even during env-update skew. Named
+unsupported languages use C8 provider STT; unknown multilingual inputs retain
+the GPU language barrier and fenced recovery path. Ledger custody and duplicate
+fences are unchanged. Live vendor retirement still requires its separate
+language-quality and durable capture eligibility checks.
+
+Prepare draining/dark env sets with `scripts.rollout.legacy_env`, which forces
+`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` on each Cloud Run entry.
+Serve the cohort-aware implementation everywhere before setting a partial
+mode/percent; rollback remains a single `legacy_sync=on` write. Operational
+preconditions and the C9 holds are in [the legacy-dark runbook](runbooks/legacy-dark.md).
+
 ## Partial finishes for retained recordings
 
 Batch GPU compute admission returns partial receipts within a four-second server

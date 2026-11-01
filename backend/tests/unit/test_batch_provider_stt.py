@@ -32,6 +32,7 @@ OWNER = 'synthetic-owner'
 # Traces of the C8 simulation configs (testing/pipeline_sim/trace.py GOLDEN_CONFIGS).
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens'
 PROVIDER_GOLDENS = ('provider_stt_ja', 'provider_stt_unsupported', 'provider_stt_byok')
+RETIREMENT_GOLDENS = (*PROVIDER_GOLDENS, 'legacy_retirement_multi', 'legacy_retirement_und')
 JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
 POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100.0)
 
@@ -484,6 +485,37 @@ def test_provider_golden_is_pinned_by_the_simulation(name):
     assert name in GOLDEN_CONFIGS and (GOLDEN_DIR / f'{name}.json').exists()
 
 
+@pytest.fixture(scope='module')
+def retirement_traces():
+    from dataclasses import replace
+    from testing.pipeline_sim.trace import trace
+
+    return {
+        (name, mode): trace(replace(GOLDEN_CONFIGS[name](), legacy_sync=mode))
+        for name in RETIREMENT_GOLDENS
+        for mode in ('draining', 'dark')
+    }
+
+
+@pytest.mark.parametrize('name', RETIREMENT_GOLDENS)
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+def test_retirement_modes_match_the_c8_characterization_goldens(name, mode, retirement_traces):
+    assert retirement_traces[name, mode] == _golden(name)
+
+
+@pytest.mark.parametrize('name', ['legacy_retirement_multi', 'legacy_retirement_und'])
+def test_unknown_language_goldens_pin_worker_barrier_and_retained_recovery(name):
+    golden = _golden(name)
+    assert golden['segments']
+    for segment in golden['segments'].values():
+        states = [entry.split(' ')[1] for entry in segment['job_transitions']]
+        assert 'quarantined' in states
+        assert segment['paid_calls'] == 1
+        assert segment['final_job']['state'] == 'committed'
+        assert segment['final_job']['recovery_state'] == 'recovered'
+    assert all(upload['intake'] == 'admitted' and upload['conversation']['projected'] for upload in golden['uploads'])
+
+
 @pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
 @pytest.mark.parametrize('byok', [False, True])
 def test_intake_fallback_condition_is_unchanged_at_legacy_sync_on(language, byok):
@@ -689,7 +721,7 @@ def dark_intake(world, monkeypatch):
 
     customer, store = world
     mode = {'value': LegacySyncMode.DRAINING}
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: mode['value'])
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: mode['value'])
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **k: store)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     user = {'language': 'en'}
@@ -705,7 +737,8 @@ def dark_intake(world, monkeypatch):
         intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
     )
     monkeypatch.setattr(intake, 'decode_units', lambda paths, max_seconds: (u for u in [unit]))
-    monkeypatch.setattr(intake, 'with_context', lambda wav, context: wav)
+    contexts = []
+    monkeypatch.setattr(intake, 'with_context', lambda wav, context: contexts.append(context) or wav)
     monkeypatch.setattr(
         intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda i, w: 'gs://synthetic/a')
     )
@@ -731,7 +764,9 @@ def dark_intake(world, monkeypatch):
     woken = []
     outbox = SimpleNamespace(wake=lambda row_id, token: woken.append((row_id, token)))
     monkeypatch.setattr(intake, 'outbox_for', lambda kind: outbox)
-    return SimpleNamespace(intake=intake, store=store, mode=mode, user=user, calls=calls, woken=woken)
+    return SimpleNamespace(
+        intake=intake, store=store, mode=mode, user=user, calls=calls, woken=woken, contexts=contexts
+    )
 
 
 @pytest.mark.asyncio
@@ -826,6 +861,47 @@ async def test_on_mode_keeps_todays_routes(dark_intake, monkeypatch):
 # --- admission policy route stamp (contract (c)) ----------------------------------------------------
 
 ROUTE_FIELDS = ('stt_route', 'provider_reason', 'provider_service')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize('language,byok', [('en', True), ('ja', False), ('multi', False), ('und', False)])
+async def test_no_upload_class_is_refused_by_both_lanes_at_any_percent(dark_intake, monkeypatch, mode, language, byok):
+    from types import SimpleNamespace
+    from utils.rollout import runtime_percent
+    from utils.sync import legacy_dark
+
+    # Leave the deployed exclusion ON deliberately: the runtime safety backstop
+    # must work even while revisions are receiving the coupled env update.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true')
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'true')
+    monkeypatch.setattr(runtime_percent, 'cohort_bucket', lambda uid, salt: 0)
+    monkeypatch.setattr(
+        legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode(runtime_percent.legacy_sync_mode(uid))
+    )
+    dark_intake.user['language'] = language
+    for percent in range(101):
+        snapshot = SimpleNamespace(
+            legacy_sync=mode, percents={'legacy-sync': percent, 'batch-pipeline': percent}, source='firestore'
+        )
+        monkeypatch.setattr(runtime_percent, 'ramp_snapshot', lambda: snapshot)
+        dark_intake.calls.clear()
+        response = await dark_intake.intake.accept_upload(
+            **{**UPLOAD, 'byok_enabled': byok, 'policy': BatchUnitPolicy(batch_enabled=False)}
+        )
+        served = legacy_dark.current_mode(OWNER)
+        if response is None:
+            assert legacy_dark.legacy_admission_allowed(served)
+            assert percent == 0
+        else:
+            assert response.status_code == 202
+            ((items, kwargs),) = dark_intake.calls
+            assert kwargs['policy'].batch_enabled
+            assert kwargs['policy'].stt_route == ('provider' if language == 'ja' else 'parakeet')
+            assert items[0].requires_compute_admission is (language != 'ja')
+            if language in {'multi', 'und'}:
+                assert dark_intake.contexts[-1]['stt_language'] == 'und'
 
 
 def test_policy_route_fields_default_validate_and_fail_closed_on_read():

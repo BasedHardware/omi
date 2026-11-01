@@ -156,6 +156,10 @@ def served_ramp(client: Any, env: str, *, now: Optional[datetime] = None) -> tup
     entry = (document or {}).get('envs', {}).get(env) if document else None
     if not entry:
         return None, None
+    # This operator sweeps every owner. Partial retirement is re-homed by the
+    # owner-scoped upload path; never move unrelated owners in a bulk sweep.
+    if entry.get('percents', {}).get('legacy-sync', 0) != 100:
+        return 'on', None
     written = entry.get('updated_at')
     if not isinstance(written, str) or not written:
         return entry.get('legacy_sync'), None

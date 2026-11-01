@@ -75,7 +75,7 @@ def read_cohort_members(name: str, *, firestore_client: Any | None = None) -> tu
 RAMP_DOC_ID = '_ramp'
 RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
-RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire')
+RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire', 'legacy-sync')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')
 # Serving reads stay within the runtime's cold-start budget. Operator tools (ramp_set, ramp_controller) build a
 # fresh client per process, and a cold channel plus token fetch from an operator host takes over 1s.
@@ -196,6 +196,8 @@ def apply_ramp_change(before: dict[str, Any], change: Mapping[str, Any]) -> dict
             raise RampDocumentError('ramp percents change malformed')
         for name, value in percents.items():
             after['percents'][name] = _percent_value(value)
+        if 'legacy-sync' in percents and after['percents']['legacy-sync'] > after['percents'].get('batch-pipeline', 0):
+            raise RampDocumentError('legacy-sync exceeds batch-pipeline')
     if 'legacy_sync' in change:
         if change['legacy_sync'] not in LEGACY_SYNC_MODES:
             raise RampDocumentError('ramp legacy_sync change malformed')
