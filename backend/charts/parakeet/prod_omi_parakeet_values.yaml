@@ -206,6 +206,12 @@ autoscaling:
   # still reach full capacity in about a minute. Ladder to 4 only after the
   # batch-100 live-demand read. Rollback: restore minReplicas=8 (or 12
   # pre-P77r) and workloadOnly=false together.
+  # COUPLING (Luna r1, #24276): the incluster-guards floorSchedule owns the
+  # running floor whenever it is enabled AND not deferred by a rollback marker
+  # (prod schedule is all-hours 4, benched-live until pkwin2 #23863). This
+  # chart floor is what the fleet holds while the schedule is deferred — it
+  # must stay >= every schedule hour so the deferred state is never colder
+  # than the scheduled one (pinned by test_audio_fleet_helm).
   minReplicas: 6
   maxReplicas: 12
   behavior:

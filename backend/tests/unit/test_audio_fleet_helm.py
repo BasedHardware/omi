@@ -151,6 +151,29 @@ def manifest():
     return yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
 
 
+def _assert_parakeet_floor_covers_guard_schedule(chart_floor):
+    """The guard floorSchedule owns the running floor while enabled and not
+    deferred; the chart floor is what the fleet holds while the schedule is
+    deferred by a rollback marker. The deferred state must never be colder
+    than the scheduled one, and resuming the schedule must never raise the
+    floor above the deferred state (Luna r1 on #24276)."""
+    guards = yaml.load(
+        (CHARTS / 'incluster-guards' / 'prod_omi_incluster_guards_values.yaml').read_text(),
+        Loader=yaml.CSafeLoader,
+    )['floorSchedule']
+    if not guards.get('enabled'):
+        return
+    hours = guards['hours']
+    assert len(hours) == 24
+    scheduled_max = max(hours)
+    assert scheduled_max <= chart_floor, (
+        f'guards floorSchedule hour {scheduled_max} exceeds the parakeet chart '
+        f'floor {chart_floor}: resuming a deferred schedule would RAISE the '
+        'live floor above the deferred state, and a deferred fleet colder '
+        'than the schedule would surprise the next guard resume'
+    )
+
+
 @pytest.mark.parametrize('chart', ['backend-listen', 'pusher', 'parakeet'])
 def test_prod_pool_placement_preserves_current_cpu_pools(chart):
     objects = render(chart)
@@ -186,6 +209,7 @@ def test_parakeet_scales_conservatively_without_relaxing_admission():
         'below 6 only after the batch-100 live-demand read.'
     )
     assert hpa['maxReplicas'] == 12
+    _assert_parakeet_floor_covers_guard_schedule(hpa['minReplicas'])
     assert hpa['behavior']['scaleUp'] == {
         'stabilizationWindowSeconds': 0,
         'selectPolicy': 'Max',
