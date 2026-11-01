@@ -1,40 +1,34 @@
 ---
-title: "App-Device Protocol"
+title: "App-device protocol"
 icon: "file-code"
 description: "BLE protocol specification for communicating with Omi wearable devices"
 ---
 
 ## Overview
 
-This document describes the Bluetooth Low Energy (BLE) protocol used to communicate between the Omi app and device. Use this reference when building custom apps or SDKs.
+This page describes the Bluetooth Low Energy (BLE) protocol used to communicate between the Omi app and device. Use this reference when building custom apps or SDKs.
 
----
-
-## BLE Discovery
+## BLE discovery
 
 The official app discovers the device by scanning for BLE devices with the name `Omi`.
 
----
-
-## BLE Services
+## BLE services
 
 The Omi wearable implements three BLE services:
 
 <CardGroup cols={3}>
-  <Card title="Battery Service" icon="battery-full">
+  <Card title="Battery service" icon="battery-full">
     Standard BLE battery level monitoring
   </Card>
-  <Card title="Device Info Service" icon="circle-info">
+  <Card title="Device info service" icon="circle-info">
     Device metadata and firmware version
   </Card>
-  <Card title="Audio Service" icon="microphone">
+  <Card title="Audio service" icon="microphone">
     Audio streaming and codec configuration
   </Card>
 </CardGroup>
 
----
-
-## Battery Service
+## Battery service
 
 <Note>
 Battery notifications require firmware v1.5 or later. Earlier versions (1.0.x) do not support notifications.
@@ -48,9 +42,7 @@ Battery notifications require firmware v1.5 or later. Earlier versions (1.0.x) d
 
 This is the standard [BLE Battery Service](https://www.bluetooth.com/specifications/specs/battery-service).
 
----
-
-## Device Information Service
+## Device information service
 
 <Note>
 Available since firmware version 1.0.3
@@ -71,9 +63,7 @@ This is the standard [BLE Device Information Service](https://www.bluetooth.com/
 | Hardware Revision | `0x2A27` | "Seeed Xiao BLE Sense" |
 | Firmware Revision | `0x2A26` | e.g., "1.0.3" |
 
----
-
-## Audio Streaming Service
+## Audio streaming service
 
 This is the main service for streaming audio from the device to the app.
 
@@ -88,9 +78,7 @@ This is the main service for streaming audio from the device to the app.
 | Audio Data | `19B10001-E8F2-537E-4F6C-D104768A1214` | Audio stream from device |
 | Codec Type | `19B10002-E8F2-537E-4F6C-D104768A1214` | Audio codec identifier |
 
----
-
-## Codec Types
+## Codec types
 
 The codec type characteristic determines how to decode the audio data:
 
@@ -106,13 +94,11 @@ The codec type characteristic determines how to decode the audio data:
 Starting with firmware v1.0.3, the default codec is **Opus**. Earlier versions used PCM 16-bit at 8 kHz.
 </Info>
 
----
-
-## Audio Data Format
+## Audio data format
 
 Audio data is sent as BLE notifications on the Audio Data characteristic.
 
-### Packet Structure
+### Packet structure
 
 ```mermaid
 flowchart LR
@@ -129,7 +115,7 @@ flowchart LR
 ```
 
 <AccordionGroup>
-  <Accordion title="Header Format" icon="file-lines">
+  <Accordion title="Header format" icon="file-lines">
     Each value update includes a 3-byte header:
 
     | Bytes | Field | Description |
@@ -137,7 +123,7 @@ flowchart LR
     | 0-1 | Packet Number | Overall packet counter (0-65535, wraps around) |
     | 2 | Index | Position of this value within the current packet |
   </Accordion>
-  <Accordion title="Packet Fragmentation" icon="puzzle-piece">
+  <Accordion title="Packet fragmentation" icon="puzzle-piece">
     Each audio packet contains 160 samples. If the packet exceeds `(negotiated BLE MTU - 3 bytes)`, it will be split across multiple value notifications.
 
     **Example:** PCM 16-bit at 16 kHz
@@ -146,14 +132,12 @@ flowchart LR
       - Notification 1: packet n, index 0, 251 bytes
       - Notification 2: packet n+1, index 1, 75 bytes
   </Accordion>
-  <Accordion title="Byte Order" icon="arrows-left-right">
+  <Accordion title="Byte order" icon="arrows-left-right">
     All audio data is sent in **little-endian** format.
   </Accordion>
 </AccordionGroup>
 
----
-
-## Implementation Example
+## Implementation example
 
 ```python
 # Example: Parsing audio packet header
@@ -163,8 +147,6 @@ def parse_audio_header(data: bytes):
     audio_data = data[3:]
     return packet_number, index, audio_data
 ```
-
----
 
 ## Related
 

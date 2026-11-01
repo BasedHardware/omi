@@ -4428,6 +4428,8 @@
     "episodeLiveFor": "Na żywo · {duration}",
     "episodeMomentsCount": "{count, plural, =1{1 moment} other{{count} momentów}}",
     "episodeMoments": "Momenty",
+    "episodeFollowUps": "Dalsze kroki",
+    "episodeOpenTranscript": "Otwórz transkrypcję",
     "episodeSoFar": "Na razie",
     "episodeUpdatedJustNow": "Zaktualizowano przed chwilą · pełne notatki na końcu",
     "episodeUpdatedMinutesAgo": "Zaktualizowano {minutes} min temu · pełne notatki na końcu",
@@ -4487,7 +4489,6 @@
     "episodeNotesStartWithTranscript": "Notatki pojawią się, gdy przyjdzie ostateczna transkrypcja.",
     "episodeOnDeviceNotesFootnote": "Tworzone na Twoim telefonie w trakcie rozmowy. Pełne notatki pojawią się wraz z ostateczną transkrypcją.",
     "episodeOnThisPhone": "Na tym telefonie",
-    "episodeOpenTranscript": "Otwórz transkrypcję",
     "liveCardTitle": "Na żywo",
     "livePreviewBehind": "Ostateczna transkrypcja z opóźnieniem około {duration}",
     "livePreviewCatchingUp": "Ostateczna transkrypcja nadąża",
@@ -4549,5 +4550,8 @@
     "yearlySwitchPreviewFailed": "Nie udało się wczytać ceny.",
     "yearlySwitchUnavailable": "Płatność roczna nie jest teraz dostępna dla Twojego planu.",
     "yearlySwitchDoneTitle": "Płacisz teraz rocznie",
-    "yearlySwitchDoneBody": "Dziś pobrano {amount}. Odnowienie {date}."
+    "yearlySwitchDoneBody": "Dziś pobrano {amount}. Odnowienie {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} części} one{{count} część} two{{count} części} few{{count} części} many{{count} części} other{{count} części}}",
+    "chatAppsWaitingMessageIn": "Wyślij wiadomość w aplikacji {app}. Ten ekran odświeży się, gdy tylko Omi ją odbierze.",
+    "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}."
 }

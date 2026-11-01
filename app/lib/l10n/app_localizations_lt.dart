@@ -14469,6 +14469,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeMoments => 'Akimirkos';
 
   @override
+  String get episodeFollowUps => 'Tolesni veiksmai';
+
+  @override
+  String get episodeOpenTranscript => 'Atidaryti transkripciją';
+
+  @override
   String get episodeSoFar => 'Kol kas';
 
   @override
@@ -14687,9 +14693,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Šiame telefone';
-
-  @override
-  String get episodeOpenTranscript => 'Atidaryti transkripciją';
 
   @override
   String get liveCardTitle => 'Tiesiogiai';
@@ -14951,5 +14954,30 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Šiandien nuskaičiuota $amount. Atnaujinama $date.';
+  }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dalių',
+      many: '$count dalies',
+      few: '$count dalys',
+      two: '$count dalių',
+      one: '$count dalis',
+      zero: '$count dalių',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Išsiųskite žinutę programoje $app. Šis ekranas atsinaujins, kai tik Omi ją gaus.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Gaukite naują kodą ir išsiųskite jį per $app.';
   }
 }

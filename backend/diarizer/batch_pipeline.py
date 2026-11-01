@@ -170,6 +170,35 @@ def validate_words(words, duration):
     return result
 
 
+def bounded_window_words(words, duration):
+    """Own words by midpoint and intersect edge-straddling clocks with capture.
+
+    Model frames may extend past either edge. Invalid or wholly outside clocks
+    still fail; clamping must never turn them into plausible captured speech.
+    """
+    result = []
+    previous = -math.inf
+    for word in words:
+        try:
+            start, end = map(float, word['timestamp'])
+        except ValueError:
+            raise BatchValidationError(ValidationReason.WORD_SHAPE) from None
+        if (
+            not all(math.isfinite(v) for v in (start, end))
+            or start > end
+            or end < 0
+            or (end == 0 and start < 0)
+            or start >= duration
+        ):
+            raise BatchValidationError(ValidationReason.WORD_CLOCK)
+        if start < previous or not isinstance(word['word'], str) or not word['word'].strip():
+            raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
+        previous = start
+        if 0 <= (start + end) / 2 < duration:
+            result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
+    return validate_words(result, duration)
+
+
 def padded_retry_seconds(samples) -> float:
     left = 2 * SAMPLE_RATE
     right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
@@ -915,7 +944,7 @@ class PipelineWorker:
                     continue
                 for window, hypothesis in zip(batch, hypotheses):
                     try:
-                        checked_words = validate_words(hypothesis, window.duration)
+                        checked_words = bounded_window_words(hypothesis, window.duration)
                         for word in checked_words:
                             start, end = [t + window.start for t in word['timestamp']]
                             midpoint = (start + end) / 2

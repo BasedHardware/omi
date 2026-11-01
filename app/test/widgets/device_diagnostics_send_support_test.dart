@@ -94,6 +94,8 @@ class _CannedHttpClient implements HttpClient {
 
   @override
   Duration idleTimeout = const Duration(seconds: 15);
+  @override
+  Duration? connectionTimeout;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

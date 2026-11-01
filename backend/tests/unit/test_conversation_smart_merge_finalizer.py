@@ -46,6 +46,9 @@ class _Conversation:
         self.geolocation = None
         self.client_device_id = None
 
+    def model_dump(self):
+        return {'id': self.id, 'status': self.status}
+
 
 @pytest.fixture
 def harness(monkeypatch):
@@ -108,6 +111,72 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
     return await finalizer.finalize_persisted_conversation(
         'u', 'n', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
+
+
+@pytest.mark.parametrize('registered', [True, False])
+async def test_generic_batch_registration_refusal_is_visible_and_blocks_fanout(
+    harness, monkeypatch, caplog, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    original = finalizer.run_blocking
+    before = finalizer.RECORD_REGISTER_REFUSED._value.get()
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with caplog.at_level('WARNING', logger=finalizer.logger.name):
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize()
+    assert (finalizer.lifecycle_service.claim_finalization_fanout in calls) is registered
+    assert finalizer.RECORD_REGISTER_REFUSED._value.get() == before + int(not registered)
+    messages = [r.getMessage() for r in caplog.records if 'register_refused' in r.getMessage()]
+    assert messages == ([] if registered else ['event=register_refused owner=batch_live_v1'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SILENT_BACKFILL])
+@pytest.mark.parametrize('registered', [True, False])
+async def test_record_registration_precedes_terminal_fanout_even_for_silent_backfill(
+    harness, monkeypatch, trigger, registered
+):
+    calls, row = harness
+    row['record_lane_owner'] = 'batch_live_v1'
+    conversation = _Conversation()
+    conversation.model_dump = lambda: {'id': 'n', 'status': 'completed'}
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.register_recording:
+            assert args[1]['record_lane_owner'] == 'batch_live_v1'
+            calls.append(function)
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    async def absorbed(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    monkeypatch.setattr(finalizer, 'smart_merge_step', absorbed)
+    if registered:
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.fenced
+            assert finalizer.register_recording in calls
+            assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        else:
+            assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.completed
+            assert calls.index(finalizer.register_recording) < calls.index(
+                finalizer.lifecycle_service.claim_finalization_fanout
+            )
+    else:
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await _finalize(trigger)
+        assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+        assert finalizer.lifecycle_service.complete_finalization_fanout not in calls
 
 
 @pytest.mark.asyncio

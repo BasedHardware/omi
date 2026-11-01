@@ -319,6 +319,8 @@ def _seed_row(store, cid, *, started_at, segments=(), status='in_progress'):
 
 
 def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
+    # Historical-clock transport replay exercises the live persistence rollback.
+    monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(episode_live, 'on_realtime_segments', _async_noop)
     from database import capture_coverage as coverage_store

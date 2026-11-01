@@ -21,6 +21,7 @@ def terminal(speech, outcome='recovered', **extra):
             speech_loss_seconds=0 if outcome == 'recovered' else speech,
             projection_status='planned' if outcome == 'recovered' else 'empty' if outcome == 'empty' else None,
             created_at=epoch(START),
+            paid_providers=[],
         ),
         **extra,
     }
@@ -145,6 +146,39 @@ def test_inference_only_success_never_certifies_projection_speech():
     old.pop('projection_status')
     result = combine(base(), census([old], []), NOW, START, NOW)
     assert result['hard3']['T2'] == 'UNKNOWN' and result['t2_speech_denominator_seconds'] == 0
+
+
+def test_paid_recovery_counts_combined_quality_but_never_normal_gpu():
+    paid = terminal(900, vad='strict', paid_providers=['modulate'])
+    result = census([terminal(200), paid], [])
+    assert result['terminal_unrecovered_speech_denominator_seconds'] == 1100
+    assert result['normal_gpu_success_units'] == 1
+    assert result['normal_gpu_speech_seconds'] == 200
+    assert result['paid_recovery_speech_seconds'] == 900
+
+
+def test_paid_without_recognizer_receipts_cannot_fill_normal_gpu_floor():
+    paid = terminal(900, paid_providers=['modulate'])
+    result = census([paid], [])
+    assert result['normal_gpu_success_units'] == 0
+    assert result['normal_gpu_t2']['terminal_unrecovered_speech_denominator_seconds'] == 0
+    assert result['paid_recovery_t2']['terminal_unrecovered_speech_denominator_seconds'] == 900
+
+
+def test_missing_provider_metadata_never_becomes_normal_gpu_proof():
+    legacy = terminal(900)
+    legacy.pop('paid_providers')
+    result = census([legacy], [])
+    assert result['terminal_unrecovered_speech_denominator_seconds'] == 900
+    assert result['normal_gpu_success_units'] == 0
+
+
+def test_paid_loss_cannot_disappear_from_combined_t2():
+    paid = terminal(121, 'failed_held', vad='strict', paid_providers=['modulate', 'soniox'])
+    result = census([terminal(4000), paid], [])
+    assert result['terminal_unrecovered_vad_speech_seconds'] == 121
+    assert result['paid_recovery_t2']['terminal_unrecovered_vad_speech_seconds'] == 121
+    assert combine(base(), result, NOW, START, NOW)['hard3']['T2'] == 'TRIP'
 
 
 def test_queries_use_masks_stable_read_time_and_no_identifier_output():

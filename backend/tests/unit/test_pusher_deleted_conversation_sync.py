@@ -18,6 +18,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+from database import record_audio as record_audio_db
 import utils.pusher_protocol as pusher_protocol
 
 UID = 'uid'
@@ -73,6 +74,8 @@ def private_cloud_session(monkeypatch):
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
     monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())

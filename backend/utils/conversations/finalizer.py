@@ -40,6 +40,7 @@ from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
+from utils.conversations.minimum_derived import is_server_minimum
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -56,6 +57,7 @@ from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
+    RECORD_REGISTER_REFUSED,
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
@@ -63,6 +65,7 @@ from utils.observability.finalization import (
 from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
+
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
 from utils.batch_pipeline.live import register_recording, reserve_recording
@@ -87,6 +90,9 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
 
 def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     """Provider errors are counted by the writer; never propagate to finalization."""
+    if is_server_minimum(conversation):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
+        return
     if getattr(conversation, 'processing_deferred', False) is True:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
         return
@@ -199,6 +205,18 @@ class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
     deferred = 'deferred'
+
+
+def _record_registration_required(row: dict[str, Any]) -> bool:
+    """Retain native audio obligations unless a closed archive proves no input."""
+    return row.get('record_lane_owner') == 'batch_live_v1' and not (
+        server_batch_owned(row)
+        and row.get('server_batch_audio_closed') is True
+        and row.get('server_batch_audio_received') is False
+        and not row.get('record_upload_failed')
+        and not row.get('record_upload_sessions')
+        and not server_batch_has_audio(row)
+    )
 
 
 async def finalize_persisted_conversation(
@@ -408,6 +426,17 @@ async def finalize_persisted_conversation(
         # reports this through the observer and returns without side effects;
         # the finalizer must honour that result before touching memories.
         if not persistence['owned']:
+            if conversation_data.get('finalization_job_id') == finalization_job_id and await run_blocking(
+                db_executor,
+                finalization_jobs_db.defer_sync_revision_fence,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+                conversation_data.get('sync_content_revision'),
+            ):
+                logger.info('event=finalization_persistence_fence outcome=redispatch reason=sync_revision_advanced')
+                return ConversationFinalizationDisposition.deferred
+            logger.info('event=finalization_persistence_fence outcome=terminal reason=lifecycle_changed')
             logger.info(
                 'persisted conversation finalization fenced: lifecycle persistence lost uid=%s conversation=%s',
                 uid,
@@ -417,8 +446,14 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        if not silent_backfill and conversation_data.get('record_lane_owner') == 'batch_live_v1':
-            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
+        if _record_registration_required(conversation_data):
+            stage = 'record_registration'
+            if not await run_blocking(
+                db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
+            ):
+                RECORD_REGISTER_REFUSED.inc()
+                logger.warning('event=register_refused owner=batch_live_v1')
+                raise ConversationFinalizationError('record_registration_refused')
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -486,6 +521,7 @@ async def finalize_persisted_conversation(
             # summary-vector emission below the claim branch is unreachable on
             # this path, so run the same fail-soft freshness guard here; a
             # summary-vector failure never fails finalization (#21111 gap).
+            latest_data = None
             try:
                 latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
                 latest = deserialize_conversation(latest_data) if latest_data else None
@@ -503,6 +539,7 @@ async def finalize_persisted_conversation(
             except Exception as error:
                 OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
                 logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+            await _episode_after_finalization(uid, conversation_id, latest_data, trigger)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(
@@ -514,13 +551,8 @@ async def finalize_persisted_conversation(
         if fanout['status'] != 'claimed':
             raise ConversationFinalizationError('fanout_lease_conflict')
 
-        # Ownership is now proven.  Emit every derived side effect — calendar,
-        # usage/app, action/goal, audio artifact/enqueue, webhook, and
-        # memory extraction — only behind the winning claim. Summary indexing
-        # also runs here, independently of the intelligence bundle.  A processing
-        # conversation hands the bundle back from process_conversation; an
-        # already-completed replay re-extracts memories behind the proven claim
-        # unless the durable terminal marker is set (free-tier minimum).
+        # Emit the processing bundle, or replay memory extraction, only behind
+        # the winning claim. Summary indexing is independent of intelligence.
         # TERMINAL_NO_DERIVED_EFFECTS suppresses only that intelligence bundle,
         # the empty-bundle memory fallback, and third-party app webhooks. Capture
         # receipt, keyframes, and arrival intent are not derived intelligence
@@ -529,17 +561,18 @@ async def finalize_persisted_conversation(
         stage = 'derived_effects'
         from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-        lazy_effects = lazy_enrichment_enabled(uid) and not skip_derived_effects and not conversation.discarded
+        lazy_effects = (
+            lazy_enrichment_enabled(uid)
+            and not skip_derived_effects
+            and not conversation.discarded
+            and not is_server_minimum(conversation)
+        )
         if lazy_effects:
             from utils.sync.reprocess import mark_effects
 
             await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
-        # Completed-row replays have no coordinator bundle. Summary indexing is
-        # independent of folder/apps receipts and terminal intelligence
-        # suppression, but must share the same winning fanout claim.
-        # Await inside a fail-soft boundary rather than detach a provider pipeline:
-        # the worker can exit after completion, so awaiting preserves write observability.
-        # A summary-vector failure never fails finalization, including terminal rows.
+        # Index enriched notes behind the winning claim, independently of apps.
+        # Await fail-soft so worker exit cannot strand an embedding request.
         episode_row = None
         try:
             latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
@@ -738,6 +771,12 @@ async def _load_admitted_conversation(
         return ConversationFinalizationDisposition.fenced, None, None
 
     if trigger is ProcessingTrigger.SILENT_BACKFILL and conversation_data.get('record_lane_owner'):
+        # Historical enrichment must not process a batch-owned row. Preserve
+        # that fence, but first retain its deterministic batch obligation.
+        if _record_registration_required(conversation_data) and not await run_blocking(
+            db_executor, register_recording, uid, conversation_data
+        ):
+            raise ConversationFinalizationError('record_registration_refused')
         return ConversationFinalizationDisposition.fenced, None, None
     for _ in range(3):
         try:

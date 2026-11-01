@@ -3643,7 +3643,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3665,7 +3666,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3687,7 +3689,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -4964,7 +4967,7 @@
     }
   ],
   "transport_dispositions": {
-    "source": "docs/finops/telemetry-transport-contract.md section 4",
+    "source": "backend/docs/telemetry-transport-contract.md section 4",
     "note": "Legacy required events stay in the events array. Recording Requested is documented here with request_origin semantics. It is not inserted into events[] in this change because the registry generator would also rewrite app/lib/utils/analytics/registry/events.g.dart, which is outside the admin and analytics write boundary. Parent regenerates that Dart file if the event is later promoted into events[].",
     "recording_requested": {
       "wire_name": "Recording Requested",

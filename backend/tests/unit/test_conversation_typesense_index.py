@@ -175,6 +175,9 @@ class _Transaction:
     def update(self, ref, data):
         ref.written = data
 
+    def create(self, ref, data):
+        ref.create(data)
+
 
 class TestDocumentShape:
     def test_payload_carries_exactly_the_schema_fields(self):
@@ -632,7 +635,8 @@ class TestConversationWriteWiring:
         sync.assert_called_once_with(UID, CONVERSATION_ID)
 
     def test_create_if_absent_syncs_on_create(self, wired):
-        sync, _, _ = wired
+        sync, _, ref = wired
+        ref._snapshot = _Snapshot(None)
 
         assert conversations_db.create_conversation_if_absent_with_lifecycle(UID, {"id": CONVERSATION_ID}) is True
 
