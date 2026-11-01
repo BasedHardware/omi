@@ -569,7 +569,9 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_HELD_STALE_GRACE_SECONDS': ('D', 'runtime grace past redrive_at before a hold counts as a wedge'),
 }
 
-# --- frozen metric names (vendor_route_metrics.py defines the collectors) --------------------------
+# --- frozen metric names --------------------------------------------------------------------------
+# Collectors and record helpers: utils.batch_pipeline.vendor_route_metrics (slices B, C and D
+# import it; until then it has no serving importer by design).
 # Prefix omi_batch_pipeline_ so the sync-fleet GMP keep-list and the rolling watcher already
 # retain them: no keep-list edit, no BLIND window before the first vendor percent.
 
