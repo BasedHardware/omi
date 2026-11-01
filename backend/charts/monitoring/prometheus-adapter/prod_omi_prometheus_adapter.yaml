@@ -40,8 +40,8 @@ rules:
     # p99 Diarizer request latency from the internal HTTPS LB histogram for HPA
     - name:
         as: "diarizer_request_latency_p99"
-      seriesQuery: 'stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name="k8s1-5245918b-prod-omi-backend-prod-omi-diarizer-8080-cb654677"}'
-      metricsQuery: 'histogram_quantile(0.99, sum by (le) (rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name="k8s1-5245918b-prod-omi-backend-prod-omi-diarizer-8080-cb654677"}[5m])))'
+      seriesQuery: 'stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name=~"k8s1-5245918b-prod-omi-backend-prod-omi-diarizer-8080-cb654677|gkegw1-heio-prod-omi-backen-prod-omi-diarizer-8080-ieaacasqsxni"}'
+      metricsQuery: 'histogram_quantile(0.99, sum by (le) (rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name=~"k8s1-5245918b-prod-omi-backend-prod-omi-diarizer-8080-cb654677|gkegw1-heio-prod-omi-backen-prod-omi-diarizer-8080-ieaacasqsxni"}[5m])))'
       resources:
         overrides:
           namespace: { resource: "namespace" }
