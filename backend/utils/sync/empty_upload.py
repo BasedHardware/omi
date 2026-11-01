@@ -6,6 +6,8 @@ from typing import BinaryIO, Iterable
 
 from fastapi import UploadFile
 
+from utils.request_validation import canonical_sync_upload_filenames
+
 
 def empty_framed_clip(stream: BinaryIO) -> bool:
     # The wire contract needs a four-byte length AND at least one payload byte.
@@ -30,6 +32,16 @@ def prepare_sync_uploads(files: list[UploadFile], uid: str) -> list[UploadFile]:
         )
     if not nonempty:
         raise EmptySyncUpload()
+    # Released apps put a same-second collision sequence after the capture
+    # time; every later read (admission, lanes, staging, workers) sees the
+    # canonical name with the timestamp last. The capture time is unchanged.
+    renamed = 0
+    for file, name in zip(nonempty, canonical_sync_upload_filenames([f.filename or '' for f in nonempty])):
+        if name != (file.filename or ''):
+            file.filename = name
+            renamed += 1
+    if renamed:
+        logging.getLogger(__name__).info('sync_upload_name_canonicalized uid=%s count=%s', uid, renamed)
     return nonempty
 
 
