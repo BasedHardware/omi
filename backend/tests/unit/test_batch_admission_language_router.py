@@ -113,7 +113,7 @@ async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeyp
         # An `on` read still records the route owner (draining/dark re-homes it to batch on the next upload);
         # the cohort-scoped exclusion bypass in draining/dark lands with #24219.
         assert response.status_code == 409 and b'sync_content_in_progress' in response.body
-        module.create_sync_job.assert_not_called()
+        jobs.create_sync_job.assert_not_called()  # C11: the router no longer imports it at all.
         if mode is LegacySyncMode.ON:
             assert world.claims == ['legacy_final_pass_v1']
         else:
