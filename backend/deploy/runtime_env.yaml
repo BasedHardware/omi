@@ -2098,7 +2098,7 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -2539,7 +2539,7 @@ environments:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
-          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -2939,7 +2939,7 @@ environments:
             LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
-            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -3308,7 +3308,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -3694,7 +3694,7 @@ environments:
             SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD:
               value: '8'
               category: reliability
-            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -4054,7 +4054,7 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
