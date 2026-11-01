@@ -52,12 +52,12 @@ def eligible(row: Mapping[str, Any]) -> bool:
     )
 
 
-def enabled_for(row: Mapping[str, Any], mode: LegacySyncMode | None = None) -> bool:
+def enabled_for(row: Mapping[str, Any], mode: LegacySyncMode | None = None, *, uid: str | None = None) -> bool:
     """cap_hold_mode == 'batch_hold' (contract (c)) while legacy is draining or dark."""
     if mode is None:
         from utils.sync import legacy_dark
 
-        mode = legacy_dark.current_mode()
+        mode = legacy_dark.current_mode(uid)
     return mode is not LegacySyncMode.ON and eligible(row)
 
 

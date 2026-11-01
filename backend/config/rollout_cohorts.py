@@ -59,7 +59,7 @@ _members_resolver: Callable[[str], tuple[str, ...]] | None = None
 _load_resolver: Callable[[str], Any] | None = None
 _warm_resolver: Callable[[str], Any] | None = None
 _percent_resolver: Callable[[str, float], float] | None = None
-_legacy_sync_resolver: Callable[[], str] | None = None
+_legacy_sync_resolver: Callable[[str | None], str] | None = None
 
 
 def configured() -> bool:
@@ -112,7 +112,7 @@ async def warm_rollout_cohorts(uid: str) -> None:
         await _warm_resolver(uid)
 
 
-def configure_runtime_percent(percent: Callable[[str, float], float], legacy_sync: Callable[[], str]) -> None:
+def configure_runtime_percent(percent: Callable[[str, float], float], legacy_sync: Callable[[str | None], str]) -> None:
     """Bind the runtime `_ramp` reader (utils.rollout.runtime_percent); unbound processes keep env values."""
     global _percent_resolver, _legacy_sync_resolver
     _percent_resolver, _legacy_sync_resolver = percent, legacy_sync
@@ -128,11 +128,11 @@ def runtime_percent(name: str, *, env_default: float) -> float:
     return _percent_resolver(name, env_default)
 
 
-def legacy_sync_mode() -> str:
+def legacy_sync_mode(uid: str | None = None) -> str:
     """'on' | 'draining' | 'dark' (contract (h)); unbound means 'on', today's behaviour."""
     if _legacy_sync_resolver is None:
         return 'on'
-    return _legacy_sync_resolver()
+    return _legacy_sync_resolver(uid)
 
 
 # The free-tier policy retired in #22238. Retain its pure token grammar and

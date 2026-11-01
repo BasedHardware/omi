@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Notizen beginnen, wenn das endgültige Transkript ankommt.",
     "episodeOnDeviceNotesFootnote": "Auf deinem Telefon entstanden, während du sprichst. Die vollständigen Notizen kommen mit dem endgültigen Transkript.",
     "episodeOnThisPhone": "Auf diesem Telefon",
-    "liveCardTitle": "Live",
     "livePreviewBehind": "Endgültiges Transkript etwa {duration} zurück",
     "livePreviewCatchingUp": "Endgültiges Transkript holt auf",
     "livePreviewNoEngineBody": "Deine Worte erscheinen hier ein bis zwei Minuten nachdem du sie gesagt hast.",
     "livePreviewNoEngineTitle": "Nimmt sicher auf",
-    "livePreviewOnPhoneDivider": "Live auf diesem Telefon",
+    "livePreviewOnPhoneDivider": "Gerade eben, auf diesem Telefon",
     "livePreviewTurnOnLiveText": "Live-Text aktivieren",
     "deviceCatchUpOnItsWay": "unterwegs",
     "deviceCatchUpWhenOnline": "wenn wieder online",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Jährliche Zahlung ist für Ihren Plan gerade nicht verfügbar.",
     "yearlySwitchDoneTitle": "Sie zahlen jetzt jährlich",
     "yearlySwitchDoneBody": "Heute {amount} abgebucht. Verlängerung am {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} Teile} one{{count} Teil} two{{count} Teile} few{{count} Teile} many{{count} Teile} other{{count} Teile}}",
     "chatAppsWaitingMessageIn": "Sende die Nachricht in {app}. Dieser Bildschirm aktualisiert sich, sobald Omi sie erhält.",
-    "chatAppsCodeExpiredMessageIn": "Hol dir einen neuen Code und sende ihn in {app}."
+    "chatAppsCodeExpiredMessageIn": "Hol dir einen neuen Code und sende ihn in {app}.",
+    "episodeWritingNotes": "Notizen werden geschrieben…",
+    "episodeWritingNotesDetail": "Zuerst wird das Transkript fertiggestellt. Du kannst diese Seite verlassen.",
+    "episodeCoversUpTo": "Bis {time} · vollständige Notizen zum Schluss",
+    "liveTranscribedUpTo": "Transkribiert bis {time}",
+    "liveAudioSaved": "{duration} gespeichert",
+    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen."
 }

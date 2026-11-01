@@ -94,7 +94,8 @@ def test_release_resets_held_unit_when_target_restored():
     assert result['projection_blocked_since'] is None
     assert result['projection_block_type'] is None
     assert result['lineage_quarantine_version'] == 0
-    assert result['protocol_version'] == 1
+    assert result['protocol_version'] == 2
+    assert result['projection_release_version'] == 1
     assert job['recovery_state'] is None
     # Audio is never touched by the reset.
     assert job['audio_uri'] == 'gs://synthetic/audio'
@@ -109,7 +110,7 @@ def test_release_resets_held_unit_when_target_restored():
         lambda seeded: seeded[('batch_pipeline_prod_jobs', 'held')].pop('recovery_state'),
         lambda seeded: seeded[('batch_pipeline_prod_results', 'held')].update(projection_state='pending'),
         lambda seeded: seeded[('batch_pipeline_prod_results', 'held')].update(projection={'state': 'ready'}),
-        lambda seeded: seeded[('batch_pipeline_prod_results', 'held')].update(projection_redriven_at=499.0),
+        lambda seeded: seeded[('batch_pipeline_prod_results', 'held')].update(projection_release_attempts=3),
         lambda seeded: seeded[('users', OWNER, 'conversations', TARGET)].update(status='processing'),
         lambda seeded: seeded[('users', OWNER, 'conversations', TARGET)].update(deleted=True),
     ],

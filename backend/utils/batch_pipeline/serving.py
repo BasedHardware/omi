@@ -12,6 +12,7 @@ from config.batch_pipeline import (
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
     recovery_dispatch_interval_seconds,
+    projection_hold_recovery_enabled,
 )
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
@@ -43,9 +44,9 @@ HELD_PARTIAL_TICK_SECONDS = 20.0
 HELD_PARTIAL_READS_PER_HOUR = 120_000
 HELD_PARTIAL_READS_PER_UNIT = 16
 HELD_PARTIAL_WINDOW_SECONDS = 3600.0
-# Held units whose record target may have been restored are re-examined at this
-# slow cadence: one bounded page per tick, wraps at the scan's own pace.
-RELEASE_HELD_INTERVAL_SECONDS = 900.0
+# Re-examine landed targets at most once per minute on the maintenance leader.
+# One page has its own inter-row time budget, so fresh projection resumes.
+RELEASE_HELD_INTERVAL_SECONDS = 60.0
 
 
 class Serving:
@@ -223,7 +224,9 @@ class Serving:
                 )
         release_held = getattr(self.projector, 'release_held_scan', None)
         if release_held is not None and time.monotonic() >= self.release_held_due:
-            self.release_held_due = time.monotonic() + RELEASE_HELD_INTERVAL_SECONDS
+            self.release_held_due = time.monotonic() + (
+                RELEASE_HELD_INTERVAL_SECONDS if projection_hold_recovery_enabled() else 900.0
+            )
             try:
                 release_held()
             except Exception as error:

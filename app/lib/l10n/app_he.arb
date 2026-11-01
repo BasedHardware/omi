@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "הפתקים מתחילים כשמגיע התמליל הסופי.",
     "episodeOnDeviceNotesFootnote": "נערכות בטלפון שלך בזמן שאתה מדבר. הפתקים המלאים מגיעים עם התמליל הסופי.",
     "episodeOnThisPhone": "בטלפון הזה",
-    "liveCardTitle": "בשידור חי",
     "livePreviewBehind": "התמליל הסופי בפיגור של כ-{duration}",
     "livePreviewCatchingUp": "התמליל הסופי מתעדכן",
     "livePreviewNoEngineBody": "המילים שלך מופיעות כאן דקה או שתיים אחרי שאמרת אותן.",
     "livePreviewNoEngineTitle": "מקליט בבטחה",
-    "livePreviewOnPhoneDivider": "בשידור חי בטלפון הזה",
+    "livePreviewOnPhoneDivider": "ממש עכשיו, בטלפון הזה",
     "livePreviewTurnOnLiveText": "הפעל טקסט חי",
     "deviceCatchUpOnItsWay": "בדרך",
     "deviceCatchUpWhenOnline": "כשיש חיבור",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "תשלום שנתי אינו זמין כרגע לתוכנית שלך.",
     "yearlySwitchDoneTitle": "עברת לתשלום שנתי",
     "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}.",
-    "episodePartsCount": "{count, plural, zero{{count} חלקים} one{{count} חלק} two{{count} חלקים} few{{count} חלקים} many{{count} חלקים} other{{count} חלקים}}",
     "chatAppsWaitingMessageIn": "שלחו את ההודעה באפליקציית {app}. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.",
-    "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}."
+    "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}.",
+    "episodeWritingNotes": "כותבים הערות…",
+    "episodeWritingNotesDetail": "קודם מסיימים את התמלול. אפשר לעזוב את הדף.",
+    "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
+    "liveTranscribedUpTo": "תומלל עד {time}",
+    "liveAudioSaved": "{duration} נשמרו",
+    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה."
 }

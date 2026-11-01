@@ -22,19 +22,44 @@ def defaults(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('language', [None, '', 'multi', 'auto', 'und', 'unknown', 'xx', 'ja', 'vi'])
 @pytest.mark.parametrize('user_language', ['multi', 'auto', 'en'])
 async def test_multilingual_unknown_or_unsupported_conversation_never_enters_custody(
-    monkeypatch, mode, language, user_language
+    monkeypatch, language, user_language
 ):
     writer = Mock(side_effect=AssertionError('excluded upload wrote batch custody'))
     monkeypatch.setattr(intake, 'admit', writer)
     response, staged, probe = await upload(
-        monkeypatch, user_language=user_language, conversation_language=language, mode=mode
+        monkeypatch, user_language=user_language, conversation_language=language, mode='on'
     )
     assert response is None and not staged and not probe.called
     writer.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize(
+    'user,conversation,single',
+    [
+        ('multi', None, False),
+        ('multi', 'und', False),
+        ('auto', 'xx', False),
+        ('en', 'ja', False),
+        ('multi', 'vi', False),
+        ('ja', None, False),
+        ('en', 'vi', True),
+        ('multi', 'ko-KR', True),
+    ],
+)
+async def test_excluded_languages_enter_batch_once_owner_legacy_is_retired(
+    monkeypatch, mode, user, conversation, single
+):
+    # Legacy no longer takes new work for this owner, so exclusion would leave the upload with
+    # neither lane; it enters batch custody instead (C8's provider route serves it).
+    response, staged, _ = await upload(
+        monkeypatch, user_language=user, conversation_language=conversation, single=single, mode=mode
+    )
+    assert admitted(response, staged)
 
 
 @pytest.mark.asyncio
@@ -85,17 +110,16 @@ async def test_single_supported_language_is_unchanged(monkeypatch, mode):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('single', [False, True])
 @pytest.mark.parametrize('user,conversation', [('ja', None), ('en', 'vi'), ('multi', 'ko-KR')])
 @pytest.mark.parametrize('inherit', ['true', 'false'])
 async def test_effective_unsupported_code_excluded_even_when_old_eligibility_is_off(
-    monkeypatch, mode, single, user, conversation, inherit
+    monkeypatch, single, user, conversation, inherit
 ):
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     response, staged, probe = await upload(
-        monkeypatch, user_language=user, conversation_language=conversation, single=single, mode=mode
+        monkeypatch, user_language=user, conversation_language=conversation, single=single, mode='on'
     )
     assert response is None and not staged and not probe.called
 
@@ -188,8 +212,9 @@ async def test_durable_batch_conversation_owner_keeps_its_route(monkeypatch):
 async def test_exclusion_precedes_legacy_owner_rehome(monkeypatch):
     rehome = Mock(side_effect=AssertionError('excluded upload changed a durable route'))
     monkeypatch.setattr(final_pass_rehome, 'upload_rehome', rehome)
+    # Exclusion applies only while the owner still has legacy (dark admits it: see the retired-owner test).
     response, staged, probe = await upload(
-        monkeypatch, user_language='multi', conversation_language='ja', owner='legacy_final_pass_v1', mode='dark'
+        monkeypatch, user_language='multi', conversation_language='ja', owner='legacy_final_pass_v1', mode='on'
     )
     assert response is None and not staged and not probe.called
     rehome.assert_not_called()

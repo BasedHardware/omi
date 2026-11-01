@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Le note iniziano quando arriva la trascrizione finale.",
     "episodeOnDeviceNotesFootnote": "Abbozzate sul tuo telefono mentre parli. Le note complete arrivano con la trascrizione finale.",
     "episodeOnThisPhone": "Su questo telefono",
-    "liveCardTitle": "In diretta",
     "livePreviewBehind": "Trascrizione finale in ritardo di circa {duration}",
     "livePreviewCatchingUp": "La trascrizione finale si sta aggiornando",
     "livePreviewNoEngineBody": "Le tue parole compaiono qui uno o due minuti dopo che le hai dette.",
     "livePreviewNoEngineTitle": "Registrazione in sicurezza",
-    "livePreviewOnPhoneDivider": "In diretta su questo telefono",
+    "livePreviewOnPhoneDivider": "Proprio ora, su questo telefono",
     "livePreviewTurnOnLiveText": "Attiva il testo in diretta",
     "deviceCatchUpOnItsWay": "in arrivo",
     "deviceCatchUpWhenOnline": "quando torni online",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "La fatturazione annuale non è disponibile per il tuo piano in questo momento.",
     "yearlySwitchDoneTitle": "Ora sei sull'annuale",
     "yearlySwitchDoneBody": "Addebitati {amount} oggi. Rinnovo il {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} parti} one{{count} parte} two{{count} parti} few{{count} parti} many{{count} parti} other{{count} parti}}",
     "chatAppsWaitingMessageIn": "Invia il messaggio in {app}. Questa schermata si aggiorna appena Omi lo riceve.",
-    "chatAppsCodeExpiredMessageIn": "Ottieni un nuovo codice e invialo da {app}."
+    "chatAppsCodeExpiredMessageIn": "Ottieni un nuovo codice e invialo da {app}.",
+    "episodeWritingNotes": "Scrittura delle note…",
+    "episodeWritingNotesDetail": "Prima completiamo la trascrizione. Puoi lasciare questa pagina.",
+    "episodeCoversUpTo": "Fino alle {time} · note complete alla fine",
+    "liveTranscribedUpTo": "Trascritto fino alle {time}",
+    "liveAudioSaved": "{duration} salvati",
+    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento."
 }

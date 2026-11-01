@@ -2,11 +2,12 @@
 
 import io
 import json
+from urllib.error import URLError
 from unittest.mock import Mock
 
 import pytest
 
-from utils.batch_pipeline.compute_client import ComputeClient
+from utils.batch_pipeline.compute_client import ComputeClient, failure_outcome, InvalidReceipt
 from utils.batch_pipeline.contracts import LeasedWork
 from tests.unit.test_batch_pipeline_scheduler import item
 
@@ -70,6 +71,46 @@ def test_hold_reason_receipt_round_trips_for_the_durable_decision():
         send=lambda *args, **kwargs: io.BytesIO(json.dumps(body).encode()),
     )
     assert client([lease()])['held_reason'] == {'segment': 'allowance_exhausted'}
+
+
+@pytest.mark.parametrize(
+    'error,expected',
+    [
+        (TimeoutError(), 'timeout'),
+        (URLError(TimeoutError()), 'timeout'),
+        (ConnectionError(), 'transport'),
+    ],
+)
+def test_client_faults_have_bounded_distinct_outcomes(error, expected):
+
+    assert failure_outcome(error) == expected
+    assert failure_outcome(InvalidReceipt()) == 'invalid_receipt'
+
+
+def test_malformed_json_is_invalid_receipt_and_never_permission():
+
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'aud',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(b'invalid-json'),
+    )
+    with pytest.raises(InvalidReceipt):
+        client([lease()])
+
+
+def test_deeply_nested_json_is_an_invalid_receipt_not_a_transport_failure():
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'aud',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(b'[' * 2000 + b']' * 2000),
+    )
+    with pytest.raises(InvalidReceipt) as error:
+        client([lease()])
+    assert failure_outcome(error.value) == 'invalid_receipt'
 
 
 @pytest.mark.parametrize(

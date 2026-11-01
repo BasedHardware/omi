@@ -93,7 +93,7 @@ async def upload(
     def units(*args, **kwargs):
         yield audio_unit(100, b'\x01\x00' * int(seconds * 16000))
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store if store is not None else MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)

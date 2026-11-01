@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Нотатки з’являться, коли прибуде фінальна розшифровка.",
     "episodeOnDeviceNotesFootnote": "Створюються на вашому телефоні, поки ви говорите. Повні нотатки з’являться разом із фінальною розшифровкою.",
     "episodeOnThisPhone": "На цьому телефоні",
-    "liveCardTitle": "Наживо",
     "livePreviewBehind": "Фінальна розшифровка відстає приблизно на {duration}",
     "livePreviewCatchingUp": "Фінальна розшифровка наздоганяє",
     "livePreviewNoEngineBody": "Ваші слова з’являться тут через хвилину-дві після того, як ви їх промовите.",
     "livePreviewNoEngineTitle": "Безпечний запис",
-    "livePreviewOnPhoneDivider": "Наживо на цьому телефоні",
+    "livePreviewOnPhoneDivider": "Щойно, на цьому телефоні",
     "livePreviewTurnOnLiveText": "Увімкнути текст наживо",
     "deviceCatchUpOnItsWay": "в дорозі",
     "deviceCatchUpWhenOnline": "коли з'явиться інтернет",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Річна оплата зараз недоступна для вашого плану.",
     "yearlySwitchDoneTitle": "Тепер ви платите раз на рік",
     "yearlySwitchDoneBody": "Сьогодні списано {amount}. Поновлення {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} частини} one{{count} частина} two{{count} частини} few{{count} частини} many{{count} частин} other{{count} частини}}",
     "chatAppsWaitingMessageIn": "Надішліть повідомлення в застосунку «{app}». Цей екран оновиться, щойно Omi його отримає.",
-    "chatAppsCodeExpiredMessageIn": "Отримайте новий код і надішліть його з застосунку «{app}»."
+    "chatAppsCodeExpiredMessageIn": "Отримайте новий код і надішліть його з застосунку «{app}».",
+    "episodeWritingNotes": "Пишемо нотатки…",
+    "episodeWritingNotesDetail": "Спочатку завершуємо транскрипцію. Можете залишити цю сторінку.",
+    "episodeCoversUpTo": "Охоплює до {time} · повні нотатки після завершення",
+    "liveTranscribedUpTo": "Транскрибовано до {time}",
+    "liveAudioSaved": "Збережено {duration}",
+    "liveAudioSavedDetail": "Учасники й остаточна транскрипція з'являться тут під час завантаження."
 }

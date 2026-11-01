@@ -182,6 +182,7 @@ class SimConfig:
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
     # C8 admission route (intake.accept_upload): stored language, BYOK, legacy_sync mode.
     language: str = 'en'
+    worker_language: str | None = None  # frozen intake metadata, when different from the declared language
     byok: bool = False
     legacy_sync: str = 'on'  # on | draining | dark
 
@@ -277,7 +278,7 @@ class SimWorker:
             config=self.config,
             recover_words=self.planned.recover_words,
             gpu_lock=contextlib.nullcontext(),
-            language_of=lambda item: 'en',  # This virtual corpus is declared English.
+            language_of=lambda item: self.sim.config.worker_language or self.sim.config.language,
         )
         self.index = index
 
@@ -420,6 +421,9 @@ class Simulation:
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
             (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
+            # Synthetic artifacts are not WAV bytes; use the same explicit
+            # strict-VAD double as the provider stage at this external leaf.
+            (recovery_module, 'inspect_audio', self._provider_inspect),
             # Only Modulate is modeled here. Refuse the unmodeled Soniox leg
             # before touching its real client, even if the host has a key.
             (recovery_module, 'independent_ready', lambda: False),

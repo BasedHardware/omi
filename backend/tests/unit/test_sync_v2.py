@@ -112,11 +112,11 @@ class TestSyncV2Structure:
         assert '"/v2/sync-local-files/{job_id}"' in source
         assert 'def get_sync_job_status' in source
 
-    def test_v1_endpoint_unchanged(self):
-        """v1 endpoint must still exist with original path and function name."""
+    def test_v1_endpoint_is_a_410_stub(self):
+        """v1 keeps its path and function name but answers 410 (lane 10 slice 2b; 7-day census: zero calls)."""
         source = self._read_sync_source()
-        assert '"/v1/sync-local-files"' in source
-        assert 'async def sync_local_files(' in source
+        assert '"/v1/sync-local-files", deprecated=True, status_code=410' in source
+        assert '\ndef sync_local_files(' in source
 
     def test_v2_returns_202_with_job_id(self):
         """v2 POST must return 202 with job_id."""
@@ -330,9 +330,7 @@ class TestSyncV2Structure:
     def test_device_provenance_survives_inline_and_cloud_task_dispatch(self):
         """Offline sync must stamp the conversation that canonical extraction reads."""
         source = self._read_sync_source()
-        v1_start = source.index('async def sync_local_files(')
         v2_start = source.index('async def sync_local_files_v2')
-        v1 = source[v1_start:v2_start]
         v2_end = source.find('\n@router.', v2_start + 1)
         v2 = source[v2_start:v2_end]
         task_handler = source[source.index('async def run_sync_job') :]
@@ -344,7 +342,6 @@ class TestSyncV2Structure:
             pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')
         ]
 
-        assert 'resolve_client_device_from_request(request)' in v1
         assert 'resolve_client_device(' in v2
         assert "'client_device_id': client_device_context.client_device_id" in v2
         assert 'client_device_id=client_device_context.client_device_id' in v2
@@ -668,68 +665,6 @@ class TestFullPipelineBackground:
 # ---------------------------------------------------------------------------
 # 4. v1 regression tests — v1 must be completely unchanged
 # ---------------------------------------------------------------------------
-
-
-class TestV1Unchanged:
-    """Verify v1 endpoint behavior is not modified by v2 addition."""
-
-    @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            return f.read()
-
-    def _get_v1_body(self):
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        # v1 ends at the v2 section comment
-        end = source.index('# v2 async sync-local-files', start)
-        return source[start:end]
-
-    def test_v1_returns_200_on_success(self):
-        """v1 must still return dict (200) on full success."""
-        body = self._get_v1_body()
-        assert 'return result' in body, "v1 must return result dict for 200"
-
-    def test_v1_returns_207_on_partial_failure(self):
-        """v1 must still return 207 on partial failure."""
-        body = self._get_v1_body()
-        assert 'status_code=207' in body, "v1 must return 207 for partial failure"
-
-    def test_v1_returns_500_on_total_failure(self):
-        """v1 must still raise 500 when all segments fail."""
-        body = self._get_v1_body()
-        assert 'status_code=500' in body, "v1 must raise 500 for total failure"
-
-    def test_v1_uses_synchronous_gather(self):
-        """v1 must process segments synchronously with asyncio.gather (no background)."""
-        body = self._get_v1_body()
-        assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
-        assert 'run_blocking' in body, "v1 must use run_blocking for blocking segment work"
-        assert 'sync_executor' in body, "v1 must use sync_executor for segment work"
-
-    def test_v1_cleanup_in_finally(self):
-        """v1 must still clean up files in finally block."""
-        body = self._get_v1_body()
-        assert 'finally:' in body
-        assert '_cleanup_files' in body
-
-    def test_v1_has_no_job_id(self):
-        """v1 must not reference job_id or Redis jobs."""
-        body = self._get_v1_body()
-        assert 'job_id' not in body, "v1 must not use job_id"
-        assert 'create_sync_job' not in body, "v1 must not use sync_jobs"
-
-    def test_v1_path_unchanged(self):
-        """v1 must still be at /v1/sync-local-files."""
-        source = self._read_sync_source()
-        # Find the v1 decorator line
-        v1_decorator_idx = source.index('"/v1/sync-local-files"')
-        # The next function def after this decorator should be sync_local_files
-        func_start = source.index('async def ', v1_decorator_idx)
-        func_line = source[func_start : source.index('\n', func_start)]
-        assert 'sync_local_files(' in func_line
-        assert 'v2' not in func_line
 
 
 # ---------------------------------------------------------------------------
