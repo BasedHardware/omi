@@ -39,6 +39,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+        # artifacts on open/play/download only. Kill switch: set false.
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
           value: 'true'
@@ -255,6 +258,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+        # artifacts on open/play/download only. Kill switch: set false.
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -495,6 +501,9 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -835,6 +844,9 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -1205,6 +1217,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
           # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
@@ -1546,6 +1561,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
+          # artifacts on open/play/download only. Kill switch: set false.
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
           # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
