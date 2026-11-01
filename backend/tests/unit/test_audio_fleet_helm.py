@@ -202,11 +202,11 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 6, (
-        'each replica pins one g2-standard-8 + L4 node (~$13.7/day); floor 6 '
-        'matches the HPA Pods metric (~6 desired at 0.857 avg active requests '
-        'vs target 2, 7d GPU engine active avg 5.6%, lead 2026-11-01). Ladder '
-        'below 6 only after the batch-100 live-demand read.'
+    assert hpa['minReplicas'] == 7, (
+        'each replica pins one g2-standard-8 + L4 node (~$13.7/day); floor 7 '
+        'is the guard schedule day floor: a weekday peak needs 6-7 pods and '
+        'a fleet shed in the L4 stockout may not return (lead f66b37, '
+        '2026-11-01). The schedule, not this floor, drops to 4 overnight.'
     )
     assert hpa['maxReplicas'] == 12
     _assert_parakeet_floor_covers_guard_schedule(hpa['minReplicas'])

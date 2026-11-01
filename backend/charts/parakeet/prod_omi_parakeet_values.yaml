@@ -208,11 +208,12 @@ autoscaling:
   # pre-P77r) and workloadOnly=false together.
   # COUPLING (Luna r1, #24276): the incluster-guards floorSchedule owns the
   # running floor whenever it is enabled AND not deferred by a rollback marker
-  # (prod schedule is all-hours 4, benched-live until pkwin2 #23863). This
+  # (prod schedule: 4 for 00-11Z, 7 for 12-23Z since 2026-11-01). This
   # chart floor is what the fleet holds while the schedule is deferred — it
   # must stay >= every schedule hour so the deferred state is never colder
   # than the scheduled one (pinned by test_audio_fleet_helm).
-  minReplicas: 6
+  # 7 = the schedule's day floor (liveoptimal, lead ruling f66b37).
+  minReplicas: 7
   maxReplicas: 12
   behavior:
     scaleUp:

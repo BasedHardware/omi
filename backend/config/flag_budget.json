@@ -78,6 +78,7 @@
     "BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY": {"owner": "two-lane lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_SHADOW_LANGUAGE_PROBES_PER_HOUR": {"owner": "two-lane lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR": {"seeded": "2026-10-25"},
+    "BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT": {"owner": "flightcut / batch rollout lead", "review_by": "2026-11-29"},
     "BATCH_PIPELINE_SHADOW_PERCENT": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_SHADOW_RECOVERY_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED": {"seeded": "2026-10-25"},
