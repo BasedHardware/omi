@@ -121,6 +121,9 @@ declare -a CI_PREDICTION_VERIFIED=()
 declare -a CI_PREDICTION_DEFERRED=()
 declare -a CI_PREDICTION_SKIPPED=()
 CI_PREDICTION_SELECTION=""
+# Set once the shared PR preflight (the full manifest) has run, so steps that duplicate a
+# manifest check can rely on it instead of running the same command a second time.
+SHARED_PREFLIGHT_RAN=0
 
 ci_prediction_note_verified() {
   CI_PREDICTION_VERIFIED+=("$1")
@@ -253,6 +256,7 @@ check_pr_preflight() {
   #   scripts/pr-preflight --pr-body-file /tmp/pr-body.md
   # or: OMI_PR_BODY_FILE=/tmp/pr-body.md git push
   scripts/pr-preflight --lane local --base "$BASE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
+  SHARED_PREFLIGHT_RAN=1
   if [ "$has_supplied_pr_body" -eq 1 ]; then
     ci_prediction_note_verified "shared PR contract, hygiene, and supplied PR body"
   else
@@ -652,6 +656,14 @@ check_backend_unit_tests_if_needed() {
 check_runtime_image_source_closure_if_needed() {
   if [ "${PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE:-}" = "1" ]; then
     echo "Skipping runtime-image contract check because PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE=1."
+    return
+  fi
+
+  # The shared preflight runs this exact command as manifest check
+  # backend-runtime-image-source-closure, whose triggers cover every backend and
+  # plugin path below. Running it twice cost ~140 s per backend push.
+  if [ "$SHARED_PREFLIGHT_RAN" = "1" ]; then
+    echo "Runtime-image contract check already ran in the shared PR preflight (backend-runtime-image-source-closure)."
     return
   fi
 
