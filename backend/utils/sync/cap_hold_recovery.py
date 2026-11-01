@@ -471,7 +471,7 @@ async def _handoff_paced(uid: str, snapshot: Any, row: dict) -> bool:
     return True
 
 
-async def finish_handoff(uid: str, snapshot: Any, row: dict | None = None) -> bool:
+async def finish_handoff(uid: str, snapshot: Any, row: dict[str, Any] | None = None) -> bool:
     """Erase a handed-off hold's audio once its batch content is durably completed.
 
     Until then this hold is the only copy outside the staged batch object, which the batch
@@ -480,9 +480,9 @@ async def finish_handoff(uid: str, snapshot: Any, row: dict | None = None) -> bo
     """
     from utils.batch_pipeline import cap_hold_admission
 
-    row = row if row is not None else snapshot.to_dict() or {}
-    job_id = row.get('batch_job_id')
-    if row.get('state') != 'batch_admitted' or not job_id:
+    current: dict[str, Any] = row if row is not None else (snapshot.to_dict() or {})
+    job_id = current.get('batch_job_id')
+    if current.get('state') != 'batch_admitted' or not job_id:
         return False
     try:
         projected = await run_blocking(db_executor, cap_hold_admission.handoff_projected, uid, job_id)
@@ -491,7 +491,7 @@ async def finish_handoff(uid: str, snapshot: Any, row: dict | None = None) -> bo
         return False
     if not projected:
         return False
-    await run_blocking(storage_executor, _erase, uid, snapshot, row)
+    await run_blocking(storage_executor, _erase, uid, snapshot, current)
     return True
 
 
