@@ -43,24 +43,41 @@ if "fastapi" not in sys.modules:
                 pass
 
         class HTTPException(Exception):
-            def __init__(self, status_code=500, detail=""):
+            def __init__(self, status_code=500, detail="", headers=None, *args, **kwargs):
                 super().__init__(detail)
                 self.status_code = status_code
                 self.detail = detail
+                self.headers = headers or {}
+
+        class Request:
+            def __init__(self, *args, **kwargs):
+                self.headers = {}
+                self.query_params = {}
+
+        class Depends:
+            def __init__(self, *args, **kwargs):
+                pass
 
         fastapi.APIRouter = APIRouter
         fastapi.FastAPI = FastAPI
         fastapi.Query = Query
         fastapi.HTTPException = HTTPException
+        fastapi.Request = Request
+        fastapi.Depends = Depends
         sys.modules["fastapi"] = fastapi
 
         responses = types.ModuleType("fastapi.responses")
 
         class HTMLResponse:
-            pass
+            def __init__(self, content="", status_code=200, *args, **kwargs):
+                self.content = content
+                self.body = content.encode("utf-8") if isinstance(content, str) else content
+                self.status_code = status_code
 
         class JSONResponse:
-            pass
+            def __init__(self, content=None, status_code=200, *args, **kwargs):
+                self.content = content
+                self.status_code = status_code
 
         responses.HTMLResponse = HTMLResponse
         responses.JSONResponse = JSONResponse
@@ -92,6 +109,10 @@ spec = importlib.util.spec_from_file_location("iq_rating_main", PLUGIN_DIR / "ma
 main = importlib.util.module_from_spec(spec)
 sys.modules["iq_rating_main"] = main
 spec.loader.exec_module(main)
+
+
+def load_app():
+    return main
 
 
 class TestIqRatingExceptionGuards(unittest.TestCase):
@@ -346,15 +367,17 @@ class IQRatingCalculateAITests(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
+class _DummyRequest:
+    def __init__(self, query_params=None, headers=None):
+        self.query_params = query_params or {}
+        self.headers = headers or {}
 
 
 class TestIqRatingHtmlAndApiExceptionMasking(unittest.TestCase):
     def test_iq_rating_page_masks_exception_in_html(self):
         import asyncio
         with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive database leak: /var/data/sqlite.db")):
-            response = asyncio.run(main.iq_rating_page(uid="test_user"))
+            response = asyncio.run(main.iq_rating_page(request=_DummyRequest(), uid="test_user"))
             html_content = getattr(response, "body", None)
             if html_content is None:
                 html_content = getattr(response, "content", "")
@@ -367,7 +390,11 @@ class TestIqRatingHtmlAndApiExceptionMasking(unittest.TestCase):
         import asyncio
         with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive sql error")):
             with self.assertRaises(main.HTTPException) as ctx:
-                asyncio.run(main.iq_rating_api(uid="test_user"))
+                asyncio.run(main.iq_rating_api(request=_DummyRequest(), uid="test_user"))
             self.assertEqual(ctx.exception.status_code, 500)
             self.assertEqual(ctx.exception.detail, "Internal server error processing IQ ratings")
             self.assertNotIn("sensitive sql error", ctx.exception.detail)
+
+
+if __name__ == "__main__":
+    unittest.main()
