@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from utils.batch_pipeline.compute_client import ComputeClient
+from utils.batch_pipeline.compute_client import ComputeClient, failure_outcome, InvalidReceipt
 from utils.batch_pipeline.contracts import LeasedWork
 from tests.unit.test_batch_pipeline_scheduler import item
 
@@ -82,14 +82,12 @@ def test_hold_reason_receipt_round_trips_for_the_durable_decision():
     ],
 )
 def test_client_faults_have_bounded_distinct_outcomes(error, expected):
-    from utils.batch_pipeline.compute_client import failure_outcome, InvalidReceipt
 
     assert failure_outcome(error) == expected
     assert failure_outcome(InvalidReceipt()) == 'invalid_receipt'
 
 
 def test_malformed_json_is_invalid_receipt_and_never_permission():
-    from utils.batch_pipeline.compute_client import InvalidReceipt
 
     client = ComputeClient(
         'https://synthetic.invalid',

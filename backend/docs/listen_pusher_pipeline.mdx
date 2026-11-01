@@ -7152,6 +7152,33 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+### Batch worker artifact IO and fenced publication
+
+The dedicated worker prepares a lane's first fetch/decode before acquiring the
+GPU lock, within one shared 1800-admitted-audio-second budget across pump lanes.
+Oversize units retain ordinary locked decode. Prepared audio, language and
+capture-stream context belong to the exact lease attempt; a replacement attempt
+cannot consume an older context. Stop and lost renewal cancel queued preparation
+and drain bounded running IO before renewal ends. Cancelled waiting attempts are
+refunded through the existing lease fence, including after renewal recovers.
+
+All model calls and CUDA quiescence remain exclusive on the calling thread.
+The final encrypted persist tail settles after releasing GPU ownership, with
+renewal active through fenced publication. No result publishes before its write
+settles; per-unit persistence errors retain the existing retry/recovery path.
+Fatal CUDA and SIGTERM still drain outstanding IO. The shared artifact pool is
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY=5` (Helm `worker.ioConcurrency`); `1`
+restores serial IO and disables preparation at worker restart. For the exact
+previous overlap/default, restore the prior image with IO concurrency `3`.
+
+Retry-to-ready wakeups now emit `requeued`; `retry` counts real worker failures.
+Unique fenced completion exports capture seconds by success/silence, including
+silence. CPU-only strict-VAD shadow records strict-silent/pyannote-nonempty
+comparisons and CPU cost without changing any disposition or GPU model call.
+There is no early-silence enablement, new wire contract or job-schema migration.
+Details and rollback custody: [worker runtime](../diarizer/batch_pipeline_runtime.md)
+and [worker contract](./batch-pipeline-worker.md).
+
 ### Batch worker GPU skips (speech-only diarization, short single speaker)
 
 Two switches decide whether the batch worker runs diarization on the whole

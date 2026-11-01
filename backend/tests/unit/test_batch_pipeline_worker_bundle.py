@@ -18,6 +18,8 @@ from diarizer.batch_pipeline_models import StagedAudio
 from diarizer.batch_pipeline_runtime import SynchronizedWorker
 from tests.unit.test_batch_pipeline_worker import setup_worker, item
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from tests.unit.test_batch_pipeline_artifacts import setup as artifacts_setup, item as artifact_item
+from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline import pump as pump_module, worker_metrics
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline.contracts import FailedWork, WorkResult
@@ -388,9 +390,6 @@ def test_shadow_cannot_change_words_speakers_clocks_or_model_calls(monkeypatch, 
 
 def test_privacy_delete_during_persist_never_publishes(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
-    from tests.unit.test_batch_pipeline_artifacts import setup as artifacts_setup, item as artifact_item
-    from utils.batch_pipeline.artifacts import ProtectionContext
-
     artifacts, objects, policy = artifacts_setup()
     work = artifact_item()
     worker, _, _, _, _, _ = setup_worker(
