@@ -692,7 +692,9 @@ class ProviderSttStage:
         plan = self._guarded(segment_id, self._prepare, segment_id)
         if isinstance(plan, UnitOutcome):
             return plan
-        return self._guarded(segment_id, self._finish, plan, self._call_sync(plan))
+        started = time.monotonic()
+        response = self._call_sync(plan)
+        return self._guarded(segment_id, self._finish, plan, response, time.monotonic() - started)
 
     async def run_async(self, segment_id: str, run_sync: Callable[..., Awaitable[Any]]) -> UnitOutcome:
         """One delivery: Firestore/GCS/VAD work through ``run_sync`` (an executor), the vendor call
@@ -700,8 +702,9 @@ class ProviderSttStage:
         plan = await run_sync(self._guarded, segment_id, self._prepare, segment_id)
         if isinstance(plan, UnitOutcome):
             return plan
+        started = time.monotonic()
         response = await self._call_async(plan)
-        return await run_sync(self._guarded, segment_id, self._finish, plan, response)
+        return await run_sync(self._guarded, segment_id, self._finish, plan, response, time.monotonic() - started)
 
     def _guarded(self, segment_id: str, fn: Callable[..., Any], *args) -> Any:
         try:
@@ -827,7 +830,7 @@ class ProviderSttStage:
             vendor_metrics.failover(route.provider_service, service)
         return _Call(segment_id, item, route, token, service, inspected, failure, tuple(candidates))
 
-    def _finish(self, plan: _Call, response: dict | RecoveryFailure | None) -> UnitOutcome:
+    def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token
         duration = item.duration_seconds
         if isinstance(response, dict):
@@ -861,6 +864,8 @@ class ProviderSttStage:
                 vendor_metrics.late_result(plan.service, 'ignored')
                 return UnitOutcome('done', 'superseded')
             vendor_metrics.attempt(plan.service, outcome, 0.0 if outcome in contracts.UNBILLED_OUTCOMES else audio)
+            if plan.failure is None:
+                self._record_attempt(plan.service, outcome, latency)
             if settled == 'failover':
                 self._log('failover', failure['reason'])
                 # Immediate redelivery picks the next healthy unpaid vendor, or parks in vendor_held.
@@ -888,6 +893,8 @@ class ProviderSttStage:
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
+            if not silence:
+                self._record_attempt(plan.service, outcome, latency)
         else:
             # The attempt was settled elsewhere (abandoned, then failed over): never overwrite.
             vendor_metrics.late_result(plan.service, 'ignored')
@@ -919,6 +926,12 @@ class ProviderSttStage:
             else:
                 try:
                     allowed, reason = self.health.allows(service)
+                    reserve = getattr(self.health, 'reserve', None)
+                    if allowed and reserve is not None:
+                        # Slice C: count the unit against the vendor's daily cap and month budget
+                        # before the mint (never inside a retried transaction body). A cap is
+                        # unhealthy, not an error: try the next vendor, else hold.
+                        allowed, reason = reserve(service, float(job.get('duration_seconds') or 0.0))
                 except Exception:
                     allowed, reason = False, VendorHealthReason.STATE_UNAVAILABLE
             if allowed:
@@ -967,6 +980,16 @@ class ProviderSttStage:
         except Exception:
             return False
 
+    def _record_attempt(self, service: str, outcome: VendorAttemptOutcome, latency: float | None) -> None:
+        """Feed a settled vendor attempt to slice C's breaker windows, when the health has them."""
+        record = getattr(self.health, 'record_attempt', None)
+        if record is None:
+            return
+        try:
+            record(service, outcome, latency_seconds=latency)
+        except Exception:
+            pass
+
     def _reconcile(self, segment_id: str, job: dict, item: WorkItem, route: SttRoute) -> UnitOutcome:
         intent = job['provider_intent']
         uri = self.artifacts.find_recovery_result(item, intent['token'])
@@ -999,6 +1022,7 @@ class ProviderSttStage:
             if not settled:
                 return UnitOutcome('done', 'superseded')
             vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.ABANDONED, item.duration_seconds)
+            self._record_attempt(intent['service'], VendorAttemptOutcome.ABANDONED, None)
             if settled == 'failover':
                 self._log('failover', 'abandoned_running')
                 return UnitOutcome('deferred', 'not_due', self.clock())

@@ -293,7 +293,7 @@ def test_no_healthy_vendor_parks_the_unit_with_custody_and_owner_order(store):
     assert (hold.held_at, hold.redrive_at, hold.redrives) == (200.0, 500.0, 0)
     assert vendors.calls == [] and 'provider_attempts' not in row and artifacts.deleted == []
     # Guards exclude a live hold (T3, age proxy, 2h backstop) like an allowance hold.
-    assert is_vendor_policy_hold(row, 400.0, 900.0)
+    assert is_vendor_policy_hold(row, 400.0, redrive_seconds=300.0, stale_grace_seconds=900.0)
     from database.batch_pipeline_store import is_policy_hold
 
     assert is_policy_hold(row, 400.0) and not is_policy_hold(row, 500.0 + 900.0 + 1)
@@ -326,7 +326,7 @@ def test_redrive_kill_switch_parks_without_redrive_and_the_hold_goes_stale(store
     parked = stage(store, artifacts, vendors, now=600.0, health=Health()).run('p1')
     assert parked.outcome == 'deferred' and job(store)['state'] == VENDOR_HELD and vendors.calls == []
     assert job(store)[HOLD_FIELD]['redrive_at'] == 500.0  # unchanged: the hold now ages toward stale
-    assert not is_vendor_policy_hold(job(store), 500.0 + 900.0 + 1, 900.0)
+    assert not is_vendor_policy_hold(job(store), 500.0 + 900.0 + 1, redrive_seconds=300.0, stale_grace_seconds=900.0)
 
 
 def test_erasure_releases_a_held_unit_through_the_fence(store):
@@ -336,6 +336,53 @@ def test_erasure_releases_a_held_unit_through_the_fence(store):
     assert stage(store, artifacts, vendors, now=600.0).run('p1').reason == 'privacy_blocked'
     row = job(store)
     assert row['state'] == 'privacy_blocked' and row['merge_pending'] is False and vendors.calls == []
+
+
+# --- slice C hooks --------------------------------------------------------------------------------
+
+
+class MeteredHealth(Health):
+    """Slice C's optional hooks: reserve before the mint, record_attempt after each settle."""
+
+    def __init__(self, capped=(), **refused):
+        super().__init__(**refused)
+        self.capped, self.reserved, self.recorded = set(capped), [], []
+
+    def reserve(self, service, audio_seconds):
+        self.reserved.append((service, audio_seconds))
+        if service in self.capped:
+            return False, VendorHealthReason.DAILY_CAP_REACHED
+        return True, VendorHealthReason.HEALTHY
+
+    def record_attempt(self, service, outcome, *, latency_seconds=None):
+        self.recorded.append((service, outcome, latency_seconds is not None))
+
+
+def test_a_capped_vendor_is_unhealthy_not_an_error_and_the_unit_fails_over(store):
+    artifacts, vendors, health = Artifacts(), Vendors(), MeteredHealth(capped={'modulate'})
+    assert stage(store, artifacts, vendors, health=health).run('p1').reason == 'processed'
+    assert vendors.calls == ['soniox']
+    assert health.reserved == [('modulate', 5.0), ('soniox', 5.0)]
+    assert health.recorded == [('soniox', VendorAttemptOutcome.OK, True)]
+
+
+def test_every_vendor_capped_holds_with_the_cap_reason(store):
+    artifacts, vendors = Artifacts(), Vendors()
+    health = MeteredHealth(capped={'modulate', 'soniox'})
+    assert stage(store, artifacts, vendors, health=health).run('p1').outcome == 'deferred'
+    assert job(store)['state'] == VENDOR_HELD and job(store)[HOLD_FIELD]['reason'] == 'cap_reached'
+    assert vendors.calls == [] and health.recorded == []
+
+
+def test_failed_attempts_feed_the_breaker_but_silence_and_local_inspection_do_not(store):
+    artifacts, health = Artifacts(), MeteredHealth()
+    vendors = Vendors(modulate=[failure(VendorAttemptOutcome.ERROR_5XX)])
+    stage(store, artifacts, vendors, health=health).run('p1')
+    stage(store, artifacts, vendors, now=201.0, health=health).run('p1')
+    assert health.recorded == [
+        ('modulate', VendorAttemptOutcome.ERROR_5XX, True),
+        ('soniox', VendorAttemptOutcome.OK, True),
+    ]
 
 
 # --- late results ---------------------------------------------------------------------------------

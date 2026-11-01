@@ -474,10 +474,15 @@ def is_policy_hold(job: dict[str, Any], now: float | None = None) -> bool:
         return True
     if job.get('state') != 'vendor_held':
         return False
-    from config.batch_pipeline_vendor_failover import held_stale_grace_seconds
+    from config.batch_pipeline_vendor_failover import held_redrive_seconds, held_stale_grace_seconds
     from utils.batch_pipeline.vendor_route_contracts import is_vendor_policy_hold
 
-    return is_vendor_policy_hold(job, time.time() if now is None else now, held_stale_grace_seconds())
+    return is_vendor_policy_hold(
+        job,
+        time.time() if now is None else now,
+        redrive_seconds=held_redrive_seconds(),
+        stale_grace_seconds=held_stale_grace_seconds(),
+    )
 
 
 def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -> int:
