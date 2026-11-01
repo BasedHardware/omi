@@ -46,6 +46,7 @@ static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
+extern bool is_off;
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 extern bool is_charging;
 #endif
@@ -102,6 +103,18 @@ static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      void *buf,
                                                      uint16_t len,
                                                      uint16_t offset);
+static ssize_t settings_power_control_write_handler(struct bt_conn *conn,
+                                                    const struct bt_gatt_attr *attr,
+                                                    const void *buf,
+                                                    uint16_t len,
+                                                    uint16_t offset,
+                                                    uint8_t flags);
+static ssize_t settings_power_control_read_handler(struct bt_conn *conn,
+                                                   const struct bt_gatt_attr *attr,
+                                                   void *buf,
+                                                   uint16_t len,
+                                                   uint16_t offset);
+static void power_off_work_handler(struct k_work *work);
 static int notify_charging_status(struct bt_conn *conn, bool force_notify);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
@@ -122,6 +135,8 @@ static struct bt_gatt_exchange_params exchange_params;
 #define MTU_RECHECK_MAX_ATTEMPTS 6
 static uint8_t mtu_recheck_attempts = 0;
 K_WORK_DELAYABLE_DEFINE(mtu_recheck_work, mtu_recheck_work_handler);
+#define BLE_POWER_OFF_DELAY_MS 50
+K_WORK_DELAYABLE_DEFINE(power_off_work, power_off_work_handler);
 
 //
 // Service and Characteristic
@@ -179,6 +194,8 @@ static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_power_control_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10014, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -201,6 +218,12 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            NULL,
                            NULL),
     BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&settings_power_control_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_power_control_read_handler,
+                           settings_power_control_write_handler,
+                           NULL),
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -459,6 +482,67 @@ static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &charging_status, sizeof(charging_status));
 }
 
+static void power_off_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    LOG_INF("Executing BLE-requested orderly shutdown");
+    turnoff_all();
+}
+
+static ssize_t settings_power_control_write_handler(struct bt_conn *conn,
+                                                    const struct bt_gatt_attr *attr,
+                                                    const void *buf,
+                                                    uint16_t len,
+                                                    uint16_t offset,
+                                                    uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    ARG_UNUSED(flags);
+
+    if (offset != 0 || len != sizeof(uint8_t)) {
+        LOG_WRN("Invalid length/offset for power control write: len=%u offset=%u", len, offset);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint8_t cmd = ((const uint8_t *) buf)[0];
+    switch (cmd) {
+    case OMI_POWER_CMD_ACTIVE:
+        LOG_INF("BLE power control: resume recording");
+        mic_resume();
+        break;
+    case OMI_POWER_CMD_POWER_OFF:
+        LOG_INF("BLE power control: scheduling orderly shutdown");
+        k_work_schedule(&power_off_work, K_MSEC(BLE_POWER_OFF_DELAY_MS));
+        break;
+    case OMI_POWER_CMD_PAUSE_MIC:
+        LOG_INF("BLE power control: pause recording (stay connected)");
+        mic_pause();
+        break;
+    default:
+        LOG_WRN("Unsupported BLE power control command: 0x%02x", cmd);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    return len;
+}
+
+static ssize_t settings_power_control_read_handler(struct bt_conn *conn,
+                                                   const struct bt_gatt_attr *attr,
+                                                   void *buf,
+                                                   uint16_t len,
+                                                   uint16_t offset)
+{
+    uint8_t state = OMI_POWER_CMD_ACTIVE;
+    if (is_off) {
+        state = OMI_POWER_CMD_POWER_OFF;
+    } else if (mic_is_paused()) {
+        state = OMI_POWER_CMD_PAUSE_MIC;
+    }
+    LOG_INF("Reading power control state: %u", state);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &state, sizeof(state));
+}
+
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
@@ -489,6 +573,8 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
     features |= OMI_FEATURE_LED_DIMMING;
     // Mic gain control is always enabled.
     features |= OMI_FEATURE_MIC_GAIN;
+    // BLE power off / recording pause control is always enabled.
+    features |= OMI_FEATURE_POWER_CONTROL;
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
 }
@@ -672,6 +758,10 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     mtu_recheck_attempts = 0;
 
     is_connected = false;
+    if (!is_off && mic_is_paused()) {
+        LOG_INF("Transport disconnected while paused; resuming microphone");
+        mic_resume();
+    }
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_disable();
