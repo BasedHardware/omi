@@ -49,12 +49,14 @@ def drop_replayed_words(existing: list[dict], incoming: list[dict], *, clock: st
     range, so a redelivered batch would otherwise append the same words again.
     """
     ids = {segment.get('id') for segment in existing if segment.get('id')}
-    spans: dict[tuple[str, str], list[tuple[float, float]]] = {}
+    spans: dict[tuple[str, str, Any], list[tuple[float, float]]] = {}
     for segment in existing:
         stream = _stream(segment)
         if stream is not None:
             start = float(segment[clock])
-            spans.setdefault(stream, []).append((start, start + float(segment['end']) - float(segment['start'])))
+            spans.setdefault((*stream, segment.get('speaker')), []).append(
+                (start, start + float(segment['end']) - float(segment['start']))
+            )
     kept = []
     for segment in incoming:
         if segment.get('id') and segment['id'] in ids:
@@ -65,7 +67,7 @@ def drop_replayed_words(existing: list[dict], incoming: list[dict], *, clock: st
             end = start + float(segment['end']) - float(segment['start'])
             if any(
                 left - _SAME_CLOCK_SLOP_SECONDS <= start and end <= right + _SAME_CLOCK_SLOP_SECONDS
-                for left, right in spans.get(stream, ())
+                for left, right in spans.get((*stream, segment.get('speaker')), ())
             ):
                 continue
         if segment.get('id'):
@@ -118,6 +120,7 @@ def drop_repeated_word_runs(existing: list[dict], incoming: list[dict], *, clock
             and _is_word(segment)
             and _is_word(run[-1])
             and _stream(segment) == _stream(run[-1])
+            and segment.get('speaker') == run[-1].get('speaker')
             and float(segment[clock]) - float(run[-1][clock]) < _MAX_GAP_SECONDS
         ):
             run.append(segment)

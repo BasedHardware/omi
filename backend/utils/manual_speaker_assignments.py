@@ -459,6 +459,7 @@ def _live_merge_anchor(persisted: list[dict], fresh: list[dict]) -> int:
             candidate.get('start', 0) <= first['start']
             and candidate.get('stt_provider') == first.get('stt_provider')
             and candidate.get('speaker_id_scope') == first.get('speaker_id_scope')
+            and candidate.get('speaker') == first.get('speaker')
         ):
             return index
     return tail

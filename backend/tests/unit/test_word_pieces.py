@@ -165,3 +165,22 @@ def test_live_word_far_behind_every_line_stays_its_own_line():
 def test_live_word_joins_its_own_stream_across_another_providers_line():
     stored = [_word('a', 'some', 10.0), _line('a whole sentence from the other provider', 10.1, 14.0)]
     assert _texts(_live_merge(stored, [_word('b', 'orange', 10.5)])) == ['some orange', stored[1]['text']]
+
+
+def test_live_word_from_another_speaker_does_not_anchor_on_this_speaker():
+    stored = [_word('a', 'we drove to the', 10.0, 11.0), _line('a whole sentence from the other provider', 10.1, 14.0)]
+    other = _word('b', 'home.', 11.5, speaker='SPEAKER_01', speaker_id=2)
+    assert 'we drove to the' in _texts(_live_merge(stored, [other]))
+
+
+def test_another_speaker_inside_a_stored_span_is_not_a_replay():
+    stored = [_word('a', 'long stored line', 100.0, 102.0)]
+    other = _word('b', 'yes', 101.0, speaker='SPEAKER_01', speaker_id=2)
+    assert _texts(drop_replayed_words(stored, [other])) == ['yes']
+
+
+def test_repeat_run_stops_at_a_speaker_change():
+    line = _line('did you get five percent of the company', 0.0, 5.0)
+    words = _run('did you get five percent of the'.split())
+    words.append(_word('z', 'tomorrow', 3.6, speaker='SPEAKER_01', speaker_id=2))
+    assert _texts(drop_repeated_word_runs([line], words)) == ['tomorrow']
