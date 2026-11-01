@@ -12,4 +12,9 @@ floorSchedule:
   # Keep the hourly writer aligned with the benched-live HPA floor until
   # pkwin2 (#23863) ships; the safety guard can still restore 12 on a trip.
   # Prior schedule and pool-min rollback: docs/operational/parakeet-benched-floor.md.
+  # COUPLING (Luna r1, #24276): while this schedule is deferred by a rollback
+  # marker, the fleet holds the parakeet chart's minReplicas (6 since
+  # 2026-11-01) — every hour here must stay <= that chart floor so resuming
+  # the schedule never raises the floor above the deferred state (pinned by
+  # test_audio_fleet_helm).
   hours: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
