@@ -67,7 +67,7 @@ async function evidence(github, repo, pr) {
             throw new Error('Incomplete Swift source evidence');
           }
           const source = Buffer.from(data.content,'base64').toString('utf8');
-          file.ui ||= /\bimport\s+SwiftUI\b|:\s*(?:[\w.]+\s*,\s*)*(?:NSView|NSViewController|UIView|UIViewController)\b/.test(source);
+          file.ui ||= /\bimport\s+(?:SwiftUI|AppKit)\b|:\s*(?:[\w.]+\s*,\s*)*(?:NSView|NSViewController|NSPanel|NSWindow|UIView|UIViewController)\b/.test(source);
         } catch (error) {
           if (error.status !== 404) throw error;
         }
@@ -77,11 +77,11 @@ async function evidence(github, repo, pr) {
   return {files:first.files,commits};
 }
 
-async function evaluateHead({github, context}) {
+async function evaluateHead({github, context, headSha}) {
   const repo = context.repo;
   const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
-  if (trigger.state !== 'open' || trigger.base.ref !== 'main') return;
+  if (trigger.state !== 'open' || trigger.base.ref !== 'main' || (headSha && trigger.head.sha !== headSha)) return;
   const sha = trigger.head.sha;
   const status = (state, description) => github.rest.repos.createCommitStatus({
     ...repo,sha,state,context:STATUS,description,
@@ -125,19 +125,10 @@ async function evaluateHead({github, context}) {
     throw error;
   }
 }
-async function run({github,context}) {
-  // A global concurrency group can replace pending events. Reconcile every open
-  // head on every surviving event, including a dropped approval revocation.
-  const prs = await github.paginate(github.rest.pulls.list,{
-    ...context.repo,state:'open',base:'main',per_page:100,
-  });
-  const heads = new Map(prs.map(p => [p.head.sha,p.number]));
-  let failed = false;
-  for (const number of heads.values()) {
-    try { await evaluateHead({github,context:{...context,payload:{pull_request:{number}}}}); }
-    catch (error) { failed = true; console.error(error.message); }
-  }
-  if (failed) throw new Error('One or more heads could not be verified');
+async function run(args) {
+  // Workflow concurrency is keyed to the resolved immutable head. Replaced
+  // pending events therefore still evaluate that same head's latest comments.
+  return evaluateHead(args);
 }
 module.exports = run;
 module.exports.decision = decision;
