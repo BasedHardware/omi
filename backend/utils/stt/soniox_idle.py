@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import (
+    MIN_IDLE_CLOSE_SECONDS,
     IdleCohortSettings,
     VAD_HANGOVER_SECONDS,
     cohort_armed,
@@ -34,7 +35,23 @@ from utils.stt.provider_stream_end import US_TIMEOUT, begin_stream_close, note_s
 from utils.observability.demand_cohort import current_transport_origin
 from config.live_stt_idle import idle_reopen_cost_reselect_enabled
 
-IDLE_DRAIN_SECONDS = 2.0
+# Soniox returns the final tokens of the last utterance only after
+# ``finalize`` and end-of-audio, and the receive loop flushes the last
+# committed word only when the drain completes. Two seconds cut most drains
+# short. Listen session-end finalize (all providers, so an upper bound on the
+# Soniox drain) finished for 28% within 2 s, 98.5% within 10 s and 99.5% within
+# 20 s (prod, 12h to 2026-11-01 17:22Z). No finite cap keeps every final:
+# omi_soniox_idle_drains_total{outcome="timeout"} shows what remains. The cap
+# stays below the onset buffer, so speech that resumes during the drain is held
+# for the reopen, not failed over.
+IDLE_DRAIN_SECONDS = 20.0
+# PCM retained while the transport is closed (VAD pre-roll included); at most
+# about 1 MB of 16 kHz PCM per socket, and only while a drain or reopen is pending.
+ONSET_BUFFER_SECONDS = 30
+# Before a leg has heard any speech there are no words to finalize and no
+# speaker scope to split, so a silent session start closes at the threshold
+# floor instead of paying the full VAD wait. The first onset reopens it.
+PRE_SPEECH_CLOSE_SECONDS = MIN_IDLE_CLOSE_SECONDS
 _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 
 
@@ -146,6 +163,7 @@ class IdleSonioxSocket(STTSocket):
         self._last_frame_at = time.monotonic()
         self._last_speech_at = float('-inf')  # No speech seen yet on this leg.
         self._close_trigger = 'vad'
+        self._refusal_counted = False
         self._watchdog: asyncio.Task[None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
         self._start_watchdog()
@@ -187,26 +205,43 @@ class IdleSonioxSocket(STTSocket):
         if output.is_speech or output.audio_to_send:
             # Speech or its hangover tail: the word boundary is not settled yet.
             self._last_speech_at = now
+            self._refusal_counted = False  # any VAD mode: the next refused episode counts
         if mode != 'active' or self._finishing or self.is_connection_dead:
             return
         if output.is_speech:
             self._silent_since = None
         elif self._silent_since is None:
             self._silent_since = now
-        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._seconds:
+        elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._threshold():
             # ``audio_to_send`` is non-empty through the VAD hangover, so a
             # close can only start after the gate released the word boundary.
             if not self._idle_budget.reserve_close(now):
+                self._count_refusal(now)
                 return
             # Reserve before scheduling so repeated VAD callbacks cannot spend
             # the same rolling-hour slot. These limits belong to the logical
             # session and survive each replacement transport.
-            self._begin_idle_close(now, 'vad')
+            self._begin_idle_close(now, 'vad' if self._heard_speech() else 'pre_speech')
+
+    def _heard_speech(self) -> bool:
+        return self._last_speech_at != float('-inf')
+
+    def _threshold(self) -> float:
+        return self._seconds if self._heard_speech() else min(self._seconds, PRE_SPEECH_CLOSE_SECONDS)
+
+    def _count_refusal(self, now: float) -> None:
+        # Once per idle episode: VAD calls this per frame and the watchdog per
+        # retry, but a refused episode keeps one paid socket open on keepalives.
+        if self._refusal_counted:
+            return
+        self._refusal_counted = True
+        self._metrics.close_refusals.labels(reason='rearm' if now < self._idle_budget.rearm_at else 'cap').inc()
 
     def _begin_idle_close(self, now: float, trigger: str) -> None:
         # Fence death publication before any await. The logical leg stays
         # alive while the paid transport finishes its last committed text.
         self._close_trigger = trigger
+        self._refusal_counted = False
         self._transport._planned_close = True
         note_stream_close_intent(self._transport, US_TIMEOUT)
         self._idle_since = now
@@ -239,6 +274,7 @@ class IdleSonioxSocket(STTSocket):
             return due - now
         if not self._idle_budget.reserve_close(now):
             # Re-arm floor or the shared hourly cap: retry when a slot can open.
+            self._count_refusal(now)
             budget = self._idle_budget
             retry = budget.rearm_at - now
             if budget.close_times and len(budget.close_times) >= budget.max_closes_per_hour:
@@ -269,6 +305,7 @@ class IdleSonioxSocket(STTSocket):
         task = create_named_task(transport.drain_and_close(), name='soniox_idle_drain')
         try:
             done, _ = await asyncio.wait({task}, timeout=IDLE_DRAIN_SECONDS)
+            self._metrics.drains.labels(outcome='drained' if done else 'timeout').inc()
             if not done:
                 task.cancel()
                 await abort_replay_socket(transport, timeout=0.5)
@@ -293,12 +330,13 @@ class IdleSonioxSocket(STTSocket):
             # Gated sends carry only speech, hangover or pre-roll; ungated sends
             # cannot be classified, so both count as unsettled audio.
             self._last_speech_at = self._last_frame_at
+            self._refusal_counted = False
         if self._finishing or self.is_connection_dead:
             return False
         if self._idle_since is not None:
             # The serving send boundary awaits complete_send before accepting
-            # this frame. Retain at most ten seconds, including VAD pre-roll.
-            if len(self._pending) + len(data) > self._rate * 2 * 10:
+            # this frame. Retain at most ONSET_BUFFER_SECONDS, including VAD pre-roll.
+            if len(self._pending) + len(data) > self._rate * 2 * ONSET_BUFFER_SECONDS:
                 # The idle wrapper's own pending buffer filled: a local bound,
                 # never vendor capacity.
                 self._dead, self._reason = True, LOCAL_DELIVERY_SEND_QUEUE_FULL

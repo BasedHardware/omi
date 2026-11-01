@@ -24,7 +24,8 @@ from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN, NONWINDOW_REPLAY_SETTLES
 from utils.stt.live_reason import normalize_live_stt_reason
-from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt.live_rollout import window_allocation, window_language, window_language_supported
+from config.parakeet_ja import window_endpoint
 from utils.stt import replay_delivery
 from utils.stt.replay_delivery import abort_replay_socket
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
@@ -95,11 +96,12 @@ class LiveChainSession:
         demand = getattr(self.receiver, 'live_demand', None)
         if demand is not None and not demand.eligible:
             demand = None
+        uid = host.request.uid
         return bool(
-            window_allocation(host.request.uid)
+            window_allocation(uid)
             and (demand.window_permitted if demand is not None else True)
-            and window_language_supported(host.language, host.stt_language)
-            and os.getenv('HOSTED_PARAKEET_API_URL')
+            and window_language_supported(host.language, host.stt_language, uid)
+            and window_endpoint(window_language(host.language, host.stt_language))
         )
 
     def parakeet_failback_due(self, service: st.STTService) -> bool:
@@ -156,7 +158,13 @@ class LiveChainSession:
             demand = None
         if demand is not None:
             self.no_text_rescue.enabled = False
-        window_eligible = self.window_eligible()
+        window_lang = window_language(host.language, language)
+        window_eligible = (
+            window_allocation(uid)
+            and (demand.window_permitted if demand is not None else True)
+            and window_language_supported(host.language, language, uid)
+            and bool(window_endpoint(window_lang))
+        )
         if demand is not None and not window_eligible:
             models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
         if demand_lane == 'parakeet':
@@ -177,6 +185,9 @@ class LiveChainSession:
         parakeet_allowed = parakeet_token is not None
         engine_models = {
             'parakeet': parakeet_token,
+            # Which window pool the session posts to; the router checks every
+            # required language against that pool's model.
+            'parakeet_window_language': window_lang if window else None,
             'modulate': 'velma-2',
             'soniox': 'soniox',
             'deepgram': dg_model,
@@ -189,7 +200,7 @@ class LiveChainSession:
                 reason=(
                     'capability_mismatch'
                     if not (
-                        window_language_supported(host.language, language)
+                        window_language_supported(host.language, language, uid)
                         if 'parakeet-window' in models
                         else st.parakeet_supports_language(st.STTServingSurface.STREAMING, language)
                     )
@@ -258,7 +269,7 @@ class LiveChainSession:
             if target is not None and (
                 target.family != service.value
                 or not engine_matches(target, engine_models)
-                or (target.id == 'parakeet-window' and not os.getenv('HOSTED_PARAKEET_API_URL'))
+                or (target.id == 'parakeet-window' and not window_endpoint(window_lang))
             ):
                 raise TargetEngineMismatch('Selected target differs from the session engine')
             try:
@@ -375,7 +386,7 @@ class LiveChainSession:
                     from utils.stt.parakeet_window import connect_window
 
                     def new_window():
-                        window_raw = connect_window(callback, sample_rate)
+                        window_raw = connect_window(callback, sample_rate, language=window_lang)
                         if self.no_text_rescue.enabled:
                             window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
                             window_raw.progress_deadline_enabled = True

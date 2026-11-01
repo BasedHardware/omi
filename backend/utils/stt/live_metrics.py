@@ -387,6 +387,8 @@ class SonioxIdleMetrics(NamedTuple):
     cohort_failures: Counter
     cohort_avoided: Counter
     cohort_closes_by_trigger: Counter
+    drains: Counter
+    close_refusals: Counter
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
@@ -419,7 +421,7 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                 ),
                 Counter(
                     'omi_soniox_idle_closes_by_trigger_total',
-                    'Planned paid transport closes by trigger (vad silence or no client frames)',
+                    'Planned paid transport closes by trigger (vad silence, pre_speech silence or no client frames)',
                     ['trigger'],
                 ),
                 Counter(
@@ -453,8 +455,22 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'Planned paid transport closes by trigger and treatment arm',
                     ['arm', 'trigger'],
                 ),
+                Counter(
+                    'omi_soniox_idle_drains_total',
+                    'Planned-close drains by outcome (drained within the cap, or timeout and abort)',
+                    ['outcome'],
+                ),
+                Counter(
+                    'omi_soniox_idle_close_refusals_total',
+                    'Idle episodes whose planned close was refused (rearm floor or hourly cap), once per episode',
+                    ['reason'],
+                ),
             )
-            for _trigger in ('vad', 'no_frames'):
+            _soniox_idle_metrics.drains.labels(outcome='drained')
+            _soniox_idle_metrics.drains.labels(outcome='timeout')
+            _soniox_idle_metrics.close_refusals.labels(reason='rearm')
+            _soniox_idle_metrics.close_refusals.labels(reason='cap')
+            for _trigger in ('vad', 'pre_speech', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
                 for _arm in SONIOX_IDLE_COHORT_ARMS:
                     _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)

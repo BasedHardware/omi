@@ -25,7 +25,10 @@ from functools import lru_cache
 
 DEFAULT_IDLE_CLOSE_SECONDS = 45.0
 MIN_IDLE_CLOSE_SECONDS = 20.0
-DEFAULT_NO_FRAMES_CLOSE_SECONDS = 60.0
+# A client that sends no frames at all is backgrounded or disconnected; every
+# keepalive second until the close is billed. The next frame reopens through
+# the onset path, so a shorter wait costs no audio.
+DEFAULT_NO_FRAMES_CLOSE_SECONDS = 20.0
 MIN_NO_FRAMES_CLOSE_SECONDS = 10.0
 # Mirrors utils.stt.vad_gate.VAD_GATE_HANGOVER_MS (pinned by a unit test). A
 # no-frames close never finalizes inside this tail after the last speech frame.
