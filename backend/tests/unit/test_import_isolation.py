@@ -287,6 +287,23 @@ def test_stub_modules_preserves_allowlisted_jiter_extension_with_existing_origin
     assert fake_package.jiter is fake_extension
 
 
+def test_stub_modules_keeps_zoneinfo_first_imported_inside_the_block(monkeypatch: pytest.MonkeyPatch):
+    zoneinfo_names = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: importlib.import_module(name) for name in zoneinfo_names}
+    for name in zoneinfo_names:
+        monkeypatch.delitem(sys.modules, name)
+
+    with stub_modules({}):
+        for name in zoneinfo_names:
+            sys.modules[name] = originals[name]
+
+    # Evicting _zoneinfo lets a later collection null the globals of the surviving
+    # ZoneInfo type, so the whole family stays loaded.
+    for name in zoneinfo_names:
+        assert sys.modules[name] is originals[name]
+    assert originals["_zoneinfo"].ZoneInfo("UTC").key == "UTC"
+
+
 @pytest.fixture
 def atom_keyword_index_with_top_level_typesense_only():
     module_path = Path(__file__).resolve().parents[2] / "utils" / "memory" / "atom_keyword_index.py"

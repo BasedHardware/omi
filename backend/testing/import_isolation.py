@@ -39,6 +39,9 @@ from types import ModuleType
 from typing import Any, Iterable, Iterator, Mapping
 from unittest.mock import MagicMock
 
+# Stdlib modules that ``stub_modules`` keeps once loaded; see the eviction step.
+_ZONEINFO_FAMILY = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+
 
 class AutoMockModule(ModuleType):
     """Import-complete stub module: unknown attributes resolve to ``MagicMock``.
@@ -208,6 +211,12 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
                         preserve_for_import_safety.add(companion_name)
                 elif _has_existing_file_origin(companion):
                     preserve_for_import_safety.add(companion_name)
+        # CPython 3.11's _zoneinfo frees its module globals when its module object is
+        # collected, but the static ZoneInfo type lives on in every module that imported
+        # it. An evicted copy collected after a later re-import nulls the globals under
+        # the live type, and ZoneInfo(...) raises "null argument to internal routine".
+        if "_zoneinfo" in extra_name_set:
+            preserve_for_import_safety.update(name for name in _ZONEINFO_FAMILY if name in extra_name_set)
         for extra in extra_names:
             if extra in preserve_for_import_safety:
                 continue
