@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -132,7 +133,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     final dateFormat = DateFormat.yMMMd(Localizations.localeOf(context).toString());
     String onDay(int days) => dateFormat.format(now.add(Duration(days: days)));
     final slides = _slideSpecs(l10n);
-    return PopScope(
+    final page = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         // Popped from outside (the host navigated away): the widget stays mounted through the exit
@@ -318,6 +319,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         ),
       ),
     );
+    return AnnotatedRegion<SystemUiOverlayStyle>(value: SystemUiOverlayStyle.dark, child: page);
   }
 
   List<_SlideSpec> _slideSpecs(dynamic l10n) => [
@@ -401,7 +403,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return SizedBox(
-      height: 44,
+      height: kOmiMinTapTarget,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -420,17 +422,12 @@ class _Header extends StatelessWidget {
             ),
           ),
           Positioned(
-            right: 16,
-            child: Material(
-              color: _Paper.card,
-              shape: const CircleBorder(),
-              elevation: 0.5,
-              child: IconButton(
-                key: const Key('trial_paywall_close'),
-                tooltip: l10n.useFreePlan,
-                onPressed: onClose,
-                icon: const Icon(Icons.close, color: _Paper.text, size: 20),
-              ),
+            right: OmiSpacing.md,
+            child: OmiCloseButton.circled(
+              key: const Key('trial_paywall_close'),
+              onPressed: onClose,
+              color: _Paper.text,
+              fillColor: _Paper.card,
             ),
           ),
         ],
