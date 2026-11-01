@@ -7,7 +7,7 @@ on:
     types: [created, edited, deleted]
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
   issues: write
   statuses: write
 env:
