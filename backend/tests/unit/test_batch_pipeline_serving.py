@@ -705,3 +705,71 @@ def test_serving_maintenance_fails_open_when_lease_store_errors():
     service = Serving(store, cleanup=Mock(), leader=LeaderLease(broken, SERVING_MAINTENANCE, ttl_seconds=60))
     service.reconcile(periodic=True)
     service.cleanup.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked', ['reconcile', 'drain', None])
+async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, blocked):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    counts = {'reconcile': 0, 'drain': 0}
+    cancelled = asyncio.Event()
+    progressed = asyncio.Event()
+    stages = []
+    stage = 'dev'
+    original_wait_for = asyncio.wait_for
+
+    async def short_wait(awaitable, timeout):
+        return await original_wait_for(awaitable, timeout=0.01 if timeout == 5 else 0.001)
+
+    async def tick(kind):
+        nonlocal stage
+        counts[kind] += 1
+        if kind == blocked:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        elif counts[kind] >= 2 and (blocked is not None or min(counts.values()) >= 2):
+            progressed.set()
+        stage = 'prod'
+        if kind == 'drain':
+            raise RuntimeError('synthetic drain failure')
+
+    async def reconcile_async(**kwargs):
+        await tick('reconcile')
+
+    async def drain_recordings(store):
+        assert store is service.store
+        await tick('drain')
+
+    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+
+    def resolve(selected):
+        stages.append(selected)
+        return service
+
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: stage)
+    monkeypatch.setattr(serving, 'serving_for_stage', resolve)
+    monkeypatch.setattr(serving, 'drain_recordings', drain_recordings)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', short_wait)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(progressed.wait(), timeout=1)
+    finally:
+        await serving.stop_serving(runtime)
+    assert runtime[1].done()
+    assert counts['reconcile'] >= (1 if blocked == 'reconcile' else 2)
+    assert counts['drain'] >= (1 if blocked == 'drain' else 2)
+    assert 'dev' in stages and 'prod' in stages
+    assert cancelled.is_set() is (blocked is not None)
+    stopped_counts = counts.copy()
+    await asyncio.sleep(0)
+    assert counts == stopped_counts
+
+
+async def _inline_serving_call(executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)

@@ -8,6 +8,16 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 ## Partial finishes for retained recordings
 
+Recording admission runs on its own serving loop, with a stop-aware 20-second
+wait after each pass, independently of reconciliation and recovery dispatch.
+Each pass selects the existing ten due `record_pending` rows and runs at most
+four admissions concurrently, so a slow partial inventory does not serialize
+the other selected recordings. All workers finish before the next pass starts;
+the existing intake transactions and partial-generation CAS remain authoritative.
+`event=batch_drain_pass` reports selected `row_count`, observed `partial_count`
+and elapsed `seconds`, without recording identifiers. Shared executor contention
+and the slowest admission can still extend a pass; the interval is not an SLA.
+
 [ADR 0007](adr/0007-partial-retained-recordings.md) separates availability from
 complete-tail proof. Repair may mark a completed, batch-owned recording partial
 after 1,800 seconds when complete proof refuses its tail or size budget. Fresh

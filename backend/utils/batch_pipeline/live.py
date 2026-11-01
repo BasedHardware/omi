@@ -1,10 +1,11 @@
-"""Durable live/desktop admission, drained on the existing CPU reconciliation loop.
+"""Durable live/desktop admission, drained independently of reconciliation.
 
 Capture reserves its route in the existing conversation create. Finalization
 registers a privacy-fenced pending job before closing its own durable job. No
 Firestore reads are added to audio frames, provisional segments or pusher flush.
 """
 
+import asyncio
 from dataclasses import replace
 from collections.abc import Generator
 from typing import Any
@@ -41,6 +42,8 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
+# Leave headroom in the shared sync (16), DB (32) and storage (128) pools.
+RECORD_DRAIN_CONCURRENCY = 4
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -372,20 +375,24 @@ async def admit_recording(store, pending, *, now=None):
 
 
 async def drain_recordings(store):
-    segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
-    for segment in segments:
+    started = time.monotonic()
+    segments, partial_count = [], 0
+
+    async def drain_one(segment):
+        nonlocal partial_count
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
-            continue
+            return
+        partial_count += bool(pending.get('partial_coordinator'))
         try:
             await admit_recording(store, pending)
             if not pending.get('partial_coordinator'):
-                continue
+                return
         except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, privacy=True, run=pending.get('partial_run'))
-            continue
+            return
         except Exception as error:
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
@@ -399,3 +406,28 @@ async def drain_recordings(store):
                 tx.put('jobs', segment, latest)
 
         await run_blocking(db_executor, store.run, defer)
+
+    async def worker():
+        # next() has no await: each selected row belongs to one local worker.
+        for segment in remaining:
+            await drain_one(segment)
+
+    try:
+        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
+        remaining = iter(segments)
+        # Join every worker even on failure; a retry must not overlap unfinished
+        # work from this pass. Across replicas the existing intake/partial CAS
+        # still decides admission; selection itself never claims or expires rows.
+        results = await asyncio.gather(
+            *(worker() for _ in range(min(RECORD_DRAIN_CONCURRENCY, len(segments)))), return_exceptions=True
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+    finally:
+        logger.info(
+            'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
+            len(segments),
+            partial_count,
+            time.monotonic() - started,
+        )
