@@ -109,11 +109,15 @@ def authorization(duration, *, second_chance=False, failover=False):
     return {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}
 
 
-def transcript_words(payload, duration):
-    """Join subword tokens, retaining their original capture-axis timestamps."""
+def transcript_words(payload, duration, *, mark_fallback=False):
+    """Join subword tokens, retaining their original capture-axis timestamps.
+
+    ``mark_fallback`` flags every word ``speaker_fallback`` when any token lacked a
+    real vendor speaker, so a caller never treats the default label as diarization.
+    """
     if not isinstance(payload, dict) or not isinstance(payload.get('tokens'), list):
         raise SonioxBatchError('invalid_response')
-    words, language, previous, boundary = [], 'multi', -1.0, True
+    words, language, previous, boundary, fallback = [], 'multi', -1.0, True, False
     for token in payload['tokens']:
         text = token['text']
         if not isinstance(text, str):
@@ -133,6 +137,7 @@ def transcript_words(payload, duration):
         raw_speaker = token.get('speaker')
         if raw_speaker is not None and (not str(raw_speaker).isdigit() or len(str(raw_speaker)) > 4):
             raise SonioxBatchError('invalid_response')
+        fallback = fallback or raw_speaker is None or int(raw_speaker) < 1
         speaker = f'SPEAKER_{max(int(raw_speaker) - 1, 0) if raw_speaker is not None else 0:02d}'
         detected = token.get('language')
         if isinstance(detected, str) and detected:
@@ -146,6 +151,8 @@ def transcript_words(payload, duration):
     # A nonempty transcript with missing tokens is malformed, never empty evidence.
     if not isinstance(payload.get('text'), str) or (payload['text'].strip() and not words):
         raise SonioxBatchError('invalid_response')
+    if mark_fallback and fallback:
+        words = [{**word, 'speaker_fallback': True} for word in words]
     return words, language
 
 
@@ -222,6 +229,7 @@ async def transcribe_async(
     semaphore=None,
     clock=time.monotonic,
     sleep=asyncio.sleep,
+    mark_fallback=False,
 ):
     """Serving path: individual requests borrow a shared async HTTP permit only.
 
@@ -273,7 +281,9 @@ async def transcribe_async(
         for _ in range(60):
             if state['status'] == 'completed':
                 return transcript_words(
-                    await request('GET', f'/transcriptions/{transcription_id}/transcript'), duration
+                    await request('GET', f'/transcriptions/{transcription_id}/transcript'),
+                    duration,
+                    mark_fallback=mark_fallback,
                 )
             if state['status'] not in {'queued', 'processing'}:
                 raise SonioxBatchError('error_5xx' if state['status'] == 'error' else 'invalid_response')

@@ -18,6 +18,26 @@ def vendor_turns_enabled() -> bool:
     return default_on(VENDOR_SPEAKER_TURNS_ENV)
 
 
+VENDOR_SPEAKER_PROVIDERS = frozenset({'modulate', 'soniox'})
+
+
+def vendor_evidence_refused(segment) -> bool:
+    """With the switch off, a vendor unit's batch authority is not read: no vectors, no must-links.
+
+    The original unit partition survives resolution in ``provider_speaker``.
+    """
+    if vendor_turns_enabled():
+        return False
+    original = segment.provider_speaker or {}
+    scope = original.get('scope') or segment.speaker_id_scope or ''
+    provider = original.get('provider') or segment.stt_provider
+    return (
+        provider in VENDOR_SPEAKER_PROVIDERS
+        and scope.startswith('final:batch:')
+        and not scope.startswith(BATCH_CONVERSATION_SCOPE)
+    )
+
+
 def vendor_speaker_authority(payload) -> bool:
     """A vendor-route result whose own unit-local speaker turns stand in for pyannote's."""
     return (

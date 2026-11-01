@@ -20,6 +20,8 @@ from config.policy import ProjectionPolicy
 from utils.batch_pipeline.projection_parts import split_result
 from utils.conversations import speaker_resolution as stage
 from utils.conversations import sync_off_speakers
+from utils.conversations.speaker_resolution_inputs import batch_provider_keys
+from utils.stt import modulate_batch, soniox_batch
 
 UTTERANCES = [
     {'word': 'Hello there.', 'timestamp': [0.0, 1.5], 'speaker': 'SPEAKER_00'},
@@ -81,6 +83,66 @@ def test_provider_payload_carries_vendor_turns_unless_killed(monkeypatch, switch
     assert payload['recovery_version'] == 1
     assert payload['diarization']['turns'] == ([] if switch else provider_stt.vendor_turns(payload['words'], 5.0))
     assert [w['speaker'] for w in payload['words']] == [w['speaker'] for w in UTTERANCES]
+
+
+def test_any_defaulted_vendor_speaker_abstains_the_whole_unit(monkeypatch):
+    async def vendor(service, wav, duration, language):
+        raw = [{'text': w['word'], 'timestamp': w['timestamp'], 'speaker': w['speaker']} for w in UTTERANCES]
+        return [{**word, 'speaker_fallback': True} for word in raw], 'en'
+
+    monkeypatch.setattr(provider_stt, '_vendor_words', vendor)
+    item = WorkItem('unit', UID, 1700000000.0, 'gs://synthetic/pcm', 5.0, Priority.FRESH)
+    inspected = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.0, 'end': 5.0}])
+    payload = asyncio.run(provider_stt.transcribe_async(item, 'en', inspected, service='modulate'))
+    assert payload['diarization']['turns'] == [] and not vendor_speaker_authority(payload)
+    assert not any('speaker_fallback' in word for word in payload['words'])
+
+
+@pytest.mark.parametrize('speakers,marked', [((1, 2), False), ((1, None), True), ((1, 0), True), ((True, 2), True)])
+def test_modulate_marks_a_defaulted_speaker_only_when_asked(monkeypatch, speakers, marked):
+    import httpx
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-not-a-key')
+    monkeypatch.setenv('STT_PRERECORDED_VENDOR_FAIL_FAST', 'false')
+    utterances = [
+        {'text': f'synthetic {i}', 'start_ms': i * 1000, 'duration_ms': 800, **({} if s is None else {'speaker': s})}
+        for i, s in enumerate(speakers)
+    ]
+    body = {'text': 'synthetic', 'duration_ms': 5000, 'utterances': utterances}
+
+    async def call(mark):
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await modulate_batch.modulate_batch_async(
+                b'\0\0' * 16000, language='en', client=client, mark_fallback=mark
+            )
+
+    words, _ = asyncio.run(call(True))
+    assert all(bool(w.get('speaker_fallback')) is marked for w in words)
+    words, _ = asyncio.run(call(False))
+    assert not any('speaker_fallback' in w for w in words)
+
+
+@pytest.mark.parametrize('speaker,marked', [('1', False), (None, True), ('0', True)])
+def test_soniox_marks_a_defaulted_speaker_only_when_asked(speaker, marked):
+    token = {'text': 'synthetic ', 'start_ms': 0, 'end_ms': 500, **({} if speaker is None else {'speaker': speaker})}
+    payload = {'text': 'synthetic', 'tokens': [token]}
+    words, _ = soniox_batch.transcript_words(payload, 1.0, mark_fallback=True)
+    assert all(bool(w.get('speaker_fallback')) is marked for w in words)
+    words, _ = soniox_batch.transcript_words(payload, 1.0)
+    assert not any('speaker_fallback' in w for w in words)
+
+
+def test_turns_past_the_label_budget_drop_the_least_spoken_labels():
+    from utils.batch_pipeline.voice_centroids import MAX_LABELS
+
+    words = [
+        {'word': 'w', 'timestamp': [i * 2.0, i * 2.0 + (0.5 if i == 7 else 1.0)], 'speaker': f'SPEAKER_{i:02d}'}
+        for i in range(MAX_LABELS + 1)
+    ]
+    turns = provider_stt.vendor_turns(words, 100.0)
+    labels = {turn['speaker'] for turn in turns}
+    assert len(labels) == MAX_LABELS and 'SPEAKER_07' not in labels
 
 
 def build(monkeypatch, payload):
@@ -168,10 +230,13 @@ def vendor_conversation(units, scope):
     )
 
 
-@pytest.mark.parametrize('scope', ['final:batch:', 'sync:'])
-def test_sync_off_vendor_units_link_across_the_conversation(monkeypatch, scope):
-    """Three vendor units, each saying SPEAKER_00: with turns they resolve to one owner voice;
-    today's words-only `sync:` units have no evidence and stay three unlinked unit voices."""
+@pytest.mark.parametrize('scope,killed', [('final:batch:', False), ('sync:', False), ('final:batch:', True)])
+def test_sync_off_vendor_units_link_across_the_conversation(monkeypatch, scope, killed):
+    """Three vendor units, each saying SPEAKER_00: with turns they resolve to one owner voice.
+    Today's words-only `sync:` units, and already-published vendor evidence after the kill
+    switch, give no vectors or must-links: three unlinked unit voices."""
+    if killed:
+        monkeypatch.setenv(flags.VENDOR_SPEAKER_TURNS_ENV, 'false')
     store, artifacts, objects, capture = state()
     units = [f'unit{i}' for i in range(3)]
     for i, unit in enumerate(units):
@@ -192,8 +257,9 @@ def test_sync_off_vendor_units_link_across_the_conversation(monkeypatch, scope):
     vectors, _, _ = evidence.load_vectors(UID, conversation, time.monotonic() + 10, store=store, artifacts=artifacts)
     stage.resolve_speakers_for_processing(UID, conversation)
     voices = {(s.speaker_id_scope, s.speaker_id) for s in conversation.transcript_segments}
-    if scope == 'sync:':
+    if scope == 'sync:' or killed:
         assert not vectors
+        assert not killed or not batch_provider_keys(conversation.transcript_segments)
         assert len(voices) == 3 and not any(s.is_user for s in conversation.transcript_segments)
         return
     assert set(vectors) == {'s0', 's1', 's2'}
