@@ -2,6 +2,7 @@
 
 import io
 import json
+from urllib.error import URLError
 from unittest.mock import Mock
 
 import pytest
@@ -76,7 +77,7 @@ def test_hold_reason_receipt_round_trips_for_the_durable_decision():
     'error,expected',
     [
         (TimeoutError(), 'timeout'),
-        (__import__('urllib.error', fromlist=['URLError']).URLError(TimeoutError()), 'timeout'),
+        (URLError(TimeoutError()), 'timeout'),
         (ConnectionError(), 'transport'),
     ],
 )

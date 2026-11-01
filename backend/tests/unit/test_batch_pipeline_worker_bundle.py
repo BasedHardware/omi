@@ -9,7 +9,7 @@ import threading
 import time
 
 import numpy as np
-from prometheus_client import CollectorRegistry
+from prometheus_client import CollectorRegistry, Counter
 import pytest
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -22,6 +22,7 @@ from utils.batch_pipeline import pump as pump_module, worker_metrics
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline.contracts import FailedWork, WorkResult
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.compute_client import InvalidReceipt
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
@@ -425,3 +426,48 @@ def test_closed_metric_events_and_completed_seconds_include_silence_once():
         for metric in collector.collect():
             for sample in metric.samples:
                 assert set(sample.labels) <= {'outcome', 'le'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error,outcome',
+    [
+        (TimeoutError(), 'timeout'),
+        (ConnectionError(), 'transport'),
+        (InvalidReceipt(), 'invalid_receipt'),
+        (None, 'received'),
+    ],
+)
+async def test_admission_fault_counters_keep_every_unpermitted_unit_deferred(monkeypatch, error, outcome):
+    registry = CollectorRegistry()
+    monkeypatch.setattr(
+        worker_metrics,
+        'ADMISSION',
+        Counter('omi_batch_pipeline_admission_receipts_total', '', ['outcome'], registry=registry),
+    )
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(replace(item(), requires_compute_admission=True), time.time())
+    worker, _, saved, _, _, _ = setup_worker(io_concurrency=1)
+
+    def authorize(leases):
+        if error is not None:
+            raise error
+        return {'allowed': [], 'retry_after': {}}
+
+    assert await Pump(queue, worker, authorize_compute=authorize).run_once(maintain=False) == 0
+    assert not saved and worker.counts['items'] == 0
+    assert store.rows['jobs', 'a']['state'] == 'retry' and store.rows['jobs', 'a']['attempt'] == 0
+    assert registry.get_sample_value('omi_batch_pipeline_admission_receipts_total', {'outcome': outcome}) == 1
+
+
+def test_broken_shadow_clock_and_counter_cannot_change_result(monkeypatch):
+    worker, _, saved, _, _, failures = setup_worker(io_concurrency=5)
+
+    def broken(*args):
+        raise RuntimeError('synthetic unavailable observation')
+
+    monkeypatch.setattr(worker_module.time, 'thread_time', broken)
+    monkeypatch.setattr(worker_metrics, 'strict_vad', broken)
+    assert worker.process_batch([item()])[0].outcome == 'success'
+    assert saved['a']['words'][0]['word'] == 'hello' and not failures
