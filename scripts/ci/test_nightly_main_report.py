@@ -121,6 +121,24 @@ class ReportTests(unittest.TestCase):
         with patch.object(REPORT, "api_pages", return_value=runs), patch.object(REPORT, "gh", side_effect=gh):
             self.assertIsNone(REPORT.last_green("BasedHardware/omi", 123, "a" * 40))
 
+    def test_manifest_verdicts_suppress_passing_self_test_noise(self):
+        # The Hygiene job runs manifest checks whose PASSING self-tests print
+        # deliberate ❌/FAIL: strings (error-handling fixtures, promotion-policy
+        # gates). The runner's own verdicts are the only failure records.
+        log = "\n".join([
+            "2026-11-01T03:22:16Z <== PASS desktop-prod-promotion-policy (0.4s)",
+            "2026-11-01T03:46:50Z ##[error]required check failed",
+            "2026-11-01T03:48:56Z ❌ Error getting customers: /srv/app/.secrets/shopify_token_store.json",
+            "2026-11-01T03:48:56Z <== PASS shopify-error-handling-tests (0.47s)",
+            "2026-11-01T03:46:38Z <== FAIL backend-module-isolation (8.02s)",
+            "2026-11-01T03:49:20Z Manifest checks failed: backend-module-isolation",
+        ])
+        self.assertEqual(REPORT.failing_tests(log), ["backend-module-isolation"])
+
+    def test_manifest_fail_lines_report_check_names_without_summary(self):
+        log = "<== FAIL backend-module-isolation (8.02s)\n<== FAIL repo-hygiene (0.2s)"
+        self.assertEqual(REPORT.failing_tests(log), ["backend-module-isolation", "repo-hygiene"])
+
     def test_summary_escapes_test_markdown_and_names_main_and_green(self):
         rendered = REPORT.summary(dict(main_sha="a" * 40, last_green_sha="b" * 40,
                                        failures=[dict(job="Dart|Linux", test="<script>alert</script>\nother")]))

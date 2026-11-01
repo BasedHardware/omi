@@ -96,6 +96,7 @@ def test_advice_for_an_achieved_goal_still_falls_back(monkeypatch):
     prompts = _stub_goals(monkeypatch, {'goal_a': {**_goal('Run a 10k'), 'status': 'achieved', 'is_active': False}})
 
     import pytest
+
     with pytest.raises(ValueError, match="Goal not found"):
         llm_goals.get_goal_advice('u1', 'goal_a')
     assert prompts == []
