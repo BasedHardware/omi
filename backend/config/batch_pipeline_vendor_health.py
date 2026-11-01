@@ -39,6 +39,9 @@ class Thresholds:
     error_open_rate: float = 0.50
     error_open_window_s: float = 300
     error_open_min_n: int = 20
+    # Below error_open_min_n (a quiet hour, a 1% cohort) the rate never trips: this many call
+    # errors, or rate limits, with no success in the open window is an outage at any volume.
+    all_failed_open_count: int = 5
     # Funds refusals (402, credit-marked 429, organization_balance_exhausted): David-only fix.
     funds_open_count: int = 3
     funds_window_s: float = 300

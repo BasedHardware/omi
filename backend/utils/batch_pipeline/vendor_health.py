@@ -148,8 +148,12 @@ def assess(buckets: Buckets, now: float, t: config.Thresholds) -> tuple[str, Ven
     errors = window(buckets, now, t.error_open_window_s)
     if errors.n >= t.error_open_min_n and _rate(errors.err, errors.n) >= t.error_open_rate:
         return OPEN, VendorHealthReason.BREAKER_OPEN
+    if errors.ok == 0 and errors.err >= t.all_failed_open_count:
+        return OPEN, VendorHealthReason.BREAKER_OPEN
     limits = window(buckets, now, t.rate_limit_window_s)
     if limits.n >= t.rate_limit_open_min_n and _rate(limits.rate, limits.n) >= t.rate_limit_open_rate:
+        return OPEN, VendorHealthReason.RATE_LIMITED
+    if limits.ok == 0 and limits.rate >= t.all_failed_open_count:
         return OPEN, VendorHealthReason.RATE_LIMITED
     latency = window(buckets, now, t.latency_window_s)
     slow_enough = latency.timed >= t.latency_min_n
@@ -515,7 +519,19 @@ class VendorHealthService:
         metrics.health_decision(service, reason)
         return allowed, reason
 
-    def _allows(self, service: str) -> tuple[bool, VendorHealthReason]:
+    def peek(self, service: str) -> tuple[bool, VendorHealthReason]:
+        """``allows`` that never takes the fleet's half-open probe: an open breaker is unhealthy.
+
+        For callers that only choose where a unit waits or starts (admission selection, a held
+        unit's early redrive). The probe belongs to the caller about to mint a vendor call
+        (``ProviderSttStage._healthy``); a probe taken anywhere else is spent without a call, and
+        the breaker, which closes only on probe successes, stays open after the vendor recovers.
+        """
+        allowed, reason = self._allows(service, take_probe=False)
+        metrics.health_decision(service, reason)
+        return allowed, reason
+
+    def _allows(self, service: str, *, take_probe: bool = True) -> tuple[bool, VendorHealthReason]:
         if service == contracts.GPU:
             return True, VendorHealthReason.HEALTHY
         if not _admitted(service):
@@ -535,7 +551,7 @@ class VendorHealthService:
             metrics.cap_hit(service, capped)
             return False, capped
         if view.state == OPEN:
-            if view.probe_eligible and probe():
+            if take_probe and view.probe_eligible and probe():
                 return True, VendorHealthReason.HALF_OPEN_PROBE
             return False, view.reason
         if view.state == DEGRADED:

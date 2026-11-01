@@ -114,6 +114,34 @@ def test_queue_age_and_stale_refresh_retains_previous_sample(monkeypatch):
         metrics.record('user-id')
 
 
+def test_admission_hold_reason_counter_counts_policy_defers_and_folds_unknown():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    metrics.record('admission_policy_deferred', reason='allowance_exhausted')
+    metrics.record('admission_policy_deferred', reason='free-text-escape')
+    # An unevaluated defer carries no reason; its lease never reached a decision.
+    metrics.record('admission_unevaluated_deferred', reason='ignored')
+    metrics.record('admission_policy_deferred')
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'allowance_exhausted'})
+        == 1
+    )
+    assert registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'unknown'}) == 1
+    assert registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'ignored'}) is None
+    assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'admission_policy_deferred'}) == 3
+
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=metrics)
+    queue.enqueue(item('a'), 0)
+    lease = queue.pull(0)[0]
+    assert queue.defer('a', lease.token, 1, retry_after=60, held_reason='fair_use_restricted', admission_refused=True)
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'fair_use_restricted'})
+        == 1
+    )
+    assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'admission_policy_deferred'}) == 4
+
+
 def test_scheduler_records_new_transitions_without_duplicate_completion_count():
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
