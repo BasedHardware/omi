@@ -1,3 +1,10 @@
+// The desktop home view and its capture-launch policy: restoring persisted
+// capture intent at launch, permission surfaces, and the entry tiles.
+//
+// PersistedCaptureLaunchPolicy reconciles stored intent with running services
+// because intent and runtime are stored independently -- a fresh launch and a
+// settings sync both need the same reconciliation instead of treating a
+// one-time readiness check as the source of truth.
 import AppKit
 import OmiTheme
 import SwiftUI

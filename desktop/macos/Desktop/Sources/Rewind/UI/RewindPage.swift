@@ -1,3 +1,9 @@
+// The Rewind page: the screen-activity timeline with integrated inline search.
+//
+// The timeline is the primary interface -- search results highlight inline on
+// it rather than replacing it -- and the page carries an optional brain
+// destination because it can be opened in place of another page (task
+// evidence, a citation) and must hand navigation back.
 @preconcurrency import AppKit
 import Combine
 import OmiTheme

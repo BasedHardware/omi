@@ -1,3 +1,9 @@
+// Root observable app state: onboarding, permissions (including system audio),
+// capture mode, and the long-lived services the SwiftUI tree observes.
+//
+// Permission status is modeled explicitly (unknown/granted/denied/unsupported)
+// rather than as booleans -- the unsupported case must hide a feature cleanly
+// instead of merely disabling it, on every macOS version from the 14.0 floor.
 @preconcurrency import AVFoundation
 import Combine
 @preconcurrency import ObjectiveC
