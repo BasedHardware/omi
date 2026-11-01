@@ -54,6 +54,9 @@ worker:
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
+  # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
+  # restores full sampling (the silence qualification reads this evidence).
+  strictVadShadowPercent: 10
   unitSeconds: 3600
   paddedSeconds: 272
   # Pack pyannote segmentation/embedding forwards across one flight's units.

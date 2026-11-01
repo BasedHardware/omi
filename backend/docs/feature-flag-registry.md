@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-31 -->
+<!-- feature-flag-registry as-of: 2026-11-01 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-31.
+None as of 2026-11-01.
 
 ## Flags
 
@@ -626,6 +626,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR` | Default 200; combined fleet-wide Modulate shadow unit-call reservations per UTC hour (Deepgram reservations retired 2026-08-27); invalid/zero denies paid calls | backend | env | closed | {value: '200', category: ops_kill} | {value: '200', category: ops_kill} | {value: '200', category: ops_kill} | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_SHADOW_RECOVERY_API_URL` | Explicit HTTPS existing record-recovery CPU role for shadow recovery; URL is also its OIDC audience; blank fails closed | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_STAGE_PROFILING_ENABLED` | Dedicated worker omi_batch_pipeline_stage_seconds wall-clock histograms; default on only for OMI_ENV_STAGE=dev, prod/unset off, explicit true/false overrides (local/offline opt in) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT` | Share of units that run the CPU strict-VAD shadow, sampled deterministically by segment hash; default 10, 0 disables the shadow, 100 restores full sampling; invalid values keep 10 | backend | env | closed | — | — | — | — | keep | keep | — | flightcut / batch rollout lead |
 | `BATCH_PIPELINE_UNIT_SECONDS` | Per-pool compute-unit ceiling; dedicated batch default 7200, shared live default and hard maximum 120 seconds | backend | env | closed | 3600 | 3600 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | 3600 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_WINDOW_SECONDS` | GPU chain internal ASR core window seconds; default 30; queue units remain conversations | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_WORDS_PROVIDER` | GPU chain words registry selection; default parakeet; unavailable providers fail closed | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -915,6 +916,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_SHADOW_RECOVERY_API_URL` — Explicit HTTPS existing record-recovery CPU role for shadow recovery; URL is also its OIDC audience; blank fails closed (fail: closed)
 - `BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED` — Default off; a batch unit whose speech and words form one region of at most 2 s (pauses up to 0.5 s inclusive) takes the existing skipped_single result without diarization (fail: closed)
 - `BATCH_PIPELINE_STAGE_PROFILING_ENABLED` — Dedicated worker omi_batch_pipeline_stage_seconds wall-clock histograms; default on only for OMI_ENV_STAGE=dev, prod/unset off, explicit true/false overrides (local/offline opt in) (fail: open)
+- `BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT` — Share of units that run the CPU strict-VAD shadow, sampled deterministically by segment hash; default 10, 0 disables the shadow, 100 restores full sampling; invalid values keep 10 (fail: closed)
 - `BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` — Default on; when the periodic projection sweep advances an owner's chain head it keeps walking that owner's result log in chain order instead of waiting for its cursor to wrap (fail: open)
 - `BATCH_PIPELINE_WINDOW_SECONDS` — GPU chain internal ASR core window seconds; default 30; queue units remain conversations (fail: closed)
 - `BATCH_PIPELINE_WORDS_PROVIDER` — GPU chain words registry selection; default parakeet; unavailable providers fail closed (fail: closed)

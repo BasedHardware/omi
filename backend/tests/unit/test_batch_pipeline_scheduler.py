@@ -227,6 +227,54 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
+def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=QueueMetrics(registry))
+    queue.enqueue(item('held'), 0)
+    first = queue.pull(1)[0]
+    assert first.attempt == 1
+    assert queue.defer(
+        'held',
+        first.token,
+        2,
+        retry_after=60,
+        held_reason='allowance_exhausted',
+        admission_refused=True,
+    )
+    due = store.rows['jobs', 'held']['available_at']
+    assert queue.recover(due) == 1
+    second = queue.pull(due)[0]
+    # defer() refunded the attempt, so the re-lease is a relet only through
+    # the recorded refusal streak.
+    assert second.attempt == 1 and second.token != first.token
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+
+
+def test_attempt_charged_re_lease_records_relet_true():
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=QueueMetrics(registry))
+    queue.enqueue(item('a'), 0)
+    first = queue.pull(0)[0]
+    assert first.attempt == 1
+    assert queue.recover(181) == 1
+    assert queue.recover(186) == 1
+    second = queue.pull(186)[0]
+    assert second.attempt == 2
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+
+
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
 def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
     # Shadow idle admission must follow this actual scheduler behavior, rather

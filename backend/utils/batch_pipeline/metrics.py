@@ -71,7 +71,8 @@ class QueueMetrics:
         )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
-            'Per-item admission to lease wait; no owner labels',
+            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait',
+            ['relet'],
             buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
             registry=registry,
         )
@@ -180,7 +181,7 @@ class QueueMetrics:
         self.projection_age.set(age)
         self.projection_observed_at.set(now)
 
-    def record(self, event: str, *, wait_seconds: float | None = None) -> None:
+    def record(self, event: str, *, wait_seconds: float | None = None, relet: bool = False) -> None:
         if event not in {
             'leased',
             'completed',
@@ -197,7 +198,7 @@ class QueueMetrics:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
-            self.owner_wait.observe(max(0.0, wait_seconds))
+            self.owner_wait.labels('true' if relet else 'false').observe(max(0.0, wait_seconds))
 
     def record_completed_audio(self, outcome: str, seconds: float) -> None:
         if outcome not in WORK_OUTCOMES:

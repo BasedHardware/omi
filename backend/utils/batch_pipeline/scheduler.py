@@ -334,10 +334,10 @@ class Scheduler:
                     break
                 receipt, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id)
                 if receipt:
-                    lease, enqueued_at = receipt
+                    lease, enqueued_at, relet = receipt
                     if self.metrics:
                         try:
-                            self.metrics.record('leased', wait_seconds=now - enqueued_at)
+                            self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
                         except Exception:
                             pass  # Metrics cannot turn an issued lease into a failed pull.
                     return lease
@@ -504,8 +504,13 @@ class Scheduler:
                 control[field(int(priority), 'service')] += cost / owner_count
                 tx.put('control', shard, control)
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
+                # defer() refunds the attempt, so an admission-deferred re-lease
+                # is a relet only through its admission_refusals streak; a
+                # charged attempt (> 1 after this lease's increment) marks every
+                # other re-lease.
+                relet = job.get('admission_refusals', 0) > 0 or job['attempt'] > 1
                 return (
-                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']),
+                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at'], relet),
                     True,
                     observations,
                 )
