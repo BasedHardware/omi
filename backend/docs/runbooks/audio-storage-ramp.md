@@ -1,5 +1,16 @@
 # STOP_PCM and regional derived-cache ramp
 
+November 1 decision: **close the STOP_PCM 5% config packet; do not apply it**.
+The whole-pack identity shortcut can accept a capture-time PCM hash even when
+fresh decoding of a stateful Opus pack differs from that PCM. A synthetic
+native-Opus replay through `verified_pcm_paths` and `read_pack` accepted the
+skip but differed in 127 of 320 PCM bytes, with all 160 samples retained.
+Original packets remain stored; this is a fidelity gap, not evidence of
+production audio loss. Keep the existing PCM writer on. Any revival requires
+a reviewed proof that the raw reader reproduces the required audio fidelity,
+including stateful pack boundaries, plus measured positive residual net value.
+The sequence below is a future qualification plan, not apply authorization.
+
 The rollout lead owns every apply, via an existing Cloud Run/GKE train. Config
 PRs are a sequence, never a batch of flags to merge together. Keep later PRs
 draft until the preceding step passes its soak and the lead requests the next
@@ -31,11 +42,11 @@ comparison; first let those changes settle so their savings are not credited
 to STOP_PCM. If they change during a soak, restart attribution with a new
 accepted baseline rather than expanding from a confounded receipt.
 
-The lead owns expansion: schedule the 5% canary only after current batch and
-playback acceptance, then 25% after at least 12h clean and 100% after at least
-4h clean. Review the apply-or-close decision by November 2, 2026; if applied,
-target completion or explicit rollback/hold by November 5. Do not expand on a
-calendar deadline without passing receipts and positive incremental net value.
+The lead owns the fidelity follow-up review by November 2, 2026. Do not schedule
+the current packet. After a separately reviewed repair and batch/playback
+acceptance, a newly authorized ramp could use 5% for at least 12h, then 25% for
+at least 4h, then 100%, with a fresh dated expansion promise. Do not expand on
+a calendar deadline without passing receipts and positive incremental net value.
 
 STOP_PCM rollback: percent 0, optionally disable; READ and custody remain on.
 Regional rollback: set REGIONAL_CACHE_PERCENT=0 first, then disable
@@ -123,8 +134,8 @@ context, not the new step's acceptance baseline.
 
 ## Savings reporting
 
-November 1 refresh: KEEP as a small, conditional duplicate-write lever, with
-$0 realized and $0 committed to the margin forecast until measured. It is
+November 1 refresh: CLOSE the config ramp, with $0 qualified net value,
+$0 realized and $0 committed to the margin forecast. It is
 not a demonstrated $50/day saving. In the 24h ending 2026-11-01 05:00Z,
 in-cluster reset-aware counters measured about 239,716 span-bearing projection
 batches, 8,683 spanless batches and zero PCM writes avoided. Pusher raw PCM16
@@ -149,8 +160,10 @@ demand gates merge enqueue/build activity, not this ingestion writer. Never
 add STOP_PCM's old estimate to those levers without measuring the residual.
 
 Skipping requires READ, 16 kHz positioned chunks, full committed raw coverage,
-successful checksum/decode/sample checks and PCM identity proof. A miss or
-exception keeps the PCM write. Custody media and manifests remain immutable;
+successful checksum/decode/sample checks and PCM identity proof. The whole-pack
+shortcut compares the capture-time hash instead of requiring fresh decode
+equality; the stateful Opus replay above blocks treating it as a fidelity proof.
+A miss or exception keeps the PCM write. Custody media and manifests remain immutable;
 no successful projection deletes them. Rollback restores future PCM writes,
 and READ must stay on for recordings whose PCM write was already skipped.
 Local fake-storage checks establish these paths, not live audio acceptance.
