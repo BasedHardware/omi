@@ -132,6 +132,25 @@ class NewFileHeaderTests(unittest.TestCase):
         )
         self.assertEqual(len(self.evaluate(base, ["app/lib/pages/late_comment.dart"])), 1)
 
+    def test_empty_python_docstring_is_not_a_header(self) -> None:
+        base = self.commit_base()
+        self.write("backend/utils/empty_doc.py", '"""   """\n' + PY_PAD + "\n")
+        self.assertEqual(len(self.evaluate(base, ["backend/utils/empty_doc.py"])), 1)
+
+    def test_marker_and_directive_comments_are_not_a_header(self) -> None:
+        base = self.commit_base()
+        body = "// MARK: - One\n// swiftlint:disable all\n//\nimport Foundation\n" + PAD + "\n"
+        self.write("desktop/macos/Desktop/Sources/Markers.swift", body)
+        self.assertEqual(len(self.evaluate(base, ["desktop/macos/Desktop/Sources/Markers.swift"])), 1)
+
+    def test_renamed_headerless_file_is_not_new(self) -> None:
+        self.write("app/lib/old_home.dart", PAD + "\n")
+        base = self.commit_base()
+        (self.root / "app/lib/new_home.dart").write_text(PAD + "\n")
+        (self.root / "app/lib/old_home.dart").unlink()
+        self.git("add", "-A")
+        self.assertEqual(self.evaluate(base, ["app/lib/new_home.dart"]), [])
+
     def test_modified_file_is_ignored(self) -> None:
         self.write("backend/utils/existing.py", "x = 1\n" + "y = 2\n" * 30)
         base = self.commit_base()
@@ -182,7 +201,7 @@ class NewFileHeaderTests(unittest.TestCase):
         )
 
     def test_real_incident_shape_fails(self) -> None:
-        # PR #14527 added the 231-line headerless app/lib/backend/http/api_result.dart:
+        # PR #14527 added the 75-line headerless app/lib/backend/http/api_result.dart:
         # imports straight into declarations, no comment block anywhere before code.
         base = self.commit_base()
         self.write("app/lib/backend/http/api_result.dart", "import 'dart:async';\n" + PAD + "\n")

@@ -1,8 +1,8 @@
 """Synchronous enrichment coordinator for a completed conversation: structuring,
 summary, memories, action items, and app/goal triggers.
 
-Every caller names a ProcessingTrigger whose PROCESSING_MODES row fixes run-now,
-reprocess, first-open bypass and relevance policy together, and expensive child
+A ProcessingTrigger (default CAPTURE_END) selects the PROCESSING_MODES row that
+fixes run-now, reprocess, first-open bypass and relevance policy, and expensive child
 work fans out to the named executor lanes instead of running inline. The managed
 vs custom-STT credit gates sit here so one path cannot bill the wrong budget
 (backend/utils/conversations/ARCHITECTURE.md).

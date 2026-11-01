@@ -44,6 +44,10 @@ Gemini Live has no safe mid-session system role. Background agent/card text stay
 
 Beta candidates ship on the **hourly release train**: `desktop_auto_release.yml` tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change, Codemagic (`codemagic.yaml`, workflow `omi-desktop-swift-release`) builds, signs, notarizes, smokes, and publishes the immutable candidate, and the backend admission endpoint advances Beta automatically. Full train mechanics, signed-smoke scope, recovery, and the Codemagic CLI live in [`docs/release.md`](docs/release.md).
 
+- **Broader signed-smoke probes are restricted.** They need an isolated release
+  runner and explicit canary env vars. Production-bundle launch stays fail-closed
+  without `OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1`, and `--auth` needs
+  `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND` to prove app-level persistence.
 - **Do not manually edit release visibility or pointers outside the promotion
   workflow.** Automatic Beta is fail-closed: any smoke, digest, manifest, or
   pointer failure leaves the candidate non-live. Operators pause/resume only

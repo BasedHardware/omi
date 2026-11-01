@@ -22,7 +22,7 @@ Thresholds, and why they hold:
 Excluded: tests (executable specs describe their subject), generated files
 (never hand-edited), ``__init__.py`` (package markers own nothing).
 
-Instance: #14527 merged the 231-line headerless
+Instance: #14527 merged the 75-line headerless
 ``app/lib/backend/http/api_result.dart`` -- the C3 typed-result contract at
 the heart of the app's HTTP layer -- with no statement of what it owns; every
 substantial new file should say what it owns where the next reader looks first.
@@ -40,6 +40,10 @@ from pathlib import Path
 
 MIN_HEADER_COMMENT_LINES = 2
 MIN_FILE_LINES = 40
+# Bare comment syntax, section or work markers and tool directives state no purpose.
+NON_HEADER_COMMENT = re.compile(
+    r"^[/*!\s]*(?:$|(?:MARK|TO" r"DO|FIX" r"ME|XXX|HACK)\b|swiftlint:|ignore_for_file:|eslint-|@ts-|prettier-)"
+)
 
 SCOPES = (
     ("backend/", (".py",)),
@@ -97,6 +101,7 @@ def python_has_header(text: str) -> tuple[bool, str | None]:
         isinstance(first, ast.Expr)
         and isinstance(first.value, ast.Constant)
         and isinstance(first.value.value, str)
+        and bool(first.value.value.strip())
     )
     return documented, None
 
@@ -108,7 +113,8 @@ def comment_lang_has_header(text: str) -> bool:
         if not stripped or stripped.startswith("#!"):
             continue
         if stripped.startswith(("//", "/*", "*", "*/")):
-            run += 1
+            if not NON_HEADER_COMMENT.match(stripped):
+                run += 1
             if run >= MIN_HEADER_COMMENT_LINES:
                 return True
             continue
@@ -143,8 +149,21 @@ def file_exists_at_base(root: Path, base: str, relative: str) -> bool:
     return result.returncode == 0
 
 
+def renamed_paths(root: Path, base: str) -> set[str]:
+    """Rename destinations: a moved file is not a new one, whatever the path says."""
+    result = subprocess.run(
+        ["git", "diff", "--find-renames", "--diff-filter=R", "--name-only", base],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env=clean_git_env(),
+    )
+    return set(result.stdout.splitlines()) if result.returncode == 0 else set()
+
+
 def validate(root: Path, changed_paths: list[str], base: str) -> list[str]:
     failures: list[str] = []
+    renamed = renamed_paths(root, base)
     for relative in changed_paths:
         normalized = relative.replace("\\", "/").strip()
         if not normalized or scope_for(normalized) is None:
@@ -156,7 +175,7 @@ def validate(root: Path, changed_paths: list[str], base: str) -> list[str]:
         path = root / normalized
         if not path.is_file():
             continue
-        if file_exists_at_base(root, base, normalized):
+        if normalized in renamed or file_exists_at_base(root, base, normalized):
             continue
         documented, error = has_header(path)
         if error:
