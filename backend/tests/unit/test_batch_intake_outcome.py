@@ -154,6 +154,8 @@ def test_owner_load_exclusion_marks_evidence_but_durable_owners_do_not(monkeypat
 
 
 async def test_intake_language_exclusion_decline_marks_evidence(monkeypatch):
+    # The full declaration-only exclusion; the sampled refusal is covered in test_batch_admission_language.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'false')
     world = _language_world(monkeypatch)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)

@@ -59,6 +59,8 @@ async def upload(
     seconds=1,
     stop_after_staging=True,
     store=None,
+    decision=None,
+    evidence=None,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -67,6 +69,8 @@ async def upload(
             language='en', parakeet_safe=True, evidence='audio_lid', confidence=0.99, probe_seconds=6.0
         )
     )
+    if decision is not None:
+        probe = Mock(side_effect=decision) if callable(decision) else Mock(return_value=decision)
     if real_language:
         probe = Mock(wraps=batch_language.resolve_language)
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
@@ -113,6 +117,7 @@ async def upload(
         client_device_id=None,
         client_platform='ios',
         policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+        evidence=evidence,
     )
     return response, staged, probe
 
