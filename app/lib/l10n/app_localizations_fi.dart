@@ -14451,6 +14451,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeMoments => 'Hetket';
 
   @override
+  String get episodeFollowUps => 'Jatkotoimet';
+
+  @override
+  String get episodeOpenTranscript => 'Avaa litterointi';
+
+  @override
   String get episodeSoFar => 'Tähän mennessä';
 
   @override
@@ -14669,9 +14675,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Tässä puhelimessa';
-
-  @override
-  String get episodeOpenTranscript => 'Avaa litterointi';
 
   @override
   String get liveCardTitle => 'Live';

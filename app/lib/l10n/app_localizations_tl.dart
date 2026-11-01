@@ -14561,6 +14561,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeMoments => 'Mga Sandali';
 
   @override
+  String get episodeFollowUps => 'Mga susunod na hakbang';
+
+  @override
+  String get episodeOpenTranscript => 'Buksan ang transcript';
+
+  @override
   String get episodeSoFar => 'Sa ngayon';
 
   @override
@@ -14781,9 +14787,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Sa phone na ito';
-
-  @override
-  String get episodeOpenTranscript => 'Buksan ang transcript';
 
   @override
   String get liveCardTitle => 'Live';

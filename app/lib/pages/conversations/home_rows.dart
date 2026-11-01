@@ -21,7 +21,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     Set<String> liveConversationIds = const {},
     Set<String> deletedIds = const {},
     List<ServerConversation> knownConversations = const [],
-    List<ServerConversation> processingConversations = const []}) {
+    List<ServerConversation> processingConversations = const [],
+    DateTime? now}) {
   if (!enabled) return [for (final c in conversations) HomeRow(c)];
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
   final hidden = {...liveConversationIds};
@@ -67,6 +68,24 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       continue;
     }
     final primary = members.first;
+    if (!episode.composed) {
+      if (episode.awaitingSummary(now ?? DateTime.now())) {
+        rows.add(HomeRow(
+          ServerConversation(
+            id: 'episode:${episode.id}',
+            createdAt: episode.startedAt,
+            startedAt: episode.startedAt,
+            structured: primary.structured,
+          ),
+          episodeConversationIds: episode.conversationIds.toSet(),
+          isProcessing: true,
+        ));
+      } else {
+        // The summary never landed. Its members stand alone rather than exposing draft notes.
+        hidden.removeAll(members.map((m) => m.id).where((id) => !liveConversationIds.contains(id)));
+      }
+      continue;
+    }
     final end = episode.lastActivityAt;
     // The adapter gives the existing row widget its exact typography, emoji tile and spacing.
     // It is never passed to a conversation mutation or detail API.

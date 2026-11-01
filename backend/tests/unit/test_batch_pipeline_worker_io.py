@@ -252,7 +252,7 @@ def test_fatal_diarization_error_waits_for_inflight_writes():
 
 @pytest.mark.parametrize(
     'raw,expected',
-    [(None, 3), ('1', 1), ('4', 4), ('8', 8), ('0', 3), ('9', 3), ('x', 3), ('-2', 3)],
+    [(None, 5), ('1', 1), ('4', 4), ('8', 8), ('0', 5), ('9', 5), ('x', 5), ('-2', 5)],
 )
 def test_io_concurrency_knob(monkeypatch, raw, expected):
     if raw is None:

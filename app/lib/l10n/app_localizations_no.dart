@@ -14451,6 +14451,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get episodeMoments => 'Øyeblikk';
 
   @override
+  String get episodeFollowUps => 'Oppfølging';
+
+  @override
+  String get episodeOpenTranscript => 'Åpne utskrift';
+
+  @override
   String get episodeSoFar => 'Så langt';
 
   @override
@@ -14669,9 +14675,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'På denne telefonen';
-
-  @override
-  String get episodeOpenTranscript => 'Åpne utskrift';
 
   @override
   String get liveCardTitle => 'Direkte';

@@ -19,6 +19,8 @@ import time
 from typing import Any
 
 from config import record_seal_repair as config
+from config import record_partial as partial_config
+from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
 
 MAX_ROWS = 1024
@@ -47,6 +49,11 @@ DISPOSITIONS = frozenset(
         'unknown',
         'deferred',
         'disabled',
+        'partial_eligible',
+        'partial_finished',
+        'already_partial',
+        'not_aged',
+        'byok_refused',
     }
 )
 
@@ -79,12 +86,24 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     from utils.batch_pipeline.record_seal_sweeper import require_fresh_proof
 
     budget.check()
-    proof = inventory()
-    require_fresh_proof(proof)  # Required even for token-free rows.
     uid, cid = nojob.conversation_path(path)
     _, job_id = record_identity(uid, cid)
     job = store.run(lambda tx: tx.get('jobs', job_id))
     budget.check()
+    if job.get('partial_coordinator'):
+        # Partial rows stay open, including after coordinator retirement. Only
+        # a changed barrier needs fresh producer proof and transactional rearm.
+        row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+        budget.check()
+        if partial_config.partial_barrier(row):
+            return 'already_partial'
+    proof = inventory()
+    require_fresh_proof(proof)  # Required for every attempted seal or rearm.
+    if job.get('partial_coordinator'):
+        if reason_out is not None:
+            reason = job.get('partial_reason')
+            reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
+        return finish_partial(store, path, reason='tail_lagging', proof=proof, now=time.time(), preview=mode == 'plan')
     plan: dict[str, Any]
     if job:
         plan = repair.plan_seals(
@@ -107,6 +126,26 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if len(entries) != 1:
         return 'unknown'
     disposition = entries[0].get('disposition')
+    if partial_config.enabled() and (
+        disposition == 'proof_refused'
+        and entries[0].get('proof_reason') in partial_config.REASONS
+        or disposition == 'read_error'
+        and entries[0].get('proof_reason') == 'budget_limit'
+    ):
+        require_fresh_proof(proof)
+        partial_result = finish_partial(
+            store,
+            path,
+            reason=entries[0]['proof_reason'],
+            proof=proof,
+            now=time.time(),
+            preview=mode == 'plan',
+            register=lambda tx, uid, cid, row: nojob.registration(tx, uid, cid, row, flags),
+        )
+        if partial_result != 'not_aged':
+            if reason_out is not None:
+                reason_out['partial_reason'] = entries[0]['proof_reason']
+            return partial_result
     if reason_out is not None and entries[0].get('trimmed_divergent_overlaps'):
         reason_out['trimmed_divergent_overlaps'] = entries[0]['trimmed_divergent_overlaps']
     if disposition == 'proof_refused' and reason_out is not None:
@@ -152,7 +191,7 @@ def discover(
             .where(filter=FieldFilter('finished_at', '<=', horizon))
             .order_by('finished_at')
             .order_by('__name__')
-            .select(('finished_at', 'record_audio_closed'))
+            .select(('finished_at', 'record_audio_closed', 'record_audio_partial'))
             .limit(min(128, max_scan - scanned))
         )
         if cursor is not None:
@@ -169,7 +208,11 @@ def discover(
             data = doc.to_dict() or {}
             finished = data.get('finished_at')
             cursor = {'path': doc.reference.path, 'finished_at': finished, 'horizon': horizon}
-            if not data.get('record_audio_closed') and isinstance(finished, datetime) and finished.tzinfo is not None:
+            if (
+                (not data.get('record_audio_closed') or data.get('record_audio_partial'))
+                and isinstance(finished, datetime)
+                and finished.tzinfo is not None
+            ):
                 rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
                 if selected_cursors is not None:
                     selected_cursors[doc.reference.path] = cursor
@@ -241,7 +284,7 @@ def coordinate(
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
-    gaps = Counter()
+    gaps, partial_reasons = Counter(), Counter()
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age = 0, 0
@@ -266,6 +309,7 @@ def coordinate(
                 reason = 'other'
                 gap = 'negative_or_unknown'
                 trimmed = 0
+                partial_reason = 'tail_lost_or_unproven'
                 if process.poll() is not None:
                     try:
                         payload = process.stdout.read(1025)
@@ -277,6 +321,8 @@ def coordinate(
                         reason = candidate if candidate in PROOF_REASONS else 'other'
                         candidate = result.get('tail_gap_bucket')
                         gap = candidate if candidate in TAIL_GAP_BUCKETS else 'negative_or_unknown'
+                        candidate = result.get('partial_reason')
+                        partial_reason = candidate if candidate in partial_config.REASONS else 'tail_lost_or_unproven'
                     except Exception:
                         disposition = 'error'
                     if process.returncode != 0 or disposition not in DISPOSITIONS:
@@ -287,6 +333,8 @@ def coordinate(
                     stop(process)
                     active.remove((process, expires, age))
                     counts[disposition] += 1
+                    if disposition == 'partial_finished':
+                        partial_reasons[partial_reason] += 1
                     if disposition == 'proof_refused':
                         reasons[reason] += 1
                         if reason == 'tail_lagging':
@@ -301,6 +349,7 @@ def coordinate(
                             'count': 1,
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
+                            **({'partial_reason': partial_reason} if disposition == 'partial_finished' else {}),
                             'seal_age_seconds': age if sealed else 0,
                             **({'proof_reason': reason} if disposition == 'proof_refused' else {}),
                             **(
@@ -319,6 +368,7 @@ def coordinate(
         'dispositions': dict(sorted(counts.items())),
         'proof_reasons': dict(sorted(reasons.items())),
         'tail_gap_buckets': dict(sorted(gaps.items())),
+        'partial_finishes': dict(sorted(partial_reasons.items())),
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,

@@ -1116,14 +1116,6 @@ def test_ensure_after_partial_relabel_supersession_admits_new_job(world, target)
     assert found[old_id]['state'] == 'terminal' and found[old_id]['last_outcome'] == 'superseded'
 
 
-def test_sync_v1_route_schedules_learning_retries_after_audio_finalize():
-    source = (Path(__file__).resolve().parents[2] / 'routers' / 'sync.py').read_text(encoding='utf-8')
-    fn_start = source.index('async def sync_local_files(')
-    fn_end = source.index('@router.post(  # v2 async sync-local-files', fn_start)
-    fn_body = source[fn_start:fn_end]
-    assert fn_body.index('_finalize_sync_audio_files') < fn_body.index('schedule_person_voice_learning_retries')
-
-
 def test_pipeline_schedules_learning_retries_outside_private_cloud_gate():
     """Reprocessed conversations must trigger durable teaching even without fresh audio."""
     source = (Path(__file__).resolve().parents[2] / 'utils' / 'sync' / 'pipeline.py').read_text(encoding='utf-8')

@@ -14241,6 +14241,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get episodeMoments => 'モーメント';
 
   @override
+  String get episodeFollowUps => 'フォローアップ';
+
+  @override
+  String get episodeOpenTranscript => '文字起こしを開く';
+
+  @override
   String get episodeSoFar => 'ここまで';
 
   @override
@@ -14458,9 +14464,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'この端末上で';
-
-  @override
-  String get episodeOpenTranscript => '文字起こしを開く';
 
   @override
   String get liveCardTitle => 'ライブ';

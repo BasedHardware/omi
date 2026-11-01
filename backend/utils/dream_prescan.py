@@ -142,7 +142,7 @@ def is_junk_name(name):
     )
 
 
-def _scan_people(uid, firestore_client):
+def scan_people(uid, firestore_client):
     """Unprotected, not-dismissed people from one projected, name-ordered page."""
     people = _client(firestore_client).collection('users').document(uid).collection('people')
     rows = [
@@ -261,7 +261,7 @@ def scan(uid, *, firestore_client=None) -> dict:
     Fails open: any error logs one ``dream_lever_error`` line and returns an empty scan.
     """
     try:
-        candidates, junk = _scan_people(uid, firestore_client)
+        candidates, junk = scan_people(uid, firestore_client)
         dupes = _duplicate_people(candidates)
         tasks = _scan_tasks(uid, firestore_client)
         counts = {'people_dupes': len(dupes), 'junk_names': len(junk), 'task_dupes': len(tasks)}

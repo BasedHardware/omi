@@ -14546,6 +14546,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get episodeMoments => 'தருணங்கள்';
 
   @override
+  String get episodeFollowUps => 'அடுத்த படிகள்';
+
+  @override
+  String get episodeOpenTranscript => 'எழுத்துப்பிரதியைத் திற';
+
+  @override
   String get episodeSoFar => 'இதுவரை';
 
   @override
@@ -14766,9 +14772,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'இந்த ஃபோனில்';
-
-  @override
-  String get episodeOpenTranscript => 'எழுத்துப்பிரதியைத் திற';
 
   @override
   String get liveCardTitle => 'நேரலை';

@@ -212,9 +212,13 @@ describe('encrypted chat draft storage', () => {
     ]);
     const envelope = await encryptChatDraft('draft text', key, chatDraftKeys.panel);
     const [version, iv, ciphertext] = envelope.split('.');
-    const altered = `${version}.${iv}.${ciphertext.slice(0, -1)}${
-      ciphertext.endsWith('A') ? 'B' : 'A'
-    }`;
+    // Tamper the first character, whose six base64 bits are all significant.
+    // The unpadded 26-byte ciphertext is 35 chars, so the final char carries
+    // only 4 significant bits: ~1 run in 16 it is 'A', and rewriting A to B
+    // changes only an unused bit, leaving the decoded bytes — and the GCM
+    // tag — intact so decryption succeeds and this test failed.
+    const tampered = `${ciphertext.startsWith('A') ? 'B' : 'A'}${ciphertext.slice(1)}`;
+    const altered = `${version}.${iv}.${tampered}`;
 
     await expect(decryptChatDraft(altered, key, chatDraftKeys.panel)).rejects.toThrow();
   });

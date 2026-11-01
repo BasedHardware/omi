@@ -85,44 +85,55 @@ def _top_level_outcome_tiles():
 def test_first_screen_keeps_outcome_thresholds_and_a_trend_under_each_tile():
     panels = _top_level_outcome_tiles()
     stats = {p['id']: p for p in panels if p['type'] == 'stat'}
-    bands = {'default': [None, 95, 99], 73: [None, 90, 98]}
+    # The null base step is what "no traffic" takes, so absence never reads as a red outcome.
+    bands = {'default': [None, 0, 95, 99], 73: [None, 0, 90, 98]}
     for stat_id, spark_id in zip((63, 3, 2, 73, 4, 20, 36, 70), range(80, 88)):
         stat = stats[stat_id]
         steps = [s['value'] for s in stat['fieldConfig']['defaults']['thresholds']['steps']]
         assert steps == bands.get(stat_id, bands['default']), stat['title']
+        assert stat['fieldConfig']['defaults']['thresholds']['steps'][0]['color'] == 'text', stat['title']
         spark = next(p for p in panels if p['id'] == spark_id)
         assert spark['fieldConfig']['defaults']['thresholds'] == stat['fieldConfig']['defaults']['thresholds']
         assert spark['gridPos']['x'] == stat['gridPos']['x']
         assert spark['gridPos']['y'] == stat['gridPos']['y'] + stat['gridPos']['h']
-        assert spark['interval'] == '1h'
         assert 'noValue' not in spark['fieldConfig']['defaults'], 'noValue turns gaps into a drawn value'
         expr = spark['targets'][0].get('expr')
+        assert spark['fieldConfig']['defaults']['custom']['gradientMode'] == 'scheme'
+        if stat_id != 73:
+            # A numerator series that was never created must read 0% under traffic, not "no traffic".
+            assert ' or 0 * sum(' in stat['targets'][0]['expr'], stat['title']
+            assert ' or 0 * sum(' in spark['targets'][0]['expr'], stat['title']
         if expr is None:
+            assert spark['interval'] == '1h'
             promql = spark['targets'][0]['promQLQuery']
             assert '[1h]' in promql['expr'] and '[3h]' not in promql['expr']
             assert promql['step'] == '1h'
         else:
+            # Roughly 24 points at any range, so a short range doesn't end a whole step early.
+            assert spark['interval'] == '5m' and spark['maxDataPoints'] == 24
             # The window equals the step, so each sample is read once and a wider range cannot overlap.
             assert '[$__interval]' in expr and '[$__range]' not in expr
             assert expr.endswith(' >= 0'), 'hours with no settled traffic must gap, not draw NaN'
 
 
-def test_verdict_counts_the_same_expressions_as_the_tiles():
+def test_oldest_job_shows_the_queue_that_separates_stuck_from_backlog():
+    panel = _panels()[30]
+    assert [t['legendFormat'] for t in panel['targets']] == ['Oldest', 'Queued']
+    assert panel['targets'][1]['expr'] == 'max(listen_finalization_jobs{status="queued"})'
+    assert panel['fieldConfig']['overrides'][0]['matcher']['options'] == 'Queued'
+
+
+def test_capture_failures_can_be_read_by_reason():
     panels = _panels()
-    (target,) = panels[88]['targets']
-    assert target['instant'] is True
-    assert target['expr'].startswith('count_values("state", clamp(floor((((')
-    assert target['expr'].endswith(') >= 0) - 95) / 4), -1, 1))')
-    for tile in (63, 3, 2, 4, 20, 36, 70):
-        assert panels[tile]['targets'][0]['expr'] in target['expr']
-    assert panels[73]['targets'][0].get('expr') is None  # Recaps live in another datasource and bands.
+    assert 90 in {p['id'] for p in panels[44]['panels']}
+    expr = panels[90]['targets'][0]['expr']
+    assert 'sum by (service_name, reason)' in expr
+    assert 'omi_capture_finalization_failures_total[$__interval]' in expr
 
 
 def test_first_screen_is_exactly_the_agreed_panels():
     panels = _top_level_outcome_tiles()
-    # Panel 5 is the deliberate exception: it is the only no-signal check, because a stopped
-    # reporter and no traffic look the same on an outcome tile.
-    assert {p['id'] for p in panels} == {88, 5, 63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88)}
+    assert {p['id'] for p in panels} == {63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88)}
 
 
 def test_no_panels_overlap_on_the_first_screen_or_inside_any_row():

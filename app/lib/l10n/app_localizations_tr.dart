@@ -14460,6 +14460,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get episodeMoments => 'Anlar';
 
   @override
+  String get episodeFollowUps => 'Takip adımları';
+
+  @override
+  String get episodeOpenTranscript => 'Transkripti aç';
+
+  @override
   String get episodeSoFar => 'Şu ana kadar';
 
   @override
@@ -14678,9 +14684,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'Bu telefonda';
-
-  @override
-  String get episodeOpenTranscript => 'Transkripti aç';
 
   @override
   String get liveCardTitle => 'Canlı';

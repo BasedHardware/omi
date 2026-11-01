@@ -233,6 +233,17 @@ async def test_dark_wake_does_not_kick(monkeypatch):
         _restore(saved)
 
 
+def test_v1_sync_local_files_is_gone():
+    module, saved, jobs, BytesIO = _router()
+    try:
+        response = module.sync_local_files(uid='test-uid')
+        assert response.status_code == 410
+        assert json.loads(response.body)['code'] == 'sync_v1_retired'
+        assert response.headers['deprecation'] == 'true'
+    finally:
+        _restore(saved)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', [DRAINING, DARK])
 async def test_dark_direct_backfill_never_runs_beside_a_live_sequencer_owner(monkeypatch, mode):

@@ -14375,6 +14375,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get episodeMoments => 'ช่วงเวลา';
 
   @override
+  String get episodeFollowUps => 'สิ่งที่ต้องทำต่อ';
+
+  @override
+  String get episodeOpenTranscript => 'เปิดถอดความ';
+
+  @override
   String get episodeSoFar => 'จนถึงตอนนี้';
 
   @override
@@ -14593,9 +14599,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'บนเครื่องนี้';
-
-  @override
-  String get episodeOpenTranscript => 'เปิดถอดความ';
 
   @override
   String get liveCardTitle => 'แสดงสด';

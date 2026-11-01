@@ -14364,6 +14364,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get episodeMoments => 'اللحظات';
 
   @override
+  String get episodeFollowUps => 'المتابعات';
+
+  @override
+  String get episodeOpenTranscript => 'فتح النسخ';
+
+  @override
   String get episodeSoFar => 'حتى الآن';
 
   @override
@@ -14581,9 +14587,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get episodeOnThisPhone => 'على هذا الهاتف';
-
-  @override
-  String get episodeOpenTranscript => 'فتح النسخ';
 
   @override
   String get liveCardTitle => 'مباشر';
