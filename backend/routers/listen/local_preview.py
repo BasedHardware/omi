@@ -18,9 +18,10 @@ from prometheus_client import Histogram
 
 from config.batch_live_preview import local_preview_batch_owned
 from config.cloud_live_stt import local_preview_batch_enabled
-from utils.metrics import OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL, audio_timeline_provider_label
+from utils.metrics import OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL
 from utils.observability.reasons import LocalPreviewOutcome, ReasonFamily, reason_label
 from utils.observability.transcription import bounded_client_platform
+from utils.stt.outcomes import bounded_provider
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ def note_deferred_stream_closed(receiver) -> None:
     try:
         OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS.labels(
             deferred_by=getattr(receiver, '_cloud_live_deferred_by', None) or 'off',
-            provider=audio_timeline_provider_label(receiver._serving_provider()),
+            provider=bounded_provider(receiver._serving_provider()),
         ).observe(max(0.0, time.monotonic() - opened_at))
     except Exception:
         pass  # Telemetry never blocks teardown.
