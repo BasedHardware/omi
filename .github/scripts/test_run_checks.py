@@ -24,6 +24,7 @@ from git_bash import bash_executable, bash_path, native_path_from_bash
 from run_checks import (
     MAX_CHECK_JOBS,
     VALID_PLATFORMS,
+    _stop,
     Check,
     Manifest,
     check_jobs,
@@ -1578,6 +1579,27 @@ class ParallelRunnerTests(unittest.TestCase):
             self.assertNotIn("CANCELLED fine", stdout)
             self.assertNotIn("CANCELLED also-bad", stdout)
             self.assertIn("Manifest checks failed: bad, also-bad", stderr)
+
+    @unittest.skipIf(os.name == "nt", "exit-status attribution is POSIX-only")
+    def test_stop_keeps_the_status_of_a_check_that_exited_before_the_signal(self) -> None:
+        """Luna r2 on #24232: a check that exits between poll() and the stop keeps its own result."""
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "exited"
+            process = subprocess.Popen(
+                [sys.executable, "-c", f"import pathlib; pathlib.Path({str(marker)!r}).touch(); raise SystemExit(5)"],
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + 120
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            time.sleep(0.5)  # exited but not yet reaped: Popen.returncode is still None
+            with patch.object(process, "poll", side_effect=[None, None]):
+                stopped = _stop(process)
+            self.assertFalse(stopped)
+            self.assertEqual(process.returncode, 5)
+
+            live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+            self.assertTrue(_stop(live))
 
     def test_jobs_override_is_clamped(self) -> None:
         for raw, expected in (("54", MAX_CHECK_JOBS), ("0", 1), ("3", 3)):

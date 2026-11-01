@@ -553,9 +553,10 @@ def save_durations(path: Path | None, durations: dict[str, float]) -> None:
         pass
 
 
-def _stop(process: subprocess.Popen[bytes]) -> None:
+def _stop(process: subprocess.Popen[bytes]) -> bool:
+    """Stop a running check; True only when this call ended it, False when it had already exited on its own."""
     if process.poll() is not None:
-        return
+        return False
     try:
         if os.name == "nt":
             process.terminate()
@@ -565,6 +566,10 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
     except (OSError, subprocess.TimeoutExpired):
         process.kill()
         process.wait()
+    if os.name == "nt":
+        return True  # TerminateProcess leaves no signal trace; the poll above is the best available check
+    # A check that exited between the poll and the signal keeps its own exit status.
+    return process.returncode in (-signal.SIGTERM, -signal.SIGKILL)
 
 
 def execute_parallel_checks(
@@ -629,16 +634,15 @@ def execute_parallel_checks(
                 pending.clear()
                 # Checks that finished on their own report their real result; only live ones are cancelled.
                 for check_id, (process, log, _) in list(running.items()):
-                    if process.poll() is not None:
-                        returncode, block = collect(check_id)
-                        if returncode:
-                            failures.append(check_id)
-                        print(block, end="", flush=True)
+                    if _stop(process):
+                        log.close()
+                        running.pop(check_id)
+                        print(f"<== CANCELLED {check_id} (stopped after the first failure)", flush=True)
                         continue
-                    _stop(process)
-                    log.close()
-                    running.pop(check_id)
-                    print(f"<== CANCELLED {check_id} (stopped after the first failure)", flush=True)
+                    returncode, block = collect(check_id)
+                    if returncode:
+                        failures.append(check_id)
+                    print(block, end="", flush=True)
     finally:
         for process, log, _ in running.values():
             _stop(process)
