@@ -430,6 +430,7 @@ def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlis
         language_gate.SELF_REQUESTS,
         language_gate.SHADOW,
         language_gate.ENFORCED,
+        language_gate.CONFIDENT_SKIPS,
         vendor_guard.VENDOR_AUDIO_SECONDS,
     ):
         assert re.fullmatch(keep, counter._name + '_total')
