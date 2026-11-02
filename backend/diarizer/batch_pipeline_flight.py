@@ -11,8 +11,9 @@ packs the remaining forwards across the items of one locked flight:
 * one ResNet trunk forward per chunk, pooled per local speaker with the same
   masks and statistics pooling, packed across items.
 
-Each forward keeps the deployment's pinned model batch size, so a single
-forward is never larger than in the serial path and peak VRAM does not grow.
+Each forward keeps the deployment's pinned model batch size, so a forward is
+bounded by that batch; the embedding trunk now sees up to that many chunk
+waveforms per forward where stock pyannote embedded one chunk per pair.
 ``budget_seconds`` bounds the audio packed into one group (host-side features
 held between stages). A unit longer than the budget, an unsupported model
 layout, any non-fatal failure, or a CUDA out-of-memory error inside the packed
@@ -258,6 +259,7 @@ def install_shared_trunk(diarizer) -> bool:
     original = diarizer.get_embeddings
 
     def get_embeddings(file, binary_segmentations, exclude_overlap=False, hook=None):
+        # The chain passes pyannote's no-op progress hook; the shared trunk does not call it per pair.
         if isinstance(file, Mapping):
             try:
                 embeddings = shared_trunk_embeddings(

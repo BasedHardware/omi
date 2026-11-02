@@ -632,6 +632,17 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
 
 
+@pytest.mark.parametrize(
+    'arguments,expected', [((), 'true'), (('--set', 'worker.sharedEmbeddingTrunkEnabled=false'), 'false')]
+)
+def test_shared_embedding_trunk_ships_on_with_helm_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED'] == expected
+
+
 @pytest.mark.parametrize('arguments,expected', [((), 'true'), (('--set', 'worker.shardSpreadEnabled=false'), 'false')])
 def test_shard_spread_ships_on_with_helm_kill_switch(arguments, expected):
     result = render(*enabled_arguments(), *arguments)
