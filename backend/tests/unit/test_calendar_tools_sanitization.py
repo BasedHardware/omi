@@ -200,15 +200,6 @@ GRANT_WITH_CALENDAR = {
 class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
     SENSITIVE = "sensitive_internal_api_token_xyz_98765"
 
-    def setUp(self):
-        # Every case also checks the server log, tracebacks included.
-        logs = io.StringIO()
-        handler = logging.StreamHandler(logs)
-        handler.setFormatter(logging.Formatter())
-        ct.logger.addHandler(handler)
-        self.addCleanup(lambda: self.assertNotIn(self.SENSITIVE, logs.getvalue()))
-        self.addCleanup(ct.logger.removeHandler, handler)
-
     async def test_search_query_reports_widened_range_and_full_page_cap(self):
         event = {
             "summary": "Project review",
@@ -401,6 +392,135 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(self.SENSITIVE, result)
             self.assertNotIn("RuntimeError", result)
             self.assertEqual("Error getting calendar event. Please try again.", result)
+
+    def _with_access(self):
+        return patch.object(ct, "prepare_access", return_value=("uid_123", {"access_token": "token"}, "token", None))
+
+    async def test_bad_start_time_omits_parser_exception(self):
+        with self._with_access():
+            result = await ct.create_calendar_event_tool.func(
+                title="Design Sync", start_time="not-a-time", end_time="2026-09-28T11:00:00Z"
+            )
+        self.assertEqual("Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: not-a-time", result)
+
+    async def test_failed_delete_by_title_reports_fixed_reason(self):
+        mutation = load_module_fresh(
+            "models._calendar_mutation_sanitization_test", str(BACKEND_DIR / "models" / "calendar_mutation.py")
+        )
+        events = [{"id": "evt-1", "summary": "Standup", "start": {"dateTime": "2026-09-28T10:00:00Z"}}]
+        with (
+            self._with_access(),
+            patch.object(ct, "get_google_calendar_events", new=AsyncMock(return_value=events)),
+            patch.object(ct, "delete_google_calendar_event", side_effect=RuntimeError(self.SENSITIVE)),
+            patch.object(ct, "CalendarMutationResult", mutation.CalendarMutationResult),
+            patch.object(ct, "format_deleted_calendar_events", mutation.format_deleted_calendar_events),
+            patch.object(ct, "calendar_event_title", mutation.event_title),
+        ):
+            result = await ct.delete_calendar_event_tool.func(event_title="Standup")
+        self.assertNotIn(self.SENSITIVE, result)
+        self.assertIn("Standup", result)
+        self.assertIn("could not delete this event", result)
+
+    async def test_delete_failures_keep_exception_text_out_of_response_and_logs(self):
+        mutation = load_module_fresh(
+            "models._calendar_mutation_sanitization_test", str(BACKEND_DIR / "models" / "calendar_mutation.py")
+        )
+        events = [{"id": "evt-1", "summary": "Standup", "start": {"dateTime": "2026-09-28T10:00:00Z"}}]
+        expired = GoogleAPIError("Token expired", is_auth_error=True, status_code=401)
+        searches = {
+            "first attempt": AsyncMock(return_value=events),
+            "after token refresh": AsyncMock(side_effect=[expired, events]),
+        }
+        for label, search in searches.items():
+            with (
+                self.subTest(label),
+                self._with_access(),
+                patch.object(ct, "get_google_calendar_events", new=search),
+                patch.object(ct, "refresh_google_token", new=AsyncMock(return_value="new_token")),
+                patch.object(ct, "delete_google_calendar_event", side_effect=RuntimeError(self.SENSITIVE)),
+                patch.object(ct, "CalendarMutationResult", mutation.CalendarMutationResult),
+                patch.object(ct, "format_deleted_calendar_events", mutation.format_deleted_calendar_events),
+                patch.object(ct, "calendar_event_title", mutation.event_title),
+                self.assertLogs(ct.logger, level="ERROR") as logs,
+            ):
+                result = await ct.delete_calendar_event_tool.func(event_title="Standup")
+            self.assertIn("could not delete this event", result)
+            self.assertNotIn(self.SENSITIVE, result)
+            formatter = logging.Formatter()
+            self.assertNotIn(self.SENSITIVE, "\n".join(formatter.format(r) for r in logs.records))
+
+    async def test_update_search_failure_keeps_exception_text_out_of_logs(self):
+        with (
+            self._with_access(),
+            patch.object(ct, "get_google_calendar_events", side_effect=RuntimeError(self.SENSITIVE)),
+            self.assertLogs(ct.logger, level="ERROR") as logs,
+        ):
+            await ct.update_calendar_event_tool.func(event_title="Standup")
+        formatter = logging.Formatter()
+        self.assertNotIn(self.SENSITIVE, "\n".join(formatter.format(r) for r in logs.records))
+
+    async def test_update_search_failure_returns_fixed_text(self):
+        with (
+            self._with_access(),
+            patch.object(ct, "get_google_calendar_events", side_effect=RuntimeError(self.SENSITIVE)),
+        ):
+            result = await ct.update_calendar_event_tool.func(event_title="Standup")
+        self.assertEqual("Error searching for calendar event. Please try again.", result)
+
+    async def test_google_api_error_text_is_not_returned(self):
+        leak = GoogleAPIError(f"Bad request: {self.SENSITIVE}", status_code=400)
+        current = {"id": "evt_123", "summary": "Standup", "attendees": []}
+        cases = [
+            (
+                "get_google_calendar_events",
+                lambda: ct.get_calendar_events_tool.func(),
+                "Error fetching calendar events (Google Calendar status 400). Please try again.",
+            ),
+            (
+                "create_google_calendar_event",
+                lambda: ct.create_calendar_event_tool.func(
+                    title="Design Sync", start_time="2026-09-28T10:00:00Z", end_time="2026-09-28T11:00:00Z"
+                ),
+                "Error creating calendar event (Google Calendar status 400). Please try again.",
+            ),
+            (
+                "delete_google_calendar_event",
+                lambda: ct.delete_calendar_event_tool.func(event_id="evt_123"),
+                "Error deleting calendar event (Google Calendar status 400). Please try again.",
+            ),
+            (
+                "get_google_calendar_events",
+                lambda: ct.delete_calendar_event_tool.func(event_title="Standup"),
+                "Error searching for calendar events (Google Calendar status 400). Please try again.",
+            ),
+            (
+                "get_google_calendar_event",
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123"),
+                "Error getting calendar event (Google Calendar status 400). Please try again.",
+            ),
+            (
+                "update_google_calendar_event",
+                lambda: ct.update_calendar_event_tool.func(event_id="evt_123", title="Renamed"),
+                "Error updating calendar event (Google Calendar status 400). Please try again.",
+            ),
+        ]
+        for target, call, expected in cases:
+            with (
+                self.subTest(target=target, expected=expected),
+                self._with_access(),
+                patch.object(ct, "get_google_calendar_event", new=AsyncMock(return_value=current)),
+                patch.object(ct, target, side_effect=leak),
+            ):
+                self.assertEqual(expected, await call())
+
+    def setUp(self):
+        # Every case also checks the server log, tracebacks included.
+        logs = io.StringIO()
+        handler = logging.StreamHandler(logs)
+        handler.setFormatter(logging.Formatter())
+        ct.logger.addHandler(handler)
+        self.addCleanup(lambda: self.assertNotIn(self.SENSITIVE, logs.getvalue()))
+        self.addCleanup(ct.logger.removeHandler, handler)
 
     async def test_retry_and_search_failures_log_without_exception_text(self):
         current = {"id": "evt_123", "summary": "Standup", "attendees": []}

@@ -83,7 +83,8 @@ jobs:
         with:
           source_sha: ${{ github.sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       - name: Google Auth
         id: auth
