@@ -28,17 +28,26 @@ Legs:
 - `projection`: committed, projection `pending`, `persisted` or `ready`.
 - `quarantine_held_rows`: result rows at `quarantine_held`. Counted, never alarmed: most are ready receipts whose text
   is already in the conversation and only the content ledger waits; the rest are the assignment holds above.
+- `terminal_empty` (counts only): the quarantined units that are `failed_held` with recovery failure `empty_asr`
+  and measured held VAD speech exactly 0, the existing silence contract for "no recoverable speech".
+
+Open question for David: does a terminal empty unit count as processed? `TERMINAL_EMPTY_IS_PROCESSED` in
+`config/batch_timeliness.py` is the one-line switch. It defaults to `False`, so those units stay in the alarm. `True`
+subtracts them exactly from the `quarantined` leg; `terminal_empty` stays visible either way. On prod at
+2026-11-02 10:36Z, no quarantined `empty_asr` unit had zero measured speech: 13 of 13 admitted since the epoch carried
+some (10 under 2 s), so flipping it would not change today's alarm.
 
 Config: `BATCH_TIMELINESS_ALARM_ENABLED` (default on; `false` stops the Firestore reads),
 `BATCH_TIMELINESS_EPOCH` (default `2026-11-02T06:09:00Z`, when the target was set) and
 `BATCH_TIMELINESS_INTERVAL_SECONDS` (default 300, clamped to 60–3600).
 
-Reads per sample, worst case: 8 bounded walks of 20 documents (160), the projection walk and its job reads (100), 3
-single-document reads, and 15 count aggregations (one read per 1,000 index entries each, about 25 at today's backlog).
+Reads per sample, worst case: 8 bounded walks of 20 documents (160; 9 with the terminal-empty switch on), the projection walk and its job reads (100), 3
+single-document reads, and 17 count aggregations (one read per 1,000 index entries each, about 25 at today's backlog).
 That is under 300 reads per process per sample. Sixteen workers at the default cadence read at most about 1.4M per day
 (roughly $0.4–0.8/day); a healthy queue reads far less, because walks stop at the first unheld row. The
-`assignment_held` leg needs the new `batch_timeliness_assignment_held` composite index. Until it is READY, the whole
-sample fails and counts as `error`, and the stale rule fires.
+`assignment_held` leg needs the new jobs `(state, recovery_state, enqueued_at)` composite index, and `terminal_empty`
+needs jobs `(state, recovery_state, recovery.failure.reason, measured_held_vad_speech_seconds, enqueued_at)`. Until
+both are READY, the whole sample fails and counts as `error`, and the stale rule fires.
 
 The metric is alert-only. No scheduler, ramp, hard-3 rollback trigger or gate reads it.
 

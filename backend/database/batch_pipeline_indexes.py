@@ -58,4 +58,21 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
+    # Its terminal_empty count: failed held, empty_asr, no measured held VAD speech.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_timeliness_terminal_empty',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (
+                _asc('state'),
+                _asc('recovery_state'),
+                _asc('recovery.failure.reason'),
+                _asc('measured_held_vad_speech_seconds'),
+                _asc('enqueued_at'),
+                _asc('__name__'),
+            ),
+        )
+        for stage in ('prod', 'dev')
+    ),
 )
