@@ -99,7 +99,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
   bool _isSuggested(App app) => _provider.cachedSuggestedApps.any((suggested) => suggested.id == app.id);
 
   bool _isEnabled(App app) =>
-      app.id == 'omi-default-summary' ||
+      app.id == builtInSummaryTemplateAppId ||
       _provider.cachedEnabledConversationApps.any((enabled) => enabled.id == app.id) ||
       _provider.isSuggestedAppAvailable(app.id);
 
@@ -154,7 +154,8 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
     final busy = provider.loadingReprocessConversation || _installingAppId != null || !_selectionResolves;
 
     final templates = <Widget>[
-      _appRow(provider.findAppById('omi-default-summary')!, isLastUsed: lastUsedId == 'omi-default-summary'),
+      _appRow(provider.findAppById(builtInSummaryTemplateAppId)!,
+          isLastUsed: lastUsedId == builtInSummaryTemplateAppId),
       if (enabled.isNotEmpty)
         for (final app in enabled) _appRow(app, isLastUsed: app.id == lastUsedId)
       else if (load == SummaryTemplatesLoad.failed)

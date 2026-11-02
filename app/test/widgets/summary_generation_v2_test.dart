@@ -169,6 +169,20 @@ void main() {
   });
 
   group('template sheet', () {
+    testWidgets('legacy picker waits for fetched templates before showing the built-in row', (tester) async {
+      SummaryGenerationV2Gate.debugOverride = false;
+      final fetches = SummaryTemplateFetches();
+      final provider = summaryProvider(summaryConversation(), fetches: fetches);
+      addTearDown(provider.dispose);
+      await tester.pumpWidget(summaryHarness(provider, _sheetLauncher()));
+      await _openSheet(tester);
+      expect(find.byKey(const Key('dismissible_omi-default-summary')), findsNothing);
+      fetches.enabled.single.complete([]);
+      fetches.suggested.single.complete([]);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('dismissible_omi-default-summary')), findsOneWidget);
+    });
+
     testWidgets('Omi is there before any template request answers, over two visible skeleton rows', (tester) async {
       final fetches = SummaryTemplateFetches();
       final provider = summaryProvider(summaryConversation(), fetches: fetches);

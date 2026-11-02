@@ -298,6 +298,22 @@ void main() {
     expect(writes, ['pg', null]);
   });
 
+  test('legacy Set Default persists the built-in through the shared writer', () async {
+    final writes = <String?>[];
+    final provider = summaryProvider(summaryConversation(), writePreferredSummaryApp: (id) async {
+      writes.add(id);
+      return true;
+    });
+    addTearDown(provider.dispose);
+    expect(await provider.setPreferredSummarizationApp(builtInSummaryTemplateAppId), isTrue);
+    expect(writes, [builtInSummaryTemplateAppId]);
+    expect(provider.preferredSummarizationAppId, builtInSummaryTemplateAppId);
+    expect(provider.defaultSummaryTemplateAppId, builtInSummaryTemplateAppId);
+    expect(await provider.setDefaultSummaryTemplateAppId(null), isTrue);
+    expect(writes, [builtInSummaryTemplateAppId, null]);
+    expect(provider.defaultSummaryTemplateAppId, isNull);
+  });
+
   test('a failed server preference write keeps the local default and reports false', () async {
     final provider = summaryProvider(
       summaryConversation(),

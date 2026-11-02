@@ -13,6 +13,8 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
 
+const builtInSummaryTemplateAppId = 'omi-default-summary';
+
 /// Installed summary templates; throws when the list could not be read (never an empty list).
 typedef EnabledSummaryAppsFetch = Future<List<App>> Function();
 
@@ -251,7 +253,7 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Finds an app by ID from cached apps
   App? findAppById(String? appId) {
     if (appId == null) return null;
-    if (appId == 'omi-default-summary') {
+    if (appId == builtInSummaryTemplateAppId) {
       return App(
           id: appId,
           name: 'The Best Summarizer',
@@ -343,7 +345,8 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   String? get defaultSummaryTemplateAppId {
     final prefs = SharedPreferencesUtil();
     final legacy = prefs.preferredSummarizationAppId;
-    final id = prefs.getString(_defaultTemplateKey(), defaultValue: legacy.isNotEmpty ? legacy : 'omi-default-summary');
+    final id =
+        prefs.getString(_defaultTemplateKey(), defaultValue: legacy.isNotEmpty ? legacy : builtInSummaryTemplateAppId);
     return id.isEmpty ? null : id;
   }
 
