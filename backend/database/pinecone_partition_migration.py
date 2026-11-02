@@ -321,6 +321,11 @@ class PartitionTransport:
             selectors.append(json.loads(selector_json))
             expected.update(records)
             batch_bytes += group_bytes
+            if group_bytes > PAYLOAD_PROOF_MAX_BYTES:
+                # An identity group is the smallest filterable unit and cannot be split. An over-budget
+                # group is proven alone, never packed with others: at most 30 records, as before packing.
+                check()
+                selectors, expected, batch_bytes = [], {}, 0
         check()
 
 

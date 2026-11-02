@@ -332,6 +332,27 @@ def test_payload_proof_respects_the_response_byte_budget_and_old_default():
     assert len(_proof_queries(provider, 'ns2')) == 3  # without sizes: the original 30-record groups
 
 
+def test_over_budget_identity_group_is_proven_alone():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 10)
+    big = {}
+    for i in range(30):
+        row = record(f'big{i}')
+        row['metadata']['memory_id'] = 'big-source'
+        provider.records['ns2'][f'big{i}'] = row
+        big[f'big{i}'] = migration.record_digest(row)
+    groups[json.dumps({'memory_id': {'$eq': 'big-source'}}, sort_keys=True)] = big
+    sizes = {**{f'g{i}': 100 for i in range(10)}, **{f'big{i}': 150_000 for i in range(30)}}
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, sizes)
+    per_query = [
+        {selector['memory_id']['$eq'] for selector in proof['filter']['$and'][1]['$or']}
+        for proof in _proof_queries(provider, 'ns2')
+    ]
+    # 30 x 150 KB = 4.5 MB > budget: proven in its own query, nothing packed with it.
+    assert {'big-source'} in per_query
+    assert sum(len(query) for query in per_query) == 11
+
+
 def test_packed_payload_proof_still_detects_a_changed_record():
     provider = Provider()
     groups = _groups(provider, 'ns2', 70)
