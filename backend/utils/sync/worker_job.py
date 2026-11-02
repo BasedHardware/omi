@@ -18,10 +18,11 @@ from utils.sync.worker_client import ControlClient
 
 
 def bootstrap() -> None:
+    from database.google_credentials import customer_data_project
     from utils.staging_fence import assert_staging_isolation
 
     assert_staging_isolation(force=True)
-    if os.environ.get('OMI_ENV_STAGE') != 'prod' or not os.environ.get('OMI_CUSTOMER_DATA_PROJECT'):
+    if os.environ.get('OMI_ENV_STAGE') != 'prod' or not customer_data_project():
         raise RuntimeError('worker needs explicit stage and customer data project')
     if any(
         os.getenv(key)
