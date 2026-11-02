@@ -10,7 +10,7 @@ from config.batch_timeliness import (
     timeliness_epoch,
     timeliness_interval_seconds,
 )
-from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
+from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 
@@ -228,7 +228,7 @@ class QueueMetrics:
             self.timeliness_samples.labels('disabled').inc()
             return
         try:
-            sample = store.timeliness(timeliness_epoch(), now, SLA_SECONDS)
+            sample = timeliness_sample(store.client, store.namespace, timeliness_epoch(), now, SLA_SECONDS)
         except Exception as error:
             self.timeliness_samples.labels('error').inc()
             logging.getLogger(__name__).warning(

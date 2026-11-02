@@ -258,9 +258,6 @@ class FirestoreStore:
     def oldest_retry(self, priority: int) -> float | None:
         return oldest_retry(self.client, self.namespace, priority)
 
-    def timeliness(self, epoch: float, now: float, sla: float) -> dict[str, Any]:
-        return timeliness_sample(self.client, self.namespace, epoch, now, sla)
-
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
 

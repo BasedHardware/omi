@@ -262,13 +262,6 @@ def entries():
             'database.batch_pipeline_store.oldest_retry',
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
         ),
-        CoveredByEntry(
-            'database.batch_pipeline_store.FirestoreStore.timeliness',
-            covered_by=('database.batch_pipeline_store.timeliness_sample',),
-            reason='thin store adapter forwards namespace and timestamp operands unchanged',
-            expect_observed=False,
-            body_digest='c10c9a01cda692882ad1b58583eaacb9e68394eb69600ee2f6fad29f63084a60',
-        ),
         DriverEntry(
             'database.batch_pipeline_store.timeliness_sample',
             domains={'namespace': namespaces},

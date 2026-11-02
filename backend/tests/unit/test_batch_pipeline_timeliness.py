@@ -210,9 +210,12 @@ def test_no_new_unit_can_breach_before_two_hours_after_the_epoch():
     assert set(sample['new_over_sla'].values()) == {0}
 
 
-def _store(sample):
-    store = Mock()
-    store.timeliness.return_value = sample
+def _store(monkeypatch, sample):
+    """The sampler the metrics module calls, patched; the store only carries client and namespace."""
+    sampler = Mock(return_value=sample)
+    monkeypatch.setattr('utils.batch_pipeline.metrics.timeliness_sample', sampler)
+    store = Mock(namespace='ns')
+    store.timeliness = sampler
     return store
 
 
@@ -240,7 +243,7 @@ def test_gauges_counter_and_cadence(monkeypatch):
     monkeypatch.delenv('BATCH_TIMELINESS_ALARM_ENABLED', raising=False)
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
-    store = _store(SAMPLE)
+    store = _store(monkeypatch, SAMPLE)
     metrics.refresh_timeliness(store, NOW)
     value = registry.get_sample_value
     assert value('omi_batch_timeliness_new_oldest_age_seconds', {'leg': 'quarantined'}) == 9000
@@ -261,7 +264,7 @@ def test_failed_sample_keeps_values_and_freshness(monkeypatch):
     monkeypatch.delenv('BATCH_TIMELINESS_ALARM_ENABLED', raising=False)
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
-    store = _store(SAMPLE)
+    store = _store(monkeypatch, SAMPLE)
     metrics.refresh_timeliness(store, NOW)
     store.timeliness.side_effect = RuntimeError('unavailable')
     metrics.refresh_timeliness(store, NOW + 600)
@@ -274,7 +277,7 @@ def test_kill_switch_skips_firestore_and_counts_disabled(monkeypatch):
     monkeypatch.setenv('BATCH_TIMELINESS_ALARM_ENABLED', 'false')
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
-    store = _store(SAMPLE)
+    store = _store(monkeypatch, SAMPLE)
     metrics.refresh_timeliness(store, NOW)
     store.timeliness.assert_not_called()
     assert registry.get_sample_value('omi_batch_timeliness_samples_total', {'outcome': 'disabled'}) == 1
