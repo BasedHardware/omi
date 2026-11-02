@@ -274,7 +274,16 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
           unset test_source
         fi
         set +e
-        "$PYTHON_BIN" -m pytest "${file_pytest_args[@]}" "$test_path"
+        if [[ -n "${BACKEND_COVERAGE_MAP_DIR:-}" ]]; then
+          # Coverage-map collection (scripts/build_test_coverage_map.py): one data file per isolated test file.
+          # Only the dedicated coverage-map workflow sets this; it installs `coverage` itself.
+          coverage_slug="${test_path//\//__}"
+          printf '%s\n' "$test_path" > "$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.path"
+          "$PYTHON_BIN" -m coverage run --data-file="$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.cov" --source="$PWD" \
+            -m pytest "${file_pytest_args[@]}" "$test_path"
+        else
+          "$PYTHON_BIN" -m pytest "${file_pytest_args[@]}" "$test_path"
+        fi
         status=$?
         set -e
         if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
