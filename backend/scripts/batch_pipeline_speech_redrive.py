@@ -761,11 +761,11 @@ def main():
         output['max_audio_seconds_per_unit'] = MAX_AUDIO_SECONDS
     if args.independent_language:
         # Soniox rate; a repair's Modulate call is metered by its own allowance.
-        output['estimated_usd_per_unit_at_cap'] = MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
+        output['estimated_usd_per_unit_at_cap'] = 2 * MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
     if prepared:
         output['runtime_max_audio_seconds'] = MAX_AUDIO_SECONDS
         output['max_audio_seconds_per_unit'] = args.max_seconds
-        output['estimated_usd_per_unit_at_cap'] = args.max_seconds / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
+        output['estimated_usd_per_unit_at_cap'] = 2 * args.max_seconds / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
         output['total_audio_seconds'] = total_audio_seconds
         output['estimated_usd_total'] = estimated_usd_total
         output['maximum_attempt_audio_seconds'] = 2 * total_audio_seconds
