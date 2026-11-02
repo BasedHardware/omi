@@ -264,13 +264,16 @@ def test_updated_or_created_index_fills_the_page_past_hidden_rows(monkeypatch):
         _memory_row('m6', created_at=_at_hour(1), updated_at=_at_hour(1)),
     ]
 
-    def fake_window(_memories_ref, order_field, candidate_limit, *, budget=None):
+    def fake_window(_memories_ref, order_field, candidate_limit, *, budget=None, cursor_snapshot=None):
         # Firestore order_by: newest first, rows missing the field excluded.
         ordered = sorted(
             (row for row in rows if row.get(order_field) is not None),
             key=lambda row: (row[order_field], row['id']),
             reverse=True,
         )
+        if cursor_snapshot is not None:
+            index = next(i for i, row in enumerate(ordered) if row['id'] == cursor_snapshot.id)
+            ordered = ordered[index + 1 :]
         return [_FakeDoc(row) for row in ordered[:candidate_limit]]
 
     monkeypatch.setattr(memories_db, '_stream_memory_list_index_window', fake_window)

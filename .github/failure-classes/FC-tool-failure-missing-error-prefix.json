@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-tool-failure-missing-error-prefix",
+  "violated_contract": "A desktop tool returns plain text, and the local agent API decides whether that text is a failure only by its leading 'Error:' prefix: LocalAgentAPIServer.toolResponse answers HTTP 400 with ok:false for it and HTTP 200 with ok:true for anything else, and the omi CLI fails a command only on a non-2xx answer. A failure path of a relayed tool that words its result any other way is therefore delivered as a successful result. semantic_search (the API's search_screen_history) returned 'Failed to search: ...' when the search threw, so the API answered ok:true and `omi local search-screen` exited 0 with the error text as its search result.",
+  "canonical_prevention": "Every failure result of a tool the local agent API relays starts with the 'Error:' prefix that toolResponse checks, as the other relayed tools already do. A behavioral test drives each catch path through the tool's injected dependencies and asserts the prefix on the returned text, so a reworded failure fails the test instead of reaching API clients as a success.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/LocalEmbeddingFoundationTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
+    "desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift"
+  ],
+  "status": "open"
+}

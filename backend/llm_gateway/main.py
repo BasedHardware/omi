@@ -4,6 +4,12 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
+from omi_logging import configure_logging
+
+# Text until llm-gateway's log consumers are admitted for JSON
+# (docs/runbooks/structured-logging-rollout.md); OMI_LOG_FORMAT=json opts in.
+configure_logging('llm-gateway', default_format='text')
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response

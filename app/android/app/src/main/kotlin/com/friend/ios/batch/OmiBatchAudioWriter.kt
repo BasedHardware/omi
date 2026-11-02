@@ -130,7 +130,8 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
                 // recordings apart from offline-sync WAL flushes, which share this directory
                 // and the same audio_*.bin naming. The backend ignores this segment; keep it
                 // in sync with Dart's `batchRecordingDevice`.
-                val name = "audio_omibatch_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
+                val marker = if (boolPref("onDeviceOverflowActive", false)) "omibatchoverflow" else "omibatch"
+                val name = "audio_${marker}_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
                 if (!openLocked(config.dir, name, startSec, now)) return // storage full or open failed — drop this packet
             }
 
@@ -184,7 +185,7 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
     // ── Config ──
 
     private fun loadConfig(): Config? {
-        if (!boolPref("batchModeEnabled", false)) return null
+        if (!boolPref("batchModeEnabled", false) && !boolPref("onDeviceOverflowActive", false)) return null
         val dir = stringPref("batchAudioDir")
         if (dir.isEmpty()) return null
         val raw = stringPref("nativeBleStreamConfig")

@@ -45,12 +45,12 @@ def _wrapped_doc_ref(uid: object, year: object):
 
 
 def _coerce_timestamp(value: Any) -> Optional[datetime]:
-    if hasattr(value, 'timestamp'):
-        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
     if isinstance(value, datetime):
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
-        return value
+        return value.astimezone(timezone.utc)
+    if hasattr(value, 'timestamp'):
+        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
     return None
 
 

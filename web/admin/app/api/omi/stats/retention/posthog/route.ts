@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
 export const dynamic = "force-dynamic";
 
@@ -44,7 +44,7 @@ async function posthogQuery(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (actorToCohortDate.size === 0) {
-      return NextResponse.json({
+      return authResult.json({
         data: [],
         cohorts: [],
         totalCohorts: 0,
@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
 
     const totalUsers = cohorts.reduce((sum, cohort) => sum + cohort.users, 0);
 
-    return NextResponse.json({
+    return authResult.json({
       data: mean,
       cohorts,
       totalCohorts: cohorts.length,
@@ -231,7 +231,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching PostHog retention:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch PostHog retention data" },
       { status: 500 }
     );

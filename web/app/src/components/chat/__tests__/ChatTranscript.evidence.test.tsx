@@ -1,16 +1,24 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatTranscript } from '@/components/chat/ChatTranscript';
 import type { ClientMessage } from '@/types/conversation';
 
-function aiMessage(evidence?: ClientMessage['evidence']): ClientMessage {
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('@tschk/moonshine-next/navigation', () => ({ useRouter: () => ({ push }) }));
+
+function aiMessage(
+  evidence?: ClientMessage['evidence'],
+  memories?: ClientMessage['memories'],
+  text = 'The answer remains authoritative.',
+): ClientMessage {
   return {
     id: 'message-1',
     created_at: '2026-08-23T12:00:00Z',
     sender: 'ai',
-    text: 'The answer remains authoritative.',
+    text,
     type: 'text',
     evidence,
+    memories,
   };
 }
 
@@ -28,6 +36,7 @@ function renderTranscript(messages: ClientMessage[]) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   Element.prototype.scrollIntoView = () => undefined;
 });
 
@@ -77,5 +86,47 @@ describe('ChatTranscript evidence', () => {
       screen.queryByRole('region', { name: 'Supporting evidence' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText('Current screen')).not.toBeInTheDocument();
+  });
+
+  it('renders clickable citation source cards in first-mention order when prose markers were stripped by the server', () => {
+    renderTranscript([
+      aiMessage(
+        undefined,
+        [
+          {
+            id: 'conversation-8',
+            created_at: '2026-10-12T00:00:00Z',
+            structured: { title: 'Board resolutions', emoji: '📝' },
+          },
+          {
+            id: 'conversation-7',
+            created_at: '2026-10-12T00:00:00Z',
+            structured: { title: 'Dinner plans', emoji: '🍽️' },
+          },
+        ],
+        'I can name them.',
+      ),
+    ]);
+
+    const answer = screen.getByText('I can name them.');
+    const sourcesRegion = screen.getByRole('region', { name: 'Sources' });
+    expect(
+      answer.compareDocumentPosition(sourcesRegion) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const links = screen.getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/conversations?id=conversation-8',
+      '/conversations?id=conversation-7',
+    ]);
+    expect(screen.getByTestId('chat-citation-conversation-8')).toHaveTextContent(
+      'Board resolutions',
+    );
+    expect(screen.getByTestId('chat-citation-conversation-7')).toHaveTextContent(
+      'Dinner plans',
+    );
+
+    fireEvent.click(links[0]);
+    expect(push).toHaveBeenCalledWith('/conversations?id=conversation-8');
   });
 });

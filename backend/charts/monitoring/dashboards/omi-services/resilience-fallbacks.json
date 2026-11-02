@@ -1159,6 +1159,129 @@
       ],
       "title": "Live STT provider stream closes by reason",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "description": "No series is exported until this process completes its first Firestore summary. Values above 600s are stale at the production 300s reconcile interval.",
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 112
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "time() - max(listen_finalization_summary_last_success_timestamp_seconds)",
+          "legendFormat": "summary age",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Capture finalization summary age (seconds since successful Firestore read)",
+      "type": "timeseries",
+      "description": "No series is exported until this process completes its first Firestore summary. Values above 600s are stale at the production 300s reconcile interval."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "description": "Attempts are counted when a write enters background scheduling; written counts advance only after Redis acknowledges a commit. Dropped labels use the bounded reason set."
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 120
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (write_path, kind) (increase(omi_stt_fleet_health_write_attempted_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+          "legendFormat": "attempted {{write_path}}/{{kind}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (write_path, kind) (increase(omi_stt_fleet_health_write_written_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+          "legendFormat": "written {{write_path}}/{{kind}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (write_path, kind, reason) (increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+          "legendFormat": "dropped {{write_path}}/{{kind}}/{{reason}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Live STT fleet-health writes by path, kind, and drop reason",
+      "type": "timeseries",
+      "description": "Attempts are counted when a write enters background scheduling; written counts advance only after Redis acknowledges a commit. Dropped labels use the bounded reason set."
     }
   ],
   "preload": false,

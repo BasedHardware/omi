@@ -11,7 +11,6 @@ vi.mock('./apiClient', () => ({
 }))
 
 import {
-  beliefCapabilityFromResponse,
   fetchAllMemories,
   fetchAllMemoriesPaged,
   nextMemoryCursor,
@@ -82,35 +81,6 @@ describe('fetchAllMemories', () => {
     expect(omiApiGet).toHaveBeenCalledTimes(2)
   })
 
-  it('uses the temporal view and follows a cursor after an empty filtered page', async () => {
-    omiApiGet
-      .mockResolvedValueOnce({
-        data: [],
-        headers: {
-          'x-omi-memory-belief-enabled': 'true',
-          'x-omi-memory-next-cursor': 'cursor-2'
-        }
-      })
-      .mockResolvedValueOnce({
-        data: [{ id: 'history-1', uid: 'u', content: 'dated', created_at: '', updated_at: '' }],
-        headers: { 'x-omi-memory-next-cursor': 'cursor-3' }
-      })
-      .mockResolvedValueOnce({ data: [] })
-
-    const all = await fetchAllMemoriesPaged(undefined, { view: 'history' })
-
-    expect(all.map((memory) => memory.id)).toEqual(['history-1'])
-    expect(omiApiGet).toHaveBeenNthCalledWith(1, '/v3/memories', {
-      params: { limit: 500, view: 'history', offset: 0 }
-    })
-    expect(omiApiGet).toHaveBeenNthCalledWith(2, '/v3/memories', {
-      params: { limit: 500, view: 'history', cursor: 'cursor-2' }
-    })
-    expect(omiApiGet).toHaveBeenNthCalledWith(3, '/v3/memories', {
-      params: { limit: 500, view: 'history', cursor: 'cursor-3' }
-    })
-  })
-
   it('throws when the server truncates a cursor page without a continuation', async () => {
     omiApiGet
       .mockResolvedValueOnce({
@@ -130,7 +100,7 @@ describe('fetchAllMemories', () => {
         headers: { 'x-omi-list-truncated': 'true' }
       })
 
-    await expect(fetchAllMemoriesPaged(undefined, { view: 'history' })).rejects.toThrow(
+    await expect(fetchAllMemoriesPaged()).rejects.toThrow(
       'Memory list was truncated by the server read budget; result may be incomplete'
     )
   })
@@ -151,17 +121,7 @@ describe('fetchAllMemories', () => {
     expect(all.map((m) => m.id)).toEqual(['m0', 'm1'])
   })
 
-  it('parses capability headers case-insensitively and leaves absent headers unknown', () => {
-    expect(
-      beliefCapabilityFromResponse({ headers: { 'X-Omi-Memory-Belief-Enabled': 'TRUE' }, data: [] })
-    ).toBe(true)
-    expect(
-      beliefCapabilityFromResponse({
-        headers: { 'x-omi-memory-belief-enabled': 'false' },
-        data: []
-      })
-    ).toBe(false)
-    expect(beliefCapabilityFromResponse({ data: [] })).toBeNull()
+  it('parses the memory cursor header case-insensitively', () => {
     expect(nextMemoryCursor({ headers: { 'X-OMI-MEMORY-NEXT-CURSOR': 'next' }, data: [] })).toBe(
       'next'
     )

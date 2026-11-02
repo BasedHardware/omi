@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-filtered-selection-gated-on-count",
+  "violated_contract": "A select-all control over a filtered view must decide and toggle selection from the identity of the rows that view shows, not from the size of the whole selection. Comparing counts lets a row hidden by a search or date filter stand in for a visible row, so the control reports every visible row selected and clears the selection instead of selecting them.",
+  "canonical_prevention": "Derive the selectable rows from the same filtered list the view renders and test membership by row id (`every(row => selected.has(row.id))`), never by comparing set sizes; cover a hidden prior selection with a test that presses the control and asserts the visible row's id is acted on.",
+  "canonical_prevention_artifact": [
+    "web/app/src/components/tasks/__tests__/TaskHub.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["web/app/src/components/tasks/**"],
+  "status": "open"
+}

@@ -127,7 +127,11 @@ def test_concurrent_reprocess_calls_share_the_active_summary_writer(monkeypatch,
             try:
                 assert started.wait(5), 'processor did not start'
                 concurrent = pool.submit(conv_router.reprocess_conversation, 'c1', uid='u1', app_id=app_ids[1])
-                assert concurrent.result(timeout=5) is model
+                # The second caller never echoes the stale row as success (summary-v2 F1).
+                with pytest.raises(HTTPException) as busy:
+                    concurrent.result(timeout=5)
+                assert busy.value.status_code == 409
+                assert busy.value.detail['code'] == 'conversation_processing_in_progress'
                 process.assert_called_once()
                 assert process.call_args.kwargs['app_id'] == app_ids[0]
             finally:
@@ -141,7 +145,14 @@ def test_sequential_reprocess_calls_both_run_after_success(monkeypatch, app_ids)
     from database import processing_attention as attention
 
     row = {'id': 'c1', 'status': 'completed', 'structured': {'overview': 'Existing summary'}}
-    model = SimpleNamespace(language='en', discarded=False, structured=SimpleNamespace(overview='New summary'))
+    # An explicit selection only returns after its app produced a result; the
+    # attention outcome is judged on that result, not on the notes overview.
+    model = SimpleNamespace(
+        language='en',
+        discarded=False,
+        structured=SimpleNamespace(overview='New summary'),
+        apps_results=[SimpleNamespace(app_id=app_id, content='App summary') for app_id in app_ids if app_id],
+    )
     with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=row), patch.object(
         conv_router, 'deserialize_conversation', return_value=model
     ), patch.object(

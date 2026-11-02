@@ -5,11 +5,18 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from models.dream_agent import Feedback
 from models.dream_edit import Strict, Term
-from models.agent_edit import HarnessEdit
+from models.agent_edit import HarnessEdit, DreamHarnessEdit
 from models.agent_refs import canonical_collection
 from models.review import SamePersonItem, SpellingQuestionPayload
 from models.dream_edit import QUESTION_VALUE_DESCRIPTION
+from utils.model_text import TIME_FORMAT_HINT, ToolTimeError, parse_tool_time
+
+_TIME_DESCRIPTION = (
+    'Inclusive capture/creation time, ISO 8601 UTC ending in Z (offsets are converted; no offset means UTC). '
+    "In temporal mode a missing bound defaults to the session's context window."
+)
 
 
 class Search(Strict):
@@ -22,8 +29,8 @@ class Search(Strict):
         max_length=4,
     )
     mode: Literal['lexical', 'semantic', 'temporal'] = 'lexical'
-    start: datetime | None = Field(default=None, description='Inclusive UTC capture/creation time.')
-    end: datetime | None = Field(default=None, description='Inclusive UTC capture/creation time.')
+    start: datetime | None = Field(default=None, description=_TIME_DESCRIPTION)
+    end: datetime | None = Field(default=None, description=_TIME_DESCRIPTION)
     person_ref: str | None = Field(
         default=None, max_length=256, description='A known person ref for speaker/subject filtering.'
     )
@@ -40,12 +47,19 @@ class Search(Strict):
             return value
         return [canonical_collection(item) if isinstance(item, str) else item for item in value]
 
+    @field_validator('start', 'end', mode='before')
+    @classmethod
+    def lenient_time(cls, value):
+        # Harness tool rule 2: offsets convert, naive is UTC, nonsense names the expected format.
+        try:
+            return parse_tool_time(value)
+        except ToolTimeError:
+            raise ValueError(TIME_FORMAT_HINT) from None
+
     @model_validator(mode='after')
     def time_bounds(self):
         if self.start and self.end and self.end < self.start:
             raise ValueError('End must follow start')
-        if any(value and value.tzinfo is None for value in (self.start, self.end)):
-            raise ValueError('Time filters require UTC offsets')
         return self
 
 
@@ -57,6 +71,10 @@ class Read(Strict):
 
 class ProposeEdit(Strict):
     edit: HarnessEdit
+
+
+class DreamProposeEdit(Strict):
+    edit: DreamHarnessEdit
 
 
 class HarnessQuestion(Strict):
@@ -147,11 +165,45 @@ TOOLS = {
 }
 
 
-def tool_schemas():
+class ReportDefect(Feedback):
+    """A defect in Dream's own harness, tools or data shape, stored only as an anonymous k-aggregated pattern."""
+
+    count: int = Field(default=1, ge=1, le=10000, description='How many times this pass hit the defect.')
+    latency_ms: float = Field(default=0, ge=0, le=3600000, allow_inf_nan=False)
+    error_rate: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
+    reproduction: str = Field(
+        min_length=1,
+        max_length=500,
+        description='Generic steps that hit the defect. Never quote owner text, names, ids or refs.',
+    )
+
+
+# Dream-only and offered only when the caller supplies a sink; outside TOOLS so
+# owner-requested sessions and existing tool contracts are unchanged.
+DEFECT_TOOL = 'report_defect'
+DEFECT_TOOL_DESCRIPTION = (
+    'Report a defect in this harness: a tool that errored or returned wrong/unhelpful data, a missing tool or '
+    'field, a confusing rejection, or a budget that blocked useful work. Never for owner data quality; fix that '
+    'with edits. Anonymous and aggregated; never include owner text, names, ids or refs. Does not end the session.'
+)
+
+
+def tool_model(name, authority='user'):
+    if name == DEFECT_TOOL:
+        return ReportDefect
+    return DreamProposeEdit if name == 'propose_edit' and authority == 'dream' else TOOLS[name][1]
+
+
+def tool_schemas(*, authority='user', defect_reports=False):
+    names = [*TOOLS, *([DEFECT_TOOL] if defect_reports and authority == 'dream' else [])]
     return tuple(
         {
             'type': 'function',
-            'function': {'name': name, 'description': description, 'parameters': model.model_json_schema()},
+            'function': {
+                'name': name,
+                'description': DEFECT_TOOL_DESCRIPTION if name == DEFECT_TOOL else TOOLS[name][0],
+                'parameters': tool_model(name, authority).model_json_schema(),
+            },
         }
-        for name, (description, model) in TOOLS.items()
+        for name in names
     )

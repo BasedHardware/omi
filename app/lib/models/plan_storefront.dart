@@ -1,4 +1,6 @@
 import 'package:omi/models/subscription.dart';
+import 'package:omi/utils/billing_price.dart';
+import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 
 /// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
 /// Schema version 2 is the only accepted payload. Unknown versions and malformed purchasable prices fail closed.
@@ -10,6 +12,8 @@ class PlanStorefront {
   final String header;
   final String? yearlyToggleLabel;
   final bool showSubscriptionUi;
+  final GeneratedStorefrontCapChoice? atCap;
+  final ChatAtCap? chatAtCap;
 
   const PlanStorefront({
     required this.catalogRevision,
@@ -19,15 +23,16 @@ class PlanStorefront {
     required this.header,
     this.yearlyToggleLabel,
     required this.showSubscriptionUi,
+    this.atCap,
+    this.chatAtCap,
   });
 
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
   bool get showBudgetNudge => showSubscriptionUi && current?.legacy == false && usage?.showBudgetNudge == true;
 
-  /// Pro gates apply below Pro on the ladder. A live or payload Pro/Architect
-  /// plan already includes them. Non-ladder plans (`unlimited`, `unlimited_v2`)
-  /// and unknown ids are not gated: checkout refuses that payload, and opening
-  /// the paywall would skip the save.
+  /// Pro gates apply below Pro on the ladder. A live or payload Operator,
+  /// Architect or Omi Pro plan already includes them. Legacy Neo (`unlimited`)
+  /// and unknown ids are not gated: opening the paywall would skip the save.
   bool shouldGate(String feature, {PlanType? livePlan}) {
     if (!showSubscriptionUi || current == null || current!.legacy) return false;
     if (usage?.proGates.contains(feature) != true) return false;
@@ -56,6 +61,8 @@ class PlanStorefront {
       throw const FormatException('Invalid yearly toggle label');
     }
     return PlanStorefront(
+      chatAtCap: json['chat_at_cap'] == null ? null : ChatAtCap.fromJson(_object(json['chat_at_cap'])),
+      atCap: json['at_cap'] == null ? null : GeneratedStorefrontCapChoice.fromJson(_object(json['at_cap'])),
       catalogRevision: revision,
       tiers: List.unmodifiable(tiers),
       current: json['current'] == null ? null : StorefrontCurrentPlan.fromJson(_object(json['current'])),
@@ -70,9 +77,10 @@ class PlanStorefront {
 /// Checkout, resubscribe the current price, or refuse.
 enum StorefrontCheckoutDecision { refuse, checkout, resubscribe }
 
-/// basic < plus < operator < architect. Null when [id] is not on that ladder.
+/// basic < plus < operator < architect < unlimited_v2 (Omi Pro, the only plan
+/// sold). Null when [id] is not on that ladder.
 int? _storefrontLadderRank(String? id) {
-  const ladder = ['basic', 'plus', 'operator', 'architect'];
+  const ladder = ['basic', 'plus', 'operator', 'architect', 'unlimited_v2'];
   if (id == null) return null;
   final plan = PlanType.fromWire(id);
   if (plan.isUnknown) return null;
@@ -80,7 +88,7 @@ int? _storefrontLadderRank(String? id) {
   return index < 0 ? null : index;
 }
 
-bool _isNonLadderLegacyPlan(PlanType plan) => plan == PlanType.unlimited || plan == PlanType.unlimitedV2;
+bool _isNonLadderLegacyPlan(PlanType plan) => plan == PlanType.unlimited;
 
 bool _isOffLadderOrUnknown(String? id) {
   if (id == null) return false;
@@ -107,8 +115,8 @@ StorefrontPrice? _priceOnTier(StorefrontTier tier, String? id) {
 /// Paid subscribers may move up the ladder. The only same-tier purchase is
 /// monthly to annual, and only from a monthly current price — including when
 /// that card publishes just the yearly price. Annual to monthly and every
-/// other same-tier price are refused. Legacy prices, unlimited plans, and
-/// unrecognized ids never check out. While a cancellation is scheduled the
+/// other same-tier price are refused. Legacy prices and unrecognized ids never
+/// check out; a legacy Neo subscriber may only move to Omi Pro. While a cancellation is scheduled the
 /// payment API rejects every other price, so the only purchase is resubscribe
 /// on the current price.
 StorefrontCheckoutDecision storefrontCheckoutDecision(
@@ -123,11 +131,13 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
   if (!showSubscriptionUi || usageLegacy || current?.legacy == true) {
     return StorefrontCheckoutDecision.refuse;
   }
-  if (livePlan != null && (_isNonLadderLegacyPlan(livePlan) || livePlan.isUnknown)) {
+  final toOmiPro = PlanType.fromWire(tier.planId) == PlanType.unlimitedV2;
+  if (livePlan != null && ((_isNonLadderLegacyPlan(livePlan) && !toOmiPro) || livePlan.isUnknown)) {
     return StorefrontCheckoutDecision.refuse;
   }
   if (current != null &&
-      (_isNonLadderLegacyPlan(PlanType.fromWire(current.planId)) || PlanType.fromWire(current.planId).isUnknown)) {
+      ((_isNonLadderLegacyPlan(PlanType.fromWire(current.planId)) && !toOmiPro) ||
+          PlanType.fromWire(current.planId).isUnknown)) {
     return StorefrontCheckoutDecision.refuse;
   }
   // `none` is not purchasable. `current` proceeds only when that price has a
@@ -181,7 +191,7 @@ String? storefrontActionLabel({
   required StorefrontCheckoutDecision decision,
 }) {
   if (decision == StorefrontCheckoutDecision.refuse) return null;
-  return price.ctaLabel ?? tier.ctaLabel;
+  return price.formattedCtaLabel ?? tier.ctaLabel;
 }
 
 class StorefrontTier {
@@ -265,6 +275,20 @@ class StorefrontPrice {
   final String? renewalLine;
   final int? monthsFree;
   final String? ctaLabel;
+  final List<String> confirmLines;
+  final String? ctaLabelTemplate;
+  final int? savingMinor;
+  final List<String> confirmLineTemplates;
+
+  String? get formattedCtaLabel => ctaLabelTemplate != null && savingMinor != null
+      ? ctaLabelTemplate!.replaceAll('{saving}', formatBillingPrice(savingMinor!, currency))
+      : ctaLabel;
+
+  List<String> get formattedConfirmLines => confirmLineTemplates.isEmpty
+      ? confirmLines
+      : confirmLineTemplates
+          .map((line) => line.replaceAll('{price}', formatBillingPrice(amountMinor, currency)))
+          .toList();
 
   const StorefrontPrice({
     required this.id,
@@ -276,6 +300,10 @@ class StorefrontPrice {
     this.renewalLine,
     this.monthsFree,
     this.ctaLabel,
+    this.confirmLines = const [],
+    this.ctaLabelTemplate,
+    this.savingMinor,
+    this.confirmLineTemplates = const [],
   });
 
   factory StorefrontPrice.fromJson(Map<String, dynamic> json) {
@@ -298,6 +326,11 @@ class StorefrontPrice {
       renewalLine: _optionalText(json, 'renewal_line'),
       monthsFree: months as int?,
       ctaLabel: _optionalText(json, 'cta_label'),
+      ctaLabelTemplate: _optionalText(json, 'cta_label_template'),
+      savingMinor: json['saving_minor'] as int?,
+      confirmLineTemplates: List<String>.from(json['confirm_line_templates'] as List? ?? const []),
+      confirmLines: List<String>.unmodifiable(
+          (json['confirm_lines'] as List? ?? const []).whereType<String>().where((line) => line.trim().isNotEmpty)),
     );
   }
 }
@@ -311,6 +344,13 @@ class StorefrontCurrentPlan {
   final bool cancelAtPeriodEnd;
   final String line;
   final String? legacyNote;
+  final int? amountMinor;
+  final String? currency;
+  final String? lineTemplate;
+
+  String get displayLine => lineTemplate != null && amountMinor != null && currency != null
+      ? lineTemplate!.replaceAll('{price}', formatBillingPrice(amountMinor!, currency!))
+      : line;
 
   const StorefrontCurrentPlan({
     required this.planId,
@@ -321,6 +361,9 @@ class StorefrontCurrentPlan {
     required this.cancelAtPeriodEnd,
     required this.line,
     this.legacyNote,
+    this.amountMinor,
+    this.currency,
+    this.lineTemplate,
   });
 
   factory StorefrontCurrentPlan.fromJson(Map<String, dynamic> json) {
@@ -348,6 +391,9 @@ class StorefrontCurrentPlan {
       cancelAtPeriodEnd: _boolean(json, 'cancel_at_period_end'),
       line: _text(json, 'line'),
       legacyNote: note as String?,
+      amountMinor: json['amount_minor'] as int?,
+      currency: _optionalText(json, 'currency'),
+      lineTemplate: _optionalText(json, 'line_template'),
     );
   }
 }
@@ -358,8 +404,11 @@ class StorefrontUsage {
   final String? periodId;
   final String? resetLabel;
   final String? meterLine;
+  final int? hoursLeft;
   final String? nudgeLine;
+  final String? moreLabel;
   final Set<String> proGates;
+  final bool mcpCapReached;
 
   const StorefrontUsage({
     required this.kind,
@@ -367,7 +416,10 @@ class StorefrontUsage {
     this.periodId,
     this.resetLabel,
     this.meterLine,
+    this.hoursLeft,
     this.nudgeLine,
+    this.moreLabel,
+    this.mcpCapReached = false,
     this.proGates = const {},
   });
 
@@ -390,10 +442,26 @@ class StorefrontUsage {
       periodId: _optionalText(json, 'period_id'),
       resetLabel: _optionalText(json, 'reset_label'),
       meterLine: _optionalText(json, 'meter_line'),
+      hoursLeft: _optionalCount(json, 'hours_left'),
       nudgeLine: _optionalText(json, 'nudge_line'),
+      moreLabel: _optionalText(json, 'more_label'),
+      mcpCapReached: json['mcp_cap_reached'] == true,
       proGates: Set<String>.unmodifiable(gates.map((value) => value as String)),
     );
   }
+
+  StorefrontUsage withMeterLine(String? meterLine) => StorefrontUsage(
+        kind: kind,
+        percent: percent,
+        periodId: periodId,
+        resetLabel: resetLabel,
+        meterLine: meterLine,
+        hoursLeft: hoursLeft,
+        nudgeLine: nudgeLine,
+        moreLabel: moreLabel,
+        mcpCapReached: mcpCapReached,
+        proGates: proGates,
+      );
 
   /// At 100%, W4 owns the choice. Never create a competing budget dialog.
   bool get showBudgetNudge =>
@@ -416,6 +484,13 @@ String _text(Map<String, dynamic> json, String key) {
   return value;
 }
 
+int? _optionalCount(Map<String, dynamic> json, String key) {
+  if (!json.containsKey(key) || json[key] == null) return null;
+  final value = json[key];
+  if (value is! int || value < 0) throw FormatException('Invalid storefront $key');
+  return value;
+}
+
 String? _optionalText(Map<String, dynamic> json, String key) {
   if (!json.containsKey(key) || json[key] == null) return null;
   return _text(json, key);
@@ -425,4 +500,25 @@ bool _boolean(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! bool) throw FormatException('Missing storefront $key');
   return value;
+}
+
+/// Backend-owned composer state. Never inferred from a local tier or message count.
+class ChatAtCap {
+  final String title, body, resetLine;
+  final int resetAt;
+  final String? upgradeLabel;
+  const ChatAtCap(
+      {required this.title, required this.body, required this.resetLine, required this.resetAt, this.upgradeLabel});
+  factory ChatAtCap.fromJson(Map<String, dynamic> json) {
+    if (json['state'] != 'paused' || json['trigger'] != 'usage_budget' || json['reset_at'] is! int) {
+      throw const FormatException('Invalid chat pause state');
+    }
+    return ChatAtCap(
+        title: _text(json, 'title'),
+        body: _text(json, 'body'),
+        resetLine: _text(json, 'reset_line'),
+        resetAt: json['reset_at'] as int,
+        upgradeLabel: json['upgrade_label'] as String?);
+  }
+  bool get active => DateTime.now().millisecondsSinceEpoch < resetAt * 1000;
 }

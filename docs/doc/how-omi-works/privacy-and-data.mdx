@@ -1,0 +1,32 @@
+---
+title: "Privacy & data handling"
+icon: "shield"
+description: "What Omi stores, where it goes, and what you control. A builder's overview of the data model."
+---
+
+Omi records conversations. That is the product, and it makes the data model worth understanding before you build on it. This page is the short, stable version for builders; the formal documents are [Privacy](/doc/info/Privacy) and [Disclaimer](/doc/info/Disclaimer), and end-user controls are documented in the [help center](https://help.omi.me).
+
+## What exists, and who can see it
+
+Every account holds **conversations** (transcripts and, depending on settings, audio), **memories** (extracted facts), **action items**, **goals**, and **people** (recognized speakers). Every API surface (the app, Developer API, MCP, CLI, and installed apps) is scoped to the signed-in account.
+
+Sharing is the one exception, and you start it. A shared conversation or task link can be opened without signing in. It returns a limited view: for a conversation, its summary and transcript; for a task, its description and due date.
+
+Apps you install can receive the data you grant them (for example conversation webhooks or chat tools); app authors see only what flows to their endpoints.
+
+## Where it lives
+
+- Conversations, memories, and metadata are stored server-side in your account and sent over encrypted connections. Accounts can turn on enhanced data protection for additional encryption of stored content. The [Privacy policy](/doc/info/Privacy) is the authoritative description.
+- The desktop app additionally keeps a local database on your machine (see [Omi for Mac](/onboarding/omi-macos)).
+- Keeping raw audio is your choice: **Store Audio on Phone** and **Store Audio on Cloud** control whether recordings are kept, and where.
+
+## Your controls
+
+- **Export**: the app exports your conversations as JSON.
+- **Delete**: delete individual conversations, or your whole account, from the app.
+- **Bring your own keys**: [BYOK and custom transcription](/doc/get_started/byok_and_custom_transcription) let you route transcription and models through providers you choose, including on-device and self-hosted transcription.
+- **Scoped API keys**: developer keys and MCP grants can be read-only and per-scope, and can be revoked at any time.
+
+## If you build on Omi
+
+Treat webhook payloads and API responses as your users' sensitive data: send it over TLS, keep it no longer than you need, and say clearly in your app listing what your app receives. The [app review guidelines](/doc/developer/apps/Submitting) enforce the basics.

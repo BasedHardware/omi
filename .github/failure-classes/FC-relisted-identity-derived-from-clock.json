@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-relisted-identity-derived-from-clock",
+  "violated_contract": "A record that is rebuilt every time its source is listed again must keep the identity it was first listed with for as long as it is the same source. FlashPageWalSyncImpl listed a Limitless pendant's flash backlog as one recording whose start was estimated as now minus its duration on every listing (connect, every discovery wake, every sync pass), and Wal.id is device_timerStart, so the same recording got a new id each time. Everything that holds a recording by id lost it: SyncProvider.getWalById behind the recording details page, deleteWal, and the Offline Sync row key.",
+  "canonical_prevention": "Derive a relisted record's identity from what the source reports (here the pendant id and its first flash page), or carry forward the identity assigned when that source was first listed; never take an identity component from the wall clock at listing time. Test it through the real listing path by listing the same source twice with the clock moved on, and assert the same id.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/flash_page_wal_listing_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/flash_page_wal_sync.dart",
+    "app/lib/services/wals/ring_storage_sync.dart",
+    "app/lib/services/wals/sdcard_wal_sync.dart"
+  ],
+  "status": "open"
+}

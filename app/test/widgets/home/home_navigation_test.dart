@@ -7,7 +7,7 @@ import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/http/api/memories.dart' show GetMemoriesResult;
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/phone_call.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/home_prompt_gate.dart';
@@ -260,7 +260,7 @@ void main() {
     expect(capture.activeRecordingId, isNull);
     expect(opened, isFalse);
     expect(home.selectedIndex, HomeProvider.homeTab);
-    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsNothing);
   });
 
   testWidgets('indexed memory opens by backend id outside the visible filter', (tester) async {

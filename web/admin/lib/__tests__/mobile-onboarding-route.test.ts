@@ -4,14 +4,15 @@ import { GET as firstRun } from "@/app/api/omi/stats/onboarding/mobile/route";
 import { GET as tutorial } from "@/app/api/omi/stats/onboarding/mobile/tutorial/route";
 import { GET as attach } from "@/app/api/omi/stats/onboarding/mobile/attach/route";
 import { PostHogError } from "@/lib/mobile-onboarding-funnel";
+import { testIdentity } from "./support/test-identity";
 
 const mocks = vi.hoisted(() => ({
-  verifyAdmin: vi.fn(),
+  requireScope: vi.fn(),
   getPayload: vi.fn(),
   setPayload: vi.fn(),
   compute: vi.fn(),
 }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin: mocks.verifyAdmin }));
+vi.mock("@/lib/auth", () => ({ requireScope: mocks.requireScope }));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: mocks.getPayload,
   setPayload: mocks.setPayload,
@@ -26,7 +27,7 @@ const request = (query = "") =>
   new NextRequest(`https://admin.test/api/omi/stats/onboarding/mobile${query}`);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.verifyAdmin.mockResolvedValue({ uid: "admin" });
+  mocks.requireScope.mockResolvedValue(testIdentity(undefined, "admin"));
   mocks.getPayload.mockResolvedValue(null);
   mocks.setPayload.mockResolvedValue(undefined);
   mocks.compute.mockResolvedValue({
@@ -61,7 +62,7 @@ describe("mobile onboarding HTTP routes", () => {
     });
   });
   it("honors auth before reading cached data", async () => {
-    mocks.verifyAdmin.mockResolvedValue(
+    mocks.requireScope.mockResolvedValue(
       NextResponse.json({ error: "Forbidden" }, { status: 403 })
     );
     expect((await firstRun(request())).status).toBe(403);

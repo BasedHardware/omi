@@ -30,6 +30,11 @@ def record_deletion(uid: str, conversation_id: str) -> None:
     except AlreadyExists:
         # A retried delete after hard cleanup must preserve the original binding.
         pass
+    # Staged chunks are siblings, including when no conversation was ever created.
+    # The tombstone transaction fence prevents a racing upload from restaging them.
+    from database.from_segments_chunks import purge_chunks
+
+    purge_chunks(uid, conversation_id, firestore_client=db)
     # Intent remains durable if storage cleanup fails, and retry runs the purge
     # again even when the original tombstone already exists.
     from database.batch_pipeline_purge import purge_batch_owner

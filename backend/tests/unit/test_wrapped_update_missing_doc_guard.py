@@ -43,9 +43,7 @@ _mod("database._client", db=MagicMock())
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location(
-        "database.wrapped", str(BACKEND_DIR / "database" / "wrapped.py")
-    )
+    spec = importlib.util.spec_from_file_location("database.wrapped", str(BACKEND_DIR / "database" / "wrapped.py"))
     mod = importlib.util.module_from_spec(spec)
     sys.modules["database.wrapped"] = mod
     spec.loader.exec_module(mod)

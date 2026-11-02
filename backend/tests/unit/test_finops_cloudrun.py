@@ -98,7 +98,7 @@ def test_assert_runtime_identity_accepts_expected_sa(monkeypatch, cloudrun):
 def test_secret_reads_mounted_file_never_home_paths(cloudrun, tmp_path, monkeypatch):
     secdir = tmp_path / "secrets"
     secdir.mkdir()
-    (secdir / "STRIPE_API_KEY").write_text("  sk-test-value  \n")
+    (secdir / "STRIPE_READ_API_KEY").write_text("  sk-test-value  \n")
     monkeypatch.setenv("FINOPS_SECRETS_DIR", str(secdir))
     assert cloudrun.secret("stripe") == "sk-test-value"
 
@@ -118,6 +118,49 @@ def test_secret_rejects_unknown_name(cloudrun, tmp_path, monkeypatch):
 def test_secret_files_never_reference_hermes_paths(cloudrun):
     assert all("/" not in str(v) for v in cloudrun.SECRET_FILES.values())
     assert str(cloudrun.secrets_dir()).startswith("/run")
+
+
+_WORKFLOW = pathlib.Path(__file__).resolve().parents[3] / ".github" / "workflows" / "gcp_finops_unit_cost_job.yml"
+
+
+def test_deploy_workflow_mounts_the_read_only_stripe_key(cloudrun):
+    """The job's Stripe access is the restricted STRIPE_READ_API_KEY mount, never
+    the full STRIPE_API_KEY, and the mount name matches cloudrun.SECRET_FILES."""
+    text = _WORKFLOW.read_text()
+    name = cloudrun.SECRET_FILES["stripe"]
+    assert name == "STRIPE_READ_API_KEY"
+    assert f"/run/secrets/finops/{name}/{name}={name}:latest" in text
+    mount_lines = [
+        line
+        for line in text.splitlines()
+        if "run/secrets/finops/" in line and ("secrets=" in line or "secrets+=" in line)
+    ]
+    assert mount_lines, "expected finops secret mount lines in the deploy step"
+    for line in mount_lines:
+        assert "STRIPE_API_KEY" not in line.replace("STRIPE_READ_API_KEY", ""), (
+            "full-key Stripe mount must not return: %s" % line.strip()
+        )
+
+
+def test_deploy_workflow_stripe_mount_cannot_fail_a_dev_deploy(cloudrun):
+    """The read-key mount is required only in prod; a development deploy adds it
+    just when the secret resource exists in the target project, so an
+    unprovisioned dev project cannot fail the job deploy during secret
+    resolution (Luna r2 P2)."""
+    lines = _WORKFLOW.read_text().splitlines()
+    gate = next((i for i, l in enumerate(lines) if '"${{ github.event.inputs.environment }}" == "prod"' in l), None)
+    assert gate is not None, "expected an environment == prod gate around the Stripe mount"
+    mount = next(
+        (i for i, l in enumerate(lines) if "secrets+=" in l and "STRIPE_READ_API_KEY=STRIPE_READ_API_KEY" in l), None
+    )
+    assert mount is not None and gate < mount, "the Stripe mount line must sit inside the prod gate"
+    branch = next((i for i, l in enumerate(lines[gate:], start=gate) if l.strip() == "else"), None)
+    assert branch is not None and mount < branch, "the prod gate must have an else branch after the mount"
+    existence = next(
+        (i for i, l in enumerate(lines[gate:mount], start=gate) if "gcloud secrets describe STRIPE_READ_API_KEY" in l),
+        None,
+    )
+    assert existence is not None, "the dev path must check the secret resource exists before mounting"
 
 
 # ---------------------------------------------------------------- auth-mode switch
@@ -267,10 +310,10 @@ def test_no_secret_values_checked_in():
 
 def test_secret_supports_per_secret_volume_layout(cloudrun, tmp_path, monkeypatch):
     """Cloud Run mounts each secret as <prefix>/<SECRET_NAME>/<file>; both layouts work."""
-    d = tmp_path / "secrets" / "STRIPE_API_KEY"  # dir = Secret Manager resource name
+    d = tmp_path / "secrets" / "STRIPE_READ_API_KEY"  # dir = Secret Manager resource name
     d.mkdir(parents=True)
     val = "sk-" + "test" + "-value"
-    (d / "STRIPE_API_KEY").write_text(val + "\n")
+    (d / "STRIPE_READ_API_KEY").write_text(val + "\n")
     monkeypatch.setenv("FINOPS_SECRETS_DIR", str(tmp_path / "secrets"))
     assert cloudrun.secret("stripe") == val
 

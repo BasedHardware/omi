@@ -1,0 +1,7 @@
+{
+  "version": "0.12.508",
+  "date": "2026-10-19",
+  "changes": [
+    "Screen task extraction now uses the privacy-approved Jev gate by default"
+  ]
+}

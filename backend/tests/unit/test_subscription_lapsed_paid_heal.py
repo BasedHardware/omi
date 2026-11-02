@@ -61,3 +61,97 @@ def test_lapsed_paid_with_nothing_active_in_stripe_is_left_alone(monkeypatch):
 
     assert result is stored
     assert writes == [] and lookups == ['uid-1']
+
+
+def test_lapsed_paid_heals_from_stripe_subscription_id_directly(monkeypatch):
+    stored = _stored(PlanType.unlimited, NOW - 86400)
+    writes = []
+    saved_customer = []
+
+    class FakeStripeSub:
+        def to_dict(self):
+            return {
+                'status': 'active',
+                'current_period_end': NOW + 30 * 86400,
+                'current_period_start': NOW - 86400,
+                'items': {'data': [{'price': {'id': 'price_1RrxXL1F8wnoWYvwIddzR902'}}]},
+                'customer': 'cus_neo_vip',
+            }
+
+    monkeypatch.setattr(subscription_utils.stripe.Subscription, 'retrieve', lambda sub_id: FakeStripeSub())
+    monkeypatch.setattr(
+        subscription_utils.users_db, 'update_user_subscription', lambda uid, data: writes.append((uid, data))
+    )
+    monkeypatch.setattr(
+        subscription_utils.users_db,
+        'set_stripe_customer_id',
+        lambda uid, cus: saved_customer.append((uid, cus)),
+    )
+    # Ensure fallback customer listing is never needed
+    monkeypatch.setattr(
+        subscription_utils,
+        'find_active_paid_subscription_for_user',
+        lambda uid: None,
+    )
+
+    result = subscription_utils.reconcile_basic_plan_with_stripe('uid-neo', stored)
+    assert result.current_period_end == NOW + 30 * 86400
+    assert result.plan == PlanType.unlimited
+    assert result.status == SubscriptionStatus.active
+    assert len(writes) == 1
+    assert saved_customer == [('uid-neo', 'cus_neo_vip')]
+
+
+def test_lapsed_paid_stripe_retrieve_fails_falls_back_to_customer_search(monkeypatch):
+    stored = _stored(PlanType.unlimited, NOW - 86400)
+    renewed = _stored(PlanType.unlimited, NOW + 30 * 86400)
+    writes = []
+    lookups = []
+
+    def mock_retrieve(sub_id):
+        raise RuntimeError("Stripe API down")
+
+    monkeypatch.setattr(subscription_utils.stripe.Subscription, 'retrieve', mock_retrieve)
+    monkeypatch.setattr(
+        subscription_utils,
+        'find_active_paid_subscription_for_user',
+        lambda uid: lookups.append(uid) or renewed,
+    )
+    monkeypatch.setattr(
+        subscription_utils.users_db, 'update_user_subscription', lambda uid, data: writes.append((uid, data))
+    )
+
+    result = subscription_utils.reconcile_basic_plan_with_stripe('uid-fallback', stored)
+    assert result is renewed
+    assert lookups == ['uid-fallback']
+    assert writes == [('uid-fallback', renewed.model_dump())]
+
+
+def test_lapsed_paid_canceled_in_stripe_falls_back_to_customer_search(monkeypatch):
+    stored = _stored(PlanType.unlimited, NOW - 86400)
+    writes = []
+    lookups = []
+
+    class FakeCanceledSub:
+        def to_dict(self):
+            return {
+                'status': 'canceled',
+                'current_period_end': NOW + 30 * 86400,
+                'items': {'data': [{'price': {'id': 'price_1RrxXL1F8wnoWYvwIddzR902'}}]},
+                'customer': 'cus_neo_canceled',
+            }
+
+    monkeypatch.setattr(subscription_utils.stripe.Subscription, 'retrieve', lambda sub_id: FakeCanceledSub())
+    monkeypatch.setattr(
+        subscription_utils,
+        'find_active_paid_subscription_for_user',
+        lambda uid: lookups.append(uid) or None,
+    )
+    monkeypatch.setattr(
+        subscription_utils.users_db, 'update_user_subscription', lambda uid, data: writes.append((uid, data))
+    )
+
+    result = subscription_utils.reconcile_basic_plan_with_stripe('uid-canceled', stored)
+    assert result is stored
+    assert lookups == ['uid-canceled']
+    assert writes == []

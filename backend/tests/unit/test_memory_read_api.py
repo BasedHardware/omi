@@ -368,6 +368,32 @@ def test_query_archive_product_memory_items_is_explicit_and_capability_gated():
     assert allowed_archive_results[0]["agent_use"] == "explicit_archive_memory"
 
 
+def test_query_archive_product_memory_items_filters_queries_made_only_of_short_words():
+    records = [
+        _product_item(
+            memory_id,
+            content,
+            tier=MemoryTier.archive,
+            processing_state=ProcessingState.processed,
+            expires_at=None,
+        )
+        for memory_id, content in (("ai", "Works on AI agents"), ("chinese", "正在学习中文"))
+    ]
+    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=True)
+
+    def matched_ids(query):
+        return [
+            result["memory_id"] for result in query_archive_product_memory_items(query, records, policy=policy, now=NOW)
+        ]
+
+    # Only a blank query lists every memory; short words still filter and a query
+    # with no searchable word matches nothing.
+    assert matched_ids("AI") == ["ai"]
+    assert matched_ids("中文") == ["chinese"]
+    assert matched_ids("...") == []
+    assert matched_ids("") == ["ai", "chinese"]
+
+
 def test_query_memory_context_uses_l2_first_and_only_searches_l1_when_requested():
     durable_records = [_durable("mem_active", "User prefers automatic memory capture.")]
     archive_records = [_archive("User was troubleshooting Rust fog and TAA settings.")]

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Test fixtures only: storefront goldens regenerated for catalog revision 12. User-facing mobile changes ship in the app PR."
+}

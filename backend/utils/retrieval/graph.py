@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 import asyncio
+from contextlib import nullcontext
 from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -20,6 +21,9 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, Base
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from utils.journey_metrics_contract import ClientKind
+from utils.llm.shaped_agent import route_for_uid
+from utils.messaging.projection import surface_runtime
+from utils.messaging.context import preparation_scope
 from utils.llm.chat import get_current_datetime_block, get_user_timezone
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
@@ -243,43 +247,53 @@ async def execute_chat_stream(
     if callback_data is None:
         callback_data = {}
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
-    # One absolute setup deadline covers router metadata and agentic prompt/tool
-    # load so the SSE body cannot stay silent for two stacked 25s budgets.
-    setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
-    try:
-        async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
-            current_datetime_block, tz = await _current_prompt_metadata(uid, platform, client_tz=client_tz)
-    except TimeoutError:
-        logger.error(
-            'chat stream setup timed out route=router uid=%s reason=setup_timeout',
+    # Start before router metadata and agentic prompt/tools; the model consumes
+    # only ready components. Old/shadow routing starts no context IO.
+    scope = nullcontext()
+    if surface_runtime.get() is not None or (shaped_invocation and route_for_uid(uid) == 'new'):
+        scope = preparation_scope(
             uid,
+            chat_session.id if chat_session else None,
+            [message.id for message in messages if getattr(message, 'id', None)],
         )
-        callback_data['error'] = 'setup_timeout'
-        callback_data['route'] = 'router'
-        callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
-        yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
-        yield None
-        return
+    async with scope:
+        # One absolute setup deadline covers router metadata and agentic prompt/tool
+        # load so the SSE body cannot stay silent for two stacked 25s budgets.
+        setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+        try:
+            async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
+                current_datetime_block, tz = await _current_prompt_metadata(uid, platform, client_tz=client_tz)
+        except TimeoutError:
+            logger.error(
+                'chat stream setup timed out route=router uid=%s reason=setup_timeout',
+                uid,
+            )
+            callback_data['error'] = 'setup_timeout'
+            callback_data['route'] = 'router'
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+            yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+            yield None
+            return
 
-    # Persona apps previously took a dedicated LangChain/OpenAI stream; every
-    # turn now keeps the shared prompt, history and tools so a selected persona
-    # cannot drop tool, memory, or file access.
-    async for chunk in execute_agentic_chat_stream(
-        uid,
-        messages,
-        app,
-        callback_data=callback_data,
-        chat_session=chat_session,
-        context=context,
-        platform=platform,
-        client_kind=client_kind,
-        current_datetime_block=current_datetime_block,
-        tz=tz,
-        setup_deadline_at=setup_deadline_at,
-        device_tool_names=device_tool_names,
-        shaped_invocation=shaped_invocation,
-    ):
-        yield chunk
+        # Persona apps previously took a dedicated LangChain/OpenAI stream; every
+        # turn now keeps the shared prompt, history and tools so a selected persona
+        # cannot drop tool, memory, or file access.
+        async for chunk in execute_agentic_chat_stream(
+            uid,
+            messages,
+            app,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            context=context,
+            platform=platform,
+            client_kind=client_kind,
+            current_datetime_block=current_datetime_block,
+            tz=tz,
+            setup_deadline_at=setup_deadline_at,
+            device_tool_names=device_tool_names,
+            shaped_invocation=shaped_invocation,
+        ):
+            yield chunk
 
 
 # Backward compatibility aliases

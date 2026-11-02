@@ -30,11 +30,11 @@ import httpx
 from database import redis_db
 from database import users as users_db
 from database import x_posts as x_posts_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import db
 from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from models.memory_contracts import MemoryExtractionError
-from utils.free_tier_memory_policy import managed_memory_formation_suppressed
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -249,14 +249,14 @@ def _register_user(uid: str) -> None:
             {'uid': uid, 'updated_at': datetime.now(timezone.utc)}, merge=True
         )
     except Exception as e:
-        logger.warning(f'x_connector: failed to register user {uid} for sync: {e}')
+        logger.warning('x_connector: failed to register user %s for sync (error_type=%s)', uid, type(e).__name__)
 
 
 def _unregister_user(uid: str) -> None:
     try:
         db.collection(_REGISTRY_COLLECTION).document(uid).delete()
     except Exception as e:
-        logger.warning(f'x_connector: failed to unregister user {uid}: {e}')
+        logger.warning('x_connector: failed to unregister user %s (error_type=%s)', uid, type(e).__name__)
 
 
 async def get_valid_access_token(uid: str) -> Optional[str]:
@@ -293,7 +293,7 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
         emit_auth_refresh_succeeded(telemetry_context)
         return token_resp['access_token']
     except Exception as e:
-        logger.warning(f'x_connector: token refresh failed for uid={uid}: {e}')
+        logger.warning('x_connector: token refresh failed for uid=%s (error_type=%s)', uid, type(e).__name__)
         emit_auth_refresh_failed(telemetry_context, e)
         return None
 
@@ -359,7 +359,7 @@ async def fetch_bookmarks(token: str, x_user_id: str) -> List[Dict]:
             token, f'/users/{x_user_id}/bookmarks', x_posts_db.KIND_BOOKMARK, MAX_BOOKMARK_PAGES, {}
         )
     except Exception as e:
-        logger.info(f'x_connector: bookmarks fetch skipped/failed: {e}')
+        logger.info('x_connector: bookmarks fetch skipped/failed (error_type=%s)', type(e).__name__)
         return []
 
 
@@ -379,16 +379,6 @@ def _extract_and_index(
     vector-index the resulting memories. Returns memories created."""
     if not posts:
         return 0
-    # §1.8 (flip-review F-3): the X connector is one of the managed
-    # memory-formation doors that ran ungated for basic. The shared producer
-    # gate sits above every chunk's extractor spend, exactly like the
-    # coordinator's extraction boundary. Skipped posts stay pending —
-    # unformed memories are never backfilled (the eager-extraction
-    # asymmetry), so a later upgrade forms them on the next sync instead of
-    # a suppression window mass-forming a backlog.
-    if managed_memory_formation_suppressed(uid, 'x_connector'):
-        return 0
-
     chunks: List[Tuple[str, List[str]]] = []
     buf: List[str] = []
     buf_ids: List[str] = []
@@ -491,6 +481,8 @@ def _extract_and_index(
 
 async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRunRouter] = None) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return {'success': False, 'skipped': 'account_deletion', 'new_posts': 0, 'memories_created': 0}
     sync_context = IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid)
     emit_sync_attempted(sync_context)
     integ = await run_blocking(db_executor, users_db.get_integration, uid, INTEGRATION_KEY) or {}
@@ -525,7 +517,9 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
                 new_posts = tweets + bookmarks
                 source = 'oauth'
         except Exception as e:
-            logger.warning(f'x_connector: official API sync failed for uid={uid}, falling back: {e}')
+            logger.warning(
+                'x_connector: official API sync failed for uid=%s, falling back (error_type=%s)', uid, type(e).__name__
+            )
             emit_sync_failed(
                 IntegrationTelemetryContext(
                     integration_name=X,
@@ -548,7 +542,7 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             # deployment, not a fetch error: skip the fallback instead of
             # burning retries per user on a guaranteed failure.
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
-            logger.info(f'x_connector: RapidAPI fallback skipped for uid={uid}: RAPID_API_KEY not configured')
+            logger.info('x_connector: RapidAPI fallback skipped for uid=%s: credentials are not configured', uid)
             emit_sync_failed(sync_context, 'rapidapi_not_configured')
             return {'success': False, 'error': 'rapidapi_not_configured', 'new_posts': 0, 'memories_created': 0}
         try:
@@ -564,7 +558,7 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             ]
             source = 'rapidapi'
         except Exception as e:
-            logger.error(f'x_connector: RapidAPI fallback failed for uid={uid}: {e}')
+            logger.error('x_connector: RapidAPI fallback failed for uid=%s (error_type=%s)', uid, type(e).__name__)
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
             emit_sync_failed(
                 IntegrationTelemetryContext(
@@ -599,7 +593,13 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             try:
                 await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
             except Exception as e:
-                logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
+                logger.warning(
+                    'x_connector: failed to index x_posts chunk[%s:%s] for uid=%s (error_type=%s)',
+                    i,
+                    i + 100,
+                    uid,
+                    type(e).__name__,
+                )
         extraction_llm = (
             background_flex.llm_for_uid(
                 uid,
@@ -641,14 +641,22 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
         try:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
         except Exception as cleanup_error:
-            logger.warning(f'x_connector: failed to clear syncing after Flex deferral for uid={uid}: {cleanup_error}')
+            logger.warning(
+                'x_connector: failed to clear syncing after Flex deferral for uid=%s (error_type=%s)',
+                uid,
+                type(cleanup_error).__name__,
+            )
         logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         raise
     except Exception as e:
         try:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
         except Exception as cleanup_error:
-            logger.warning(f'x_connector: failed to clear syncing after sync failure for uid={uid}: {cleanup_error}')
+            logger.warning(
+                'x_connector: failed to clear syncing after sync failure for uid=%s (error_type=%s)',
+                uid,
+                type(cleanup_error).__name__,
+            )
         emit_sync_failed(
             IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
             e,
@@ -705,22 +713,29 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
     try:
         uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
     except Exception as e:
-        logger.error(f'x_connector: sync job could not list users: {e}')
+        logger.error('x_connector: sync job could not list users (error_type=%s)', type(e).__name__)
         return {
             'users': 0,
             'synced': 0,
             'new_posts': 0,
             'failed': 0,
-            'errors': [f'list_users: {type(e).__name__}: {e}'],
+            'errors': [f'list_users: {type(e).__name__}'],
         }
 
     background_flex = PromotionFlexRunRouter(db_client=db, started_at=job_started_at)
     synced = 0
     failed = 0
     new_posts = 0
+    skipped = 0
     for uid in uids:
         try:
+            if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+                skipped += 1
+                continue
             result = await sync_x_for_user(uid, background_flex=background_flex)
+            if result.get('skipped') == 'account_deletion':
+                skipped += 1
+                continue
             if result.get('success'):
                 synced += 1
                 new_posts += int(result.get('new_posts', 0))
@@ -730,15 +745,17 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
             logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         except Exception as e:
             failed += 1
-            logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
+            logger.warning('x_connector: sync job failed for uid=%s (error_type=%s)', uid, type(e).__name__)
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
 
     logger.info(
-        f'x_connector: sync job done — users={len(uids)} synced={synced} ' f'failed={failed} new_posts={new_posts}'
+        f'x_connector: sync job done — users={len(uids)} synced={synced} skipped={skipped} '
+        f'failed={failed} new_posts={new_posts}'
     )
     return {
         'users': len(uids),
         'synced': synced,
+        'skipped': skipped,
         'new_posts': new_posts,
         'failed': failed,
         'errors': [],
@@ -748,8 +765,9 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
 def raise_if_x_sync_job_failed(summary: Dict) -> None:
     """Fail the Cloud Run Job when the scheduled sync contract could not complete.
 
-    Mirrors memory-maintenance-job: inspect the summary and raise so Scheduler /
-    Cloud Run show a failed execution instead of a silent healthy no-op.
+    Mirrors the retired memory-maintenance-job exit contract: inspect the
+    summary and raise so Scheduler / Cloud Run show a failed execution instead
+    of a silent healthy no-op.
     """
     errors = list(summary.get('errors') or [])
     if errors:
@@ -758,7 +776,11 @@ def raise_if_x_sync_job_failed(summary: Dict) -> None:
     users = int(summary.get('users') or 0)
     synced = int(summary.get('synced') or 0)
     failed = int(summary.get('failed') or 0)
+    skipped = int(summary.get('skipped') or 0)
+    actionable = max(0, users - skipped)
     # Empty registry is a valid healthy run. Total failure across every connected
     # user means the sync contract did not complete even though listing worked.
-    if users > 0 and synced == 0 and failed >= users:
-        raise RuntimeError(f"x-connector-sync-job failed: synced 0/{users} connected user(s) (failed={failed})")
+    if actionable > 0 and synced == 0 and failed >= actionable:
+        raise RuntimeError(
+            f"x-connector-sync-job failed: synced 0/{actionable} eligible connected user(s) (failed={failed})"
+        )

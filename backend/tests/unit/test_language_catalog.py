@@ -24,7 +24,9 @@ def test_offered_codes_round_trip_unchanged():
     # A code that normalizes to something else would leave the picker showing one
     # language while the account stores another.
     drifted = [
-        (code, normalize_user_language(code)) for code, _ in PRIMARY_LANGUAGE_OPTIONS if normalize_user_language(code) != code
+        (code, normalize_user_language(code))
+        for code, _ in PRIMARY_LANGUAGE_OPTIONS
+        if normalize_user_language(code) != code
     ]
     assert drifted == [], f"code changes on save: {drifted}"
 

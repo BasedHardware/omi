@@ -166,6 +166,7 @@ def configure_logging(
     project: str | None = None,
     level: int = logging.INFO,
     access_policy: str | None = None,
+    default_format: str | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
 ) -> None:
@@ -174,12 +175,18 @@ def configure_logging(
     access_policy is ``keep`` or ``platform``; omitted selects known LB coverage.
     Configure again after vendor imports if they replace their own handlers.
     OMI_LOG_FORMAT=text is an explicit rollback/debug override, including on GCP.
+    default_format (``json`` or ``text``) applies only when OMI_LOG_FORMAT is unset:
+    a service whose log consumers are not yet admitted passes ``text`` so adopting
+    the shared setup keeps its textPayload filters, and OMI_LOG_FORMAT=json opts in.
     """
     if not service or access_policy not in (None, 'keep', 'platform'):
         raise ValueError('service and a valid access policy are required')
+    if default_format not in (None, 'json', 'text'):
+        raise ValueError('default_format must be json or text')
     mode = os.getenv('OMI_LOG_FORMAT', '').strip().lower()
     if mode not in ('', 'json', 'text'):
         raise ValueError('OMI_LOG_FORMAT must be json or text')
+    mode = mode or default_format or ''
     cloud_run = bool(os.getenv('K_SERVICE') or os.getenv('CLOUD_RUN_JOB'))
     on_kubernetes = bool(os.getenv('KUBERNETES_SERVICE_HOST'))
     on_gcp = cloud_run or on_kubernetes or bool(os.getenv('GOOGLE_CLOUD_PROJECT'))

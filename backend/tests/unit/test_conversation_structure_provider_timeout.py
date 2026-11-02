@@ -36,6 +36,7 @@ The seam here is the provider client: it enforces the deadline the production fu
 exactly as httpx does, against a provider that needs longer than the background deadline to answer.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -206,3 +207,61 @@ def test_every_user_waiting_conversation_summary_feature_declares_the_deadline()
 
     # A background feature keeps the bounded transport deadline it was sized for.
     assert model_config.feature_request_timeout('conv_folder') is None
+
+
+def test_notes_loop_deadline_covers_the_whole_transport_recovery_budget():
+    """Sixth instance of the class (2026-10-18, gcp group timeouts.py:115 through
+    ``_get_structured``): the shaped notes mount reused the per-attempt transport
+    deadline as run_loop's total deadline, so structuring that outlived one attempt
+    died as a bare ``TimeoutError`` instead of letting the client-owned deadline —
+    and the direct lane's single retry — govern."""
+    assert processing.notes_mount().budget.deadline_seconds == 3 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_notes_loop_deadline_leaves_retry_backoff_headroom():
+    """Two timeout-length attempts are not the whole recovery budget: the SDK sleeps
+    before its retry (0.5s doubling backoff after a timeout, Retry-After up to 60s
+    after a retried status), and the per-attempt deadline buys each HTTP attempt
+    afresh. An exactly-2x deadline cancelled the viable retry in its final stretch
+    — the same bare ``TimeoutError`` this PR exists to prevent — so the loop
+    deadline must exceed two attempts by one inter-attempt delay bound."""
+    assert processing.NOTES_LOOP_DEADLINE_SECONDS > 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_notes_loop_deadline_is_not_headroom_capped_under_the_sync_route_budget():
+    """The route, not the loop, owns the client-visible cut on synchronous
+    create/reprocess: transport recovery plus the auth/db preamble cannot fit the
+    middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at one 60s
+    attempt. Capping the loop deadline under that budget to "reserve headroom"
+    would preempt the direct lane's retry again on the durable finalizer's 1500s
+    lease — the lane where the whole recovery budget fits — resurrecting this
+    error group there. A sync request that outruns the middleware gets a 504 on
+    the response only; the threadpool handler finishes the recovery out-of-band.
+    The 3x sizing leaves that lane 120s of retry-backoff headroom inside its
+    lease."""
+    assert processing.NOTES_LOOP_DEADLINE_SECONDS >= 3 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_first_attempt_past_the_per_attempt_deadline_still_summarizes(monkeypatch):
+    """A model turn slower than one per-attempt deadline but inside the mount's whole
+    recovery budget must still produce the summary; before the fix run_loop cancelled
+    it at the single-attempt mark."""
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+
+    @asynccontextmanager
+    async def isolated_fake(model):
+        yield model
+
+    monkeypatch.setattr(processing, 'isolated_notes_model', isolated_fake)
+    # Per-attempt 0.5s, mount deadline 1.5s: the turn at 0.75s is past one attempt
+    # yet inside the budget the transport owns. 0.5s is the real-clock ratchet's
+    # floor (test_real_clock_budget_ratchet); smaller budgets race a loaded runner.
+    monkeypatch.setattr(processing, 'CONVERSATION_STRUCTURE_TIMEOUT_SECONDS', 0.5)
+
+    async def _slow_invoke(_payload):
+        await asyncio.sleep(0.75)
+        return AIMessage(content=_RESPONSE_JSON)
+
+    monkeypatch.setattr(processing, 'get_llm', lambda *args, **kwargs: RunnableLambda(_slow_invoke))
+
+    _summarizes(_conversation_notes())

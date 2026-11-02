@@ -26,8 +26,9 @@ import {
   createCheckoutSession,
   upgradeSubscription,
   openCustomerPortal,
-  OPERATOR_DEPRECATION_FALLBACK_PRICE,
-  RESUBSCRIBE_FIRST
+  OMI_PRO_DEPRECATION_FALLBACK_PRICE,
+  RESUBSCRIBE_FIRST,
+  EXISTING_SUBSCRIPTION
 } from '../../../lib/billing'
 import type {
   UserSubscriptionResponse,
@@ -51,9 +52,7 @@ const REFRESH_LAGGING_MSG =
 export function PlanUsageTab(): React.JSX.Element {
   // Register the tab for cross-tab Settings search (billing content is card-based,
   // not SettingRows, so this one hidden entry surfaces the panel on a match).
-  useSearchableRow(
-    'plan usage billing subscription upgrade quota trial overage payment neo operator architect'
-  )
+  useSearchableRow('plan usage billing subscription upgrade quota trial overage payment omi pro')
 
   const [sub, setSub] = useState<UserSubscriptionResponse | null>(null)
   const [quota, setQuota] = useState<ChatUsageQuota | null>(null)
@@ -174,6 +173,9 @@ export function PlanUsageTab(): React.JSX.Element {
         case 'blocked':
           toast(RESUBSCRIBE_FIRST, { tone: 'error' })
           return
+        case 'existing_subscription':
+          toast(EXISTING_SUBSCRIPTION, { tone: 'error' })
+          return
         default:
           toast("You're all set", { tone: 'success' })
       }
@@ -181,22 +183,17 @@ export function PlanUsageTab(): React.JSX.Element {
       setSelectedPlanId(null)
       await load()
     } catch (e) {
-      const status = (e as { response?: { status?: number } }).response?.status
-      toast('Checkout failed', {
-        tone: 'error',
-        body: status === 409 ? RESUBSCRIBE_FIRST : apiError(e)
-      })
+      toast('Checkout failed', { tone: 'error', body: apiError(e) })
     } finally {
       setActivePriceId(null)
     }
   }
 
-  // Deprecation "Try Pro" + trial "View Plans": select the Operator card
+  // Deprecation "Try Omi Pro" + trial "View Plans": select the Omi Pro card
   // (or first available) and scroll the grid into view.
-  const jumpToOperator = (): void => {
-    const operator =
-      catalog.find((p) => p.id === 'operator') ?? catalog[0]
-    if (operator) setSelectedPlanId(operator.id)
+  const jumpToOmiPro = (): void => {
+    const omiPro = catalog.find((p) => p.id === 'unlimited_v2') ?? catalog[0]
+    if (omiPro) setSelectedPlanId(omiPro.id)
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -262,12 +259,12 @@ export function PlanUsageTab(): React.JSX.Element {
           title="Plan Retiring"
           subtitle={
             subscription.deprecation_message ??
-            `Your Unlimited plan is being retired. Try the new Pro plan — same great features at ${OPERATOR_DEPRECATION_FALLBACK_PRICE}.`
+            `Your plan is being retired. Try Omi Pro at ${OMI_PRO_DEPRECATION_FALLBACK_PRICE}.`
           }
           trailing={
             showCatalog ? (
-              <button onClick={jumpToOperator} className="btn-ghost">
-                Try Pro
+              <button onClick={jumpToOmiPro} className="btn-ghost">
+                Try Omi Pro
               </button>
             ) : undefined
           }
@@ -279,7 +276,7 @@ export function PlanUsageTab(): React.JSX.Element {
       {overage?.is_overage_plan ? <OverageCard overage={overage} /> : null}
 
       {trial && (isTrialActive(trial) || trial.trial_expired) ? (
-        <TrialCard trial={trial} onViewPlans={jumpToOperator} />
+        <TrialCard trial={trial} onViewPlans={jumpToOmiPro} />
       ) : null}
 
       {showCatalog ? (

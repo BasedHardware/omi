@@ -149,12 +149,15 @@ class CaptureConnectivityBoundary {
     required bool initiallyConnected,
     required Stream<bool> changes,
     required bool Function() isConnected,
+    Stream<void>? networkChanges,
   })  : _initiallyConnected = initiallyConnected,
         _changes = changes,
+        _networkChanges = networkChanges ?? const Stream<void>.empty(),
         _isConnected = isConnected;
 
   final bool _initiallyConnected;
   final Stream<bool> _changes;
+  final Stream<void> _networkChanges;
   final bool Function() _isConnected;
 
   bool get isConnected => _isConnected();
@@ -163,10 +166,14 @@ class CaptureConnectivityBoundary {
   CaptureConnectivityBoundary.production()
       : _initiallyConnected = ConnectivityService().isConnected,
         _changes = ConnectivityService().onConnectionChange,
+        _networkChanges = ConnectivityService().onNetworkChange,
         _isConnected = _productionProbe;
 
   static bool _productionProbe() => ConnectivityService().isConnected;
 
   Stream<bool> get changes => _changes;
+
+  /// Interface changes that never reported offline (wifi -> cellular).
+  Stream<void> get networkChanges => _networkChanges;
   bool get initiallyConnected => _initiallyConnected;
 }

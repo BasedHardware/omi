@@ -1,0 +1,7 @@
+{
+  "version": "0.12.499",
+  "date": "2026-10-17",
+  "changes": [
+    "Settings now has a Connect Claude button when Claude is your AI provider but signed out, so a chat that asks you to reconnect Claude has a way to do it"
+  ]
+}

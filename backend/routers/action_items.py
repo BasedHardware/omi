@@ -13,6 +13,12 @@ import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
+from utils.list_version_check import ListVersionCheck
+from utils.task_intelligence.task_source_validation import TaskSourceValidationError
+from utils.retrieval.tool_services.action_items import (
+    create_action_item as create_task,
+    create_action_items_batch as create_tasks,
+)
 from database.vector_db import (
     upsert_action_item_vector,
     upsert_action_item_vectors_batch,
@@ -29,6 +35,7 @@ from database.action_items_cache import (
     read_cached_list,
     write_cached_list,
 )
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 from config.firestore_read_levers import lever_enabled
 from utils.action_items_list_guard import enforce_hot_client_list_ceiling, enforce_stale_client_list_refusal
 from utils.metrics import record_action_items_list_cache
@@ -40,6 +47,7 @@ from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     list_read_budget_for_request,
+    finish_list_budget,
 )
 from utils.notifications import (
     send_notification,
@@ -293,14 +301,15 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
-    # This route completes tasks and moves due dates too, so it owes the same reminder
+    # This route completes, renames and moves due dates of tasks too, so it owes the same reminder
     # reconciliation as the single-item paths (#5085): otherwise the phone still fires a
-    # reminder for a task the user ticked off during an Apple Reminders sync.
+    # reminder for a task the user ticked off (or with the title it had before a rename) during
+    # an Apple Reminders sync.
     for update in updates:
         if update['id'] not in updated_ids:
             continue
         data = update['data']
-        if 'completed' not in data and 'due_at' not in data:
+        if not action_item_write_affects_reminder(data):
             continue
         try:
             stored = action_items_db.get_action_item(uid, update['id'])
@@ -369,9 +378,9 @@ def create_action_item(
     action_item_data = request.storage_payload()
 
     try:
-        action_item_id = action_items_db.create_action_item(
-            uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key)
-        )
+        action_item_id = create_task(uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key))
+    except TaskSourceValidationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
@@ -592,17 +601,25 @@ def get_action_items(
     enforce_stale_client_list_refusal(request)
     enforce_hot_client_list_ceiling(uid, request)
 
-    cached_response = _serve_action_items_list_from_cache(
-        uid,
-        request=request,
-        limit=limit,
-        offset=offset,
-        completed=completed,
-        conversation_id=conversation_id,
-        start_date=start_date,
-        end_date=end_date,
-        due_start_date=due_start_date,
-        due_end_date=due_end_date,
+    version_check = ListVersionCheck.start(request, uid, 'action_items')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
+
+    cached_response = (
+        _serve_action_items_list_from_cache(
+            uid,
+            request=request,
+            limit=limit,
+            offset=offset,
+            completed=completed,
+            conversation_id=conversation_id,
+            start_date=start_date,
+            end_date=end_date,
+            due_start_date=due_start_date,
+            due_end_date=due_end_date,
+        )
+        if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
+        else None
     )
     if cached_response is not None:
         return cached_response
@@ -670,6 +687,7 @@ def get_action_items(
             due_end_date=due_end_date,
         )
 
+    version_check.finish(response, truncated=truncated)
     return result
 
 
@@ -696,6 +714,8 @@ def list_action_item_ids(
         description="When present, return only non-deleted IDs in this completion bucket",
     ),
     uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     """Return the user's action-item IDs (lightweight reconciliation).
 
@@ -711,12 +731,16 @@ def list_action_item_ids(
     Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
     """
+    budget = list_read_budget_for_request(request, route='action-item-ids')
     if completed is None:
-        return {"ids": action_items_db.get_action_item_ids(uid)}
-    return {
-        "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed),
-        "completed_scope": completed,
-    }
+        result = {"ids": action_items_db.get_action_item_ids(uid, budget=budget)}
+    else:
+        result = {
+            "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed, budget=budget),
+            "completed_scope": completed,
+        }
+    finish_list_budget(response, budget)
+    return result
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
@@ -794,10 +818,11 @@ def update_action_item(
                 },
             )
 
-    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
-    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
-    # (#5085). Previously this re-armed the reminder whenever due_at was present, even on completion.
-    if 'completed' in update_data or 'status' in update_data or 'due_at' in update_data:
+    # Reconcile the client-scheduled reminder when the write touched anything it is armed from
+    # (lifecycle, due date or title), using the final state: cancel if completed or no due date,
+    # (re)schedule only for an open task with a due date (#5085). Previously this re-armed the
+    # reminder whenever due_at was present, even on completion.
+    if action_item_write_affects_reminder(update_data):
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
@@ -848,7 +873,7 @@ def toggle_action_item_completion(
     )
 
     # Notify sender if this was a shared task that just got completed
-    if completed and existing_item.get('shared_from'):
+    if completed and not existing_item.get('completed') and existing_item.get('shared_from'):
         shared_from = existing_item['shared_from']
         sender_uid = shared_from.get('sender_uid')
         if sender_uid:
@@ -932,7 +957,7 @@ def batch_delete_action_items(
 def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -959,7 +984,7 @@ def get_conversation_action_items_count(conversation_id: str, uid: str = Depends
     A task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -978,6 +1003,12 @@ class ConversationActionItemsDeleteResponse(BaseModel):
 )
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation or conversation.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+
     existing = action_items_db.get_action_items_by_conversation(uid, conversation_id)
     existing_ids = [item['id'] for item in existing]
 
@@ -1010,7 +1041,9 @@ def create_action_items_batch(
 
     # Create batch
     try:
-        created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+        created_ids = create_tasks(uid, action_items_data)
+    except TaskSourceValidationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:

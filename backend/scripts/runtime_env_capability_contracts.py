@@ -11,12 +11,6 @@ import os
 from collections.abc import Iterable
 from typing import Any, cast
 
-from config.free_tier_rollout import (
-    FREE_TIER_DEPLOY_KEYS,
-    LOCAL_PROCESSING_COHORT,
-    EMERGENCY_STOP,
-    validate_free_tier_deploy_value,
-)
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_compat import VOICE_STAGING_BUCKET_ENV, VOICE_STAGING_BUCKETS
@@ -50,17 +44,8 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
     ('cloud_run', 'backend-sync'): _FINALIZATION_CAPABILITIES,
 }
 
-# Remaining summary context flags must agree on every finalization host; an
-# omitted declaration must fail admission rather than use the code default.
-SUMMARY_PIPELINE_FLAGS = (
-    'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
-    'CONVERSATION_OCR_CONTEXT_ENABLED',
-    'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
-    # Same co-host rule: an omitted or disagreeing value on one
-    # process_conversation host would silently keep that host ungated (code
-    # default OFF) while the others deny identified-basic first-open.
-    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
-)
+# Summary acceptance must agree on every finalization host.
+FINALIZATION_GATE_FLAGS = ('CLIENT_SUMMARIES_AT_CAP_ENABLED',)
 
 # The runtime resolves these flags with strip().casefold() against the truthy
 # set {'1','true','yes','on'}; anything else — including '' — is silently False.
@@ -69,11 +54,8 @@ SUMMARY_PIPELINE_FLAGS = (
 # like the omitted/False case the contract exists to reject.
 _SUMMARY_FLAG_LITERALS = frozenset({'1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'})
 
-# utils.free_tier_basic_gates lights a gate only on an exact case-insensitive
-# ``true`` with no trimming (the FREE_TIER_* convention). Admission must not
-# accept a spelling the reader treats as off: ``on`` or `` true `` on every
-# host would pass co-host agreement and silently disable the gate.
-_EXACT_BOOLEAN_FLAGS = frozenset({'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'})
+# Deploys pin exact booleans; the runtime summary kill switch defaults on.
+_EXACT_BOOLEAN_FLAGS = frozenset({'CLIENT_SUMMARIES_AT_CAP_ENABLED'})
 _EXACT_BOOLEAN_LITERALS = frozenset({'true', 'false'})
 
 
@@ -148,7 +130,7 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
 
     errors: list[ValidationError] = []
     declared_by_host: dict[tuple[str, str], frozenset[str]] = {}
-    summary_flag_values: dict[str, dict[str, str]] = {flag: {} for flag in SUMMARY_PIPELINE_FLAGS}
+    finalization_gate_values: dict[str, dict[str, str]] = {flag: {} for flag in FINALIZATION_GATE_FLAGS}
 
     for platform, service_name, service_config in _iter_declared_services(env_config):
         key = (platform, service_name)
@@ -205,12 +187,12 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
                 )
             )
 
-        for flag in SUMMARY_PIPELINE_FLAGS:
+        for flag in FINALIZATION_GATE_FLAGS:
             if flag not in literal_env:
                 errors.append(
                     ValidationError(
                         scope,
-                        f'summary-pipeline flag {flag} must be a literal on every conversation-finalization host',
+                        f'finalization gate {flag} must be a literal on every conversation-finalization host',
                     )
                 )
                 continue
@@ -218,7 +200,7 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
             # gate (verify_pusher_cohost_env_diff.py) enforces byte-identical
             # values for these same flags, so admission must not accept drift
             # (e.g. 'true' vs ' TRUE ') that the co-host gate would reject.
-            summary_flag_values[flag][scope] = literal_env[flag]
+            finalization_gate_values[flag][scope] = literal_env[flag]
             if flag in _EXACT_BOOLEAN_FLAGS:
                 if literal_env[flag] not in _EXACT_BOOLEAN_LITERALS:
                     errors.append(
@@ -233,77 +215,22 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
                 errors.append(
                     ValidationError(
                         scope,
-                        f'summary-pipeline flag {flag} must be an explicit boolean literal '
+                        f'finalization gate {flag} must be an explicit boolean literal '
                         f'(true/false), got {literal_env[flag]!r}',
                     )
                 )
 
-    for flag, host_values in summary_flag_values.items():
+    for flag, host_values in finalization_gate_values.items():
         distinct = set(host_values.values())
         if len(distinct) > 1:
             rendered = ', '.join(f'{scope}={value!r}' for scope, value in sorted(host_values.items()))
             errors.append(
                 ValidationError(
                     f'{env}/conversation-finalization',
-                    f'summary-pipeline flag {flag} disagrees across finalization hosts: {rendered}',
+                    f'finalization gate {flag} disagrees across finalization hosts: {rendered}',
                 )
             )
 
-    return errors
-
-
-# main:app also runs integration and backfill; desktop_backend hosts the
-# shared emergency-stop reader through its basic-plan gates. Keep this roster
-# independent of env-key presence, as in #14316's finalization contract.
-FREE_TIER_DEPLOY_HOSTS = (
-    ('gke', 'backend-listen'),
-    ('gke', 'pusher'),
-    ('cloud_run', 'backend'),
-    ('cloud_run', 'backend-sync'),
-    ('cloud_run', 'backend-sync-backfill'),
-    ('cloud_run', 'backend-integration'),
-    ('desktop_backend', 'desktop-backend'),
-)
-
-
-def validate_free_tier_deploy_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    errors: list[ValidationError] = []
-    for platform, host in FREE_TIER_DEPLOY_HOSTS:
-        service = (
-            env_config.get('desktop_backend')
-            if platform == 'desktop_backend'
-            else _service_config(env_config, platform, host)
-        )
-        entries = (service or {}).get('env', {})
-        scope = f'{env}/{platform}/{host}'
-        for name in FREE_TIER_DEPLOY_KEYS:
-            entry = entries.get(name, {})
-            if name == LOCAL_PROCESSING_COHORT and env == 'dev':
-                if platform == 'gke':
-                    expected = {'name': 'dev-omi-backend-config', 'key': name}
-                    config_entry = env_config.get('gke', {}).get('config_map', {}).get('entries', {}).get(name, {})
-                    if entry.get('config_map') != expected or config_entry != {'source': 'environment', 'default': ''}:
-                        errors.append(
-                            ValidationError(scope, f'{name} requires the shared ConfigMap variable with empty default')
-                        )
-                elif entry.get('env_var') != name or entry.get('default') != '' or 'value' in entry:
-                    errors.append(ValidationError(scope, f'{name} requires the Actions variable with empty default'))
-                value = os.getenv(name, '')
-            else:
-                value = entry.get('value')
-                if value is None:
-                    errors.append(ValidationError(scope, f'{name} requires an explicit literal'))
-                    continue
-            try:
-                validate_free_tier_deploy_value(name, str(value))
-            except ValueError as exc:
-                errors.append(ValidationError(scope, str(exc)))
-            if (
-                env == 'prod'
-                and name != EMERGENCY_STOP
-                and value != ('' if name == LOCAL_PROCESSING_COHORT else 'false')
-            ):
-                errors.append(ValidationError(scope, f'{name} must remain dark in prod'))
     return errors
 
 
@@ -317,19 +244,28 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+# Cloud Run cannot resolve cluster DNS. These are the internal-ALB routes
+# (gateway IP + /diarizer); admission rejects any other literal, including a
+# value that merely agrees across Cloud Run hosts.
+_CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
+    'dev': 'http://172.16.48.49/diarizer',
+    'prod': 'http://172.16.160.20/diarizer',
+}
 
 
 def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require the reachable diarizer ILB on every speaker-ID host.
+    """Require a reachable diarizer route on every speaker-ID host.
 
     Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
     ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
     voice matching there while the others keep working. Cloud Run cannot use
-    in-cluster DNS; the value must match GKE listen's ILB hostname.
+    in-cluster DNS, so each Cloud Run host must use that environment's
+    approved internal-ALB route. GKE hosts share one route (ClusterIP service
+    DNS in prod, the shared internal gateway in dev).
     """
     errors: list[ValidationError] = []
-    seen_values: dict[str, str] = {}
-    listen_value: str | None = None
+    gke_values: dict[str, str] = {}
+    cloud_run_values: dict[str, str] = {}
     for platform, service_name in SPEAKER_EMBEDDING_HOSTS:
         service_config = _service_config(env_config, platform, service_name)
         if service_config is None:
@@ -358,32 +294,35 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
                     f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
                 )
             )
-        seen_values[scope] = value
-        if platform == 'gke' and service_name == 'backend-listen':
-            listen_value = value
-
-    if listen_value:
-        for scope, value in seen_values.items():
-            if '/gke/backend-listen' in scope:
-                continue
-            if value != listen_value:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{SPEAKER_EMBEDDING_ENV} must match gke/backend-listen ({listen_value!r})',
-                    )
+        approved = _CLOUD_RUN_SPEAKER_EMBEDDING_URL.get(env) if platform == 'cloud_run' else None
+        if approved and value != approved:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the approved internal-ALB route {approved!r}',
                 )
+            )
+        (gke_values if platform == 'gke' else cloud_run_values)[scope] = value
+
+    for topology_values in (gke_values, cloud_run_values):
+        distinct = set(topology_values.values())
+        if len(distinct) > 1:
+            rendered = ', '.join(f'{scope}={value!r}' for scope, value in sorted(topology_values.items()))
+            errors.append(
+                ValidationError(
+                    f'{env}/speaker-embedding',
+                    f'{SPEAKER_EMBEDDING_ENV} disagrees across hosts: {rendered}',
+                )
+            )
     return errors
 
 
 __all__ = [
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
-    'SUMMARY_PIPELINE_FLAGS',
+    'FINALIZATION_GATE_FLAGS',
     'SPEAKER_EMBEDDING_ENV',
     'SPEAKER_EMBEDDING_HOSTS',
-    'FREE_TIER_DEPLOY_HOSTS',
-    'validate_free_tier_deploy_contract',
     'validate_conversation_finalization_capabilities',
     'validate_speaker_embedding_hosts',
 ]

@@ -5,6 +5,7 @@
   "canonical_prevention": "Route every @firestore.transactional invocation in database/conversations.py through database._client.run_transactional so expired-transaction commits restart with a fresh transaction up to three attempts.",
   "canonical_prevention_artifact": [
     "backend/database/conversations.py",
+    "backend/database/firestore_transaction_retry.py",
     "backend/tests/unit/"
   ],
   "evidence_prs": [],

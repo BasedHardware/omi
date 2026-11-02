@@ -4,6 +4,8 @@ import { dirname } from 'node:path';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // HTTP contract tests own a fresh output directory; ordinary builds keep .next.
+  distDir: process.env.OMI_SHARE_HTTP_DIST_DIR || '.next',
   staticPageGenerationTimeout: 60 * 20,
   // Bypass 2MB fetch cache limit by using file system cache directly
   cacheHandler: fileURLToPath(import.meta.resolve('./cache-handler.cjs')),

@@ -272,7 +272,7 @@ final class ChatErrorStateTests: XCTestCase {
 
   func testClaudeOAuthSuccessKeepsKeychainBackedConnectionState() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
-    let start = try XCTUnwrap(source.range(of: "private func handleClaudeAuthSuccess()"))
+    let start = try XCTUnwrap(source.range(of: "func handleClaudeAuthSuccess()"))
     let tail = source[start.lowerBound...]
     let end = try XCTUnwrap(tail.range(of: "\n  }\n"))
     let snippet = String(tail[..<end.lowerBound])

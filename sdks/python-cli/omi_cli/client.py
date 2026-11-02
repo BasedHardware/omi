@@ -47,13 +47,33 @@ MAX_RETRY_ATTEMPTS = 4
 # CliError immediately instead of sleeping a truncated delay and retrying early.
 MAX_RETRY_AFTER_SECONDS = 60.0
 
-# Backend rate-limit policies surfaced to users on 429 (see
-# ``backend/utils/rate_limit_config.py``).
-KNOWN_RATE_LIMIT_POLICIES = {
-    "dev:conversations": "25/hr",
-    "dev:memories": "120/hr",
-    "dev:memories_batch": "15/hr",
+# Dev-API rate-limit policies surfaced to users on 429, as the
+# ``(max_requests, window_seconds)`` pairs the backend declares in
+# ``RATE_POLICIES`` (``backend/utils/rate_limit_config.py``). Mirroring the
+# backend's own units keeps per-minute budgets expressible; writing the label
+# out by hand could only ever say "/hr". A policy absent here is reported by
+# name alone rather than given an invented budget.
+KNOWN_RATE_LIMIT_POLICIES: dict[str, tuple[int, int]] = {
+    "dev:key_read": (120, 3600),
+    "dev:memories_read": (120, 3600),
+    "dev:action_items_read": (120, 3600),
+    "dev:conversation_reads_total": (60, 3600),
+    "dev:conversations_read": (60, 3600),
+    "dev:conversation_detail_read": (60, 3600),
+    "dev:conversation_transcript_read": (25, 3600),
+    "dev:goals_read": (120, 3600),
+    "dev:conversations": (25, 3600),
+    "dev:conversations_from_segments": (30, 3600),
+    "dev:ask": (25, 3600),
+    "dev:memories": (120, 3600),
+    "dev:memories_write_burst": (30, 60),
+    "dev:memories_batch": (15, 3600),
+    "dev:action_items_write": (120, 3600),
+    "dev:goals_write": (120, 3600),
 }
+
+# Window lengths the backend actually uses, in the units a person reads.
+_RATE_LIMIT_WINDOW_LABELS = {60: "min", 3600: "hr", 86400: "day"}
 
 
 class OmiClient:
@@ -233,8 +253,8 @@ class OmiClient:
         policy = _detect_rate_limit_policy(detail)
         # Server errors and rate limit errors get the richer formatters below.
         if response.status_code == 429:
-            policy_label = KNOWN_RATE_LIMIT_POLICIES.get(policy, policy) if policy else None
-            label = f"{policy} ({policy_label})" if policy_label else policy
+            budget = describe_rate_limit_policy(policy) if policy else None
+            label = f"{policy} ({budget})" if budget else policy
             return RateLimitError(
                 message="Rate limited" if not label else f"Rate limited: {label}",
                 detail=_format_rate_limit_detail(retry_after, detail),
@@ -284,12 +304,14 @@ class OmiClient:
         A browser-login profile carries BOTH a Firebase ID token and the
         minted dev key: ``/v1/dev/user/*`` routes authenticate through the
         backend's ``get_api_key_auth`` which only accepts an ``omi_dev_…``
-        key — a JWT there 401s. ``/v2/*`` (and ``POST /v1/dev/keys``) need
-        the ID token instead. One shared client header can't serve both, so
-        the dev-user family overrides it here. None → the client's default
-        Authorization applies unchanged."""
+        key — a JWT there 401s. So does ``GET /v1/dev/key``, the dev key
+        describing itself, which ``auth login --browser`` calls first.
+        ``/v2/*`` (and ``POST /v1/dev/keys``) need the ID token instead. One
+        shared client header can't serve both, so the dev-key family
+        overrides it here. None → the client's default Authorization applies
+        unchanged."""
         p = self._profile
-        if p.auth_method == "oauth" and p.api_key and                 path.startswith("/v1/dev/user"):
+        if p.auth_method == "oauth" and p.api_key and (path.startswith("/v1/dev/user") or path == "/v1/dev/key"):
             return {"Authorization": f"Bearer {p.api_key}"}
         return None
 
@@ -462,6 +484,20 @@ def _detect_rate_limit_policy(detail: Optional[str]) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def describe_rate_limit_policy(policy: str) -> Optional[str]:
+    """Render a known policy's budget as ``25/hr`` or ``30/min``.
+
+    Returns None for a policy this version does not carry, so the caller names
+    the policy on its own instead of restating it as its own budget.
+    """
+    budget = KNOWN_RATE_LIMIT_POLICIES.get(policy)
+    if budget is None:
+        return None
+    max_requests, window_seconds = budget
+    unit = _RATE_LIMIT_WINDOW_LABELS.get(window_seconds)
+    return f"{max_requests}/{unit}" if unit else f"{max_requests} per {window_seconds}s"
+
+
 def _format_rate_limit_detail(retry_after: Optional[float], detail: Optional[str]) -> str:
     parts = []
     if retry_after is not None and retry_after > 0:
@@ -478,10 +514,18 @@ def path_segment(value: str) -> str:
     request paths. Unencoded, ``/`` and ``..`` let an ID escape its resource
     collection — httpx resolves dot-segments, so ``omi goal delete a/../../conversations/X``
     would DELETE a conversation — while ``?`` and ``#`` silently truncate the path.
+
+    Surrounding whitespace is stripped first: shell copy-paste padding is never
+    part of an ID, and ``"  ..  "`` must be rejected as a dot segment rather than
+    percent-encoded into an unexpected ``%20..%20`` lookup.
     """
-    if value in {"", ".", ".."}:
-        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, '.' or '..'.")
-    return urllib.parse.quote(value, safe="")
+    cleaned = value.strip()
+    if cleaned in {"", ".", ".."}:
+        raise UsageError(
+            message=f"Invalid ID: {value!r}",
+            detail="IDs cannot be empty, whitespace-only, '.' or '..'.",
+        )
+    return urllib.parse.quote(cleaned, safe="")
 
 
 def chunked(seq: list[Any], size: int) -> Iterator[list[Any]]:

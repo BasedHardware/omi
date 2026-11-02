@@ -13,6 +13,8 @@ import hashlib
 import logging
 import math
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 from typing import Any, Iterable
 
 from database.redis_db import create_bounded_redis_client
@@ -35,10 +37,7 @@ def enabled_for(uid: str) -> bool:
     """Master kill switch plus the final-pass policy's stable SHA-256 UID cohort."""
     if not uid or os.getenv('SYNC_LEGACY_FRESH_ENABLED', 'false').strip().lower() != 'true':
         return False
-    allowlist = {
-        value.strip() for value in os.getenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', '').split(',') if value.strip()
-    }
-    if uid in allowlist:
+    if in_rollout_cohort(uid, 'sync-legacy-fresh'):
         return True
     try:
         percent = float(os.getenv('SYNC_LEGACY_FRESH_PERCENT', '0'))

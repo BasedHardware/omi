@@ -17,6 +17,7 @@ READS = Counter(
 )
 
 BRIDGE_FIELDS = [
+    'sync_bridge_pending',
     'id',
     'deleted',
     'sync_merged_into',
@@ -27,7 +28,16 @@ BRIDGE_FIELDS = [
     'sync_bridge_audio_target',
     'private_cloud_sync_enabled',
 ]
-PROVENANCE_FIELDS = ['id', 'client_device_id', 'started_at', 'finished_at']
+PROVENANCE_FIELDS = [
+    'id',
+    'client_device_id',
+    'started_at',
+    'finished_at',
+    'record_lane_owner',
+    'source',
+    'uses_custom_stt',
+    'deleted',
+]
 
 
 def read_metadata(database: Any, uid: str, conversation_id: str, *, operation: str) -> dict | None:

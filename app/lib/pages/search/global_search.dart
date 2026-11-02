@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -770,7 +771,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             _Row(
               key: ValueKey('search_conversation_${conversation.id}'),
               leading: _Emoji(conversation.structured.emoji),
-              title: conversation.structured.title,
+              title: presentableConversationTitleOrFallback(conversation, l10n),
               subtitle: [
                 dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                 if (conversation.matchSnippets.isNotEmpty) conversation.matchSnippets.first.text,
@@ -803,7 +804,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               maxTitleLines: 2,
               onTap: () {
                 _remember(_searchedQuery);
-                context.read<MemoriesProvider>().setSearchQuery(_searchedQuery);
+                context.read<MemoriesProvider>().setSearchQuery(_memoriesFilterFor(_searchedQuery, memory.content));
                 routeToPage(context, const MemoriesPage());
               },
             ),
@@ -836,7 +837,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                 for (final conversation in _scopeConversations)
                   _Row(
                     leading: _Emoji(conversation.structured.emoji),
-                    title: conversation.structured.title,
+                    title: presentableConversationTitleOrFallback(conversation, context.l10n),
                     subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                     onTap: () => _openConversation(conversation),
                   ),
@@ -866,6 +867,21 @@ Color? _hexColor(String hex) {
   final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
   if (value == null) return null;
   return Color(hex.length <= 7 ? 0xFF000000 | value : value);
+}
+
+/// What Memories is filtered by when a memory found for [query] is opened.
+///
+/// Memory search finds a memory that holds any one word of the query, but Memories only lists the
+/// memories that hold its whole filter. Keep the whole query when this memory holds it, otherwise
+/// use the longest query word it holds, so the memory that was tapped is in the list.
+String _memoriesFilterFor(String query, String content) {
+  final text = content.toLowerCase();
+  if (text.contains(query.toLowerCase())) return query;
+  String? word;
+  for (final candidate in query.split(RegExp(r'[\s.,]+'))) {
+    if (candidate.length > (word?.length ?? 0) && text.contains(candidate.toLowerCase())) word = candidate;
+  }
+  return word ?? query;
 }
 
 /// A browse tile: glyph, count, and a one-word label. No count when the server could not count.

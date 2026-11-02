@@ -20,6 +20,7 @@ import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/transcript.dart';
+import '../helpers/reprocess_fakes.dart';
 
 TranscriptSegment _line(String id, int speakerId, String text, double start, {String? personId}) => TranscriptSegment(
       id: id,
@@ -111,10 +112,10 @@ void main() {
           saves.add((ids.join(','), personId));
           return true;
         },
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
           regenerations++;
           return conversation;
-        },
+        }),
         fetchConversation: (_) async => conversation,
       )
         ..selectedDate = conversation.createdAt

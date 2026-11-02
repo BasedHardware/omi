@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/devices/saved_pendant_reconnect.dart';
 import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/services/devices/models.dart';
 
@@ -28,6 +29,11 @@ class BleBridge implements BleFlutterApi {
   static final BleBridge instance = BleBridge._();
 
   BleBridge._();
+
+  @override
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs) {
+    recordSavedReconnect('native_retry', attempt, result, disconnectedMs);
+  }
 
   final Map<String, CharacteristicValueCallback> _characteristicCallbacks = {};
   final Map<String, ConnectionStateCallback> _disconnectCallbacks = {};
@@ -64,6 +70,30 @@ class BleBridge implements BleFlutterApi {
   }
 
   CaptureIngressHealth? ingressHealth(String deviceId) => _ingressHealth[deviceId.toUpperCase()];
+
+  /// Support export is an allowlist, never the native raw snapshot. There is no
+  /// capture-health history ring; absence is unknown, not an empty health claim.
+  Map<String, dynamic>? diagnosticsCaptureHealth(String deviceId, {DateTime? observedAt}) {
+    final health = ingressHealth(deviceId);
+    if (health == null) return null;
+    final now = observedAt ?? DateTime.now();
+    return {
+      'observed_at_ms': now.millisecondsSinceEpoch,
+      'phase': health.phase,
+      'generation': health.generation,
+      'reason': health.reason,
+      'valid_until_ms': health.validUntilMs,
+      'subscription_confirmed': health.subscriptionConfirmed,
+      'unverified_since_ms': health.unverifiedSinceMs,
+      'last_audio_at_ms': health.lastAudioAtMs,
+      'recovery_outcome': health.recoveryOutcome,
+      'recovery_spent': health.recoverySpent,
+      'reconnect_spent': health.reconnectSpent,
+      'verified': health.verifiedAt(now),
+      'audio_lease_valid': health.audioLeaseValid(now),
+    };
+  }
+
   void addIngressListener(VoidCallback listener) => _ingressListeners.add(listener);
   void removeIngressListener(VoidCallback listener) => _ingressListeners.remove(listener);
 

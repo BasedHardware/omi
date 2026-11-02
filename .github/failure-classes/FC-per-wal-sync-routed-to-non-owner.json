@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-per-wal-sync-routed-to-non-owner",
+  "violated_contract": "A per-recording sync must reach the sub-sync that owns that exact recording, and a transfer that moved nothing must not be reported as done. WalSyncs.syncWal chose a handler from the shared WalStorage.sdcard tag, so recordings listed by the multi-file storage sync (firmware 3.0.17 to 3.0.19) went to SDCardWalSyncImpl.syncWal, which returns null for a recording it does not list. Transfer to Phone read nothing from the device and still showed 'Transfer complete'. Ring recordings hit the same misroute until #7218, and StorageSyncImpl.syncWal also dropped its own completion result.",
+  "canonical_prevention": "Route each per-recording action by ownership of the exact Wal instance (membership in the sub-sync's own list), never by its storage tag alone, and have the owner raise an incomplete or refused transfer as an error instead of returning null or an empty success. Cover each routed kind through WalSyncs.syncWal: a recording the sub-sync owns reaches its device read, durable phone copy, synced status and device release, and an incomplete transfer fails and keeps the recording on the device.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/legacy_storage_limitless_seam_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/wal_syncs.dart",
+    "app/lib/services/wals/storage_sync.dart",
+    "app/lib/services/wals/sdcard_wal_sync.dart",
+    "app/lib/services/wals/ring_storage_sync.dart"
+  ],
+  "status": "open"
+}

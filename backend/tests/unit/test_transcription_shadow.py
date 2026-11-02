@@ -268,7 +268,11 @@ def test_comparison_prometheus_metrics_use_only_closed_outcome_and_safety_labels
 
 def test_duplicate_reservation_never_writes_or_counts_result(monkeypatch):
     conversation = SimpleNamespace(audio_files=[SimpleNamespace(duration=10, chunk_timestamps=[100])])
-    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', lambda *_args: {'synthetic': True})
+    monkeypatch.setattr(
+        shadow.conversations_db,
+        'get_conversation',
+        lambda *_args: {'synthetic': True, 'record_lane_owner': 'legacy_final_pass_v1'},
+    )
     monkeypatch.setattr(shadow, 'deserialize_conversation', lambda _raw: conversation)
     monkeypatch.setattr(shadow, '_enabled', lambda *_args: True)
     monkeypatch.setattr(shadow, '_reserve_budget', lambda *_args: 'duplicate')
@@ -327,6 +331,29 @@ def test_result_write_is_fenced_by_account_deletion_intent(monkeypatch):
     parent.get.return_value.to_dict.return_value = {}
     shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
     parent.get.assert_called_once_with(transaction=transaction)
+    transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
+
+
+def test_restored_account_can_write_transcription_shadow_result(monkeypatch):
+    client = MagicMock()
+    user = MagicMock()
+    parent = user.collection.return_value.document.return_value
+    marker = MagicMock()
+    marker.get.return_value.exists = True
+    marker.get.return_value.to_dict.return_value = {'wipe_status': 'cancelled'}
+    client.collection.side_effect = lambda name: {
+        'users': SimpleNamespace(document=lambda _uid: user),
+        'account_deletions': SimpleNamespace(document=lambda _uid: marker),
+    }[name]
+    parent.get.return_value.exists = True
+    parent.get.return_value.to_dict.return_value = {}
+    transaction = client.transaction.return_value
+    monkeypatch.setattr(shadow, 'db', client)
+    monkeypatch.setattr(shadow.firestore, 'transactional', lambda fn: fn)
+
+    shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
+
+    marker.get.assert_called_once_with(transaction=transaction)
     transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
 
 

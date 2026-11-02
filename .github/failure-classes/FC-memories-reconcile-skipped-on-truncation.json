@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-memories-reconcile-skipped-on-truncation",
+  "violated_contract": "A cache reconcile that is the only tombstone path for rows deleted elsewhere must not end its run without a prune or a scheduled retry when the server truncates. The list view renders the server-authoritative page, but search reads the local cache, so a synced row whose local tombstone was never set stays searchable for the rest of the session when the reconcile gives up on a truncated pull and waits for the next launch.",
+  "canonical_prevention": "Schedule a bounded in-launch retry (monotonic backoff, capped attempts) that re-enters the same guarded reconcile path — fresh cursor, owner-authorization re-check before every prune — and emit outcome telemetry (complete / truncated_exhausted / aborted_owner_changed / failed) so the failure class is measurable. Latch only on a complete pull; an exhausted run stays unlatched so the next launch retries.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/MemoriesReconcileRetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift"
+  ],
+  "status": "open"
+}

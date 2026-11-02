@@ -7,6 +7,14 @@ import XCTest
 
 @MainActor
 final class ConversationDetailAutomationStateTests: XCTestCase {
+  func testCitationFocusDoesNotPublishAnotherOpenRequest() {
+    let state = ConversationDetailAutomationState()
+    state.prepareCitationFocus(conversationId: "conversation-1", transcriptSegmentIds: ["segment-2"])
+
+    XCTAssertNil(state.takePendingOpenRequest())
+    XCTAssertTrue(state.syncPresentedDetail(conversationId: "conversation-1", transcriptDrawerOpen: false))
+    XCTAssertEqual(state.focusedTranscriptSegmentIds, ["segment-2"])
+  }
   func testProcessingBannerReservesSpaceAboveConversationMetadata() {
     let idle = ConversationDetailProcessingLayout(isProcessing: false) {
       Color.red.frame(height: 32)
@@ -165,6 +173,33 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
       ConversationDetailRequestToken(conversation: processing),
       ConversationDetailRequestToken(conversation: completed))
     XCTAssertTrue(ConversationsPage.shouldReplaceSelectedConversation(processing, with: completed))
+  }
+
+  func testRestoringAMatchedSearchHitRefreshesTheQuery() {
+    // #23695: restoring a discarded conversation can reprocess its summary,
+    // which can be the only thing that matched the active query. Patching the
+    // row in place instead of revalidating left a stale hit in the list.
+    XCTAssertTrue(
+      ConversationsPage.shouldRefreshSearchAfterRestore(
+        searchResults: [Self.conversation(id: "conversation-1")],
+        searchQuery: "summary",
+        restoredId: "conversation-1"))
+  }
+
+  func testRestoringAConversationOutsideTheCurrentSearchDoesNothing() {
+    XCTAssertFalse(
+      ConversationsPage.shouldRefreshSearchAfterRestore(
+        searchResults: [Self.conversation(id: "conversation-1")],
+        searchQuery: "summary",
+        restoredId: "conversation-2"))
+  }
+
+  func testRestoringWithNoActiveSearchDoesNothing() {
+    XCTAssertFalse(
+      ConversationsPage.shouldRefreshSearchAfterRestore(
+        searchResults: [Self.conversation(id: "conversation-1")],
+        searchQuery: "",
+        restoredId: "conversation-1"))
   }
 
   /// The summary pane's markdown must stay drag-selectable *through AppKit*:

@@ -1,10 +1,11 @@
 /** Approved PostHog ingestion transform: desktop_health_event retained at 10%.
  * Reader/transform contract: docs/posthog-events.md#desktop-health-event-sampling.
- * Disarmed until the rollout owner confirms the actual enablement timestamp.
- * Deploy that constant first; enable ingestion sampling at that instant or later.
+ * Armed 2026-10-17: the transform (hog function 01a13f9f…, cost cut) began
+ * sampling desktop_health_event at 03:43:08Z, which is the cutover below.
  */
 export const DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER = 10;
-export const DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER: string | null = null;
+export const DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER: string | null =
+  "2026-10-17T03:43:08Z";
 
 // Weight at event time, before daily aggregation, so a cutover-spanning window
 // never rescales historical unsampled events. Apply only to PostHog health rows,

@@ -774,6 +774,17 @@ def test_file_dispatch_uses_extension_title_and_filename_date():
     [
         ('20260912_143005.txt', 'UTC', datetime(2026, 9, 12, 14, 30, 5, tzinfo=timezone.utc)),
         ('Sync 2026-09-12T09-15.vtt', 'America/New_York', datetime(2026, 9, 12, 13, 15, tzinfo=timezone.utc)),
+        # Zoom names cloud recordings by their GMT start; the same digits without "GMT" stay local.
+        (
+            'GMT20240508-213012_Recording.transcript.vtt',
+            'America/New_York',
+            datetime(2024, 5, 8, 21, 30, 12, tzinfo=timezone.utc),
+        ),
+        (
+            '20240508-213012_Recording.transcript.vtt',
+            'America/New_York',
+            datetime(2024, 5, 9, 1, 30, 12, tzinfo=timezone.utc),
+        ),
         ('2026-02-30 10_00 bad date.txt', 'UTC', None),
         ('Weekly sync.txt', 'UTC', None),
         ('0001-01-01 00_00 call.txt', 'Asia/Tokyo', None),
@@ -1257,6 +1268,15 @@ def test_single_file_upload_and_origin_mapping(tmp_path, job):
     (conversation,) = job.store.docs.values()
     assert conversation['source'] == ConversationSource.plaud.value
     assert conversation['structured']['title'] == 'Standup'
+
+
+def test_a_zoom_recording_is_dated_by_its_gmt_start_not_the_users_timezone(tmp_path, job):
+    """Zoom names a cloud recording by its start in GMT; read as Tokyo time it would be stored nine hours early."""
+    _run(tmp_path, 'GMT20240508-213012_Recording.transcript.vtt', VTT.encode('utf-8'), tz='Asia/Tokyo')
+
+    (conversation,) = job.store.docs.values()
+    assert conversation['started_at'] == datetime(2024, 5, 8, 21, 30, 12, tzinfo=timezone.utc)
+    assert conversation['created_at'] == conversation['started_at']
 
 
 def test_upload_without_transcripts_fails_with_a_clear_message(tmp_path, job):

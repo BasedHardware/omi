@@ -35,7 +35,6 @@ CONVERSATION_SMART_MERGE_LABELS = {
 }
 CONVERSATION_SMART_MERGE_REASONS = frozenset(
     {
-        'uid_not_allowed',
         'not_eligible_source',
         'not_capture_end',
         'conversation_not_eligible',
@@ -55,6 +54,7 @@ CONVERSATION_SMART_MERGE_REASONS = frozenset(
         'jev_same',
         'jev_different',
         'absorbed',
+        'size_cap_stop',
         'survivor_changed',
         'error',
         'flatten_ancestor_invalid',
@@ -196,22 +196,20 @@ def record_smart_merge_flatten(outcome: str, reason: str) -> None:
         pass
 
 
-CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS = frozenset({'merge', 'kept', 'skip'})
-CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL = _reuse_or_create(
+MERGE_PROCESSING_STAGE = _reuse_or_create(
     Counter,
-    'omi_conversation_smart_merge_wallclock_shadow_total',
-    'Smart-merge wall-clock shadow verdicts for proven same-recording pairs the legacy gate skipped. '
-    'Never labeled by uid. Per-pod; sum() across jobs.',
-    ['would', 'reason'],
+    'omi_conversation_merge_processing_stage_total',
+    'Committed smart absorbs by processing stage and whether donor notes were present; no user labels.',
+    ['stage', 'donor_notes'],
 )
 
 
-def record_conversation_smart_merge_wallclock_shadow(would: str, reason: str) -> None:
-    """Never raises: observability must not change a finalization outcome."""
+def record_merge_processing_stage(before_notes: bool, donor_notes: bool | None) -> None:
+    """Receipts distinguish actual rich-note waste from completed raw/minimum rows."""
     try:
-        CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL.labels(
-            would=would if would in CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS else 'other',
-            reason=reason if reason in CONVERSATION_SMART_MERGE_REASONS else 'other',
+        MERGE_PROCESSING_STAGE.labels(
+            stage='before_notes' if before_notes else 'after_notes',
+            donor_notes='yes' if donor_notes is True else 'no' if donor_notes is False else 'unknown',
         ).inc()
     except Exception:
         pass

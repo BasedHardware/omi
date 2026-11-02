@@ -58,10 +58,10 @@ CLIENT_OFFERED_LANGUAGES = (
     'zh',
 )
 
-# Must keep their exact provider: widening Velma's gate would pull these — including
-# 'multi', the default for most users — off self-hosted Parakeet onto metered Velma.
+# Named supported languages retain provider preference. Unknown multilingual
+# audio needs the multilingual provider even when Parakeet is cheaper.
 ALREADY_ROUTED = {
-    'multi': PrerecordedSTTService.PARAKEET,
+    'multi': PrerecordedSTTService.MODULATE,
     'ru': PrerecordedSTTService.PARAKEET,
     'pl': PrerecordedSTTService.PARAKEET,
     'uk': PrerecordedSTTService.PARAKEET,

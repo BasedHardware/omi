@@ -323,9 +323,9 @@ enum RewindError: LocalizedError {
   case storageError(String)
   /// A storage failure that preserves the underlying OS error (e.g. an
   /// AVAssetWriter disk-out-of-space failure). Keeping the wrapped `NSError`
-  /// lets the Sentry classifier recognize environmental disk failures
+  /// lets the error classifier recognize environmental disk failures
   /// ("The file couldn't be saved") and collapse them into breadcrumbs instead
-  /// of flooding Sentry with unactionable error clusters.
+  /// of flooding the log with unactionable error clusters.
   case storageWriteFailed(String, underlying: Error)
   case ocrFailed(String)
   case screenshotNotFound

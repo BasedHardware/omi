@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -324,6 +325,66 @@ def test_reviewed_parent_accepts_preview_alias_without_early_exit(tmp_path):
 
 def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
+
+
+def _module_bool_constant(path: Path, name: str) -> bool:
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool), name
+            return node.value.value
+    raise AssertionError(f"{name} not found in {path}")
+
+
+def test_play_held_changes_flags_agree():
+    # 2026-10-28 -> 11-01: the Play commit flag and both Codemagic blocks were
+    # held, but the dispatcher's ANDROID_HELD_CHANGES_MODE stayed False, so the
+    # held Android distribution stalled with no reminder. All four move together.
+    promote = _module_bool_constant(REPO_ROOT / "app/scripts/mobile_store_promote.py", "CHANGES_NOT_SENT_FOR_REVIEW")
+    dispatcher = _module_bool_constant(
+        REPO_ROOT / ".github/scripts/mobile_distribution.py", "ANDROID_HELD_CHANGES_MODE"
+    )
+    workflows = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))["workflows"]
+    codemagic = {
+        name: bool(workflows[name]["publishing"]["google_play"].get("changes_not_sent_for_review", False))
+        for name in ("android-internal-auto", "android-prod-internal")
+    }
+    assert dispatcher == promote, (dispatcher, promote)
+    assert set(codemagic.values()) == {promote}, (codemagic, promote)
+
+
+def test_android_internal_publishers_hold_changes_for_console_review():
+    document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))
+    auto_publisher = document["workflows"]["android-internal-auto"]["publishing"]["google_play"]
+    workflow = document["workflows"]["android-prod-internal"]
+    publisher = workflow["publishing"]
+
+    # The 2026-10-28 android-internal-auto uploads failed at Publishing:
+    # "Changes cannot be sent for review automatically." Keep both Play
+    # publishing blocks held until the Console review submission.
+    assert auto_publisher["changes_not_sent_for_review"] is True
+    assert publisher["google_play"]["track"] == "internal"
+    assert publisher["google_play"]["changes_not_sent_for_review"] is True
+    assert publisher["google_play"]["release_name"] == "$CM_TAG [$CM_BUILD_ID]"
+    assert "release_promotion" not in publisher["google_play"]
+
+    build_script = workflow["scripts"][-1]["script"]
+    assert build_script.index("flutter build appbundle") < build_script.index(".omi-android-prod-internal-build-identity")
+    assert 'echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"' in build_script
+    assert 'echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"' in build_script
+    assert "printf '%s\\n%s\\n%s\\n%s\\n' \"$BUILD_NAME\" \"$BUILD_NUMBER\" \"${CM_TAG:?CM_TAG is required}\"" in build_script
+    assert '"${CM_BUILD_ID:?CM_BUILD_ID is required}"' in build_script
+    assert ".omi-android-prod-internal-build-identity\"\n" in workflow["scripts"][0]["script"]
+
+    post_publish = publisher["scripts"]
+    assert len(post_publish) == 1
+    promotion_script = post_publish[0]["script"]
+    assert "if [[ ! -f \"$IDENTITY\" ]]" in promotion_script
+    assert "--confirm promote-internal-to-alpha" in promotion_script
+    assert "--platform android" in promotion_script
+    assert "--version \"${PROMOTE_BUILD_NAME:?missing Android build name}\"" in promotion_script
+    assert "--android-build \"${PROMOTE_BUILD_NUMBER:?missing Android build number}\"" in promotion_script
+    assert "--build-tag \"${PROMOTE_BUILD_TAG:?missing Android release tag}\"" in promotion_script
+    assert "--build-id \"${PROMOTE_BUILD_ID:?missing Codemagic build ID}\"" in promotion_script
 
 
 def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str) -> list[str]:

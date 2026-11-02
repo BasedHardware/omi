@@ -1543,8 +1543,10 @@ class CaptureCoordinator {
                   (transition.effects.first as RunStage).stage is PersistDeviceMuteStage;
               if (i == 0 || preparedDeviceMute) {
                 final requested = (transition.effects[i] as PolicyWrite).muted;
-                final pausedBatch =
-                    _state.phase == CapturePhase.phoneBatchPaused || _state.phase == CapturePhase.pendantBatchPaused;
+                final pausedBatch = _state.phase == CapturePhase.phoneBatchPaused ||
+                    _state.phase == CapturePhase.pendantBatchPaused ||
+                    working.phase == CapturePhase.phoneBatchPaused ||
+                    working.phase == CapturePhase.pendantBatchPaused;
                 bool? effectiveMuted;
                 Object? readError;
                 StackTrace? readStack;
@@ -2305,6 +2307,7 @@ CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment
     CapturePhase.pendantBatchLive => CaptureTransition(state.copyWith(phase: CapturePhase.pendantBatchPaused), const [
         RunStage(PersistDeviceMuteStage(true)),
         PolicyWrite(true),
+        RunStage(RecordingMarkStage(RecordingState.pause)),
         RunStage(PauseDeviceTailStage()),
       ]),
     // A suspended pendant only records wasPaused — pausing must never write

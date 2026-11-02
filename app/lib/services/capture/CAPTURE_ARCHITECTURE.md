@@ -10,6 +10,8 @@ Related documents:
 
 - `OWNERSHIP.md` — the C1 seam contract and injectable fakes.
 - `CAPTURE_POLICY.md` — the durable capture-policy (mute) admission contract.
+- `../../../docs/transcription-connectivity-recovery.md` — connectivity generations,
+  transcription settings and recording-preserving recovery checks.
 - `capture_session_owner.dart` — generation/foreground/recovery authority.
   The coordinator deliberately does **not** duplicate it: `CaptureSessionOwner`
   stays the fence for stale callbacks and app-lifecycle recovery.
@@ -225,6 +227,16 @@ interrupted→record/deviceRecord restore and the mic restart live in
 `_socketConnectedBody`, guarded by staged live ownership. None of these paths
 opens a capture source; their remaining bookkeeping belongs in the
 coordinator admission fence during the next seam extraction.
+
+The uplink-policy seam also reconciles keepalive when the legacy mirror becomes
+`deviceRecord` and after coordinator commits. An admitted `pendantLive` owner
+with transcription not ready must not lose its retry merely because socket
+setup/close ran before BLE activation finished. Reconciliation preserves an
+already-active timer and marks the device reconnect notification pending. The
+keepalive codec read has a ten-second deadline using the capture scheduler;
+expiry returns without failing capture or opening a socket, releasing the
+serialized tick so the next fifteen-second retry can run. Late codec results
+cannot execute reconnect effects.
 
 ### Synchronous surfaces that remain outside the reducer
 

@@ -95,4 +95,67 @@ describe('SummaryTab overview markdown', () => {
     expect(screen.getByTestId('map')).toBeInTheDocument();
     expect(screen.queryByText(/## Key points/)).not.toBeInTheDocument();
   });
+  it.each([false, true])(
+    'repairs overview text without changing the note (map: %s)',
+    (withMap) => {
+      const overview = 'Overview ([s01234]). []';
+      const insights = [
+        { text: 'Insight [s01234, s99999] and []', kind: 'memory' as const },
+      ];
+      const { container } = render(
+        <SummaryTab
+          overview={overview}
+          sections={[{ heading: 'Discussion', body_markdown: 'Different projection' }]}
+          insights={insights}
+          transcriptSegments={[
+            {
+              id: 's01234',
+              text: 'Evidence',
+              start: 0,
+              end: 1,
+              speaker: 'spk 0',
+              is_user: true,
+            },
+          ]}
+          conversationId="conv-1"
+          appResults={[]}
+          suggestedAppIds={[]}
+          geolocation={
+            withMap ? { latitude: 37, longitude: -122, address: 'Here' } : null
+          }
+        />,
+      );
+      expect(screen.getByText('Overview .')).toBeInTheDocument();
+      expect(container.textContent).not.toContain('s01234');
+      expect(insights[0].text).toBe('Insight [s01234, s99999] and []');
+    },
+  );
+  it.each([false, true])('repairs mounted section insights (map: %s)', (withMap) => {
+    const insights = [
+      { text: 'Insight [s01234, s99999] and []', kind: 'memory' as const },
+    ];
+    render(
+      <SummaryTab
+        overview=""
+        sections={[{ heading: 'Discussion', body_markdown: 'Facts' }]}
+        insights={insights}
+        transcriptSegments={[
+          {
+            id: 's01234',
+            text: 'Evidence',
+            start: 0,
+            end: 1,
+            speaker: 'spk 0',
+            is_user: true,
+          },
+        ]}
+        conversationId="conv-1"
+        appResults={[]}
+        suggestedAppIds={[]}
+        geolocation={withMap ? { latitude: 37, longitude: -122, address: 'Here' } : null}
+      />,
+    );
+    expect(screen.getByText('Insight s99999 and')).toBeInTheDocument();
+    expect(insights[0].text).toBe('Insight [s01234, s99999] and []');
+  });
 });

@@ -16,7 +16,9 @@
     "app/test/fixtures/capture_policy.json",
     "app/test/unit/capture_mute_admission_test.dart",
     "backend/tests/unit/test_manual_speaker_assignments.py",
-    "app/test/unit/transcript_speaker_identity_test.dart"
+    "app/test/unit/transcript_speaker_identity_test.dart",
+    "backend/tests/unit/test_batch_pipeline_live.py",
+    "backend/tests/integration/test_batch_pipeline_live_firestore.py"
   ],
   "evidence_prs": [
     9365,

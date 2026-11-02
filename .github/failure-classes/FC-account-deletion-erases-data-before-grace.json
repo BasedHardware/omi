@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-account-deletion-erases-data-before-grace",
+  "violated_contract": "A user who requests account deletion to take a break must be able to restore the same account and its held or unprocessed recordings before permanent erasure. The current destructive request path can remove Firebase Auth, Firestore, audio objects and vectors before the owner can return, so one mistaken choice irreversibly loses recoverable recordings.",
+  "canonical_prevention": "Only persist a pending-deletion marker and grace deadline when the client explicitly opts in with `?grace=true` and the default-on ACCOUNT_DELETION_GRACE_ENABLED kill switch is on. Requests without opt-in, erase-now requests, a zero-day window, or the kill switch being off must retain immediate erasure for released clients without restore UI. For opted-in requests, fence ordinary reads and writes, cancel billing and revoke sessions, retain data until the recorded deadline, and allow an authenticated owner to restore before a transactional worker claim; reconcile incomplete admission actions and dispatch the existing legal-hold-gated wipe only after both the deadline and action receipt. Test legacy admission, opt-in admission, restore, due-time and restore-versus-claim behavior with fakes.",
+  "canonical_prevention_artifact": [
+    "backend/tests/services/users/test_account_deletion.py",
+    "backend/tests/unit/test_claim_deletion_wipe_txn.py",
+    "backend/tests/routers/test_users.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/users.py",
+    "backend/routers/users.py",
+    "backend/services/users/account_deletion.py",
+    "backend/utils/other/endpoints.py"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,10 @@
+{
+  "version": "0.12.505",
+  "date": "2026-10-19",
+  "changes": [
+    "Meeting notes now use approved calendar, device identity, and screen-frame context without rollout gates; screen-frame egress still requires bucket and signer readiness, with the privacy judge as the first product gate.",
+    "Memory management now uses the canonical current-memory and retained ledger-history reads without retired belief-model or JIT controls",
+    "Negative feedback now triggers remediation for all users",
+    "Screen activity sync stops retrying after a refreshed authentication failure or while account deletion is in progress."
+  ]
+}

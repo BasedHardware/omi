@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-on-the-way-before-main.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the server reports one conversation summarizing and one sync job transcribing, Home's row is showing, and the page it opens says all recordings are synced",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-on-the-way-server-work.png",
+      "platform": "mobile-ios",
+      "description": "After: the undated sync job sits above the days and the conversation is listed under Today with the day totals",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ from utils.subscription import resolve_transcription_allowance, TRANSCRIPTION_AL
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import create_named_task
 from utils.stt import duration_probe
+from utils.stt.parakeet_request_metrics import observe_parakeet_request
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,8 @@ async def stt_transcribe(
         files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
         data = {'diarize': 'true' if diarize else 'false'}
         try:
-            resp = await client.post(upstream_url, files=files, data=data)
+            with observe_parakeet_request('v2', caller='app_proxy'):
+                resp = await client.post(upstream_url, files=files, data=data)
         except httpx.HTTPError as e:
             logger.error(f'stt_transcribe: parakeet request failed uid={uid}: {sanitize(str(e))}')
             raise HTTPException(status_code=502, detail='Transcription upstream unavailable')

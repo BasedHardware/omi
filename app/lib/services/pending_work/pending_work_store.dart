@@ -6,10 +6,10 @@ import 'package:omi/backend/http/api/pending_work.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 
-/// The server's view of pending work and of work it gave up on, for Home's pending row and the
+/// The server's view of pending work and of work it gave up on, for the device catch-up card and the
 /// bell. One shared instance; tests build their own with fakes.
 ///
-/// A backend that predates the endpoints answers 404 (or `enabled: false`): the row then reads only
+/// A backend that predates the endpoints answers 404 (or `enabled: false`): the card then reads only
 /// local state and the bell shows no attention items.
 class PendingWorkStore extends ChangeNotifier {
   PendingWorkStore({
@@ -56,7 +56,7 @@ class PendingWorkStore extends ChangeNotifier {
   int _generation = 0;
 
   /// Re-reads both server views. A failed read keeps the last good rows: a flaky network must not
-  /// empty the bell or drop the row.
+  /// empty the bell or drop the card.
   Future<void> refresh() async {
     final generation = ++_generation;
     final results = await Future.wait<Object>([_loadPending(), _loadAttention()]);

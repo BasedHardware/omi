@@ -441,7 +441,6 @@ enum RuntimeOwnerIdentity {
     await KnowledgeGraphStorage.shared.invalidateCache()
     await MainActor.run {
       FloatingBarUsageLimiter.shared.reset()
-      ProactivityFeedConsumer.shared.purgeForOwnerTransition()
     }
   }
 

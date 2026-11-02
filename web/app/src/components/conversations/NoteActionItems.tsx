@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import type { StructuredActionItem } from '@/types/conversation';
 import { noteAvatarToneIndex, noteParticipantInitials } from '@/lib/meetingNotes';
+import { presentableNoteText } from '@omi/note-shared/note-sources.mjs';
 
 const AVATAR_TONES = [
   'bg-blue-500/15 text-blue-300',
@@ -16,9 +17,20 @@ const AVATAR_TONES = [
 /**
  * Action item component
  */
-export function ActionItemRow({ item }: { item: StructuredActionItem }) {
+export function ActionItemRow({
+  item,
+  transcriptIDs = [],
+}: {
+  item: StructuredActionItem;
+  transcriptIDs?: string[];
+}) {
   const owner = typeof item.owner_name === 'string' ? item.owner_name.trim() : '';
-  const context = typeof item.context === 'string' ? item.context.trim() : '';
+  // Read-time citation repair, as for sections: legacy items may carry `[s01234]` debris.
+  const description = presentableNoteText(item.description, transcriptIDs);
+  const context =
+    typeof item.context === 'string'
+      ? presentableNoteText(item.context.trim(), transcriptIDs)
+      : '';
   const dueDate = item.due_at ? new Date(item.due_at) : null;
   const dueLabel =
     dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString() : '';
@@ -55,7 +67,7 @@ export function ActionItemRow({ item }: { item: StructuredActionItem }) {
             item.completed && 'text-text-tertiary line-through',
           )}
         >
-          {item.description}
+          {description}
         </span>
         {(owner || context || dueLabel) && (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-tertiary">
@@ -82,7 +94,13 @@ export function ActionItemRow({ item }: { item: StructuredActionItem }) {
   );
 }
 
-export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
+export function NextStepsList({
+  items,
+  transcriptIDs = [],
+}: {
+  items: StructuredActionItem[];
+  transcriptIDs?: string[];
+}) {
   if (items.length === 0) return null;
 
   return (
@@ -91,7 +109,11 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
       <ul className="divide-y divide-bg-quaternary/50">
         {items.map((item, index) => {
           const owner = typeof item.owner_name === 'string' ? item.owner_name.trim() : '';
-          const context = typeof item.context === 'string' ? item.context.trim() : '';
+          const description = presentableNoteText(item.description, transcriptIDs);
+          const context =
+            typeof item.context === 'string'
+              ? presentableNoteText(item.context.trim(), transcriptIDs)
+              : '';
           const dueDate = item.due_at ? new Date(item.due_at) : null;
           const dueLabel =
             dueDate && !Number.isNaN(dueDate.getTime())
@@ -130,7 +152,7 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
                     item.completed && 'text-text-tertiary line-through',
                   )}
                 >
-                  {item.description}
+                  {description}
                 </span>
                 {(owner || context || dueLabel) && (
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-tertiary">
@@ -166,7 +188,13 @@ export function NextStepsList({ items }: { items: StructuredActionItem[] }) {
 /**
  * Action items tab content
  */
-export function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
+export function ActionItemsTab({
+  items,
+  transcriptIDs = [],
+}: {
+  items: StructuredActionItem[];
+  transcriptIDs?: string[];
+}) {
   const completedCount = items.filter((i) => i.completed).length;
 
   return (
@@ -189,7 +217,7 @@ export function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
       {/* Action items list */}
       <ul className="space-y-3">
         {items.map((item, index) => (
-          <ActionItemRow key={index} item={item} />
+          <ActionItemRow key={index} item={item} transcriptIDs={transcriptIDs} />
         ))}
       </ul>
     </div>

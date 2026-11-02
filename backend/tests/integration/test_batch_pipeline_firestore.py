@@ -321,3 +321,110 @@ def test_idle_shard_rejoins_at_persistent_frontier_in_transaction(store):
     queue.enqueue(work('rejoin', owner='a'), 3)
     key = scheduler_control_key(owner_key('a'))
     assert store.run(lambda tx: tx.get('control', key))['p2_service'] == 60
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_head_priority_splice_uses_real_queries_and_survives_flag_rollback(store, monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', str(enabled).lower())
+    queue = Scheduler(store)
+    for sid, capture in [('newer', 20), ('head', 10)]:
+        queue.enqueue(work(sid, capture), 0)
+    first = queue.pull(1)[0]
+    assert first.item.segment_id == ('head' if enabled else 'newer')
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false')
+    queue.enqueue(work('tail', 30), 2)
+    rest = queue.pull(3, 2)
+    assert [v.item.segment_id for v in rest] == (['newer', 'tail'] if enabled else ['head', 'tail'])
+    for lease in [first, *rest]:
+        assert queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 4)
+    merge = OrderedMerge(store)
+    assert [merge.commit_next('synthetic-owner', 5)['segment_id'] for _ in range(3)] == ['head', 'newer', 'tail']
+
+
+def test_head_priority_does_not_flush_privacy_fenced_link_mutations(store, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    queue = Scheduler(store)
+    queue.enqueue(work('newer', 20), 0)
+    queue.enqueue(replace(work('head', 10), conversation_id='removed'), 0)
+    store.client.collection('users').document('synthetic-owner').collection('deleted_conversations').document(
+        'removed'
+    ).set({'deleted': True})
+    assert queue.pull(1)[0].item.segment_id == 'newer'
+    assert queue.pull(2) == []
+    assert store.run(lambda tx: tx.get('jobs', 'head'))['state'] == 'ready'
+
+
+def test_projection_cursor_handles_timestamp_ties_deleted_anchor_wrap_and_restart(store):
+    from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+
+    collection = store.client.collection(f'{store.namespace}_results')
+    for sid in ('a', 'b', 'c'):
+        collection.document(sid).set({'projection_state': 'ready', 'committed_at': 2.0})
+    scan = ProjectionDiscovery(store)
+    assert scan.next(1) == ['a']
+    collection.document('a').delete()
+    assert scan.next(1) == ['b']
+    assert scan.next(1) == ['c']
+    assert scan.next(1) == []
+    assert scan.next(1) == ['b']
+    assert ProjectionDiscovery(store).next(1) == ['b']
+
+
+def test_indexed_reverse_upload_head_survives_competing_pulls(store, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    queue = Scheduler(store)
+    for n in reversed(range(160)):
+        assert queue.enqueue(work(f'reverse-{n:03}', n), 0)
+    # Two workers may compute for this owner at once. Only one owns the head;
+    # its neighbor uses the ordinary FIFO until that pending head commits.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(queue.pull, 1) for _ in range(2)]
+        leases = [lease for future in futures for lease in future.result()]
+    assert len({lease.item.segment_id for lease in leases}) == 2
+    assert 'reverse-000' in {lease.item.segment_id for lease in leases}
+    assert len([lease for lease in leases if lease.item.segment_id == 'reverse-000']) == 1
+    by_id = {lease.item.segment_id: lease for lease in leases}
+    later = next(lease for lease in leases if lease.item.segment_id != 'reverse-000')
+    assert queue.complete(WorkResult(later.item.segment_id, 'gs://synthetic/later'), later.token, 2)
+    merge = OrderedMerge(store)
+    assert merge.commit_next('synthetic-owner', 2) is None
+    assert queue.complete(WorkResult('reverse-000', 'gs://synthetic/head'), by_id['reverse-000'].token, 3)
+    assert merge.commit_next('synthetic-owner', 3)['segment_id'] == 'reverse-000'
+    assert queue.pull(4)[0].item.segment_id == 'reverse-001'
+
+
+def test_partial_pull_failure_keeps_committed_leases_and_release_is_fenced(store, monkeypatch):
+    from utils.batch_pipeline import scheduler as module
+
+    queue = Scheduler(store)
+    for n, owner in enumerate(('a', 'b', 'light')):
+        assert queue.enqueue(work(owner, n, owner=owner), 0)
+    built = [0]
+
+    class FailingWorkItem(WorkItem):
+        def __post_init__(self):
+            built[0] += 1
+            if built[0] == 3:
+                raise ValueError('synthetic validation failure inside lease 3')
+            super().__post_init__()
+
+    # Raised inside the third lease transaction, so Firestore rolls it back.
+    monkeypatch.setattr(module, 'WorkItem', FailingWorkItem)
+    pulled = queue.pull(1, 3)
+    monkeypatch.undo()
+    assert len(pulled) == 2
+    claimed = {v.item.segment_id for v in pulled}
+    (rest,) = {'a', 'b', 'light'} - claimed
+    assert [v.item.segment_id for v in queue.pull(2, 3)] == [rest]
+    first, second = pulled
+    assert queue.complete(WorkResult(first.item.segment_id, 'gs://results/x'), first.token, 3)
+    assert not queue.release(second.item.segment_id, 'stale-token', 3)
+    assert queue.release(second.item.segment_id, second.token, 3)
+    assert not queue.release(first.item.segment_id, first.token, 3)
+    assert queue.recover(8) == 1
+    retried = queue.pull(8)[0]
+    assert retried.item.segment_id == second.item.segment_id and retried.attempt == 2
+    assert not queue.complete(WorkResult(second.item.segment_id, 'gs://results/stale'), second.token, 9)
+    assert queue.complete(WorkResult(second.item.segment_id, 'gs://results/y'), retried.token, 9)
