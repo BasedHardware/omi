@@ -81,6 +81,7 @@ def refused_candidate(job, *, prepared, after, cutoff, max_seconds, window):
             and recovery.get('provider') == 'modulate'
             and not job.get('speech_redrive')
             and 60 < job.get('duration_seconds', 0) <= max_seconds
+            and set(marker.get('recognizers') or {}) == {'soniox'}
             and (marker.get('recognizers') or {}).get('soniox', {}).get('outcome') == 'error',
             'attestation_route_mismatch',
         )
@@ -98,7 +99,7 @@ def refused_candidate(job, *, prepared, after, cutoff, max_seconds, window):
     scope.require(
         bool(marker.get('token'))
         and marker.get('paid_state') != 'spent'
-        and all(r.get('outcome') in {'error', 'refused'} for r in (marker.get('recognizers') or {}).values())
+        and ((marker.get('recognizers') or {}).get('soniox') or {}).get('outcome') in {None, 'error', 'refused'}
         and (
             not failure
             or failure == {'stage': 'provider', 'reason': 'provider_failed'}

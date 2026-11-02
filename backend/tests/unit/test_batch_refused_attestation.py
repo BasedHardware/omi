@@ -156,3 +156,26 @@ def test_attestation_never_overrules_paid_or_custody_evidence(setup, monkeypatch
         job['terminal_disposition'] = {'state': 'completed'}
     with pytest.raises(scope.ScopeRefused):
         refused_candidate(job, prepared=True, after=50, cutoff=200, max_seconds=190, window=(90, 200))
+
+
+def test_marker_refusal_attests_soniox_only_and_preserves_prior_modulate(setup, monkeypatch, legacy_dependencies):
+    client, *_ = prepared_setup(setup, monkeypatch, legacy_dependencies, duration=30)
+    job = row(client)
+    job['recovery_state'] = 'failed_held'
+    job['recovery']['provider'] = 'modulate'
+    job['speech_redrive'] = {
+        'paid_epoch': 3,
+        'provider': 'soniox',
+        'token': 'd' * 32,
+        'state': 'failed_held',
+        'started_at': 100,
+        'prior_recovery': deepcopy(job['recovery']),
+        'failure': {'stage': 'provider', 'reason': 'provider_failed'},
+        'recognizers': {'modulate': {'outcome': 'empty'}, 'soniox': {'outcome': 'error'}},
+    }
+    before = deepcopy(job)
+    assert refused_candidate(job, prepared=False, after=50, cutoff=200, max_seconds=60, window=(90, 200))
+    assert job == before
+    job['speech_redrive']['recognizers']['soniox']['outcome'] = 'empty'
+    with pytest.raises(scope.ScopeRefused, match='attestation_has_paid_evidence'):
+        refused_candidate(job, prepared=False, after=50, cutoff=200, max_seconds=60, window=(90, 200))
