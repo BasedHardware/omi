@@ -36,7 +36,9 @@ LEAD_IN_SECONDS = 0.3
 SILENCE_FLUSH_SECONDS = 1.5
 IDLE_FLUSH_SECONDS = 2.0
 TRAILING_COMPLETE_GAP_SECONDS = 1.2
-TERMINAL_PUNCTUATION = '.?!'
+# Japanese (and Chinese) sentences end in full-width marks; without them a ja
+# window never anchors and always runs to the max-context forced cut.
+TERMINAL_PUNCTUATION = '.?!。？！'
 
 
 @dataclass(frozen=True)

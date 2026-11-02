@@ -227,6 +227,101 @@ Rollback at any step: vendor routing percent → 0 (or the kill switch), which
 serves the builtin table, today's routing. Units in flight finish on their
 stamped route, and held units keep their audio.
 
+## Overflow when the GPU floor is full
+
+Selection treats GPU as always healthy, so without overflow a saturated ring
+only queues (audio kept, transcripts late) while the HPA buys on-demand nodes.
+Overflow adds one capacity input (`utils/batch_pipeline/gpu_overflow.py`). The
+ring reads **saturated** when the oldest *admissible* fresh unit (same predicate
+as `ready_for_capacity`, so allowance holds and deferred retries never count)
+is at least `BATCH_VENDOR_OVERFLOW_ENTER_SECONDS` (default 1200) old **and** at
+least `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` (default 300) admissible fresh
+units wait. It stops below half the age (default 600 s) or below half the unit
+gate. The count gate exists because stuck heads look old in
+an idle ring: at 2026-11-01 18:01Z, 111 admissible fresh units from 4 parked
+owners were 42 h old with the fleet idle. Each process samples every 30 s off
+the event loop; any read failure answers "not saturated" (today's routing).
+Before arming, check both gauges against the live
+`max by (priority)(omi_batch_pipeline_admissible_ready_units)` and raise the
+unit gate above any stuck population.
+
+While saturated:
+
+- **Vendor overflow** (owners in the vendor-routing cohort, legacy `draining`
+  or `dark`): new fresh units that would start on GPU start on the table's next
+  healthy primary vendor instead (reason `gpu_overflow`).
+- **Legacy capacity fallback** (owners whose legacy sync is still `on`; lead
+  ruling ec4a93): a new fresh upload stays on legacy sync, through the same
+  intake exit heavy-owner exclusion uses, before any custody write. Counted as
+  `omi_fallback_total{component="sync_dispatch",reason="capacity_full"}` and in
+  `omi_legacy_sync_admissions_total{reason="intake_fallback"}`. Kill switch
+  `BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED=false`. It is on by default and needs
+  no table; it ends for each owner when that owner's legacy starts draining.
+
+What never overflows: the GPU floor share (`gpu_floor_percent` owners),
+backfill (recent/deep priority), a language the row has no primary vendor for,
+and anything when the only other healthy route is failover-only (Soniox stays
+failover). Overflow is part of vendor routing: owners must be in the
+vendor-routing cohort with legacy `draining` or `dark`, and every interlock
+above applies.
+
+Table to serve: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`
+(lead ruling 7cb3fb: GPU-first, Modulate overflow, spill to legacy, no queue).
+- `selection: ordered`, rows `gpu_unsupported: [modulate, soniox]` and
+  `*: [gpu, modulate, soniox]`. Soniox is `failover_only`.
+- Modulate `daily_audio_hours_cap` 3,000 (a durable daily budget, about 2x the
+  expected 100% batch load). Soniox cap 1,000: it covers a mean full
+  Modulate outage day of unsupported-language STT (about 900 audio-h/day)
+  for about $100 at list. On a peak day, units past the cap hold with their
+  audio and redrive when Modulate returns.
+- `gpu_floor_percent` 0: ordered GPU-first already keeps every Parakeet unit
+  on the floor.
+- Overflow throughput is capped by `provider-stt`'s 10 dispatches/s.
+
+`tests/unit/test_batch_vendor_route_table_prod.py` runs the real selection
+over the file. Healthy and unsaturated, it routes every language exactly as
+`resolve_route` does, including blank, `multi` and unknown. A saturated ring
+overflows fresh Parakeet units to Modulate, never to Soniox. A Modulate outage
+fails unsupported languages over to Soniox, else holds them.
+
+Set the same compact JSON on backend-sync, backend-sync-backfill and
+backend-integration. A comma-free delimiter is needed because the JSON
+contains commas:
+
+```
+TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
+if [ -z "$TABLE" ]; then
+  echo "STOPPED: table did not parse; nothing updated"
+else
+  for s in backend-sync backend-sync-backfill backend-integration; do
+    if ! gcloud run services update "$s" --region us-central1 --project based-hardware \
+        --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"; then
+      echo "STOPPED at $s: run the rollback on the services updated before it"
+      break
+    fi
+  done
+fi
+```
+
+Each update is checked explicitly (not with `set -e`, which a `||` or `if`
+around it would suspend). The loop stops at the first failure and says where,
+so the services never stay split between two tables without notice.
+
+Once served, Soniox failover is live for vendor-routed units even at routing
+percent 0, because the stage reads the served table. Overflow needs the cohort
+too: arm with env `BATCH_VENDOR_ROUTING_PERCENT` (clamped to the batch
+percent). Do not seed `batch-vendor-routing` in `_ramp` while the actuator's
+`ramp_set` predates nested names. Rollback: `--remove-env-vars
+BATCH_VENDOR_ROUTE_TABLE` serves the builtin table (today's routing). Make it
+durable in the runtime overlay before the next deploy, or the deploy removes it.
+
+Watch: `omi_batch_pipeline_vendor_gpu_overflow_active`,
+`omi_batch_pipeline_vendor_gpu_backlog_age_seconds`,
+`omi_batch_pipeline_vendor_route_decisions_total{reason="gpu_overflow"}` and
+the Modulate audio-hours gauge against its cap. Rollback:
+`BATCH_VENDOR_OVERFLOW_ENABLED=false` keeps vendor routing but stops overflow;
+routing percent → 0 stops both.
+
 ## Plays
 
 **Vendor outage.** Confirm the breaker state
@@ -237,5 +332,6 @@ Leave the floor alone. On close, watch `vendor_held` drain at the queue rate.
 **L4 stockout.** The floor holds and scale-up fails. Do not delete or recreate
 pool nodes, and do not lower the floor to free quota. Deep backlog is
 tolerated; audio is durable while it waits. If the floor itself drops below 4
-Ready (a node lost to maintenance), vendors carry the overflow; check that no
+Ready (a node lost to maintenance), vendors carry the overflow only where
+overflow is armed (section above) and only for fresh units; check that no
 vendor is also unhealthy before expanding any percent.

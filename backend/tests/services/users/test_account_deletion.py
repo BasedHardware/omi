@@ -268,6 +268,7 @@ def _configure_compute_cleanup(monkeypatch, client):
 
 @pytest.fixture(autouse=True)
 def _stub_new_external_cleanup_boundaries(monkeypatch):
+    monkeypatch.setattr(account_deletion.vector_db, 'delete_all_user_vector_copies', MagicMock())
     monkeypatch.setattr(account_deletion.vector_db, 'index', object())
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=[]))
     monkeypatch.setattr(account_deletion, 'get_conversation_photos', MagicMock(return_value=[]))
@@ -2554,3 +2555,14 @@ def test_worker_stops_at_boundary_after_run_lock_is_lost(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1', lease_lost=lost) is False
     agent_vm.assert_not_called()
     account_deletion.auth.delete_account.assert_not_called()
+
+
+def test_account_wipe_requires_all_retained_vector_copies_to_be_removed(monkeypatch):
+    purge = MagicMock(side_effect=RuntimeError('retained partition still contains data'))
+    monkeypatch.setattr(account_deletion.vector_db, 'delete_all_user_vector_copies', purge)
+
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    purge.assert_called_once_with('uid1')
+    assert any(failure['operation'] == 'all_vector_copies' for failure in result['required_failures'])
+    assert result['best_effort_failures'] == []

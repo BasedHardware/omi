@@ -135,7 +135,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'worker_release': 'synthetic-worker',
         'namespace': 'synthetic',
     }
-    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '16'}
+    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
     assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
     assert chain['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'}
     assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
@@ -234,11 +234,9 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        # OD worker plus the stockout borrower (l4capacity) and the zero-replica T4
-        # fallback; the OD one is unchanged.
+        # Borrowing stays off in prod; the T4 sibling ships at zero replicas.
         assert sorted(d['metadata']['name'] for d in deployments) == [
             'synthetic-worker',
-            'synthetic-worker-borrow',
             'synthetic-worker-t4',
         ]
         assert deployment['spec']['replicas'] == 4  # Preserve baseline/live count for HPA.
@@ -276,9 +274,15 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     batch_size = environment_values.get('worker', {}).get('batchSize', defaults['worker']['batchSize'])
     assert batch_size == 8
     assert project_env['BATCH_PIPELINE_MODEL_BATCH_SIZE']['value'] == str(batch_size)
-    assert container['resources']['requests']['memory'] == '12Gi'
-    assert container['resources']['limits']['memory'] == '14Gi'
-    assert container['resources']['requests']['cpu'] == '4'
+    processes = environment_values.get('worker', {}).get('processes', defaults['worker']['processes'])
+    assert project_env['BATCH_PIPELINE_WORKER_PROCESSES']['value'] == str(processes)
+    # Two processes double the one-process host sizing, inside g2-standard-8.
+    sized = ('12Gi', '14Gi', '4') if processes == 1 else ('24Gi', '26Gi', '6')
+    assert (
+        container['resources']['requests']['memory'],
+        container['resources']['limits']['memory'],
+        container['resources']['requests']['cpu'],
+    ) == sized
     assert container['resources']['limits']['cpu'] == '8'
     assert container['resources']['requests']['nvidia.com/gpu'] == '1'
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
@@ -334,7 +338,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         # namespace's chain metric covers the whole fleet, so both targets
         # double: each pool HPA buys half of either demand instead of buying
         # it twice.
-        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
+        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '64'}
         assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
@@ -403,6 +407,8 @@ def render_prod(*extra):
         str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
         '--set-string',
         'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        'borrowedNodePools.enabled=true',
         *extra,
     )
 
@@ -633,6 +639,17 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
 
 
+@pytest.mark.parametrize(
+    'arguments,expected', [((), 'true'), (('--set', 'worker.sharedEmbeddingTrunkEnabled=false'), 'false')]
+)
+def test_shared_embedding_trunk_ships_on_with_helm_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED'] == expected
+
+
 @pytest.mark.parametrize('arguments,expected', [((), 'true'), (('--set', 'worker.shardSpreadEnabled=false'), 'false')])
 def test_shard_spread_ships_on_with_helm_kill_switch(arguments, expected):
     result = render(*enabled_arguments(), *arguments)
@@ -660,6 +677,28 @@ def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expec
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == expected
+
+
+@pytest.mark.parametrize(
+    'arguments,expected,memory',
+    [((), '1', ('12Gi', '14Gi')), (('--set', 'worker.processes=2'), '2', ('24Gi', '26Gi'))],
+)
+def test_worker_processes_default_one_and_two_size_the_pod(arguments, expected, memory):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    container = deployment['spec']['template']['spec']['containers'][0]
+    env = {v['name']: v.get('value') for v in container['env']}
+    assert env['BATCH_PIPELINE_WORKER_PROCESSES'] == expected
+    assert (container['resources']['requests']['memory'], container['resources']['limits']['memory']) == memory
+    assert container['resources']['limits']['nvidia.com/gpu'] == '1'  # Processes share one GPU.
+    assert container['ports'] == [{'name': 'http', 'containerPort': 8080}]  # Children stay on loopback.
+
+
+@pytest.mark.parametrize('count,message', [(0, 'must be in'), (4, 'must be in'), (3, 'processResources.3')])
+def test_worker_processes_refuse_unsized_counts(count, message):
+    result = render(*enabled_arguments(), '--set', f'worker.processes={count}')
+    assert result.returncode != 0 and message in result.stderr
 
 
 def test_gpu_skip_switches_render_overrides():
@@ -750,26 +789,50 @@ def test_t4_fallback_is_off_outside_production_values():
     assert names == ['synthetic-worker']
 
 
+def test_t4_kill_switch_removes_only_the_sibling():
+    on = [doc for doc in yaml.safe_load_all(render_prod().stdout) if doc]
+    result = render_prod('--set', 't4Fallback.enabled=false')
+    assert result.returncode == 0, result.stderr
+    off = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    for kind in ('Deployment', 'PodMonitoring'):
+        assert 'synthetic-worker-t4' not in by_name(off, kind)
+        assert by_name(off, kind) == {
+            name: doc for name, doc in by_name(on, kind).items() if name != 'synthetic-worker-t4'
+        }
+    assert by_name(on, 'HorizontalPodAutoscaler') == by_name(off, 'HorizontalPodAutoscaler')
+
+
 @pytest.mark.parametrize(
     'fallback_replicas,expected', [('', []), ('0', []), ('2', ['synthetic-batch-pipeline-worker-t4'])]
 )
-def test_rollout_verify_waits_for_a_serving_t4_fallback(tmp_path, fallback_replicas, expected):
+@pytest.mark.parametrize('failure', ['', 'lookup', 'rollout', 'digest', 'budget'])
+def test_rollout_verify_waits_for_a_serving_t4_fallback(tmp_path, fallback_replicas, expected, failure):
     workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
     step = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('name') == 'Verify rollout')
     log = tmp_path / 'rollouts'
+    reported = tmp_path / 'reported'
     kubectl = tmp_path / 'kubectl'
     kubectl.write_text(
         '#!/bin/sh\n'
         'case "$3 $4" in\n'
-        '  "rollout status") echo "${5#deploy/}" >> "$LOG";;\n'
-        '  get*) case "$*" in *spec.replicas*) printf "%s" "$FALLBACK";; *) printf "img@sha256:%s" "$DIGEST";; esac;;\n'
+        '  "rollout status") echo "${5#deploy/}" >> "$LOG";\n'
+        '    case "$5" in *-t4) [ "$FAILURE" = rollout ] && exit 1;; esac;;\n'
+        '  get*) case "$*" in\n'
+        '    *spec.replicas*) [ "$FAILURE" = lookup ] && exit 1; printf "%s" "$FALLBACK";;\n'
+        '    *-t4*) [ "$FAILURE" = digest ] && printf "wrong-image" || printf "img@sha256:%s" "$DIGEST";;\n'
+        '    *) printf "img@sha256:%s" "$DIGEST";; esac;;\n'
         'esac\n'
+        'exit 0\n'
     )
     kubectl.chmod(0o755)
-    (tmp_path / 'python3').write_text('#!/bin/sh\nexit 0\n')
+    (tmp_path / 'python3').write_text('#!/bin/sh\ntouch "$REPORTED"\n')
     (tmp_path / 'python3').chmod(0o755)
+    script = step['run']
+    if failure == 'budget':
+        # Exercise the deadline without waiting for a real 40-minute rollout.
+        script = script.replace('rollout_deadline=$((SECONDS + ${rollout_timeout%s}))', 'rollout_deadline=$SECONDS')
     result = subprocess.run(
-        ['bash', '-e', '-c', step['run']],
+        ['bash', '-e', '-c', script],
         env={
             **os.environ,
             'PATH': f'{tmp_path}:{os.environ["PATH"]}',
@@ -781,9 +844,15 @@ def test_rollout_verify_waits_for_a_serving_t4_fallback(tmp_path, fallback_repli
             'DIGEST': 'a' * 64,
             'FALLBACK': fallback_replicas,
             'LOG': str(log),
+            'FAILURE': failure,
+            'REPORTED': str(reported),
         },
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, result.stderr
+    should_fail = failure == 'lookup' or (fallback_replicas == '2' and bool(failure))
+    assert result.returncode == int(should_fail), result.stdout + result.stderr
+    assert reported.exists() != should_fail
+    if failure == 'lookup' or (fallback_replicas == '2' and failure == 'budget'):
+        expected = []
     assert log.read_text().splitlines() == ['synthetic-batch-pipeline-worker', *expected]

@@ -23,6 +23,12 @@ from utils.observability.reasons import (
 
 ROUTE_DECISIONS = Counter(contracts.METRIC_ROUTE_DECISIONS, 'Batch vendor route selections', ['route', 'reason'])
 TABLE_LOADS = Counter(contracts.METRIC_TABLE_LOADS, 'Route table resolutions by ladder rung', ['outcome'])
+GPU_OVERFLOW_ACTIVE = Gauge(
+    contracts.METRIC_GPU_OVERFLOW_ACTIVE, '1 while this process reads the GPU ring as past its fresh-backlog SLO'
+)
+GPU_BACKLOG_AGE = Gauge(
+    contracts.METRIC_GPU_BACKLOG_AGE, 'Oldest admissible fresh GPU-ring unit age at the last overflow sample'
+)
 ATTEMPTS = Counter(contracts.METRIC_ATTEMPTS, 'Settled batch vendor attempts', ['provider', 'outcome'])
 ATTEMPT_AUDIO = Counter(
     contracts.METRIC_ATTEMPT_AUDIO, 'Audio seconds sent to a vendor, by settled outcome', ['provider', 'outcome']
@@ -47,6 +53,8 @@ CAP_HITS = Counter(contracts.METRIC_CAP_HITS, 'Vendor sends refused at a spend c
 COLLECTORS = (
     ROUTE_DECISIONS,
     TABLE_LOADS,
+    GPU_OVERFLOW_ACTIVE,
+    GPU_BACKLOG_AGE,
     ATTEMPTS,
     ATTEMPT_AUDIO,
     FAILOVERS,
@@ -87,6 +95,14 @@ def route_decision(route: str, reason: VendorRouteReason | str) -> None:
 def table_load(outcome: VendorRouteTableOutcome | str) -> None:
     try:
         TABLE_LOADS.labels(outcome=reason_label(ReasonFamily.VENDOR_ROUTE, outcome, VendorRouteTableOutcome)).inc()
+    except Exception:
+        pass
+
+
+def gpu_overflow(active: bool, backlog_age_seconds: float) -> None:
+    try:
+        GPU_OVERFLOW_ACTIVE.set(1 if active else 0)
+        GPU_BACKLOG_AGE.set(max(0.0, backlog_age_seconds))
     except Exception:
         pass
 

@@ -25,6 +25,7 @@ import {
   AggregateRows,
   CAPTURE_SEGMENTS,
   captureSourceQuery,
+  deviceFunnelQuery,
   CHURNED_ROW,
   cohortQuery,
   DAYS_ROW_PREFIX,
@@ -206,6 +207,8 @@ export interface Legs {
   growth?: AggregateRows;
   activationHistory?: AggregateRows;
   captureSource?: AggregateRows;
+  /** Weekly cohorts by platform and paired-within-48h; period 0 is the newest. */
+  deviceFunnel?: AggregateRows;
   retainedHistory?: AggregateRows;
   establishedHistory?: AggregateRows;
   curve?: AggregateRows;
@@ -241,7 +244,7 @@ type LegName = keyof Legs;
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
   headline: ["finops", "mauPrior", "billing"],
   growth: ["growth"],
-  activation: ["activationHistory", "captureSource"],
+  activation: ["activationHistory", "captureSource", "deviceFunnel"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
   revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
   health: [
@@ -359,6 +362,17 @@ export function legJobs(
       ),
     captureSource: () =>
       read({ kind: "capture", end }, captureSourceQuery(end)),
+    // One cohort per read; partial cohorts are kept and only the missing retried.
+    deviceFunnel: () =>
+      periods(FUNNEL_WEEKS, async (p) =>
+        Object.assign(
+          (await sources.query(deviceFunnelQuery(back(p)))).map((r) => [
+            0,
+            ...r,
+          ]),
+          { sourceRefreshedAt: null }
+        )
+      ),
     retainedHistory: () =>
       history(
         (stop, n) => cohortQuery(stop, 37, n),
@@ -601,6 +615,97 @@ const CAPTURE_LABELS: Record<(typeof CAPTURE_SEGMENTS)[number], string> = {
   "No capture": "No capture",
 };
 
+/** Weekly cohorts on the funnel row; the oldest two are old enough to show Kept. */
+const FUNNEL_WEEKS = 6;
+const FUNNEL_KEPT_PERIOD = 4;
+const FUNNEL_PLATFORMS: Record<string, string> = {
+  ios: "iOS",
+  android: "Android",
+  macos: "macOS",
+  windows: "Windows",
+  web: "Web",
+};
+// Columns of a `deviceFunnel` row: period, entry, device, then these counts.
+const PEOPLE = 3;
+const ACTIVATED = 7;
+const KEPT = 8;
+// Only these clients send Onboarding Completed (Windows and web do not), so
+// the Onboarded step counts people who entered on one of them.
+const ONBOARDING_PLATFORMS: unknown[] = ["ios", "android", "macos"];
+const ONBOARDED = 4;
+const FUNNEL_STEPS = [
+  ["Conversation, day 1", 5],
+  ["Conversation, week 1", 6],
+  ["Activated", ACTIVATED],
+] as const;
+
+export function funnelFrames(legs: Legs, now: Date) {
+  const all = (legs.deviceFunnel || []) as unknown as unknown[][];
+  const week = (p: number) => all.filter((r) => Number(r[0]) === p);
+  const device = (rows: unknown[][]) => rows.filter((r) => Number(r[2]) === 1);
+  const organic = (rows: unknown[][]) => rows.filter((r) => Number(r[2]) !== 1);
+  const count = (rows: unknown[][], column: number) =>
+    rows.reduce((sum, r) => sum + Number(r[column]), 0);
+  const percent = (part: number, whole: number) =>
+    whole ? Math.round((1000 * part) / whole) / 10 : null;
+  const rate = (rows: unknown[][], column: number) =>
+    percent(count(rows, column), count(rows, PEOPLE));
+  const split = (step: string, rows: unknown[][], column: number): Row => ({
+    step,
+    Device: rate(device(rows), column),
+    Organic: rate(organic(rows), column),
+  });
+
+  const latest = week(0);
+  const people = count(latest, PEOPLE);
+  const funnel: Row[] = people
+    ? [
+        {
+          step: "Share of new users",
+          Device: percent(count(device(latest), PEOPLE), people),
+          Organic: percent(count(organic(latest), PEOPLE), people),
+        },
+        split(
+          "Onboarded (phone and Mac)",
+          latest.filter((r) => ONBOARDING_PLATFORMS.includes(r[1])),
+          ONBOARDED
+        ),
+        ...FUNNEL_STEPS.map(([step, column]) => split(step, latest, column)),
+      ]
+    : [];
+  const older = week(FUNNEL_KEPT_PERIOD);
+  if (people && count(older, PEOPLE))
+    funnel.push(split("Kept, weeks 2–5 (older cohort)", older, KEPT));
+
+  // Users ride in the label, largest platform first, as on Activation by capture.
+  const funnelPlatforms: Row[] = Object.entries(FUNNEL_PLATFORMS)
+    .map(([key, platform]) => ({
+      platform,
+      rows: latest.filter((r) => r[1] === key),
+    }))
+    .filter(({ rows }) => count(rows, PEOPLE) > 0)
+    .sort((a, b) => count(b.rows, PEOPLE) - count(a.rows, PEOPLE))
+    .map(({ platform, rows }) => ({
+      platform: `${platform} · ${count(rows, PEOPLE).toLocaleString("en-US")}`,
+      Device: rate(device(rows), ACTIVATED),
+      Organic: rate(organic(rows), ACTIVATED),
+    }));
+
+  // Dated by the cohort's last day, as the other cohort charts are.
+  const stop = shiftDay(utcDay(now), -7);
+  const funnelWeekly: Row[] = [];
+  for (let p = FUNNEL_WEEKS - 1; p >= 0; p--) {
+    const rows = week(p);
+    if (rows.length)
+      funnelWeekly.push({
+        date: ts(isoDay(shiftDay(stop, -7 * p - 1))),
+        Device: rate(device(rows), ACTIVATED),
+        Organic: rate(organic(rows), ACTIVATED),
+      });
+  }
+  return { funnel, funnelPlatforms, funnelWeekly };
+}
+
 export function activationFrames(
   legs: Legs,
   snapshot: WallPayload | null,
@@ -635,6 +740,7 @@ export function activationFrames(
     capture: captured,
     sources,
     maturing: maturingBand(stop, now),
+    ...funnelFrames(legs, now),
   };
 }
 

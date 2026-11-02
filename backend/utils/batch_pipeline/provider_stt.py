@@ -25,11 +25,13 @@ from dataclasses import asdict, dataclass, fields
 import asyncio
 import io
 import logging
+import re
 import time
 from typing import Any, Awaitable, Callable, ClassVar, Literal
 from uuid import uuid4
 import wave
 
+from config.batch_conversation_speakers import vendor_turns_enabled
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
 from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
@@ -581,7 +583,7 @@ async def _vendor_words(service: str, wav: bytes, duration: float, language: str
         from utils.stt.modulate_batch import ModulateBatchError, modulate_batch_async
 
         try:
-            return await modulate_batch_async(wav, language=language)
+            return await modulate_batch_async(wav, language=language, mark_fallback=True)
         except ModulateBatchError as error:
             raise VendorCallFailure('provider', 'provider_failed', _MODULATE_OUTCOMES[error.kind]) from None
     if service == 'soniox':
@@ -596,6 +598,7 @@ async def _vendor_words(service: str, wav: bytes, duration: float, language: str
                 failover=True,
                 client=get_batch_vendor_client(),
                 semaphore=get_batch_vendor_semaphore(),
+                mark_fallback=True,
             )
         except soniox_batch.SonioxBatchError as error:
             outcome = _SONIOX_OUTCOMES[error.kind]
@@ -605,6 +608,41 @@ async def _vendor_words(service: str, wav: bytes, duration: float, language: str
                 outcome = VendorAttemptOutcome.ERROR_5XX
             raise VendorCallFailure('provider', 'provider_failed', outcome) from None
     raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
+
+
+_VOICE_LABEL = re.compile(r'SPEAKER_[0-9]{2,3}')
+
+
+def vendor_turns(words: list[dict], duration: float, *, fallback: bool = False) -> list[dict]:
+    """Pyannote-shaped turns from the vendor's labelled utterances.
+
+    Only positive-duration records with a valid label carry voice; touching
+    records of one label merge, so pauses never enter a voice clip. A response
+    with any defaulted speaker is no diarization at all: its words-only labels
+    could join two people into one voice. Past the centroid label budget, the
+    labels with the least speech keep their text but carry no voice evidence.
+    """
+    from utils.batch_pipeline.voice_centroids import MAX_LABELS
+
+    if fallback:
+        return []
+    turns: list[dict] = []
+    for word in words:
+        label = word.get('speaker')
+        start, end = float(word['timestamp'][0]), min(float(word['timestamp'][1]), duration)
+        if not isinstance(label, str) or not _VOICE_LABEL.fullmatch(label) or not 0 <= start < end:
+            continue
+        if turns and turns[-1]['speaker'] == label and start <= turns[-1]['end']:
+            turns[-1]['end'] = max(turns[-1]['end'], end)
+        else:
+            turns.append({'start': start, 'end': end, 'speaker': label})
+    seconds: dict[str, float] = {}
+    for turn in turns:
+        seconds[turn['speaker']] = seconds.get(turn['speaker'], 0.0) + turn['end'] - turn['start']
+    if len(seconds) > MAX_LABELS:
+        kept = set(sorted(seconds, key=lambda label: (-seconds[label], label))[:MAX_LABELS])
+        turns = [turn for turn in turns if turn['speaker'] in kept]
+    return turns
 
 
 async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
@@ -628,19 +666,24 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
         raw, detected = response
         if not isinstance(detected, str) or not detected:
             raise ValueError('response language')
-        words = validate_words([{**word, 'word': word['text']} for word in raw], duration)
+        fallback = any(word.get('speaker_fallback') for word in raw)
+        words = validate_words(
+            [{**{k: v for k, v in word.items() if k != 'speaker_fallback'}, 'word': word['text']} for word in raw],
+            duration,
+        )
         if not words:
             raise RecoveryFailure('response_validation', 'empty_asr')
-        return words, detected
+        return words, detected, fallback
 
-    words, detected = at_stage('response_validation', 'invalid_response', validate_response)
+    words, detected, fallback = at_stage('response_validation', 'invalid_response', validate_response)
     payload = {
         'audio_seconds': duration,
         'speech_seconds': sum(span['end'] - span['start'] for span in spans),
         'speech_spans': spans,
         'words': words,
-        # Vendor speaker turns stay discarded (words-only, as recovered units; RouteConfig.speaker_turns).
-        'diarization': {'turns': []},
+        # The vendor's own unit-local turns (diarization was requested); the kill
+        # switch restores words-only units at projection too.
+        'diarization': {'turns': vendor_turns(words, duration, fallback=fallback) if vendor_turns_enabled() else []},
         'words_provider': service,
         'language': detected,
         'recovery_version': 1,

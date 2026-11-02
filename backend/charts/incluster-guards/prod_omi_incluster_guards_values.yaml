@@ -22,4 +22,12 @@ floorSchedule:
   # 2026-11-01) — every hour here must stay <= that chart floor so resuming
   # the schedule never raises the floor above the deferred state (pinned by
   # test_audio_fleet_helm).
-  hours: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]
+  # STOCKOUT HOLD (2026-11-02, parakeetguard, lead ruling 1ca4cb): 7 all hours
+  # while the us-central1 L4 stockout is live (FailedScaleUp, GCE out of
+  # resources), so L4s shed overnight cannot leave the 13Z weekday peak short;
+  # 7 pods carried the measured peak with queue p99 < 1 s.
+  # EXIT RULE: after 2 h with Parakeet Pending = 0 and no FailedScaleUp,
+  # restore the day/night table
+  #   [4]*12 + [7]*12  (4 for 00-11Z, 7 for 12-23Z)
+  # and roll incluster-guards. That restore is worth about -$24/day.
+  hours: [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]

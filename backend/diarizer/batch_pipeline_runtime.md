@@ -59,6 +59,38 @@ it already is across replicas and the serving reconciler. `1` restores the seria
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh
 arrivals, so fresh work can wait up to one extra chain.
 
+### Worker processes per GPU
+
+`BATCH_PIPELINE_WORKER_PROCESSES` (Helm `worker.processes`, default `1`, range
+1-3) runs that many independent pump processes on the pod's one GPU. Much of a
+chain's GPU-lock time is CPU, Python and IO work; a sibling's kernels fill those
+gaps (3-CPU T4 bench, chain before the shared embedding trunk: 33.8
+audio-h/GPU-h with one process, 45.4 with two, identical words and speakers).
+With the shared trunk on, two processes added nothing on that 3-CPU bench (45.1
+vs 48.3 for one), so the default stays `1` (no supervisor, the process above runs
+exactly as before) until an 8-vCPU L4 canary shows a gain. Malformed or
+out-of-range values run one.
+
+The container's process becomes a supervisor that loads no models and touches
+no cloud client. Each child re-executes this module as the unchanged
+single-process runtime with its own models, leases, fences, pump depth and
+7200-audio-second decoded bound, exactly like another replica; its scheduler
+and leader identities are per process. Children serve probes and metrics on
+loopback ports 8081+. The supervisor's pod port answers `/ready` only once every
+child is ready, `/health` only while every running child's event loop ticks,
+and `/metrics` with every child's series labelled `worker_process`. Only child
+0 samples queue gauges, so Firestore sampling and the HPA's per-pod series stay
+as with one process; the adapter's chain-occupancy rule already takes the max
+per pod, so occupancy never adds across siblings. SIGTERM reaches every child
+and the supervisor waits for each drain. Any child that exits unrequested,
+including a fatal-CUDA quarantine, drains its siblings and the supervisor exits
+non-zero so Kubernetes replaces the pod and its GPU state.
+
+Host memory scales with the count: the chart takes pod resources from
+`processResources.<count>` and refuses a count without an entry. Two processes
+double the one-process sizing (24Gi request / 26Gi limit, 6 / 8 CPU; the limit stays under node allocatable minus daemons) inside
+`g2-standard-8` allocatable; three do not fit that machine shape.
+
 ## Encrypted staging and results
 
 `utils.batch_pipeline.artifact_policy.create_artifact_store(store, storage_client,
@@ -144,6 +176,28 @@ count. The L4 HPA's chain-busy metric is namespace-wide, so serving T4 replicas
 raise the L4 recommendation; scale the fallback to 0 as L4 workers schedule
 and the 1800s scale-down window sheds the excess. The bench did not cover flight batching, pipeline depth 2 or lease and
 storage IO; watch the T4 replicas' stage timings and peak memory on first use.
+
+At the 100% admission target this adds a second GPU supply source before the
+fresh queue reaches saturation. While legacy sync is on, saturated admission
+spills back to legacy sync; Modulate overflow covers drained owners only. T4
+capacity reduces pressure on that already capped legacy queue; it does not
+change admission, draining or vendor routing. A T4 is not a one-for-one L4
+replacement: eight T4s add about 3.85 L4-equivalents using the loader bench,
+not a measured end-to-end fleet guarantee. Four ready L4s plus eight T4s would
+still fall short of a nine-L4 peak projection. Gate on ready capacity and
+fresh-owner wait, not the sum of pod counts.
+
+The on-demand compute envelope is $0 at zero nodes, $0.730/h per T4 node and
+$5.84/h at the pool's eight-node ceiling, plus boot disk and network charges.
+These are us-central1 list rates, not billed spend or commitments:
+[N1 VM pricing](https://cloud.google.com/products/compute/pricing/general-purpose)
+and [T4 pricing](https://cloud.google.com/products/compute/gpus-pricing).
+There is no reservation, commitment or storage migration. Set N to at most
+the lesser of eight and Pending L4 pods; increase only after the first T4's
+stage timing, memory and fresh-owner wait are healthy. Scale to zero when
+L4s recover; `t4Fallback.enabled=false` removes the sibling on the next chart
+upgrade. Setting `t4Fallback.replicas=0` alone does not stop a live sibling:
+Helm deliberately preserves its operator-set count.
 
 An operator creates the pool out-of-band, not through IaC or this chart, with
 labels `env=<env>,service=batch-pipeline` (`env=dev` or `env=prod`), taints

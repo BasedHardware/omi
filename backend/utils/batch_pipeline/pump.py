@@ -40,6 +40,12 @@ SEGMENT_OWNER_MEMO = 4096
 # Bound on one lease-renewal round trip; a timeout marks the lease lost but the
 # blocking DB leaf may still land later, fenced by its token.
 HEARTBEAT_TIMEOUT_SECONDS = 8
+# Spend admission checks leases serially under the server deadline, so one call
+# carries at most this many leases; leases a call cannot reach come back
+# unevaluated and wait out the admission backoff (32% of leases at 25%,
+# 2026-11-02). Each call gets its own wait, above the client HTTP timeout.
+ADMISSION_LEASES_PER_CALL = 4
+ADMISSION_CALL_TIMEOUT_SECONDS = 10
 
 
 async def _drain_task(task):
@@ -274,6 +280,31 @@ class Pump:
             await self.sample_metrics()
             self._last_metrics = sampled_at
 
+    def _authorize_in_calls(self, leases: list[LeasedWork]) -> dict:
+        """One merged spend receipt from serial admission calls of at most ADMISSION_LEASES_PER_CALL leases.
+
+        A failed or malformed call contributes nothing, so its leases stay
+        unevaluated (never allowed) while the other calls' decisions stand.
+        """
+        allowed, retry_after, held_reason = [], {}, {}
+        authorize = self.authorize_compute
+        if authorize is None:
+            return {'allowed': allowed, 'retry_after': retry_after, 'held_reason': held_reason}
+        for start in range(0, len(leases), ADMISSION_LEASES_PER_CALL):
+            try:
+                part = authorize(leases[start : start + ADMISSION_LEASES_PER_CALL]) or {}
+                part_allowed = list(part.get('allowed') or [])
+                part_retry = dict(part.get('retry_after') or {})
+                part_held = dict(part.get('held_reason') or {})
+            except Exception as error:
+                worker_metrics.admission(failure_outcome(error))
+                continue
+            worker_metrics.admission('received')
+            allowed += part_allowed
+            retry_after.update(part_retry)
+            held_reason.update(part_held)
+        return {'allowed': allowed, 'retry_after': retry_after, 'held_reason': held_reason}
+
     @staticmethod
     def _log_held_retry(scope: str, error: Exception) -> None:
         logger.warning(
@@ -329,16 +360,15 @@ class Pump:
                 except Exception:
                     pass  # Missing configuration is a policy denial, never GPU permission.
                 if self.authorize_compute:
+                    calls = -(-len(required) // ADMISSION_LEASES_PER_CALL)
                     try:
                         receipt = await asyncio.wait_for(
-                            self._run_blocking('admission', db_executor, self.authorize_compute, required),
-                            timeout=10,
+                            self._run_blocking('admission', db_executor, self._authorize_in_calls, required),
+                            timeout=ADMISSION_CALL_TIMEOUT_SECONDS * calls,
                         )
                     except Exception as error:
                         worker_metrics.admission(failure_outcome(error))
                         receipt = {}
-                    else:
-                        worker_metrics.admission('received')
                 else:
                     worker_metrics.admission('unconfigured')
                 permitted = set(receipt.get('allowed') or [])
@@ -375,13 +405,7 @@ class Pump:
                     selected = [v for v in leases if v.item.segment_id in segments]
                     receipt = {}
                     if self.authorize_compute is not None:
-                        try:
-                            receipt = self.authorize_compute(selected) or {}
-                        except Exception as error:
-                            worker_metrics.admission(failure_outcome(error))
-                            receipt = {}
-                        else:
-                            worker_metrics.admission('received')
+                        receipt = self._authorize_in_calls(selected)
                     else:
                         worker_metrics.admission('unconfigured')
                     permitted = set(receipt.get('allowed') or [])

@@ -134,6 +134,9 @@ env:
     # Keep dispatch at the GPU batch boundary so backfill cannot queue ahead
     # of newly arrived live work in the worker's FIFO queue.
     value: "1"
+  # Stays on the shared gateway. test_parakeet_helm_apply_changes_only_hpa_against_origin_main
+  # allows only the two dark flags and the language path to drift from main, so this
+  # URL cannot move to ClusterIP until that qualification is separate.
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://172.16.160.20/diarizer"
 

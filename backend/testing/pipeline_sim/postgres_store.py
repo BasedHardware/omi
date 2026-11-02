@@ -120,6 +120,9 @@ class PgSimStore(SimStore):
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return self.pg.oldest(priority, ready_only=ready_only)
 
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        return self.pg.oldest_admissible_ready(priority, now)
+
     def oldest_retry(self, priority: int) -> float | None:
         return self.pg.oldest_retry(priority)
 

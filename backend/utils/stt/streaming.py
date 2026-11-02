@@ -33,7 +33,13 @@ from config.stt_provider_policy import (
     supports_live_multilingual_mode,
 )
 from config.policy.listen import service_models, account_circuit_cooldown
-from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
+from utils.stt.live_rollout import (
+    configured_chain_enabled,
+    window_allocation,
+    window_language,
+    window_language_supported,
+)
+from config.parakeet_ja import window_endpoint
 from utils.stt.live_health import health
 from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
 from utils.async_tasks import create_named_task
@@ -995,9 +1001,9 @@ def get_stt_service_for_language(
             if model == 'parakeet-window' and surface == STTServingSurface.STREAMING:
                 if not window_allocation(window_uid):
                     parakeet_fallback_reason = 'allocation_rejected'
-                elif not window_language_supported(language, requested_language):
+                elif not window_language_supported(language, requested_language, window_uid):
                     parakeet_fallback_reason = 'capability_mismatch'
-                elif os.getenv('HOSTED_PARAKEET_API_URL'):
+                elif window_endpoint(window_language(language, requested_language)):
                     return (STTService.parakeet, requested_language, model), parakeet_fallback_reason
                 else:
                     parakeet_fallback_reason = 'config_incomplete'

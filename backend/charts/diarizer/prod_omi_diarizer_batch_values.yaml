@@ -15,12 +15,29 @@ gateway:
 # Replace the inherited embedding affinity entirely. Both label and taint
 # isolate batch capacity from existing embedding and other GPU workloads.
 affinity: null
-# No cloud.google.com/gke-nodepool pin: diarizer-batch-pool and its Spot
-# sibling share the service/env labels and omi.ai taints, so the autoscaler
-# can place replicas on Spot first while the on-demand pool stays the fallback.
+# No cloud.google.com/gke-nodepool pin: every diarizer-batch pool carries the
+# service/env labels and omi.ai taint, so a pool can be replaced by label
+# (2026-11-01: n1-standard-8 diarizer-batch-pool -> n1-standard-4
+# diarizer-batch-pool-v2) and both pools serve while the old one drains.
 nodeSelector:
   service: diarizer-batch
   env: prod
+# Fit the smallest pool, n1-standard-4 + T4: measured allocatable 3.92 CPU /
+# 11.96Gi, of which DaemonSets request 0.51 CPU / 1.04Gi, leaving 3.41 / 10.9Gi.
+# The inherited 12Gi memory limit exceeds that; 10Gi keeps a runaway pod an
+# in-container OOM instead of node memory pressure. Worst pod over 7d: 1.96Gi.
+resources:
+  limits:
+    memory: 10Gi
+# Surge instead of the live diarizer's maxSurge 0: at the one-pod floor,
+# maxUnavailable 1 takes the batch route to zero pods for a GPU node scale-up
+# plus model load on every rollout or pool move. Surge costs one extra T4 node
+# for the length of the rollout.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
 tolerations:
   - key: omi.ai/diarizer-batch
     operator: Equal

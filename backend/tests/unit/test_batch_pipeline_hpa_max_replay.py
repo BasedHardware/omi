@@ -158,10 +158,10 @@ def test_max_of_two_dominates_ready_only_when_backlog_binds_and_never_starves():
 
     # Dominance: wherever backlog exceeds the ready target per worker, the
     # max-of-two fleet is at least the ready-only answer.
+    # Backlog binds wherever the ready signal alone asks for more than the floor.
     backlog_steps = 0
     for (t, ready_replicas), (_, max_replicas) in zip(ready_only, max_of_two):
-        pending = _interp(pool, t)
-        if pending is not None and pending > config['ready_target'] * ready_replicas:
+        if (ready_only_rec(t) or 0) > config['min_replicas']:
             backlog_steps += 1
             assert max_replicas >= ready_replicas, (t, ready_replicas, max_replicas)
     assert backlog_steps > 0  # the window must exercise the claim-bound regime

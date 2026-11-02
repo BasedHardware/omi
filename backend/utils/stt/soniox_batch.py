@@ -13,7 +13,7 @@ import time
 from uuid import UUID
 
 import httpx
-from config.batch_language_recovery import allowed
+from config.batch_language_recovery import MAX_AUDIO_SECONDS, allowed
 from config.batch_pipeline import second_multilingual_enabled
 from config.prerecorded_stt import SONIOX_HELD_RECOVERY_MODEL, require_provider_environment
 from utils.http_client import get_stt_client, get_stt_semaphore
@@ -92,13 +92,26 @@ def _bounded_unit(duration):
     return type(duration) in (int, float) and math.isfinite(duration) and 0 < duration <= 7200
 
 
-def authorization(duration, *, second_chance=False, failover=False):
+def takeover_admitted(duration, max_seconds):
+    """A sealed operator take-over: above the runtime one-minute bound, up to the plan's scoped bound."""
+    return (
+        _bounded_unit(duration)
+        and type(max_seconds) in (int, float)
+        and math.isfinite(max_seconds)
+        and MAX_AUDIO_SECONDS < duration <= max_seconds
+        and provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    )
+
+
+def authorization(duration, *, second_chance=False, failover=False, takeover_max_seconds=None):
     # The ordinary second chance is bounded by the admitted unit (max two
     # hours), independently of the guarded path's opt-in one-minute budget.
     # Batch provider-STT failover is bounded the same way, but is admitted by
     # the prerecorded surface and the stage's paid-once attempt record instead.
     if failover:
         admitted = _bounded_unit(duration) and provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    elif takeover_max_seconds is not None:
+        admitted = takeover_admitted(duration, takeover_max_seconds)
     else:
         admitted = (
             _bounded_unit(duration) and second_multilingual_enabled() if second_chance else allowed(duration)
@@ -109,11 +122,15 @@ def authorization(duration, *, second_chance=False, failover=False):
     return {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}
 
 
-def transcript_words(payload, duration):
-    """Join subword tokens, retaining their original capture-axis timestamps."""
+def transcript_words(payload, duration, *, mark_fallback=False):
+    """Join subword tokens, retaining their original capture-axis timestamps.
+
+    ``mark_fallback`` flags every word ``speaker_fallback`` when any token lacked a
+    real vendor speaker, so a caller never treats the default label as diarization.
+    """
     if not isinstance(payload, dict) or not isinstance(payload.get('tokens'), list):
         raise SonioxBatchError('invalid_response')
-    words, language, previous, boundary = [], 'multi', -1.0, True
+    words, language, previous, boundary, fallback = [], 'multi', -1.0, True, False
     for token in payload['tokens']:
         text = token['text']
         if not isinstance(text, str):
@@ -133,6 +150,7 @@ def transcript_words(payload, duration):
         raw_speaker = token.get('speaker')
         if raw_speaker is not None and (not str(raw_speaker).isdigit() or len(str(raw_speaker)) > 4):
             raise SonioxBatchError('invalid_response')
+        fallback = fallback or raw_speaker is None or int(raw_speaker) < 1
         speaker = f'SPEAKER_{max(int(raw_speaker) - 1, 0) if raw_speaker is not None else 0:02d}'
         detected = token.get('language')
         if isinstance(detected, str) and detected:
@@ -146,6 +164,8 @@ def transcript_words(payload, duration):
     # A nonempty transcript with missing tokens is malformed, never empty evidence.
     if not isinstance(payload.get('text'), str) or (payload['text'].strip() and not words):
         raise SonioxBatchError('invalid_response')
+    if mark_fallback and fallback:
+        words = [{**word, 'speaker_fallback': True} for word in words]
     return words, language
 
 
@@ -155,11 +175,12 @@ def transcribe(
     *,
     language=None,
     second_chance=False,
+    takeover_max_seconds=None,
     client_factory=httpx.Client,
     clock=time.monotonic,
     sleep=time.sleep,
 ):
-    headers = authorization(duration, second_chance=second_chance)
+    headers = authorization(duration, second_chance=second_chance, takeover_max_seconds=takeover_max_seconds)
     file_id, transcription_id = None, None
     deadline = clock() + DEADLINE_SECONDS
     # HTTP transport defaults to zero retries. Each paid POST occurs once.
@@ -222,6 +243,7 @@ async def transcribe_async(
     semaphore=None,
     clock=time.monotonic,
     sleep=asyncio.sleep,
+    mark_fallback=False,
 ):
     """Serving path: individual requests borrow a shared async HTTP permit only.
 
@@ -273,7 +295,9 @@ async def transcribe_async(
         for _ in range(60):
             if state['status'] == 'completed':
                 return transcript_words(
-                    await request('GET', f'/transcriptions/{transcription_id}/transcript'), duration
+                    await request('GET', f'/transcriptions/{transcription_id}/transcript'),
+                    duration,
+                    mark_fallback=mark_fallback,
                 )
             if state['status'] not in {'queued', 'processing'}:
                 raise SonioxBatchError('error_5xx' if state['status'] == 'error' else 'invalid_response')

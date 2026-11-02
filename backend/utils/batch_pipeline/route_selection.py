@@ -5,7 +5,9 @@ vendor-routing cohort, with the kill switch off, or for an owner whose legacy sy
 on, it returns ``resolve_route`` itself, so today's routing is unchanged byte for byte. Inside
 the cohort it reads the route table (configured -> last valid -> builtin), keeps only the
 options code-owned capability admits, applies vendor health and the GPU floor share, then
-picks the cheapest (or first, for an ordered table) route that is not failover-only.
+picks the cheapest (or first, for an ordered table) route that is not failover-only. When
+GPU would win but its ring is past the fresh-backlog SLO (``gpu_overflow``), a fresh unit
+starts on the next healthy primary vendor instead.
 
 Selection only chooses where a unit starts. It never mints a vendor intent: the provider
 stage owns paid-once, failover and ``vendor_held``. A vendor that is unhealthy at admission
@@ -18,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 from config.batch_pipeline_vendor_routing import (
     parse_route_table,
@@ -146,8 +148,29 @@ def _price(table: contracts.RouteTable, route: str) -> float:
     return price
 
 
-def decide(table: contracts.RouteTable, language: str | None, *, byok: bool, uid: str) -> RouteDecision | None:
-    """Pure selection over one table; ``None`` when the table offers no capable route."""
+def _primary(table: contracts.RouteTable, capable: list[str], primaries: list[str]) -> tuple[str, VendorRouteReason]:
+    if len([route for route in capable if not table.routes[route].failover_only]) == 1:
+        return primaries[0], VendorRouteReason.SOLE_CAPABLE
+    if table.selection == 'cheapest':
+        # Stable on ties: row order breaks them. Validation guarantees every price is set.
+        return min(primaries, key=lambda route: _price(table, route)), VendorRouteReason.CHEAPEST
+    return primaries[0], VendorRouteReason.ORDERED
+
+
+def decide(
+    table: contracts.RouteTable,
+    language: str | None,
+    *,
+    byok: bool,
+    uid: str,
+    gpu_saturated: Callable[[], bool] | None = None,
+) -> RouteDecision | None:
+    """Selection over one table; ``None`` when the table offers no capable route.
+
+    ``gpu_saturated`` is the capacity input (``gpu_overflow``): asked only when GPU would be chosen
+    as a primary and another healthy primary vendor exists, outside the GPU floor share. When it
+    answers true the unit starts on that vendor instead (``GPU_OVERFLOW``).
+    """
     options = contracts.capable_options(table, language)
     capable = [option.route for option in options]
     healthy = [route for route in capable if route_allowed(route)]
@@ -164,14 +187,11 @@ def decide(table: contracts.RouteTable, language: str | None, *, byok: bool, uid
         # No capable route, or only failover capacity (Soniox, admitted by slice D): today's routing.
         return None
     elif primaries:
-        if len([route for route in capable if not table.routes[route].failover_only]) == 1:
-            selected, reason = primaries[0], VendorRouteReason.SOLE_CAPABLE
-        elif table.selection == 'cheapest':
-            # Stable on ties: row order breaks them. Validation guarantees every price is set.
-            selected = min(primaries, key=lambda route: _price(table, route))
-            reason = VendorRouteReason.CHEAPEST
-        else:
-            selected, reason = primaries[0], VendorRouteReason.ORDERED
+        selected, reason = _primary(table, capable, primaries)
+        vendors = [route for route in primaries if route != contracts.GPU]
+        if selected == contracts.GPU and vendors and gpu_saturated is not None and gpu_saturated():
+            # Overflow: the ring is past its SLO, so buy vendor hours instead of waiting (or nodes).
+            selected, reason = _primary(table, capable, vendors)[0], VendorRouteReason.GPU_OVERFLOW
     elif healthy:
         # Only failover capacity is healthy (e.g. Modulate down for a language the GPU cannot serve).
         selected, reason = healthy[0], VendorRouteReason.FAILOVER
@@ -211,10 +231,16 @@ def _in_cohort(uid: str, percent: float) -> bool:
     )
 
 
-def _table_decision(language: str | None, *, byok: bool, uid: str) -> RouteDecision:
+def _table_decision(
+    language: str | None, *, byok: bool, uid: str, gpu_saturated: Callable[[], bool] | None = None
+) -> RouteDecision:
     table, outcome = current_table()
     metrics.table_load(outcome)
-    decision = None if table is contracts.BUILTIN_TABLE else decide(table, language, byok=byok, uid=uid)
+    decision = (
+        None
+        if table is contracts.BUILTIN_TABLE
+        else decide(table, language, byok=byok, uid=uid, gpu_saturated=gpu_saturated)
+    )
     if decision is None:
         # No configured table, or one with no capable route for this language: today's routing,
         # whose exact implementation is resolve_route (the builtin table has no floor share).
@@ -229,11 +255,13 @@ def select_route(
     uid: str,
     batch_percent: float,
     vendor_eligible: bool,
+    gpu_saturated: Callable[[], bool] | None = None,
 ) -> RouteDecision:
     """The admission route for one upload. Never raises past today's routing.
 
     ``vendor_eligible`` is false while the owner's legacy sync is on: the provider route only
     exists once legacy is draining or dark (intake), so those owners keep today's routing.
+    ``gpu_saturated`` (intake passes it for fresh units only) enables GPU-capacity overflow.
     """
     try:
         if not vendor_routing_enabled():
@@ -241,9 +269,9 @@ def select_route(
         elif not vendor_eligible or not _in_cohort(uid, vendor_routing_percent(batch_percent)):
             decision = _builtin(language, byok, VendorRouteReason.NOT_IN_COHORT)
             if vendor_eligible and _in_cohort(uid, vendor_routing_shadow_percent()):
-                _log_shadow(language, byok=byok, uid=uid, served=decision)
+                _log_shadow(language, byok=byok, uid=uid, served=decision, gpu_saturated=gpu_saturated)
         else:
-            decision = _table_decision(language, byok=byok, uid=uid)
+            decision = _table_decision(language, byok=byok, uid=uid, gpu_saturated=gpu_saturated)
     except Exception as error:
         logger.error('event=batch_vendor_route outcome=builtin exception_type=%s', type(error).__name__)
         decision = _builtin(language, byok, VendorRouteReason.UNKNOWN)
@@ -251,10 +279,17 @@ def select_route(
     return decision
 
 
-def _log_shadow(language: str | None, *, byok: bool, uid: str, served: RouteDecision) -> None:
+def _log_shadow(
+    language: str | None,
+    *,
+    byok: bool,
+    uid: str,
+    served: RouteDecision,
+    gpu_saturated: Callable[[], bool] | None = None,
+) -> None:
     """Decision quality for the shadow step: computed, logged without ids, never served."""
     try:
-        shadow = _table_decision(language, byok=byok, uid=uid)
+        shadow = _table_decision(language, byok=byok, uid=uid, gpu_saturated=gpu_saturated)
     except Exception as error:
         logger.warning('event=batch_vendor_route_shadow outcome=error exception_type=%s', type(error).__name__)
         return
