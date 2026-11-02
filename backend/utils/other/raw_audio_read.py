@@ -338,8 +338,28 @@ def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:
                 )
                 if 'raw_offset_samples' in pack:
                     item['raw_offset_samples'] = pack['raw_offset_samples'] + start - original_start
-                    for key in ('raw_capture_offset_samples', 'raw_capture_samples', 'raw_capture_rate'):
-                        item.pop(key, None)
+                    if 'raw_capture_rate' in pack:
+                        rate = pack['raw_capture_rate']
+                        capture_start = pack['raw_capture_offset_samples']
+                        capture_end = capture_start + pack['raw_capture_samples']
+                        # Only quantize cut edges. A rounded rendition length
+                        # cannot reconstruct the original capture endpoints.
+                        if start != original_start:
+                            capture_start = min(
+                                capture_end, max(capture_start, round(item['raw_offset_samples'] * rate / 16000))
+                            )
+                        if end != original_end:
+                            capture_end = max(
+                                capture_start,
+                                min(
+                                    capture_end,
+                                    round((pack['raw_offset_samples'] + end - original_start) * rate / 16000),
+                                ),
+                            )
+                        item.update(
+                            raw_capture_offset_samples=capture_start,
+                            raw_capture_samples=capture_end - capture_start,
+                        )
                     item.pop('raw_source_start', None)
             result.append(item)
         # Claim this pack's interval for subsequent raw packs, just as encoded
@@ -360,7 +380,9 @@ def select_raw_pcm(pcm: bytes, chunk: dict, sample_rate: int) -> bytes:
     if 'raw_source_start' not in chunk and 'raw_offset_samples' not in chunk:
         return pcm
     span = chunk['span']
-    if 'raw_capture_rate' in chunk:
+    # Upsampling can put a 16 kHz cut between two source sample boundaries.
+    # Keep that rendition's exact bounds as well as the native capture bounds.
+    if 'raw_capture_rate' in chunk and sample_rate != 16000:
         rate = chunk['raw_capture_rate']
         start = resampled_samples(chunk['raw_capture_offset_samples'], rate, sample_rate)
         end = resampled_samples(chunk['raw_capture_offset_samples'] + chunk['raw_capture_samples'], rate, sample_rate)
