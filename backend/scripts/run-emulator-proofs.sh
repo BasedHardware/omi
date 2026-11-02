@@ -77,6 +77,10 @@ run_proof "summary task recovery, concurrency and expiry" \
 run_proof "job-store conformance (sim + emulator)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py
 
+run_proof "pull batch parity (PL-321/322/323, sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pull_batch_parity.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"

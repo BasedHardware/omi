@@ -37,7 +37,7 @@ from typing import Any, Callable, Iterator
 import pytest
 
 BACKENDS = ('sim', 'emulator', 'postgres')
-_BATCH_TABLES = ('jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts')
+_BATCH_TABLES = ('jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts', 'pull_claims')
 
 
 class BackendUnavailable(Exception):
