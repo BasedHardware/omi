@@ -426,12 +426,13 @@ re-upload of the same content (`durable_status`) used to answer `failed` with
 looped. Kill switch `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` (default on)
 answers instead:
 
-- `completed` with an empty result and `reason_code: batch_unit_held` when every
+- `processing` with an empty result and `reason_code: batch_unit_held` when every
   failed unit is `failed_held` with no open `speech_redrive`,
   `terminal_disposition` or `silence_disposition` intent, and every other unit
-  is `committed`. Released apps ACK the WAL. A re-upload cannot change the
-  outcome, and the held unit's encrypted audio stays server-side for the
-  operator path above. Committed siblings are already projected; no
+  is `committed`. Phones retain their WALs without re-uploading or consuming
+  retry budget, with a five-minute poll hint even for an open surface. A server
+  artifact is not proof that the phone's independent copy may be released.
+  Committed siblings are already projected; no
   conversation ID is named. Nothing is written: the ledger, jobs and
   retention keep their held state.
 - `processing` when such an intent is open or a sibling is still in flight.
@@ -465,11 +466,12 @@ or `silence_disposition` intent still blocks it. Every other unit must have a
   recorded time, is never re-issued: its key may have expired, and that speech
   is outside the 7-day fair-use read anyway. Accounting returns nothing
   while any unit can still change, so an ineligible upload is never charged.
-- **Client.** The status poll and a re-upload answer `completed` with
+- **Client.** The status poll and a re-upload answer `processing` with
   `reason_code: batch_unit_held`, the partial result, and
-  `failed_segments` set to the held count. Released apps ACK the WAL. A
-  conversation the user has since deleted answers `conversation_deleted`, as
-  it does for a completed row.
+  `failed_segments` set to the held count and `poll_after_ms: 300000`. Phones
+  keep custody, including after 30 minutes; projected transcripts remain
+  visible independently. Deleting one projected sibling cannot acknowledge
+  unresolved siblings. Actual all-unit completion permits acknowledgement.
 - **Nothing else moves.** There is no provider call, and no job, intent,
   merge-head, owner-revision or retention write. The held units' encrypted
   audio stays for a reviewed redrive, and parked siblings keep
@@ -485,7 +487,42 @@ or `silence_disposition` intent still blocks it. Every other unit must have a
   held span. A completed row is never re-partialed. Partial writes are
   idempotent: a replay of the same state writes nothing.
 - **Rollback.** Setting the kill switch to false stops new partials. Existing
-  partial rows keep answering `completed` and can still upgrade.
+  partial rows keep answering `processing` and can still upgrade.
+
+### Metadata-proven missing artifacts
+
+`scripts/batch_pipeline_artifact_missing.py` is dry-run by default. It accepts
+only a fresh, owner/segment-bound, generation-pinned GCS metadata 404; no
+`alt=media`, decryption, provider call, completion or deletion. Its CAS keeps
+the unit `quarantined/failed_held`, records `artifact_disposition.state=missing`
+and adds a content-scoped repair hint. A client advertising
+`X-Omi-Custody-Repair-Protocol: 1` receives retryable
+`failed/batch_artifact_missing` and the original `total_files` count before
+either completed or partial handling. Other clients receive `processing` with
+five-minute polling and retain custody; they must never receive completion.
+Healthy siblings can still publish through the ordinary partial transaction.
+
+An exact-content re-upload retains the original ledger/job owner and bindings.
+Only absent spans are staged and requeued; projected jobs, projection receipts,
+processed segment IDs, paid recovery intents and charge checkpoints remain.
+The decoder must reproduce every original capture/duration boundary; changed
+input, privacy, ownership, open operator intents or decoder drift refuse the
+repair without acknowledgement. Native/provider record repairs are excluded.
+The capable client persists the original job and file count across restarts,
+keeps that bundle separate from new recordings, and sends `repair_job_id`.
+The server rejects a changed content ID (including a surviving subset) before
+ordinary admission. Missing local members hold the repair while unrelated new
+recordings can upload; they cannot establish that the lost bytes are recoverable.
+An already-ACKed phone WAL is not automatically resent merely because its bytes
+still exist: the phone cleared that job handle. Verify original archives or a
+separate client recovery path before promising recovery for those recordings.
+
+Roll the readers to every status-serving role before any operator apply.
+Applies remain off until a capable client is live. The rollout lead owns apply
+and deployment; a public app release needs David's separate authorization.
+Old readers can ACK held partials, so preserve the custody contract during
+rollback. Never infer audio presence
+from a missing metadata permission, timeout, or a new object generation.
 
 The record lane's capture listing (`list_audio_chunks(require_archive=True)`)
 raises when the raw-archive pack listing fails. It never returns only the

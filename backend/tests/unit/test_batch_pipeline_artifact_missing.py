@@ -144,3 +144,20 @@ def test_existing_partial_path_cannot_ack_an_operator_proven_missing_artifact(se
     status = durable_status(store, binding.owner_id, binding.job_id)
     assert status['status'] == 'failed', 'completed would acknowledge and age out the only recoverable phone copy'
     assert status['reason_code'] == 'batch_artifact_missing'
+
+
+def test_missing_marker_precedes_even_a_stale_completed_ledger(setup):
+    client, store, binding, _ = mark(setup)
+    ledger_row(client, binding).update(
+        status='completed',
+        result={
+            'new_memories': [],
+            'updated_memories': [],
+            'failed_segments': 0,
+            'total_segments': 2,
+            'errors': [],
+            'outcome': 'expected_silence',
+        },
+    )
+    status = durable_status(store, binding.owner_id, binding.job_id)
+    assert status['status'] == 'failed' and status['reason_code'] == 'batch_artifact_missing'
