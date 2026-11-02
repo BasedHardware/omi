@@ -153,6 +153,22 @@ test('large Swift blob mismatch or truncation still fails closed', async () => {
   assert.equal(f.statuses.at(-1).state,'failure');
   f.github.rest.git.getBlob = async ({file_sha}) => ({data:{sha:file_sha,encoding:'base64',size:big.length,content:big.subarray(0,1000).toString('base64')}});
   await assert.rejects(run(f),/Incomplete Swift source evidence/);
+  f.github.rest.git.getBlob = async () => {throw Object.assign(new Error('Not Found'),{status:404});};
+  await assert.rejects(run(f),/Incomplete Swift source evidence/);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  const bad = Buffer.from('abc'); // '!WJjA' decodes to 3 bytes in Node despite the invalid character
+  f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:bad.length,sha:'f'.repeat(40)}});
+  f.github.rest.git.getBlob = async ({file_sha}) => ({data:{sha:file_sha,encoding:'base64',size:3,content:'!WJjA'}});
+  await assert.rejects(run(f),/Incomplete Swift source evidence/);
   f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:big.length}});
   await assert.rejects(run(f),/Incomplete Swift source evidence/);
+});
+test('GitHub line-wrapped base64 blobs are accepted', async () => {
+  const f = fixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift'}],commits:[],total_commits:0}});
+  const big = Buffer.from('import Foundation\n' + '// x\n'.repeat(300000));
+  const wrapped = big.toString('base64').replace(/.{60}/g,'$&\n');
+  f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:big.length,sha:'f'.repeat(40)}});
+  f.github.rest.git = {getBlob:async ({file_sha}) => ({data:{sha:file_sha,encoding:'base64',size:big.length,content:wrapped}})};
+  await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
