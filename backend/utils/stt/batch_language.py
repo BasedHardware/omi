@@ -236,6 +236,22 @@ def _self_verdict(probe: bytes, probe_seconds: float, surface: str, *, before_pr
     return verdict
 
 
+def self_language_class(audio: bytes, *, before_probe=None) -> str:
+    """The self gate's top-1 capability for one bounded window of speech, or 'unavailable'.
+
+    A continuity check on speech after a vendor-admitted sample, never admission by itself. On
+    prerecorded shadow (24 h, probes >= 10 s), the P(supported) floor refused 62% of probes the
+    vendor called Parakeet-safe; the top-1 named an unsupported language on 3.6% of those and on
+    ~85% of probes the vendor called an unsupported language.
+    """
+    try:
+        probe, seconds = probe_wav(audio)
+    except Exception:
+        return 'unavailable'
+    verdict = _self_verdict(probe, seconds, 'batch', before_probe=before_probe)
+    return 'unavailable' if verdict is None else language_class(verdict.language)
+
+
 def _outage_fallback(audio, surface, audio_options, verdict, *, before_probe=None) -> LanguageDecision | None:
     """The vendor probe is down: use the self-hosted gate's verdict under its own confidence floor.
 
