@@ -40,6 +40,30 @@ def frame(pcm, start, sequence=0, offset=0, gap=False):
     }
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('overlap', [0.0005, 0.001])
+async def test_pusher_tolerated_overlap_commits_all_samples_and_receipt(remote, monkeypatch, overlap):
+    _window_harness(remote, monkeypatch)
+    monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '100')
+    captured = [b'\x01\x02' * 160, b'\x03\x04' * 160]
+    sock = Socket(_audio_frames('conversation', captured, step=0.01 - overlap))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
+    receipts = _sent_receipts(sock)
+    assert len(receipts) == 1
+    assert audio_outbox.read_pcm('owner', receipts[0]) == b''.join(captured)
+    manifest = json.loads(remote.blob(receipts[0].manifest_path).data)
+    assert [row['start'] for row in manifest['frames']] == [1000, 1000.01 - overlap]
+    assert [row['samples'] for row in manifest['frames']] == [160, 160]
+    paths = storage.upload_audio_chunks_batch(
+        [{'data': b''.join(captured), 'timestamp': 1000, 'custody_receipt': receipts[0].to_dict()}],
+        'owner',
+        'conversation',
+        'standard',
+        sample_rate=16000,
+    )
+    assert remote.blob(paths[0]).data == b''.join(captured)
+
+
 @pytest.mark.parametrize(
     'value,admitted', [(None, False), ('0', False), ('bad', False), ('nan', False), ('101', False), ('100', True)]
 )

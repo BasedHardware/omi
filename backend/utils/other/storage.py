@@ -1174,6 +1174,7 @@ def list_audio_chunks(
     max_count: Optional[int] = None,
     source_identity: bool = False,
     require_archive: bool = False,
+    include_raw: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation. ``require_archive``: a failed raw-archive listing raises.
@@ -1239,22 +1240,40 @@ def list_audio_chunks(
                 if span is not None:
                     chunk_entry['span'] = span
                 chunks.extend(
-                    projection_entries(bucket, blob, uid, chunk_entry) if has_frame_receipt(blob) else [chunk_entry]
+                    projection_entries(bucket, blob, uid, chunk_entry, deadline=deadline)
+                    if has_frame_receipt(blob)
+                    else [chunk_entry]
                 )
+                if max_count is not None and len(chunks) > max_count:
+                    raise TimeoutError('speaker audio listing budget exhausted')
             except ValueError:
                 continue
 
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
     sample_clock = source_identity
-    if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
+    if include_raw or (audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None):
         try:
-            packs = list_packs(bucket, uid, conversation_id)
-            raw_chunks = uncovered_raw_packs(packs, chunks)
+            packs = (
+                list_packs(
+                    bucket,
+                    uid,
+                    conversation_id,
+                    fresh=True,
+                    deadline=deadline,
+                    timeout=timeout or 10,
+                    max_count=max_count or 10000,
+                )
+                if include_raw
+                else list_packs(bucket, uid, conversation_id)
+            )
+            raw_chunks = packs if include_raw else uncovered_raw_packs(packs, chunks)
+            if max_count is not None and len(chunks) + len(raw_chunks) > max_count:
+                raise TimeoutError('speaker audio listing budget exhausted')
             sample_clock = sample_clock or bool(raw_chunks)
             chunks.extend(raw_chunks)
         except Exception:
-            if require_archive:
+            if require_archive or include_raw:
                 raise
             logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
     if sample_clock:

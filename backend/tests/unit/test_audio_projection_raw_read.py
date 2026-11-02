@@ -2,11 +2,14 @@
 
 import json
 from unittest.mock import MagicMock
+import time
 
 from utils.other import audio_outbox, raw_audio_read, storage
 from utils.other.audio_raw_read_metrics import RAW_READ
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.other.audio_frame_table import entries
+from utils.other.raw_audio import decode_capture
+from utils.other import audio_chunk_replay
 import pytest
 from tests.unit.test_audio_custody_frames import frame, remote
 
@@ -138,3 +141,130 @@ def test_rebatched_projection_preserves_independent_replay_proof(remote, conflic
         storage.upload_audio_chunks_batch(chunks, 'owner', 'conversation', 'standard', sample_rate=16000)
         assert len(remote.list_blobs('chunks/')) == 2
     assert audio_outbox.read_pcm('owner', new) == replay + tail
+
+
+@pytest.mark.parametrize('read_enabled', [False, True])
+def test_replay_cannot_shadow_raw_receipt_after_projection_failure(remote, monkeypatch, read_enabled):
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *args: read_enabled)
+    first = b'\x01\x02' * 160
+    old = audio_outbox.commit_pcm_window(
+        'owner', first, 'conversation', 1000, 16000, 'old', 0, [frame(first, 1000)], framed=True
+    )
+    replay, tail = b'\x05\x06' * 160, b'\x03\x04' * 160
+    frames = [frame(replay, 1000), frame(tail, 1003.01, 1, len(replay), True)]
+    new = audio_outbox.commit_pcm_window(
+        'owner', replay + tail, 'conversation', 1000, 16000, 'new', 0, frames, framed=True
+    )
+    # Model another writer's commit while this process still has an empty TTL index.
+    raw_audio_read._indexes[(remote.name, 'owner', 'conversation')] = (time.monotonic() + 120, [])
+    reload_blob = remote.blob(old.path).reload
+
+    def sdk_reload(*, timeout, retry, if_generation_match=None):
+        assert 0 < timeout <= 10 and retry is None
+        reload_blob(timeout=timeout, retry=retry, if_generation_match=if_generation_match)
+
+    monkeypatch.setattr(remote.blob(old.path), 'reload', sdk_reload)
+    with pytest.raises(storage.AudioChunkContentConflict):
+        storage.upload_audio_chunks_batch(
+            [{'data': replay + tail, 'timestamp': 1000, 'custody_receipt': new.to_dict()}],
+            'owner',
+            'conversation',
+            'standard',
+            sample_rate=16000,
+        )
+    assert not remote.list_blobs('chunks/')
+
+
+def test_raw_playback_keeps_earlier_custody_when_replay_extends_both_ends():
+    earlier = {
+        'path': 'old',
+        'generation': 1,
+        'raw_created_at': 1,
+        'timestamp': 1000,
+        'raw_end': 1000.01,
+        'span': {'start': 1000, 'samples': 160, 'sample_rate': 16000},
+        'raw_offset_samples': 0,
+    }
+    replay = {
+        'path': 'new',
+        'generation': 2,
+        'raw_created_at': 2,
+        'timestamp': 999.99,
+        'raw_end': 1000.02,
+        'span': {'start': 999.99, 'samples': 480, 'sample_rate': 16000},
+        'raw_offset_samples': 0,
+    }
+    visible = raw_audio_read.uncovered_raw_packs([replay, earlier], [])
+    assert [(row['path'], row['span']['samples'], row['raw_offset_samples']) for row in visible] == [
+        ('new', 160, 0),
+        ('old', 160, 0),
+        ('new', 160, 320),
+    ]
+
+
+def test_bounded_replay_fails_closed_on_raw_listing_error(remote, monkeypatch):
+    pcm = b'\x01\x02' * 160
+    receipt = audio_outbox.commit_pcm_window(
+        'owner', pcm, 'conversation', 1000, 16000, 'root', 0, [frame(pcm, 1000)], framed=True
+    )
+    real_list = remote.list_blobs
+
+    def list_blobs(prefix, **kwargs):
+        if prefix.startswith('raw-live/'):
+            raise TimeoutError('injected raw listing failure')
+        return real_list(prefix, **kwargs)
+
+    monkeypatch.setattr(remote, 'list_blobs', list_blobs)
+    with pytest.raises(TimeoutError):
+        storage.upload_audio_chunks_batch(
+            [{'data': pcm, 'timestamp': 1000, 'custody_receipt': receipt.to_dict()}],
+            'owner',
+            'conversation',
+            'standard',
+            sample_rate=16000,
+        )
+    assert not real_list('chunks/')
+
+
+@pytest.mark.parametrize('rate', [8000, 22050, 44100, 48000])
+@pytest.mark.parametrize('gap', [False, True])
+def test_resampled_frame_fragments_partition_whole_pack(remote, rate, gap):
+    first, second = b'\x01\x02' * 1024, b'\x03\x04' * 1024
+    frames = [frame(first, 1000), frame(second, 1000 + 1024 / rate + (3 if gap else 0), 1, len(first), gap)]
+    receipt = audio_outbox.commit_pcm_window(
+        'owner', first + second, 'conversation', 1000, rate, 'root', 0, frames, framed=True
+    )
+    assert audio_outbox.read_pcm('owner', receipt) == first + second
+    listed = raw_audio_read.list_packs(remote, 'owner', 'conversation')
+    for output_rate in (16000, rate):
+        decoded = raw_audio_read.read_pack(remote, receipt.path, 'owner', sample_rate=output_rate)
+        assert decoded == decode_capture(first + second, remote.blob(receipt.path).metadata, output_rate)
+        fragments = [raw_audio_read.select_raw_pcm(decoded, row, output_rate) for row in listed]
+        assert b''.join(fragments) == decoded
+
+
+def test_replay_counts_objects_once_for_many_disjoint_spans(remote, monkeypatch):
+    captured = [bytes([index, 0]) * 160 for index in range(65)]
+    frames = [frame(data, 1000 + index * 3, index, index * 320, index > 0) for index, data in enumerate(captured)]
+    pcm = b''.join(captured)
+    receipt = audio_outbox.commit_pcm_window('owner', pcm, 'conversation', 1000, 16000, 'root', 0, frames, framed=True)
+    path = storage.upload_audio_chunks_batch(
+        [{'data': pcm, 'timestamp': 1000, 'custody_receipt': receipt.to_dict()}],
+        'owner',
+        'conversation',
+        'standard',
+        sample_rate=16000,
+    )[0]
+    download = MagicMock(wraps=remote.blob(path).download_as_bytes)
+    monkeypatch.setattr(remote.blob(path), 'download_as_bytes', download)
+    audio_chunk_replay.verify_frame_overlaps(
+        'owner',
+        'conversation',
+        pcm,
+        frames,
+        16000,
+        bucket=remote,
+        list_chunks=storage.list_audio_chunks,
+        bucket_for=lambda name: remote,
+    )
+    assert download.call_count == 1
