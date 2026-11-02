@@ -482,6 +482,9 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
           TELEGRAM_BOT_TOKEN:
             secret: TELEGRAM_BOT_TOKEN
             version: latest
@@ -863,6 +866,9 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
           DREAM_AGENT_FEEDBACK_SALT:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
@@ -1244,6 +1250,10 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync-backfill:
+        secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL

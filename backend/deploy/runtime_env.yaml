@@ -2890,6 +2890,9 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
+              version: latest
             TELEGRAM_BOT_TOKEN:
               secret: TELEGRAM_BOT_TOKEN
               version: latest
@@ -3315,6 +3318,9 @@ environments:
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
+              version: latest
             DREAM_AGENT_FEEDBACK_SALT:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
@@ -3717,6 +3723,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
               version: latest
           env:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}

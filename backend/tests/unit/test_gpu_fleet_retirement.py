@@ -196,3 +196,16 @@ def test_retirement_is_declared_on_every_prod_routing_runtime_only():
                 assert env['STT_GPU_FLEET_OFF']['value'] == 'true'
             else:
                 assert 'STT_GPU_FLEET_OFF' not in env
+
+
+@pytest.mark.parametrize('service', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+def test_cloud_run_retirement_configuration_can_pass_real_startup(service, streaming_module):
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    config = manifest['environments']['prod']['cloud_run']['services'][service]
+    # All four roles already use this runtime identity; reuse the existing secret,
+    # with no new key or IAM change, rather than weakening the startup key guard.
+    assert config['service_account'] == 'backend-runtime@based-hardware.iam.gserviceaccount.com'
+    assert config['secrets']['SONIOX_API_KEY'] == {'secret': 'SONIOX_API_KEY', 'version': 'latest'}
+    environment = {name: binding['value'] for name, binding in config['env'].items() if 'value' in binding}
+    environment.update({name: 'configured-binding' for name in config['secrets']})
+    streaming_module.validate_streaming_stt_env(environment)
