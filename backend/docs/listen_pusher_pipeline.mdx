@@ -8871,3 +8871,11 @@ through the unchanged pack index each flush, including raw-only uploads. Every
 successful flush still persists fresh `audio_files` and triggers speaker retries;
 custody receipts and replay reconciliation are independent and unchanged.
 [Design and validation](listen_pusher_pipeline/changes/2026-11-02-pusher-audio-projection.md).
+
+`BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED` defaults to `true`: successful
+quarantine-recovery requests drain only their owner's fenced merge and projection
+chain and schedule targeted follow-ups. `false` restores full reconciliation in
+the request. Global maintenance and discovery retain the independent serving
+supervisor (20-second wait after each pass, 60-second maintenance lease TTL).
+Pending jobs and result receipts remain the durable retry owner across process
+loss. [Details and verification](listen_pusher_pipeline/changes/2026-11-03-recovery-owner-only.md).

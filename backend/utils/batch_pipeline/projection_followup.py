@@ -82,7 +82,7 @@ class ProjectionFollowups:
                 candidates.append(sid)
         return candidates
 
-    async def schedule(self, priority=(), *, tail=()):
+    async def schedule(self, priority=(), *, tail=(), discover=True):
         # Rows a sweep's chain walk persisted, possibly behind the discovery
         # cursor. They wait for the next discovery pass and join behind its page,
         # so they never jump discovered work and never keep discovery from running.
@@ -106,7 +106,7 @@ class ProjectionFollowups:
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
-            if self.pending or not self.owed:
+            if not discover or self.pending or not self.owed:
                 return
         # Finish launching this bounded page before advancing discovery. Slow
         # tasks must not cause the next serving pass to discard queued rows.
@@ -115,6 +115,8 @@ class ProjectionFollowups:
             self.launch()
             if self.pending or not self.owed:
                 return
+        if not discover:
+            return
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:

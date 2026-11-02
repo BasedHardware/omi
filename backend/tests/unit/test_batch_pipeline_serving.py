@@ -498,11 +498,12 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch):
+async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch, caplog):
     import asyncio
     from routers import batch_pipeline as routes
 
     _, store = api
+    caplog.set_level(logging.INFO, logger=routes.__name__)
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     entered, release = asyncio.Event(), asyncio.Event()
@@ -530,10 +531,15 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
         release.set()
     assert await task == {'status': 'recovered'}
     service.reconcile_async.assert_awaited_once_with(
-        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
+        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic', owner_only=True
     )
     assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
     service.recovery.recover.assert_not_called()
+    stages = [record.getMessage() for record in caplog.records if 'event=batch_recovery_stage ' in record.getMessage()]
+    assert len(stages) == 2
+    assert stages[0].startswith('event=batch_recovery_stage stage=recognition duration_seconds=')
+    assert stages[1].startswith('event=batch_recovery_stage stage=post_recovery duration_seconds=')
+    assert all('synthetic' not in line and store.rows['jobs', 'synthetic']['owner_id'] not in line for line in stages)
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
