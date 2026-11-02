@@ -83,6 +83,25 @@ def superseded_intake_discard(data: Mapping[str, Any], content_changed: bool) ->
     )
 
 
+def is_automatic_discard(data: Mapping[str, Any]) -> bool:
+    """Whether a stored discard is only the pipeline's verdict, never the user's.
+
+    An explicit discard writes ``sync_relevance_user_kept=False`` (or carries no
+    relevance receipt at all); a restore marks the row curated. Either one
+    leaves the discard to the user.
+    """
+    decision = data.get('relevance_decision')
+    return bool(
+        data.get('discarded')
+        and isinstance(decision, Mapping)
+        and decision.get('verdict') == 'discard'
+        and decision.get('decided_by') in {'rule', 'model', 'jev', 'deterministic'}
+        and 'sync_relevance_user_kept' not in data
+        and not data.get('jev_discard_restored')
+        and not is_user_curated(data)
+    )
+
+
 def is_completed_rule_discard(data: Mapping[str, Any] | None) -> bool:
     """Whether ``data`` is a finished, uncurated row the rules already discarded.
 

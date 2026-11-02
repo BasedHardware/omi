@@ -43,7 +43,7 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
-from utils.conversations.fragment_visibility import superseded_intake_discard, is_user_curated
+from utils.conversations.fragment_visibility import is_automatic_discard, superseded_intake_discard, is_user_curated
 from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.conversations.recorded_time import recorded_span, sync_recorded_end, write_span
 from utils.conversations.relevance import sync_intake_decision
@@ -331,7 +331,7 @@ def assign_in_transaction(
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         if target.get('deleted'):
             raise SyncAssignmentSuperseded('sync target was deleted')
-        if target.get('discarded'):
+        if target.get('discarded') and (record_span is None or not is_automatic_discard(target)):
             raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
         if target.get('status') != 'completed':
             raise SyncAssignmentConflict('record finalize still pending', subtype=Reason.RECORD_FINALIZE_PENDING)
@@ -1312,7 +1312,9 @@ def assign_in_transaction(
         chosen.survivors,
     )
     if redrive_target and any(
-        (accepted.matched.get(accepted.canonical) or {}).get('discarded') for accepted in [chosen, *extra_plans]
+        (row := accepted.matched.get(accepted.canonical) or {}).get('discarded')
+        and (record_span is None or not is_automatic_discard(row))
+        for accepted in [chosen, *extra_plans]
     ):
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     remember_size_payload(canonical, result)
