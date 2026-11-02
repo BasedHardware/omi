@@ -210,3 +210,89 @@ async def test_occasion_cap_uses_recorded_extent_without_consulting_arrival(monk
     assert not controller._occasion_span_exceeded(row)
     row['transcript_segments'][0]['end'] = config.OCCASION_MAX_SPAN_SECONDS
     assert controller._occasion_span_exceeded(row)
+
+
+@pytest.mark.anyio
+async def test_the_byte_size_and_segment_count_caps_stop_joining_and_roll_the_occasion_over(monkeypatch):
+    monkeypatch.delenv(config.LIVE_CONVERSATION_SIZE_ROLLOVER_ENABLED_ENV, raising=False)
+    harness = CaptureHarness(monkeypatch)
+    first = await _open(harness, 'rec-a')
+    cid = first.host.state.current_conversation_id
+    row = harness.rows[cid]
+
+    # Segment-count cap triggers rollover even inside the 3-hour span window.
+    row['transcript_segments'] = [{'text': 'seg'}] * config.OCCASION_MAX_TRANSCRIPT_SEGMENTS
+    assert config.occasion_size_exceeded(row) is True
+    assert first._occasion_span_exceeded(row) is True
+    harness.now += timedelta(minutes=1)
+    second = await _open(harness, 'rec-b')
+    assert second.host.state.current_conversation_id != cid
+
+    # Byte-size cap triggers rollover when serialized payload reaches OCCASION_MAX_DOCUMENT_BYTES.
+    cid_b = second.host.state.current_conversation_id
+    row_b = harness.rows[cid_b]
+    row_b['transcript_segments'] = [{'text': 'x' * config.OCCASION_MAX_DOCUMENT_BYTES}]
+    assert config.occasion_size_exceeded(row_b) is True
+    assert second._occasion_span_exceeded(row_b) is True
+    harness.now += timedelta(minutes=1)
+    third = await _open(harness, 'rec-c')
+    assert third.host.state.current_conversation_id != cid_b
+
+
+@pytest.mark.anyio
+async def test_the_lifecycle_loop_rolls_a_size_capped_conversation_over_before_1mib_and_respects_kill_switch(
+    monkeypatch,
+):
+    monkeypatch.delenv(config.LIVE_CONVERSATION_SIZE_ROLLOVER_ENABLED_ENV, raising=False)
+    harness = CaptureHarness(monkeypatch)
+    controller = await _open(harness, 'rec-a', enabled=False)
+    cid = controller.host.state.current_conversation_id
+    harness.rows[cid]['transcript_segments'] = [{'text': 'x' * config.OCCASION_MAX_DOCUMENT_BYTES}]
+
+    # When kill switch is set off, live rollover does not split the meeting.
+    for off in ('0', 'false', 'OFF', 'no'):
+        monkeypatch.setenv(config.LIVE_CONVERSATION_SIZE_ROLLOVER_ENABLED_ENV, off)
+        assert config.live_conversation_size_rollover_enabled() is False
+        assert config.occasion_size_exceeded(harness.rows[cid]) is False
+
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id == cid
+    assert harness.creates == 1
+
+    # Re-enabling (default on) rolls over on the next lifecycle tick.
+    monkeypatch.delenv(config.LIVE_CONVERSATION_SIZE_ROLLOVER_ENABLED_ENV, raising=False)
+    assert config.live_conversation_size_rollover_enabled() is True
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id != cid
+    assert harness.creates == 2
+
+
+def test_incremental_live_conversation_size_estimate_matches_full_and_only_sizes_new_segments(monkeypatch):
+    import utils.firestore_document_size as doc_size
+
+    state: dict = {}
+    doc_path = 'users/u1/conversations/c1'
+    segments = [{'id': f's-{i}', 'text': f'hello world {i}'} for i in range(10)]
+    row = {'id': 'c1', 'status': 'in_progress', 'transcript_segments': segments}
+
+    est_1 = config.estimate_live_conversation_bytes_incremental(row, doc_path, state)
+    assert est_1 == doc_size.estimate_firestore_document_bytes(row, doc_path)
+    assert state['prefix_len'] == 9
+
+    orig_value_bytes = doc_size.estimate_firestore_value_bytes
+    calls: list = []
+
+    def counting_value_bytes(val):
+        if isinstance(val, dict) and 'id' in val and str(val['id']).startswith('s-'):
+            calls.append(val['id'])
+        return orig_value_bytes(val)
+
+    monkeypatch.setattr(doc_size, 'estimate_firestore_value_bytes', counting_value_bytes)
+
+    # Next tick with 1 new segment only sizes old tail s-9 (now settled) + new tail s-10.
+    segments.append({'id': 's-10', 'text': 'appended segment'})
+    est_2 = config.estimate_live_conversation_bytes_incremental(row, doc_path, state)
+    assert calls == ['s-9', 's-10']
+    assert est_2 == doc_size.estimate_firestore_document_bytes(row, doc_path)

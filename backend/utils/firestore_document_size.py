@@ -32,6 +32,11 @@ def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: st
     return name_bytes + 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(value) for key, value in data.items())
 
 
+def estimate_firestore_value_bytes(value: Any) -> int:
+    """Firestore's documented storage size of a single field value."""
+    return _value_bytes(value)
+
+
 def _value_bytes(value: Any) -> int:
     if value is None or isinstance(value, bool):
         return 1
