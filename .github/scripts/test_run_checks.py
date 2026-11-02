@@ -1560,24 +1560,61 @@ class ParallelRunnerTests(unittest.TestCase):
 
     def test_checks_finished_by_the_first_failure_keep_their_real_result(self) -> None:
         """Luna r1 on #24232: a pass or a second failure that finished alongside the first must not read CANCELLED."""
+        self.assert_finished_checks_keep_their_real_result(parent_start_delay=0)
+
+    def test_finished_checks_keep_their_result_when_parent_is_delayed_after_launch(self) -> None:
+        """Force the fast-failure interleaving that used to bypass the sleep barrier."""
+        self.assert_finished_checks_keep_their_real_result(parent_start_delay=0.5)
+
+    def assert_finished_checks_keep_their_real_result(self, *, parent_start_delay: float) -> None:
         real_sleep = time.sleep
+        real_popen = subprocess.Popen
+        processes = {}
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
             checks = [
-                self.script(root, name, f"import pathlib\npathlib.Path('{name}.done').touch()\n{body}\n")
+                self.script(
+                    root,
+                    name,
+                    "import pathlib, time\n"
+                    f"time.sleep({parent_start_delay if name == 'also-bad' else 0})\n"
+                    f"pathlib.Path('{name}.done').touch()\n"
+                    "deadline = time.monotonic() + 120\n"
+                    "while not pathlib.Path('release').exists() and time.monotonic() < deadline: time.sleep(0.01)\n"
+                    "if not pathlib.Path('release').exists(): raise SystemExit(97)\n"
+                    f"{body}\n",
+                )
                 for name, body in quick.items()
             ]
             checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
 
+            def start(command, *args, **kwargs):
+                process = real_popen(command, *args, **kwargs)
+                name = Path(command[1]).stem if len(command) > 1 else None
+                if name in quick:
+                    processes[name] = process
+                if name == "bad":
+                    # Before the ready/release barrier this lets bad exit before
+                    # the first poll, while also-bad has not written its marker.
+                    real_sleep(parent_start_delay)
+                return process
+
             def wait_for_quick_checks(_seconds: float) -> None:
-                # Hold the poll until all three quick checks have exited, so one scan sees them together.
+                # No quick child can exit before this first sleep/poll barrier.
+                # Latch readiness, release them together, then observe actual exit.
                 deadline = time.monotonic() + 120  # interpreter startup alone took >30 s at load 140 on m5
                 while not all((root / f"{name}.done").exists() for name in quick) and time.monotonic() < deadline:
                     real_sleep(0.02)
+                (root / "release").touch()
+                while (
+                    not all(name in processes and processes[name].poll() is not None for name in quick)
+                    and time.monotonic() < deadline
+                ):
+                    real_sleep(0.02)
                 real_sleep(0.5)
 
-            with patch("run_checks.time.sleep", wait_for_quick_checks):
+            with patch("run_checks.subprocess.Popen", start), patch("run_checks.time.sleep", wait_for_quick_checks):
                 result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
             self.assertEqual(result, 1)
             self.assertIn("<== PASS fine", stdout)
