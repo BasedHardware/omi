@@ -86,6 +86,7 @@ def test_written_receipt_counts_full_usage_even_below_cache_minimum(registry):
     }
     cost = samples(registry, 'llm_gateway_estimated_cost_micro_usd_total')
     assert len(cost) == 1 and cost[0].value == value.estimated_cost_micro_usd
+    assert cost[0].value > 0 if any(raw.values()) else cost[0].value == 0
     for family in registry.collect():
         for sample in family.samples:
             assert not {'uid', 'user_uid', 'request_id', 'feature', 'caller', 'attempt_id'} & sample.labels.keys()
@@ -149,11 +150,11 @@ def test_non_token_units_and_arbitrary_tier_are_not_fabricated(registry):
     assert samples(registry, 'llm_gateway_accounted_attempts_total')[0].labels['traffic_type'] == 'unknown'
 
 
-def normalized_event(metadata, *, provider='openai'):
+def normalized_event(metadata, *, provider='openai', model=LUNA_MODEL, api_surface='openai_chat_completions'):
     trace = a.AttemptTrace()
     attempt = trace.record(
         provider=provider,
-        configured_model=LUNA_MODEL,
+        configured_model=model,
         route_artifact_id='route.synthetic',
         fallback_reason=None,
         retry_ordinal=0,
@@ -167,7 +168,7 @@ def normalized_event(metadata, *, provider='openai'):
         caller='synthetic-test',
         user_uid=None,
         feature='chat_agent',
-        api_surface='openai_chat_completions',
+        api_surface=api_surface,
         payer='omi',
     )
     return a.build_accounting_event(context, attempt)
@@ -241,6 +242,61 @@ def test_real_complete_normalizer_retains_billable_output(registry, provider):
     metrics.observe_accounting_event(value, delivery='written')
     assert tokens(registry)['prompt'] == 100
     assert tokens(registry)['output'] == (20 if provider == 'openai' else 25)
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        {'input_tokens': 100, 'output_tokens': 20},
+        {'input_tokens': 100, 'output_tokens': 20, 'cache_read_input_tokens': 4},
+        {'input_tokens': 100, 'output_tokens': 20, 'cache_read_input_tokens': 4, 'cache_creation_input_tokens': 6},
+        {'input_tokens': 0, 'output_tokens': 0},
+    ],
+)
+def test_complete_anthropic_receipt_publishes_reported_tokens_and_cost(registry, raw):
+    value = normalized_event(
+        a.anthropic_usage_from_response({'usage': raw}, cache_requested=False, cache_write_ttl='1h'),
+        provider='anthropic',
+        model='claude-sonnet-5',
+        api_surface='anthropic_messages',
+    )
+    assert value.billable_usage_complete
+    assert 'billable_usage_complete' not in value.as_dict()
+    metrics.observe_accounting_event(value, delivery='written')
+    assert tokens(registry)['prompt'] == raw['input_tokens'] + raw.get('cache_read_input_tokens', 0)
+    assert tokens(registry)['output'] == raw['output_tokens']
+    assert tokens(registry)['cache_write'] == raw.get('cache_creation_input_tokens', 0)
+    cost = samples(registry, 'llm_gateway_estimated_cost_micro_usd_total')
+    assert len(cost) == 1 and cost[0].value == value.estimated_cost_micro_usd
+    assert samples(registry, 'llm_gateway_accounted_attempts_total')[0].labels['usage_status'] == 'confirmed'
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        {'input_tokens': 100},
+        {'output_tokens': 20},
+        {'input_tokens': True, 'output_tokens': 20},
+        {'input_tokens': -1, 'output_tokens': 20},
+        {'input_tokens': 100, 'output_tokens': -1},
+        {'input_tokens': '100', 'output_tokens': 20},
+        {'input_tokens': 100, 'output_tokens': 20, 'cache_read_input_tokens': -1},
+        {'input_tokens': 100, 'output_tokens': 20, 'cache_creation_input_tokens': None},
+        {'input_tokens': 100, 'output_tokens': 20, 'cache_read_input_tokens': False},
+    ],
+)
+def test_incomplete_anthropic_receipt_stays_a_coverage_gap(registry, raw):
+    value = normalized_event(
+        a.anthropic_usage_from_response({'usage': raw}, cache_requested=False),
+        provider='anthropic',
+        model='claude-sonnet-5',
+        api_surface='anthropic_messages',
+    )
+    assert not value.billable_usage_complete
+    metrics.observe_accounting_event(value, delivery='written')
+    assert tokens(registry) == {}
+    assert samples(registry, 'llm_gateway_estimated_cost_micro_usd_total') == []
+    assert samples(registry, 'llm_gateway_accounted_attempts_total')[0].labels['usage_status'] == 'indeterminate'
 
 
 def test_request_models_and_unknown_surfaces_cannot_create_arbitrary_labels(registry):

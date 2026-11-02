@@ -598,6 +598,13 @@ def anthropic_usage_from_response(
                 cache_field_reported='cache_read_input_tokens' in raw,
             ),
         ),
+        token_usage_complete=(
+            all(type(raw.get(field)) is int and raw[field] >= 0 for field in ('input_tokens', 'output_tokens'))
+            and all(
+                type(raw.get(field, 0)) is int and raw.get(field, 0) >= 0
+                for field in ('cache_read_input_tokens', 'cache_creation_input_tokens')
+            )
+        ),
         provider_response_id=_string_or_none(response.get('id')),
         actual_model_version=_string_or_none(response.get('model')),
     )
