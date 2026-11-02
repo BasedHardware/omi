@@ -105,8 +105,22 @@ includes the entire HPA spec except `minReplicas`, and deployment images. Ordina
 autoscaling replica changes do not restart the clock. Configuration/image changes
 reset the 15-minute clock; scheduled floor writes do not (they also bump the HPA
 generation, which is likewise excluded), or the guard could never arm under a
-time-of-day floor. Readiness shortfall uses HPA desiredReplicas, not the
-floor. ScalingActive must be true, as in the original P77 guard.
+time-of-day floor. ScalingActive must be true, as in the original P77 guard.
+
+Capacity trips (`ready_shortfall`, `FailedScheduling_in_15m`) fire only when
+ready pods are short of **what the live load needs**: `min(desiredReplicas,
+load_need)`, where `load_need` is the HPA's own inputs at their worst minute
+of the 15-minute window - `max(1, ceil(active requests / 2), ceil(ready x GPU
+avg / 35))`. FailedScheduling events are evidence attached to that shortfall,
+never a trip on their own; Pending pods beyond the load are logged as
+`pending_beyond_load`. Before 2026-11-02, a desired count above the pool (12
+pods on a 10-node L4 pool in the stockout) or the guard's own expired
+rollback (desired held near 12 by the 900s scale-down window, its 12th pod's
+FailedScheduling still in the lookback) re-tripped every ~50 minutes: 28 of
+31 rollbacks 10-30..11-02 with latency healthy. A real stockout at peak (ready
+below the load) still trips here, and every latency, refusal and first-text
+gate trips on harm regardless of pod counts. Missing load series blind the
+reading (three blind readings roll back).
 
 ## Time-of-day floor schedule
 
@@ -254,11 +268,12 @@ an exporter or new Job network listener.
 An applied rollback does not wait for a human forever: while rolled back, the
 Job keeps evaluating readings, and after **one full 15-minute lookback window
 of consecutive clean readings** (no trips, no blind, no unmeasured, not
-low-sample) it clears itself - restoring workload-only metrics with the floor
+low-sample, and ready covering the live load) it clears itself - restoring workload-only metrics with the floor
 still at 12, after which the arming/usable gates own any scheduled reduction.
 Any unusable reading restarts the clean streak; a real regression keeps
-re-tripping readings, so its rollback never expires. A rollback/expiry loop is
-bounded and visible: each cycle holds the cap for at least the clean window
+re-tripping readings, so its rollback never expires; a real stockout at peak
+holds the rollback until ready covers the load, instead of cycling expiry ->
+lower -> trip. A rollback/expiry loop is bounded and visible: each cycle holds the cap for at least the clean window
 plus a fresh arming window before any lower applies. The explicit operator
 clear remains: patch the HPA to remove the `parakeet_request_latency_p99`
 metric (an approved HPA change); the guard reconciles on the next reading.

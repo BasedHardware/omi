@@ -41,6 +41,10 @@ WINDOW_SHARE_OF_BASELINE = WINDOW / 3600
 # that lands beyond the last finite bucket is reported as exactly this
 # boundary, not measured.
 FIRST_P95_TOP_BUCKET = 60.0
+# The HPA's own scale-out targets (build_rollback asserts the live spec still
+# carries exactly these): what the live load needs, never the floor.
+REQUESTS_PER_POD = 2
+GPU_TARGET_PERCENT = 35
 FAST_SCALE_UP = {
     'stabilizationWindowSeconds': 0,
     'selectPolicy': 'Max',
@@ -200,6 +204,15 @@ def queries(namespace):
             'omi_stt_window_session_outcome_total',
             '{job="backend-listen-metrics",outcome="no_text",reason="first_text_deadline"}',
         ),
+        # The HPA's inputs at their worst minute of the lookback window (the
+        # adapter's parakeet_active_requests_total and parakeet_gpu_utilization),
+        # so load_need() is what the live load asks for, not what a floor or the
+        # 900s scale-down window holds.
+        'live_requests_max': (
+            f'max_over_time((sum(parakeet_active_streams{gpu})'
+            f' + (sum(parakeet_active_batch_requests{gpu}) or vector(0)))[15m:1m])'
+        ),
+        'gpu_util_max': f'max_over_time(avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[1m]))[15m:1m])',
     }
 
 
@@ -230,10 +243,10 @@ def build_rollback(old):
     }, 'Missing/duplicate metric'
     assert next(
         m for m in metrics if m.get('pods', {}).get('metric', {}).get('name') == 'parakeet_active_requests_total'
-    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': '2'}, 'Requests drift'
+    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': str(REQUESTS_PER_POD)}, 'Requests drift'
     assert next(
         m for m in metrics if m.get('external', {}).get('metric', {}).get('name') == 'parakeet_gpu_utilization'
-    )['external']['target'] == {'type': 'Value', 'value': '35'}, 'GPU drift'
+    )['external']['target'] == {'type': 'Value', 'value': str(GPU_TARGET_PERCENT)}, 'GPU drift'
     # Kubernetes defaults selectPolicy=Max on stored objects; Helm may omit it.
     up = {'selectPolicy': 'Max', **old['behavior']['scaleUp']}
     legacy_up = {
@@ -340,6 +353,50 @@ def evaluate(values):
     }
 
 
+def load_need(values, ready):
+    """Pods the live load needs at the HPA's targets; None when unmeasured (evaluate blinds).
+
+    Never below one, so an empty fleet cannot pass as an idle one. GPU work is
+    the ready pods' average utilization times their count: Pending pods carry
+    none.
+    """
+    requests, gpu = values.get('live_requests_max'), values.get('gpu_util_max')
+    if not (finite(requests) and finite(gpu)) or requests < 0 or gpu < 0:
+        return None
+    return max(1, math.ceil(requests / REQUESTS_PER_POD), math.ceil(ready * gpu / GPU_TARGET_PERCENT))
+
+
+def capacity_shortfall(hpa, deployment, events, values, reading, now):
+    """Trip only when ready pods are short of the live load, with that shortfall's scheduling evidence.
+
+    2026-10-30..11-02 01:25Z: 28 of 31 rollbacks tripped only on
+    FailedScheduling or ready < desired, with latency healthy; replaying this
+    rule keeps 4 of them (ready short of the load). In the L4 stockout a rollback's 12 pods
+    leave Pending pods and their events on a 10-node pool; after it expires
+    and the schedule lowers the floor, the 900s scale-down window still holds
+    desired near 12, so the next run tripped again (about every 50 minutes),
+    and an ordinary one-pod scale-up waiting for its node tripped the same
+    way. Pending pods the live load does not need are recorded, not tripped.
+    A real stockout at peak still trips here, and latency, refusals and the
+    first-text gates trip on harm whatever the pod counts say.
+    """
+    desired = hpa.get('status', {}).get('desiredReplicas')
+    if desired is None:
+        reading['blind'].append('desired_replicas_missing')
+        return
+    ready = deployment.get('status', {}).get('readyReplicas', 0)
+    need = load_need(values, ready)
+    failures = scheduling_failures(events, hpa['metadata']['name'], now)
+    reading['load_need'] = need
+    if need is None:
+        return
+    if ready < min(desired, need):
+        reading['trips'].append('ready_shortfall')
+        reading['trips'] += failures
+    else:
+        reading['pending_beyond_load'] = len(failures)
+
+
 def scheduling_failures(events, name, now):
     failed = []
     for event in events:
@@ -412,17 +469,15 @@ def decide(hpa, deployment, events, values, state, now):
         advanced = advance(state, identity, now, False)
         if state.get('identity') == identity and 'rollback' in state:
             advanced['rollback'] = state['rollback']
+        # A rollback expires only once ready also covers the live load: a real
+        # peak stockout holds it instead of cycling expiry -> lower -> trip.
+        capacity_shortfall(hpa, deployment, events, values, reading, now)
         return 'NOOP', advanced, reading
-    reading['trips'] += scheduling_failures(events, hpa['metadata']['name'], now)
+    capacity_shortfall(hpa, deployment, events, values, reading, now)
     if not any(
         c['type'] == 'ScalingActive' and c['status'] == 'True' for c in hpa.get('status', {}).get('conditions', [])
     ):
         reading['trips'].append('HPA_not_ScalingActive')
-    desired = hpa.get('status', {}).get('desiredReplicas')
-    if desired is None:
-        reading['blind'].append('desired_replicas_missing')
-    elif deployment.get('status', {}).get('readyReplicas', 0) < desired:
-        reading['trips'].append('ready_shortfall')
     state = advance(state, identity, now, bool(reading['blind']))
     if now - state['since'] < WINDOW:
         verdict = 'WARMUP'
