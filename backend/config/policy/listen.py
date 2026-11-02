@@ -259,6 +259,10 @@ def account_circuit_cooldown() -> float:
 
 
 def service_models(default: list[str]) -> list[str]:
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        return ['soniox']  # Also build the vendor callback when an old secret/policy omitted it.
     policy = current_listen_policy.get()
     return list(policy.service_models) if policy is not None else default
 

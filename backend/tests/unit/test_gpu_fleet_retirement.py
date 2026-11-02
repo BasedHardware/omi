@@ -32,6 +32,9 @@ def test_switch_preserves_existing_routing_until_deployed(monkeypatch):
 
 
 def test_retirement_preserves_batch_vendors_and_never_reactivates_gpu_defaults(retired):
+    from config.policy.listen import service_models
+
+    assert service_models(['parakeet-window', 'modulate-velma-2']) == ['soniox']
     assert default_models_for_surface(STTServingSurface.STREAMING) == ('soniox',)
     assert default_models_for_surface(STTServingSurface.PRERECORDED) == ('modulate-velma-2',)
     assert default_models_for_surface(STTServingSurface.PTT) == ('modulate-velma-2',)
