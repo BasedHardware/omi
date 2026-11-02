@@ -192,8 +192,8 @@ async def test_silent_leading_unit_waits_unstaged_and_replays_first_after_a_spee
     assert admitted(response, staged) and vad.call_count == 2
     # The whole upload was classified first (the speech unit's probe); the silent unit was then
     # staged first, under its own index and its own per-unit LID, never the speech unit's language.
-    assert probe.call_args_list[0].args[1] == SPEECH and probe.call_count == 2
-    assert probe.call_args_list[1].args[1] != SPEECH
+    assert probe.call_args_list[1].args[1] == SPEECH and probe.call_count == 2
+    assert probe.call_args_list[0].args[1] != SPEECH
     assert staged[0].segment_id == hashlib.sha256(b'new:0').hexdigest()
 
 
@@ -223,10 +223,29 @@ async def test_an_unsafe_later_unit_keeps_the_whole_upload_on_legacy_before_stag
 
 
 @pytest.mark.asyncio
+async def test_a_refused_silent_unit_probe_aborts_before_any_unit_is_staged(monkeypatch):
+    # Consent resets between the speech unit's probe and the silent unit's own probe: the refusal
+    # (retry, audio retained) surfaces in the pre-pass, before the approved speech unit is staged.
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    consent = iter([True, False])
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: next(consent, False))
+    speaking(monkeypatch, SPEECH, None)
+
+    def classify(*args, **kwargs):
+        allowed = kwargs['before_probe']()
+        return decision('en', True) if allowed else decision('und', False, 0.0)
+
+    response, staged, probe, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=2, decision=classify
+    )
+    assert response.status_code == 503 and staged == [] and contexts == [] and probe.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_each_speech_unit_keeps_its_own_language_and_a_silent_unit_never_inherits_one(monkeypatch):
     speaking(monkeypatch, SPEECH, None, SPEECH)
-    # Two speech samples in the pre-pass, then the silent unit's own per-unit LID during replay.
-    answers = iter([decision('en', True), decision('es', True), decision('und', False, 0.0)])
+    # Every unit is probed in order in the pre-pass; the silent unit on its own audio.
+    answers = iter([decision('en', True), decision('und', False, 0.0), decision('es', True)])
     response, staged, probe, contexts = await _upload_all_units(
         monkeypatch, user_language='en', unit_count=3, decision=lambda *a, **k: next(answers)
     )
@@ -278,7 +297,7 @@ async def test_sample_probe_is_authorized_as_the_unit_it_replays_as(monkeypatch)
 
     response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', unit_count=2, decision=classify)
     assert admitted(response, staged)
-    sampled_item = guarded[0]
+    sampled_item = guarded[1]  # guarded[0] is the silent unit's own probe
     assert sampled_item.segment_id == hashlib.sha256(b'new:1').hexdigest()
     assert sampled_item.conversation_id and sampled_item.unit_kind == 'capture_span'
     replayed_speech_unit = intake.chunk_identity('synthetic-owner', 'omi', None, False, sampled_item.capture_at)
