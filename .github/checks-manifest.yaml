@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: firmware-ota-slot-geometry
+    command: ["python3", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    triggers: ["omi/firmware/boards/omi/pm_static.yml", "omi/firmware/tools/cv1/pinned-partitions.yml", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    lanes: ["local", "ci"]
+    reason: "#13855: moved OTA slots away from the installed bootloader's compiled addresses, which would stop later OTAs from applying"
   - id: firmware-capture-mute-durability
     command: ["bash", "omi/firmware/omi/tests/run_capture_mute_test.sh"]
     triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/**", ".github/checks-manifest.yaml"]
