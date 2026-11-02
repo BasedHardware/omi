@@ -26,14 +26,15 @@ def load(path: Path = CONTRACT_PATH) -> dict[str, Any]:
     return json.loads(Path(path).read_text())
 
 
-def _pending(hold: dict[str, Any]) -> bool:
-    """Not yet a bound: the ruling is pending, or the control the bound relies on is not verified."""
-    return hold.get('ruling') == 'pending' or hold.get('control_verified') is False
+def _pending(hold: dict[str, Any], accept_pending: bool = False) -> bool:
+    """Not yet a bound: the control the bound relies on is unverified, or the ruling is pending. accept_pending asks
+    "would a pending ruling fit?"; it never waives an unverified control."""
+    return hold.get('control_verified') is False or (hold.get('ruling') == 'pending' and not accept_pending)
 
 
 def required_days(contract: dict[str, Any], bucket: str, accept_pending: bool = False) -> float | None:
     holds = [contract['holds'][name] for name in contract['buckets'][bucket]['holds']]
-    if any(h['days'] is None or (_pending(h) and not accept_pending) for h in holds):
+    if any(h['days'] is None or _pending(h, accept_pending) for h in holds):
         return None
     return max(h['days'] for h in holds) + contract['margin_days']
 
@@ -71,7 +72,7 @@ def floor_violations(
     """Live-object Delete rules that can reach a protected prefix sooner than the longest hold allows."""
     need = required_days(contract, bucket, accept_pending)
     spec = contract['buckets'][bucket]
-    pending = [] if accept_pending else [h for h in spec['holds'] if _pending(contract['holds'][h])]
+    pending = [h for h in spec['holds'] if _pending(contract['holds'][h], accept_pending)]
     out = []
     for rule in _rules(lifecycle):
         condition = rule.get('condition') or {}

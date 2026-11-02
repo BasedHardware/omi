@@ -45,8 +45,10 @@ def test_cited_hold_constants_still_match_the_code(name):
     assert re.search(code['pattern'], text, re.M), f'{name}: {code["path"]} changed; update the contract'
 
 
-def test_batch_staging_age_covers_the_proposed_holds():
-    assert rc.required_days(CONTRACT, BATCH, accept_pending=True) <= CONTRACT['batch_staging_delete_age_days']
+def test_batch_staging_age_covers_the_holds_once_verified():
+    verified = copy.deepcopy(CONTRACT)
+    verified['holds']['batch_finalization_alarm']['control_verified'] = True
+    assert rc.required_days(verified, BATCH) <= CONTRACT['batch_staging_delete_age_days']
     assert CONTRACT['buckets'][BATCH]['ceiling']['max_age_days'][''] == CONTRACT['batch_staging_delete_age_days']
 
 
@@ -64,6 +66,9 @@ def test_an_unverified_alarm_leaves_the_hold_unbounded():
     assert CONTRACT['holds']['batch_finalization_alarm']['control_verified'] is False
     held = rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(30)]})
     assert held == [{'age': 30, 'required': None, 'pending': ['batch_finalization_alarm']}]
+    # "Would a pending ruling fit?" never waives the unverified control (Luna #24349 r4).
+    assert rc.required_days(CONTRACT, BATCH, accept_pending=True) is None
+    assert rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(30)]}, accept_pending=True) == held
 
 
 def test_the_11_01_seven_day_rule_violates_the_floor_once_the_alarm_is_verified():
