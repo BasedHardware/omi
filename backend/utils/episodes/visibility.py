@@ -3,7 +3,7 @@
 from typing import Any, Optional
 
 from database import conversations
-from utils.conversations.fragment_visibility import is_relevance_discarded
+from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_settling_fragment
 
 VISIBILITY_FIELDS = [
     'discarded',
@@ -23,6 +23,10 @@ def hidden_member(row: dict[str, Any]) -> bool:
     return bool(row.get('deleted') or row.get('sync_merged_into') or is_relevance_discarded(row))
 
 
+# Read projection only: moment attachment and composing use the narrower hidden_member.
+_VISIBLE_EPISODE_FIELDS = [*VISIBILITY_FIELDS, *SETTLING_FIELDS, 'status', 'started_at', 'finished_at', 'structured']
+
+
 def hidden_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     row = conversations.get_conversation_raw_snapshot(
         uid,
@@ -40,9 +44,9 @@ def visible_episode(
         return episode
     for cid in episode.get('conversation_ids') or []:
         row = conversations.get_conversation_raw_snapshot(
-            uid, cid, field_paths=VISIBILITY_FIELDS, firestore_client=firestore_client
+            uid, cid, field_paths=_VISIBLE_EPISODE_FIELDS, firestore_client=firestore_client
         )
         # Missing metadata is not evidence of a discard.
-        if row is None or not hidden_member(row):
+        if row is None or not (hidden_member(row) or is_settling_fragment(row)):
             return episode
     return None
