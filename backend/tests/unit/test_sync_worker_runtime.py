@@ -137,7 +137,10 @@ def test_chart_pins_identity_resources_and_dedicated_entrypoint():
     assert container['command'] == ['python', '-m', 'utils.sync.worker_runtime']
     assert container['image'].endswith('@sha256:' + 'a' * 64)
     assert container['envFrom'] == [{'secretRef': {'name': 'synthetic-runtime'}}]
-    assert set(docs) == {'ServiceAccount', 'Deployment'}
+    assert set(docs) == {'ServiceAccount', 'Deployment', 'PodMonitoring'}
+    monitoring = docs['PodMonitoring']['spec']
+    assert monitoring['selector']['matchLabels'] == deployment['template']['metadata']['labels']
+    assert monitoring['endpoints'] == [{'port': 'http', 'path': '/metrics', 'interval': '15s'}]
     desired = yaml.safe_load((ROOT / 'backend/deploy/sync-backfill-worker.yaml').read_text())
     assert desired['admissionPercent'] == 0
     assert desired['nodePool']['config']['spot'] is False

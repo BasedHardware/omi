@@ -2391,6 +2391,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_GPU_FLEET_OFF:
+            value: 'false'
+            category: ops_kill
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2602,6 +2605,9 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          STT_GPU_FLEET_OFF:
+            value: 'false'
+            category: ops_kill
           OMI_FLAGS_FIRESTORE_PROJECT:
             value: based-hardware
             category: service_discovery
@@ -2884,6 +2890,9 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
+              version: latest
             TELEGRAM_BOT_TOKEN:
               secret: TELEGRAM_BOT_TOKEN
               version: latest
@@ -3141,6 +3150,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
@@ -3305,6 +3317,9 @@ environments:
               version: latest
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
+              version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
               version: latest
             DREAM_AGENT_FEEDBACK_SALT:
               secret: DREAM_AGENT_FEEDBACK_SALT
@@ -3540,6 +3555,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
@@ -3705,6 +3723,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
               version: latest
           env:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -3933,6 +3954,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
@@ -4260,6 +4284,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment

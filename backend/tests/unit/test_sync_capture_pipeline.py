@@ -92,7 +92,7 @@ async def test_coordinator_scopes_privacy_before_first_await_and_closes_on_cance
     monkeypatch.setattr(module, 'warm_rollout_cohorts', cancel_at_first_await)
     with batch_privacy_attempt() as parent:
         with pytest.raises(asyncio.CancelledError):
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'privacy-test-job', 'privacy-test-owner', [], None, False, str(tmp_path), task_mode=task_mode
             )
         assert current_attempt() is parent

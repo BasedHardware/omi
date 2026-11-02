@@ -108,6 +108,7 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Values.namespace }}
 spec:
+  suspend: {{ .Values.parakeetSuspended | default false }}
   schedule: '*/5 * * * *'
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60

@@ -123,3 +123,30 @@ def test_expired_transaction_retries_and_persist_processing_result_lands(monkeyp
     assert written['id'] == 'conversation-1'
     assert written['status'] == 'completed'
     assert written['structured']['title'] == 'Recovered'
+
+
+@pytest.mark.parametrize('fails', [False, True])
+def test_delivery_counter_only_after_committed_result_not_transaction_attempts(monkeypatch, fails):
+    client = _FakeFirestoreClient(
+        {'status': 'processing', 'data_protection_level': 'standard'},
+        [RuntimeError('aborted')] if fails else [InvalidArgument(EXPIRED_MESSAGE)],
+    )
+    monkeypatch.setattr(conversations_db, 'db', client)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda _uid: None)
+    calls = []
+    monkeypatch.setattr(conversations_db.summary_delivery, 'record_delivery', lambda *args: calls.append(args))
+    payload = dict(
+        id='synthetic',
+        status='completed',
+        data_protection_level='standard',
+        summary_output_present=True,
+        structured={'title': 'Recovered', 'overview': 'Summary'},
+    )
+    if fails:
+        with pytest.raises(RuntimeError, match='aborted'):
+            conversations_db.persist_processing_result_with_lifecycle('synthetic', payload)
+        assert not calls and not client.commits
+    else:
+        assert conversations_db.persist_processing_result_with_lifecycle('synthetic', payload)
+        assert len(client.transactions) == 2 and len(client.commits) == 1
+        assert calls == [('summary', 'delivered')]

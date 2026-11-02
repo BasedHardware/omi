@@ -6,7 +6,9 @@ from fakes.stt import install_streaming_stt_fake
 from listen_test_helpers import is_conversation_session_event, is_ready_event, receive_until, seed_listen_user
 
 from contextlib import nullcontext
+import asyncio
 import json
+import threading
 from types import SimpleNamespace
 import pytest
 
@@ -29,21 +31,25 @@ def remote(client, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'platform,source,mobile_percent,byok,consent,disabled',
+    'platform,source,mobile_percent,byok,consent,disabled,restore',
     [
-        ('macos', 'desktop', '0', False, True, True),
-        ('windows', 'desktop', '0', False, True, True),
-        ('ios', 'phone', '0', False, True, True),
-        ('android', 'omi', '0', False, True, True),
-        ('ios', 'phone', '100', False, True, True),
-        ('android', 'omi', '100', False, True, True),
-        ('macos', 'desktop', '0', True, True, True),
-        ('macos', 'desktop', '0', False, False, True),
-        ('macos', 'desktop', '0', False, True, False),
+        ('macos', 'desktop', '0', False, True, True, False),
+        ('windows', 'desktop', '0', False, True, True, False),
+        ('ios', 'phone', '0', False, True, True, False),
+        ('android', 'omi', '0', False, True, True, False),
+        ('ios', 'phone', '100', False, True, True, False),
+        ('android', 'omi', '100', False, True, True, False),
+        ('macos', 'desktop', '0', True, True, True, False),
+        ('macos', 'desktop', '0', False, False, True, False),
+        ('macos', 'desktop', '0', False, True, False, False),
+        ('ios', 'phone', '100', False, True, True, 'success'),
+        ('android', 'omi', '100', False, True, True, 'success'),
+        ('android', 'omi', '100', False, True, True, 'failure'),
+        ('android', 'omi', '100', False, True, True, 'hide_during_dial'),
     ],
 )
 def test_native_desktop_custody_or_exact_live_rollback(
-    client, test_uid, monkeypatch, remote, consent, disabled, platform, source, mobile_percent, byok
+    client, test_uid, monkeypatch, remote, consent, disabled, platform, source, mobile_percent, byok, restore
 ):
     from config.server_batch import owned
     from database.conversations import prepare_conversation_for_read
@@ -51,6 +57,8 @@ def test_native_desktop_custody_or_exact_live_rollback(
     from utils.other.raw_audio import decode_capture
     import routers.listen.runtime as runtime
     import utils.pusher as pusher_client
+    from routers.listen.visible_restore import VisibleRestore, VISIBLE_DWELL_SECONDS
+    from routers.listen import receiver as receiver_module
 
     async def finalization(*args):
         return None
@@ -77,6 +85,18 @@ def test_native_desktop_custody_or_exact_live_rollback(
         monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
         monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
         monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', mobile_percent)
+        monkeypatch.setenv('SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT', '100' if restore else '0')
+        if restore:
+            # Advance only the policy's visibility timestamp, leaving real
+            # socket/harness timeouts alone. Unit tests cover the 15s boundary.
+            original_observe = VisibleRestore.observe
+
+            def elapsed_visible(self, payload):
+                original_observe(self, payload)
+                if self.presence.policy.state == 'visible':
+                    self.presence.policy.changed_at -= VISIBLE_DWELL_SECONDS
+
+            monkeypatch.setattr(VisibleRestore, 'observe', elapsed_visible)
         monkeypatch.setattr(runtime, 'PUSHER_ENABLED', True)
         if byok:
             monkeypatch.setattr(runtime, 'get_byok_keys', lambda: {'soniox': 'synthetic-test-key'})
@@ -88,7 +108,29 @@ def test_native_desktop_custody_or_exact_live_rollback(
         seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
         user = get_mock_firestore().collection('users').document(test_uid)
         user.update({'private_cloud_sync_enabled': consent, 'data_protection_level': 'standard'})
-        sockets = install_streaming_stt_fake(monkeypatch)
+        sockets = install_streaming_stt_fake(monkeypatch, die_on_first_send=restore == 'failure')
+        dial_started, dial_connected = threading.Event(), threading.Event()
+        release_dial = []
+        if restore:
+            connect_preview = receiver_module.process_audio_modulate
+
+            async def controlled_preview_dial(*args, **kwargs):
+                loop = asyncio.get_running_loop()
+                released = loop.create_future()
+
+                def release():
+                    if not released.done():
+                        released.set_result(None)
+
+                release_dial.append(lambda: loop.call_soon_threadsafe(release))
+                dial_started.set()
+                if restore == 'hide_during_dial':
+                    await released
+                raw = await connect_preview(*args, **kwargs)
+                dial_connected.set()
+                return raw
+
+            monkeypatch.setattr(receiver_module, 'process_audio_modulate', controlled_preview_dial)
         data = b'\x80' * 480 + b'\x90' * 480 + b'\x70' * 480
         with client.websocket_connect(
             f'/v4/listen?language=en&sample_rate=8000&codec=pcm8&source={source}&vad_gate=disabled',
@@ -96,20 +138,51 @@ def test_native_desktop_custody_or_exact_live_rollback(
         ) as websocket:
             session = receive_until(websocket, is_conversation_session_event)
             receive_until(websocket, is_ready_event)
+            if restore:
+                websocket.send_json({'type': 'client_state', 'foreground': True, 'transcript_visible': True})
             websocket.send_bytes(data)
             if consent:
                 peer.wait_for_frames(101, 1)
             else:
                 receive_until(websocket, lambda value: isinstance(value, list) and bool(value))
+            if restore:
+                assert dial_started.wait(5)
+                if restore == 'hide_during_dial':
+                    websocket.send_json({'type': 'client_state', 'foreground': False, 'transcript_visible': False})
+                    websocket.send_bytes(data)
+                    # Real receiver must process hide + retain another frame
+                    # before the provider is released. The inline dial fails here.
+                    peer.wait_for_frames(101, 2, timeout=5)
+                    release_dial[0]()
+                    assert dial_connected.wait(5)
+                else:
+                    assert dial_connected.wait(5)
+                    websocket.send_bytes(data)
+                    peer.wait_for_frames(101, 2)
+                    if restore == 'success':
+                        receive_until(websocket, lambda value: isinstance(value, list) and bool(value))
+                websocket.send_json({'type': 'client_state', 'foreground': False, 'transcript_visible': False})
+                websocket.send_bytes(data)
+                peer.wait_for_frames(101, 3)
 
         row = user.collection('conversations').document(session['conversation_id']).get().to_dict()
         assert row is not None
         decoded = prepare_conversation_for_read(row, test_uid)
         if disabled and consent and not byok and (platform in {'macos', 'windows'} or mobile_percent == '100'):
-            assert owned(row) and not decoded.get('transcript_segments')
+            assert owned(row)
+            if restore == 'success':
+                assert decoded.get('transcript_segments')
+            else:
+                assert not decoded.get('transcript_segments')
             assert row['has_content']
-            assert not sockets
+            if restore:
+                assert len(sockets) == 1 and sockets[0].provider == 'modulate'
+                assert len(sockets[0].sent_chunks) == (0 if restore == 'hide_during_dial' else 1)
+            else:
+                assert not sockets
             expected = b'\x00\x00' * 480 + b'\x00\x10' * 480 + b'\x00\xf0' * 480
+            if restore:
+                expected *= 3  # Opening/hidden/failing preview cannot stop PCM or originals.
             assert b''.join(frame.raw[12:] for frame in peer.frames_of_type(101)) == expected
             manifests = remote.list_blobs('audio-outbox/')
             assert manifests

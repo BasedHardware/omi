@@ -9,6 +9,8 @@ An explicit `true`/`1`/`on` re-enables it per deployment.
 
 import os
 
+from config.live_stt_gpu_fleet import gpu_fleet_off
+
 
 def idle_parakeet_failback_enabled() -> bool:
     """Kill switch (on unless set off) for the one-time idle return to Parakeet.
@@ -20,7 +22,7 @@ def idle_parakeet_failback_enabled() -> bool:
     onset where Parakeet is window-eligible, admitting and cooled down — not at
     every onset for every session, which was the 2026-10-27 regression.
     """
-    return os.getenv('STT_IDLE_PARAKEET_FAILBACK_ENABLED', 'true').strip().lower() not in {
+    return not gpu_fleet_off() and os.getenv('STT_IDLE_PARAKEET_FAILBACK_ENABLED', 'true').strip().lower() not in {
         '0',
         'false',
         'off',

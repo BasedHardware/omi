@@ -20,10 +20,12 @@ configure_logging(service='sync-backfill-worker')
 
 import httpx
 from fastapi import FastAPI
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST
 
 from utils.executors import start_background_task
 from utils.sync.worker_client import WorkerClient, worker_endpoint
+from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 from utils.staging_fence import assert_staging_isolation
 
 logger = logging.getLogger(__name__)
@@ -36,12 +38,13 @@ WORK_DEADLINE_SECONDS = 1380
 EMPTY_POLL_MAX_SECONDS = 60
 
 
-async def launch_job():
+async def launch_job(env: dict[str, str]):
     return await asyncio.create_subprocess_exec(
         sys.executable,
         '-m',
         'utils.sync.worker_job',
         stdin=asyncio.subprocess.PIPE,
+        env=env,
         start_new_session=True,
     )
 
@@ -54,6 +57,7 @@ class Runtime:
         self.connected = False
         self.active = False
         self.poll_seconds = POLL_SECONDS
+        self.privacy_metrics = WorkerPrivacyMetrics()
 
     async def tick(self) -> None:
         result = await self.client.call('claim')
@@ -82,7 +86,7 @@ class Runtime:
         try:
             async with asyncio.timeout(WORK_DEADLINE_SECONDS):
                 # Payload and opaque lease token travel through stdin, never argv.
-                process = await launch_job()
+                process = await launch_job(self.privacy_metrics.begin_job())
                 assert process.stdin is not None
                 process.stdin.write(json.dumps(lease).encode())
                 await process.stdin.drain()
@@ -114,6 +118,7 @@ class Runtime:
                 await asyncio.wait_for(process.wait(), 10)
             if waiter is not None:
                 await asyncio.wait_for(waiter, 10)
+            self.privacy_metrics.finish_job()
             self.active = False
         # Child exit is the quiescence proof. A killed child leaves Redis held;
         # fail then refuses early release and the unchanged silence TTL wins.
@@ -180,6 +185,10 @@ def create_app() -> FastAPI:
         available = runtime.connected and not runtime.stop.is_set()
         return JSONResponse({'ready': available}, status_code=200 if available else 503)
 
+    async def metrics():
+        return Response(app.state.runtime.privacy_metrics.render(), media_type=CONTENT_TYPE_LATEST)
+
+    app.add_api_route('/metrics', metrics, methods=['GET'])
     app.add_api_route('/health', health, methods=['GET'])
     app.add_api_route('/ready', ready, methods=['GET'])
     return app

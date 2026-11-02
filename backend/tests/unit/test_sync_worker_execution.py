@@ -34,12 +34,13 @@ LEASE = {
 async def test_lease_loss_kills_job_and_its_executor_process_group(monkeypatch, tmp_path):
     processes = []
 
-    async def launch():
+    async def launch(env):
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             str(Path(__file__).parent / 'fixtures/sync_worker_child.py'),
             str(tmp_path),
             stdin=asyncio.subprocess.PIPE,
+            env=env,
             start_new_session=True,
         )
         processes.append(process)
@@ -78,12 +79,13 @@ async def test_lease_loss_kills_job_and_its_executor_process_group(monkeypatch, 
 async def test_crashed_job_reaps_orphan_leaf_before_fail_rpc(monkeypatch, tmp_path):
     (tmp_path / 'crash').touch()
 
-    async def launch():
+    async def launch(env):
         return await asyncio.create_subprocess_exec(
             sys.executable,
             str(Path(__file__).parent / 'fixtures/sync_worker_child.py'),
             str(tmp_path),
             stdin=asyncio.subprocess.PIPE,
+            env=env,
             start_new_session=True,
         )
 
@@ -129,12 +131,13 @@ async def test_work_deadline_kills_hung_job_before_fallback(execution, monkeypat
     run_token = sync_jobs.try_acquire_sync_job_run_lock('job')
     assert run_token
 
-    async def launch():
+    async def launch(env):
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             str(Path(__file__).parent / 'fixtures/sync_worker_child.py'),
             str(tmp_path),
             stdin=asyncio.subprocess.PIPE,
+            env=env,
             start_new_session=True,
         )
         processes.append(process)
@@ -368,3 +371,108 @@ async def test_cancelled_worker_keeps_redis_fence_and_retry_material(execution, 
     assert sync_jobs.try_acquire_sync_job_run_lock('job') is None
     assert json.loads(redis.get('sync_job:job'))['status'] == 'queued'
     assert redis.ttl('sync_job_lock:job') > 1700
+
+
+async def test_worker_scopes_privacy_before_first_await_and_closes_on_cancellation(execution, monkeypatch):
+    from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
+
+    observed = []
+
+    def cancel_at_first_await():
+        observed.append(current_attempt())
+        assert observed[-1] is not None
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(sync_jobs, 'get_sync_ledger_fence_mode', cancel_at_first_await)
+    with batch_privacy_attempt() as parent:
+        with pytest.raises(asyncio.CancelledError):
+            await worker_job.execute(LEASE, Client())
+        assert current_attempt() is parent
+        assert len(observed) == 1 and observed[0] is not parent and observed[0]._closed
+    assert current_attempt() is None
+
+
+@pytest.mark.parametrize('blocked', [False, True])
+async def test_worker_preflight_keeps_live_authority_and_privacy_shadow(execution, monkeypatch, blocked):
+    from database import batch_pipeline_privacy as privacy, privacy_check_metrics as metrics
+    from database.batch_privacy_attempt import current_attempt
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+    from utils.sync import ledger_completion
+
+    redis, pipeline, cleanup = execution
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'privacy_checks_shadow': 100}))
+    store = StrictFirestore(
+        {
+            ('users', 'synthetic'): {'data_protection_level': 'standard'},
+            ('batch_pipeline_privacy', privacy.privacy_owner_key('synthetic')): {
+                'generation': 7,
+                'memo_token': 'a' * 32,
+                'memo_schema': 1,
+            },
+        }
+    )
+    original_get = StrictFirestoreDocument.get
+
+    def get(reference, **kwargs):
+        snapshot = original_get(reference, **kwargs)
+        snapshot.update_time = datetime(2026, 11, 2, tzinfo=timezone.utc) if snapshot.exists else None
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    live = metrics.CHECKS.labels('batch', 'live', 'account_deleted' if blocked else 'allow')
+    shadow = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    mismatch = metrics.DECISION_MISMATCH.labels('batch', 'stale_allow')
+    hits = metrics.MEMO_REQUESTS.labels('batch', 'hit')
+    before_live, before_shadow = live._value.get(), shadow._value.get()
+    before_mismatch, before_hits = mismatch._value.get(), hits._value.get()
+    observed = []
+
+    def preflight(**kwargs):
+        observed.append(current_attempt())
+        assert privacy.assert_batch_write_allowed(store, store.transaction(), 'synthetic') == 7
+        if blocked:
+            # Deliberately bypass the writer token bump: shadow must detect it.
+            store.rows[('account_deletions', 'synthetic')] = {'wipe_status': 'pending'}
+        assert privacy.assert_batch_write_allowed(store, store.transaction(), 'synthetic') == 7
+        row = json.loads(redis.get('sync_job:job'))
+        row['status'] = 'completed'
+        redis.set('sync_job:job', json.dumps(row))
+        return row
+
+    # This fence runs before entering the separately scoped coordinator.
+    monkeypatch.setattr(ledger_completion, 'bind_or_converge_sync_ledger_completion', preflight)
+    assert await worker_job.execute(LEASE, Client()) is (not blocked)
+    assert live._value.get() == before_live + (1 if blocked else 2)
+    assert shadow._value.get() == before_shadow + (1 if blocked else 2)
+    assert hits._value.get() == before_hits + 1
+    assert mismatch._value.get() == before_mismatch + int(blocked)
+    assert len(observed) == 1 and observed[0] is not None and observed[0]._closed
+    assert cleanup.await_count == (0 if blocked else 1)
+    assert current_attempt() is None
+
+
+async def test_worker_enters_real_coordinator_scope_and_closes_both_on_cancellation(execution, monkeypatch):
+    from database.batch_privacy_attempt import current_attempt
+    from utils.sync import ledger_completion
+
+    _, pipeline, cleanup = execution
+    observed = []
+
+    def preflight(**kwargs):
+        observed.append(current_attempt())
+        return None
+
+    async def cancel_at_coordinator_first_await(uid):
+        observed.append(current_attempt())
+        assert observed[-1] is not None
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ledger_completion, 'bind_or_converge_sync_ledger_completion', preflight)
+    monkeypatch.setattr(pipeline, 'warm_rollout_cohorts', cancel_at_coordinator_first_await)
+    with pytest.raises(asyncio.CancelledError):
+        await worker_job.execute(LEASE, Client())
+    assert len(observed) == 2 and observed[0] is not observed[1]
+    assert all(attempt is not None and attempt._closed for attempt in observed)
+    assert current_attempt() is None
+    cleanup.assert_not_awaited()
+    assert sync_jobs.sync_job_run_lock_present('job')
