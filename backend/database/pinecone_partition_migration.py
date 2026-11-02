@@ -58,6 +58,45 @@ def record_digest(record: dict) -> str:
     return sha256(json.dumps(payload, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
+# The provider scores one record slightly differently in different namespaces
+# (measured 2-4e-4 on memories-backend-dev, 2026-11-02), so near-tied neighbours
+# can swap. Payloads are proven exactly elsewhere; this only bounds ranking drift.
+SEARCH_SCORE_TOLERANCE = 1e-3
+
+
+def search_parity(old: list[dict], new: list[dict], tolerance: float = SEARCH_SCORE_TOLERANCE) -> bool:
+    """Raise unless two top-k lists agree up to reordering among near-equal scores.
+
+    Every shared ID scores within ``tolerance``; an ID may appear in only one
+    list solely at the cutoff, tied to the other list's lowest score; and any
+    pair ranked in opposite order is tied within ``tolerance``. Returns whether
+    the order was exactly identical.
+    """
+    try:
+        old_scores = {match['id']: float(match['score']) for match in old}
+        new_scores = {match['id']: float(match['score']) for match in new}
+    except (KeyError, TypeError, ValueError) as error:
+        raise MigrationNotReady('Search results lack comparable scores') from error
+    if len(old_scores) != len(old) or len(new_scores) != len(new) or len(old) != len(new):
+        raise MigrationNotReady('Search result membership differs; preserve source route')
+    shared = old_scores.keys() & new_scores.keys()
+    if any(abs(old_scores[i] - new_scores[i]) > tolerance for i in shared):
+        raise MigrationNotReady('Search scores differ; preserve source route')
+    old_floor = min(old_scores.values(), default=0.0)
+    new_floor = min(new_scores.values(), default=0.0)
+    if any(old_scores[i] - new_floor > tolerance for i in old_scores.keys() - shared) or any(
+        new_scores[i] - old_floor > tolerance for i in new_scores.keys() - shared
+    ):
+        raise MigrationNotReady('Search result membership differs; preserve source route')
+    position = {match['id']: rank for rank, match in enumerate(new)}
+    ranked = [match['id'] for match in old if match['id'] in position]
+    for i, first in enumerate(ranked):
+        for second in ranked[i + 1 :]:
+            if position[first] > position[second] and abs(old_scores[first] - old_scores[second]) > tolerance:
+                raise MigrationNotReady('Search result order differs; preserve source route')
+    return [match['id'] for match in old] == [match['id'] for match in new]
+
+
 IDENTITY_FIELDS = {
     'ns1': ('memory_id',),
     'ns2': ('memory_id',),
@@ -382,11 +421,8 @@ class OwnerMigration:
             new, target_indexed = self.transport.query(target, self.key.uid, vector)
             if source_indexed < source_barrier or target_indexed < last_target_lsn:
                 raise MigrationNotReady('Query replica has not reached the verified write barrier')
-            old_ids = [match['id'] for match in old['matches']]
-            new_ids = [match['id'] for match in new['matches']]
-            if old_ids != new_ids:
-                raise MigrationNotReady('Search result order differs; preserve source route')
-            query_checks.append({'matched': len(old_ids), 'passed': True})
+            exact = search_parity(old['matches'], new['matches'])
+            query_checks.append({'matched': len(old['matches']), 'passed': True, 'exact_order': exact})
         after = self._route()
         if (
             after.pending_count
