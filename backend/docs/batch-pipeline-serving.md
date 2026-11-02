@@ -513,6 +513,9 @@ keeps that bundle separate from new recordings, and sends `repair_job_id`.
 The server rejects a changed content ID (including a surviving subset) before
 ordinary admission. Missing local members hold the repair while unrelated new
 recordings can upload; they cannot establish that the lost bytes are recoverable.
+Already accepted audio may outlive the new-upload lookback: only an exact
+existing content/job-owner match crosses that age boundary, verified before
+any original-archive write. Normal stale uploads keep their age refusal.
 An already-ACKed phone WAL is not automatically resent merely because its bytes
 still exist: the phone cleared that job handle. Verify original archives or a
 separate client recovery path before promising recovery for those recordings.
