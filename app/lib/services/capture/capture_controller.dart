@@ -2551,9 +2551,11 @@ class CaptureController extends ChangeNotifier
       }
       return;
     }
-    if (foregroundAudioReady) {
-      await _preferences.saveBool('nativeBleForegroundReady', true);
+    if (!foregroundAudioReady) {
+      Logger.debug('CaptureController: foreground audio stream failed to initialize for device $deviceId');
+      return;
     }
+    await _preferences.saveBool('nativeBleForegroundReady', true);
 
     // Update state (limitless is excluded: the pendant records on-device, so the
     // capture card is driven by its stored-page count, not a live phone timer)

@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
@@ -349,6 +350,28 @@ void main() {
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('El Camino AI'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Elaine AI Speaker'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Michael AI'), isFalse);
+    });
+  });
+
+  group('RayBanMetaDeviceConnection audio capture start failure', () {
+    test('when startAudioCapture throws, cancels subscription and returns null', () async {
+      final device = BtDevice(
+        name: 'Ray-Ban Meta',
+        id: 'meta-glasses-1',
+        type: DeviceType.raybanMeta,
+        rssi: 0,
+        locator: DeviceLocator.metaDat(),
+      );
+      final transport = RayBanMetaTransport(device.id);
+      final connection = RayBanMetaDeviceConnection(device, transport);
+
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler('startAudioCapture', (_) async {
+        throw PlatformException(code: 'capture_failed', message: 'HFP mic route unavailable');
+      });
+
+      final subscription = await connection.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
+      expect(subscription, isNull);
     });
   });
 }
