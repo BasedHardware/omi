@@ -1243,7 +1243,7 @@ def list_audio_chunks(
         except Exception:
             if require_archive:
                 raise
-            logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
+            log_failure('other')
     if sample_clock:
         for chunk in chunks:
             span = chunk.get('span')

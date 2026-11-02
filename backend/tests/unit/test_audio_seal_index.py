@@ -75,6 +75,14 @@ def test_old_close_cannot_seal_newly_accepted_uncommitted_frames(remote):
     assert len(seals.sealed_entries(remote, 'owner', 'conversation')) == 2
 
 
+def test_oversized_frame_manifest_never_issues_an_unreadable_receipt(remote, monkeypatch):
+    monkeypatch.setattr(audio_outbox, 'MAX_MANIFEST_BYTES', 1)
+    with pytest.raises(ValueError):
+        part(remote)
+    assert len(remote.list_blobs('raw-live/')) == 1
+    assert not remote.list_blobs('audio-outbox/')
+
+
 def test_part_cap_seals_deterministically_without_releasing_or_holding_receipts(remote, monkeypatch):
     monkeypatch.setattr(seals, 'PART_BYTES', 640)
     index = writer(remote)
