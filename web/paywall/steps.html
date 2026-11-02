@@ -198,6 +198,7 @@
   <section class="step later" data-step="2">
     <img class="device" src="/omi-pendant-front.webp" alt="">
     <h1>Unlock Omi Pro</h1>
+    <!-- Marketing figures as of October 2026; update them here when the user count or store rating changes. -->
     <div class="accolades">
       <div class="accolade"><img src="/laurel-left.svg" alt=""><div>300K+<small>Users</small></div><img src="/laurel-right.svg" alt=""></div>
       <div class="accolade"><img src="/laurel-left.svg" alt=""><div>4.7 Stars<span class="stars" id="stars"></span></div><img src="/laurel-right.svg" alt=""></div>
@@ -275,7 +276,6 @@
   // Prices come from the app (the plan catalog), never from this page.
   var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
-  var yc = q.get('year_currency'), mc = q.get('month_currency');
   if (year != null) {
     $('yearly-sub').textContent = money('year', false) + '/year';
     $('yearly-per').textContent = money('year', true) + '/mo';

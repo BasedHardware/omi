@@ -90,7 +90,6 @@
 
   var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
-  var yc = q.get('year_currency'), mc = q.get('month_currency');
   if (year != null) {
     document.getElementById('yearly-price').textContent = money('year', false);
     document.getElementById('yearly-sub').textContent = money('year', true) + ' / month · billed yearly';

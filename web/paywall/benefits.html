@@ -120,7 +120,6 @@
   var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
   if (year != null) {
-    var yc = q.get('year_currency');
     $('yearly-price').textContent = money('year', false) + '/yr';
     $('yearly-sub').textContent = 'Just ' + money('year', true) + '/mo, billed yearly';
   } else { $('yearly').classList.add('hidden'); selected = 'month'; }
