@@ -472,7 +472,11 @@ a later month is recorded as `stale_intent` and declined. Recordings made during
 trial are not held (Unlimited) and never debit the grant; anything held after the
 grant's cutoff is outside it. A trial's conversion, a purchase or an allowance
 increase starts a release (source `conversion`) newest first within the plan's
-remaining allowance, all of it at idle.
+remaining allowance, all of it at idle, but only once the Stripe subscription is
+`active`: a trialing subscription is covered by its grant and converts on
+trialing->active, and an unknown status waits. A hold whose legacy recovery
+already spent can only finish on the legacy route, so an automatic release passes
+over it (`legacy_started`) and it stays held for a manual choice.
 
 Every automatic release passes `utils/backlog_release.decide` per recording; a manual
 tap does not. A refusal leaves the recording held and the cursor unmoved, and the
