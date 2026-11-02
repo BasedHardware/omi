@@ -132,8 +132,11 @@ def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, 
         reader = Mock(return_value=None)
         monkeypatch.setattr(developer.daily_summaries_db, 'get_daily_summary', reader)
     else:
-        reader = Mock(return_value=[])
-        monkeypatch.setattr(developer.goals_db, 'get_all_goals', reader)
+        reader = Mock(return_value=None)
+        monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', reader)
+        monkeypatch.setattr(
+            developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cohort uses point read'))
+        )
     path = f'/v1/dev/user/{kind}/missing'
     assert client.get(path).status_code == 404
     cached = client.get(path)
@@ -153,6 +156,46 @@ def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, 
     state.key_id = 'other-key'
     assert client.get(path).status_code == 404
     assert reader.call_count == 4
+
+
+def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible(routes, monkeypatch):
+    client, _, _, storage = routes
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
+    now = datetime.now(timezone.utc)
+    repaired = developer.goals_db.normalize_goal_storage(
+        dict(
+            id='repaired',
+            title='Repaired',
+            goal_type='boolean',
+            target_value=1,
+            current_value=0,
+            min_value=0,
+            max_value=1,
+            created_at=now,
+            updated_at=now,
+        ),
+        goal_id='repaired',
+    )
+    point_read = Mock(side_effect=[ValueError('malformed stored goal'), repaired])
+    monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', point_read)
+    monkeypatch.setattr(developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cohort uses point read')))
+    first = client.get('/v1/dev/user/goals/repaired')
+    assert first.status_code == 404 and not storage.entries
+    second = client.get('/v1/dev/user/goals/repaired')
+    assert second.status_code == 200 and second.json()['title'] == 'Repaired'
+    assert point_read.call_count == 2
+
+
+def test_goal_item_off_cohort_keeps_the_original_list_reader_and_no_negative_cache(routes, monkeypatch):
+    client, _, _, storage = routes
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false')
+    reader = Mock(return_value=[])
+    monkeypatch.setattr(developer.goals_db, 'get_all_goals', reader)
+    monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', Mock(side_effect=AssertionError('off cohort stays live')))
+    for _ in range(2):
+        assert client.get('/v1/dev/user/goals/missing').status_code == 404
+    assert reader.call_count == 2 and not storage.entries
 
 
 @pytest.mark.parametrize('path,origin', zip(PATHS, ['cards', 'memories', 'actions', 'mcp_memories']))

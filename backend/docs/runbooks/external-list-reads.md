@@ -96,6 +96,14 @@ before the origin read; slow fills and even retained expired Redis bytes cannot
 extend absence. Corrupt, locked, deleted or failed results are not admitted.
 Newly created items may remain absent for this bounded interval. There is no
 action-item GET-by-ID route: those router 404s already cost no content reads.
+
+Within the enabled cohort, goal detail GETs use the existing owner-scoped point
+reader instead of scanning all goals. Only its trusted absent-document result
+can fill the negative cache. Goal normalization failures keep the uncached 404,
+so a repaired goal is visible on the next request. Off-cohort goal GETs keep
+their original list projection. Grade both `goals:get_all_goals` and
+`goals:get_goal_by_id` together: moving reads between caller labels is not a
+saving by itself.
 401/403 gates already precede list readers; route tests pin that ordering rather
 than claiming a new saving from sampled error proportions.
 

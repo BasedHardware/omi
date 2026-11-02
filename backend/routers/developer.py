@@ -2691,10 +2691,17 @@ def get_goal(
     negative_key = polling_cache.negative_key(request, uid, auth, goal_id)
     if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
         raise HTTPException(404, detail='Goal not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'})
-    goals = goals_db.get_all_goals(uid, include_inactive=True)
-    goal = next((g for g in goals if g.get('id') == goal_id), None)
-    if not goal and negative_key:
-        polling_cache.remember_missing(external_lists._redis(), negative_key)
+    if negative_key:
+        try:
+            goal = goals_db.get_goal_by_id(uid, goal_id)
+        except (AttributeError, TypeError, ValueError):
+            goal = None  # List projection also hides corrupt rows; never cache them as absent.
+        else:
+            if goal is None:
+                polling_cache.remember_missing(external_lists._redis(), negative_key)
+    else:
+        goals = goals_db.get_all_goals(uid, include_inactive=True)
+        goal = next((g for g in goals if g.get('id') == goal_id), None)
 
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
