@@ -1,6 +1,15 @@
 'use client';
 
 import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
+import {
+  chatDraftKeys,
+  chatDraftRevision,
+  chatDraftOwner,
+  clearChatDraft,
+  readChatDraft,
+  restoreChatDraft,
+  writeChatDraft,
+} from './chatDraft';
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
@@ -33,8 +42,8 @@ export interface ChatComposerHandle {
 }
 
 interface ChatComposerProps {
-  /** Resolves once the send completes, so the caller can react to the first message. */
-  onSend: (text: string, files: MessageFile[]) => Promise<void>;
+  /** Resolves true when the send was accepted, so the caller can react to the first message. */
+  onSend: (text: string, files: MessageFile[]) => Promise<boolean>;
   isStreaming: boolean;
   disabled?: boolean;
   appId?: string;
@@ -71,7 +80,7 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const budget = useChatBudgetPause();
   const chatDisabled = disabled || budget.state !== null;
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => readChatDraft(chatDraftKeys.home));
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
 
@@ -79,6 +88,20 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadCountRef = useRef(0);
   const isUploading = pendingUploadCount > 0;
+
+  useEffect(() => {
+    let active = true;
+    const revision = chatDraftRevision(chatDraftKeys.home);
+    void restoreChatDraft(chatDraftKeys.home).then((draft) => {
+      if (!active) return;
+      if (chatDraftRevision(chatDraftKeys.home) === revision && draft) {
+        setInput((current) => current || draft);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }), []);
 
@@ -89,6 +112,15 @@ export function ChatComposer({
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 200)}px`;
     }
   }, [input]);
+
+  const updateDraftInput = (value: string) => {
+    setInput(value);
+    if (value) {
+      void writeChatDraft(chatDraftKeys.home, value);
+    } else {
+      clearChatDraft(chatDraftKeys.home);
+    }
+  };
 
   // Handle file selection
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,7 +193,7 @@ export function ChatComposer({
 
   // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
-    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    updateDraftInput(input ? `${input} ${transcript}` : transcript);
     inputRef.current?.focus();
   };
 
@@ -186,7 +218,22 @@ export function ChatComposer({
       inputRef.current.style.height = 'auto';
     }
 
-    await onSend(text, uploadedFiles);
+    const ownerAtSend = chatDraftOwner();
+    const accepted = await onSend(text, uploadedFiles);
+    // A different account may have signed in while this send ran; the
+    // continuation must not write the previous account's prompt under the new
+    // owner's draft key.
+    if (chatDraftOwner() !== ownerAtSend) return;
+    // Only this send's own draft is retired on acceptance; a newer draft the
+    // user typed while the send ran is never clobbered. The persist effect may
+    // have already cleared the composer's own copy, so an empty persisted
+    // draft on failure still restores this send's text.
+    const persisted = readChatDraft(chatDraftKeys.home);
+    if (persisted === text) {
+      if (accepted) clearChatDraft(chatDraftKeys.home);
+    } else if (persisted === '') {
+      if (!accepted) writeChatDraft(chatDraftKeys.home, text);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -232,7 +279,7 @@ export function ChatComposer({
       <textarea
         ref={inputRef}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={(e) => updateDraftInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={chatDisabled || isStreaming}

@@ -15,7 +15,7 @@ from models.storefront import StorefrontResponse, StorefrontUsage
 from utils.other import endpoints as auth
 from utils import storefront_flags, subscription as subscription_utils
 from utils.observability.fallback import record_fallback
-from utils.storefront import build_storefront, load_ladder
+from utils.storefront import build_single_plan_storefront, build_storefront, load_ladder
 from utils.storefront_copy import present_usage
 
 router = APIRouter()
@@ -110,6 +110,19 @@ def get_storefront(
     subscription = users_db.get_user_valid_subscription(uid, provision=False)
     if subscription is None:
         subscription = subscription_utils.get_default_basic_subscription()
+    # Omi Pro is the only plan sold: a buyer with no current paid subscription
+    # gets a single-tier Omi Pro sheet on every platform (the ladder sheet has
+    # no Omi Pro card). NEW_BUYER_SINGLE_PLAN_ENABLED=false restores the ladder.
+    usage = _usage(uid, subscription, locale)
+    if subscription_utils.new_buyer_single_plan_applies(subscription.plan):
+        return build_single_plan_storefront(
+            catalog_revision=catalog.CATALOG_REVISION,
+            subscription=subscription,
+            usage=usage,
+            retrieve_price=_retrieve_price,
+            trigger=trigger,
+            locale=locale,
+        )
     # W3's generated declaration is absent until #21351 merges. No env prices
     # can accidentally become ladder-v1 just because they exist.
     configured = catalog.configured_ladder_prices()
@@ -126,7 +139,6 @@ def get_storefront(
         for price_id, plan in catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()
     ]
     recognized.extend(configured.values())
-    usage = _usage(uid, subscription, locale)
     from config import ladder_v1 as policy
     from utils.ladder_v1 import account
 

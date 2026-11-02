@@ -55,6 +55,9 @@ interface DailyCostPoint {
     anthropic: number;
     /** GCP net by service; the TV's one-time incident detector reads it. */
     gcpServices?: Record<string, number>;
+    /** Net GCP on the development project (inside gcpInfra/vertexLlm): the
+     * variable margin excludes it; the all-in stack keeps it. */
+    gcpDevUsd?: number;
   };
 }
 
@@ -536,12 +539,17 @@ export async function computeBillingInfraCosts(
       total: round(desktop + mobile),
       // Provider legs of the same total (TV cost stack). Vertex/Gemini LLM is
       // inside the GCP bill; OpenAI and Anthropic are their own invoices.
+      // `vertexReserved` is the prepaid Provisioned-Throughput slice already
+      // inside `vertexLlm` (never an extra dollar): the variable-margin tile
+      // subtracts it; the all-in total keeps counting it.
       components: {
         gcpInfra: round(otherPool),
         vertexLlm: round(row.llmNetUsd),
+        vertexReserved: round(row.vertexReservedUsd ?? 0),
         openai: round(openaiByDay.get(row.date) ?? 0),
         anthropic: round(chatPool),
         gcpServices: row.services,
+        gcpDevUsd: round(row.devNetUsd ?? 0),
       },
     };
   });

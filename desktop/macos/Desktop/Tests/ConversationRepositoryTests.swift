@@ -4,6 +4,210 @@ import XCTest
 
 @MainActor
 final class ConversationRepositoryTests: XCTestCase {
+  func testDiscardedScopeReachesListCountAndSearch() async throws {
+    let remote = FakeConversationRemote()
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    let query = ConversationListQuery(starredOnly: true, date: nil, folderId: "work", includeDiscarded: true)
+    await repository.load(query: query)
+    _ = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(remote.listQueries, [query])
+    XCTAssertEqual(remote.countQueries, [query])
+    XCTAssertEqual(remote.searchDiscardedScopes, [true])
+    XCTAssertTrue(query.hasFilters)
+  }
+
+  func testRestorePublishesAndCachesFullCanonicalResponse() async throws {
+    let hidden = makeConversation(revision: 1, discarded: true)
+    let restored = makeConversation(
+      title: "Restored", overview: "New summary", revision: 2, transcript: "Retained audio transcript")
+    let remote = FakeConversationRemote(listResult: .success([hidden]))
+    remote.restoreResult = .success(restored)
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(
+      query: ConversationListQuery(starredOnly: false, date: nil, folderId: nil, includeDiscarded: true))
+    local.stored.removeAll()
+    let result = try await repository.restore(id: hidden.id)
+    XCTAssertEqual(result, restored)
+    XCTAssertEqual(repository.conversations, [restored])
+    XCTAssertEqual(local.stored, [restored])
+  }
+
+  func testFailedRestoreKeepsHiddenCardAndCacheIntact() async {
+    let hidden = makeConversation(revision: 1, discarded: true)
+    let remote = FakeConversationRemote(listResult: .success([hidden]))
+    // A server returning 200 with the old discard must never read as success.
+    remote.restoreResult = .success(hidden)
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(
+      query: ConversationListQuery(starredOnly: false, date: nil, folderId: nil, includeDiscarded: true))
+    local.stored.removeAll()
+    do {
+      _ = try await repository.restore(id: hidden.id)
+      XCTFail("A still-discarded response cannot complete restore")
+    } catch {
+      XCTAssertTrue(error is ConversationRestoreError)
+    }
+    XCTAssertEqual(repository.conversations, [hidden])
+    XCTAssertTrue(local.stored.isEmpty)
+  }
+
+  func testStaleSearchIndexCannotUndoRestoreButNewerDecisionCan() async throws {
+    let hidden = makeConversation(revision: 1, discarded: true)
+    let restored = makeConversation(revision: 2, transcript: "Retained transcript")
+    let remote = FakeConversationRemote(searchResult: .success([hidden]))
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    _ = try await repository.restore(id: hidden.id)
+    let staleHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleHits, [restored])
+    XCTAssertEqual(staleHits.first?.transcriptSegments.first?.text, "Retained transcript")
+    remote.searchResult = .success([makeConversation(title: "Old summary", revision: 1)])
+    let staleVisibleHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleVisibleHits, [restored])
+    remote.searchResult = .success([restored])
+    _ = try await repository.search(text: "synthetic", includeDiscarded: true)
+    remote.searchResult = .success([hidden])
+    let staleAfterFresh = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleAfterFresh, [restored], "A fresh detail must not release the floor for a lagging search index")
+    let newer = makeConversation(revision: 3, discarded: true)
+    remote.searchResult = .success([newer])
+    let freshHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(freshHits, [newer])
+  }
+
+  func testRestoreDoesNotOverrideDeletedServerTruth() async throws {
+    let restored = makeConversation(revision: 2)
+    let deleted = makeConversation(revision: 3, discarded: true, deleted: true)
+    let remote = FakeConversationRemote(searchResult: .success([deleted]))
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    _ = try await repository.restore(id: restored.id)
+    let results = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertTrue(try XCTUnwrap(results.first).deleted)
+    XCTAssertTrue(
+      ConversationSearchResultFilter.apply(
+        results, starredOnly: false, date: nil, folderId: nil, includeDiscarded: true
+      ).isEmpty)
+  }
+
+  func testSparseListAfterRestoreRetainsTranscriptForOfflineDetail() async throws {
+    let restored = makeConversation(revision: 2, transcript: "Retained transcript")
+    let sparse = makeConversation(title: "Fresh list title", revision: 3)
+    let remote = FakeConversationRemote(listResult: .success([sparse]))
+    remote.restoreResult = .success(restored)
+    let local = FakeConversationLocal(detailResult: restored)
+    let repository = ConversationRepository(remote: remote, local: local)
+    _ = try await repository.restore(id: restored.id)
+    await repository.load(query: .all)
+    var cachedPaint: ServerConversation?
+    let offline = try await repository.detail(id: restored.id, seed: restored) { cachedPaint = $0 }
+    XCTAssertEqual(cachedPaint?.transcriptSegments.first?.text, "Retained transcript")
+    XCTAssertEqual(offline.transcriptSegments.first?.text, "Retained transcript")
+    XCTAssertTrue(offline.transcriptSegmentsIncluded)
+    XCTAssertEqual(offline.title, "Fresh list title")
+    XCTAssertEqual(offline.updatedAt, sparse.updatedAt)
+  }
+
+  func testSparseSearchAfterRestoreRetainsTranscriptButExplicitEmptyDetailWins() async throws {
+    let restored = makeConversation(revision: 2, transcript: "Retained transcript")
+    let sparse = makeConversation(revision: 3)
+    var empty = makeConversation(revision: 4)
+    empty.transcriptSegmentsIncluded = true
+    let remote = FakeConversationRemote(searchResult: .success([sparse]))
+    remote.restoreResult = .success(restored)
+    let local = FakeConversationLocal(detailResult: restored)
+    let repository = ConversationRepository(remote: remote, local: local)
+    _ = try await repository.restore(id: restored.id)
+    let hits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(hits.first?.transcriptSegments.first?.text, "Retained transcript")
+    let offline = try await repository.detail(id: restored.id)
+    XCTAssertEqual(offline.transcriptSegments.first?.text, "Retained transcript")
+    remote.detailResult = .success(empty)
+    let canonical = try await repository.detail(id: restored.id)
+    XCTAssertTrue(canonical.transcriptSegments.isEmpty)
+    XCTAssertTrue(canonical.transcriptSegmentsIncluded)
+    XCTAssertEqual(canonical.updatedAt, empty.updatedAt)
+  }
+
+  func testSparseRestoreResponseDoesNotMaskCachedTranscriptOffline() async throws {
+    let cached = makeConversation(revision: 1, transcript: "Cached retained transcript", discarded: true)
+    let restored = makeConversation(title: "Restored", revision: 2)
+    let remote = FakeConversationRemote()
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal(detailResult: cached))
+    _ = try await repository.restore(id: restored.id)
+    var cachedPaint: ServerConversation?
+    let offline = try await repository.detail(id: restored.id, seed: restored) { cachedPaint = $0 }
+    XCTAssertEqual(cachedPaint?.transcriptSegments.first?.text, "Cached retained transcript")
+    XCTAssertEqual(offline.transcriptSegments.first?.text, "Cached retained transcript")
+    XCTAssertFalse(offline.discarded)
+    XCTAssertEqual(offline.title, "Restored")
+  }
+
+  func testRestoreWithoutResponseRevisionAdoptsFreshServerChanges() async throws {
+    let restored = makeConversation(title: "Restored", revision: nil)
+    let fresh = makeConversation(title: "Later title", revision: 3)
+    let remote = FakeConversationRemote(searchResult: .success([fresh]))
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    _ = try await repository.restore(id: restored.id)
+    let freshHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(freshHits, [fresh])
+    remote.searchResult = .success([makeConversation(revision: 2, discarded: true)])
+    let staleHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleHits, [fresh])
+  }
+
+  func testRestorePrewriteRevisionCannotAuthorizeAnInflightHiddenResponse() async throws {
+    let restored = makeConversation(revision: 1)
+    let hidden = makeConversation(revision: 2, discarded: true)
+    let remote = FakeConversationRemote(searchResult: .success([hidden]))
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    _ = try await repository.restore(id: restored.id)
+    let staleHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleHits, [restored], "The POST can echo a revision older than an in-flight GET")
+  }
+
+  func testStaleCacheCannotRehideConfirmedRestoreWhenOffline() async throws {
+    let hidden = makeConversation(revision: 1, discarded: true)
+    let restored = makeConversation(revision: 2)
+    let remote = FakeConversationRemote(listResult: .failure(TestFailure.offline))
+    remote.restoreResult = .success(restored)
+    let local = FakeConversationLocal(listResult: [hidden], count: 1)
+    let repository = ConversationRepository(remote: remote, local: local)
+    _ = try await repository.restore(id: hidden.id)
+    await repository.load(
+      query: ConversationListQuery(starredOnly: false, date: nil, folderId: nil, includeDiscarded: true))
+    XCTAssertEqual(repository.conversations, [restored])
+  }
+
+  func testRestoreFromPreviousAccountCannotPublishOrCache() async throws {
+    let hidden = makeConversation(revision: 1, discarded: true)
+    let restored = makeConversation(revision: 2)
+    let suspended = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([hidden]))
+    remote.restoreHandler = { try await suspended.result(for: $0) }
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(
+      query: ConversationListQuery(starredOnly: false, date: nil, folderId: nil, includeDiscarded: true))
+    local.stored.removeAll()
+    let task = Task { try await repository.restore(id: hidden.id) }
+    await suspended.waitUntilRequested(hidden.id)
+    repository.reset()
+    await suspended.resume(hidden.id, with: .success(restored))
+    do {
+      _ = try await task.value
+      XCTFail("The previous account response must be cancelled")
+    } catch is CancellationError {
+    }
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertTrue(local.stored.isEmpty)
+  }
+
   func testLoadEmitsCacheImmediatelyThenCanonicalServerState() async {
     let cached = makeConversation(
       title: "Cached title",
@@ -695,6 +899,50 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.count, 0)
   }
 
+  func testDeletingALoadedRowKeepsLoadMoreAlignedWithTheServerPage() async throws {
+    // Regression: the server pages conversations by offset, so deleting a
+    // loaded row shifts every older row up one slot. Without lowering
+    // nextPageOffset alongside count, loadMore() re-requests one row too
+    // late and skips the row that moved into the loaded window.
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let skippedIfBuggy = makeConversation(id: "fifty-first", title: "Should not be skipped", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success(firstPage), countResult: .success(51), deleteResult: .success(()))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all, includeCache: false)
+    XCTAssertTrue(repository.hasMore)
+
+    try await repository.delete(id: firstPage[0].id)
+
+    remote.listResult = .success([skippedIfBuggy])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.last?.offset, 49, "a loaded-row delete must shift the next offset back by one")
+    XCTAssertTrue(repository.conversations.contains { $0.id == skippedIfBuggy.id })
+  }
+
+  func testUnstarringUnderTheStarredFilterKeepsLoadMoreAlignedWithTheServerPage() async throws {
+    let starred = makeConversation(starred: true, revision: 1)
+    let canonical = makeConversation(starred: false, revision: 2)
+    let skippedIfBuggy = makeConversation(id: "skipped", title: "Should not be skipped", starred: true, revision: 3)
+    let remote = FakeConversationRemote(
+      listResult: .success([starred]), countResult: .success(2), starResult: .success(canonical))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: ConversationListQuery(starredOnly: true, date: nil, folderId: nil))
+    XCTAssertTrue(repository.hasMore)
+
+    try await repository.setStarred(id: starred.id, starred: false)
+    XCTAssertTrue(repository.conversations.isEmpty, "precondition: the unstarred row left the Starred filter")
+
+    remote.listResult = .success([skippedIfBuggy])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.last?.offset, 0, "unstarring the only loaded row must not skip ahead")
+    XCTAssertTrue(repository.conversations.contains { $0.id == skippedIfBuggy.id })
+  }
+
   func testDeleteFailureKeepsVisibleAndCachedStateIntact() async {
     let conversation = makeConversation(revision: 1)
     let remote = FakeConversationRemote(
@@ -856,8 +1104,10 @@ final class ConversationRepositoryTests: XCTestCase {
     overview: String = "Overview",
     status: ConversationStatus = .completed,
     starred: Bool = false,
-    revision: TimeInterval,
-    transcript: String? = nil
+    revision: TimeInterval?,
+    transcript: String? = nil,
+    discarded: Bool = false,
+    deleted: Bool = false
   ) -> ServerConversation {
     let created = Date(timeIntervalSince1970: 100)
     let segments =
@@ -878,7 +1128,7 @@ final class ConversationRepositoryTests: XCTestCase {
     return ServerConversation(
       id: id,
       createdAt: created,
-      updatedAt: Date(timeIntervalSince1970: revision),
+      updatedAt: revision.map { Date(timeIntervalSince1970: $0) },
       startedAt: created,
       finishedAt: created.addingTimeInterval(60),
       structured: Structured(
@@ -897,8 +1147,8 @@ final class ConversationRepositoryTests: XCTestCase {
       source: .desktop,
       language: "en",
       status: status,
-      discarded: false,
-      deleted: false,
+      discarded: discarded,
+      deleted: deleted,
       isLocked: false,
       starred: starred,
       folderId: nil,
@@ -924,6 +1174,11 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   var titleResult: Result<ServerConversation, Error>
   var folderResult: Result<ServerConversation, Error>
   var searchResult: Result<[ServerConversation], Error>
+  var restoreResult: Result<ServerConversation, Error> = .failure(TestFailure.offline)
+  var restoreHandler: ((String) async throws -> ServerConversation)?
+  var listQueries: [ConversationListQuery] = []
+  var countQueries: [ConversationListQuery] = []
+  var searchDiscardedScopes: [Bool] = []
   var deleteResult: Result<Void, Error>
   var listHandler: ((ConversationListQuery) async throws -> [ServerConversation])?
   var searchHandler: ((String) async throws -> [ServerConversation])?
@@ -955,18 +1210,27 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   }
 
   func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
+    listQueries.append(query)
     listRequests.append((offset: offset, limit: limit))
     if let listHandler { return try await listHandler(query) }
     return try listResult.get()
   }
-  func count(query: ConversationListQuery) async throws -> Int { try countResult.get() }
+  func count(query: ConversationListQuery) async throws -> Int {
+    countQueries.append(query)
+    return try countResult.get()
+  }
   func detail(id: String) async throws -> ServerConversation {
     if let detailHandler { return try await detailHandler(id) }
     return try detailResult.get()
   }
-  func search(text: String) async throws -> [ServerConversation] {
+  func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation] {
+    searchDiscardedScopes.append(includeDiscarded)
     if let searchHandler { return try await searchHandler(text) }
     return try searchResult.get()
+  }
+  func restore(id: String) async throws -> ServerConversation {
+    if let restoreHandler { return try await restoreHandler(id) }
+    return try restoreResult.get()
   }
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation {
     if let starHandler { return try await starHandler(starred) }

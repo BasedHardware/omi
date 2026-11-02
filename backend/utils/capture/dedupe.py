@@ -1,6 +1,7 @@
 """One speaker-independent decision for bridge donors and incoming sync chunks.
 
-Frame receipts and same-scope retry evidence run first. Text is a fallback: an
+Frame receipts qualify lexical drops; same-scope retries require exact text.
+For unpositioned speech, text is a fallback: an
 unambiguous conversation-wide clock estimate only narrows the search, and a
 near-identical line must still occupy the same two-second window. Speaker labels
 are never evidence that two pieces of speech are the same or different.
@@ -23,7 +24,7 @@ from utils.capture.shadow import compare
 from utils.observability.fallback import record_fallback
 from utils.sync.capture_repeat_evidence import capture_covered_indices
 from utils.sync.live_overlap import compatible_capture
-from utils.sync.live_speech_dedupe import drop_proven_exact_retries
+from utils.sync.live_speech_dedupe import drop_covered_repeats, drop_proven_exact_retries
 
 FLAG = 'CAPTURE_COVERAGE_MODE'
 MAX_SEGMENTS = 4096
@@ -146,25 +147,45 @@ def dedupe_segments(
     frame_verified, positioned = evaluate_frames(incoming, incoming_row, [reference_row, *conversation_rows])
     verified |= frame_verified
     positioned_ids = {id(segment) for i, segment in enumerate(incoming) if i in positioned}
-    # Source-frame coverage is authoritative. Same-scope retry proofs are also
-    # preserved; neither path consults is_user, person_id, or provider speaker IDs.
+    # Frame proof only qualifies a segment: novel/protected tokens must survive.
+    # Existing offsets may have been rebased by assignment; timestamp is absolute.
+    lexical_reference = [
+        dict(segment, start=span[0], end=span[0] + span[1])
+        for segment in existing
+        if (span := _span(segment)) is not None
+    ]
+    lexical_kept, _ = drop_covered_repeats(
+        incoming,
+        lexical_reference,
+        live_origin=0.0,
+        live_pinned=False,
+        verified_capture_indices=verified,
+    )
+    lexical_kept_ids = {id(segment) for segment in lexical_kept}
     survivors, _, _ = drop_proven_exact_retries(
-        [(i, segment) for i, segment in enumerate(incoming) if i not in verified and i not in positioned],
+        [
+            (i, segment)
+            for i, segment in enumerate(incoming)
+            if id(segment) in lexical_kept_ids and (i in verified or i not in positioned)
+        ],
         existing,
+        verified_indices=verified,
     )
     retry_kept = {id(segment) for segment in survivors}
     survivors = [
         segment
         for i, segment in enumerate(incoming)
-        if i not in verified and (i in positioned or id(segment) in retry_kept)
+        if id(segment) in lexical_kept_ids and ((i in positioned and i not in verified) or id(segment) in retry_kept)
     ]
     windows = _windows(existing)
     starts = [window['start'] for window in windows]
     offset = _offset(windows, _reference_segments(conversation_rows, reference_row, incoming))
     consumed, kept = set(), []
+    verified_ids = {id(segment) for i, segment in enumerate(incoming) if i in verified}
     for segment in survivors:
         span, tokens = _span(segment), _tokens(segment)
-        if not span or id(segment) in positioned_ids:
+        # A lexical abstention must not be overridden by the weaker fuzzy pass.
+        if not span or id(segment) in positioned_ids or id(segment) in verified_ids:
             kept.append(segment)
             continue
         target = span[0] + offset

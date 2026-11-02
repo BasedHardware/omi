@@ -77,7 +77,8 @@ actor TranscriptionStorage {
   func finishSession(
     id: Int64,
     strategy: TranscriptionFinalizationStrategy? = nil,
-    reason: TranscriptionFinalizationReason = .userStop
+    reason: TranscriptionFinalizationReason = .userStop,
+    finishedAt: Date? = nil
   ) async throws {
     let db = try await ensureInitialized()
 
@@ -119,7 +120,8 @@ actor TranscriptionStorage {
         // one-second minimum so a subsecond segment does not encode an empty interval.
         record.finishedAt = max(captureEnd, record.startedAt.addingTimeInterval(1.0))
       } else {
-        record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
+        let captureEnd = finishedAt.flatMap { $0.timeIntervalSince1970.isFinite ? min($0, now) : nil } ?? now
+        record.finishedAt = max(captureEnd, record.startedAt.addingTimeInterval(1.0))
       }
       record.status = .pendingUpload
       if let strategy {
@@ -139,6 +141,35 @@ actor TranscriptionStorage {
 
     if didFinish {
       log("TranscriptionStorage: Finished session \(id)")
+    }
+  }
+
+  /// The latest local session from a previous process, with a trustworthy capture end.
+  /// Run before opening this launch's first session; recovery may already have finalized it.
+  func interruptedMeetingEnd(before launch: Date, now: Date) async throws -> Date? {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      guard
+        let session =
+          try TranscriptionSessionRecord
+          .filter(Column("createdAt") < launch && Column("source") == "desktop" && Column("deleted") == false)
+          .order(Column("id").desc).fetchOne(database),
+        session.conversationRole == .meeting,
+        session.status == .recording || session.finalizationReason == .crashRecovery,
+        let id = session.id
+      else { return nil }
+      let segmentEnd = try Double.fetchOne(
+        database,
+        sql: """
+          SELECT MAX(endTime) FROM transcription_segments
+          WHERE sessionId = ? AND startTime >= 0 AND endTime > startTime AND endTime <= ?
+          """, arguments: [id, now.timeIntervalSince(session.startedAt)])
+      let persistedEnd = session.finishedAt.flatMap { end -> Date? in
+        end.timeIntervalSince1970.isFinite && end > session.startedAt && end <= now ? end : nil
+      }
+      let end = persistedEnd ?? segmentEnd.map { session.startedAt.addingTimeInterval($0) }
+      guard let end, end.timeIntervalSince1970.isFinite, end > session.startedAt, end <= now else { return nil }
+      return end
     }
   }
 
@@ -1086,7 +1117,8 @@ actor TranscriptionStorage {
     limit: Int = 50,
     offset: Int = 0,
     starredOnly: Bool = false,
-    folderId: String? = nil
+    folderId: String? = nil,
+    includeDiscarded: Bool = false
   ) async throws -> [ServerConversation] {
     let db = try await ensureInitialized()
 
@@ -1095,7 +1127,10 @@ actor TranscriptionStorage {
         TranscriptionSessionRecord
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
-        .filter(Column("discarded") == false)
+
+      if !includeDiscarded {
+        query = query.filter(Column("discarded") == false)
+      }
 
       if starredOnly {
         query = query.filter(Column("starred") == true)
@@ -1160,7 +1195,9 @@ actor TranscriptionStorage {
   }
 
   /// Get count of local conversations
-  func getLocalConversationsCount(starredOnly: Bool = false, folderId: String? = nil) async throws -> Int {
+  func getLocalConversationsCount(
+    starredOnly: Bool = false, folderId: String? = nil, includeDiscarded: Bool = false
+  ) async throws -> Int {
     let db = try await ensureInitialized()
 
     return try await db.read { database in
@@ -1168,7 +1205,10 @@ actor TranscriptionStorage {
         TranscriptionSessionRecord
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
-        .filter(Column("discarded") == false)
+
+      if !includeDiscarded {
+        query = query.filter(Column("discarded") == false)
+      }
 
       if starredOnly {
         query = query.filter(Column("starred") == true)

@@ -7,6 +7,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:omi/backend/http/api/flags.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -89,6 +91,10 @@ class AnalyticsManager {
   static bool get trackingEnabled => _trackingEnabled;
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
+  static final ValueNotifier<String?> _settledIdentity = ValueNotifier(null);
+
+  /// The SDK distinct id once an identity settles; null while one settles or tracking is off.
+  static ValueListenable<String?> get settledIdentity => _settledIdentity;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
   static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
@@ -157,6 +163,7 @@ class AnalyticsManager {
   }
 
   static void _notifyIdentity(String? distinctId, bool enabled) {
+    _settledIdentity.value = enabled ? distinctId : null;
     identityChanged?.call(distinctId, enabled);
   }
 
@@ -238,6 +245,13 @@ class AnalyticsManager {
       _adapter = PostHogAnalyticsAdapter(
         apiKey: Env.posthogApiKey!,
         personPropertiesForFlags: () => {'\$email': _preferences.email},
+        omiFlags: () async => switch (await const OmiFlagsApi().getClientFlags()) {
+          ApiSuccess(:final data) => {
+              for (final f in data) f.key: (enabled: f.enabled, variant: f.variant, payloadJson: f.payloadJson),
+            },
+          // Any failure keeps every key on PostHog; the adapter treats null as "no Omi answer".
+          ApiFailure() => null,
+        },
       );
     }
     final adapter = _adapter;
@@ -334,6 +348,7 @@ class AnalyticsManager {
     _trackingConsent.value = true;
     _clientAppNamespace = 'unknown';
     _settledDistinctId = null;
+    _settledIdentity.value = null;
     _identityEpoch++;
     _boundIdentity = null;
     _identityKnown = false;
@@ -2790,11 +2805,6 @@ class AnalyticsManager {
       properties: {'hour_24': hour, 'hour_12': hour12, 'period': period, 'display_time': '$hour12:00 $period'},
     );
     setUserProperty('Daily Summary Hour', hour);
-  }
-
-  /// Shape-only dimensions: no advice, source identities or arbitrary producer text.
-  void proactivityOutcome({required String action, required String channel, required String surface}) {
-    track('proactivity_v2_outcome', properties: {'action': action, 'channel': channel, 'surface': surface});
   }
 
   void dailySummaryDetailViewed({required String summaryId, required String date, String? source}) {

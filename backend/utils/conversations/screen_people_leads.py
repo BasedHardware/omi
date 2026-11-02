@@ -109,6 +109,8 @@ def screen_people_leads(
             {'name': name, 'evidence': set(), 'sightings': 0, 'first_seen_min': None, 'app': row.get('appName')},
         )
         lead['evidence'].add(kind)
+        if kind == 'call_window' and start <= at <= end:
+            lead['call_seen_during_conversation'] = True
         lead['sightings'] += 1
         minute = round((at - start).total_seconds() / 60)
         if lead['first_seen_min'] is None or minute < lead['first_seen_min']:

@@ -13,10 +13,12 @@ from typing import Any, Mapping, Optional, Sequence
 from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database import speaker_learning_jobs as learning_jobs
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
 from utils.person_evidence import person_updates_for_assignment
+from utils.speakers import auto_enroll
 
 
 @dataclass
@@ -104,6 +106,21 @@ def persist_assignment_effects(
         source_conversation_ids=donor_ids,
     )
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
+    pool_changes = {}
+    # Retraction is mandatory even when new enrollment/use is killed off.
+    for pid, doc in docs.items():
+        change = auto_enroll.retract(
+            uid,
+            pid,
+            (doc or {}).get(auto_enroll.POOL_FIELD),
+            [conversation_id, *donor_ids],
+            resolved,
+        )
+        if change:
+            updates.setdefault(pid, {}).update(change)
+            pool_changes[pid] = change[auto_enroll.POOL_FIELD]
+    if pool_changes:
+        owner_update.update(auto_enroll.authority_after(user_doc, pool_changes))
     if bookkeeping.enabled:
         bookkeeping.involved = True
         projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}
@@ -141,4 +158,5 @@ def persist_assignment_effects(
         transaction.update(user_ref, owner_update)
     for pid, update in updates.items():
         transaction.update(people[pid][0], update)
+        bump_people_generation(transaction, people[pid][0])
     return removed, relabeled

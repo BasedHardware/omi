@@ -27,7 +27,7 @@ class _LoadedIntegrations extends TaskIntegrationProvider {
   @override
   bool get hasLoaded => true;
   @override
-  Future<void> loadFromBackend({bool forceRefresh = false}) async {}
+  Future<void> loadFromBackend({bool silent = false, bool forceRefresh = false}) async {}
 }
 
 void main() {

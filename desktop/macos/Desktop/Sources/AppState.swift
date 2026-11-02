@@ -369,7 +369,7 @@ class AppState: ObservableObject {
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
   var hasActiveConversationFilters: Bool {
-    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil || showDiscardedConversations
   }
 
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
@@ -383,9 +383,11 @@ class AppState: ObservableObject {
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
   let conversationRepository = ConversationRepository()
+  let conversationRestored = PassthroughSubject<ServerConversation, Never>()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
+  @Published var showDiscardedConversations: Bool = false
   @Published var selectedDateFilter: Date? = nil
   @Published var selectedFolderId: String? = nil
 
@@ -518,11 +520,17 @@ class AppState: ObservableObject {
   }
   /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
   func publishMeetingCaptureActivity() {
-    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
+    UpdateInstallActivity.setMeetingCaptureActive(
+      isTranscribing && currentConversationRole == .meeting
+        && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
   var pendingMeetingState: Bool?
+  var pendingMeetingEndedAt: Date?
+  var meetingRelaunchChecked = false
+  var meetingRelaunchCheckGeneration: UInt64?
+  var meetingRelaunchCheckMode: AssistantSettings.AudioRecordingMode?
   /// True while `finishConversation` is rotating the logical conversation.
   /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
   /// flag only covers detector edges; the deferred `.meetingEnded` finalizer,
@@ -710,6 +718,7 @@ class AppState: ObservableObject {
     selectedFolderId = nil
     selectedDateFilter = nil
     showStarredOnly = false
+    showDiscardedConversations = false
     totalConversationsCount = nil
     filteredConversationsCount = nil
     conversationsError = nil

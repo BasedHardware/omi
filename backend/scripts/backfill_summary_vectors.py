@@ -28,6 +28,9 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from database.pinecone_partition_index import owner_index
+
 logger = logging.getLogger(__name__)
 DEFAULT_SINCE = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
@@ -161,7 +164,7 @@ def write_summary(uid: str, metadata: Mapping[str, Any]) -> str:
     if not row or not eligible(row, datetime.min.replace(tzinfo=timezone.utc)):
         raise RuntimeError('selected conversation is no longer eligible')
     vector_id = f"{uid}-{metadata['id']}"
-    existing = vector_db.index.fetch(ids=[vector_id], namespace='ns1')
+    existing = owner_index(vector_db.index, uid).fetch(ids=[vector_id], namespace='ns1')
     existed = bool(existing.vectors)
     if not save_structured_vector(uid, deserialize_conversation(row)):
         raise RuntimeError('summary vector upsert failed')

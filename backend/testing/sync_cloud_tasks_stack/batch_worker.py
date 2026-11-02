@@ -139,8 +139,15 @@ def main() -> int:
         return ModeRoutingWorker(loaded_artifacts)
 
     class CpuSynchronizedWorker(runtime.SynchronizedWorker):
-        def __init__(self, worker: Any, synchronize: Any = None, on_fatal: Any = None, memory_probe: Any = None):
-            super().__init__(worker, synchronize=lambda: None, on_fatal=on_fatal, memory_probe=None)
+        def __init__(
+            self,
+            worker: Any,
+            synchronize: Any = None,
+            on_fatal: Any = None,
+            memory_probe: Any = None,
+            timings: Any = None,
+        ):
+            super().__init__(worker, synchronize=lambda: None, on_fatal=on_fatal, memory_probe=None, timings=timings)
 
     token = local_oidc_token(
         os.environ['BATCH_PIPELINE_WORKER_AUDIENCE'], os.environ['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']

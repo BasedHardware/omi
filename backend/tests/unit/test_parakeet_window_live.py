@@ -38,6 +38,7 @@ from utils.stt.live_metrics import (
     WINDOW_SESSION_OUTCOME,
     WINDOW_STRANDED_FLUSHES,
     NONWINDOW_REPLAY_SETTLES,
+    WINDOW_REPLICA_ATTEMPTS,
 )
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_session import (
@@ -78,6 +79,10 @@ def runtime(monkeypatch):
     # Pin that unit here so they test mechanics, not the shipped default, which
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
+    # Legacy mechanics below also cover the startup rollback. Dedicated
+    # startup replay cases remove these overrides to exercise shipped defaults.
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_POST_SECONDS', '15')
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'false')
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '12')
     monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', raising=False)
     monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', raising=False)
@@ -157,6 +162,324 @@ class SeqClient:
         if callable(data):
             data = data(len(self.requests), kwargs)
         return httpx.Response(200, json=data, request=httpx.Request('POST', url))
+
+
+@pytest.fixture
+def replica_pool(monkeypatch):
+    from utils.stt.window_replicas import WindowReplicas
+
+    pool = WindowReplicas()
+    pool._cursor = 0
+    monkeypatch.setattr(window, 'window_replicas', pool)
+    monkeypatch.setattr(window.batch_pressure, 'ready_replicas', lambda: ('10.0.0.1', '10.0.0.2'))
+    monkeypatch.delenv('PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED', raising=False)
+    return pool
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first', ['empty', '5xx', 'connect', 'timeout'])
+async def test_replica_retry_uses_distinct_pod_and_same_pcm_before_vendor(monkeypatch, replica_pool, first):
+    class ReplicaClient(Client):
+        async def post(self, url, **kwargs):
+            if not self.requests:
+                self.requests.append((url, kwargs))
+                if first == 'connect':
+                    raise httpx.ConnectError('test')
+                if first == 'timeout':
+                    raise httpx.ReadTimeout('test')
+                return httpx.Response(
+                    500 if first == '5xx' else 200, json={'text': ''}, request=httpx.Request('POST', url)
+                )
+            return await super().post(url, **kwargs)
+
+    client = ReplicaClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    emitted = []
+    sock = window.connect_window(emitted.extend, 16000)
+    assert sock.replica_scoped
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock.drain_and_close()
+    assert not sock.is_connection_dead
+    assert len(client.requests) == 2
+    assert client.requests[0][0] != client.requests[1][0]
+    assert client.requests[0][1]['files'] == client.requests[1][1]['files']
+    assert [seg['text'] for seg in emitted] == ['hello']
+    assert st._parakeet_circuit.state == 'closed'
+    assert window.admission.active == 0
+    if first != 'empty':
+        next_pod = replica_pool.claim(('10.0.0.1', '10.0.0.2'))
+        assert next_pod.ip == '10.0.0.2'
+
+
+@pytest.mark.asyncio
+async def test_empty_replica_retry_is_bounded_per_episode_and_preserves_anchors(monkeypatch, replica_pool):
+    client = Client(data={'text': '', 'segments': []})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    for _ in range(3):
+        assert await sock._post_and_parse(b'\x01\x00' * 32000, 2.0) == []
+    assert len(client.requests) == 4  # one retry for the whole empty episode
+    assert sock._anchor_bytes == 0
+    assert sock.replay_anchor_sample() is None
+    assert not sock.is_connection_dead
+    # Silence/model-empty output never quarantines a working GPU.
+    assert all(state.failures == 0 for state in replica_pool._states.values())
+
+
+@pytest.mark.asyncio
+async def test_active_replica_window_preserves_admitted_pressure_grace_without_stale_pod_routing(
+    monkeypatch, replica_pool
+):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    assert sock.replica_scoped
+    # adm2 may admit bounded cached pressure while DNS is unavailable. Retain
+    # serving via exactly one VIP POST, without offering any stale pod IP.
+    monkeypatch.setattr(window.batch_pressure, 'ready_replicas', lambda: ())
+    assert [segment.text for segment in await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)] == ['hello']
+    assert [url for url, _ in client.requests] == ['http://tdt.invalid/v1/transcribe']
+    assert not replica_pool._states
+    assert st._parakeet_circuit.state == 'closed'
+    # The VIP is not an escape from the admission owner's expired grace.
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_args: False)
+    with pytest.raises(st.ParakeetConnectionError):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert len(client.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_replica_failure_never_publishes_family_quarantine(monkeypatch, replica_pool):
+    from utils.stt import live_failure
+
+    client = Client(status=500)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    family_bench = Mock()
+    monkeypatch.setattr(st, 'open_provider_selection_circuit', family_bench)
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    # The same terminal failover seam used by the listen receiver must not
+    # re-open the family circuit after the pod-scoped owner settled failures.
+    assert live_failure.note_typed_provider_death(sock, 'parakeet')
+    family_bench.assert_not_called()
+    assert st._parakeet_circuit.state == 'closed'
+    assert sock.is_connection_dead
+    assert len(client.requests) == 2
+    assert replica_pool.claim(('10.0.0.1', '10.0.0.2')) is None
+    assert window.admission.active == 0
+    next_sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    with pytest.raises(st.ParakeetConnectionError):
+        await next_sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert len(client.requests) == 2  # known quarantines must not escape via VIP
+
+
+@pytest.mark.asyncio
+async def test_replica_retry_shares_original_budget_and_releases_cancelled_probe(monkeypatch, replica_pool):
+    calls = []
+
+    async def post(url, **kwargs):
+        calls.append(url)
+        if len(calls) == 1:
+            await _REAL_SLEEP(0.04)
+            return httpx.Response(500, request=httpx.Request('POST', url))
+        await _REAL_SLEEP(10)
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SimpleNamespace(post=post))
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '1.0')
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    start = asyncio.get_running_loop().time()
+    with pytest.raises(TimeoutError):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert asyncio.get_running_loop().time() - start < 3.0
+    assert len(calls) == 2
+    assert sock.death_reason == 'timeout'
+    assert not any(state.probing for state in replica_pool._states.values())
+    assert all(state.failures == 1 for state in replica_pool._states.values())
+    assert st._parakeet_circuit.state == 'closed'
+
+
+@pytest.mark.asyncio
+async def test_replica_retry_reserves_time_inside_the_first_text_deadline(monkeypatch, replica_pool):
+    client = SimpleNamespace(requests=[])
+
+    async def post(url, **kwargs):
+        client.requests.append(url)
+        await _REAL_SLEEP(10)
+
+    client.post = post
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    sock._first_text_deadline = 1.0
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    with pytest.raises(TimeoutError):
+        await sock._post_and_parse(b'\x01\x00' * 16000, 1.0)
+    assert len(client.requests) == 2
+    assert len(set(client.requests)) == 2
+    assert sock.death_reason == 'first_text_deadline'
+    assert not any(state.probing for state in replica_pool._states.values())
+
+
+@pytest.mark.asyncio
+async def test_first_text_callback_quarantines_started_post_before_timeout_callback(monkeypatch, replica_pool):
+    started = asyncio.Event()
+    calls = []
+
+    async def post(url, **_kwargs):
+        calls.append(url)
+        if len(calls) == 1:
+            return httpx.Response(500, request=httpx.Request('POST', url))
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SimpleNamespace(post=post))
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '30')
+    sock = window.connect_window(lambda _: None, 16000)
+    before = WINDOW_REPLICA_ATTEMPTS.labels(outcome='timeout')._value.get()
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await asyncio.wait_for(started.wait(), timeout=5.0)
+    # Deliver the real socket deadline callback before the timeout context's
+    # callback, as the event loop can do when both timers become due together.
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+    monkeypatch.setattr(loop, 'time', lambda: real_time() + sock._first_text_deadline)
+    sock._expire_first_text()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+    assert len(calls) == 2
+    assert sock.death_reason == 'first_text_deadline'
+    assert all(state.failures == 1 and not state.probing for state in replica_pool._states.values())
+    assert WINDOW_REPLICA_ATTEMPTS.labels(outcome='timeout')._value.get() == before + 1
+    assert st._parakeet_circuit.state == 'closed'
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
+async def test_scoped_socket_never_returns_to_vip_after_an_earlier_window_attempt(monkeypatch, replica_pool):
+    class FailureThenEmpty(Client):
+        async def post(self, url, **kwargs):
+            self.requests.append((url, kwargs))
+            return httpx.Response(
+                500 if len(self.requests) == 1 else 200,
+                json={'text': ''},
+                request=httpx.Request('POST', url),
+            )
+
+    client = FailureThenEmpty()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    assert await sock._post_and_parse(b'\x01\x00' * 32000, 2.0) == []
+    assert len(client.requests) == 2
+    monkeypatch.setattr(window.batch_pressure, 'ready_replicas', lambda: ())
+    with pytest.raises(st.ParakeetConnectionError):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert len(client.requests) == 2  # pressure grace cannot hide the known bad GPU via VIP
+
+
+@pytest.mark.asyncio
+async def test_external_post_cancellation_is_measured_without_quarantining_gpu(monkeypatch, replica_pool):
+    started = asyncio.Event()
+
+    async def post(_url, **_kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SimpleNamespace(post=post))
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    before = WINDOW_REPLICA_ATTEMPTS.labels(outcome='cancelled')._value.get()
+    task = asyncio.create_task(sock._post_and_parse(b'\x01\x00' * 32000, 2.0))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert WINDOW_REPLICA_ATTEMPTS.labels(outcome='cancelled')._value.get() == before + 1
+    assert all(state.failures == 0 and not state.probing for state in replica_pool._states.values())
+
+
+@pytest.mark.asyncio
+async def test_only_eligible_gpu_retains_full_post_budget(monkeypatch, replica_pool):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.batch_pressure, 'ready_replicas', lambda: ('10.0.0.1',))
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    assert [segment.text for segment in await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)] == ['hello']
+    assert len(client.requests) == 1
+    assert float(client.requests[0][1]['headers']['X-Omi-STT-Timeout-Seconds']) > sock._post_timeout * 0.9
+
+
+@pytest.mark.asyncio
+async def test_managed_live_leg_emits_alternate_pod_text_once_without_vendor(monkeypatch, replica_pool):
+    client = SeqClient([{'text': ''}, {'text': 'hello'}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    vendor = AsyncMock(side_effect=AssertionError('vendor must not be dialled'))
+    monkeypatch.setattr(st, 'process_audio_soniox', vendor)
+    recv = receiver()
+    session = LiveChainSession(recv)
+    leg = await session.connect(16000)
+    assert leg.raw.replica_scoped
+    assert leg.send(b'\x01\x00' * 16000)
+    assert leg.send(bytes(32000))
+    await leg.drain_and_close()
+    assert len(client.requests) == 2
+    assert client.requests[0][0] != client.requests[1][0]
+    assert [segment['text'] for segment in recv.emitted] == ['hello']
+    vendor.assert_not_called()
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [401, 402, 403, 413, 429])
+async def test_replica_retry_does_not_repeat_account_rate_or_input_rejections(monkeypatch, replica_pool, status):
+    client = Client(status=status)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    with pytest.raises(httpx.HTTPStatusError):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert len(client.requests) == 1
+    assert all(state.failures == 0 for state in replica_pool._states.values())
+
+
+@pytest.mark.asyncio
+async def test_signalled_replica_queue_pressure_does_not_retry_or_bench_gpu(monkeypatch, replica_pool):
+    client = Client(status=503, headers={'X-Omi-STT-Error': 'queue_timeout'})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    with pytest.raises(httpx.HTTPStatusError):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert len(client.requests) == 1
+    assert sock.typed_death_reason == 'capacity_full'
+    assert sock.capacity_subtype == 'queue_timeout'
+    assert all(state.failures == 0 for state in replica_pool._states.values())
+    # Exhausting our local HTTP connection pool is also local capacity, not
+    # evidence that the selected GPU failed to serve.
+    client.error = httpx.PoolTimeout('local pool full')
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    with pytest.raises(window.QueueTimeout):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
+    assert len(client.requests) == 2  # no retry for either local refusal
+    assert all(state.failures == 0 for state in replica_pool._states.values())
+
+
+@pytest.mark.asyncio
+async def test_replica_kill_switch_restores_service_request_and_family_breaker(monkeypatch, replica_pool):
+    monkeypatch.setenv('PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED', 'false')
+    client = Client(status=500)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    assert not sock.replica_scoped
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert st._parakeet_circuit.state == 'open'
+    assert len(client.requests) == 1
+    assert client.requests[0][0] == 'http://tdt.invalid/v1/transcribe'
 
 
 async def _wait_requests(client, count: int) -> None:
@@ -362,7 +685,7 @@ async def test_post_window_budget_header_reduced_by_semaphore_wait(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_post_window_exhausted_budget_raises_without_posting(monkeypatch):
+async def test_post_window_exhausted_budget_is_local_queue_without_gpu_failure(monkeypatch, replica_pool):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     loop = asyncio.get_running_loop()
@@ -378,9 +701,10 @@ async def test_post_window_exhausted_budget_raises_without_posting(monkeypatch):
 
     monkeypatch.setattr(window, 'get_stt_semaphore', lambda: StallSemaphore())
     sock = window.WindowedParakeetSocket(lambda _segs: None, 'http://tdt.invalid', 16000, lambda: None)
-    with pytest.raises(TimeoutError):
-        await sock._post_window(b'\x01\x00' * 32000)
+    with pytest.raises(window.QueueTimeout):
+        await sock._post_and_parse(b'\x01\x00' * 32000, 2.0)
     assert client.requests == []
+    assert all(state.failures == 0 and not state.probing for state in replica_pool._states.values())
 
 
 @pytest.mark.asyncio
@@ -4059,6 +4383,170 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('cut_enabled,rescue_available', [(True, True), (False, True), (True, False)])
+async def test_wholly_held_progress_answer_keeps_twelve_second_watchdog_and_exact_replay(
+    monkeypatch, cut_enabled, rescue_available
+):
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', str(cut_enabled).lower())
+    monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
+
+    def response(n, kwargs):
+        duration = _wav_duration(kwargs)
+        return {
+            'segments': [
+                {
+                    'text': 'Opening.' if n == 1 else 'Unfinished continuing speech',
+                    'start': 0.0,
+                    'end': duration - 1.5 if n == 1 else duration,
+                }
+            ]
+        }
+
+    client = SeqClient([response])
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    raw._first_text_deadline = 12  # The helper normally stretches it for unrelated replay mechanics.
+    raw.allow_no_text_rescue = lambda: rescue_available
+    assert raw.progress_deadline_enabled and raw._pace_seconds == 6
+    clock = [window.time.monotonic()]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
+    sample = 0
+    snapshot = None
+    try:
+        for _ in range(500):  # Twenty seconds of uninterrupted production-mode capture.
+            sample = await _fragment_frame(actual, clock, sample, speech=True)
+            for _ in range(8):
+                await _REAL_SLEEP(0)
+            if raw._deadline_speech_at is not None and clock[0] >= raw._deadline_speech_at + 12:
+                snapshot = actual._window_ring().snapshot()
+                raw._expire_first_text()
+                if raw.is_connection_dead:
+                    break
+        assert raw._first_text_recorded  # Initial complete text succeeded in both controls.
+        expected_failure = rescue_available and not cut_enabled
+        assert raw.is_connection_dead == expected_failure
+        if rescue_available and cut_enabled:
+            assert len(base.emitted) >= 3
+            assert all(right['start'] >= left['end'] for left, right in zip(base.emitted, base.emitted[1:]))
+            assert replayed == [] and callbacks == []
+        elif expected_failure:
+            assert raw.death_reason == 'first_text_deadline' and snapshot is not None
+            assert await actual._failover_stt_socket()
+            assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+            assert len(callbacks) == 1
+        else:
+            assert len(base.emitted) == 1 and raw._deadline_speech_at is None
+            assert replayed == [] and callbacks == []
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('answer', ['held', 'complete', 'empty', 'cut_off'])
+async def test_default_startup_replay_posts_before_deadline_and_preserves_fallback(monkeypatch, answer):
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
+    monkeypatch.delenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED')
+    if answer == 'cut_off':
+        monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'false')
+
+    def response(_n, kwargs):
+        duration = _wav_duration(kwargs)
+        if answer == 'complete' and _n == 1:
+            return {
+                'segments': [
+                    {'text': 'Opening sentence.', 'start': 0.0, 'end': 4.0},
+                    {'text': 'Unfinished tail', 'start': 4.0, 'end': duration},
+                ]
+            }
+        return (
+            {'text': ''}
+            if answer == 'empty'
+            else {'segments': [{'text': 'Continuous speech without punctuation', 'start': 0.0, 'end': duration}]}
+        )
+
+    client = SeqClient([response])
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    raw._first_text_deadline = 12
+    clock = [window.time.monotonic()]
+    began = clock[0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
+    posts = []
+    post = client.post
+
+    async def observed_post(*args, **kwargs):
+        posts.append(clock[0] - began)
+        return await post(*args, **kwargs)
+
+    monkeypatch.setattr(client, 'post', observed_post)
+    sample = 0
+    try:
+        for _ in range(250):  # Ten seconds of real receiver/VAD/capture replay.
+            sample = await _fragment_frame(actual, clock, sample, speech=True)
+            for _ in range(8):
+                await _REAL_SLEEP(0)
+        assert len(posts) == 1
+        assert 8.0 <= round(posts[0], 2) <= 8.4  # Capture advances in 40ms frames.
+        assert raw._pace_seconds == 15.0
+        survives = answer in {'held', 'complete'}
+        assert raw._first_text_recorded == survives
+        assert bool(base.emitted) == survives
+        if survives:
+            assert raw._first_text_timer is None
+            assert len(base.emitted) == 1
+            assert base.emitted[0]['end'] > base.emitted[0]['start']
+            if answer == 'complete':
+                assert raw._anchor_bytes == raw._to_bytes(4.0) < raw._last_post_end
+            else:
+                assert raw._anchor_bytes == raw._last_post_end
+            assert raw._last_post_end == raw._to_bytes(_wav_duration(client.requests[0][1]))
+            raw._expire_first_text()
+            assert not raw.is_connection_dead
+            # A subsequent incomplete sentence retains normal anchoring.
+            raw.mark_speech()
+            assert raw.send(b'\x01\x00' * 16000 * 15)
+            job = raw._next_job()
+            assert job is not None
+            anchor = raw._anchor_bytes
+            await raw._run_job(job)
+            assert len(base.emitted) == 1 and raw._anchor_bytes == anchor
+        else:
+            assert raw._first_text_timer is not None
+            assert raw._anchor_bytes == 0
+            snapshot = actual._window_ring().snapshot()
+            _fire_first_text_deadline_at_budget(raw, clock)
+            assert raw.death_reason == 'first_text_deadline'
+            assert await actual._failover_stt_socket()
+            assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+            assert len(callbacks) == 1
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('configured,expected', [(None, 8), ('nan', 8), ('0', 8), ('4', 4), ('30', 15)])
+async def test_startup_post_configuration_is_bounded_by_normal_pace(monkeypatch, configured, expected):
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    if configured is None:
+        monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
+    else:
+        monkeypatch.setenv('PARAKEET_WINDOW_FIRST_POST_SECONDS', configured)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    try:
+        sock.mark_speech()
+        assert sock.send(b'\x01\x00' * 16000 * (expected - 1))
+        assert sock._next_job() is None
+        sock.mark_speech()
+        assert sock.send(b'\x01\x00' * 16000)
+        job = sock._next_job()
+        assert job is not None and job.duration == expected and not job.force
+    finally:
+        sock.finish()
+
+
+@pytest.mark.asyncio
 async def test_default_pace_waits_for_fifteen_seconds_of_speech(monkeypatch):
     # Window size drives accuracy on this leg, so continuous speech must not be posted
     # in small slices: at the default pace, 6 s does not post and 15 s does.
@@ -4496,7 +4984,9 @@ async def test_no_text_rescue_audio_budget_counts_replay_and_preserves_rejected_
 
 
 @pytest.mark.asyncio
-async def test_gated_progress_deadline_rearms_after_text(monkeypatch):
+@pytest.mark.parametrize('cut_enabled', [True, False])
+async def test_gated_progress_deadline_rearms_after_text(monkeypatch, cut_enabled):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', str(cut_enabled).lower())
     client = SeqClient([{'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}, {'text': ''}])
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)

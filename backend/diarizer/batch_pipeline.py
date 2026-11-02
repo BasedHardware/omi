@@ -11,20 +11,24 @@ from enum import Enum
 import math
 import logging
 import threading
+import time
 from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.prerecorded_language import language_class
-from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
-from utils.batch_pipeline.worker_silence import inspect_worker_silence
-from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
+from utils.batch_pipeline.worker_silence import inspect_worker_silence, inspect_worker_vad
+from utils.batch_pipeline.recovery_disposition import silence_payload
+from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech, empty_retry_audio
+from config.batch_pipeline_empty_asr import safety_net_enabled
 from config.batch_pipeline import (
     LONG_SPEECH_HANDOFF_SECONDS,
     long_speech_handoff_enabled,
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
+    strict_vad_shadow_sampled,
     worker_io_concurrency,
     worker_silence_disposition_enabled,
     worker_validation_disposition_enabled,
@@ -34,7 +38,17 @@ from config.batch_pipeline_providers import ProviderConfig
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
+from utils.batch_pipeline import leaf_timings
+from utils.batch_pipeline.capacity import within_unit_ceiling
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    WorkResult,
+    HeldWork,
+    FailedWork,
+    RecoveryWork,
+    ValidationFailureWork,
+    vad_receipt,
+)
 from utils.batch_pipeline.diarization_gate import (
     compact as compact_speech,
     map_back,
@@ -43,9 +57,12 @@ from utils.batch_pipeline.diarization_gate import (
     speech_regions,
     unassigned_word_count,
 )
-from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
+from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision, record_unit_diarization
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
+from utils.batch_pipeline.stage_timings import StageTimings
+from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults
+from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
 
 SAMPLE_RATE = 16000
@@ -158,10 +175,43 @@ def validate_words(words, duration):
     return result
 
 
+def bounded_window_words(words, duration):
+    """Own words by midpoint and intersect edge-straddling clocks with capture.
+
+    Model frames may extend past either edge. Invalid or wholly outside clocks
+    still fail; clamping must never turn them into plausible captured speech.
+    """
+    result = []
+    previous = -math.inf
+    for word in words:
+        try:
+            start, end = map(float, word['timestamp'])
+        except ValueError:
+            raise BatchValidationError(ValidationReason.WORD_SHAPE) from None
+        if (
+            not all(math.isfinite(v) for v in (start, end))
+            or start > end
+            or end < 0
+            or (end == 0 and start < 0)
+            or start >= duration
+        ):
+            raise BatchValidationError(ValidationReason.WORD_CLOCK)
+        if start < previous or not isinstance(word['word'], str) or not word['word'].strip():
+            raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
+        previous = start
+        if 0 <= (start + end) / 2 < duration:
+            result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
+    return validate_words(result, duration)
+
+
 def padded_retry_seconds(samples) -> float:
     left = 2 * SAMPLE_RATE
     right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
     return (len(samples) + left + right) / SAMPLE_RATE
+
+
+def near_empty_words(words: Sequence[dict[str, Any]], speech_seconds: float) -> bool:
+    return speech_seconds >= 1 and sum(char.isalnum() for word in words for char in word['word']) < 2
 
 
 def padded_retry_fits(samples, max_padded_seconds: float) -> bool:
@@ -241,12 +291,15 @@ class _DecodePrefetch:
     next decoded group. Exceptions surface from ``take`` on the calling thread.
     """
 
-    def __init__(self, executor, decode, items, limit, ahead_seconds):
+    def __init__(self, executor, decode, items, limit, ahead_seconds, prepared=None):
         self._executor, self._decode, self._items = executor, decode, list(items)
         self._limit, self._ahead_seconds = limit, ahead_seconds
         self._futures: dict[int, Future] = {}
         self._submitted = 0
         self._consumed = 0
+        if prepared is not None and self._items and prepared.item is self._items[0]:
+            self._futures[0] = prepared.future
+            self._submitted = 1
 
     def _fill(self):
         while self._submitted < len(self._items):
@@ -274,9 +327,7 @@ class _DecodePrefetch:
         """Never leave fetches running after the flight; discard their outcomes."""
         pending = list(self._futures.values())
         self._futures.clear()
-        for future in pending:
-            future.cancel()
-        wait_futures(pending)
+        wait_futures([future for future in pending if not future.cancel()])
 
 
 def pack_windows(windows, config):
@@ -340,6 +391,7 @@ class PipelineWorker:
         flight_models=None,
         stream_of: Callable | None = None,
         language_of: Callable | None = None,
+        timings: StageTimings | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -354,6 +406,7 @@ class PipelineWorker:
         self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
+        self.timings = timings or StageTimings()
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
         # Capture stream of a decoded unit (see batch_pipeline_context.capture_stream).
@@ -362,7 +415,8 @@ class PipelineWorker:
         # Intake's resolved STT language of a decoded unit; None when unrecorded.
         self.language_of = language_of or (lambda item: None)
         self.left_context = LeftContextIndex(
-            max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
+            max_seconds=max(self.config.asr_left_context_seconds, 8 if safety_net_enabled() else 0),
+            max_units=self.config.asr_left_context_units,
         )
         # Artifact IO only (fetch/decrypt/decode, encrypt/upload). Model calls,
         # CUDA work and the chain lock stay on the calling thread.
@@ -374,6 +428,58 @@ class PipelineWorker:
             if self.io_concurrency > 1
             else None
         )
+        self._decode_budget = DecodeBudget(PREFETCH_AHEAD_SECONDS)
+
+    def _decode_context(self, item):
+        try:
+            samples = self.timings.call('fetch_decode', self.decode, item)
+        except BaseException:
+            # Even a failed decode may have extracted authenticated context.
+            self._discard_context(item)
+            raise
+        try:
+            language = self.language_of(item)
+        except Exception:
+            language = None
+        try:
+            stream = self.stream_of(item)
+        except Exception:
+            stream = None
+        strict_silent = None
+        if not item.shadow and strict_vad_shadow_sampled(item.segment_id):
+            try:
+                started = time.thread_time()
+            except Exception:
+                started = None
+            try:
+                # Existing strict inspector is local ONNX CPU only; this
+                # evidence is never used to change the worker's outcome.
+                with self.timings.measure('strict_vad_shadow'):
+                    _, spans = inspect_worker_vad(item, samples)
+                strict_silent = not spans
+            except Exception:
+                pass
+            finally:
+                try:
+                    if started is not None:
+                        worker_metrics.STRICT_CPU.observe(max(0, time.thread_time() - started))
+                except Exception:
+                    pass
+        return samples, language, stream, strict_silent
+
+    def _discard_context(self, item):
+        for read in (self.language_of, self.stream_of):
+            try:
+                read(item)
+            except Exception:
+                pass
+
+    def prepare_first(self, items):
+        # IO=1 is the existing serial rollback. No models or privacy shortcuts.
+        if self._io is None or not items:
+            return None
+        future = self._decode_budget.submit(self._io, self._decode_context, items[0])
+        return FirstDecode(self._decode_budget, items[0], future) if future is not None else None
 
     def _fatal(self, exc):
         self._unavailable = True
@@ -383,7 +489,9 @@ class PipelineWorker:
         if self.flight is None or not decoded:
             return [None] * len(decoded)
         try:
-            features = list(self.flight.segment([samples for _, samples in decoded]))
+            features = list(
+                self.timings.call('flight_segment', self.flight.segment, [samples for _, samples in decoded])
+            )
             if len(features) != len(decoded):
                 raise ValueError('flight segmentation cardinality mismatch')
             return features
@@ -399,7 +507,13 @@ class PipelineWorker:
         if self.flight is None or not pending or diarize_speech_only_enabled():
             return {}
         try:
-            outcomes = list(self.flight.diarize_many([(s['samples'], s.get('flight_features')) for s in pending]))
+            outcomes = list(
+                self.timings.call(
+                    'flight_diarize',
+                    self.flight.diarize_many,
+                    [(s['samples'], s.get('flight_features')) for s in pending],
+                )
+            )
             if len(outcomes) != len(pending):
                 raise ValueError('flight diarization cardinality mismatch')
             return {s['item'].segment_id: outcome for s, outcome in zip(pending, outcomes)}
@@ -507,42 +621,71 @@ class PipelineWorker:
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
-    ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]:
+    ) -> Sequence[WorkResult | HeldWork | FailedWork | RecoveryWork | ValidationFailureWork]:
+        return self.process_batch_deferred(items, authorize_dispatch=authorize_dispatch).settle()
+
+    def process_batch_deferred(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
-        if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
+        if not all(within_unit_ceiling(item.duration_seconds, self.config.max_unit_seconds) for item in items):
             raise ValueError('conversation requires a dedicated batch GPU or a smaller admitted unit')
         if self.config.pool_kind == 'shared_live' and sum(i.duration_seconds for i in items) > 120:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
         if self.config.pool_kind == 'shared_live' and any(i.unit_kind != 'capture_span' for i in items):
             raise ValueError('shared-live requires explicitly admitted capture spans, never conversation units')
-        with self._lock:
+        with self._lock, leaf_timings.active(self.timings):
             if self._unavailable:
                 raise FatalGpuError('GPU chain unavailable; restart required')
-            results, group, seconds = [], [], 0
+            pending, group, seconds = [], [], 0
             # Bound decoded host memory to two audio-hours (~460 MB float32).
-            for item in items:
-                if group and seconds + item.duration_seconds > 7200:
-                    results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
-                    group, seconds = [], 0
-                group.append(item)
-                seconds += item.duration_seconds
-            results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
-            return results
+            try:
+                for item in items:
+                    if group and seconds + item.duration_seconds > 7200:
+                        pending.append(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
+                        prepared = None
+                        group, seconds = [], 0
+                    group.append(item)
+                    seconds += item.duration_seconds
+                pending.append(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
+            except BaseException:
+                # A later group's fatal failure must drain earlier writes too.
+                for receipt in pending:
+                    receipt.close()
+                raise
+            return PendingResults(
+                lambda: [result for receipt in pending for result in receipt.settle()],
+                [future for receipt in pending for future in receipt.futures],
+            )
 
-    def _process(self, items, *, authorize_dispatch=None):
-        states, windows, failed, results = {}, [], set(), []
+    def _process(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
+        states: dict[str, dict[str, Any]] = {}
+        windows, failed, results = [], set(), []
         failure_records = []
         held = set()
+        held_reasons = {}
         recovery_records = []
         silence_records = []
+        strict_measurements = {}
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
-        def allowed(required):
+        def inspect_silence(item, samples):
+            if not safety_net_enabled():
+                return inspect_worker_silence(item, samples)
+            duration, spans = inspect_worker_vad(item, samples)
+            strict_measurements[item.segment_id] = sum(span['end'] - span['start'] for span in spans)
+            return None if spans else silence_payload(duration)
+
+        def admission(required):
+            # Bounded hold reason per requested segment: None is an allow, ''
+            # is an unevaluated hold. Missing policy authority is a hold,
+            # never provider permission.
+            if authorize_dispatch is None:
+                return {segment_id: '' for segment_id in required}
             try:
-                return set(authorize_dispatch(required)) if authorize_dispatch is not None else set()
+                decisions = authorize_dispatch(required) or {}
+                return {segment_id: decisions.get(segment_id, '') for segment_id in required}
             except Exception:
-                return set()
+                return {segment_id: '' for segment_id in required}
 
         def accepted(segment_id, seconds):
             record_audio('sync', 'accepted', self.config.words, seconds)
@@ -558,14 +701,21 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                state = states.get(item.segment_id, {})
+                measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
+                receipt = (
+                    vad_receipt(item.audio_uri, shapes[item.segment_id]['samples'], measured_vad)
+                    if measured_vad is not None
+                    else None
+                )
                 if reason == 'empty_asr' and not item.shadow:
                     record_correctness('empty_asr_attempt', source='gpu_worker', seconds=item.duration_seconds)
                 if (
                     (
                         reason == 'empty_asr'
-                        and empty_asr_recovery_enabled()
+                        and (empty_asr_recovery_enabled() or safety_net_enabled())
                         or reason in {'empty_asr', 'no_owned_words'}
-                        and empty_asr_disposition_enabled()
+                        and (empty_asr_disposition_enabled() or safety_net_enabled())
                     )
                     and stage == 'assemble_words'
                     and self.recover_words is not None
@@ -577,6 +727,8 @@ class PipelineWorker:
                             padded_retry_empty=bool(state.get('padded_retry_empty')),
                             padded_retry=state.get('padded_retry'),
                             reason=reason,
+                            measured_held_vad_speech_seconds=measured_vad,
+                            worker_vad_receipt=receipt,
                         )
                     )
                 elif isinstance(exc, BatchValidationError) and (
@@ -585,7 +737,9 @@ class PipelineWorker:
                     # Repeating the same validated GPU failure cannot establish
                     # silence or corrupt audio. End this chain now and retain
                     # custody for the independent privacy-fenced recovery path.
-                    results.append(ValidationFailureWork(item.segment_id, stage, reason))
+                    results.append(ValidationFailureWork(item.segment_id, stage, reason, measured_vad, receipt))
+                elif safety_net_enabled():
+                    results.append(FailedWork(item.segment_id, measured_vad, receipt))
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(
@@ -608,11 +762,19 @@ class PipelineWorker:
                         logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
 
         prefetch = (
-            _DecodePrefetch(self._io, self.decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
+            _DecodePrefetch(
+                self._io,
+                self._decode_context,
+                items,
+                self.io_concurrency,
+                PREFETCH_AHEAD_SECONDS,
+                prepared=prepared,
+            )
             if self._io is not None
             else None
         )
         pending_persist = []
+        handed_off = False
 
         def settle_persist(entry):
             slot, item, future, silent, has_silence = entry
@@ -627,11 +789,16 @@ class PipelineWorker:
 
         try:
 
+            frozen_languages = {}
+            frozen_streams = {}
+            strict_shadow = {}
+
             def decoded_units():
                 for index, item in enumerate(items):
                     self.counts['items'] += 1
                     try:
-                        samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                        samples = prefetch.take(index) if prefetch is not None else self._decode_context(item)
+                        samples, frozen_language, frozen_stream, shadow_silent = samples
                         shapes[item.segment_id]['samples'] = len(samples)
                         duration = len(samples) / SAMPLE_RATE
                         if (
@@ -642,8 +809,12 @@ class PipelineWorker:
                     except Exception as exc:
                         fail(item, exc, 'fetch_decode')
                         continue
+                    frozen_languages[item.segment_id] = frozen_language
+                    frozen_streams[item.segment_id] = frozen_stream
+                    strict_shadow[item.segment_id] = shadow_silent
                     yield item, samples
 
+            flight_excluded = set()
             if self.flight is None:
                 # Serial: VAD each unit as soon as it is decoded (prefetch overlap).
                 units = ((unit, None) for unit in decoded_units())
@@ -651,34 +822,94 @@ class PipelineWorker:
                 # One packed segmentation pass shared by VAD and diarization; a
                 # None feature selects the unchanged serial VAD call for that unit.
                 decoded = list(decoded_units())
-                units = zip(decoded, self._flight_segment(decoded))
+
+                def language_blocked(unit):
+                    if self.config.words != 'parakeet':
+                        return False
+                    return language_class(frozen_languages.get(unit[0].segment_id)) != 'supported'
+
+                eligible = [unit for unit in decoded if not language_blocked(unit)]
+                eligible_ids = {item.segment_id for item, _ in eligible}
+                # A frozen language the word provider cannot serve can only end
+                # at the language barrier; such units never join the packed
+                # segmentation pass. The per-unit loop resolves them with the
+                # independent strict VAD instead of a serial pyannote forward.
+                flight_excluded = {item.segment_id for item, _ in decoded} - eligible_ids
+                flight_features = iter(self._flight_segment(eligible))
+                units = (
+                    (unit, None if unit[0].segment_id not in eligible_ids else next(flight_features))
+                    for unit in decoded
+                )
             for (item, samples), features in units:
                 stage = 'vad_windows'
                 try:
                     duration = len(samples) / SAMPLE_RATE
                     silence = None
-                    try:
-                        spans = list(
-                            self.vad(samples) if features is None else self.flight.vad_spans(samples, features)
-                        )
-                    except BatchValidationError as error:
-                        if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
-                            raise
-                        # A frame may start beyond a very short real buffer (20 ms
-                        # in production). Only independent strict VAD can establish
-                        # silence; malformed/unavailable evidence stays held.
+                    spans = None
+                    pyannote_observed = False
+                    if item.segment_id in flight_excluded and worker_validation_disposition_enabled():
+                        # Excluded from the packed pass by the frozen language:
+                        # the independent strict VAD decides speech vs silence
+                        # with no pyannote forward at all. Speech raises at the
+                        # language barrier; strict silence is the disposition;
+                        # unavailable evidence falls back to the serial VAD call.
+                        strict_failed = False
                         try:
-                            silence = inspect_worker_silence(item, samples)
+                            silence = inspect_silence(item, samples)
                         except Exception:
-                            pass
-                        if silence is None:
-                            raise
-                        spans = []
+                            silence = None
+                            strict_failed = True
+                        if not strict_failed and silence is None:
+                            # The early raise skips the barrier below, so the
+                            # route signal must be recorded here.
+                            if not item.shadow:
+                                record_route(
+                                    'worker',
+                                    frozen_languages.get(item.segment_id),
+                                    'blocked',
+                                    segment_id=item.segment_id,
+                                )
+                            raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
+                        if not strict_failed:
+                            spans = []
+                    if spans is None:
+                        try:
+                            spans = list(
+                                self.timings.call('vad', self.vad, samples)
+                                if features is None
+                                else self.timings.call('vad', self.flight.vad_spans, samples, features)
+                            )
+                            pyannote_observed = True
+                        except BatchValidationError as error:
+                            if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
+                                raise
+                            # A frame may start beyond a very short real buffer (20 ms
+                            # in production). Only independent strict VAD can establish
+                            # silence; malformed/unavailable evidence stays held.
+                            try:
+                                silence = inspect_silence(item, samples)
+                            except Exception:
+                                pass
+                            if silence is None:
+                                raise
+                            spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
-                    clips = list(speech_windows(item, samples, spans, self.config))
+                    # The sampling predicate is deterministic by segment hash, so
+                    # this re-evaluation agrees with the decode-time decision;
+                    # unsampled units emit no shadow counters at all.
+                    if not item.shadow and strict_vad_shadow_sampled(item.segment_id):
+                        try:
+                            worker_metrics.strict_vad(
+                                strict_shadow.get(item.segment_id) if pyannote_observed else None, bool(spans)
+                            )
+                        except Exception:
+                            pass  # Shadow observation never changes the verdict.
+                    clips = self.timings.call(
+                        'windows', lambda: list(speech_windows(item, samples, spans, self.config))
+                    )
                     shapes[item.segment_id]['windows'] = len(clips)
                     speech_spans = vad_speech_spans(spans, len(samples))
-                    state = {
+                    state: dict[str, Any] = {
                         'item': item,
                         'samples': samples,
                         'words': [],
@@ -692,14 +923,9 @@ class PipelineWorker:
                         'flight_features': features,
                     }
                     states[item.segment_id] = state
-                    try:
-                        state['stream'] = self.stream_of(item)
-                    except Exception:
-                        state['stream'] = None  # No stream identity: no left context.
-                    try:
-                        state['stt_language'] = self.language_of(item)
-                    except Exception:
-                        state['stt_language'] = None
+                    state['stream'] = frozen_streams.get(item.segment_id)
+                    # Resolved once at decode; a second language_of() pop reads None.
+                    state['stt_language'] = frozen_languages.get(item.segment_id)
                     if self.config.words == 'parakeet':
                         # A new-admission rollback cannot revoke the quality
                         # boundary for audio already in this worker's custody.
@@ -774,12 +1000,17 @@ class PipelineWorker:
                     # Authorization belongs immediately before ASR, after potentially
                     # slow decode/VAD and between successive microbatches. Missing
                     # policy authority is a hold, never provider permission.
-                    held.update(required - allowed(required))
+                    decisions = admission(required)
+                    for segment_id, reason in decisions.items():
+                        if reason is None:
+                            continue
+                        held.add(segment_id)
+                        held_reasons[segment_id] = reason
                     batch = [w for w in batch if w.segment_id not in held]
                 if not batch:
                     continue
                 try:
-                    hypotheses = self.words.transcribe_batch([w.samples for w in batch])
+                    hypotheses = self.timings.call('asr', self.words.transcribe_batch, [w.samples for w in batch])
                     for window in batch:
                         if not states[window.segment_id]['item'].shadow and cap_dispatch_enabled(
                             states[window.segment_id]['item'].owner_id, 'batch'
@@ -793,7 +1024,7 @@ class PipelineWorker:
                     continue
                 for window, hypothesis in zip(batch, hypotheses):
                     try:
-                        checked_words = validate_words(hypothesis, window.duration)
+                        checked_words = bounded_window_words(hypothesis, window.duration)
                         for word in checked_words:
                             start, end = [t + window.start for t in word['timestamp']]
                             midpoint = (start + end) / 2
@@ -812,7 +1043,7 @@ class PipelineWorker:
             for state in states.values():
                 item = state['item']
                 if item.segment_id in held:
-                    results.append(HeldWork(item.segment_id))
+                    results.append(HeldWork(item.segment_id, reason=held_reasons.get(item.segment_id, '')))
                     continue
                 if item.segment_id in failed:
                     continue
@@ -820,13 +1051,24 @@ class PipelineWorker:
                 try:
                     duration = len(state['samples']) / SAMPLE_RATE
                     words = validate_words(sorted(state['words'], key=lambda w: w['timestamp'][0]), duration)
+                    safety = self.config.words == 'parakeet' and safety_net_enabled()
+                    if safety and words and near_empty_words(words, state['speech_seconds']):
+                        # Punctuation/single-character debris is not sufficient
+                        # recognition of a speech-bearing unit. Replace the whole
+                        # hypothesis; never combine it with the retry.
+                        words = []
                     if not state['silence'] and not words and self.recover_words is not None:
                         # Retry this unit once, independently of the length-bucketed
                         # batch and VAD/core selection. Never combine partial text
                         # with a second hypothesis or publish a fabricated silence.
                         reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
                         stage = 'asr_recovery'
-                        fits_retry = padded_retry_fits(state['samples'], self.config.max_padded_seconds)
+                        retry_samples, retry_offset = (
+                            empty_retry_audio(state, self.left_context, self.config.max_padded_seconds)
+                            if safety and state['speech_seconds'] >= 1
+                            else (state['samples'], 0.0)
+                        )
+                        fits_retry = padded_retry_fits(retry_samples, self.config.max_padded_seconds)
                         if long_speech_handoff(state, reason):
                             # Repadding cannot make Parakeet transcribe a language it
                             # does not have. Hand off to recovery without a retry.
@@ -849,33 +1091,55 @@ class PipelineWorker:
                             )
                         else:
                             if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
-                                recovered = self.recover_words(
-                                    state['samples'],
+                                dispatch_hold = []
+
+                                def recheck():
+                                    reason = admission({item.segment_id}).get(item.segment_id)
+                                    dispatch_hold.clear()
+                                    dispatch_hold.append(reason)
+                                    return reason is None
+
+                                recovered = self.timings.call(
+                                    'asr_recovery',
+                                    self.recover_words,
+                                    retry_samples,
                                     self.config.max_padded_seconds,
-                                    before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
+                                    before_dispatch=recheck,
                                     after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
                                 )
                                 if recovered is None and (
                                     fits_retry
                                     or not (
                                         reason == 'empty_asr'
-                                        and empty_asr_recovery_enabled()
+                                        and (empty_asr_recovery_enabled() or safety)
                                         or reason in {'empty_asr', 'no_owned_words'}
-                                        and empty_asr_disposition_enabled()
+                                        and (empty_asr_disposition_enabled() or safety)
                                     )
                                 ):
                                     held.add(item.segment_id)
-                                    results.append(HeldWork(item.segment_id))
+                                    hold_reason = dispatch_hold[0] if dispatch_hold and dispatch_hold[0] else ''
+                                    held_reasons[item.segment_id] = hold_reason
+                                    results.append(HeldWork(item.segment_id, reason=hold_reason))
                                     continue
                             else:
-                                recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                                recovered = self.timings.call(
+                                    'asr_recovery', self.recover_words, retry_samples, self.config.max_padded_seconds
+                                )
                             if recovered is None or not fits_retry:
                                 words = []
                                 state['padded_retry'] = 'skipped_oversize'
                                 state['padded_retry_empty'] = False
                                 recovery_outcome = 'skipped_oversize'
                             else:
-                                words = validate_words(recovered, duration)
+                                retry_words = validate_words(recovered, len(retry_samples) / SAMPLE_RATE)
+                                words = []
+                                for word in retry_words:
+                                    start, end = [t + retry_offset for t in word['timestamp']]
+                                    if 0 <= (start + end) / 2 < duration:
+                                        words.append({**word, 'timestamp': [max(0.0, start), min(duration, end)]})
+                                words = validate_words(words, duration)
+                                if safety and near_empty_words(words, state['speech_seconds']):
+                                    words = []
                                 state['padded_retry'] = 'recovered' if words else 'empty'
                                 state['padded_retry_empty'] = not words
                                 recovery_outcome = 'recovered' if words else 'empty'
@@ -902,7 +1166,7 @@ class PipelineWorker:
                         and worker_silence_disposition_enabled()
                     ):
                         try:
-                            silence = inspect_worker_silence(item, state['samples'])
+                            silence = inspect_silence(item, state['samples'])
                         except Exception:
                             # Unavailable/invalid strict VAD is never silence. Keep
                             # the original empty-ASR quarantine and recovery route.
@@ -945,9 +1209,10 @@ class PipelineWorker:
                 ]
             )
             for item, state, words, silence, duration, single, evidence, short in prepared:
-                # Bound in-flight encrypted writes; settle outside any item handler.
-                while len(pending_persist) >= self.io_concurrency:
-                    settle_persist(pending_persist.pop(0))
+                # The admitted pull bounds pending payloads/receipts to 32;
+                # executor size bounds simultaneous uploads. Never wait for an
+                # upload here: both GPU locks remain held until this returns.
+                # Settlement after CUDA quiescence retains publication custody.
                 stage = 'assemble_words'
                 try:
                     if state['silence']:
@@ -966,7 +1231,9 @@ class PipelineWorker:
                         if isinstance(diarization, BaseException):
                             raise diarization
                         if diarization is None:
-                            diarization = self._diarize_unit(state['samples'], evidence, words)
+                            diarization = self.timings.call(
+                                'diarize', self._diarize_unit, state['samples'], evidence, words
+                            )
                     payload = {
                         'words': words,
                         'diarization': diarization,
@@ -978,6 +1245,14 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
+                    # Shadow units are synthetic idle-time traffic; they must not
+                    # skew the production parity distributions.
+                    if not item.shadow:
+                        record_unit_diarization(
+                            'silence' if state['silence'] else 'skipped_single' if (single or short) else 'diarized',
+                            diarization.get('turns') if isinstance(diarization, dict) else None,
+                            flight_batching=self.config.flight_batching,
+                        )
                     if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
@@ -992,104 +1267,129 @@ class PipelineWorker:
                             (
                                 len(results) - 1,
                                 item,
-                                self._io.submit(self.persist, item, payload),
+                                self._io.submit(self.timings.call, 'persist', self.persist, item, payload),
                                 state['silence'],
                                 silence is not None,
                             )
                         )
                         continue
-                    uri = self.persist(item, payload)
+                    uri = self.timings.call('persist', self.persist, item, payload)
                     results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
                     if silence is not None:
                         silence_records.append(item.segment_id)
                 except Exception as exc:
                     fail(item, exc, stage)
-            while pending_persist:
-                settle_persist(pending_persist.pop(0))
+            handed_off = True
         finally:
             if prefetch is not None:
                 prefetch.close()
             # A fatal error abandons the flight; never leave writes running past it.
-            wait_futures([entry[2] for entry in pending_persist])
-            pending_persist.clear()
-        results[:] = [result for result in results if result is not None]
-        shadow_ids = {item.segment_id for item in items if item.shadow}
-        # Emit only strings/integers after every item exception handler has exited.
-        # Handler error printers must not inherit the private worker exception.
-        for (
-            segment_id,
-            reason,
-            samples,
-            owned,
-            asr_words,
-            clips,
-            shortest,
-            longest,
-            speech,
-            recovery_outcome,
-        ) in recovery_records:
-            if segment_id in shadow_ids:
-                continue
-            try:
-                record_fallback(
-                    component='stt_selection',
-                    from_mode='batch',
-                    to_mode='batch',
-                    reason='other',
-                    outcome=(
-                        'recovered'
-                        if owned
-                        else (
-                            'degraded'
-                            if recovery_outcome in {'skipped_oversize', 'skipped_long_speech'}
-                            else 'exhausted'
-                        )
-                    ),
-                )
-                logger.info(
-                    'event=batch_asr_recovery segment_id=%s reason=%s samples=%d owned_words=%d outcome=%s '
-                    'asr_words=%d windows=%d window_min_samples=%d window_max_samples=%d speech_samples=%d',
-                    segment_id,
-                    reason,
-                    samples,
-                    owned,
-                    recovery_outcome,
-                    asr_words,
-                    clips,
-                    shortest,
-                    longest,
-                    speech,
-                )
-            except Exception:
-                pass  # Metrics/logging cannot invalidate a completed inference.
-        for segment_id in silence_records:
-            if segment_id in shadow_ids:
-                continue
-            try:
-                record_fallback(
-                    component='stt_selection', from_mode='batch', to_mode='none', reason='other', outcome='recovered'
-                )
-                logger.info('event=batch_worker_silence_disposition segment_id=%s outcome=silence', segment_id)
-            except Exception:
-                pass  # Observability cannot invalidate a persisted result.
-        for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
-            try:
+            if not handed_off:
+                wait_futures([entry[2] for entry in pending_persist])
+
+        # Deferred receipts retain failure evidence, never decoded waveforms.
+        # Otherwise earlier groups would defeat the two-hour host-memory bound.
+        for state in states.values():
+            for field in ('samples', 'asr_clips', 'flight_features'):
+                state.pop(field, None)
+
+        def finish():
+            while pending_persist:
+                settle_persist(pending_persist.pop(0))
+            results[:] = [result for result in results if result is not None]
+            shadow_ids = {item.segment_id for item in items if item.shadow}
+            # Emit only strings/integers after every item exception handler has exited.
+            # Handler error printers must not inherit the private worker exception.
+            for (
+                segment_id,
+                reason,
+                samples,
+                owned,
+                asr_words,
+                clips,
+                shortest,
+                longest,
+                speech,
+                recovery_outcome,
+            ) in recovery_records:
                 if segment_id in shadow_ids:
-                    logger.info('event=batch_shadow_worker_failure stage=%s reason=%s', failure_stage, reason)
                     continue
-                logger.error(
-                    'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
-                    'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
-                    error_class,
-                    failure_stage,
-                    segment_id,
-                    reason,
-                    samples,
-                    spans,
-                    clips,
-                    asr_words,
-                    owned,
-                )
-            except Exception:
-                pass  # Observability failure must never discard healthy results.
-        return results
+                try:
+                    record_fallback(
+                        component='stt_selection',
+                        from_mode='batch',
+                        to_mode='batch',
+                        reason='other',
+                        outcome=(
+                            'recovered'
+                            if owned
+                            else (
+                                'degraded'
+                                if recovery_outcome in {'skipped_oversize', 'skipped_long_speech'}
+                                else 'exhausted'
+                            )
+                        ),
+                    )
+                    logger.info(
+                        'event=batch_asr_recovery segment_id=%s reason=%s samples=%d owned_words=%d outcome=%s '
+                        'asr_words=%d windows=%d window_min_samples=%d window_max_samples=%d speech_samples=%d',
+                        segment_id,
+                        reason,
+                        samples,
+                        owned,
+                        recovery_outcome,
+                        asr_words,
+                        clips,
+                        shortest,
+                        longest,
+                        speech,
+                    )
+                except Exception:
+                    pass  # Metrics/logging cannot invalidate a completed inference.
+            for segment_id in silence_records:
+                if segment_id in shadow_ids:
+                    continue
+                try:
+                    record_fallback(
+                        component='stt_selection',
+                        from_mode='batch',
+                        to_mode='none',
+                        reason='other',
+                        outcome='recovered',
+                    )
+                    logger.info('event=batch_worker_silence_disposition segment_id=%s outcome=silence', segment_id)
+                except Exception:
+                    pass  # Observability cannot invalidate a persisted result.
+            for (
+                error_class,
+                failure_stage,
+                segment_id,
+                reason,
+                samples,
+                spans,
+                clips,
+                asr_words,
+                owned,
+            ) in failure_records:
+                try:
+                    if segment_id in shadow_ids:
+                        logger.info('event=batch_shadow_worker_failure stage=%s reason=%s', failure_stage, reason)
+                        continue
+                    logger.error(
+                        'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
+                        'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
+                        error_class,
+                        failure_stage,
+                        segment_id,
+                        reason,
+                        samples,
+                        spans,
+                        clips,
+                        asr_words,
+                        owned,
+                    )
+                except Exception:
+                    pass  # Observability failure must never discard healthy results.
+            return results
+
+        return PendingResults(finish, [entry[2] for entry in pending_persist])

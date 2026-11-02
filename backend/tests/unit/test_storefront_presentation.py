@@ -214,12 +214,12 @@ def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
         currency='usd',
         monthly_minor=1000,
     )
-    assert rendered['subline'] == '$110 billed yearly · 1 month free'
+    assert rendered['subline'] == 'US$110 billed yearly · 1 month free'
     assert rendered['months_free'] == 1
     assert yearly_toggle_label(1) == 'Yearly · 1 month free'
     assert yearly_toggle_label(2) == 'Yearly · 2 months free'
     assert yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='usd') == (
-        'Switch to yearly · save $39.98'
+        'Switch to yearly · save US$39.98'
     )
     assert yearly_switch_label(monthly_minor=1999, annual_minor=1999 * 12, currency='usd') is None
     euro = yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='eur')
@@ -227,17 +227,17 @@ def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
 
 
 def test_format_money_groups_whole_dollars_and_respects_zero_decimal_currencies():
-    assert format_money(19900, 'usd') == '$199'
-    assert format_money(39800, 'usd') == '$398'
-    assert format_money(1999, 'usd') == '$19.99'
-    assert format_money(1666, 'usd') == '$16.66'
-    assert format_money(3998, 'usd') == '$39.98'
-    assert format_money(49990, 'usd') == '$499.90'
-    assert format_money(199050, 'usd') == '$1,990.50'
-    assert format_money(199000, 'usd') == '$1,990'
-    assert format_money(0, 'usd') == '$0'
-    assert money(199000) == '$1,990'
-    # JPY unit_amount is whole yen. 4800 is ¥4,800, not $48 and not 48.00 JPY.
+    assert format_money(19900, 'usd') == 'US$199'
+    assert format_money(39800, 'usd') == 'US$398'
+    assert format_money(1999, 'usd') == 'US$19.99'
+    assert format_money(1666, 'usd') == 'US$16.66'
+    assert format_money(3998, 'usd') == 'US$39.98'
+    assert format_money(49990, 'usd') == 'US$499.90'
+    assert format_money(199050, 'usd') == 'US$1,990.50'
+    assert format_money(199000, 'usd') == 'US$1,990'
+    assert format_money(0, 'usd') == 'US$0'
+    assert money(199000) == 'US$1,990'
+    # JPY unit_amount is whole yen. 4800 is ¥4,800, not US$48 and not 48.00 JPY.
     assert format_money(4800, 'jpy') == '4,800 JPY'
     assert format_money(199000, 'jpy') == '199,000 JPY'
     assert format_money(39800, 'eur') == '398 EUR'
@@ -379,7 +379,7 @@ def test_built_sheets_match_the_policy_matrix():
             free = next(tier for tier in built.tiers if tier.plan_id == 'basic')
             assert free.action == 'none' and free.cta_label is None and free.compact is True
             assert free.bullets == [] and free.blocked_line == 'Resubscribe first to change plans'
-            assert free.prices[0].headline == '$0'
+            assert free.prices[0].headline == 'US$0'
         switching = not legacy and not cancel and interval == 'month' and plan in LADDER and plan != 'basic'
         for tier in built.tiers:
             expected = expected_action(plan, tier.plan_id, legacy, cancel)
@@ -427,7 +427,7 @@ def test_built_sheets_match_the_policy_matrix():
                 yearly = current_tier.prices[0]
                 assert yearly.headline == f'{money(yearly.amount_minor // 10)}/month'
                 assert yearly.subline is not None and 'billed yearly' in yearly.subline
-                assert yearly.cta_label is not None and yearly.cta_label.startswith('Switch to yearly · save $')
+                assert yearly.cta_label is not None and yearly.cta_label.startswith('Switch to yearly · save US$')
                 assert current_tier.action == 'checkout'
                 assert current_tier.compact is False and current_tier.cta_label is None
             else:
@@ -469,7 +469,7 @@ def test_cancel_scheduled_sheet_lists_every_ladder_tier(plan, interval):
         assert tier.blocked_line == 'Resubscribe first to change plans'
         if tier.plan_id == 'basic':
             assert tier.compact is True and tier.bullets == []
-            assert tier.prices[0].headline == '$0'
+            assert tier.prices[0].headline == 'US$0'
         else:
             assert tier.compact is False and tier.bullets
 
@@ -843,7 +843,7 @@ def test_golden_storefront_scenarios():
     assert [tier.plan_id for tier in free.tiers] == ['plus', 'basic', 'operator', 'architect']
     free_card = next(tier for tier in free.tiers if tier.is_current)
     assert free_card.compact is True and free_card.bullets == []
-    assert free_card.prices[0].headline == '$0'
+    assert free_card.prices[0].headline == 'US$0'
     assert rendered['free_budget80'].header == "You've used 80% of this month's usage"
     assert rendered['free_budget80'].usage.meter_line == ('80% used · about 3 hours of recording left · resets Nov 1')
     assert rendered['free_budget80'].usage.more_label == 'Get more usage'
@@ -857,10 +857,10 @@ def test_golden_storefront_scenarios():
     assert rendered['free_mcp_cap'].header == "You've used today's 100 MCP requests"
     assert all('MCP requests' in tier.bullets[0] for tier in rendered['free_mcp_cap'].tiers if not tier.is_current)
     plus80 = rendered['plus_budget80']
-    assert plus80.current.line == "You're on Plus · $19.99/mo · renews Nov 1"
+    assert plus80.current.line == "You're on Plus · US$19.99/mo · renews Nov 1"
     assert plus80.usage.meter_line == '80% used · about 20 hours of recording left · resets Nov 1'
     annual = rendered['plus_annual_current']
-    assert annual.current.line == "You're on Plus · $199.90/yr · renews Nov 1"
+    assert annual.current.line == "You're on Plus · US$199.90/yr · renews Nov 1"
     plus_card = next(tier for tier in annual.tiers if tier.plan_id == 'plus')
     assert [item.interval for item in plus_card.prices] == ['year']
     assert plus_card.compact is True and plus_card.cta_label is None and plus_card.bullets == []
@@ -871,18 +871,18 @@ def test_golden_storefront_scenarios():
     assert plus_month.action == 'checkout' and plus_month.cta_label is None and plus_month.compact is False
     assert plus_month.bullets == []
     assert [item.interval for item in plus_month.prices] == ['year']
-    assert plus_month.prices[0].headline == '$19.99/month'
-    assert plus_month.prices[0].subline == '$199.90 billed yearly · 2 months free'
-    assert plus_month.prices[0].cta_label == 'Switch to yearly · save $39.98'
+    assert plus_month.prices[0].headline == 'US$19.99/month'
+    assert plus_month.prices[0].subline == 'US$199.90 billed yearly · 2 months free'
+    assert plus_month.prices[0].cta_label == 'Switch to yearly · save US$39.98'
     assert all(tier.plan_id != 'basic' for tier in switched.tiers)
     pro_settings = rendered['pro_settings']
-    assert pro_settings.current.line == "You're on Pro · $49.99/mo · renews Nov 1"
+    assert pro_settings.current.line == "You're on Pro · US$49.99/mo · renews Nov 1"
     assert [tier.plan_id for tier in pro_settings.tiers] == ['plus', 'operator']
     assert all(tier.plan_id != 'architect' for tier in pro_settings.tiers)
     assert all(tier.plan_id != 'architect' for tier in rendered['pro_budget80'].tiers)
     assert plus_month.prices[0].confirm_lines == [
         'Your monthly plan continues until Nov 1',
-        'Your payment method will be charged $199.90 when your yearly plan starts',
+        'Your payment method will be charged US$199.90 when your yearly plan starts',
         'Your yearly plan starts on Nov 1',
     ]
     capped = rendered['pro_budget_cap']
@@ -895,12 +895,12 @@ def test_golden_storefront_scenarios():
     assert architect.recommended and architect.action == 'checkout'
     assert architect.cta_label == 'Upgrade to Architect' and architect.blocked_line is None
     assert not any(tier.recommended for tier in capped.tiers if tier.plan_id != 'architect')
-    assert rendered['architect_settings'].current.line == "You're on Architect · $199/mo · renews Nov 1"
+    assert rendered['architect_settings'].current.line == "You're on Architect · US$199/mo · renews Nov 1"
     legacy = rendered['legacy_unlimited']
     assert legacy.header == 'Your plan'
     assert legacy.current.plan_id == 'unlimited_v2'
     assert legacy.current.name == 'Unlimited'
-    assert legacy.current.line == "You're on Unlimited · $29.99/mo · renews Nov 1"
+    assert legacy.current.line == "You're on Unlimited · US$29.99/mo · renews Nov 1"
     assert legacy.current.legacy_note == "We don't sell this plan anymore, but yours stays exactly as it is."
     assert legacy.usage.more_label is None
     assert 'more_label' not in legacy.model_dump(mode='json')['usage']
@@ -915,12 +915,12 @@ def test_golden_storefront_scenarios():
     assert neo.header == 'Your plan'
     assert neo.current.plan_id == 'unlimited'
     assert neo.current.name == 'Neo'
-    assert neo.current.line == "You're on Neo · $19.99/mo · renews Nov 1"
+    assert neo.current.line == "You're on Neo · US$19.99/mo · renews Nov 1"
     assert neo.current.legacy_note == legacy.current.legacy_note
     assert not any(tier.action == 'checkout' for tier in neo.tiers)
     cancelled = rendered['cancel_scheduled_plus']
     assert cancelled.header == 'Your Plus plan ends Nov 1'
-    assert cancelled.current.line == "You're on Plus · $19.99/mo"
+    assert cancelled.current.line == "You're on Plus · US$19.99/mo"
     assert [tier.plan_id for tier in cancelled.tiers] == ['plus', 'basic', 'operator', 'architect']
     assert not any(tier.recommended for tier in cancelled.tiers)
     cancelled_free = next(tier for tier in cancelled.tiers if tier.plan_id == 'basic')
@@ -1204,3 +1204,29 @@ def test_localized_storefront_goldens():
     assert '11月1日' in japanese.header
     arabic = _l10n_sheet('free_settings', 'ar')
     assert arabic.header == copy_for('ar')['headers']['default']
+
+
+def test_current_jpy_raw_amount_and_template_support_currency_safe_clients():
+    row = price('price_jpy_current', 4800, 'month', currency='jpy')
+    sheet = sheet_for('unlimited', price_id=row['id'], rows={row['id']: row}, period_end=PERIOD_END)
+    assert sheet.current.amount_minor == 4800
+    assert sheet.current.currency == 'jpy'
+    assert '{price}' in sheet.current.line_template
+    assert '4,800 JPY' in sheet.current.line  # installed clients retain their rendered contract
+
+
+def test_annual_switch_templates_keep_prices_and_savings_in_minor_units():
+    rows, recognized = ladder_catalog()
+    sheet = sheet_for(
+        'plus',
+        price_id='price_plus_month',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        period_end=PERIOD_END,
+    )
+    tier = next(tier for tier in sheet.tiers if tier.plan_id == 'plus')
+    annual = next(price for price in tier.prices if price.interval == 'year')
+    assert annual.saving_minor == 1999 * 12 - 19990
+    assert '{saving}' in annual.cta_label_template
+    assert any('{price}' in line for line in annual.confirm_line_templates)

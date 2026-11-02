@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.conversation_finalization import (
     final_attempt_failed,
@@ -30,6 +31,7 @@ from utils.conversations.finalizer import (
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
+from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
@@ -42,15 +44,6 @@ from utils.workers.retry import retry_response
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _durable_attempt_cap_enabled() -> bool:
-    return os.getenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true').strip().lower() in {
-        '1',
-        'true',
-        'yes',
-        'on',
-    }
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:
@@ -154,10 +147,20 @@ async def run_listen_finalization_job(
     job_id, dispatch_generation = parsed
     if job_id.startswith('merge-'):
         status = await lifecycle_service.merge_jobs.run(job_id, dispatch_generation)
+        if status == 'account_pending_deletion':
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
         return JSONResponse(status_code=200, content={'status': status})
     if job_id.startswith('quiet-'):
         status = await run_blocking(db_executor, quiet_finalization.run, job_id, dispatch_generation)
+        if status == 'account_pending_deletion':
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
         return JSONResponse(status_code=200, content={'status': status})
+    # Read the owner and marker before admitting a lease. The transaction in
+    # claim_finalization_job repeats this fence to close the race with deletion.
+    pending_job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+    if pending_job and isinstance(pending_job.get('uid'), str):
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, pending_job['uid']):
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
     from utils.conversations.demand_processing import admit
 
     if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
@@ -184,6 +187,8 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
         if claim_status == 'leased':
             return JSONResponse(status_code=409, content={'status': claim_status})
+        if claim_status == 'account_pending_deletion':
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
         if claim_status == 'stale_generation':
             # The reconciler has already enqueued the newer generation. An old
             # named task is no longer actionable and must be acknowledged so
@@ -309,9 +314,16 @@ async def run_listen_finalization_job(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'processing_failed'
             )
             if terminal:
-                logger.error(
-                    'listen finalization final attempt failed job_hash=%s failure=processing_failed',
+                # A BYOK provider failure is the user's own account state even at
+                # dead-letter terminality; keep it out of severity>=ERROR counts.
+                byok_class = byok_failure_class_of(error)
+                log = logger.error if byok_class is None else logger.warning
+                log(
+                    'listen finalization final attempt failed job_hash=%s failure=processing_failed '
+                    'byok=%s failure_class=%s',
                     finalization_diagnostic_id(job_id),
+                    byok_class is not None,
+                    byok_class or 'none',
                 )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})

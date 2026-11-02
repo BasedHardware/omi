@@ -598,9 +598,11 @@ class LiveHeldAudio:
                                 cuts.add(right_owner)
                         boundaries = sorted(cuts)
                         for first, last in zip(boundaries, boundaries[1:]):
-                            timestamp = (
-                                timeline.wall(first) if timeline is not None else time.time() - (end - first) / rate
-                            )
+                            if timeline is None:
+                                raise RuntimeError('live held audio requires recorded capture timeline')
+                            timestamp = timeline.wall(first)
+                            if timestamp is None:
+                                raise RuntimeError('live held audio has no recorded capture coordinate')
                             part = data[(first - start) * 2 : (last - start) * 2]
                             if self.buffered_seconds() + len(part) / (2 * rate) > self.bound + 1e-9:
                                 raise RuntimeError('live held audio packet exceeds custody bound')

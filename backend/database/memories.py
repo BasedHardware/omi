@@ -31,6 +31,7 @@ from utils.observability.fallback import record_fallback
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from config import firestore_read_levers
 from database import memory_ledger, memory_source_index
+from database.released_memory_projection import projected_stream_list
 from database.firestore_index_registry import (
     CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY,
     MEMORIES_CREATED_RANGE_QUERY,
@@ -48,7 +49,7 @@ from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_stream_list
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
@@ -475,13 +476,15 @@ def _stream_memory_list_index_window(
                     BookmarkDict({order_field: stamp, "__name__": memories_ref.document(memory_id)})
                 )
             # The route clamps its requested page to 1..500. No offset or hidden-row slack.
-            return budgeted_stream_list(query.limit(max(1, min(int(candidate_limit), 500))), budget)
+            return projected_stream_list(
+                query.limit(max(1, min(int(candidate_limit), 500))), budget, surface='list_window'
+            )
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )
     if cursor_snapshot is not None:
         query = query.start_after(cursor_snapshot)
-    return budgeted_stream_list(query.limit(candidate_limit), budget)
+    return projected_stream_list(query.limit(candidate_limit), budget, surface='list_window')
 
 
 def _merge_memory_list_index_docs(
@@ -928,7 +931,7 @@ def _historical_scan_page(
                 '__name__': memories_ref.document(cursor_memory_id),
             }
         )
-    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
+    snapshots = projected_stream_list(query.limit(bounded_limit), budget, surface='historical_scan')
     payloads: list[dict[str, Any]] = []
     cursors: list[HistoricalScanCursor] = []
     for snapshot in snapshots:

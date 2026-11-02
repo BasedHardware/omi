@@ -10,7 +10,7 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": false,
-    "line": "현재 Plus 플랜 사용 중 · $19.99/월 · 11월 1일에 갱신돼요",
+    "line": "현재 Plus 플랜 사용 중 · US$19.99/월 · 11월 1일에 갱신돼요",
     "legacy_note": null
   },
   "usage": {
@@ -50,7 +50,7 @@
           "interval": "month",
           "amount_minor": 4999,
           "currency": "usd",
-          "headline": "$49.99/월",
+          "headline": "US$49.99/월",
           "subline": null,
           "renewal_line": "해지할 때까지 매월 자동 갱신돼요. 설정에서 언제든 해지할 수 있어요."
         },
@@ -59,8 +59,8 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$41.66/월",
-          "subline": "연간 $499.90 청구 · 2개월 무료",
+          "headline": "US$41.66/월",
+          "subline": "연간 US$499.90 청구 · 2개월 무료",
           "renewal_line": "해지할 때까지 매년 자동 갱신돼요. 설정에서 언제든 해지할 수 있어요.",
           "months_free": 2
         }
@@ -84,16 +84,16 @@
           "interval": "year",
           "amount_minor": 19990,
           "currency": "usd",
-          "headline": "$19.99/월",
-          "subline": "연간 $199.90 청구 · 2개월 무료",
+          "headline": "US$19.99/월",
+          "subline": "연간 US$199.90 청구 · 2개월 무료",
           "renewal_line": "해지할 때까지 매년 자동 갱신돼요. 설정에서 언제든 해지할 수 있어요.",
           "months_free": 2,
           "confirm_lines": [
             "월간 플랜은 11월 1일까지 유지돼요",
-            "연간 플랜이 시작되면 결제 수단으로 $199.90이 청구돼요",
+            "연간 플랜이 시작되면 결제 수단으로 US$199.90이 청구돼요",
             "연간 플랜은 11월 1일에 시작돼요"
           ],
-          "cta_label": "연간 결제로 변경 · $39.98 절약"
+          "cta_label": "연간 결제로 변경 · US$39.98 절약"
         }
       ]
     },
@@ -118,7 +118,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/월",
+          "headline": "US$199/월",
           "subline": null,
           "renewal_line": "해지할 때까지 매월 자동 갱신돼요. 설정에서 언제든 해지할 수 있어요."
         },
@@ -127,8 +127,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/월",
-          "subline": "연간 $1,990 청구 · 2개월 무료",
+          "headline": "US$165.83/월",
+          "subline": "연간 US$1,990 청구 · 2개월 무료",
           "renewal_line": "해지할 때까지 매년 자동 갱신돼요. 설정에서 언제든 해지할 수 있어요.",
           "months_free": 2
         }

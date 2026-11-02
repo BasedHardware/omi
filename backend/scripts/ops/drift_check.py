@@ -91,12 +91,10 @@ LIVE_ONE_SIDED_ALLOWLIST: dict[str, str] = {
     'OMI_DEPLOYMENT': 'staging identity',
 }
 # staging-vs-prod scale rules. Staging is prod-shaped, not prod-sized: it idles at min 0 by design
-# (staging.overlay.yaml scale_flags), except the services below, which must be warm whenever prod's
-# are, because they do work without inbound traffic. Min and max never exceed prod's. cpu, memory and
+# (staging.overlay.yaml scale_flags). The 2026-10-24 right-sizing retired the warm-exception for
+# backend-integration (lesson 8, #22757): staging's serving leader may idle even while prod stays
+# warm; a replay window warms it with --warm. Min and max never exceed prod's. cpu, memory and
 # concurrency are equal, so per-instance behaviour matches.
-STAGING_WARM: dict[str, str] = {
-    'backend-integration': 'batch serving leader: reconciles and projects without traffic (lesson 8, #22757)',
-}
 EQUAL_SCALE_FIELDS = ('cpu', 'memory', 'concurrency')
 # Listen env whose prod values come from the LISTEN_PRIVATE_VALUES_YAML secret (#22763 privateEnv),
 # so source states presence only.
@@ -364,9 +362,41 @@ def _source_env(entries: Mapping[str, Any], secrets: Mapping[str, Any]) -> dict[
 
 _FLAG = re.compile(r'--(min-instances|max-instances|max|min|concurrency|cpu|memory)=([^\s$]+)(?=\s|$)')
 
+# Prod-scoping conditionals used by the deploy actions (runtime_env == 'prod',
+# project_id == 'based-hardware') resolve to their prod branch here: this model is
+# the prod declaration. Dev takes the || branch and never reaches this parser.
+_PROD_BRANCH = re.compile(
+    r"\$\{\{\s*inputs\.(?:runtime_env == 'prod'|project_id == 'based-hardware')" r" && '([^']*)' \|\| '([^']*)'\s*\}\}"
+)
+_INPUT_REF = re.compile(r'\$\{\{\s*inputs\.(\w+)\s*\}\}')
+# Manual-workflow `with:` entries scoped by deploy environment resolve to their prod branch.
+_WORKFLOW_ENV_SCOPED = re.compile(
+    r"^\$\{\{\s*vars\.\w+\s*\|\|\s*\(github\.event\.inputs\.environment == 'prod' && '([^']*)' \|\| '([^']*)'\)\s*\}\}$"
+)
 
-def deploy_action_flags(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
+
+def workflow_input_values(path: Path) -> dict[str, str]:
+    """Prod-branch values for deploy-backend-stack inputs the manual workflow scopes by deploy
+    environment (`vars.X || (environment == 'prod' && 'A' || 'B')`). A set `vars.X` overrides live;
+    the source model stays the source-declared fallback, so an override shows as drift."""
+    doc = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+    out: dict[str, str] = {}
+    for job in (doc.get('jobs') or {}).values():
+        for step in (job or {}).get('steps') or []:
+            if not str((step or {}).get('uses', '')).endswith('/deploy-backend-stack'):
+                continue
+            for name, value in ((step or {}).get('with') or {}).items():
+                m = _WORKFLOW_ENV_SCOPED.match(str(value))
+                if m:
+                    out[str(name)] = m.group(1)
+    return out
+
+
+def deploy_action_flags(
+    paths: Iterable[Path], input_values: Mapping[str, str] | None = None
+) -> dict[str, dict[str, str]]:
     """Literal scale flags per service from the deploy-cloudrun steps of the prod deploy actions."""
+    resolved = dict(input_values or {})
     out: dict[str, dict[str, str]] = {}
     for path in paths:
         doc = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
@@ -376,7 +406,9 @@ def deploy_action_flags(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
             with_ = step.get('with') or {}
             service = str(with_.get('service', '')).replace('${{ inputs.service }}', 'backend')
             flags = out.setdefault(service, {})
-            for flag, value in _FLAG.findall(str(with_.get('flags', ''))):
+            flag_text = _PROD_BRANCH.sub(r'\1', str(with_.get('flags', '')))
+            flag_text = _INPUT_REF.sub(lambda m: resolved.get(m.group(1), m.group(0)), flag_text)
+            for flag, value in _FLAG.findall(flag_text):
                 flags[flag] = value
     return out
 
@@ -450,8 +482,12 @@ def source_model(environment: str, root: Path = ROOT) -> dict[str, SourceService
             environment, base_path=runtime_env_dir / '_base.yaml', runtime_env_dir=runtime_env_dir
         )
         actions = root / '.github' / 'actions'
+        # The manual workflow scopes some action inputs by deploy environment; the prod model
+        # takes their prod branch (e.g. backend-sync memory) so the fallback stays drift-checked.
+        input_values = workflow_input_values(root / '.github' / 'workflows' / 'gcp_backend.yml')
         flags = deploy_action_flags(
-            [actions / 'deploy-backend-stack' / 'action.yml', actions / 'sync-backfill-lifecycle' / 'action.yml']
+            [actions / 'deploy-backend-stack' / 'action.yml', actions / 'sync-backfill-lifecycle' / 'action.yml'],
+            input_values=input_values,
         )
     ops = yaml.safe_load((backend / 'deploy' / 'ops' / f'{environment}.yaml').read_text(encoding='utf-8'))
     ops_services = {_base_name(name): cfg or {} for name, cfg in ((ops or {}).get('cloud_run') or {}).items()}
@@ -789,9 +825,7 @@ def compare_staging_prod(
 
 def _scale_vs_prod(service: str, s: Mapping[str, Any], p: Mapping[str, Any]) -> list[Finding]:
     out: list[Finding] = []
-    (s_low, s_high), (p_low, p_high) = _min_range(s), _min_range(p)
-    if _base_name(service) in STAGING_WARM and p_low > 0 and s_low == 0:
-        out.append(Finding(service, 'min_instances', f'staging {s_low}, prod {p_low} (rule: warm whenever prod is)'))
+    s_high, p_high = _min_range(s)[1], _min_range(p)[1]
     if s_high > p_high:
         out.append(Finding(service, 'min_instances', f'staging {s_high} > prod {p_high}'))
     s_max, p_max = _max_range(s), _max_range(p)

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import threading
 from unittest.mock import AsyncMock, MagicMock
+import hashlib
 import uuid
 
 import fakeredis
@@ -57,7 +58,6 @@ def pipeline():
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
         module.get_syncing_file_temporal_signed_url = lambda path: path
-        module.schedule_syncing_temporal_file_deletion = lambda path: None
         module.get_prerecorded_service = lambda language: ('test', None, 'test')
         module.identify_speakers_for_segments = lambda *a: None
         module.get_closest_conversation_to_timestamps = lambda *a: None
@@ -67,6 +67,9 @@ def pipeline():
         ]
         store = StrictFirestore()
         lifecycle.ingest_sync_conversation = lambda uid, row, **kw: intake(store, row, **kw)
+        # The episodes intake attach is fail-open; the harness stand-in skips like a
+        # user whose app never called the episodes API. The wiring test spies on it.
+        module.schedule_synced_intake_attach = lambda uid, cid, row: None
         yield module, store
 
 
@@ -95,6 +98,33 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert row['transcript_segments'][0]['start'] == 0
     assert row['id'] == chunk_identity('u', 'omi', None, False, 1700000020)
     assert outcome['outcome'].value == 'success'
+
+
+def test_provider_failure_after_eight_minutes_never_releases_staging(pipeline, monkeypatch, tmp_path):
+    module, _ = pipeline
+    path = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=1000).export(path, format='wav')
+    pending = []
+    staging = {'exists': True}
+
+    def schedule(_path):
+        pending.append(lambda: staging.update(exists=False))
+
+    # Fault injection: callbacks scheduled at URL creation would now be due.
+    # Restoring the old call causes this production-path test to lose staging.
+    monkeypatch.setattr(module, 'schedule_syncing_temporal_file_deletion', schedule, raising=False)
+
+    def late_failure(*args, **kwargs):
+        for delete in pending:
+            delete()
+        raise RuntimeError('synthetic provider failure after 481 seconds')
+
+    module.prerecorded = late_failure
+    errors = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment(str(path), 'u', response, threading.Lock(), errors) is False
+    assert errors
+    assert staging['exists'] and pending == []
 
 
 @pytest.mark.parametrize('recovered', [False, True])
@@ -333,8 +363,8 @@ def test_success_does_not_retry_and_failure_log_has_no_identifiers(pipeline, cap
 
 def test_correlation_refs_accept_uuid4_only():
     job = uuid.uuid4()
-    assert telemetry.bounded_correlation_ref(str(job)) == job.hex
-    assert telemetry.bounded_correlation_ref(job.hex) == job.hex
+    assert telemetry.bounded_correlation_ref(str(job)) == hashlib.sha256(job.hex.encode('ascii')).hexdigest()[:32]
+    assert telemetry.bounded_correlation_ref(job.hex) == hashlib.sha256(job.hex.encode('ascii')).hexdigest()[:32]
     assert telemetry.bounded_correlation_ref(str(uuid.uuid1())) == 'none'
     assert telemetry.bounded_correlation_ref('user-uid-123') == 'none'
     assert telemetry.bounded_correlation_ref('/tmp/audio.wav') == 'none'
@@ -377,7 +407,10 @@ def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_
     assert [m.split('outcome=')[1].split(' ')[0] for m in retry_events] == expected
     for message in retry_events:
         assert 'provider=deepgram' in message and 'lane=fresh' in message
-        assert f'job_ref={uuid.UUID(job_id).hex}' in message and f'attempt_ref={attempt_ref}' in message
+        assert (
+            f'job_ref={telemetry.bounded_correlation_ref(job_id)}' in message
+            and f'attempt_ref={telemetry.bounded_correlation_ref(attempt_ref)}' in message
+        )
         assert 'uid-secret-9f2c' not in message and '1700000000.wav' not in message
 
 
@@ -405,7 +438,7 @@ def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkey
         },
     )
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         module._record_sync_segment_outcome(
             module.TranscriptionOutcome.SUCCESS,
             provider='deepgram',
@@ -423,7 +456,7 @@ def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkey
         )
 
     assert finalized is not None
-    shared_ref = f'job_ref={uuid.UUID(job_id).hex} attempt_ref={attempt_ref}'
+    shared_ref = f'job_ref={telemetry.bounded_correlation_ref(job_id)} attempt_ref={telemetry.bounded_correlation_ref(attempt_ref)}'
     segment_msg = next(r.getMessage() for r in caplog.records if 'event=sync_transcription_segment' in r.getMessage())
     job_msg = next(r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage())
     assert shared_ref in segment_msg and shared_ref in job_msg
@@ -548,7 +581,17 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     errors, outcome = [], {}
     response = {'new_memories': set(), 'updated_memories': set()}
     assert (
-        module.process_segment('1000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome) is False
+        module.process_segment(
+            '1000.wav',
+            'u',
+            response,
+            threading.Lock(),
+            errors,
+            deferred_outcome=outcome,
+            job_id=str(uuid.UUID(int=1, version=4)),
+            attempt_ref=str(uuid.UUID(int=2, version=4)),
+        )
+        is False
     )
     assert not store.rows and not response['new_memories']
     assert errors == ['sync_persistence_failed']
@@ -557,9 +600,44 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     assert ('repeat_failure_fingerprint' in outcome) is (not retryable)
     event = next(r.message for r in caplog.records if 'event=sync_persistence_exception' in r.message)
     assert f'firestore_error={expected}' in event
+    assert 'job_ref=' + telemetry.bounded_correlation_ref(str(uuid.UUID(int=1, version=4))) in event
+    assert 'attempt_ref=' + telemetry.bounded_correlation_ref(str(uuid.UUID(int=2, version=4))) in event
+    assert 'segments_bucket=1' in event and 'speech_seconds_bucket=' in event
+    assert 'rollover_target_kind=none' in event
+    assert ('outcome=rejected' in event) is (expected == 'document_size_limit')
     assert f'firestore_doc_kind={kind} ' in event
     assert 'private' not in event and '2026-10-03' not in event
     module.prerecorded.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (ValueError('open_loop_extractions must be an object'), 'open_loop_extractions_not_object'),
+        (ValueError('synthetic confidential detail'), 'other_value_error'),
+        (ValueError('open_loop_extractions must be an object synthetic confidential detail'), 'other_value_error'),
+        (ValueError('Failed to commit transaction in 5 attempts.'), 'sdk_commit_attempts_exhausted'),
+        (
+            ValueError('The transaction has no transaction ID, so it cannot be rolled back.'),
+            'sdk_transaction_not_in_progress',
+        ),
+        (RuntimeError('synthetic confidential detail'), 'none'),
+    ],
+)
+@pytest.mark.parametrize('phase', ['persistence', 'finalize'])
+def test_value_error_diagnostics_use_only_closed_tokens(pipeline, caplog, error, reason, phase):
+    module, _ = pipeline
+    if phase == 'persistence':
+        module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
+    else:
+        module.finish_sync_segment = MagicMock(side_effect=error)
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    module.process_segment(
+        '1000.wav', 'u', {'new_memories': set(), 'updated_memories': set()}, threading.Lock(), [], deferred_outcome={}
+    )
+    event = next(r.message for r in caplog.records if f'event=sync_{phase}_exception' in r.message)
+    assert f'value_error_reason={reason}' in event
+    assert 'confidential' not in event and 'must be an object' not in event
 
 
 @pytest.mark.parametrize(
@@ -686,7 +764,7 @@ def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monke
 def test_cached_multilingual_response_does_not_increment_submitted_audio(pipeline, monkeypatch):
     module, _ = pipeline
     module.cap_enabled = lambda uid, lane: True
-    module.sync_allowed = lambda uid, *, lane='sync': True
+    module.sync_allowed = lambda uid, *, lane='sync', **kwargs: True
     module.compute_sync_segment_id = lambda *args: 'stable-synthetic-segment'
     module.dispatch_empty_recovery_once = lambda uid, sid, dispatch: (
         [{'text': 'Synthetic', 'timestamp': [0, 3]}],
@@ -814,3 +892,24 @@ def test_destructive_fence_still_propagates_without_recording_a_provider_failure
     assert caught.value is error
     assert not errors and not outcome and not store.rows
     turnstile.complete.assert_called_once_with('1700000000.wav')
+
+
+def test_process_segment_attaches_the_landed_row_to_the_live_episode(pipeline, monkeypatch):
+    module, _store = pipeline
+    attached = []
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    monkeypatch.setattr(
+        module,
+        'schedule_synced_intake_attach',
+        lambda uid, cid, row: attached.append((uid, cid, dict(row))) or 'joined',
+    )
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment('1700000000.wav', 'u', response, threading.Lock(), [])
+    # The row the intake persisted is the row handed to the episode join.
+    assert len(attached) == 1
+    uid, conversation_id, row = attached[0]
+    assert uid == 'u' and row['id'] == conversation_id and conversation_id in response['new_memories']

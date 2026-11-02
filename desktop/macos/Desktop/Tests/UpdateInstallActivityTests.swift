@@ -33,6 +33,35 @@ final class UpdateInstallActivityTests: XCTestCase {
     XCTAssertEqual(UpdateInstallActivity.lastActivityAt(now: now), Date(timeIntervalSince1970: 100))
   }
 
+  func testPendingMeetingResumeDefersInstallEvenWhileOnlyMeetingsCaptureIsClosed() {
+    var clock = Date(timeIntervalSince1970: 1000)
+    let detector = MeetingDetector(now: { clock }, onChange: { _ in })
+    detector.applyDetected(true, callIDs: ["app:com.hnc.discord"])
+    clock += 10
+    detector.applyDetected(true, callIDs: ["app:com.hnc.discord"])
+    detector.applyDetected(false)
+    clock += 8
+    detector.applyDetected(false)
+    let state = AppState()
+    state.currentConversationRole = .meeting
+    state.meetingDetector = detector
+    state.isTranscribing = true
+    state.isAwaitingMeeting = true
+    defer {
+      state.isTranscribing = false
+      state.meetingDetector = nil
+    }
+    clock += 150
+    state.publishMeetingCaptureActivity()
+    XCTAssertEqual(
+      UpdateInstallActivity.lastActivityAt(now: clock), clock,
+      "the updater must not relaunch in the middle of a resumable call")
+    clock += 90
+    detector.applyDetected(false)
+    state.publishMeetingCaptureActivity()
+    XCTAssertNil(UpdateInstallActivity.lastActivityAt(now: clock))
+  }
+
   func testAppStatePublishesMeetingCaptureOnlyWhileLiveCapturing() {
     let state = AppState()
     let now = Date(timeIntervalSince1970: 1_000)

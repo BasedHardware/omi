@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
@@ -7,6 +9,47 @@ import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
+
+const actionItemsPageBackgroundParseBytes = 64 * 1024;
+
+/// Pure decoder seam: no telemetry or provider closures cross isolates.
+@visibleForTesting
+ApiResult<ActionItemsResponse> Function(String) actionItemsPageDecoder = decodeActionItemsEnvelope;
+
+Future<ApiResult<ActionItemsResponse>> parseActionItemsPage(
+  String body, {
+  void Function(ApiFallbackEvent) fallback = recordFallback,
+}) async {
+  final decoder = actionItemsPageDecoder;
+  final result = await offUiIsolate(
+    () => decoder(body),
+    size: body.length,
+    threshold: actionItemsPageBackgroundParseBytes,
+    debugName: 'action_items_parse',
+  );
+  if (result is ApiSuccess<ActionItemsResponse> && result.rejectedRows > 0) {
+    fallback(const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded));
+  }
+  return result;
+}
+
+ActionItemsResponse decodeLegacyActionItemsPage(String body) =>
+    wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+
+@visibleForTesting
+ActionItemsResponse Function(String) legacyActionItemsPageDecoder = decodeLegacyActionItemsPage;
+
+/// Legacy callers keep their strict envelope/row decoding semantics.
+Future<ActionItemsResponse> parseLegacyActionItemsPage(String body) {
+  final decoder = legacyActionItemsPageDecoder;
+  return offUiIsolate(
+    () => decoder(body),
+    size: body.length,
+    threshold: actionItemsPageBackgroundParseBytes,
+    debugName: 'action_items_parse',
+  );
+}
 
 Future<ActionItemsResponse> getActionItems({
   int limit = 50,
@@ -69,7 +112,7 @@ Future<ActionItemsResponse?> tryGetActionItems({
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return parseLegacyActionItemsPage(body);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
     return null;
@@ -203,7 +246,7 @@ class ActionItemsApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (decodeActionItemsEnvelope(data, fallback: recordFallback)) {
+      ApiSuccess(:final data, :final truncated) => switch (await parseActionItemsPage(data)) {
           ApiSuccess(:final data, :final rejectedRows) =>
             ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
           ApiFailure(:final problem) => ApiFailure(problem),

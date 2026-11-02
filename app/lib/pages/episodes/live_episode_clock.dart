@@ -16,6 +16,7 @@ class LiveEpisodeClock extends StatefulWidget {
 
 class _LiveEpisodeClockState extends State<LiveEpisodeClock> with WidgetsBindingObserver {
   Timer? _tick;
+  bool _tickerEnabled = true;
 
   @override
   void initState() {
@@ -24,10 +25,18 @@ class _LiveEpisodeClockState extends State<LiveEpisodeClock> with WidgetsBinding
     _start();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Subscribe even before the first tick so revealing Home catches up in its
+    // first frame. Timer callbacks themselves are not muted by TickerMode.
+    _tickerEnabled = TickerMode.valuesOf(context).enabled;
+  }
+
   void _start() {
     _tick?.cancel();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted && _tickerEnabled) setState(() {});
     });
   }
 
@@ -35,7 +44,7 @@ class _LiveEpisodeClockState extends State<LiveEpisodeClock> with WidgetsBinding
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _start();
-      setState(() {});
+      if (_tickerEnabled) setState(() {});
     } else {
       _tick?.cancel();
     }

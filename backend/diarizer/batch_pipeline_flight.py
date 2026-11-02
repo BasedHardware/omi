@@ -11,8 +11,9 @@ packs the remaining forwards across the items of one locked flight:
 * one ResNet trunk forward per chunk, pooled per local speaker with the same
   masks and statistics pooling, packed across items.
 
-Each forward keeps the deployment's pinned model batch size, so a single
-forward is never larger than in the serial path and peak VRAM does not grow.
+Each forward keeps the deployment's pinned model batch size, so a forward is
+bounded by that batch; the embedding trunk now sees up to that many chunk
+waveforms per forward where stock pyannote embedded one chunk per pair.
 ``budget_seconds`` bounds the audio packed into one group (host-side features
 held between stages). A unit longer than the budget, an unsupported model
 layout, any non-fatal failure, or a CUDA out-of-memory error inside the packed
@@ -21,10 +22,14 @@ errors propagate to the chain's quarantine.
 
 Clustering, reconstruction and labelling remain pyannote's own ``apply``; only
 its two model-feature hooks read the precomputed values.
+
+With packing off, ``install_shared_trunk`` gives the serial chain the same
+per-chunk trunk forward, one unit at a time.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib import metadata
 import logging
 import math
 import warnings
@@ -52,11 +57,15 @@ fix_reproducibility: Any = getattr(_reproducibility, 'fix_reproducibility', None
 
 from diarizer.batch_pipeline import SAMPLE_RATE, crop_model_vad_spans, is_fatal_cuda_error
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from utils.batch_pipeline import leaf_timings
 
 logger = logging.getLogger(__name__)
 
 SEGMENTATION_KEY = 'omi_flight_segmentation'
 EMBEDDINGS_KEY = 'omi_flight_embeddings'
+# trunk_embedding_rows mirrors SpeakerDiarization.get_embeddings of these
+# releases; any other pyannote.audio keeps its stock per-pair forward.
+SHARED_TRUNK_PYANNOTE_VERSIONS = ('4.0.',)
 
 
 def is_out_of_memory(exc) -> bool:
@@ -155,7 +164,17 @@ def unsupported_reason(diarizer, vad) -> str | None:
     return failed[0] if failed else None
 
 
+def _pyannote_version() -> str | None:
+    try:
+        return metadata.version('pyannote-audio')
+    except Exception:
+        return None
+
+
 def _shared_trunk_supported(diarizer) -> bool:
+    version = _pyannote_version()
+    if version is None or not version.startswith(SHARED_TRUNK_PYANNOTE_VERSIONS):
+        return False
     try:
         embedding = diarizer._embedding
         model = embedding.model_
@@ -168,6 +187,102 @@ def _shared_trunk_supported(diarizer) -> bool:
         )
     except Exception:
         return False
+
+
+def trunk_embedding_rows(diarizer, file, binarized, exclude_overlap):
+    """SpeakerDiarization.get_embeddings' crops and masks, one row per chunk.
+
+    Lazy like the serial generator: only one model batch of 10s crops is
+    materialized at a time, never the whole group.
+    """
+    embedding = diarizer._embedding
+    duration = binarized.sliding_window.duration
+    _, num_frames, _ = binarized.data.shape
+    if exclude_overlap:
+        min_num_samples = embedding.min_num_samples
+        num_samples = duration * embedding.sample_rate
+        min_num_frames = math.ceil(num_frames * min_num_samples / num_samples)
+        clean_frames = 1.0 * (np.sum(binarized.data, axis=2, keepdims=True) < 2)
+        clean = SlidingWindowFeature(binarized.data * clean_frames, binarized.sliding_window)
+    else:
+        min_num_frames = -1
+        clean = SlidingWindowFeature(binarized.data, binarized.sliding_window)
+    for (chunk, masks), (_, clean_masks) in zip(binarized, clean):
+        waveform, _ = diarizer._audio.crop(file, chunk, mode='pad')
+        masks = np.nan_to_num(masks, nan=0.0).astype(np.float32)
+        clean_masks = np.nan_to_num(clean_masks, nan=0.0).astype(np.float32)
+        used = [
+            clean_mask if np.sum(clean_mask) > min_num_frames else mask
+            for mask, clean_mask in zip(masks.T, clean_masks.T)
+        ]
+        yield waveform, np.stack(used)
+
+
+def shared_trunk_embeddings(diarizer, files, binarized_list, *, exclude_overlap=None):
+    """(chunks, speakers, dimension) embeddings per file, one trunk forward per chunk."""
+    embedding = diarizer._embedding
+    model = embedding.model_
+    if exclude_overlap is None:
+        exclude_overlap = diarizer.embedding_exclude_overlap
+    rows = [trunk_embedding_rows(diarizer, f, b, exclude_overlap) for f, b in zip(files, binarized_list)]
+    counts = [b.data.shape[0] for b in binarized_list]
+    outputs = [[] for _ in rows]
+    for batch in packed_batches(counts, int(diarizer.embedding_batch_size)):
+        # packed_batches visits owners and their rows strictly in order.
+        pulled = [next(rows[owner]) for owner, _ in batch]
+        waveforms = torch.vstack([waveform[None] for waveform, _ in pulled])
+        masks = torch.from_numpy(np.stack([mask for _, mask in pulled]))
+        with torch.inference_mode(), warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            # The trunk depends only on the waveform; pool it once per
+            # local speaker exactly as the per-pair forward does.
+            frames = model.forward_frames(waveforms.to(embedding.device))
+            pooled = model.forward_embedding(frames, weights=masks.to(embedding.device))
+        pooled = pooled.cpu().numpy()
+        for row, (owner, _) in enumerate(batch):
+            outputs[owner].append(pooled[row])
+    return [np.stack(rows_out) for rows_out in outputs]
+
+
+def install_shared_trunk(diarizer) -> bool:
+    """Serial chain: one trunk forward per chunk of one unit, pooled per local speaker.
+
+    Rows never pack across units, so a unit's embeddings do not depend on the
+    flight it shares. An unsupported layout or pyannote release keeps the stock
+    per-(chunk, speaker) forward; a CUDA out-of-memory error or any non-fatal
+    failure recomputes that call with it. Other fatal CUDA errors propagate to
+    the chain's quarantine.
+    """
+    if not _shared_trunk_supported(diarizer):
+        logger.warning('event=batch_shared_trunk outcome=disabled reason=unsupported')
+        return False
+    original = diarizer.get_embeddings
+
+    def get_embeddings(file, binary_segmentations, exclude_overlap=False, hook=None):
+        # The chain passes pyannote's no-op progress hook; the shared trunk does not call it per pair.
+        if isinstance(file, Mapping):
+            try:
+                embeddings = shared_trunk_embeddings(
+                    diarizer, [file], [binary_segmentations], exclude_overlap=exclude_overlap
+                )
+                return embeddings[0]
+            except Exception as exc:
+                out_of_memory = is_out_of_memory(exc)
+                if not out_of_memory and is_fatal_cuda_error(exc):
+                    raise
+                if out_of_memory and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                logger.warning(
+                    'event=batch_shared_trunk_fallback reason=%s exception_type=%s',
+                    'out_of_memory' if out_of_memory else 'error',
+                    type(exc).__name__,
+                )
+        return original(file, binary_segmentations, exclude_overlap=exclude_overlap, hook=hook)
+
+    # Same bookkeeping bypass as FlightPyannote's feature hooks.
+    object.__setattr__(diarizer, 'get_embeddings', get_embeddings)
+    logger.info('event=batch_shared_trunk outcome=enabled')
+    return True
 
 
 class FlightPyannote:
@@ -312,57 +427,13 @@ class FlightPyannote:
 
     # ---- embeddings ---------------------------------------------------
 
-    def _embedding_rows(self, file, binarized, exclude_overlap):
-        """SpeakerDiarization.get_embeddings' crops and masks, one row per chunk.
-
-        Lazy like the serial generator: only one model batch of 10s crops is
-        materialized at a time, never the whole group.
-        """
-        embedding = self.diarizer._embedding
-        duration = binarized.sliding_window.duration
-        _, num_frames, _ = binarized.data.shape
-        if exclude_overlap:
-            min_num_samples = embedding.min_num_samples
-            num_samples = duration * embedding.sample_rate
-            min_num_frames = math.ceil(num_frames * min_num_samples / num_samples)
-            clean_frames = 1.0 * (np.sum(binarized.data, axis=2, keepdims=True) < 2)
-            clean = SlidingWindowFeature(binarized.data * clean_frames, binarized.sliding_window)
-        else:
-            min_num_frames = -1
-            clean = SlidingWindowFeature(binarized.data, binarized.sliding_window)
-        for (chunk, masks), (_, clean_masks) in zip(binarized, clean):
-            waveform, _ = self.diarizer._audio.crop(file, chunk, mode='pad')
-            masks = np.nan_to_num(masks, nan=0.0).astype(np.float32)
-            clean_masks = np.nan_to_num(clean_masks, nan=0.0).astype(np.float32)
-            used = [
-                clean_mask if np.sum(clean_mask) > min_num_frames else mask
-                for mask, clean_mask in zip(masks.T, clean_masks.T)
-            ]
-            yield waveform, np.stack(used)
-
     def embed_group(self, files, binarized_list, *, exclude_overlap=None):
-        embedding = self.diarizer._embedding
-        model = embedding.model_
-        if exclude_overlap is None:
-            exclude_overlap = self.diarizer.embedding_exclude_overlap
-        rows = [self._embedding_rows(f, b, exclude_overlap) for f, b in zip(files, binarized_list)]
-        counts = [b.data.shape[0] for b in binarized_list]
-        outputs = [[] for _ in rows]
-        for batch in packed_batches(counts, int(self.diarizer.embedding_batch_size)):
-            # packed_batches visits owners and their rows strictly in order.
-            pulled = [next(rows[owner]) for owner, _ in batch]
-            waveforms = torch.vstack([waveform[None] for waveform, _ in pulled])
-            masks = torch.from_numpy(np.stack([mask for _, mask in pulled]))
-            with torch.inference_mode(), warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                # The trunk depends only on the waveform; pool it once per
-                # local speaker exactly as the per-pair forward does.
-                frames = model.forward_frames(waveforms.to(embedding.device))
-                pooled = model.forward_embedding(frames, weights=masks.to(embedding.device))
-            pooled = pooled.cpu().numpy()
-            for row, (owner, _) in enumerate(batch):
-                outputs[owner].append(pooled[row])
-        return [np.stack(rows_out) for rows_out in outputs]
+        return leaf_timings.call(
+            'flight_embedding', self._embed_group, files, binarized_list, exclude_overlap=exclude_overlap
+        )
+
+    def _embed_group(self, files, binarized_list, *, exclude_overlap=None):
+        return shared_trunk_embeddings(self.diarizer, files, binarized_list, exclude_overlap=exclude_overlap)
 
     def speaking(self, segmentation) -> bool:
         count = self.diarizer.speaker_count(segmentation, self.segmentation.model.receptive_field, warm_up=(0.0, 0.0))

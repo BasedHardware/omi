@@ -26,6 +26,7 @@ on:
         type: choice
         options:
           - diarizer
+          - diarizer-batch
           - batch-pipeline-worker
       release_version:
         description: 'Release version (optional)'
@@ -117,12 +118,25 @@ jobs:
             echo "Invalid deployment environment variable: $DEPLOY_ENV"
             exit 1
           fi
+          values_overlay=""
           case "$SERVICE" in
             diarizer)
               image_name=diarizer
               dockerfile=backend/diarizer/Dockerfile
               chart=backend/charts/diarizer
               values_file="backend/charts/diarizer/${DEPLOY_ENV}_omi_diarizer_values.yaml"
+              ;;
+            # Separate batch release from the same chart and image: the batch overlay
+            # stacks on the base values exactly as the lead-only install documents it
+            # (backend/scripts/diarization_eval/batch_install.md); never install it
+            # over prod-omi-diarizer. release_name stays ${DEPLOY_ENV}-omi-${SERVICE},
+            # i.e. prod-omi-diarizer-batch / dev-omi-diarizer-batch.
+            diarizer-batch)
+              image_name=diarizer
+              dockerfile=backend/diarizer/Dockerfile
+              chart=backend/charts/diarizer
+              values_file="backend/charts/diarizer/${DEPLOY_ENV}_omi_diarizer_values.yaml"
+              values_overlay="backend/charts/diarizer/${DEPLOY_ENV}_omi_diarizer_batch_values.yaml"
               ;;
             batch-pipeline-worker)
               image_name=batch-pipeline-worker
@@ -139,10 +153,15 @@ jobs:
             echo "Deployment inputs are missing for $SERVICE in $DEPLOY_ENV"
             exit 1
           fi
+          if [[ -n "$values_overlay" && ! -f "$values_overlay" ]]; then
+            echo "Deployment overlay is missing for $SERVICE in $DEPLOY_ENV: $values_overlay"
+            exit 1
+          fi
           {
             echo "dockerfile=$dockerfile"
             echo "chart=$chart"
             echo "values_file=$values_file"
+            echo "values_overlay=$values_overlay"
             echo "release_name=${DEPLOY_ENV}-omi-${SERVICE}"
             echo "image_repository=gcr.io/${GCP_PROJECT_ID}/${image_name}"
           } >> "$GITHUB_OUTPUT"
@@ -185,7 +204,9 @@ jobs:
             --label "omi.release.tree=$(git rev-parse 'HEAD^{tree}')" .
           python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile "$DOCKERFILE" --image "$image"
           docker push "$image"
-          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+          # diarizer-batch deploys by digest with the tag emptied, matching the
+          # batch install runbook; batch-pipeline-worker has always pinned its digest.
+          if [[ "$SERVICE" == "batch-pipeline-worker" || "$SERVICE" == "diarizer-batch" ]]; then
             image_digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
             if [[ ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
               echo "Registry did not return a valid image digest for $image"
@@ -230,11 +251,21 @@ jobs:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           TARGET_CHART: ${{ steps.target.outputs.chart }}
           TARGET_VALUES: ${{ steps.target.outputs.values_file }}
+          TARGET_VALUES_OVERLAY: ${{ steps.target.outputs.values_overlay }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
         run: |
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
               -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}"
+          elif [[ "$SERVICE" == "diarizer-batch" ]]; then
+            # Same invocation as the lead-only install (backend/scripts/diarization_eval/
+            # batch_install.md): base values with the batch overlay stacked on top, the
+            # published digest pinned and the tag explicitly emptied (the chart prefers
+            # a validated digest), atomic so a failed upgrade rolls the release back.
+            helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
+              -f "./$TARGET_VALUES" -f "./$TARGET_VALUES_OVERLAY" \
+              --set-string image.tag= --set-string "image.digest=${{ steps.build.outputs.image_digest }}" \
+              --atomic --wait --timeout 15m
           else
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
               -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
@@ -250,11 +281,14 @@ jobs:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           DEPLOY_ENV: ${{ vars.ENV }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
-          EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest }}
+          EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
         run: |
           rollout_timeout=600s
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
             rollout_timeout=2400s
+          elif [[ "$SERVICE" == "diarizer-batch" ]]; then
+            # Batch install runbook's rollout wait: one T4 replica on the dedicated pool.
+            rollout_timeout=900s
           fi
           if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout="$rollout_timeout"; then
             timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
@@ -264,7 +298,7 @@ jobs:
             deployed_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$TARGET_RELEASE" --request-timeout=30s \
               -o jsonpath='{.spec.template.spec.containers[0].image}')"
             if [[ "$deployed_image" != *"@$EXPECTED_DIGEST" ]]; then
-              echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the built digest $EXPECTED_DIGEST"
+              echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the expected digest $EXPECTED_DIGEST"
               exit 1
             fi
             echo "deploy/$TARGET_RELEASE is ready on $EXPECTED_DIGEST"

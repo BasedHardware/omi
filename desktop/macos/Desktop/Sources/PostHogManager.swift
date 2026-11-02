@@ -100,6 +100,7 @@ class PostHogManager {
 
     PostHogSDK.shared.identify(uid, userProperties: properties)
     log("PostHog: Identified user \(uid)")
+    OmiFlagStore.shared.refresh()
   }
 
   /// Set person properties in one identify call.
@@ -195,26 +196,31 @@ class PostHogManager {
   func reset() {
     guard isInitialized else { return }
     PostHogSDK.shared.reset()
+    OmiFlagStore.shared.reset()
     log("PostHog: Reset user")
   }
 
   // MARK: - Feature Flags
+  // Keys owned by Omi's flag store (`OmiFlagStore`) answer first; every other key reads PostHog.
 
   /// Check if a feature flag is enabled
   func isFeatureEnabled(_ flag: String) -> Bool {
     guard isInitialized else { return false }
+    if let omi = OmiFlagStore.shared.flag(flag) { return omi.enabled }
     return PostHogSDK.shared.isFeatureEnabled(flag)
   }
 
   /// Get feature flag value
   func getFeatureFlag(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
+    if let omi = OmiFlagStore.shared.value(flag) { return omi }
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
   /// Get the JSON payload configured on a feature flag
   func getFeatureFlagPayload(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
+    if OmiFlagStore.shared.flag(flag) != nil { return OmiFlagStore.shared.payload(flag) }
     return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
   }
 
@@ -236,47 +242,14 @@ class PostHogManager {
       "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
   }
 
-  /// Fresh screen-task kill-switch read. Missing, quota-limited or failed flag
-  /// reads default on; backend admission remains a separate authority.
-  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard isInitialized, let url = URL(string: host + "/flags/?v=2") else { return true }
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 5
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = try JSONSerialization.data(withJSONObject: [
-      "token": apiKey, "distinct_id": authorization.ownerID,
-      "person_properties": [
-        "platform": "macos",
-        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-        "update_channel": AppBuild.currentUpdateChannel,
-      ],
-    ])
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    let data: Data
-    let response: URLResponse
-    do {
-      (data, response) = try await URLSession.shared.data(for: request)
-    } catch {
-      if Task.isCancelled { throw CancellationError() }
-      guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-      return true
-    }
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else { return true }
-    return ScreenTaskFreshFlagResponse.enabled(data)
-  }
+  /// Analytics opt-out also withholds the screen-task flag lease, as the retired fresh flag read did.
+  var screenTaskFlagWithheld: Bool { PostHogSDK.shared.isOptOut() }
 
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
     PostHogSDK.shared.reloadFeatureFlags()
+    OmiFlagStore.shared.refresh()
   }
 }
 

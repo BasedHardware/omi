@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 from typing import Any
 
 from google.cloud import firestore
+from prometheus_client import Counter
 
+from database.quiet_check_retirement import (
+    quiet_check_id,
+    stop_quiet_check as stop_quiet_check,
+    stop_quiet_check_for_conversation,
+)
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_continuity import continuation_timeout
@@ -23,6 +28,14 @@ QUIET_CHECK_KIND = 'listen_quiet_check'
 QUIET_CHECK_STATUS = 'waiting_quiet'
 QUIET_SOURCES = frozenset({'omi', 'phone'})
 
+ARM_OUTCOMES = Counter('listen_quiet_check_arm_total', 'Quiet-check arm attempts by durable outcome', ['outcome'])
+ARM_METRICS = {
+    'created': ARM_OUTCOMES.labels(outcome='created'),
+    'rearmed': ARM_OUTCOMES.labels(outcome='rearmed'),
+    'reused': ARM_OUTCOMES.labels(outcome='reused'),
+    'refused': ARM_OUTCOMES.labels(outcome='refused'),
+}
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -30,10 +43,6 @@ def _now() -> datetime:
 
 def _client(firestore_client: Any) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
-
-
-def quiet_check_id(uid: str, conversation_id: str) -> str:
-    return 'quiet-' + sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest()
 
 
 def quiet_timeout(value: Any) -> float:
@@ -70,7 +79,9 @@ def arm_quiet_check(
         job = job_ref.get(transaction=transaction).to_dict() or {}
         if row.get('source') not in QUIET_SOURCES or row.get('status') != 'in_progress':
             return None
-        if any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'finalization_job_id')):
+        if any(
+            row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into', 'is_locked', 'finalization_job_id')
+        ):
             return None
         deadline = quiet_deadline(row, timeout, uid=uid)
         if deadline is None:
@@ -92,7 +103,7 @@ def arm_quiet_check(
                     },
                 )
                 transaction.update(job_ref, {'quiet_timeout_seconds': quiet_timeout(timeout)})
-            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout)}
+            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout), '_arm_outcome': 'reused'}
         generation = int(job.get('dispatch_generation') or 0) + 1
         updated = {
             'kind': QUIET_CHECK_KIND,
@@ -114,12 +125,28 @@ def arm_quiet_check(
             },
         )
         transaction.set(job_ref, updated)
-        return updated | {'job_id': job_id}
+        return updated | {'job_id': job_id, '_arm_outcome': 'rearmed' if job else 'created'}
 
-    return arm(client.transaction())
+    result = arm(client.transaction())
+    outcome = result.pop('_arm_outcome') if result is not None else 'refused'
+    ARM_METRICS[outcome].inc()
+    if result is None:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return result
 
 
 def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:
+    try:
+        result = _evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
+    except Exception:
+        ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
+        raise
+    if result['status'] == 'stale':
+        ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
+    return result
+
+
+def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:
     """Re-read row + lease transactionally; reserve the next wake before returning.
 
     A reconnect/content update only defers this obligation. The fresh lease is
@@ -134,14 +161,19 @@ def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any 
         job = job_ref.get(transaction=transaction).to_dict() or {}
         if job.get('kind') != QUIET_CHECK_KIND or job.get('status') != QUIET_CHECK_STATUS:
             return {'status': 'stale'}
-        if job.get('dispatch_generation') != generation:
+        if isinstance(job.get('dispatch_generation'), bool) or job.get('dispatch_generation') != generation:
             return {'status': 'stale'}
         now = _now()
         row_ref = (
             client.collection('users').document(job['uid']).collection('conversations').document(job['conversation_id'])
         )
         row = row_ref.get(transaction=transaction).to_dict() or {}
-        deadline = quiet_deadline(row, job['quiet_timeout_seconds'], uid=job['uid'])
+        if not row:
+            transaction.update(
+                job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now}
+            )
+            return {'status': 'done', 'reason': 'missing_conversation'}
+        deadline = quiet_deadline(row, job.get('quiet_timeout_seconds'), uid=job['uid'])
         lease_expiry = jobs_db.recording_session_lease_expiry(
             transaction,
             row_ref.parent.parent.collection('recording_sessions'),
@@ -156,10 +188,14 @@ def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any 
         # leaves, since content may arrive after the first scheduled wake.
         empty = refusal == 'no_content' and serving_for('LIFECYCLE_V2_MODE', job['uid'])
         if refusal is not None and not (refusal == 'no_content' and (active or empty)):
-            transaction.update(job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD})
+            transaction.update(
+                job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': _now()}
+            )
             return {'status': 'done', 'reason': refusal}
         if deadline is None:
-            transaction.update(job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD})
+            transaction.update(
+                job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': _now()}
+            )
             return {'status': 'done'}
         ready = lease_expiry is not None and not active and deadline <= now
         # Short, bounded retry for a lost admission; live sessions get a minute
@@ -176,26 +212,58 @@ def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any 
             'job_id': job_id,
             'status': ('empty_ready' if empty else 'ready') if ready else 'deferred',
             'recording_session_id': (row.get('external_data') or {}).get('recording_session_id'),
-            'recovery_cutoff': now - timedelta(seconds=continuation_timeout(row, job['quiet_timeout_seconds'])),
+            'recovery_cutoff': now
+            - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds')))),
         }
 
     return evaluate(client.transaction())
 
 
-def stop_quiet_check(
-    job_id: str, generation: int, *, failure_code: str | None = None, firestore_client: Any = None
-) -> None:
-    """Retire the check; ``failure_code`` records why a still-owed row was given up on."""
+def ensure_quiet_check_progress(job_id: str, *, firestore_client: Any = None) -> bool:
+    """Repair an overdue obligation after any return or exception, without losing work.
+
+    Fresh successor wakes are untouched. A stale delivery must never retire a
+    newer waiting generation; instead reserve a bounded successor for replay.
+    Missing or malformed references cannot be evaluated and are retired explicitly.
+    """
     client = _client(firestore_client)
     ref = client.collection(jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
 
     @firestore.transactional
-    def stop(transaction: Any) -> None:
+    def repair(transaction: Any) -> bool:
         job = ref.get(transaction=transaction).to_dict() or {}
-        if job.get('kind') == QUIET_CHECK_KIND and job.get('dispatch_generation') == generation:
-            updates: dict[str, Any] = {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD}
-            if failure_code is not None:
-                updates['last_failure_code'] = failure_code
-            transaction.update(ref, updates)
+        if job.get('kind') != QUIET_CHECK_KIND:
+            return False
+        now = _now()
+        reconcile_at = job.get('reconcile_after_at')
+        if job.get('status') != QUIET_CHECK_STATUS and 'reconcile_after_at' not in job:
+            return False  # Already retired.
+        if job.get('status') == QUIET_CHECK_STATUS and isinstance(reconcile_at, datetime) and reconcile_at > now:
+            return False  # A fresh successor is already reserved.
+        updates: dict[str, Any] = {'updated_at': now}
+        generation = job.get('dispatch_generation')
+        parsed_generation = 0
+        valid_generation = False
+        if isinstance(generation, (int, float, str)) and not isinstance(generation, bool):
+            try:
+                parsed_generation = int(generation)
+                valid_generation = parsed_generation >= 1 and str(generation) in {
+                    str(parsed_generation),
+                    str(float(parsed_generation)),
+                }
+            except (TypeError, ValueError, OverflowError):
+                pass
+        if (
+            job.get('status') != QUIET_CHECK_STATUS
+            or not valid_generation
+            or not all(isinstance(job.get(key), str) and job[key] for key in ('uid', 'conversation_id'))
+        ):
+            updates.update(status='quiet_done', reconcile_after_at=firestore.DELETE_FIELD)
+            updates['last_failure_code'] = 'invalid_or_terminal_quiet_check'
+        else:
+            due = now + timedelta(seconds=60)
+            updates.update(dispatch_generation=parsed_generation + 1, due_at=due, reconcile_after_at=due)
+        transaction.update(ref, updates)
+        return True
 
-    stop(client.transaction())
+    return repair(client.transaction())

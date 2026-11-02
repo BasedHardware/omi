@@ -326,3 +326,27 @@ def test_reconnect_recovery_switch_copied_to_pusher_is_rejected(gate: SimpleName
         'STALE_IN_PROGRESS_RECOVERY_ENABLED is no longer listen-only' in error
         for error in gate.validate_preflight(chart_fixture)
     )
+
+
+def test_replay_binding_is_explained_only_on_prod_listen(gate: SimpleNamespace) -> None:
+    keys = gate._FINALIZATION_REPLAY_LISTEN_ONLY
+    assert keys <= gate.LISTEN_ONLY_ALLOWED['prod']
+    assert not keys & gate.LISTEN_ONLY_ALLOWED['dev']
+    assert 'LISTEN_FINALIZATION_DISPATCH_MODE' not in keys
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+@pytest.mark.parametrize(
+    'name',
+    (
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+    ),
+)
+def test_copying_replay_binding_to_pusher_is_rejected(gate: SimpleNamespace, chart_fixture: Path, name: str) -> None:
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    path.write_text(path.read_text().replace('env:\n', f'env:\n  - name: {name}\n    value: "probe"\n', 1))
+    assert any(f'{name} is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture))

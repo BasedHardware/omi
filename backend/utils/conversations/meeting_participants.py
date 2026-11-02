@@ -651,7 +651,7 @@ __all__ = [
 
 
 def bind_speakers_with_roster(
-    speaker_names: dict[int, Optional[str]],
+    speaker_names: dict[Any, Optional[str]],
     roster: MeetingRoster,
     desktop_meeting_capture: bool,
 ) -> None:

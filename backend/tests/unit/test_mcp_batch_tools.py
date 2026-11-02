@@ -104,7 +104,7 @@ class TestGetConversationsByIds:
             result = sse.execute_tool(UID, "get_conversations_by_ids", {"conversation_ids": ["b", "a", "b", "c", "a"]})
         assert fetch.call_count == 1
         assert fetch.call_args.args[1] == ["b", "a", "c"]
-        assert fetch.call_args.kwargs == {"include_transcript": True, "include_discarded": True}
+        assert fetch.call_args.kwargs == {"include_transcript": True, "include_discarded": False}
         assert result == {
             "conversations": [],
             "not_found": ["b", "a", "c"],

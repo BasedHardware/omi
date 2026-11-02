@@ -29,7 +29,9 @@ def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_
         "async def test_plugins(pytestconfig):\n"
         "    assert pytestconfig.pluginmanager.is_blocked('langsmith_plugin')\n"
         "    assert 'langsmith.pytest_plugin' not in sys.modules\n"
-        "    assert pytestconfig.pluginmanager.hasplugin('asyncio')\n",
+        "    assert pytestconfig.pluginmanager.hasplugin('asyncio')\n"
+        f"    assert pytestconfig.pluginmanager.is_blocked('xdist.looponfail') == {file_isolation == '1'}\n"
+        f"    assert pytestconfig.pluginmanager.is_blocked('pytest_httpserver') == {file_isolation == '1'}\n",
         encoding="utf-8",
     )
     selected_tests = tmp_path / "selected-tests.txt"

@@ -167,20 +167,25 @@ def test_original_hold_mapping(meta, lane):
     assert policy.hold_lane(meta) == lane
 
 
-def test_both_runtime_manifests_are_dark_and_live_only():
+def test_runtime_manifests_are_live_only_with_prod_api_and_sync_enforcement():
+    # Prod recovery runs only when API (backend) and backend-sync both enforce;
+    # every other host stays dark, and the cohort is runtime-doc driven (empty
+    # in the manifest) with lanes live-only everywhere.
     root = Path(__file__).parents[2]
     manifest = yaml.load((root / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    prod_enforcing = {f'cloud_run:{service}' for service in ('backend', 'backend-sync')}
     for env in ('dev', 'prod'):
         config = manifest['environments'][env]
         hosts = [
-            config['gke']['backend-listen'],
-            config['gke']['pusher'],
-            config['desktop_backend'],
-            *config['cloud_run']['services'].values(),
+            ('gke:backend-listen', config['gke']['backend-listen']),
+            ('gke:pusher', config['gke']['pusher']),
+            ('desktop_backend', config['desktop_backend']),
+            *((f'cloud_run:{name}', host) for name, host in config['cloud_run']['services'].items()),
         ]
-        for host in hosts:
+        for name, host in hosts:
+            enforcing = str(env == 'prod' and name in prod_enforcing).lower()
             values = host['env']
-            assert values['STT_CAP_DISPATCH_ENFORCEMENT']['value'] == 'false'
+            assert values['STT_CAP_DISPATCH_ENFORCEMENT']['value'] == enforcing
             assert values['STT_CAP_DISPATCH_COHORT']['value'] == ''
             assert values['STT_CAP_DISPATCH_LANES']['value'] == 'live'
 
@@ -204,6 +209,7 @@ def test_every_scoped_production_gate_supplies_its_subject(path):
             for name in node.names:
                 if name.name in {
                     'execution_admission_enabled',
+                    'offline_admission_enabled',
                     'recovery_admission_enabled',
                     'enabled_for',
                     'selected',

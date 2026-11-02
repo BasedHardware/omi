@@ -19,13 +19,18 @@ with how much history the user had, not with the screen in front of them.
 | `listSync` of the documents directory (which holds every WAL file) on every resume | `LocalRecordingsProvider.refresh` | Async `dir.list()`; when scans overlap, only the newest publishes or rewrites the owners file |
 | The memories list re-filtered every memory for each row it built | `MemoriesPage` | Filter once per build |
 | Voice dictation notified the provider at 60 Hz, rebuilding the whole chat composer | `VoiceRecorderProvider` | A dedicated `waveformTick` that only the waveform listens to |
+| The iOS rage-click tracker held a `SemanticsHandle` for the app's lifetime, so every production iOS frame compiled the semantics tree (17–25% of UI pipeline time while scrolling a list); host harnesses never mounted it | `RageClickContextTracker` | Resolve the tapped control from the pointer's render hit-test path; semantics stays off unless an assistive technology turns it on |
+| Background sync re-sorted the whole recording history on each progress refresh and published every inventory read and identical progress tick | `SyncProvider` | Reuse the sort order while membership and timestamps are unchanged; coalesce scalar progress to 100 ms (phase, file and terminal changes publish immediately); drop identical progress |
+| Each finished recording fragment re-read, re-sorted and re-notified the whole WAL inventory, and the periodic flush re-encoded an unchanged multi-thousand-entry index | `SyncProvider.onWalSynced`, `LocalWalSyncImpl._saveWalsToFile` | Completions do O(1) bookkeeping and publish through the same 100 ms coalesced window as other WAL updates (`_publishSyncedCompletions` runs once per refresh); a snapshot whose `persistedIndexFingerprint` is unchanged skips the index write |
+| The breathing live marker rebuilt and relaid out its surroundings every animation frame | `omi_live_indicators.dart` | A fixed-size painter repaints only itself |
+| Sharing long Offline Sync recordings decoded every Opus/PCM frame and assembled WAVs on the UI isolate | `AudioPlayerUtils`, `wal_wav_worker.dart` | One worker owns disk/memory decode and streamed combination; the UI isolate owns platform selection/share only. Scratch ownership and native verification: [export pipeline](../lib/utils/audio/README.md) |
 
 Known remaining candidates (not yet changed): the chat sheet keeps a full-screen
 `BackdropFilter` (sigma 18) over the live home page for as long as chat is open
 (`lib/pages/chat/chat_route.dart`, a UX-contract D1 decision; measure raster on a device before
-changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chunk
-(`SyncProvider.onWalUpdated`), and the batch audio buffer fsyncs once per second from the UI isolate
-(`MobileBatchBuffer`, a durability trade).
+changing it), sync backlog and filter getters still scan the WAL list linearly (refreshes are now
+coalesced to 100 ms and reuse the sort order), and the batch audio buffer fsyncs once per second from
+the UI isolate (`MobileBatchBuffer`, a durability trade).
 
 ## Rules of thumb
 
@@ -140,3 +145,23 @@ three visits leave `transientCallbackCount` at baseline, and ten list identity
 replacements cost one shell build per mounted row each (20 here; row content
 stays behind its `Selector`). That last number is the current cost of a
 completion landing on Home, not a floor.
+
+## Device lag capture (October 23, 2026)
+
+Host runs cannot raster, run AOT code, or reproduce a phone's data and thermal state. For lag a
+user feels, use the local recorder in `lib/utils/analytics/lag_recorder.dart`. It runs in release
+and TestFlight builds while Settings → Developer → Debug logs is on, and writes only to the local
+debug log. Per surface (the pushed page type or the Home tab) it records:
+
+- frames over 16.7, 33.3 and 100 ms on either thread, split into build-bound and raster-bound;
+- whether each slow frame came while scrolling, just after a tap, or idle;
+- the worst frames, with wall-clock time;
+- tap-to-frame latency, which includes the tap handler's own synchronous work;
+- UI-isolate stalls between frames, from a 250 ms watchdog that runs only while capture is on.
+
+To capture:
+
+1. Turn on Debug logs, then background and reopen the app.
+2. Use the app until it lags, then background it once. This writes `mobile_lag_report`.
+3. Share the log from Developer → Share logs.
+4. Run `python3 app/tool/lag_report.py omi_debug_YYYYMMDD.log`.

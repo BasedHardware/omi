@@ -45,12 +45,19 @@ extension AppState {
       log("Transcription: start ignored because Audio Recording is Off")
       return
     }
+    if deferMeetingRelaunchStart(
+      source: source, conversationRole: conversationRole, userInitiated: userInitiated,
+      armedRetry: armedRetry, launchContext: launchContext)
+    {
+      return
+    }
     sttSession.prepareForStart()
     silentMicRecoveryAttempts = 0
     isMicrophoneSignalMissing = false
     currentConversationRole = conversationRole
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
     conversationRotationInFlight = false
     pendingPreferredMicReapplyDeviceID = nil
     pendingPreferredMicReapplyDeviceName = nil
@@ -707,6 +714,13 @@ extension AppState {
 
     captureGateInFlight = true
 
+    // A retained local session keeps its wall-clock timestamps across a closed meeting gate.
+    if sttSession.useLocalSTT {
+      let transitionAt = Date()
+      localMicService?.setCapturePaused(!shouldCapture, at: transitionAt)
+      localSystemService?.setCapturePaused(!shouldCapture, at: transitionAt)
+    }
+
     // Microphone
     if let mic = audioCaptureService {
       if shouldCapture, !mic.capturing {
@@ -745,37 +759,7 @@ extension AppState {
       }
     }
 
-    if !meetingEndFinalizationInProgress,
-      !meetingBoundaryInProgress,
-      MeetingConversationBoundaryPolicy.shouldFinishConversation(
-        mode: mode,
-        meetingStateReady: meetingStateReady,
-        shouldCapture: shouldCapture,
-        segmentCount: totalSegmentCount, conversationRole: currentConversationRole,
-        hasSpeakerSegments: !speakerSegments.isEmpty
-      )
-    {
-      meetingEndFinalizationInProgress = true
-      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
-      Task { @MainActor in
-        defer { self.meetingEndFinalizationInProgress = false }
-        // A boundary rotation owns the same finalize — skip rather than run a
-        // second `finishConversation` into the rotation serializer.
-        guard !self.meetingBoundaryInProgress,
-          MeetingConversationBoundaryPolicy.shouldFinishConversation(
-            mode: self.audioRecordingMode,
-            meetingStateReady: self.meetingDetector?.hasObservedState == true,
-            shouldCapture: self.meetingDetector?.isMeetingActive == true,
-            segmentCount: self.totalSegmentCount, conversationRole: self.currentConversationRole,
-            hasSpeakerSegments: !self.speakerSegments.isEmpty
-          )
-        else {
-          log("Transcription: skipped meeting-ended finalization because meeting state changed")
-          return
-        }
-        _ = await self.finishConversation(finalizationReason: .meetingEnded)
-      }
-    }
+    finalizeEndedMeetingIfNeeded(mode: mode, meetingStateReady: meetingStateReady, shouldCapture: shouldCapture)
 
     captureGateInFlight = false
     if let recovery = pendingCoreAudioCaptureRecovery {
@@ -932,6 +916,7 @@ extension AppState {
       return nil
     }
     preferredMicrophoneReconnectMonitor.stop()
+    let meetingCaptureEnd = audioRecordingMode == .onlyMeetings ? meetingDetector?.resumeOffAt : nil
     // On-device path: await both Parakeet tail flushes before clearing state so the last words persist to the current conversation.
     if sttSession.useLocalSTT {
       let mic = localMicService
@@ -944,7 +929,7 @@ extension AppState {
         await sys?.finish()
         await self.flushTranscriptPersistence()
         self.clearTranscriptionState(
-          finalizationReason: finalizationReason, allowCloudForceProcess: false)
+          finalizationReason: finalizationReason, allowCloudForceProcess: false, finishedAt: meetingCaptureEnd)
         self.silentMicFallbackInProgress = false
       }
     }
@@ -977,7 +962,7 @@ extension AppState {
         }
         do {
           try await TranscriptionStorage.shared.finishSession(
-            id: sessionId, reason: finalizationReason)
+            id: sessionId, reason: finalizationReason, finishedAt: meetingCaptureEnd)
         } catch {
           logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
           return
@@ -1091,7 +1076,8 @@ extension AppState {
   func finishConversation(
     finalizationReason: TranscriptionFinalizationReason = .finishAndContinue,
     allowEmptyRotation: Bool = false,
-    nextConversationRole: MeetingConversationBoundaryPolicy.Role? = nil
+    nextConversationRole: MeetingConversationBoundaryPolicy.Role? = nil,
+    finishedAt: Date? = nil
   ) async -> FinishConversationResult {
     guard isTranscribing else { return .error("transcription is no longer active") }
     // One rotation at a time, across every caller. `meetingBoundaryInProgress`
@@ -1142,7 +1128,8 @@ extension AppState {
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
     if let sessionId = sessionToFinalize {
       do {
-        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
+        try await TranscriptionStorage.shared.finishSession(
+          id: sessionId, reason: finalizationReason, finishedAt: finishedAt)
         log("Transcription: Finished DB session \(sessionId) before reconnect")
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
@@ -1416,6 +1403,7 @@ extension AppState {
     isAwaitingMeeting = false
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
     conversationRotationInFlight = false
 
     // Stop system audio capture first (if available)
@@ -1456,7 +1444,8 @@ extension AppState {
     finalizationReason: TranscriptionFinalizationReason = .userStop,
     runFinalizer: Bool = true,
     allowCloudForceProcess: Bool = false,
-    finishSession: Bool = true
+    finishSession: Bool = true,
+    finishedAt: Date? = nil
   ) {
     log(
       "Transcription: Final segments count: \(totalSegmentCount) (in-memory: \(speakerSegments.count)), words: \(totalWordCount)"
@@ -1474,7 +1463,8 @@ extension AppState {
     if finishSession, let sessionId = currentSessionId {
       Task {
         do {
-          try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
+          try await TranscriptionStorage.shared.finishSession(
+            id: sessionId, reason: finalizationReason, finishedAt: finishedAt)
           log("Transcription: Finished DB session \(sessionId)")
           if runFinalizer {
             await ConversationFinalizationService.shared.finalizeSession(
@@ -1499,6 +1489,7 @@ extension AppState {
     currentClientConversationId = nil
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
     // Terminal outcome of the armed capture attempt (one per arming; the
     // guard keeps double clears and the hermetic automation session silent).
     let attemptIdForEvents = captureAttempt?.attemptId

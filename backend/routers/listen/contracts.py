@@ -97,6 +97,10 @@ class ListenRequest:
     # The client (desktop, meeting role only) declared it runs a pre-notes
     # screen-evidence pass; persisted to external_data['screen_evidence_pass'].
     screen_evidence_pass: bool = False
+    # The client can render an on-device live transcript preview by itself, so
+    # it accepts a server session with no cloud streaming STT. Telemetry/capability
+    # handshake only: the server never verifies the engine from here.
+    local_preview: bool = False
 
 
 @dataclass

@@ -43,6 +43,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.notifications as notification_db
 from utils.chat_session_target import resolve_chat_target
 import database.llm_usage as llm_usage_db
@@ -1781,6 +1782,14 @@ def get_shared_chat_messages(token: str):
 
     sender_uid = share_data['uid']
     message_ids = share_data['message_ids']
+
+    try:
+        if account_deletion_blocks_user_work(sender_uid):
+            raise HTTPException(status_code=404, detail='Share link expired or not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared chat unavailable') from exc
 
     messages = []
     for mid in message_ids:

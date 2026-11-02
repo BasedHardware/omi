@@ -399,7 +399,7 @@ def run(
         lanes.spend('fetch_audio')
         return b''
 
-    def resolve(item, binding, manifest, client, *, projection_item=None):
+    def resolve(item, binding, manifest, client, *, projection_item=None, require_lineage_fence=False):
         lanes.spend('context')
         return context.ResolvedContext(binding.target_conversation_id)
 

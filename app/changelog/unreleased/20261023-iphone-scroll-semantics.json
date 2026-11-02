@@ -1,4 +1,0 @@
-{
-  "change": "Scrolling and tapping are smoother because Omi no longer builds an accessibility tree on every frame when no assistive feature is on",
-  "platforms": ["ios"]
-}

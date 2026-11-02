@@ -241,7 +241,7 @@ void main() {
 
   test('a failed chunk keeps the restart cursor at the original offset and the card intact', () async {
     const frameLen = 40;
-    const epochMarker = 1700000000;
+    const epochMarker = 1767225600; // 2026-01-02T00:00:00Z — inside the plausibility window
     final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
     final local = _FakeLocalSync()..failOnChunk = 2;
     final card = _FakeSdCard(
@@ -281,7 +281,7 @@ void main() {
 
   test('marker path: timestamp marker splits chunks and applies its epoch to the next segment', () async {
     const frameLen = 40;
-    const epochMarker = 1700000000;
+    const epochMarker = 1767225600; // 2026-01-02T00:00:00Z — inside the plausibility window
     final packets = <List<int>>[
       _packed440(List.filled(2, frameLen)),
       _packed440(List.filled(2, frameLen)),
@@ -303,6 +303,67 @@ void main() {
     expect(local.added[1].timerStart, epochMarker);
     expect(card.cleared, isTrue);
     expect(wal.status, WalStatus.synced);
+  });
+
+  test('marker path: a years-in-the-future marker is ignored and the recording is not split', () async {
+    const frameLen = 40;
+    const bogusFutureEpoch = 2051222400; // 2035-01-01 — audio bytes, not a clock
+    final packets = <List<int>>[
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(3, frameLen), markerEpoch: bogusFutureEpoch, markerAt: 0),
+      [100],
+    ];
+    final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
+    wal.timerStart = 1111;
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(packets: packets);
+    final sync = syncWith(local, card, wal, firmware: '3.0.17');
+
+    await sync.syncWal(wal: wal);
+
+    expect(local.added, hasLength(1), reason: 'a garbage marker must not split the recording');
+    expect(local.added.first.totalFrames, 7);
+    expect(local.added.first.timerStart, 1111, reason: 'the estimated clock stays');
+    expect(card.cleared, isTrue);
+    expect(wal.status, WalStatus.synced);
+  });
+
+  test('marker path: a pre-2024 marker is ignored and the recording is not split', () async {
+    const frameLen = 40;
+    const bogusPastEpoch = 1700000000; // 2023-11-14 — before the plausibility floor
+    final packets = <List<int>>[
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(3, frameLen), markerEpoch: bogusPastEpoch, markerAt: 0),
+      [100],
+    ];
+    final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
+    wal.timerStart = 1111;
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(packets: packets);
+    final sync = syncWith(local, card, wal, firmware: '3.0.17');
+
+    await sync.syncWal(wal: wal);
+
+    expect(local.added, hasLength(1), reason: 'a garbage past marker must not split the recording either');
+    expect(local.added.first.totalFrames, 7);
+    expect(local.added.first.timerStart, 1111);
+    expect(card.cleared, isTrue);
+    expect(wal.status, WalStatus.synced);
+  });
+
+  test('markerEpochPlausible accepts the floor and rejects garbage on both sides', () {
+    final now = DateTime.utc(2026, 10, 27);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(1704067200, now: now), isTrue, reason: '2024-01-01 is the floor');
+    expect(SDCardWalSyncImpl.markerEpochPlausible(1704067199, now: now), isFalse);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(0, now: now), isFalse);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(-1, now: now), isFalse);
+    // now + 1 day is the ceiling; beyond it a value cannot be a real clock.
+    final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
+    expect(SDCardWalSyncImpl.markerEpochPlausible(nowSeconds + 24 * 60 * 60, now: now), isTrue);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(nowSeconds + 24 * 60 * 60 + 1, now: now), isFalse);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(2051222400, now: now), isFalse, reason: '2035 is not a clock');
   });
 
   test('a recording opened before a reconnect still transfers the relisted recording', () async {

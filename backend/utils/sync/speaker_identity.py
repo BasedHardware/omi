@@ -16,6 +16,9 @@ import utils.stt.speaker_match as match_policy
 from config.speaker_prior import pinned_speaker_prior_enabled
 from utils.speakers.context import name_only_allowed
 from database import users as users_db
+from database import speaker_auto_enroll as auto_enroll_db
+from utils.speakers.auto_enroll import POOL_FIELD
+from utils.speakers import auto_enroll
 from database.auth import get_user_name
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
@@ -100,11 +103,16 @@ def build_person_embeddings_cache(
     # Load paid non-owner candidates only after resolving the batch entitlement.
     try:
         people = users_db.get_people(uid)
+        enrollment_allowed = auto_enroll_db.context(uid) if any(p.get(POOL_FIELD) for p in people or []) else {}
     except Exception as error:
         logger.warning('sync person profile read failed type=%s', type(error).__name__)
         return cache
     for person in people or []:
-        emb = usable_person_voiceprint(person)
+        emb = (
+            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=enrollment_allowed)
+            if enrollment_allowed
+            else usable_person_voiceprint(person)
+        )
         vector = validated_embedding(emb)
         owner = cache.get(USER_SELF_PERSON_ID)
         if vector is not None and person.get('id') and (owner is None or vector.size == owner['embedding'].size):
@@ -112,6 +120,14 @@ def build_person_embeddings_cache(
                 'embedding': vector,
                 'name': person.get('name') or 'Unknown',
                 'pinned': person.get('pinned') is True,
+                **(
+                    {
+                        'auto_enrolled': True,
+                        **auto_enroll.cache_authority(uid, person, enrollment_allowed),
+                    }
+                    if auto_enroll.usable(uid, person, enrollment_allowed) is not None
+                    else {}
+                ),
             }
 
     return cache
@@ -140,6 +156,13 @@ def identify_speakers_for_segments(
     3. Apply assignments via process_speaker_assigned_segments.
     """
     named_allowed = getattr(person_embeddings_cache, 'named_allowed', None)
+    if any(row.get('auto_enrolled') for row in person_embeddings_cache.values()):
+        enrollment_context = auto_enroll_db.context(uid)
+        person_embeddings_cache = {
+            k: v
+            for k, v in person_embeddings_cache.items()
+            if not v.get('auto_enrolled') or auto_enroll.cached_authorized(k, v, enrollment_context)
+        }
     if named_allowed is None:
         named_allowed = named_speaker_prompts_allowed(uid)
     if not named_allowed:
@@ -241,6 +264,19 @@ def identify_speakers_for_segments(
                 failed_clips,
             )
 
+        # Extraction may perform remote IO. Recheck immediately before matching
+        # publication so a correction/delete during that work revokes its cache.
+        if any(row.get('auto_enrolled') for row in person_embeddings_cache.values()):
+            final_context = auto_enroll_db.context(uid)
+            person_embeddings_cache = {
+                pid: row
+                for pid, row in person_embeddings_cache.items()
+                if not row.get('auto_enrolled') or auto_enroll.cached_authorized(pid, row, final_context)
+            }
+            for voice, distances in voice_distances.items():
+                remaining = {pid: distance for pid, distance in distances.items() if pid in person_embeddings_cache}
+                voice_distances[voice] = remaining
+                voice_decisions[voice] = select_speaker_match(remaining)
         decisions = arbitrate_owner_matches(voice_distances, voice_decisions, owner_reserved=owner_reserved)
         prior = pinned_speaker_prior_enabled()
         pinned = {pid for pid, data in person_embeddings_cache.items() if data.get('pinned')}
@@ -356,6 +392,32 @@ def identify_speakers_for_segments(
                     logger.info('speaker_id_decision surface=sync speaker=%s source=text accepted=True', speaker_id)
                     if speaker_id > 0:
                         break  # One match per diarized speaker is enough
+
+    # Text detection can also perform IO after voice decisions were computed.
+    # Revoke only those derived decisions before applying any labels; independent
+    # text/manual labels keep their own authority.
+    derived = {pid: row for pid, row in person_embeddings_cache.items() if row.get('auto_enrolled')}
+    if derived:
+        final_context = auto_enroll_db.context(uid)
+        revoked = {pid for pid, row in derived.items() if not auto_enroll.cached_authorized(pid, row, final_context)}
+        if revoked:
+            voice_sources = {
+                (segment.speaker_id if segment.speaker_id is not None else 0, pid) for segment, pid in voice_assignments
+            }
+            for speaker_id, (person_id, _) in list(speaker_to_person_map.items()):
+                if person_id in revoked and (speaker_id, person_id) in voice_sources:
+                    speaker_to_person_map.pop(speaker_id)
+            for segment, person_id in voice_assignments:
+                if person_id in revoked:
+                    if segment.id is not None and segment_person_assignment_map.get(segment.id) == person_id:
+                        segment_person_assignment_map.pop(segment.id)
+                    if not segment.is_user and not segment.person_id:
+                        segment.speaker_identity_status = SpeakerIdentityStatus.no_match
+            voice_assignments = [(segment, pid) for segment, pid in voice_assignments if pid not in revoked]
+            for segment in transcript_segments:
+                if segment.voice_candidates is not None:
+                    segment.voice_candidates = [c for c in segment.voice_candidates if c['person_id'] not in revoked]
+                segment.speaker_match_scores = None
 
     # Apply all assignments to segments
     if speaker_to_person_map or segment_person_assignment_map:

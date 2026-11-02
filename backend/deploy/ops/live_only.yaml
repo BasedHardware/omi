@@ -82,7 +82,7 @@ prod:
     REDIS_DB_HOST: [backend, backend-integration, backend-sync, backend-sync-backfill]
     REDIS_DB_PASSWORD: [backend, backend-integration, backend-sync, backend-sync-backfill]
     REFERRAL_PUBLIC_BASE_URL: [backend]
-    SONIOX_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
+    SONIOX_API_KEY: [backend, backend-sync, backend-sync-backfill]
     STRIPE_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
     STRIPE_ARCHITECT_ANNUAL_PRICE_ID: [backend, backend-integration, backend-sync, backend-sync-backfill]
     STRIPE_ARCHITECT_MONTHLY_PRICE_ID: [backend, backend-integration, backend-sync, backend-sync-backfill]

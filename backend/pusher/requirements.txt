@@ -81,10 +81,10 @@ neo4j==5.23.1
 deepgram-sdk==4.8.1
 
 # Security & encryption
-cryptography==48.0.1
+cryptography==50.0.2
 
 # Image processing (via tools/__init__ -> file_tools -> chat_file -> PIL)
-pillow==12.3.0
+pillow==13.0.0
 
 # Utilities
 python-dotenv==1.2.2

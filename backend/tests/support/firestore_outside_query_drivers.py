@@ -67,6 +67,15 @@ def _driver(
     DRIVERS[function] = entry
 
 
+_driver(
+    'utils.batch_pipeline.record_seal_nojob.discover',
+    domains={'after': [None, f'users/{UID}/conversations/record']},
+    neutrals={'limit': (128, 'bounds the operator discovery page only')},
+    profile='operational-record-seal-nojob-backfill',
+    serving=False,
+)
+
+
 def _feedback_rows(client, combo, trial):
     session = 'session-1' if trial == 1 else None
     client.queue_results(
@@ -288,8 +297,21 @@ _driver(
 _driver(
     'utils.memory.canonical_required_processing.list_pending_required_processing_items',
     base={'uid': UID},
+    domains={
+        'captured_after': [None, T0],
+        'captured_before': [None, T0],
+        'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}],
+    },
     neutrals={'limit': LIMIT},
     profile='maintenance-required-processing',
+    serving=False,
+)
+_driver(
+    'utils.memory.canonical_required_processing.list_receipted_required_processing_items',
+    base={'uid': UID},
+    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}]},
+    neutrals={'limit': LIMIT},
+    profile='maintenance-required-intake-completion',
     serving=False,
 )
 _driver(
@@ -306,21 +328,6 @@ _driver(
     profile='maintenance-global-expiry',
     serving=False,
 )
-for function in (
-    'utils.memory.canonical_short_term_maintenance_cron._seed_registry_from_existing_memory_states',
-    'utils.memory.canonical_short_term_maintenance_cron.bounded_canonical_memory_uid_inventory',
-):
-    neutrals = {'limit': LIMIT}
-    if function.endswith(('bounded_canonical_memory_uid_inventory',)):
-        neutrals['persist_cursor'] = (False, 'controls point-write persistence, not query shape')
-    _driver(
-        function,
-        neutrals=neutrals,
-        setup=_inventory_cursors,
-        trials=2,
-        profile='maintenance-resumable-inventory',
-        serving=False,
-    )
 _driver(
     'utils.memory.canonical_graph._read_canonical_graph_page_once',
     base={'uid': UID, 'limit': 25},
@@ -495,4 +502,13 @@ _driver(
     base={'job_id': 'legacy-job', 'uid': UID, 'job': None},
     patchers=(_completed_status_enabled,),
     profile='expired-legacy-handle',
+)
+
+
+_driver(
+    'utils.episodes.home_read.list_episode_window',
+    base={'uid': UID, 'start': T0},
+    domains={'end': (T0, T1)},
+    neutrals={'limit': LIMIT, 'cursor': (None, 'snapshot continuation changes the position only')},
+    profile='request-episode-home',
 )

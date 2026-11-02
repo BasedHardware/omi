@@ -10,6 +10,7 @@ from database import conversation_finalization_jobs as finalization_jobs_db
 from services.conversation_finalization import final_attempt_failed
 from utils.byok import set_validated_byok_keys
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
+from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
@@ -240,19 +241,25 @@ async def process_conversation_task(
         record_capture_finalization_terminal('success', claim.get('created_at'))
         record_conversation_finalization_client_terminal('success', claim, client_kind=client_kind)
         await send_result({'conversation_id': conversation_id, 'success': True})
-    except ConversationFinalizationError:
+    except ConversationFinalizationError as error:
         terminal = await record_failure('processing_failed')
+        byok_class = byok_failure_class_of(error)
         # Severity follows the fault origin, mirroring the session-side
         # reclassification of the will-retry branch (listen_pusher_session,
         # FC-request-input-rejection-escapes-as-server-fault): a non-terminal
         # failure stays armed for bounded retry — healthy in-flight work —
         # while terminal dead-lettering is the genuine fault signal at ERROR.
-        log = logger.error if terminal else logger.warning
+        # A BYOK provider failure is the user's own account state even at
+        # terminality; it keeps the structured WARNING, never ERROR.
+        log = logger.error if terminal and byok_class is None else logger.warning
         log(
-            'pusher finalization failed uid=%s conversation=%s failure=processing_failed terminal=%s',
+            'pusher finalization failed uid=%s conversation=%s failure=processing_failed terminal=%s '
+            'byok=%s failure_class=%s',
             uid,
             conversation_id,
             terminal,
+            byok_class is not None,
+            byok_class or 'none',
         )
         try:
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed', 'terminal': terminal})

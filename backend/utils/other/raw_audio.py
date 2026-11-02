@@ -101,7 +101,16 @@ def packet_provenance(raw: bytes, metadata: dict[str, Any]) -> dict[str, Any]:
 def decode_capture(raw: bytes, metadata: dict[str, str], output_rate: int = 16000) -> bytes:
     rate = int(metadata['sample_rate'])
     channels = int(metadata['channels'])
-    if metadata['format'] == WAL_FORMAT:
+    if metadata['format'] == 'pcm16le':
+        if len(raw) % (2 * channels):
+            raise ValueError('capture PCM is not sample-aligned')
+        if channels == 1 and rate == output_rate:
+            return raw
+        audio = AudioSegment(raw, frame_rate=rate, channels=channels, sample_width=2)
+    elif metadata['format'] == 'pcm8-u8':
+        pcm = audioop.lin2lin(audioop.bias(raw, 1, -128), 1, 2)
+        audio = AudioSegment(pcm, frame_rate=rate, channels=channels, sample_width=2)
+    elif metadata['format'] == WAL_FORMAT:
         decoder = _get_opuslib().Decoder(rate, channels)
         pcm = b''.join(decoder.decode(packet, rate * 120 // 1000) for packet in wal_packets(raw))
         audio = AudioSegment(pcm, frame_rate=rate, channels=channels, sample_width=2)
@@ -158,10 +167,10 @@ class CapturePack:
             self.pcm_proven = False
         self.data.extend(payload if self.codec in {'pcm16', 'pcm8'} else struct.pack('<I', len(payload)) + payload)
 
-    def encoded(self) -> tuple[bytes, dict[str, Any]]:
+    def encoded(self, *, preserve_pcm: bool = False) -> tuple[bytes, dict[str, Any]]:
         raw = bytes(self.data)
         codec = self.codec
-        if codec in {'pcm16', 'pcm8'}:
+        if codec in {'pcm16', 'pcm8'} and not preserve_pcm:
             if codec == 'pcm8':
                 raw = audioop.bias(raw, 1, -128)
             audio = AudioSegment(
@@ -176,7 +185,13 @@ class CapturePack:
             'sample_rate': self.sample_rate,
             'channels': self.channels,
             'format': (
-                WAL_FORMAT if codec == 'opus' else ('flac' if codec == 'flac' else f'omi-wal-uint32le-{codec}-v1')
+                WAL_FORMAT
+                if codec == 'opus'
+                else (
+                    'pcm16le'
+                    if codec == 'pcm16'
+                    else 'pcm8-u8' if codec == 'pcm8' else 'flac' if codec == 'flac' else f'omi-wal-uint32le-{codec}-v1'
+                )
             ),
             'capture_start': self.start,
             'capture_end': self.end,

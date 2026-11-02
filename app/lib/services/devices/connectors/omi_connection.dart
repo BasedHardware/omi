@@ -69,13 +69,24 @@ class OmiDeviceConnection extends DeviceConnection {
     return completer.future;
   }
 
-  OmiDeviceConnection(super.device, super.transport, {PendantRingCustody? custody})
-      : _custody = custody ?? PendantRingCustody.shared {
+  OmiDeviceConnection(
+    super.device,
+    super.transport, {
+    PendantRingCustody? custody,
+    Duration enableAckTimeout = _defaultEnableAckTimeout,
+  })  : _custody = custody ?? PendantRingCustody.shared,
+        _enableAckTimeout = enableAckTimeout {
     final t = transport;
     if (t is NativeBleTransport) {
       t.beforeAudioResubscribe = (_) => _audioResubscribeGate();
     }
   }
+
+  /// How long the custody opt-in waits for the device ack before giving up
+  /// (live custody off, ring-id custody retained). Injected shorter by tests
+  /// over an in-memory transport; the default matches real hardware.
+  static const Duration _defaultEnableAckTimeout = Duration(seconds: 5);
+  final Duration _enableAckTimeout;
 
   int _audioSubscribers = 0;
   Completer<void>? _physicalReady = Completer<void>();
@@ -827,7 +838,7 @@ class OmiDeviceConnection extends DeviceConnection {
         Logger.debug('OmiDeviceConnection: CMD_CUSTODY_ENABLE caps=0x${requestedCaps.toRadixString(16)}');
 
         return await completer.future.timeout(
-          const Duration(seconds: 5),
+          _enableAckTimeout,
           onTimeout: () {
             Logger.debug('OmiDeviceConnection: custody enable timeout');
             return null;
@@ -981,8 +992,18 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performHasPhotoStreamingCharacteristic() async {
+    // Ask the native transport whether the device advertises the image
+    // characteristic. A read cannot tell: the native transport answers a
+    // characteristic the firmware lacks with an empty read rather than an
+    // error, so every pendant counted as having a camera and the capture loop
+    // re-armed photo streaming on each reset. Glass may also read empty until
+    // it has captured, so data in the read is no test either.
+    final t = transport;
+    if (t is NativeBleTransport) {
+      return t.hasCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
+    }
     try {
-      // Try to read from the image data stream characteristic to see if it exists
+      // Other transports throw for an absent characteristic.
       await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
       return true;
     } catch (e) {

@@ -18,6 +18,7 @@ dependencies:
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
   clock: ^1.1.1
+  characters: ^1.4.0
 
   # Localizations
   flutter_localizations:
@@ -153,6 +154,8 @@ dependency_overrides:
       path: opus_flutter_android
 
 dev_dependencies:
+  flutter_driver:
+    sdk: flutter
   flutter_launcher_icons: 0.13.1
   google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0

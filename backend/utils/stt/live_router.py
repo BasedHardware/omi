@@ -7,7 +7,8 @@ import threading
 import time
 
 from config import live_stt_state
-from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
+from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on, window_ja_admits
+from config.parakeet_ja import ja_window_configured
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.live_stt_resilience import escape_excludes_benched_enabled
 from utils.stt.live_gate import GateState, gate_rate
@@ -57,6 +58,10 @@ def _family_supports(target: Target, language: str, engine_models: dict[str, str
     lang = language.strip().lower().split('-', 1)[0]
     if target.family == 'parakeet':
         engine = (engine_models or {}).get('parakeet')
+        if engine == 'parakeet-window' and (engine_models or {}).get('parakeet_window_language') == 'ja':
+            # The ja pool serves Japanese only, and the session applied the owner
+            # ramp when it chose it. Any other required language needs v3 or a vendor.
+            return lang == 'ja' and ja_window_configured()
         model = 'nvidia/parakeet-tdt-0.6b-v3' if engine == 'parakeet-window' else 'nvidia/parakeet-rnnt-1.1b'
         return lang in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[model]
     if target.family == 'modulate':
@@ -219,7 +224,9 @@ def select(
             not target.capable(code, features) for code in required_languages
         ):
             reason = 'capability'
-        elif not assigned(uid, target.id, target.ramp()):
+        elif not assigned(uid, target.id, target.ramp()) or not all(
+            window_ja_admits(target, uid, code) for code in (language, *required_languages)
+        ):
             reason = 'ramp_skip'
         else:
             eligible.append(target)

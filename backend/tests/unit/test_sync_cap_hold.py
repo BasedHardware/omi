@@ -37,7 +37,6 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
     url, stt = Mock(return_value='synthetic-url'), Mock(return_value=([], 'en'))
     monkeypatch.setattr(cap_hold, 'hold_segment', hold)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', url)
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _: ('modulate', None, 'velma-2'))
     monkeypatch.setattr(pipeline, 'prerecorded', stt)
@@ -92,7 +91,6 @@ def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, mon
     monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: True)
     monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_, **kwargs: SimpleNamespace(reason='available'))
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     selection = Mock(return_value=('modulate', None, 'velma-2'))
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', selection)
@@ -244,7 +242,9 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
     bucket.blob.return_value = blob
     monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
     monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *_: nullcontext())
-    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda _, **kw: SimpleNamespace(reason='plan_allowance_exhausted')
+    )
     meta = {'timestamp': 1792152000, 'source': 'omi', 'full_capture': True}
     assert cap_hold.hold_segment('synthetic', str(path), meta) == 1
     assert order == ['upload', 'manifest', 'summary']
@@ -306,7 +306,9 @@ def test_large_hold_streams_bounded_authenticated_chunks(tmp_path, monkeypatch, 
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
     monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
     monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *_: nullcontext())
-    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda _, **kw: SimpleNamespace(reason='plan_allowance_exhausted')
+    )
     monkeypatch.setattr(Path, 'read_bytes', Mock(side_effect=AssertionError('whole-file buffer')))
     encrypt_chunk = Mock(wraps=cap_hold.encrypt_audio_chunk)
     monkeypatch.setattr(cap_hold, 'encrypt_audio_chunk', encrypt_chunk)
@@ -378,7 +380,6 @@ def test_production_pipeline_result_crash_restart_and_cache_capacity_never_force
     monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: True)
     monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_, **kwargs: SimpleNamespace(reason='available'))
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     monkeypatch.setattr(pipeline, 'get_closest_conversation_to_timestamps', Mock(return_value=None))
     monkeypatch.setattr(pipeline, 'sync_enabled_for', lambda *_: False)
@@ -479,3 +480,94 @@ def test_recovered_segment_rechecks_original_lane_without_reholding(
         allowance.assert_called_with('synthetic', lane=origin)
     provider.assert_not_called()
     hold.assert_not_called()
+
+
+@pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])
+@pytest.mark.parametrize('kill', [False, True])
+def test_default_offline_gate_holds_outside_all_legacy_scopes(tmp_path, monkeypatch, queued, kill):
+    # Existing helper drives the real process_segment and spies on both URL/STT.
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if kill else 'true')
+    from config import stt_cap_dispatch as policy
+
+    monkeypatch.setattr(policy, '_cohort_resolver', lambda: '')
+    test_exhaustion_holds_before_url_or_provider_dispatch(
+        tmp_path, monkeypatch, enforce=not kill, queued=queued, ladder=False
+    )
+
+
+@pytest.mark.parametrize('boundary', ['probe', 'retry', 'multilingual'])
+def test_late_denial_holds_without_spending_next_provider_call(tmp_path, monkeypatch, boundary):
+    from pathlib import Path
+    from utils.stt import batch_language
+    from utils.observability.stt_cap_dispatch import DispatchPath
+
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    path = tmp_path / '1792152000.wav'
+    with wave.open(str(path), 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * 32000)
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _: 'synthetic-url')
+    monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
+    hold = Mock()
+    monkeypatch.setattr(cap_hold, 'defer_segment', hold)
+    denied = {
+        'probe': DispatchPath.LANGUAGE_PROBE,
+        'retry': DispatchPath.EMPTY_RETRY,
+        'multilingual': DispatchPath.MULTILINGUAL,
+    }[boundary]
+    seen = []
+
+    def allowed(*args, **kwargs):
+        seen.append(kwargs.get('path'))
+        return kwargs.get('path') != denied
+
+    monkeypatch.setattr(pipeline, 'sync_allowed', allowed)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *a, **k: SimpleNamespace(reason='available'))
+
+    probe_client = Mock(side_effect=AssertionError('denied LID must not reach the provider'))
+    monkeypatch.setattr(batch_language.httpx, 'Client', probe_client)
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-key')
+
+    def select(language, path, *, selector, before_probe, **kwargs):
+        if boundary == 'probe':
+            batch_language.detect(Path(path).read_bytes(), before_probe=before_probe)
+        else:
+            before_probe()
+        return 'parakeet', 'en', 'parakeet'
+
+    monkeypatch.setattr(batch_language, 'resolve_file', select)
+    stt = Mock(return_value=([], 'en'))
+    alternate = Mock(side_effect=AssertionError('denied fallback must not run'))
+    monkeypatch.setattr(pipeline, 'prerecorded', stt)
+    monkeypatch.setattr(pipeline, 'modulate_prerecorded_from_bytes', alternate)
+    monkeypatch.setattr(pipeline, 'sync_safety_wal_enabled', lambda: False)
+    monkeypatch.setattr(pipeline.minimal_redrive, 'paid_recovery_enabled', lambda _: True)
+
+    def recover(path, *, transcribe, authorize, observe):
+        authorize()
+        return transcribe(b'synthetic')
+
+    monkeypatch.setattr(pipeline.empty_recovery, 'recover', recover)
+    # A probe denial must also deny the following STT boundary, as a real
+    # exhausted snapshot would. The probe itself must never spend.
+    if boundary == 'probe':
+        original = allowed
+
+        def allowed(*args, **kwargs):
+            if denied in seen:
+                return False
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(pipeline, 'sync_allowed', allowed)
+    errors = []
+    outcome = {}
+    assert not pipeline.process_segment(str(path), 'synthetic', {}, threading.Lock(), errors, deferred_outcome=outcome)
+    assert not errors
+    assert denied in seen
+    hold.assert_called_once()
+    assert outcome['cap_held'] is True
+    assert stt.call_count == {'probe': 0, 'retry': 1, 'multilingual': 2}[boundary]
+    alternate.assert_not_called()
+    probe_client.assert_not_called()

@@ -64,12 +64,13 @@ def test_staging_enrichment_routes_to_its_queue_on_backend_sync(composer):
         assert env['ENRICHMENT_TASKS_OIDC_AUDIENCE']['value'] == handler
 
 
-def test_staging_batch_serving_leader_stays_warm(composer):
-    # The serving loop (reconcile, projection, recovery) runs only on backend-integration.
+def test_staging_services_idle_at_min_zero_after_right_sizing(composer):
+    # 2026-10-24 right-sizing (lead's live change, mirrored): staging idles at min 0
+    # everywhere. The serving loop (reconcile, projection, recovery) still runs only
+    # on backend-integration; a replay window warms it with --warm.
     services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
     assert services['backend-integration']['env']['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'true'
-    assert services['backend-integration']['flags']['--min-instances'] == '1'
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill'):
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert services[name]['flags']['--min-instances'] == '0'
 
 

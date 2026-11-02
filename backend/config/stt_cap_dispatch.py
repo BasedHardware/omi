@@ -1,6 +1,7 @@
 """Funded dispatch rollout; runtime cohort resolution is injected by the host."""
 
 from config.refactor_switches import default_off as rollout_default_off
+from config.refactor_modes import default_on
 
 import logging
 import os
@@ -10,8 +11,8 @@ from typing import Callable
 from config.rollout_cohorts import cohort_admits, parse_cohort
 
 LANES = frozenset({'live', 'sync', 'batch'})
-# Lane8 must write provider_reason=byok into binding.policy at batch admission
-# before this code-owned fence can open. Environment configuration cannot open it.
+# Legacy full batch rollout fence. Offline allowance refusal does not depend on
+# selecting this scope; admission-time BYOK policy remains authoritative.
 _BATCH_LANE_READY = False
 _logger = logging.getLogger(__name__)
 _batch_warning_lock = Lock()
@@ -81,6 +82,16 @@ def enabled_for(uid: str, lane: str) -> bool:
 def any_legacy_admission_enabled(uid: str) -> bool:
     """Legacy reporting/config validation only; ladder-only never turns it on."""
     return any(enabled_for(uid, lane) for lane in LANES)
+
+
+def offline_enforcement_enabled(lane: str | None) -> bool:
+    """Ship existing sync/batch allowance enforcement on; never widen live scope."""
+    return lane in {'sync', 'batch'} and default_on('STT_CAP_OFFLINE_ENFORCEMENT')
+
+
+def offline_admission_enabled(uid: str, lane: str) -> bool:
+    """Sync/batch spend fails closed independently of the legacy live rollout."""
+    return bool(uid) and (offline_enforcement_enabled(lane) or execution_admission_enabled(uid, lane))
 
 
 def execution_admission_enabled(uid: str, lane: str) -> bool:

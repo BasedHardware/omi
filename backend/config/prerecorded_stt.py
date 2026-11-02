@@ -25,6 +25,7 @@ from config.stt_provider_policy import (
 STT_PRERECORDED_MODEL_ENV = 'STT_PRERECORDED_MODEL'
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_PRERECORDED_MODELS = default_models_for_surface(STTServingSurface.PRERECORDED)
+SONIOX_HELD_RECOVERY_MODEL = 'stt-async-v5'
 
 
 class TranscriptionOutcome(str, Enum):
@@ -47,6 +48,7 @@ class PrerecordedSTTService:
     DEEPGRAM = 'deepgram'
     MODULATE = 'modulate'
     PARAKEET = 'parakeet'
+    SONIOX = 'soniox'
 
 
 class PrerecordedSTTConfigurationError(RuntimeError):
@@ -73,6 +75,8 @@ class ProviderEnvironmentContract:
 
 
 PROVIDER_ENVIRONMENT_CONTRACTS: Mapping[str, ProviderEnvironmentContract] = {
+    # Held recovery only; never activated by general prerecorded model routing.
+    PrerecordedSTTService.SONIOX: ProviderEnvironmentContract(required_env=('SONIOX_API_KEY',)),
     PrerecordedSTTService.DEEPGRAM: ProviderEnvironmentContract(
         required_env=('DEEPGRAM_API_KEY',),
         required_when_model_source_is_opaque=True,
@@ -143,6 +147,12 @@ def providers_for_model_config(raw: str) -> tuple[str, ...]:
 def required_env_for_provider(provider: str) -> tuple[str, ...]:
     contract = PROVIDER_ENVIRONMENT_CONTRACTS.get(provider)
     return contract.required_env if contract is not None else ()
+
+
+def required_env_for_held_recovery() -> tuple[str, ...]:
+    if provider_is_enabled(PrerecordedSTTService.SONIOX, STTServingSurface.HELD_RECOVERY):
+        return required_env_for_provider(PrerecordedSTTService.SONIOX)
+    return ()
 
 
 def required_env_for_model_config(raw: str | None, *, source_is_opaque: bool = False) -> tuple[str, ...]:

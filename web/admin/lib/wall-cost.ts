@@ -32,6 +32,7 @@
  * A line that cannot be sourced is reported in `missing`, never dropped silently.
  */
 import { isLlmService } from "./services/gcp-billing";
+import goals from "./omi-tv-goals.json";
 import { shiftDay } from "./qualified-activity";
 
 export const SAAS_MONTHLY_USD = 4800; // "Omi Cost vs Revenue" artifact, Oct 2026 row
@@ -58,6 +59,24 @@ export const INFRA_AS_OF = "2026-10-23";
 export const STT_MONTHLY_USD = 5300;
 export const STT_AS_OF = "2026-10-16";
 export const STT_SOURCE = `Soniox console, Oct 2026, read ${STT_AS_OF}`;
+/** Soniox last-rung fallback, used only when no measured day-rate exists at
+ * all. Since 2026-11-02 the margin uses the measured trailing-7-day rate
+ * (`sonioxRate7d`) instead of this constant (David 2026-11-02). */
+export const SONIOX_RATE_WINDOW_DAYS = 7;
+/** OpenRouter (LLM gateway) spend counted in the variable margin (David
+ * 2026-11-02: "counted, about $23/day"). Not read today: a configured constant
+ * with its read date, labelled est. wherever it appears. */
+export const OPENROUTER_DAILY_USD = 23;
+export const OPENROUTER_AS_OF = "2026-11-02";
+export const OPENROUTER_SOURCE = `configured $${OPENROUTER_DAILY_USD}/day, read ${OPENROUTER_AS_OF}, not read today`;
+/** Pinecone counted in the variable margin at actual usage (David 2026-11-02:
+ * "about $80/day recently"). Card charges lag usage by a month, so the card is
+ * not the run rate. No job can read the Pinecone usage export: a configured,
+ * dated constant. Evidence: omi-knowledge-base/projects/admin-omi-tv-dashboard/
+ * evidence/2026-11-02-pinecone-cost.md. */
+export const PINECONE_DAILY_USD = 80;
+export const PINECONE_AS_OF = "2026-11-02";
+export const PINECONE_SOURCE = `configured $${PINECONE_DAILY_USD}/day, usage read ${PINECONE_AS_OF}, not read today`;
 /** A manual estimate older than its line's threshold is flagged stale on the
  * cost frames. STT: 14 days (David 2026-10-22) — a daily measured feed exists,
  * so a console constant must not outlive two weeks. SaaS: a monthly constant. */
@@ -97,6 +116,11 @@ export interface CostDay {
   date: string;
   gcp: number;
   vertexLlm: number;
+  /** The prepaid Vertex reserved-capacity (Provisioned Throughput) net USD
+   * inside `vertexLlm` for the day. NOT subtracted from `total` — the all-in
+   * stack counts every dollar; the variable-margin tile excludes it (David
+   * 2026-10-23: prepaid, sunk). 0 when the billing read predates the column. */
+  vertexReserved: number;
   openai: number | null;
   /** Reported Anthropic admin-API spend for the day (null = leg off). Only
    * non-zero values are counted in `total`; seats live in the SaaS line. */
@@ -122,6 +146,12 @@ export interface CostDay {
   sttDeepgramMeasured: boolean;
   /** Mercury cash included for STT vendors with no usage feed that day. */
   sttCash: number;
+  /** Modulate Mercury cash for the day (its invoiced top-ups, the basis the
+   * variable margin uses: David 2026-11-02). null = no cash row that day. */
+  modulateCashUsd: number | null;
+  /** Net GCP on the development project for the day (inside `gcp` and
+   * `vertexLlm`). The variable margin excludes it; the all-in total keeps it. */
+  gcpDev: number;
   saas: number;
   /** SaaS came from a complete, fresh Mercury FinOps aggregate. */
   saasMeasured: boolean;
@@ -258,6 +288,23 @@ export function sonioxBalanceInputs(
   };
 }
 
+/** Measured trailing day-rate for Soniox: the mean USD/day of the last
+ * SONIOX_RATE_WINDOW_DAYS measured days on or before `asOf` (a null baseline
+ * reset is skipped, never averaged as $0). null while fewer measured days
+ * exist; the dated console constant then stays the last rung. */
+export function sonioxRate7d(
+  bal: SonioxBalanceInputs | undefined,
+  asOf: string
+): number | null {
+  if (!bal?.ready) return null;
+  const days = Object.keys(bal.spend)
+    .filter((d) => d <= asOf && bal.spend[d] != null)
+    .sort()
+    .slice(-SONIOX_RATE_WINDOW_DAYS);
+  if (days.length < SONIOX_RATE_WINDOW_DAYS) return null;
+  return days.reduce((s, d) => s + (bal.spend[d] as number), 0) / days.length;
+}
+
 /** True when the live Soniox series exists but no longer covers `day` (the
  * snapshot pull stopped): uncovered days show the dated console constant, the
  * line must say so, and its estimate is stale immediately. */
@@ -300,6 +347,10 @@ export interface VendorInputs {
   sttMeasured?: Record<string, Record<string, number>>;
   /** Soniox prepaid-balance day-rate series (replaces the usage line). */
   sonioxBalance?: SonioxBalanceInputs;
+  /** Measured Soniox USD/day over the trailing measured window (see
+   * `sonioxRate7d`). The fallback rung for a day with no measured row; the
+   * dated console constant is used only when this is null. */
+  sonioxRate7d?: number | null;
   /** Modulate modelled volume line (no vendor API exists). */
   modulateModelled?: ModulateModelledInputs;
   /** date → Mercury STT-vendor cash by vendor (soniox / deepgram / modulate). */
@@ -340,7 +391,13 @@ export const SONIOX_GAP_FLAG = "snapshot_gap";
  * measurement. */
 export function sttLineFor(
   date: string,
-  { sttMeasured, sonioxBalance, modulateModelled, sttCash }: VendorInputs
+  {
+    sttMeasured,
+    sonioxBalance,
+    modulateModelled,
+    sttCash,
+    sonioxRate7d,
+  }: VendorInputs
 ) {
   const cash = sttCash?.[date] || {};
   const vendors = sttMeasured?.[date] || {};
@@ -350,7 +407,8 @@ export function sttLineFor(
   const flag = inSeries ? bal!.flags[date] : undefined;
   // Labelled fallback for any day without a published Soniox row: the FinOps
   // usage line when it has one, else the dated console constant.
-  const fallbackUsd = vendors.soniox ?? STT_MONTHLY_USD / DAYS_PER_MONTH;
+  const fallbackUsd =
+    vendors.soniox ?? sonioxRate7d ?? STT_MONTHLY_USD / DAYS_PER_MONTH;
   const soniox = inSeries
     ? {
         usd: spend ?? fallbackUsd,
@@ -389,6 +447,7 @@ export function sttLineFor(
     cash:
       (modulate.modelled ? 0 : modulateCash) +
       (deepgramMeasured != null ? 0 : cash.deepgram ?? 0),
+    modulateCashUsd: cash.modulate ?? null,
   };
 }
 
@@ -524,6 +583,7 @@ export function allInCost(
         date: d.date,
         gcp,
         vertexLlm,
+        vertexReserved: hasComponents ? c.vertexReserved ?? 0 : 0,
         openai,
         anthropic,
         stt: stt.usd,
@@ -536,6 +596,8 @@ export function allInCost(
         sttDeepgramUsd: stt.deepgramUsd,
         sttDeepgramMeasured: stt.deepgramMeasured,
         sttCash: stt.cash,
+        modulateCashUsd: stt.modulateCashUsd,
+        gcpDev: hasComponents ? c.gcpDevUsd ?? 0 : 0,
         saas,
         saasMeasured: measuredSaas != null,
         infra: infra.usd,
@@ -550,4 +612,375 @@ export function allInCost(
       };
     });
   return { daily, oneTime, missing, feesUnavailable };
+}
+
+// ----------------------------------------------------------- variable margin
+
+/** Variable margin (David, 2026-10-23; tile approved 2026-10-24):
+ * (MRR − real monthly cost) ÷ MRR, goal VARIABLE_MARGIN_TARGET.
+ * Real monthly cost = the trailing-7-day run rate (× 30.44/7) of
+ *   GCP net of credits EXCLUDING only the prepaid Vertex reserved-capacity
+ *   line — the GCP input is taken BEFORE the all-in wall's one-time-incident
+ *   exclusion (`CostDay.gcp`/`vertexLlm` carry it post-exclusion, so the
+ *   margin adds `oneTime` back; the Health/all-in wall keeps its own
+ *   incident treatment, the margin's sole GCP exclusion is the reserved SKU)
+ *   + OpenAI + Soniox + Modulate + Stripe fees — the vendor/non-GCP lines the
+ *   FinOps stack already loads, with their existing labelled fallbacks.
+ * Out of scope by the same ruling: marketing, hardware, SaaS tooling, non-GCP
+ * infra, the Anthropic API leg and Deepgram. The all-in stack keeps counting
+ * and labelling all of those; the margin never silently re-adds them. */
+/** The board's one goal setting, shared with grafana/build_wall_dashboard.py
+ * (threshold, dashed line, descriptions); change it there, rebuild the board. */
+export const VARIABLE_MARGIN_TARGET = goals.variableMarginTargetPct / 100;
+/** The contract's exact month factor (David 2026-10-23): the run rate scales
+ * by 30.44/7, not the calendar 365.25/12 the all-in daily constants use. */
+export const MARGIN_DAYS_PER_MONTH = 30.44;
+/** Days in the run-rate window (the definition's trailing 7 days). */
+export const VARIABLE_MARGIN_RUN_DAYS = 7;
+/** Rendered sparkline length in days. */
+export const VARIABLE_MARGIN_SERIES_DAYS = 60;
+/** Stripe-fee fallback while no measured line exists: the 50%-margin baseline
+ * table (2026-10-23), ≈$3.2K/mo. A labelled dated estimate exactly like the
+ * STT console constant — replaced per day by the measured fee table, then by
+ * the Mercury `stripe_fees` cash run rate, never a silent zero. */
+export const STRIPE_FEES_MONTHLY_USD = 3200;
+export const STRIPE_FEES_AS_OF = "2026-10-23";
+export const STRIPE_FEES_SOURCE = `50%-margin baseline, ${STRIPE_FEES_AS_OF}`;
+export const STRIPE_FEES_STALE_DAYS = SAAS_STALE_DAYS;
+
+/** How the day's fee dollars were sourced; the disclosure names the rung. */
+export type FeeSource = "measured" | "cash" | "estimate";
+
+export interface VariableCostDay {
+  date: string;
+  /** The day's cost in the margin's scope. A line with no source contributes
+   * 0 here and is named in `missing` — disclosed, never guessed, never $0 by
+   * accident. */
+  usd: number;
+  /** GCP net of credits BEFORE the all-in wall's one-time-incident exclusion
+   * (`allInCost` already removed `oneTime` from `gcp`/`vertexLlm`, so it is
+   * added back), minus the prepaid Vertex reserved line — the margin's only
+   * GCP exclusion. */
+  gcp: number;
+  /** The excluded prepaid line, kept visible for the tile's tooltip/status. */
+  vertexReserved: number;
+  /** Dev-project GCP, excluded from `gcp` and shown on its own line. */
+  gcpDev: number;
+  /** OpenRouter (configured est., counted). */
+  openrouter: number;
+  /** Pinecone at actual usage (configured dated constant, counted). */
+  pinecone: number;
+  /** null = the OpenAI invoice leg is off; counted as 0 and missing. */
+  openai: number | null;
+  soniox: number;
+  /** True when Soniox is the measured balance-delta day-rate (or usage line),
+   * false on the dated console constant or a flagged fallback day. */
+  sonioxMeasured: boolean;
+  /** The day's Soniox producer flag. `gap_spread` survives a non-null spend —
+   * those dollars are an even-spread assumption, not a per-day measurement. */
+  sonioxFlag: string | null;
+  /** Modulate Mercury cash (David 2026-11-02: cash, not the modelled line). */
+  modulate: number;
+  /** Always false: the margin prices Modulate at cash. Kept for the tooltip. */
+  modulateModelled: boolean;
+  fees: number;
+  feeSource: FeeSource;
+  /** In-scope lines with no source that day (counted as 0, disclosed). */
+  missing: string[];
+}
+
+/** One day of the margin's cost scope, off an `allInCost` day. The fee
+ * fallback chain mirrors the all-in stack's rule (measured fee line first,
+ * Mercury fee cash second) plus one more rung the margin needs: the dated
+ * baseline estimate, because the definition includes fee dollars and the
+ * measured table is still dark. */
+export function variableCostDay(
+  day: CostDay,
+  feesCash: Record<string, number> | undefined = {}
+): VariableCostDay {
+  const missing: string[] = [];
+  const openai = day.openai;
+  if (openai == null) missing.push("OpenAI");
+  // Modulate is priced at Mercury cash (David 2026-11-02: "counted at cash").
+  // No cash row that day = no source, disclosed; a zero cash row is real.
+  const modulate = day.modulateCashUsd;
+  if (modulate == null) missing.push("Modulate");
+  const cash = feesCash[day.date];
+  const fees = day.fees ?? cash ?? STRIPE_FEES_MONTHLY_USD / DAYS_PER_MONTH;
+  const feeSource: FeeSource =
+    day.fees != null ? "measured" : cash != null ? "cash" : "estimate";
+  // The margin's GCP input is the day's raw billing net, not the wall's: the
+  // one-time-incident excess `allInCost` removed goes back in, the prepaid
+  // Vertex reserved SKU comes out (Luna r3 P1), and the development project's
+  // net comes out too (David 2026-11-02: shown on its own line instead).
+  const gcp =
+    day.gcp + day.vertexLlm + day.oneTime - day.vertexReserved - day.gcpDev;
+  const openrouter = OPENROUTER_DAILY_USD;
+  const pinecone = PINECONE_DAILY_USD;
+  const usd =
+    gcp +
+    (openai ?? 0) +
+    day.sttSonioxUsd +
+    (modulate ?? 0) +
+    openrouter +
+    pinecone +
+    fees;
+  return {
+    date: day.date,
+    usd,
+    gcp,
+    vertexReserved: day.vertexReserved,
+    gcpDev: day.gcpDev,
+    openrouter,
+    pinecone,
+    openai,
+    soniox: day.sttSonioxUsd,
+    sonioxMeasured: day.sttSonioxMeasured,
+    sonioxFlag: day.sttFlag,
+    modulate: modulate ?? 0,
+    modulateModelled: false,
+    fees,
+    feeSource,
+    missing,
+  };
+}
+
+export interface VariableMarginPoint {
+  /** Window-end day (UTC), also the MRR day. */
+  date: string;
+  /** Trailing-7-day cost run rate × 30.44/7. Only emitted for a complete,
+   * contiguous window — a partial window is no run rate. */
+  costPerMonth: number;
+  /** That day's FinOps book MRR; null when the day has no book snapshot. */
+  mrr: number | null;
+  /** (MRR − cost) ÷ MRR × 100; null without MRR. */
+  marginPct: number | null;
+  /** The cost line where margin equals the target: MRR × (1 − target). */
+  goalCost: number | null;
+  /** Per-line run rates on the same basis (the tooltip's stack). */
+  gcpPerMonth: number;
+  /** The prepaid Vertex reserved dollars left OUT of `costPerMonth`. */
+  vertexReservedPerMonth: number;
+  openaiPerMonth: number;
+  sonioxPerMonth: number;
+  modulatePerMonth: number;
+  feesPerMonth: number;
+  /** Dev-project GCP left OUT of `costPerMonth` (its own line). */
+  devPerMonth: number;
+  /** OpenRouter counted in `costPerMonth` (configured est.). */
+  openrouterPerMonth: number;
+  /** Pinecone counted in `costPerMonth` (configured dated constant). */
+  pineconePerMonth: number;
+  /** In-scope lines unsourced on any window day (counted as 0, disclosed). */
+  missing: string[];
+  /** True only when EVERY window day priced Soniox by a measured row with no
+   * producer flag; a mixed window is disclosed through the day counts below
+   * and is never labelled plain "measured" (Luna r3 P2). */
+  sonioxMeasured: boolean;
+  /** Window days Soniox spent on a fallback (console constant, usage line or
+   * snapshot gap) instead of a measured row. */
+  sonioxEstimateDays: number;
+  /** Window days whose Soniox row carries the producer's `gap_spread` flag
+   * (an even-spread assumption over a snapshot gap, not a measurement). */
+  sonioxGapSpreadDays: number;
+  /** How the window-end day priced Modulate/fees — the disclosure describes
+   * the latest number, as `marginStatus` does. */
+  modulateModelled: boolean;
+  feeSource: FeeSource;
+}
+
+/** The variable-margin series: one point per day whose trailing 7 cost days
+ * are all present and contiguous. MRR comes from `mrrFor` for the window-end
+ * day only (that day's book or null — never a neighbour's book). */
+export function variableMarginSeries(
+  daily: CostDay[],
+  mrrFor: (day: string) => number | null,
+  options: { feesCash?: Record<string, number>; days?: number } = {}
+): VariableMarginPoint[] {
+  const run = VARIABLE_MARGIN_RUN_DAYS;
+  const scale = MARGIN_DAYS_PER_MONTH / run;
+  const costs = [...daily]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((d) => variableCostDay(d, options.feesCash));
+  const points: VariableMarginPoint[] = [];
+  for (let i = run - 1; i < costs.length; i++) {
+    const end = costs[i].date;
+    const window: VariableCostDay[] = [];
+    for (let k = 0; k < run; k++) {
+      const day = costs[i - k];
+      if (
+        !day ||
+        day.date !==
+          shiftDay(new Date(`${end}T00:00:00Z`), -k)
+            .toISOString()
+            .slice(0, 10)
+      ) {
+        window.length = 0; // a gap anywhere: no run rate for this day
+        break;
+      }
+      window.push(day);
+    }
+    if (!window.length) continue;
+    const sum = (pick: (c: VariableCostDay) => number) =>
+      window.reduce((s, c) => s + pick(c), 0);
+    const costPerMonth = sum((c) => c.usd) * scale;
+    const mrr = mrrFor(end);
+    // Source flags aggregate over the WHOLE window, not the end day: a
+    // measured latest day must not hide console-estimate or gap-spread days
+    // inside the same run rate (Luna r3 P2).
+    const sonioxEstimateDays = window.filter((c) => !c.sonioxMeasured).length;
+    const sonioxGapSpreadDays = window.filter(
+      (c) => c.sonioxFlag === "gap_spread"
+    ).length;
+    points.push({
+      date: end,
+      costPerMonth,
+      mrr,
+      marginPct:
+        mrr != null && mrr > 0 ? (100 * (mrr - costPerMonth)) / mrr : null,
+      goalCost:
+        mrr != null && mrr > 0 ? mrr * (1 - VARIABLE_MARGIN_TARGET) : null,
+      gcpPerMonth: sum((c) => c.gcp) * scale,
+      vertexReservedPerMonth: sum((c) => c.vertexReserved) * scale,
+      openaiPerMonth: sum((c) => c.openai ?? 0) * scale,
+      sonioxPerMonth: sum((c) => c.soniox) * scale,
+      modulatePerMonth: sum((c) => c.modulate) * scale,
+      feesPerMonth: sum((c) => c.fees) * scale,
+      devPerMonth: sum((c) => c.gcpDev) * scale,
+      openrouterPerMonth: sum((c) => c.openrouter) * scale,
+      pineconePerMonth: sum((c) => c.pinecone) * scale,
+      missing: Array.from(new Set(window.flatMap((c) => c.missing))),
+      sonioxMeasured: sonioxEstimateDays === 0 && sonioxGapSpreadDays === 0,
+      sonioxEstimateDays,
+      sonioxGapSpreadDays,
+      modulateModelled: costs[i].modulateModelled,
+      feeSource: costs[i].feeSource,
+    });
+  }
+  return points.slice(-(options.days ?? VARIABLE_MARGIN_SERIES_DAYS));
+}
+
+export interface VariableMarginStatusContext {
+  now: Date;
+  /** The Soniox balance series, for "n/a since <last covered day>". */
+  soniox?: SonioxBalanceInputs;
+  /** Measured trailing-7-day Soniox USD/day (`sonioxRate7d`); the fallback
+   * the status names instead of the dated console constant when present. */
+  sonioxRate7d?: number | null;
+  /** The fee-scope reason while the measured fee table is unreachable. */
+  feesUnavailable?: string | null;
+  /** Paying subscriptions excluded from the window-end day's book because
+   * their price is not USD — the MRR is a USD-only, partial denominator and
+   * the tile says so with the count. Null when the FinOps table predates the
+   * count column. */
+  nonUsdPaying?: number | null;
+}
+
+/** The tile's disclosure lines: the MRR names its source (the FinOps plan
+ * book) and its partial-currency caveat, every in-scope cost line names its
+ * source, and a missing or stale one names itself (e.g. "Soniox: n/a since
+ * 2026-10-10 — console est. in use"), so the margin can never silently
+ * undercount. */
+export function variableMarginLineStatus(
+  point: VariableMarginPoint | undefined,
+  ctx: VariableMarginStatusContext
+): string[] {
+  const money = (v: number | null) =>
+    v == null ? "—" : `$${Math.round(v).toLocaleString("en-US")}/mo`;
+  const age = (asOf: string) =>
+    Math.floor(
+      (ctx.now.getTime() - Date.parse(`${asOf}T00:00:00Z`)) / 86_400_000
+    );
+  if (!point)
+    return ["Variable margin: no complete settled 7-day cost window yet"];
+  const missing = new Set(point.missing);
+  const lines: string[] = [`through ${point.date}`];
+  // The MRR line identifies a missing book (the headline then shows no value,
+  // never the previous day's margin) and the partial-currency caveat.
+  const nonUsdCaveat =
+    ctx.nonUsdPaying == null
+      ? " — non-USD paying subs excluded (count n/a)"
+      : ` — ${ctx.nonUsdPaying} non-USD paying subs excluded`;
+  lines.push(
+    point.mrr == null
+      ? "MRR: n/a (no book snapshot that day)"
+      : `MRR: FinOps plan book ${money(point.mrr)}${nonUsdCaveat}`
+  );
+  lines.push(
+    `GCP net ex reserved ${money(point.gcpPerMonth)} (${money(
+      point.vertexReservedPerMonth
+    )} prepaid Vertex reserved excluded)`
+  );
+  lines.push(
+    missing.has("OpenAI")
+      ? "OpenAI: n/a (invoice leg off)"
+      : `OpenAI: invoice ${money(point.openaiPerMonth)}`
+  );
+  const sttStale = age(STT_AS_OF) > STT_STALE_DAYS ? ", STALE" : "";
+  const sonioxBroken = !!ctx.soniox?.ready && point.date > ctx.soniox.lastDay;
+  // The Soniox fallback is the measured trailing-7-day rate when one exists;
+  // the dated console constant is named only as the last rung.
+  const rate7 = ctx.sonioxRate7d ?? null;
+  const fallbackLabel =
+    rate7 != null
+      ? `measured 7-day rate ${money(rate7 * MARGIN_DAYS_PER_MONTH)} est.`
+      : `console est. ${money(
+          STT_MONTHLY_USD
+        )} (as of ${STT_AS_OF}${sttStale})`;
+  // How many of the window's days were NOT a clean measurement, so a mixed
+  // window is never labelled plain "measured" (Luna r3 P2).
+  const run = VARIABLE_MARGIN_RUN_DAYS;
+  const sonioxMix = [
+    point.sonioxEstimateDays
+      ? `${point.sonioxEstimateDays}/${run} days est.`
+      : "",
+    point.sonioxGapSpreadDays
+      ? `${point.sonioxGapSpreadDays}/${run} days gap-spread`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  lines.push(
+    point.sonioxMeasured
+      ? `Soniox: measured ${money(point.sonioxPerMonth)}`
+      : sonioxBroken
+      ? `Soniox: n/a since ${ctx.soniox!.lastDay} — ${fallbackLabel}${
+          sonioxMix ? `; ${sonioxMix}` : ""
+        }`
+      : point.sonioxEstimateDays >= run
+      ? `Soniox: ${fallbackLabel}`
+      : `Soniox: ${point.sonioxEstimateDays ? "" : "measured "}${money(
+          point.sonioxPerMonth
+        )} — ${sonioxMix}`
+  );
+  lines.push(
+    missing.has("Modulate")
+      ? "Modulate: n/a (no Mercury cash row)"
+      : `Modulate: Mercury cash ${money(point.modulatePerMonth)}`
+  );
+  const feesStale =
+    age(STRIPE_FEES_AS_OF) > STRIPE_FEES_STALE_DAYS ? ", STALE" : "";
+  lines.push(
+    `OpenRouter: est. ${money(point.openrouterPerMonth)} (${OPENROUTER_SOURCE})`
+  );
+  lines.push(
+    `Pinecone: est. ${money(point.pineconePerMonth)} (${PINECONE_SOURCE})`
+  );
+  lines.push(
+    `Dev project GCP ${money(
+      point.devPerMonth
+    )} — shown here, excluded from margin`
+  );
+  lines.push(
+    point.feeSource === "measured"
+      ? `Stripe fees: measured ${money(point.feesPerMonth)}`
+      : point.feeSource === "cash"
+      ? `Stripe fees: Mercury cash ${money(point.feesPerMonth)}`
+      : `Stripe fees: est. ${money(
+          STRIPE_FEES_MONTHLY_USD
+        )} (${STRIPE_FEES_SOURCE}${feesStale}${
+          ctx.feesUnavailable ? "; measured line unavailable" : ""
+        })`
+  );
+  return lines;
 }

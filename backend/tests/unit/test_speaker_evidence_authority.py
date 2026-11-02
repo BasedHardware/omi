@@ -78,7 +78,17 @@ def test_manual_excerpt_is_evidence_but_never_spreads_to_whole_voice():
     record = evidence.build_evidence(segments, receipt=receipt)
     manual = next(c for c in record.clusters[0].candidates if c.source == 'manual')
     assert manual.probability == 1 and manual.band == 'confident'
+    assert manual.segment_ids == ['a']
     assert evidence.project_labels(record, receipt) == {'a': (True, None)}
+
+
+def test_manual_whole_voice_records_all_and_only_bound_segments():
+    segments = [segment('a'), segment('b'), segment('c', voice=1)]
+    receipt = {'speakers': {'0': {'generation': 1, 'is_user': True, 'speaker_id_scope': 'live:1'}}}
+    record = evidence.build_evidence(segments, receipt=receipt)
+    candidates = [c for v in record.clusters for c in v.candidates if c.source == 'manual']
+    assert len(candidates) == 1
+    assert candidates[0].segment_ids == ['a', 'b']
 
 
 def test_carried_scope_and_newer_negative_receipt_win():

@@ -202,7 +202,7 @@ async def test_batch_admission_only_trusts_its_decoder_full_proof(ledger, identi
 
 
 async def test_fully_covered_batch_hold_settles_without_new_reservation(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda *a: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda *a, **k: True)
     monkeypatch.setattr(adapter, 'admit_held', AsyncMock(return_value=adapter.HeldAdmission('covered')))
     reserve = Mock(side_effect=AssertionError('covered audio must not reserve batch spend'))
     monkeypatch.setattr(recovery.cap_hold_reservations, 'reserve', reserve)

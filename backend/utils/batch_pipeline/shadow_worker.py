@@ -7,15 +7,20 @@ import time
 from typing import Callable
 
 from config.batch_pipeline_shadow import shadow_percent
-from utils.batch_pipeline.contracts import WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
+from utils.batch_pipeline.contracts import WorkResult, HeldWork, FailedWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.shadow_metrics import GPU
 from utils.executors import db_executor, sync_executor, run_blocking, start_background_task
 
 
 class ShadowRunner:
-    def __init__(self, repository, recovery: Callable[[str], object]):
+    def __init__(self, repository, recovery: Callable[[str], object], *, process_index: int | None = None):
         self.repository, self.recovery = repository, recovery
-        self.worker_id = hashlib.sha256(os.getenv('POD_NAME', os.getenv('HOSTNAME', '')).encode()).hexdigest()
+        # Sibling pump processes share the pod name; a shared slot owner would let one
+        # sibling's offer settle the other's running shadow job as dropped.
+        identity = os.getenv('POD_NAME', os.getenv('HOSTNAME', ''))
+        if process_index is not None:
+            identity = f'{identity}/{process_index}'
+        self.worker_id = hashlib.sha256(identity.encode()).hexdigest()
         self._reap_at = 0.0
         self._recovering = False
         self._taking = False
@@ -104,6 +109,18 @@ class ShadowRunner:
             return 1
         if isinstance(results[0], HeldWork):
             await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
+        elif isinstance(results[0], FailedWork):
+            # Opaque model/IO errors do not authorize new paid shadow calls.
+            # Empty recognition takes its deliberate RecoveryWork handoff.
+            measured = results[0].measured_held_vad_speech_seconds
+            await run_blocking(
+                db_executor,
+                self.repository.finish,
+                item.segment_id,
+                'error',
+                speech=measured if measured is not None else 0.0,
+                vad='worker' if measured is not None else 'unknown',
+            )
         elif isinstance(results[0], (RecoveryWork, ValidationFailureWork)):
             # At-most-once recovery is a CPU backend RPC, never imports the
             # legacy/provider dependency graph into the GPU image.

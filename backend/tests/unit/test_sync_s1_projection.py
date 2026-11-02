@@ -67,6 +67,7 @@ def test_upload_claims_bind_after_queue_roundtrip_without_archive_names(monkeypa
     monkeypatch.setattr(recording_lineage, 'plan_segment_targets', planner)
     resolved = resolve_context(item, binding, read_context(frozen), None)
     assert resolved.target_id == 'live-target'
+    assert resolved.lineage_eligible
     planner.assert_called_once()
 
 
@@ -151,9 +152,11 @@ def test_legacy_projection_uses_archive_basename_only_when_filenames_field_is_ab
     resolved = resolve_context(item, binding, read_context(frozen), None)
     if field_shape != 'absent':
         assert resolved.target_id == 'whole-batch-target'
+        assert not resolved.lineage_eligible
         planner.assert_not_called()
         fallback.assert_called_once()
     else:
         assert resolved.target_id == 'lineage-target'
+        assert resolved.lineage_eligible
         planner.assert_called_once()
         fallback.assert_not_called()

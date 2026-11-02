@@ -196,7 +196,9 @@ async def test_actual_soniox_writes_and_capture_pin_retirement_denominator():
     attached = telemetry.attach_demand_telemetry(h, 'ineligible')
     attached.batch_cohort = 'admitted'
     wire = SimpleNamespace(send=AsyncMock(), close=AsyncMock())
-    before = telemetry.BATCH_WIRE_AUDIO.labels(provider='soniox', batch_cohort='admitted')._value.get()
+    before = telemetry.BATCH_WIRE_AUDIO.labels(
+        provider='soniox', batch_cohort='admitted', origin='initial'
+    )._value.get()
     capture_before = telemetry.BATCH_CAPTURE_AUDIO.labels(batch_cohort='admitted')._value.get()
     sock = SafeSonioxSocket(wire, lambda _: None, asyncio.get_running_loop(), sample_rate=8000)
     sock._recv_task.cancel()
@@ -214,7 +216,11 @@ async def test_actual_soniox_writes_and_capture_pin_retirement_denominator():
             await sock._write(pcm)
     finally:
         await sock.drain_and_close()
-    assert telemetry.BATCH_WIRE_AUDIO.labels(provider='soniox', batch_cohort='admitted')._value.get() - before == 2
+    assert (
+        telemetry.BATCH_WIRE_AUDIO.labels(provider='soniox', batch_cohort='admitted', origin='initial')._value.get()
+        - before
+        == 2
+    )
     assert telemetry.BATCH_CAPTURE_AUDIO.labels(batch_cohort='admitted')._value.get() - capture_before == 1
 
 

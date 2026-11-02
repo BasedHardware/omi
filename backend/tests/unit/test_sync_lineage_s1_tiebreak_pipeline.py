@@ -459,14 +459,12 @@ async def test_fully_committed_wal_skips_provider_writes_and_enrichment(real_pip
 
 
 @pytest.mark.asyncio
-async def test_committed_proof_reaches_intake_dedupe_but_abstains_without_wal_context(
-    real_pipeline, monkeypatch, tmp_path
-):
+async def test_committed_proof_dedupes_intake_transcript_without_wav_context(real_pipeline, monkeypatch, tmp_path):
     """Coverage trimming off, committed proof on the survivor covering the
     WAL's frames: the intake dedupe consumer calls capture_covered_indices
     with the real sync_vad receipts and the chosen GEN-MERGED live envelope,
-    and the existing proof contract abstains without observed WAL context —
-    identical repeats are appended, never suppressed."""
+    and committed source-frame proof plus lexical checks drop the repeats.
+    Transcript dedupe needs no observed WAV context; audio trimming stays off."""
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch, coverage_flag='off')
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
@@ -511,7 +509,7 @@ async def test_committed_proof_reaches_intake_dedupe_but_abstains_without_wal_co
         assert live_evidence == merged_evidence
     texts = _texts(store, 'GEN-MERGED')
     for i in range(7):
-        assert texts.count(live_texts[i]) == 2
+        assert texts.count(live_texts[i]) == 1
     for i in range(7, 10):
         assert texts.count(f'new-word-{i}') == 1
     assert state.finish.call_args.args[1]['id'] == 'GEN-MERGED'

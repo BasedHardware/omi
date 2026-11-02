@@ -20,6 +20,10 @@ from utils.conversations.calls_metrics import observe
 FLAG_ENV = 'ACTION_ITEMS_V2_MODE'
 FLAG = FLAG_ENV
 RULES = '''ACTION ITEM EXTRACTION RULES (owner-involved commitments)
+- Write a self-contained description of the action and object/outcome, grounded in cited
+  source/context and the supplied speaker-role map. Resolve pronouns where supported;
+  never invent names from speaker numbers. Omit irreducible placeholders. "Buy milk"
+  is valid without a proper noun. Preserve explicit manual task wording.
 - Extract commitments made by the account owner, requests accepted by the owner,
   and explicit offers/promises by another person to the owner. Keep the actual
   promisor in owner_name; describe the recipient in context. Use clear_commitment

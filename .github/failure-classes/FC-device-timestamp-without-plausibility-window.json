@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-device-timestamp-without-plausibility-window",
+  "violated_contract": "A client that turns device-supplied bytes into recording times must only accept a timestamp it can prove is a clock, not merely a positive number. The SD-card packet walk accepted any 0xFF size byte followed by four bytes decoding above zero as a timestamp marker, so once the walk desynchronized, audio bytes split real recordings into ~1s fragments dated years away (dogfooding iOS 1.0.578: 6,387 single-fragment uploads in 24h rejected 400 invalid timestamp with filename dates in 2030-2035; garbage landing in the past uploaded silently under a wrong date). The app then discarded the 400 body, parked each fragment terminally as uploadRejected with no reason, and its sync surfaces showed nothing actionable: rows reading only Failed with no length, Retry or Delete, Heard today 0s during a 33-minute live episode because startedAt is the streaming-session origin, On Device 0s with 7h45m queued on the phone, and a per-account dispatch_hold cooldown described as Omi servers being busy.",
+  "canonical_prevention": "Gate every device timestamp — packet markers and storage-listing starts alike — on the same plausibility window the server's filename gate enforces (>= 2024-01-01, <= now + 1 day), ignoring implausible markers so the recording keeps the app-estimated clock and never splits. On the server side, parse the 400 body's bounded code: invalid_capture_time discards sub-1.5s splice wreckage quietly with a counter event, re-stamps longer fragments once from plausible neighbours or file mtime (never in the future, latched so it cannot loop), and keeps the server's reason on every terminal row; UI surfaces show each recording's length, its short refusal reason and the same Retry/Delete actions as Sync Details, count today's speech on the transcript clock plus the live episode since local midnight, name the phone queue beside on-device audio, and describe a dispatch hold as a pause that resumes on its own.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/wals/sdcard_wal_sync.dart",
+    "app/lib/services/wals/local_wal_sync.dart",
+    "app/lib/services/wals/wal_policy.dart",
+    "app/test/unit/sdcard_custody_sync_test.dart",
+    "app/test/unit/invalid_capture_time_recovery_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**",
+    "app/lib/pages/conversations/**",
+    "app/lib/pages/settings/device/**",
+    "app/lib/backend/http/api/conversations.dart"
+  ],
+  "status": "open"
+}

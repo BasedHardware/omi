@@ -45,7 +45,9 @@ def merge():
     the same module its patches target.
     """
     database_pkg = ModuleType("database")
-    database_pkg.__path__ = []  # type: ignore[attr-defined]
+    # Resolve pure database helpers (including the merge-receipt policy) while
+    # keeping the client and IO modules below explicitly isolated.
+    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
 
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
@@ -865,6 +867,33 @@ class TestBatchUploadNoOverwriteByContent:
             with pytest.raises(ValueError):
                 storage_mod.upload_audio_chunks_batch(self._chunks(b'\x06' * 200), 'uid', 'conv')
         assert bytes(written) == b''
+
+    @patch.object(storage_mod, 'users_db')
+    def test_reconcile_prefix_false_skips_the_replay_listing(self, mock_users_db):
+        """GCS-3b: reconcile_prefix=False skips the replay-reconcile listing.
+
+        The write stays create-only (span path), so a precondition collision
+        still re-runs reconciliation on the upload's own retry loop.
+        """
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+        reconcile_calls = []
+
+        def counting_reconcile(*args, **kwargs):
+            reconcile_calls.append(kwargs)
+            return 0, []
+
+        with patch.object(storage_mod, 'reconcile_audio_chunk_prefix', counting_reconcile):
+            _bucket, _blob, written = self._bucket_with_existing(None)
+            paths = storage_mod.upload_audio_chunks_batch(
+                self._chunks(b'\x07' * 200), 'uid', 'conv', reconcile_prefix=False
+            )
+            assert reconcile_calls == [], 'the replay-reconcile listing must be skipped'
+            assert paths == ['chunks/uid/conv/1000.000.batch.bin']
+            assert bytes(written) == b'\x07' * 200, 'the payload still writes create-only'
+
+            self._bucket_with_existing(None)
+            storage_mod.upload_audio_chunks_batch(self._chunks(b'\x07' * 200), 'uid', 'conv')
+            assert len(reconcile_calls) == 1, 'the default reconciles as before'
 
     @patch.object(storage_mod, 'users_db')
     def test_unreadable_existing_blob_fails_closed(self, mock_users_db):

@@ -1,6 +1,7 @@
 """Per-unit handoff; ordinary worker tokens and upload ownership never transfer."""
 
 from dataclasses import asdict
+import math
 from typing import Any
 from uuid import uuid4
 
@@ -12,8 +13,10 @@ from database.batch_pipeline_policy import (
 )
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
+from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
+from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkResult
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import owner_key
 
 
@@ -33,6 +36,7 @@ class RecoveryStore:
         allow_completed_silence=False,
         allow_completed_speech_redrive=False,
         allow_completed_terminal=False,
+        allow_completed_recovery=False,
     ):
         job = tx.get('jobs', segment_id)
         if not job or not job.get('projection_binding'):
@@ -71,7 +75,14 @@ class RecoveryStore:
                     and ledger.get('status') == 'completed'
                     and ledger.get('job_id') == binding.job_id
                     and job.get('speech_redrive', {}).get('state') == 'completed'
-                    and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech'}
+                    and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech', 'silence'}
+                )
+                or (
+                    allow_completed_recovery
+                    and ledger.get('status') == 'completed'
+                    and ledger.get('job_id') == binding.job_id
+                    and job.get('recovery_state') == 'recovered'
+                    and bool(job.get('result'))
                 )
                 or (
                     allow_completed_terminal
@@ -199,7 +210,7 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def start(self, segment_id, token, now, *, provider="legacy_sync"):
+    def start(self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             result = tx.get('results', segment_id)
@@ -218,12 +229,171 @@ class RecoveryStore:
                 raise ValueError('closed recovery provider required')
             job['recovery']['provider'] = provider
             job['recovery']['started_at'] = now
+            if operator_paid_attempt:
+                attempted(job['recovery'], 'soniox', max_attempts=2)
             tx.put('jobs', segment_id, job)
             return True
 
         return self.store.run(commit)
 
-    def settle(self, segment_id, token, now, result_uri=None, *, outcome="success", failure=None):
+    def observe_vad(self, segment_id, token, seconds):
+        """A prepared intent can retain measured evidence without authorizing STT."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+                or job.get('result')
+            ):
+                return False
+            measured = held_vad_census(job, seconds)
+            if job.get('measured_held_vad_speech_seconds') != measured:
+                job['measured_held_vad_speech_seconds'] = measured
+                tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def hold_duration_limit(self, segment_id, token, now, *, audio_uri, audio_seconds):
+        """Retain an impossible independent recovery without starting a paid intent."""
+        if not math.isfinite(audio_seconds) or not MAX_AUDIO_SECONDS < audio_seconds <= 7200:
+            return False
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+                or job.get('recovery', {}).get('started_at') is not None
+                or not language_guarded(job)
+                or job.get('audio_uri') != audio_uri
+                or not math.isfinite(job['duration_seconds'])
+                or abs(job['duration_seconds'] - audio_seconds) > 0.1
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+            ):
+                return False
+            job['recovery_state'] = 'failed_held'
+            job['measured_held_vad_speech_seconds'] = held_vad_census(job, 0)
+            job['recovery'].update(
+                settled_at=now,
+                refusal={
+                    'reason': 'independent_duration_limit',
+                    'max_audio_seconds': MAX_AUDIO_SECONDS,
+                    'audio_seconds': audio_seconds,
+                },
+            )
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def start_duration_limited(self, segment_id, token, now, *, audio_uri, audio_seconds, operator_paid_attempt=False):
+        """Operator take-over of a duration-limited intent: refusal -> running.
+
+        The exact mirror of hold_duration_limit: only the never-started guarded
+        intent that refusal settled, with no provider call, receipt or failure
+        spent. One fenced transition straight into the running take-over, so a
+        concurrent sweep cannot re-settle the refusal between reopen and start.
+        A spent intent never reopens."""
+        if not math.isfinite(audio_seconds) or not MAX_AUDIO_SECONDS < audio_seconds <= 7200:
+            return False
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            recovery = job.get('recovery') or {}
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('recovery_state') != 'failed_held'
+                or recovery.get('token') != token
+                or recovery.get('started_at') is not None
+                or recovery.get('provider') is not None
+                or recovery.get('recognizers')
+                or recovery.get('failure') is not None
+                or recovery.get('refusal')
+                != {
+                    'reason': 'independent_duration_limit',
+                    'max_audio_seconds': MAX_AUDIO_SECONDS,
+                    'audio_seconds': audio_seconds,
+                }
+                or not language_guarded(job)
+                or job.get('audio_uri') != audio_uri
+                or not math.isfinite(job['duration_seconds'])
+                or abs(job['duration_seconds'] - audio_seconds) > 0.1
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+            ):
+                return False
+            recovery.pop('refusal', None)
+            recovery.pop('settled_at', None)
+            recovery.update(provider='modulate', started_at=now)
+            if operator_paid_attempt:
+                attempted(recovery, 'soniox', max_attempts=2)
+            job['recovery_state'] = 'running'
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def retry_paid_takeover(self, segment_id, token, now):
+        """One explicit operator retry, with a new token fencing late writers."""
+        next_token = uuid4().hex
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            marker = job.get('recovery') or {}
+            if (
+                marker.get('token') != token
+                or not retryable(marker, job.get('recovery_state'))
+                or not language_guarded(job)
+                or marker.get('epoch') != 1
+                or job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+                or job.get('speech_redrive')
+                or job.get('silence_disposition')
+                or job.get('terminal_disposition')
+            ):
+                return None
+            job['recovery'] = renewed(marker, next_token)
+            job['recovery'].update(started_at=now)
+            attempted(job['recovery'], 'soniox')
+            job['recovery_state'] = 'running'
+            tx.put('jobs', segment_id, job)
+            return next_token
+
+        return self.store.run(commit)
+
+    def settle(
+        self,
+        segment_id,
+        token,
+        now,
+        result_uri=None,
+        *,
+        outcome="success",
+        failure=None,
+        measured_held_vad_speech_seconds=None,
+        independent_silence=False,
+    ):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             existing = tx.get('results', segment_id)
@@ -235,6 +405,15 @@ class RecoveryStore:
                 or existing
             ):
                 return False, 0
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if result_uri and not held_result_allowed(
+                job, outcome, measured_held_vad_speech_seconds, independent=independent_silence
+            ):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', segment_id, job)
+                return False, 0
+            job['measured_held_vad_speech_seconds'] = census
             if result_uri is None:
                 job.update(recovery_state='failed_held')
                 if failure:
@@ -272,6 +451,10 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
     query = collection
     if owner_id is not None:
         query = query.where('owner_id', '==', owner_id)
+    # A quarantine-held projection also marks its committed job recovery_state=held
+    # for the held-partial scan; prepare() refuses those, so they must not fill the page.
+    # Equality-only filters: served by single-field index merging, no composite.
+    query = query.where('state', '==', 'quarantined')
     query = query.where('recovery_state', 'in', ['held', 'prepared', 'running'])
     if owner_id is None:
         # A document-reference cursor requires no extra document read.
@@ -358,6 +541,8 @@ class SilenceDispositionStore(RecoveryStore):
                 raise ProjectionBlocked('disposition owner mismatch')
             if marker.get('plan_digest') == plan_digest and marker.get('state') == 'completed':
                 return job
+            if not held_silence_allowed(job, 0):
+                raise ProjectionBlocked('held speech blocks no-provider silence')
             if (
                 binding.owner_id != owner_id
                 or job.get('state') != 'quarantined'
@@ -392,7 +577,9 @@ class SilenceDispositionStore(RecoveryStore):
         record_policy_observations(observations)
         return result
 
-    def complete_silence(self, segment_id, token, plan_digest, result_uri, now):
+    def complete_silence(
+        self, segment_id, token, plan_digest, result_uri, now, *, measured_held_vad_speech_seconds=None
+    ):
         from config.batch_pipeline import empty_asr_disposition_enabled
 
         if not empty_asr_disposition_enabled():
@@ -421,7 +608,14 @@ class SilenceDispositionStore(RecoveryStore):
                 or job.get('merge_pending') is not False
             ):
                 return False
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if not held_silence_allowed(job, measured_held_vad_speech_seconds):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', segment_id, job)
+                return False
             owner = tx.get('owners', owner_key(job['owner_id']))
+            job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
             owner['revision'] = owner.get('revision', 0) + 1
             marker.update(state='completed', completed_at=now)
             job.update(

@@ -6,5 +6,127 @@
   "home_live_scroll": 100.0,
   "episode_page": 100.0,
   "device_page": 100.0,
-  "tab_switch": 100.0
+  "tab_switch": 100.0,
+  "_gate": {
+    "home_scroll": {
+      "counts": {
+        "rebuilds": 8966,
+        "layouts": 21000,
+        "paints": 15438,
+        "semantics_compiles": 0,
+        "max_clip_layers": 3,
+        "max_opacity_layers": 11,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "detail_scroll": {
+      "counts": {
+        "rebuilds": 17142,
+        "layouts": 17062,
+        "paints": 53048,
+        "semantics_compiles": 0,
+        "max_clip_layers": 5,
+        "max_opacity_layers": 3,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "memory_scroll": {
+      "counts": {
+        "rebuilds": 6931,
+        "layouts": 9010,
+        "paints": 17228,
+        "semantics_compiles": 0,
+        "max_clip_layers": 3,
+        "max_opacity_layers": 2,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "chat_tap": {
+      "counts": {
+        "rebuilds": 7832,
+        "layouts": 4315,
+        "paints": 6741,
+        "semantics_compiles": 0,
+        "max_clip_layers": 3,
+        "max_opacity_layers": 16,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "home_live_scroll": {
+      "counts": {
+        "rebuilds": 10727,
+        "layouts": 23714,
+        "paints": 26848,
+        "semantics_compiles": 0,
+        "max_clip_layers": 4,
+        "max_opacity_layers": 11,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "episode_page": {
+      "counts": {
+        "rebuilds": 72950,
+        "layouts": 79074,
+        "paints": 45379,
+        "semantics_compiles": 0,
+        "max_clip_layers": 5,
+        "max_opacity_layers": 5,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "device_page": {
+      "counts": {
+        "rebuilds": 4266,
+        "layouts": 2656,
+        "paints": 4700,
+        "semantics_compiles": 0,
+        "max_clip_layers": 5,
+        "max_opacity_layers": 3,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    },
+    "tab_switch": {
+      "counts": {
+        "rebuilds": 5397,
+        "layouts": 1335,
+        "paints": 8160,
+        "semantics_compiles": 0,
+        "max_clip_layers": 3,
+        "max_opacity_layers": 8,
+        "max_image_pixels": 1048576
+      },
+      "semantics_compiles_per_frame": 0,
+      "phase_shares": {
+        "SEMANTICS": 0
+      }
+    }
+  }
 }

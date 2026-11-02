@@ -645,7 +645,8 @@ def _run_job_harness(monkeypatch, job, *, ensure_error=None):
 
         return inner
 
-    async def delete_blobs(_paths):
+    async def delete_blobs(_paths, *, uid=None, content_id=None, job_id=None):
+        assert (uid, content_id, job_id) == ('u1', 'content-1', 'job-1')
         calls.append('delete_blobs')
 
     def ensure(*_a, **_kw):

@@ -26,16 +26,38 @@ from config.episodes import (
     MAX_TOPIC_CHARS,
 )
 
+from utils.speakers.display import sanitize_speaker_text
+
 ITEM_KINDS = frozenset({'task', 'reminder'})
 _SPACE = re.compile(r'\s+')
+_PLACEHOLDER_HEADING = re.compile(r'^\s*(new|unknown)\b.*\bmoment\b', re.I)
+_SENTENCE_END = re.compile(r'[.!?。！？](?=\s|$)')
+
+
+def is_placeholder_heading(heading: str) -> bool:
+    return bool(_PLACEHOLDER_HEADING.match(heading))
+
+
+def trim_text(text: str, limit: int) -> str:
+    """Fit text to a limit without ending mid-word: a whole sentence if most of one fits, else whole words."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    ends = [match.end() for match in _SENTENCE_END.finditer(head)]
+    if ends and ends[-1] > limit // 2:
+        return head[: ends[-1]]
+    head = text[: limit - 1]
+    # An unspaced script has no word to protect, so it cuts at the limit.
+    cut = head.rfind(' ') if text[limit - 1] != ' ' else limit - 1
+    return f'{(head[:cut] if cut > limit // 2 else head).rstrip()}…'
 
 
 def clean_text(value: Any, limit: int) -> str:
     """One line, trimmed, bounded. Non-strings become empty."""
     if not isinstance(value, str):
         return ''
-    text = _SPACE.sub(' ', value).strip().strip('•-* ').strip()
-    return text[:limit].rstrip()
+    text = _SPACE.sub(' ', sanitize_speaker_text(value)).strip().strip('•-* ').strip()
+    return trim_text(text, limit)
 
 
 def _clean_list(values: Any, *, limit: int, chars: int) -> list[str]:
@@ -101,7 +123,7 @@ def parse_update(raw: str, *, known_item_ids: Sequence[str]) -> IncrementalUpdat
         title=clean_text(data.get('title'), MAX_TOPIC_CHARS),
         moment_heading=clean_text(data.get('moment_heading'), MAX_HEADING_CHARS),
         bullets=_clean_list(data.get('bullets'), limit=MAX_BULLETS, chars=MAX_ITEM_CHARS),
-        people=_clean_list(data.get('people'), limit=MAX_PEOPLE, chars=60),
+        people=[name for name in _clean_list(data.get('people'), limit=MAX_PEOPLE, chars=60) if name != 'a speaker'],
         open_questions=_clean_list(data.get('open_questions'), limit=MAX_OPEN_QUESTIONS, chars=MAX_ITEM_CHARS),
     )
     drops = data.get('drop_ids')
@@ -140,15 +162,17 @@ def render_state(episode: Optional[Mapping[str, Any]]) -> str:
     if not episode:
         return '{}'
     open_items = [
-        {'id': item['id'], 'text': item.get('text', ''), 'kind': item.get('kind', 'task')}
+        {'id': item['id'], 'text': clean_text(item.get('text', ''), MAX_ITEM_CHARS), 'kind': item.get('kind', 'task')}
         for item in provisional_items(episode)
         if item.get('status') == 'provisional' and isinstance(item.get('id'), str)
     ]
     state = {
-        'topic': episode.get('title') or '',
-        'bullets': list(episode.get('bullets') or []),
-        'people': list(episode.get('people') or []),
-        'open_questions': list(episode.get('open_questions') or []),
+        'topic': clean_text(episode.get('title'), MAX_TOPIC_CHARS),
+        'bullets': _clean_list(episode.get('bullets'), limit=MAX_BULLETS, chars=MAX_ITEM_CHARS),
+        'people': [
+            name for name in _clean_list(episode.get('people'), limit=MAX_PEOPLE, chars=60) if name != 'a speaker'
+        ],
+        'open_questions': _clean_list(episode.get('open_questions'), limit=MAX_OPEN_QUESTIONS, chars=MAX_ITEM_CHARS),
         'items': open_items,
     }
     rendered = json.dumps(state, ensure_ascii=False, separators=(',', ':'))

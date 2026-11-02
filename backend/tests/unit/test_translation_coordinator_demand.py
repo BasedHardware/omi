@@ -36,8 +36,8 @@ def test_hidden_observation_is_uncommitted_then_viewed_reconciles_without_new_te
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
     now = [0.0]
     demand = TranslationDemand(lambda: now[0])
-    provider = FakeProvider(TranslationProvider.gemini, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
+    service, _ = build_service({TranslationProvider.luna: provider})
     received = []
 
     async def callback(*args):
@@ -79,8 +79,8 @@ def test_demand_hidden_during_reservation_blocks_dispatch(monkeypatch):
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *a, **k: released.append(1) or True)
     now = [0.0]
     demand = TranslationDemand(lambda: now[0])
-    provider = FakeProvider(TranslationProvider.gemini, [])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [])
+    service, _ = build_service({TranslationProvider.luna: provider})
     received = []
 
     async def callback(*args):
@@ -151,8 +151,8 @@ def test_failed_materialization_does_not_commit_translated_prefix(monkeypatch):
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
     demand = TranslationDemand(lambda: 0)
     demand.observe({'foreground': True, 'transcript_visible': True, 'translation_demand_version': 1})
-    provider = FakeProvider(TranslationProvider.gemini, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
+    service, _ = build_service({TranslationProvider.luna: provider})
 
     async def rejected(*args):
         return False
@@ -210,3 +210,40 @@ def test_flag_off_hidden_report_matches_legacy_result_bytes(monkeypatch):
         ).encode('utf-8')
 
     assert asyncio.run(capture(False)) == asyncio.run(capture(True))
+
+
+def test_viewed_policy_serves_targets_outside_the_nllb_table(monkeypatch):
+    """The viewed lane is Luna-only and translates any target; the unsupported-
+    target skip must apply only to the NLLB-primary legacy lane."""
+    flags(monkeypatch)
+    monkeypatch.setattr(
+        'utils.translation_coordinator.classify_translation_need', lambda *args, **kwargs: TranslationNeed.TRANSLATE
+    )
+    monkeypatch.setattr(
+        'utils.translation_coordinator.reserve_translation', lambda *args, **kwargs: (object(), 'admitted')
+    )
+    monkeypatch.setattr('utils.translation_coordinator.reservation_is_current', lambda *args, **kwargs: True)
+    monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
+    now = [0.0]
+    demand = TranslationDemand(lambda: now[0])
+    provider = FakeProvider(TranslationProvider.luna, [translations(('Hello world.', 'en'))])
+    service, _ = build_service({TranslationProvider.luna: provider})
+    received = []
+
+    async def callback(*args):
+        received.append(args)
+
+    coordinator = TranslationCoordinator('lt', service, callback, uid='u', demand=demand)
+    coordinator.language_state.source_is_plausible = lambda *args: True
+    coordinator.language_state.observe = lambda *args, **kwargs: False
+
+    async def run():
+        demand.observe({'foreground': True, 'transcript_visible': True, 'translation_demand_version': 1})
+        await coordinator.observe([segment()], [], 'c')
+        coordinator._cancel_batch_timer()
+        await coordinator._flush_batch()
+        assert received and received[0][0] == 's'
+        assert provider.calls and provider.calls[0]['target_language'] == 'lt'
+        assert provider.calls[0]['profile'].policy_version == 'viewed_v1'
+
+    asyncio.run(run())

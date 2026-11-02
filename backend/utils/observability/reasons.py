@@ -44,6 +44,15 @@ class ReasonFamily(StrEnum):
     STAGING_FENCE = 'staging_fence'
     HELD_CONTENT = 'held_content'
     SPEAKER_EVIDENCE = 'speaker_evidence'
+    NOTES_AGENT_FORCE = 'notes_agent_force'
+    NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    SYNC_DISPATCH = 'sync_dispatch'
+    SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    ADMISSION_HOLD = 'admission_hold'
+    LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
+    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
+    VENDOR_ROUTE = 'vendor_route'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -61,6 +70,26 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class SyncProcessingHoldOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    QUIET_WAIT = 'quiet_wait'
+    WATERMARK_WAIT = 'watermark_wait'
+    READY = 'ready'
+    MAX_HOLD = 'max_hold'
+    UNCHANGED = 'unchanged'
+    IMMATERIAL = 'immaterial'
+    LATE_CAP = 'late_cap'
+
+
+class ListenSessionTranscriptOutcome(StrEnum):
+    """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
+
+    UNKNOWN = 'unknown'
+    TRANSCRIBED = 'transcribed'
+    NO_TRANSCRIPT = 'no_transcript'
+    TOO_SHORT = 'too_short'
 
 
 class PersonVoiceQualityReason(StrEnum):
@@ -137,6 +166,69 @@ class StagingRetryOutcome(StrEnum):
     RETAINED = 'retained'
 
 
+class SyncDispatchFailureReason(StrEnum):
+    """Closed reasons for a sync v2 staging/dispatch refusal."""
+
+    UNKNOWN = 'unknown'
+    DISPATCH_HOLD = 'dispatch_hold'
+    STAGING_FAILED = 'staging_failed'
+
+
+class SyncCaptureTimeReason(StrEnum):
+    """Disposition of one sync upload capture time against the shared window.
+
+    Owner: `utils/sync/capture_clock.py`. `accepted_future_skew` is a real
+    capture whose phone clock runs ahead of the server within tolerance;
+    `rejected_future`/`rejected_early` are implausible stamps (bogus device
+    clock marker, pre-2024 fragment) that stay refused.
+    """
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
+    REJECTED_FUTURE = 'rejected_future'
+    REJECTED_EARLY = 'rejected_early'
+    REJECTED_MALFORMED = 'rejected_malformed'
+
+
+class BatchIntakeOutcome(StrEnum):
+    """`omi_batch_intake_outcome_total{outcome}`: where one v2 sync upload's batch routing landed.
+
+    Owner: `utils/batch_pipeline/intake_outcome.py`. `batch` is an upload batch
+    intake admitted fresh work; `heavy_excluded`/`language_excluded` are this
+    request's fresh exclusions that landed it on legacy; `not_cohort` is the
+    ramp cohort decision. An upload following a prior durable owner carries no
+    fresh decision and is not counted.
+    """
+
+    UNKNOWN = 'unknown'
+    BATCH = 'batch'
+    HEAVY_EXCLUDED = 'heavy_excluded'
+    LANGUAGE_EXCLUDED = 'language_excluded'
+    NOT_COHORT = 'not_cohort'
+
+
+class AdmissionHoldReason(StrEnum):
+    """Closed reasons a compute-admission lease was held at defer time.
+
+    Owner: `utils/batch_pipeline/admission.py`. The literals are that module's
+    fair-use/ceiling/reservation/privacy holds; the spend-gate members mirror
+    the refusal subset of `utils.observability.stt_cap_dispatch.DispatchReason`.
+    Anything else folds to `unknown` by `reason_label`, never free text.
+    """
+
+    UNKNOWN = 'unknown'
+    FAIR_USE_RESTRICTED = 'fair_use_restricted'
+    DAILY_AUDIO_CEILING = 'daily_audio_ceiling'
+    BACKFILL_RESERVATION = 'backfill_reservation'
+    PRIVACY_BLOCKED = 'privacy_blocked'
+    CONSENT_DENIED = 'consent_denied'
+    ALLOWANCE_EXHAUSTED = 'allowance_exhausted'
+    BUDGET_EXHAUSTED = 'budget_exhausted'
+    ALLOWANCE_UNAVAILABLE = 'allowance_unavailable'
+    ACCESS_DENIED = 'access_denied'
+
+
 class WorkOutcome(StrEnum):
     """`WorkResult.outcome` tokens (`utils/batch_pipeline/contracts.py`)."""
 
@@ -209,6 +301,91 @@ class ProviderSttReason(StrEnum):
     PROVIDER_FAILED = 'provider_failed'
 
 
+# All-vendor batch routing (utils/batch_pipeline/vendor_route_contracts.py). Slice A froze
+# these member lists; a slice that needs a new value posts the change before adding it.
+
+
+class VendorRouteReason(StrEnum):
+    """Why selection chose a route: ``omi_batch_pipeline_vendor_route_decisions_total{route,reason}``."""
+
+    UNKNOWN = 'unknown'
+    CHEAPEST = 'cheapest'
+    ORDERED = 'ordered'
+    GPU_FLOOR = 'gpu_floor'
+    SOLE_CAPABLE = 'sole_capable'
+    FAILOVER = 'failover'
+    NO_HEALTHY_ROUTE = 'no_healthy_route'
+    GPU_OVERFLOW = 'gpu_overflow'
+    KILL_SWITCH = 'kill_switch'
+    NOT_IN_COHORT = 'not_in_cohort'
+
+
+class VendorRouteTableOutcome(StrEnum):
+    """Which rung of the table ladder served: ``..._vendor_route_table_loads_total{outcome}``."""
+
+    UNKNOWN = 'unknown'
+    CONFIGURED = 'configured'
+    LAST_VALID = 'last_valid'
+    BUILTIN = 'builtin'
+
+
+class VendorHealthReason(StrEnum):
+    """Second element of ``VendorHealth.allows(service)``."""
+
+    UNKNOWN = 'unknown'
+    HEALTHY = 'healthy'
+    HALF_OPEN_PROBE = 'half_open_probe'
+    DEGRADED = 'degraded'
+    BREAKER_OPEN = 'breaker_open'
+    FUNDS_REFUSAL = 'funds_refusal'
+    RATE_LIMITED = 'rate_limited'
+    DAILY_CAP_REACHED = 'daily_cap_reached'
+    MONTHLY_BUDGET_REACHED = 'monthly_budget_reached'
+    NOT_ADMITTED = 'not_admitted'
+    STATE_UNAVAILABLE = 'state_unavailable'
+
+
+class VendorAttemptOutcome(StrEnum):
+    """One vendor attempt's outcome: ``..._vendor_attempts_total{provider,outcome}``."""
+
+    UNKNOWN = 'unknown'
+    RUNNING = 'running'
+    OK = 'ok'
+    SILENCE = 'silence'
+    ERROR_5XX = 'error_5xx'
+    TIMEOUT = 'timeout'
+    RATE_LIMITED = 'rate_limited'
+    CREDIT_REFUSAL = 'credit_refusal'
+    EMPTY_VALIDATED = 'empty_validated'
+    INVALID_RESPONSE = 'invalid_response'
+    ABANDONED = 'abandoned'
+    SUPERSEDED = 'superseded'
+    # Slice D (bus ask fe314f): our own failure on the attempt (invalid audio before the POST, an
+    # invalid payload or unexpected local error after it). Billable, never fails over.
+    LOCAL_FAILURE = 'local_failure'
+
+
+class VendorHoldReason(StrEnum):
+    """Why a unit is parked in ``vendor_held``: ``..._vendor_held_units{reason}``."""
+
+    UNKNOWN = 'unknown'
+    NO_HEALTHY_VENDOR = 'no_healthy_vendor'
+    FUNDS_REFUSAL = 'funds_refusal'
+    CAP_REACHED = 'cap_reached'
+    RATE_LIMITED = 'rate_limited'
+    HEALTH_UNAVAILABLE = 'health_unavailable'
+
+
+class VendorHoldOutcome(StrEnum):
+    """``..._vendor_held_transitions_total{outcome}``."""
+
+    UNKNOWN = 'unknown'
+    HELD = 'held'
+    REDRIVEN = 'redriven'
+    REROUTED_GPU = 'rerouted_gpu'
+    RELEASED = 'released'
+
+
 class LiveSttReason(StrEnum):
     """Live STT failover and health reasons (1:1 with the legacy LIVE_STT_REASONS frozenset)."""
 
@@ -251,6 +428,33 @@ class LiveSttReason(StrEnum):
     QUOTA = 'quota'
     TEXT = 'text'
     NO_TEXT = 'no_text'
+
+
+class LocalPreviewOutcome(StrEnum):
+    """Mobile local-preview lane admission at listen session start (routers/listen/local_preview.py)."""
+
+    UNKNOWN = 'unknown'
+    ADMITTED = 'admitted'
+    NOT_REQUESTED = 'not_requested'
+    KILL_SWITCH = 'kill_switch'
+    CUSTOM_STT = 'custom_stt'
+    MULTI_CHANNEL = 'multi_channel'
+    ONBOARDING = 'onboarding'
+    PHONE_CALL = 'phone_call'
+    PRIVATE_SYNC_OFF = 'private_sync_off'
+    NOT_BATCH_LANE = 'not_batch_lane'
+    POLICY_ERROR = 'policy_error'
+
+
+class ServiceWindowOutcome(StrEnum):
+    """Disposition of one admitted service-VIP window POST (`utils/stt/window_replicas.py`)."""
+
+    UNKNOWN = 'unknown'
+    ERROR = 'service_error'
+    QUEUE_TIMEOUT = 'service_queue_timeout'
+    TEXT = 'service_text'
+    EMPTY = 'service_empty'
+    CANCELLED = 'service_cancelled'
 
 
 class WorkerValidationStage(StrEnum):
@@ -346,6 +550,8 @@ class FallbackReason(StrEnum):
     TEXT = 'text'
     NO_TEXT = 'no_text'
     GATE_UNAVAILABLE = 'gate_unavailable'
+    USAGE_ROOT_MISSING = 'usage_root_missing'
+    USAGE_FENCE_BLOCKED = 'usage_fence_blocked'
     HTTP_ERROR = 'http_error'
     HTTP_429 = 'http_429'
     TRANSPORT_ERROR = 'transport_error'
@@ -381,6 +587,29 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+
+
+class NotesAgentForceReason(StrEnum):
+    """Why an agentic notes run was given a system-directed submit turn (first reason only)."""
+
+    UNKNOWN = 'unknown'
+    LOOKUP_CAP = 'lookup_cap'
+    SUBMISSION_REJECTED_AT_CAP = 'submission_rejected_at_cap'
+    SUBMISSION_REJECTED = 'submission_rejected'
+    TEXT_ONLY_RESPONSE = 'text_only_response'
+    PRIOR_REJECTION = 'prior_rejection'
+    TURN_LIMIT = 'turn_limit'
+    COST_LIMIT = 'cost_limit'
+    DEADLINE = 'deadline'
+
+
+class NotesAgentTransportReason(StrEnum):
+    """Why a notes run could not use the managed tool transport."""
+
+    UNKNOWN = 'unknown'
+    MISSING_OWNER = 'missing_owner'
+    BYOK = 'byok'
+    UNSUPPORTED_MODEL = 'unsupported_model'
 
 
 def reason_values(enum: type[StrEnum]) -> frozenset[str]:

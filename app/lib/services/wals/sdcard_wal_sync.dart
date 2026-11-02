@@ -13,6 +13,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTimerStartSeconds;
 
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = [];
@@ -35,6 +36,25 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   static final Version _timestampMarkerMinVersion = Version.parse("3.0.16");
+
+  /// How far past "now" a device timestamp may sit and still count as a real
+  /// clock: one day absorbs pendant clock skew without reopening the door to
+  /// the years-away garbage that split real recordings into fragments.
+  static const int _markerFutureToleranceSeconds = 24 * 60 * 60;
+
+  /// Whether a decoded timestamp marker can name a real recording time. The
+  /// window matches the backend's filename gate (>= 2024-01-01, not beyond
+  /// now): once the packet walk desynchronizes, audio bytes decode as markers
+  /// with garbage epochs — years in the future were rejected at upload as
+  /// 1-second fragments, and garbage in the past uploaded silently under a
+  /// wrong date. An implausible marker is ignored so the recording keeps the
+  /// app-estimated clock instead of splitting.
+  @visibleForTesting
+  static bool markerEpochPlausible(int epoch, {DateTime? now}) {
+    if (epoch < walMinPlausibleTimerStartSeconds) return false;
+    final ceiling = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000 + _markerFutureToleranceSeconds;
+    return epoch <= ceiling;
+  }
 
   /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
   /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
@@ -194,9 +214,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       // Use device-provided recording start timestamp if available (firmware >= 3.0.16), otherwise estimate
       int timerStart;
       String? clockRun;
-      if (_supportsTimestampMarkers() && storageFiles.length >= 3 && storageFiles[2] > 0) {
-        timerStart = storageFiles[2];
+      final listedStart = storageFiles.length >= 3 ? storageFiles[2] : 0;
+      if (_supportsTimestampMarkers() && markerEpochPlausible(listedStart)) {
+        timerStart = listedStart;
       } else {
+        if (listedStart > 0) {
+          DebugLogManager.logEvent('implausible_timestamp_marker_ignored', {'epoch': listedStart, 'source': 'listing'});
+        }
         timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
         clockRun = Wal.newClockRun();
       }
@@ -562,9 +586,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);
               packageOffset += 5;
-              if (epoch > 0) {
+              if (markerEpochPlausible(epoch)) {
                 timestampMarkers.add(MapEntry(bytesData.length, epoch));
                 Logger.debug('Timestamp marker: epoch=$epoch at frame ${bytesData.length}');
+              } else {
+                // Audio bytes that decoded like a marker: ignoring it keeps the
+                // estimated clock and the recording whole instead of splitting
+                // it into fragments dated years away.
+                DebugLogManager.logEvent('implausible_timestamp_marker_ignored', {'epoch': epoch});
+                Logger.debug('Ignored implausible timestamp marker: epoch=$epoch');
               }
               continue;
             }

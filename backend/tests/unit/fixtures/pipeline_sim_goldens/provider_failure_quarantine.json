@@ -9,11 +9,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 117.77,
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 117.77,
     "merge_pending": false,
     "owner_id": "owner-1",
     "priority": 1,
@@ -35,7 +39,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 1884320,
+     "sample_rate_hz": 16000,
+     "speech_samples": 1884320,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-1",
@@ -101,11 +112,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 217.61,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 217.61,
     "merge_pending": false,
     "owner_id": "owner-1",
     "priority": 1,
@@ -127,7 +142,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 3481760,
+     "sample_rate_hz": 16000,
+     "speech_samples": 3481760,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-2",
@@ -193,11 +215,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 329.81,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 329.81,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -219,7 +245,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 5276960,
+     "sample_rate_hz": 16000,
+     "speech_samples": 5276960,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-3",
@@ -285,11 +318,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 559.77,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 559.77,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -311,7 +348,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 8956320,
+     "sample_rate_hz": 16000,
+     "speech_samples": 8956320,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-4",
@@ -377,11 +421,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-5",
     "duration_seconds": 552.98,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 552.98,
     "merge_pending": false,
     "owner_id": "owner-3",
     "priority": 1,
@@ -403,7 +451,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 8847680,
+     "sample_rate_hz": 16000,
+     "speech_samples": 8847680,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-5",
@@ -469,11 +524,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-6",
     "duration_seconds": 447.66,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 447.66,
     "merge_pending": false,
     "owner_id": "owner-3",
     "priority": 1,
@@ -495,7 +554,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 7162560,
+     "sample_rate_hz": 16000,
+     "speech_samples": 7162560,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-6",
@@ -561,11 +627,15 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-7",
     "duration_seconds": 525.29,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 525.29,
     "merge_pending": false,
     "owner_id": "owner-3",
     "priority": 1,
@@ -587,7 +657,14 @@
      "outcome": "success"
     },
     "state": "committed",
-    "unit_kind": "capture_span"
+    "unit_kind": "capture_span",
+    "worker_vad_receipt": {
+     "captured_samples": 8404640,
+     "sample_rate_hz": 16000,
+     "speech_samples": 8404640,
+     "state": "measured",
+     "version": 1
+    }
    },
    "final_result": {
     "conversation_id": "conv-7",

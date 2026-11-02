@@ -87,6 +87,7 @@ class RecordingTransferCoordinator {
     DateTime Function()? clock,
     RecordingTransferCooldownScheduler? scheduleCooldown,
     RecordingTransferTimeoutScheduler? scheduleTimeout,
+    void Function()? onTransferAdmitted,
     RecordingTransferKeepAlive? onTransferStarted,
     RecordingTransferKeepAlive? onTransferFinished,
     RecordingTransferPass? onConnectivityRestored,
@@ -105,6 +106,7 @@ class RecordingTransferCoordinator {
         _clock = clock ?? DateTime.now,
         _scheduleCooldown = scheduleCooldown,
         _scheduleTimeout = scheduleTimeout,
+        _onTransferAdmitted = onTransferAdmitted,
         _onTransferStarted = onTransferStarted,
         _onTransferFinished = onTransferFinished,
         _onConnectivityRestored = onConnectivityRestored,
@@ -164,6 +166,7 @@ class RecordingTransferCoordinator {
   final DateTime Function() _clock;
   RecordingTransferCooldownScheduler? _scheduleCooldown;
   RecordingTransferTimeoutScheduler? _scheduleTimeout;
+  void Function()? _onTransferAdmitted;
   RecordingTransferKeepAlive? _onTransferStarted;
   RecordingTransferKeepAlive? _onTransferFinished;
   RecordingTransferPass? _onConnectivityRestored;
@@ -234,6 +237,7 @@ class RecordingTransferCoordinator {
     required bool Function() autoUploadEnabled,
     required Stream<bool> connectivityChanges,
     required bool initiallyConnected,
+    void Function()? onTransferAdmitted,
     RecordingTransferKeepAlive? onTransferStarted,
     RecordingTransferKeepAlive? onTransferFinished,
     RecordingTransferPass? onConnectivityRestored,
@@ -247,6 +251,7 @@ class RecordingTransferCoordinator {
     _drain = drain;
     _drainLiveCapture = drainLiveCapture;
     _autoUploadEnabled = autoUploadEnabled;
+    _onTransferAdmitted = onTransferAdmitted ?? _onTransferAdmitted;
     _onTransferStarted = onTransferStarted ?? _onTransferStarted;
     _onTransferFinished = onTransferFinished ?? _onTransferFinished;
     _onConnectivityRestored = onConnectivityRestored ?? _onConnectivityRestored;
@@ -376,6 +381,9 @@ class RecordingTransferCoordinator {
       };
 
   Future<void> _run(WakeTrigger firstWake) async {
+    // Bind the account before native acquisition can yield. Holding an
+    // abandoned pass's native lease below is not admission of another account.
+    if (!_abandonedPassRunning) _onTransferAdmitted?.call();
     final started = _onTransferStarted;
     if (started != null) await started();
     try {

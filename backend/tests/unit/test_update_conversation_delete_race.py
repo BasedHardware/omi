@@ -291,6 +291,7 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def raced_pusher_session(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive the pusher's private-cloud worker where update_conversation hits
     the read-then-delete race (False) on the first flush."""
     import routers.pusher as pusher
@@ -312,7 +313,9 @@ def raced_pusher_session(monkeypatch):
     uploaded: list[str] = []
     fallbacks: list[dict] = []
 
-    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate):
+    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate, **_kwargs):
+        # The pusher upload path passes flush-policy keywords (reconcile_prefix);
+        # this mock records the admission without binding the call signature.
         assert sample_rate == SAMPLE_RATE
         uploaded.append(conversation_id)
 

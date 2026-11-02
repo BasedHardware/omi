@@ -165,10 +165,10 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('a draining queue shows pending X/Y next to the audio line', (tester) async {
+  testWidgets('a draining queue counts missing chunks without the synced session total', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final pending = [_wal(now - 100), _wal(now - 80), _wal(now - 60)];
-    final uploaded = List.generate(6, (i) => _wal(now - 40 + i, status: WalStatus.synced));
+    final pending = [_wal(now - 100), _wal(now - 80)];
+    final uploaded = List.generate(297, (i) => _wal(now - 40 + i, status: WalStatus.synced));
     final capture = _BacklogCaptureProvider(_PhoneSync(unsynced: pending, all: [...pending, ...uploaded]));
     capture
       ..testSessionStartSeconds = now - 120
@@ -177,11 +177,12 @@ void main() {
 
     await _pumpCapturingPage(tester, capture);
 
-    expect(find.text('Transcriptions pending 3/9'), findsOneWidget);
+    expect(find.text('Chunks pending: 2'), findsOneWidget);
+    expect(find.textContaining('299'), findsNothing);
     expect(find.textContaining('audio saved locally'), findsOneWidget);
   });
 
-  testWidgets('a single queued recording keeps the duration line only', (tester) async {
+  testWidgets('one missing chunk also has an explicit pending count', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final capture = _BacklogCaptureProvider(_PhoneSync(unsynced: [_wal(now - 60)], all: [_wal(now - 60)]));
     capture
@@ -191,7 +192,7 @@ void main() {
 
     await _pumpCapturingPage(tester, capture);
 
-    expect(find.textContaining('Transcriptions pending'), findsNothing);
+    expect(find.text('Chunks pending: 1'), findsOneWidget);
     expect(find.textContaining('audio saved locally'), findsOneWidget);
   });
 }
