@@ -97,12 +97,14 @@ the trial size from that already-built same-SHA image, routes at most 5% to it
 and waits ≥12h. Only after qualification/full promotion change the prod
 fallback here (or set GitHub environment variable `BACKEND_SYNC_MEMORY`)
 for future deployments; the backend-stack action validates
-`4Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
+`4Gi|5Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
 for prod and `8Gi` for development, and the dev-only deploys (auto-dev) keep the action's
 `8Gi` default. The deployment remains through the existing release admission and
 GitHub Actions workflow. Rollback: redeploy the admitted image at the prior size.
 Watch memory peak, OOMs, queue age and retry rate; 4.9 GiB is an observed sample
-peak, not qualification for the largest batch.
+peak, not qualification for the largest batch. At 6Gi the 1-min per-instance max was
+4.74 GiB on 2026-10-25 and at most 3.96 GiB from 10-27 to 11-02, so a 5Gi trial
+qualifies only after a weekday peak stays at or under 3.5 GiB.
 
 ## Cost model and receipt
 

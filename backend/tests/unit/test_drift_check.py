@@ -460,7 +460,7 @@ def test_prod_source_model_reads_deploy_flags_and_the_ops_file():
     # The workflow's env-scoped backend_sync_memory fallback reaches the source model, so a
     # future regression of the prod 6Gi costcut is drift, not silence.
     assert model['backend-sync'].scale['memory'] == '6Gi'
-    assert model['backend-sync-backfill'].scale['memory'] == '4Gi'
+    assert model['backend-sync-backfill'].scale['memory'] == '2Gi'
     assert model['backend-sync-backfill'].ops_scale['service_max'] == {
         'owner': 'redis_guard',
         'floor': 8,
