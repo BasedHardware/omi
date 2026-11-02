@@ -351,9 +351,13 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Saves the default locally (the sheet's initial choice on this device) and on the server, which
   /// owns what automatic processing runs: a template is set as the preferred app, Omi clears it.
   /// Resolves whether the server stored it; the local choice is kept either way.
-  Future<bool> setDefaultSummaryTemplateAppId(String? appId) async {
+  void rememberDefaultSummaryTemplateAppId(String? appId) {
     SharedPreferencesUtil().saveString(_defaultTemplateKey(), appId ?? '');
     notifyListeners();
+  }
+
+  Future<bool> setDefaultSummaryTemplateAppId(String? appId) async {
+    rememberDefaultSummaryTemplateAppId(appId);
     try {
       final stored = await preferredSummaryAppWrite(appId);
       if (!stored) Logger.debug('preferred summary app was not stored on the server');

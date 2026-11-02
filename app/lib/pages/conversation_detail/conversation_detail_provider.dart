@@ -1393,7 +1393,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   String? get preferredSummarizationAppId => _preferredSummarizationAppId;
 
   Future<bool> setPreferredSummarizationApp(String appId) async {
-    if (!await setDefaultSummaryTemplateAppId(appId)) return false;
+    if (!await preferredSummaryAppWrite(appId)) return false;
+    rememberDefaultSummaryTemplateAppId(appId);
     _preferredSummarizationAppId = appId;
     SharedPreferencesUtil().preferredSummarizationAppId = appId;
     notifyListeners();
