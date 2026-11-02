@@ -31,6 +31,7 @@ import {
   INFRA_AS_OF,
   INFRA_MONTHLY_USD,
   MARGIN_DAYS_PER_MONTH,
+  OPENROUTER_DAILY_USD,
   STRIPE_FEES_MONTHLY_USD,
   STT_MONTHLY_USD,
   VARIABLE_MARGIN_TARGET,
@@ -153,6 +154,28 @@ function sources(): SeriesSources & WallSources {
 }
 const value = (wall: WallPayload, id: string) =>
   wall.metrics.find((m) => m.id === id)!;
+/** Cost-active users per day for the cost-per-user series (David 2026-11-02):
+ * a flat count on every day of the 80-day window the 30-day means read. */
+const ACTIVE_PER_DAY = 1000;
+function withActiveUsers(
+  s: ReturnType<typeof sources>,
+  perDay = ACTIVE_PER_DAY
+) {
+  s.planCost = vi.fn(async () => ({
+    plans: Object.fromEntries(
+      Array.from({ length: 80 }, (_, k) => [
+        isoDay(shiftDay(end, -k)),
+        { basic: { usd: 1, users: perDay, varUsd: 0, varUsers: 0 } },
+      ])
+    ),
+    sttMeasured: {},
+    saasMeasured: {},
+    saasAnnualPartial: {},
+    sttCash: {},
+  }));
+  return s;
+}
+
 async function all(snapshot: WallPayload | null, s = sources()) {
   const out = {} as Record<SeriesName, Record<string, Row[]>>;
   for (const name of [
@@ -195,7 +218,7 @@ describe("v3 series agree with the v2 snapshot", () => {
   });
 
   it("every chart's latest point is the stat above it", async () => {
-    const s = sources();
+    const s = withActiveUsers(sources());
     const wall = await computeWall(s, now);
     const f = await all(wall, s);
     const wau = value(wall, "growth.wau");
@@ -240,9 +263,18 @@ describe("v3 series agree with the v2 snapshot", () => {
       value(wall, "revenue.hardware_units_week").value
     );
     expect(f.health.cost.at(-1)?.total).toBe(value(wall, "cost.net_day").value);
-    expect(f.health.costPerMau.at(-1)?.costPerMau).toBeCloseTo(
-      value(wall, "cost.per_mau_month").value!,
-      2
+    // Cost per cost-active user (David 2026-11-02), not the MAU stat: the same
+    // 30-day cost over twice the users is half the figure.
+    const perUser = f.health.costPerMau.at(-1)!.costPerMau as number;
+    expect(perUser).toBeGreaterThan(0);
+    resetSeriesCache(); // the doubled-users run must refill its planCost leg
+    const doubled = await all(
+      wall,
+      withActiveUsers(sources(), ACTIVE_PER_DAY * 2)
+    );
+    expect(doubled.health.costPerMau.at(-1)!.costPerMau as number).toBeCloseTo(
+      perUser / 2,
+      6
     );
     for (const [key, id] of [
       ["wau", "growth.wau"],
@@ -252,12 +284,12 @@ describe("v3 series agree with the v2 snapshot", () => {
       ["retained", "retention.if_activated"],
       ["netCost", "cost.net_day"],
       ["mrr", "revenue.mrr"],
-      ["costPerMau", "cost.per_mau_month"],
     ] as const)
       expect(f.headline[key].at(-1)?.value).toBeCloseTo(
         value(wall, id).value!,
         2
       );
+    expect(f.headline.costPerMau.at(-1)?.value).toBeCloseTo(perUser, 6);
     // Prior rows are the snapshot's own prior period.
     expect(f.headline.wau[0].value).toBe(wau.prev);
   });
@@ -404,7 +436,7 @@ describe("v3 series agree with the v2 snapshot", () => {
   });
 
   it("draws unit economics daily from the first FinOps book day and compares per-user stats a week back", async () => {
-    const s = sources();
+    const s = withActiveUsers(sources());
     // The book starts 20 days ago, like FinOps' 2026-09-18 start.
     s.finops = vi.fn(async () => ({
       mrr: Object.fromEntries(
@@ -1667,10 +1699,12 @@ describe("variable margin frames (David 2026-10-23)", () => {
     // console constant, Modulate dark (named), fees on the dated baseline.
     // The monthly constants convert at the calendar month; the run rate then
     // scales by the contract's exact 30.44 (Luna r3 P3).
+    // OpenRouter counted at its configured $23/day (David 2026-11-02).
     const perDay =
       60 +
       106 +
       10 +
+      OPENROUTER_DAILY_USD +
       STT_MONTHLY_USD / (365.25 / 12) +
       STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
     const cost = perDay * MARGIN_DAYS_PER_MONTH;

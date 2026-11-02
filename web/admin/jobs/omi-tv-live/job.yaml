@@ -1,0 +1,32 @@
+# Review artifact only. David supplies an immutable image digest built through
+# GitHub Actions after naming/authorizing a workflow. Do not deploy this placeholder.
+# Schedule (human, not agent): Cloud Scheduler every 5 minutes, POST to the job's
+# run endpoint with the job's invoker identity. Runs read Monitoring and write one
+# document; a failed run leaves the previous document in place.
+#
+# Required grants (David applies; not granted by the agent):
+#   - roles/monitoring.viewer on project based-hardware for the job service account
+#   - roles/datastore.user on based-hardware (writes admin_stats_payload_cache/wall-live:v1)
+#   - roles/run.invoker on this job for the scheduler identity
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: omi-tv-live
+  annotations:
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    spec:
+      parallelism: 1
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: OMI_TV_LIVE_JOB_SA_FROM_HUMAN_TIER
+          maxRetries: 0
+          timeoutSeconds: "300"
+          containers:
+            - image: IMAGE_DIGEST_FROM_APPROVED_GITHUB_ACTIONS
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi

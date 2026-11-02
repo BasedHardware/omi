@@ -62,10 +62,20 @@ import {
   estimateStatus,
   FEES_UNAVAILABLE_REASON,
   sonioxBalanceInputs,
+  sonioxRate7d,
   sonioxSeriesBroken,
   variableMarginLineStatus,
   variableMarginSeries,
+  VARIABLE_MARGIN_RUN_DAYS,
 } from "./wall-cost";
+import { LiveDoc } from "./wall-live";
+import { readLiveDoc } from "./wall-live-store";
+import {
+  liveCostDays,
+  reconcileLive,
+  spliceCostDays,
+  trailingMean,
+} from "./wall-live-margin";
 import { createHash } from "crypto";
 import {
   firestoreSeriesStore,
@@ -173,6 +183,8 @@ export interface SeriesSources {
   }>;
   /** Mercury non-GCP infra run rate; throws while that table is dark. */
   infra?: (today: string) => Promise<InfraHistory>;
+  /** The live metered document the health series splices in (health only). */
+  live?: () => Promise<LiveDoc | null>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -195,6 +207,7 @@ export const defaultSeriesSources: SeriesSources = {
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
   infra: fetchInfraHistory,
+  live: readLiveDoc,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -203,6 +216,8 @@ export const defaultSeriesSources: SeriesSources = {
 
 /** Leg results. Each leg is complete, partial (some periods failed) or failed. */
 export interface Legs {
+  /** The producer's metered live days (health only; absent = no live days). */
+  live?: LiveDoc | null;
   growth?: AggregateRows;
   activationHistory?: AggregateRows;
   captureSource?: AggregateRows;
@@ -239,7 +254,18 @@ export interface Legs {
 }
 type LegName = keyof Legs;
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
-  headline: ["finops", "mauPrior", "billing"],
+  // The headline's Cost / user is the health series' cost-per-user point, so it
+  // reads the same vendor and plan legs the health chart does (David 2026-11-02).
+  headline: [
+    "finops",
+    "mauPrior",
+    "billing",
+    "planCost",
+    "fees",
+    "vendorBalance",
+    "modulate",
+    "infra",
+  ],
   growth: ["growth"],
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
@@ -785,9 +811,13 @@ export function healthFrames(
   // chart's STT matches the stat. The fee leg is unavailable, not zero, while
   // the FinOps fee table is dark.
   const feesUnavailable = legs.fees ? null : FEES_UNAVAILABLE_REASON;
+  const sonioxBal = sonioxBalanceInputs(legs.vendorBalance ?? null, cutoff);
   const vendor = {
     sttMeasured: legs.planCost?.sttMeasured,
-    sonioxBalance: sonioxBalanceInputs(legs.vendorBalance ?? null, cutoff),
+    sonioxBalance: sonioxBal,
+    // The measured trailing-7-day rate replaces the stale console constant on
+    // every day without a measured row (David 2026-11-02).
+    sonioxRate7d: sonioxRate7d(sonioxBal, cutoff),
     modulateModelled: legs.modulate ?? undefined,
     sttCash: legs.planCost?.sttCash,
     saasMeasured: legs.planCost?.saasMeasured,
@@ -823,6 +853,19 @@ export function healthFrames(
   // 1 when a manual estimate is older than its line's staleness threshold.
   const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
+  // Settled days through D−2, live (metered) days for D−1 and today, each day
+  // in exactly one source (`spliceCostDays` throws on a double count).
+  const sonioxRate = vendor.sonioxRate7d ?? null;
+  const spliced = spliceCostDays(
+    days,
+    liveCostDays(
+      legs.live ?? null,
+      trailingMean(days.slice(-VARIABLE_MARGIN_RUN_DAYS)),
+      now.getTime(),
+      sonioxRate
+    ),
+    cutoff
+  );
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
     (net?.trend || []).map((t) => [t.date, t.value])
@@ -834,10 +877,12 @@ export function healthFrames(
   // The fee/infra history reads cover every frame this renders (their shared
   // window constant), so a fee-dark day keeps its Mercury stripe_fees cash
   // however old it is.
-  const cost = days.slice(-HEALTH_COST_DAYS).map((d) => {
+  const cost = spliced.slice(-HEALTH_COST_DAYS).map((d) => {
     const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
       date: ts(d.date),
+      // 1 for a live (metered, estimated) day; settled days are 0.
+      live: d.date > cutoff ? 1 : 0,
       gcp: d.gcp,
       vertexLlm: d.vertexLlm,
       openai: d.openai,
@@ -879,7 +924,7 @@ export function healthFrames(
       oneTimeExcluded: d.oneTime || null,
       // The snapshot uses estimates; measured vendor lines own the all-in total.
       total:
-        d.sttMeasured || d.saasMeasured || d.infraMeasured
+        d.date > cutoff || d.sttMeasured || d.saasMeasured || d.infraMeasured
           ? d.total
           : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
@@ -892,22 +937,34 @@ export function healthFrames(
       r.arpmau as number,
     ])
   );
-  const live = usable(metric(snapshot, "cost.per_mau_month"));
-  // Daily, settled D−2: day k's 30-day all-in cost ÷ the same window's MAU.
+  // Cost per cost-active user (David 2026-11-02, not qualified MAU): the 30-day
+  // all-in cost ÷ the window's average daily cost-active users, the FinOps plan
+  // rows' `users` summed per day. Daily-average, not the 30-day distinct count:
+  // no pipeline produces that yet (see the report).
+  const activeByDay = new Map<string, number>();
+  for (const [date, plans] of Object.entries(legs.planCost?.plans ?? {}))
+    activeByDay.set(
+      date,
+      Object.values(plans).reduce((sum, p) => sum + (p.users || 0), 0)
+    );
+  // Daily, settled D−2: day k's 30-day all-in cost ÷ that window's average
+  // daily cost-active users.
   const costPerMau: Row[] = [];
   for (let k = UNIT_DAYS - 1; k >= 1; k--) {
     const windowEnd = shiftDay(end, -k); // exclusive; D−2 inclusive at k = 1
-    const window = Array.from({ length: 30 }, (_, i) =>
-      byDay.get(isoDay(shiftDay(windowEnd, -30 + i)))
+    const dates = Array.from({ length: 30 }, (_, i) =>
+      isoDay(shiftDay(windowEnd, -30 + i))
     );
-    const mau = k === 1 ? live?.denominator ?? null : mauAt(legs, k);
-    const settled = window.every((v) => v != null);
-    const value =
-      k === 1 && live
-        ? live.value
-        : settled && mau
-        ? window.reduce<number>((s, v) => s + (v as number), 0) / mau
-        : null;
+    const costs = dates.map((d) => byDay.get(d));
+    const actives = dates.map((d) => activeByDay.get(d));
+    const complete =
+      costs.every((v) => v != null) && actives.every((v) => v != null && v > 0);
+    const avgActive = complete
+      ? actives.reduce<number>((s, v) => s + (v as number), 0) / 30
+      : null;
+    const value = avgActive
+      ? costs.reduce<number>((s, v) => s + (v as number), 0) / avgActive
+      : null;
     if (value == null) continue;
     const arpmau = arp.get(isoDay(shiftDay(windowEnd, -1)));
     costPerMau.push({
@@ -923,6 +980,38 @@ export function healthFrames(
     (d) => finopsMrr(legs.finops, new Date(ts(d))),
     { feesCash: vendor.infraStripeFeesCash }
   );
+  // Live margin (est.): the same scope over the spliced days. A day with no
+  // book snapshot (today's) takes the latest book on or before it, labelled.
+  let latestBook: number | null = null;
+  for (let k = 0; k < 7 && latestBook == null; k++)
+    latestBook = finopsMrr(legs.finops, shiftDay(utcDay(now), -k));
+  const liveSeries = variableMarginSeries(
+    spliced,
+    (d) => finopsMrr(legs.finops, new Date(ts(d))) ?? latestBook,
+    { feesCash: vendor.infraStripeFeesCash }
+  );
+  const liveHead = liveSeries.at(-1);
+  const recon = reconcileLive(
+    days,
+    legs.live ?? null,
+    cutoff,
+    sonioxRate,
+    (d) => finopsMrr(legs.finops, new Date(ts(d)))
+  );
+  const liveDayCount = spliced.filter((d) => d.date > cutoff).length;
+  const pct = (v: number | null) => (v == null ? "—" : `${v.toFixed(1)}%`);
+  const pp = (v: number | null) =>
+    v == null ? "n/a" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`;
+  const marginLiveStatus =
+    liveDayCount === 0
+      ? "Live estimate unavailable: no fresh metered day"
+      : `Live est. ${pct(liveHead?.marginPct ?? null)} through ${
+          liveHead?.date ?? "—"
+        }${
+          liveHead && liveHead.date > cutoff ? "" : " (settled only)"
+        } · settled ${cutoff}: ${pct(recon.settledPct)}, variance ${pp(
+          recon.variancePp
+        )} (live − settled, 7-day window)`;
   return {
     cost,
     costPerMau,
@@ -959,11 +1048,25 @@ export function healthFrames(
       feesPerMonth: round(p.feesPerMonth, 0),
       missing: p.missing.length ? p.missing.join("+") : null,
     })),
+    marginLive: liveHead
+      ? [
+          {
+            date: ts(liveHead.date),
+            marginPct: round(liveHead.marginPct, 1),
+            costPerMonth: round(liveHead.costPerMonth, 0),
+            mrr: liveHead.mrr == null ? null : round(liveHead.mrr, 0),
+            goalCost: round(liveHead.goalCost, 0),
+            live: liveHead.date > cutoff ? 1 : 0,
+          },
+        ]
+      : [],
+    marginLiveStatus: [{ text: marginLiveStatus }],
     variableMarginStatus: [
       {
         text: variableMarginLineStatus(variable.at(-1), {
           now,
           soniox: vendor.sonioxBalance,
+          sonioxRate7d: vendor.sonioxRate7d,
           feesUnavailable,
           nonUsdPaying: variable.at(-1)
             ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
@@ -1855,6 +1958,14 @@ export async function seriesPayload(
   } else if (wall?.refreshing || wall?.retryableFailures) refreshing = true;
   // A finished partial snapshot is retried in 30s: keep it unsettled so the
   // proxy does not pin the gap (or a retained stat) for its settled TTL.
+  if (name === "health") {
+    // Metered live days ride on the health legs: read directly (not a lazily
+    // filled leg), bounded by the store wait; any failure is no live days.
+    legs.live = await withTimeout(
+      sources.live ? sources.live() : Promise.resolve(null),
+      COLD_STORE_WAIT
+    ).catch(() => null);
+  }
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
   if (name === "headline") {
