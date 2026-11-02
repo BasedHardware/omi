@@ -58,6 +58,27 @@ def test_operator_discovery_counts_permission_unknown_without_inventing_absence(
     assert operator.inspect_candidate(None, None, 'synthetic')[2] == 'not_missing'
 
 
+@pytest.mark.parametrize('change', ['none', 'owner', 'content', 'job', 'legacy'])
+def test_repair_age_exception_requires_exact_existing_owner_without_writes(setup, monkeypatch, change):
+    from utils.batch_pipeline import intake
+
+    client, store, binding = missing_setup(setup)
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *args: store)
+    monkeypatch.setattr(intake, 'shadow_from_env', lambda value: value)
+    uid, content, job = binding.owner_id, binding.content_id, binding.job_id
+    if change == 'owner':
+        uid = 'foreign'
+    if change == 'content':
+        content = 'changed'
+    if change == 'job':
+        job = 'bp_other'
+    if change == 'legacy':
+        ledger_row(client, binding)['dispatch_protocol'] = 'legacy'
+    writes = sum(len(tx.updates) for tx in client.transactions)
+    assert intake.repair_upload_owner_matches(uid, content, job) is (change == 'none')
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+
+
 def mark(setup):
     from database.batch_pipeline_artifact_missing import ArtifactMissingStore
 

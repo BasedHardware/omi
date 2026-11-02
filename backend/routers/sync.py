@@ -31,6 +31,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
+    repair_upload_owner_matches,
     privacy_blocked_response,
 )
 from utils.batch_pipeline.intake_outcome import (
@@ -747,7 +748,7 @@ async def sync_local_files_v2(
                 'detail': 'Historical recovery is paused; local audio was not consumed',
             },
         )
-    if not lane_decision.automatic_recovery_allowed:
+    if not lane_decision.automatic_recovery_allowed and repair_identity is None:
         return JSONResponse(
             status_code=422,
             content={
@@ -861,6 +862,18 @@ async def sync_local_files_v2(
                 },
             )
 
+        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
+        if repair_identity is not None and not await run_blocking(
+            db_executor, repair_upload_owner_matches, uid, content_id, repair_identity
+        ):
+            # Already accepted bytes may outlive the new-upload lookback. Only
+            # the exact original owner may cross that boundary; a changed or
+            # foreign bundle cannot write an archive or enter fresh admission.
+            return JSONResponse(
+                status_code=409,
+                content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
+            )
+
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
         archive_paths = await run_blocking(
@@ -876,8 +889,6 @@ async def sync_local_files_v2(
                 'sync_job_id': job_id,
             },
         )
-
-        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
         candidate_policy = resolve_batch_policy(uid)
         intake_evidence = IntakeRouteEvidence()

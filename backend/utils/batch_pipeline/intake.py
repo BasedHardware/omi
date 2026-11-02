@@ -383,14 +383,7 @@ async def accept_upload(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
-        if repair_job_id is not None and (
-            not isinstance(repair_job_id, str)
-            or not repair_job_id.startswith(JOB_PREFIX)
-            or len(repair_job_id) > 128
-            or '/' in repair_job_id
-            or previous.get('dispatch_protocol') != 'batch_v1'
-            or previous.get('job_id') != repair_job_id
-        ):
+        if repair_job_id is not None and not _repair_owner_matches(previous, repair_job_id):
             # A regrouped/subset retry must never enter fresh admission. The
             # client retains every surviving file and the original repair tag.
             return JSONResponse(
@@ -939,6 +932,27 @@ def privacy_blocked_response() -> JSONResponse:
             'detail': 'Capture is unavailable for server processing',
         },
     )
+
+
+def _repair_owner_matches(ledger: dict, job_id: str) -> bool:
+    return (
+        isinstance(job_id, str)
+        and job_id.startswith(JOB_PREFIX)
+        and len(job_id) <= 128
+        and '/' not in job_id
+        and ledger.get('dispatch_protocol') == 'batch_v1'
+        and ledger.get('job_id') == job_id
+    )
+
+
+def repair_upload_owner_matches(uid: str, content_id: str, job_id: str) -> bool:
+    """Read-only original-owner proof before archiving or waiving new-upload age.
+
+    Admission rechecks this row and every privacy/binding fence transactionally;
+    this lookup cannot grant a fresh owner, processing, completion or a write.
+    """
+    store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
+    return store.run(lambda tx: _repair_owner_matches(tx.get('content', f'{uid}/{content_id}'), job_id))
 
 
 def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:

@@ -1,6 +1,8 @@
 """HTTP capability and complete-bundle fence, with no provider/storage calls."""
 
 import pytest
+from types import SimpleNamespace
+from fastapi import HTTPException
 
 from routers import sync
 from tests.unit.test_sync_poll_limit import poll_client, poll_redis, poll_lua  # noqa: F401
@@ -42,3 +44,50 @@ def test_empty_repair_cannot_acknowledge_a_changed_original_bundle(poll_client, 
     assert response.status_code == (409 if repair else 200)
     if repair:
         assert response.json()['code'] == 'sync_repair_bundle_changed'
+
+
+@pytest.mark.parametrize('repair, matches, expected', [(False, False, 422), (True, False, 409), (True, True, 410)])
+def test_accepted_repair_reaches_exact_owner_check_after_new_upload_lookback(
+    poll_client, monkeypatch, repair, matches, expected
+):
+    monkeypatch.setattr(sync, 'prepare_sync_uploads', lambda files, *args, **kwargs: files)
+    monkeypatch.setattr(sync, 'get_sync_ledger_fence_mode', lambda: sync.SyncLedgerFenceMode.ACTIVE)
+    monkeypatch.setattr(sync.legacy_dark, 'current_mode', lambda *args: sync.legacy_dark.LegacySyncMode.DARK)
+    monkeypatch.setattr(
+        sync,
+        'classify_sync_lane',
+        lambda *args, **kwargs: SimpleNamespace(
+            lane=sync.SyncLane.BACKFILL,
+            trust=sync.CaptureTimeTrust.LEGACY,
+            reason='lookback_exceeded',
+            maximum_age_seconds=40 * 86400,
+            automatic_recovery_allowed=False,
+        ),
+    )
+    monkeypatch.setattr(sync, 'validate_backfill_uploads', lambda *args: None)
+    monkeypatch.setattr(sync, 'has_transcription_credits', lambda *args: True)
+    monkeypatch.setattr(sync, 'is_cloud_tasks_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(sync, 'has_byok_keys', lambda: False)
+    monkeypatch.setattr(sync, '_retrieve_file_paths_v2', lambda *args: ['synthetic-original'])
+    monkeypatch.setattr(sync, 'compute_sync_content_id', lambda *args: 'original-content')
+    checks = []
+
+    def owned(uid, content, job):
+        checks.append((uid, content, job))
+        return matches
+
+    monkeypatch.setattr(sync, 'repair_upload_owner_matches', owned, raising=False)
+    archives = []
+
+    def archive(*args, **kwargs):
+        archives.append(True)
+        raise HTTPException(status_code=410, detail='synthetic verified-owner archive checkpoint')
+
+    monkeypatch.setattr(sync, 'archive_mobile_batch_raw_files', archive)
+    query = '?repair_job_id=bp_original' if repair else ''
+    response = poll_client.post(
+        '/v2/sync-local-files' + query, files=[('files', ('audio_1000.bin', b'\0\0\0\0', 'application/octet-stream'))]
+    )
+    assert response.status_code == expected
+    assert checks == ([('owner', 'original-content', 'bp_original')] if repair else [])
+    assert archives == ([True] if repair and matches else [])
