@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-01 -->
+<!-- feature-flag-registry as-of: 2026-11-02 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,11 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-01.
+These rollout/experiment entries passed `review_by`. The checker warns
+during the seven-day grace, then fails unless a dated `review_overdue`
+exception is recorded for David.
+
+- `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` — review_by 2026-11-01 (dazheng)
 
 ## Flags
 
