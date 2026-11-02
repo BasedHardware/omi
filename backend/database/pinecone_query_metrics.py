@@ -5,7 +5,6 @@ application metrics graph. All application exporters use the default registry.
 """
 
 from collections.abc import Mapping
-import math
 from typing import Any
 
 from prometheus_client import Counter
@@ -71,7 +70,8 @@ def record_query(family: str, routed_namespace: str, caller: str, response: Any,
         if units is None:
             MISSING_USAGE.labels(*labels).inc()
             return
-        if isinstance(units, bool) or not isinstance(units, (int, float)) or not math.isfinite(units) or units < 0:
+        # The pinned 7.3.0 SDK's Usage.read_units schema is integer-only.
+        if isinstance(units, bool) or not isinstance(units, int) or units < 0:
             raise ValueError('Invalid Pinecone read-unit usage')
         READ_UNITS.labels(*labels).inc(units)
     except Exception:

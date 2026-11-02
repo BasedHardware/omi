@@ -35,7 +35,9 @@ and mapping responses without converting or traversing matches.
 Accounting adds only local counter updates. It performs no network, logging,
 retry, background dispatch, or stack inspection. Failure preserves the provider
 result or exception. Provider failures count attempts but do not count missing
-usage. Invalid usage counts an accounting error and contributes no units.
+usage. Invalid usage counts an accounting error and contributes no units. The
+pinned SDK declares integer read units, so fractional/float values and booleans
+are rejected rather than added to billing totals.
 
 ## Query-path audit
 

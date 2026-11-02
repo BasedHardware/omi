@@ -38,16 +38,16 @@ def sample(registry, name, family='ns1', route_mode='legacy', caller='query_vect
 @pytest.mark.parametrize(
     'response',
     [
-        {'matches': [], 'usage': {'read_units': 2.5}},
-        SimpleNamespace(usage=SimpleNamespace(read_units=2.5)),
+        {'matches': [], 'usage': {'read_units': 2}},
+        SimpleNamespace(usage=SimpleNamespace(read_units=2)),
     ],
 )
-def test_response_shapes_and_fractional_units(registry, response, partitioned):
+def test_response_shapes_and_units(registry, response, partitioned):
     route = 'ns1-p1-private-bucket' if partitioned else 'ns1'
     metrics.record_query('ns1', route, 'query_vectors', response, succeeded=True)
     mode = 'partitioned' if partitioned else 'legacy'
     assert sample(registry, 'omi_pinecone_queries_total', route_mode=mode) == 1
-    assert sample(registry, 'omi_pinecone_read_units_total', route_mode=mode) == 2.5
+    assert sample(registry, 'omi_pinecone_read_units_total', route_mode=mode) == 2
     assert b'private-bucket' not in generate_latest(registry)
 
 
@@ -62,7 +62,7 @@ def test_missing_usage_counts_query_without_inventing_units(registry, response):
     assert sample(registry, 'omi_pinecone_read_units_total') is None
 
 
-@pytest.mark.parametrize('units', [-1, float('inf'), float('nan'), '1', True])
+@pytest.mark.parametrize('units', [-1, 0.25, 1.5, 1.0, float('inf'), float('nan'), '1', True])
 def test_invalid_usage_is_swallowed_and_counted(registry, units):
     metrics.record_query('ns1', 'ns1', 'query_vectors', {'usage': {'read_units': units}}, succeeded=True)
     assert sample(registry, 'omi_pinecone_queries_total') == 1
@@ -140,7 +140,7 @@ def test_all_vector_db_query_calls_have_closed_explicit_callers():
     path = Path(__file__).resolve().parents[2] / 'database/vector_db.py'
     calls = []
     for function in ast.walk(ast.parse(path.read_text())):
-        if not isinstance(function, ast.FunctionDef):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for call in ast.walk(function):
             if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == 'query':
