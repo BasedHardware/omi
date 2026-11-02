@@ -74,6 +74,11 @@ The `omi_batch_pipeline_language_route_total` counter has static `surface`
 logs emit the same decision as `event=batch_language_route`, with an existing
 opaque segment ID for an in-memory cohort join. Shadow work emits no serving
 route log. No transcript, language string or user ID is logged by this signal.
+The worker emits this decision once after decode freezes the language, before
+serial or packed VAD and window validation. A `vad_bounds` failure therefore
+retains the route decision. `route=parakeet` means the frozen language permitted
+that route; it does not prove ASR ran, succeeded or returned words. `blocked`
+retains the unsupported-language boundary even when later VAD validation fails.
 `omi_batch_pipeline_language_detection_total{detected_language,decision}` counts detected
 ISO codes through a closed policy vocabulary (other/und otherwise); its
 `parakeet` decision means eligible, while the route counter records the provider
