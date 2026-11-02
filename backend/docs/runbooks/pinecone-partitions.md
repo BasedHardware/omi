@@ -142,9 +142,15 @@ a zero write-unit counter does not mean writes are free. Request/upload-byte
 bounds still apply when a provider response omits usage. Firestore reads are separately bounded by route
 scan size and selected owners/families, not included in Pinecone usage counters.
 A budget stop leaves the source authoritative and an owned resumable journal.
-The qualified implementation rejects owners whose inventory cannot be proven
-complete (including 10,000-or-more matches); record and resolve that cohort
-before calling the rollout complete.
+Owners with 10,000 or more matches are supported: metadata fetch paginates their
+records, then fresh complement queries prove no unknown identities remain and
+bounded payload queries verify every known identity group. The query result cap
+alone is not a reason to exclude an owner. The operator still rejects inventories
+it cannot prove complete, including mixed identity schemas, unknown identities,
+or stale replicas; record and resolve those failures before calling the rollout
+complete. See `test_large_owner_qualifies_complete_inventory_and_every_payload_group`
+in `backend/tests/unit/test_pinecone_partition_migration.py` for the 10,001-record
+qualification case.
 
 After the first full rollout and actual user-path/health verification, schedule a
 monitored bounded sweep for later registered legacy owners. **Do not install that
