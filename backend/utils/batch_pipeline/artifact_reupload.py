@@ -17,6 +17,40 @@ from utils.stt.batch_language import resolve_language
 from config.prerecorded_language import language_class
 
 
+def _repair_plan(store, uid, content_id, source, should_lock, conversation_id, client_device_id, client_platform):
+    protocol = ArtifactMissingStore(store)
+    plan = protocol.reupload_snapshot(uid, content_id)
+    if plan is None:
+        return protocol, None
+    binding, _, _ = plan
+    if (
+        source != binding.source
+        or should_lock != binding.is_locked
+        or conversation_id != binding.target_conversation_id
+        or client_device_id != binding.client_device_id
+        or client_platform != binding.client_platform
+    ):
+        raise ProjectionBlocked('re-upload cannot change original projection binding')
+    return protocol, plan
+
+
+def _original_unit(jobs, index, unit):
+    if index >= len(jobs):
+        raise ProjectionBlocked('re-upload unit count changed')
+    job = jobs[index]
+    if not math.isclose(unit.capture_at, job['capture_at'], rel_tol=0, abs_tol=1 / 16000) or not math.isclose(
+        unit.duration_seconds, job['duration_seconds'], rel_tol=0, abs_tol=1 / 16000
+    ):
+        raise ProjectionBlocked('re-upload capture boundaries changed')
+    return job
+
+
+def _commit_restore(protocol, uid, content_id, snapshots, uris, count, expected):
+    if count != expected or set(uris) != set(snapshots):
+        raise ProjectionBlocked('complete original upload required for repair')
+    return protocol.restore_reupload(uid, content_id, snapshots, uris, time.time())
+
+
 async def restore_upload(
     store,
     uid,
@@ -40,32 +74,28 @@ async def restore_upload(
     Projected siblings are neither staged nor language-probed. Staged repair
     inputs stay in the ordinary durable outbox after an uncertain CAS reply.
     """
-    protocol = ArtifactMissingStore(store)
-    plan = await run_blocking(db_executor, protocol.reupload_snapshot, uid, content_id)
+    protocol, plan = await run_blocking(
+        db_executor,
+        _repair_plan,
+        store,
+        uid,
+        content_id,
+        source,
+        should_lock,
+        conversation_id,
+        client_device_id,
+        client_platform,
+    )
     if plan is None:
         return None
     binding, jobs, snapshots = plan
-    if (
-        source != binding.source
-        or should_lock != binding.is_locked
-        or conversation_id != binding.target_conversation_id
-        or client_device_id != binding.client_device_id
-        or client_platform != binding.client_platform
-    ):
-        raise ProjectionBlocked('re-upload cannot change original projection binding')
     ceiling = max(job['duration_seconds'] for job in jobs)
     iterator = decode(ceiling) if decode is not None else decode_units(paths, max_seconds=ceiling)
     uris, count = {}, 0
     try:
         while (unit := await run_blocking(sync_executor, next, iterator, None)) is not None:
-            if count >= len(jobs):
-                raise ProjectionBlocked('re-upload unit count changed')
-            job = jobs[count]
+            job = await run_blocking(sync_executor, _original_unit, jobs, count, unit)
             count += 1
-            if not math.isclose(unit.capture_at, job['capture_at'], rel_tol=0, abs_tol=1 / 16000) or not math.isclose(
-                unit.duration_seconds, job['duration_seconds'], rel_tol=0, abs_tol=1 / 16000
-            ):
-                raise ProjectionBlocked('re-upload capture boundaries changed')
             sid = job['segment_id']
             if sid not in snapshots:
                 continue
@@ -112,9 +142,9 @@ async def restore_upload(
                 },
             )
             uris[sid] = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
-        if count != len(jobs) or set(uris) != set(snapshots):
-            raise ProjectionBlocked('complete original upload required for repair')
-        return await run_blocking(db_executor, protocol.restore_reupload, uid, content_id, snapshots, uris, time.time())
+        return await run_blocking(
+            db_executor, _commit_restore, protocol, uid, content_id, snapshots, uris, count, len(jobs)
+        )
     finally:
         close = getattr(iterator, 'close', None)
         if close is not None:
