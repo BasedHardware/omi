@@ -121,11 +121,15 @@ def _private_sample_paths(paths: list[str]) -> tuple[str, list[str]]:
     WAL decode deletes its inputs; a sampled refusal hands the upload back to legacy,
     which must still stage these exact files (else FileNotFoundError -> 503 loop).
     """
+    if len(set(paths)) != len(paths):
+        # The router wrote every body under one repeated name to one file, so
+        # an earlier body is already gone. Never acknowledge it; the phone keeps
+        # its audio (the same fail-closed answer as an unsampled batch decode).
+        raise ValueError('sampled upload repeats a filename')
     directory = tempfile.mkdtemp(prefix='omi-batch-sample-')
     try:
         linked = []
-        # A repeated upload name is one router file on disk; decode consumes it, so decode it once.
-        for path in dict.fromkeys(paths):
+        for path in paths:
             target = os.path.join(directory, os.path.basename(path))
             try:
                 os.link(path, target)
