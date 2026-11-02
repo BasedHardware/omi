@@ -18,6 +18,33 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 
 
 
+## Software VAD qualification (#7206)
+
+`CONFIG_OMI_ENABLE_VAD_GATE=n` intentionally stages the software gate and its
+500 ms pre-roll without enabling them in the default CV1 image. Enablement is
+tracked in [#7206](https://github.com/BasedHardware/omi/issues/7206); it requires
+a maintainer decision after CV1 capture, power, and codec/BLE backpressure tests.
+The issue should remain open until that qualification and enablement decision.
+Since the software gate overwrites older quiet frames without a durable drain,
+shipping enablement must also satisfy the newer
+[INV-CAP-1 retention contract](../../../product/invariants/pendant-audio-retention.md).
+A successful soak alone does not establish retention compliance.
+
+Default-off does **not** mean unchanged power behavior: with hardware T5838 AAD
+enabled, `aad_track_silence()` now skips mic-off sleep while BLE is connected.
+This protects conversation openings but increases connected-idle power relative
+to sleeping. Offline AAD remains enabled and cannot recover audio captured while
+the mic was off. The connected-idle battery tradeoff needs maintainer sign-off.
+
+Run `bash omi/firmware/omi/tests/software_vad/run_test.sh` from the repository
+root. The `firmware-software-vad-tests` manifest check runs this suite in local
+preflight and CI Hygiene. It executes production ring replay, wake passthrough,
+and emit-failure behavior. Full-ring onset replays at most five 100 ms blocks
+**including** the triggering live block, oldest first, without a duplicate live
+emit. Host tests verify that bound; hardware still must establish whether the
+codec and BLE queues sustain the burst, with no onset clipping or queue loss.
+No host result establishes battery life, firmware build success, or CV1 soak.
+
 ## WIP
 
 - Status: running on production, missing some enhancement.

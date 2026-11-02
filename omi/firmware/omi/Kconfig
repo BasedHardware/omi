@@ -63,6 +63,41 @@ config OMI_ENABLE_MONITOR
          Disable in production to save power, RAM, and flash space."
     default n
 
+config OMI_ENABLE_VAD_GATE
+    bool "Enable software voice-activity gate with pre-roll"
+    default n
+    help
+        "Gate codec/transport work during silence while the mic keeps sampling.
+         Retains a bounded pre-roll ring (~500 ms) and replays it when speech
+         starts so conversation openings are not clipped."
+
+config OMI_VAD_ABS_THRESHOLD
+    int "Voice-activity average absolute amplitude threshold"
+    range 1 32767
+    default 600
+    depends on OMI_ENABLE_VAD_GATE || OMI_ENABLE_T5838_AAD
+    help
+        "An average absolute amplitude at or above this value counts as voice
+         for the software gate and for the hardware AAD silence timer."
+
+config OMI_VAD_DEBOUNCE_FRAMES
+    int "Software VAD debounce frames to start forwarding"
+    range 1 50
+    default 3
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Consecutive above-threshold frames required before forwarding audio
+         after quiet. Each frame is ~100 ms (default 3 = 300 ms)."
+
+config OMI_VAD_GATE_HOLD_MS
+    int "Software VAD hold after last voice (ms)"
+    range 500 30000
+    default 3000
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Keep forwarding audio this long after the last voice frame before
+         returning to quiet and refilling the pre-roll ring."
+
 config OMI_ENABLE_T5838_AAD
     bool "Enable T5838 hardware AAD (ultra-low-power mic sleep)"
     default n
@@ -73,16 +108,6 @@ config OMI_ENABLE_T5838_AAD
          pin when it detects acoustic activity, at which point the driver
          resumes PDM and audio streaming.
          Requires THSEL (P1.5) and WAKE (P1.2) to be wired to the T5838."
-
-config OMI_VAD_ABS_THRESHOLD
-    int "AAD silence-detection average absolute amplitude threshold"
-    range 1 32767
-    default 600
-    depends on OMI_ENABLE_T5838_AAD
-    help
-        "An average absolute amplitude at or above this value resets the
-         silence timer used to decide when to enter T5838 hardware AAD sleep.
-         This does not gate or drop streamed audio while the mic is active."
 
 config OMI_VAD_HOLD_MS
     int "AAD silence hold time before hardware sleep (ms)"

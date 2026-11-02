@@ -25,7 +25,11 @@
 #include "lib/core/sd_card.h"
 #include "rtc.h"
 #include "spi_flash.h"
+#include "vad_gate.h"
 #include "wdog_facade.h"
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+#include "software_vad.h"
+#endif
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -37,6 +41,20 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
+
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+struct software_vad_state g_software_vad;
+
+bool vad_gate_allows_hw_aad_sleep(void)
+{
+    return !software_vad_is_recording(&g_software_vad);
+}
+
+void vad_gate_on_hw_wake(int64_t now_ms)
+{
+    software_vad_on_hardware_wake(&g_software_vad, now_ms);
+}
+#endif
 
 static void print_reset_reason(void)
 {
@@ -75,6 +93,14 @@ static void codec_handler(uint8_t *data, size_t len)
     }
 }
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+static int emit_pcm_to_codec(const int16_t *samples, size_t sample_count, void *context)
+{
+    ARG_UNUSED(context);
+    return codec_receive_pcm((int16_t *) samples, sample_count);
+}
+#endif
+
 static void mic_handler(int16_t *buffer)
 {
 #ifdef CONFIG_OMI_ENABLE_MONITOR
@@ -82,9 +108,24 @@ static void mic_handler(int16_t *buffer)
     monitor_inc_mic_buffer();
 #endif
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    bool was_recording = software_vad_is_recording(&g_software_vad);
+    int err =
+        software_vad_process(&g_software_vad, buffer, MIC_BUFFER_SAMPLES, k_uptime_get(), emit_pcm_to_codec, NULL);
+    bool is_recording = software_vad_is_recording(&g_software_vad);
+    if (was_recording != is_recording) {
+        LOG_INF("Software VAD: %s (avg=%u, input=%u, emitted=%u, gated=%u)",
+                is_recording ? "ACTIVE" : "QUIET",
+                g_software_vad.metrics.last_average_amplitude,
+                g_software_vad.metrics.input_blocks,
+                g_software_vad.metrics.emitted_blocks,
+                g_software_vad.metrics.gated_blocks);
+    }
+#else
     // Hardware AAD (T5838) is handled inside mic.c; the mic callback only
     // forwards audio to the codec here.
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
+#endif
     if (err) {
         LOG_ERR("Failed to process PCM data: %d", err);
     }
@@ -335,6 +376,21 @@ int main(void)
         error_codec();
         return ret;
     }
+
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    BUILD_ASSERT(MIC_BUFFER_SAMPLES == SOFTWARE_VAD_MAX_SAMPLES);
+    const struct software_vad_config vad_config = {
+        .amplitude_threshold = CONFIG_OMI_VAD_ABS_THRESHOLD,
+        .debounce_frames = CONFIG_OMI_VAD_DEBOUNCE_FRAMES,
+        .hold_ms = CONFIG_OMI_VAD_GATE_HOLD_MS,
+    };
+    software_vad_init(&g_software_vad, &vad_config, k_uptime_get());
+    LOG_INF("Software VAD gate: threshold=%u debounce=%u hold=%lldms preroll=%u frames",
+            vad_config.amplitude_threshold,
+            vad_config.debounce_frames,
+            (long long) vad_config.hold_ms,
+            SOFTWARE_VAD_PREROLL_FRAMES);
+#endif
 
     // Initialize microphone
     LOG_INF("Initializing microphone...\n");
