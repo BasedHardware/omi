@@ -14657,9 +14657,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get episodeOnThisPhone => 'इस फ़ोन पर';
 
   @override
-  String get liveCardTitle => 'लाइव';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'अंतिम ट्रांस्क्रिप्ट लगभग $duration पीछे है';
   }
@@ -14674,7 +14671,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'सुरक्षित रिकॉर्ड हो रहा है';
 
   @override
-  String get livePreviewOnPhoneDivider => 'इस फ़ोन पर लाइव';
+  String get livePreviewOnPhoneDivider => 'अभी, इस फ़ोन पर';
 
   @override
   String get livePreviewTurnOnLiveText => 'लाइव टेक्स्ट चालू करें';
@@ -14918,21 +14915,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count भाग',
-      many: '$count भाग',
-      few: '$count भाग',
-      two: '$count भाग',
-      one: '$count भाग',
-      zero: '$count भाग',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '$app ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।';
   }
@@ -14941,4 +14923,28 @@ class AppLocalizationsHi extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'नया कोड लें और उसे $app ऐप से भेजें।';
   }
+
+  @override
+  String get episodeWritingNotes => 'नोट्स लिखे जा रहे हैं…';
+
+  @override
+  String get episodeWritingNotesDetail => 'पहले ट्रांसक्रिप्ट पूरी हो रही है। आप यह पेज छोड़ सकते हैं।';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time तक · समाप्त होने पर पूरे नोट्स';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time तक ट्रांसक्राइब हुआ';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration सहेजा गया';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।';
 }

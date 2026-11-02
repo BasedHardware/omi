@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "最終書き起こしが届くとノートが始まります。",
     "episodeOnDeviceNotesFootnote": "話している間にこのスマホで下書きされます。完全なノートは最終書き起こしと一緒に届きます。",
     "episodeOnThisPhone": "この端末上で",
-    "liveCardTitle": "ライブ",
     "livePreviewBehind": "最終書き起こしは約{duration}遅れています",
     "livePreviewCatchingUp": "最終書き起こしを準備中です",
     "livePreviewNoEngineBody": "発言は話してから1〜2分後にここに表示されます。",
     "livePreviewNoEngineTitle": "安全に録音しています",
-    "livePreviewOnPhoneDivider": "この端末でライブ",
+    "livePreviewOnPhoneDivider": "たった今、このスマートフォンで",
     "livePreviewTurnOnLiveText": "ライブテキストをオンにする",
     "deviceCatchUpOnItsWay": "送信中",
     "deviceCatchUpWhenOnline": "オンライン時に",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "現在、お使いのプランでは年払いをご利用いただけません。",
     "yearlySwitchDoneTitle": "年払いに切り替わりました",
     "yearlySwitchDoneBody": "本日{amount}を請求しました。次回更新は{date}です。",
-    "episodePartsCount": "{count, plural, zero{{count} パート} one{{count} パート} two{{count} パート} few{{count} パート} many{{count} パート} other{{count} パート}}",
     "chatAppsWaitingMessageIn": "{app}でメッセージを送信してください。Omiが受信するとすぐにこの画面が更新されます。",
-    "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。"
+    "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。",
+    "episodeWritingNotes": "メモを作成中…",
+    "episodeWritingNotesDetail": "先に文字起こしを仕上げています。このページを離れても大丈夫です。",
+    "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
+    "liveTranscribedUpTo": "{time}まで文字起こし済み",
+    "liveAudioSaved": "{duration}を保存済み",
+    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。"
 }

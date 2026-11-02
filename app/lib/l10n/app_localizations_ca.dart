@@ -14747,9 +14747,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeOnThisPhone => 'En aquest telèfon';
 
   @override
-  String get liveCardTitle => 'En directe';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'La transcripció final va amb uns $duration de retard';
   }
@@ -14764,7 +14761,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
 
   @override
-  String get livePreviewOnPhoneDivider => 'En directe en aquest telèfon';
+  String get livePreviewOnPhoneDivider => 'Ara mateix, en aquest telèfon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Activa el text en directe';
@@ -15010,21 +15007,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count parts',
-      many: '$count parts',
-      few: '$count parts',
-      two: '$count parts',
-      one: '$count part',
-      zero: '$count parts',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Envia el missatge a $app. Aquesta pantalla s\'actualitzarà quan l\'Omi el rebi.';
   }
@@ -15033,4 +15015,28 @@ class AppLocalizationsCa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Obtén un codi nou i envia\'l des de $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'S\'estan escrivint les notes…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Primer acabem la transcripció. Pots sortir d\'aquesta pàgina.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Cobreix fins a les $time · notes completes en acabar';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcrit fins a les $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration desats';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
 }

@@ -49,7 +49,7 @@ from utils.stt.live_reason import (
     LOCAL_DELIVERY_REPLAY_SEND_STALLED,
     LOCAL_DELIVERY_SEND_QUEUE_FULL,
 )
-from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
+from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriteStalled, RecoveryWriterPace, paced_send
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
@@ -623,8 +623,7 @@ class SafeSonioxSocket(STTSocket):
                     if self._audio_sent:
                         pace = self._writer_pace
                         if pace is not None:
-                            async with asyncio.timeout(pace.write_bound()):
-                                await self._write('')
+                            await paced_send(lambda: self._write(''), pace)
                         else:
                             await self._write('')
                     break
@@ -636,13 +635,7 @@ class SafeSonioxSocket(STTSocket):
                         await pace.throttle(len(data), deadline=deadline)
                         pace.note_write(len(data))
                     if pace is not None:
-                        try:
-                            async with asyncio.timeout(pace.write_bound(deadline)):
-                                await self._write(data)
-                        except TimeoutError:
-                            if deadline is not None and deadline <= clock():
-                                raise AudioDeliveryExpired('live audio delivery expired')
-                            raise
+                        await paced_send(lambda: self._write(data), pace, deadline)
                     else:
                         await self._write(data)
                     self._send_queue.note_written(data)
@@ -656,6 +649,8 @@ class SafeSonioxSocket(STTSocket):
                     self._audio_sent = True
         except AudioDeliveryExpired:
             self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
+        except RecoveryWriteStalled:
+            self._mark_dead('recovery write stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws send closed: {e}',

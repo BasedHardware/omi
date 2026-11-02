@@ -120,8 +120,8 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
     initial_connections = []
     connect_window = window.connect_window
 
-    def initial(callback, sample_rate):
-        socket = connect_window(callback, sample_rate)
+    def initial(callback, sample_rate, **kwargs):
+        socket = connect_window(callback, sample_rate, **kwargs)
         initial_connections.append(socket)
         return socket
 

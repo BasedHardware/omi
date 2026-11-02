@@ -121,6 +121,42 @@ class ReportTests(unittest.TestCase):
         with patch.object(REPORT, "api_pages", return_value=runs), patch.object(REPORT, "gh", side_effect=gh):
             self.assertIsNone(REPORT.last_green("BasedHardware/omi", 123, "a" * 40))
 
+    def test_manifest_verdicts_suppress_passing_self_test_noise(self):
+        # The Hygiene job runs manifest checks whose PASSING self-tests print
+        # deliberate ❌/FAIL: strings (error-handling fixtures, promotion-policy
+        # gates). The runner's own verdicts are the only failure records.
+        log = "\n".join([
+            "2026-11-01T03:22:16Z <== PASS desktop-prod-promotion-policy (0.4s)",
+            "2026-11-01T03:46:50Z ##[error]required check failed",
+            "2026-11-01T03:48:56Z ❌ Error getting customers: /srv/app/.secrets/shopify_token_store.json",
+            "2026-11-01T03:48:56Z <== PASS shopify-error-handling-tests (0.47s)",
+            "2026-11-01T03:46:38Z <== FAIL backend-module-isolation (8.02s)",
+            "2026-11-01T03:49:20Z Manifest checks failed: backend-module-isolation",
+        ])
+        self.assertEqual(REPORT.failing_tests(log), ["backend-module-isolation"])
+
+    def test_manifest_fail_lines_report_check_names_without_summary(self):
+        log = "<== FAIL backend-module-isolation (8.02s)\n<== FAIL repo-hygiene (0.2s)"
+        self.assertEqual(REPORT.failing_tests(log), ["backend-module-isolation", "repo-hygiene"])
+
+    def test_passed_manifest_drops_self_test_noise_and_defers_to_failed_step(self):
+        # Hygiene failing at a later step while the manifest itself passed: the
+        # self-test ❌/FAIL strings must not become phantom failures; collect()
+        # then names the actually-failed workflow step via its steps fallback.
+        log = "\n".join([
+            "2026-11-01T03:22:16Z <== PASS shopify-error-handling-tests (0.47s)",
+            "2026-11-01T03:48:56Z ❌ Error getting customers: /srv/app/.secrets/shopify_token_store.json",
+            "2026-11-01T03:33:37Z FAIL: PROMOTE_IOS_BUILD must be a positive integer",
+            "2026-11-01T03:49:20Z Manifest checks passed: 214 check(s).",
+            "2026-11-01T03:49:40Z .github/workflows/foo.yml:2: property foo is not defined",
+        ])
+        self.assertEqual(REPORT.failing_tests(log), [])
+        jobs = [dict(id=1, name="repo-checks / Hygiene", conclusion="failure",
+                     steps=[dict(name="Check GitHub Actions workflows", conclusion="failure")])]
+        with patch.object(REPORT, "gh", return_value=log), patch.object(REPORT, "last_green", return_value=None):
+            receipt = REPORT.collect("BasedHardware/omi", 100, "a" * 40, jobs)
+        self.assertIn("Check GitHub Actions workflows", receipt["failures"][0]["test"])
+
     def test_summary_escapes_test_markdown_and_names_main_and_green(self):
         rendered = REPORT.summary(dict(main_sha="a" * 40, last_green_sha="b" * 40,
                                        failures=[dict(job="Dart|Linux", test="<script>alert</script>\nother")]))

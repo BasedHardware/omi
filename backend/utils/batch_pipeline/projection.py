@@ -11,6 +11,7 @@ from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from google.api_core.exceptions import NotFound
 import threading
 import time
 import math
@@ -24,6 +25,7 @@ from config.batch_pipeline import (
     projection_pending_page_enabled,
     projection_predecessor_replay_enabled,
     projection_prefetch_depth,
+    projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
@@ -39,17 +41,19 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
+from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
+from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
+from config.batch_conversation_speakers import vendor_speaker_authority
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentSuperseded,
-    sync_assignment_conflict_strikes,
 )
 from utils.stt.transcript_admission import filter_admission
 
@@ -153,22 +157,6 @@ def projection_block_reason(error: BaseException) -> str:
     return 'other'
 
 
-def quarantines_assignment_conflict(error: BaseException, job: dict | None) -> bool:
-    """Whether a record-target assignment conflict must take the held disposition.
-
-    The walk retries an owner's chain head forever, so a conflict nothing can
-    resolve wedges every later capture behind it. The sync strike rule decides
-    what nothing can resolve: structural conflicts always quarantine;
-    awaiting-writer ones (a record being restored from discard, a finalize
-    landing) quarantine only on catch-up rows, whose writer is already hours
-    late. Fresh rows keep waiting for their writer.
-    """
-    return isinstance(error, SyncAssignmentConflict) and sync_assignment_conflict_strikes(
-        error.subtype,
-        'backfill' if (job or {}).get('fresh_capture') is False else 'fresh',
-    )
-
-
 # Bounded retry for a failing owner-chain head. Infrastructure contention and
 # fresh awaiting-writer conflicts may keep a head waiting, but not forever:
 # once a head has failed for this long it takes the held disposition so the
@@ -231,7 +219,7 @@ def payload_contract_violation(error: BaseException) -> bool:
 PAYLOAD_CONTRACT_ERRORS = (ValueError, InvalidTag)
 
 
-def head_holds_without_retry(error: BaseException, job: dict | None) -> bool:
+def head_holds_without_retry(error: BaseException, job: dict | None, *, now: float | None = None) -> bool:
     """The generic poison-head rule: only a writer or infrastructure may keep
     a chain head waiting. Everything else holds the unit on first failure.
 
@@ -244,7 +232,7 @@ def head_holds_without_retry(error: BaseException, job: dict | None) -> bool:
         return True
     if projection_exception_transient(error):
         return False
-    if isinstance(error, SyncAssignmentConflict) and not quarantines_assignment_conflict(error, job):
+    if isinstance(error, SyncAssignmentConflict) and not quarantines_assignment_conflict(error, job, now=now):
         # Awaiting-writer on a fresh row: the writer may still land.
         return False
     return True
@@ -304,9 +292,12 @@ def build_incoming(
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
     aligned = align_projection_words(words, payload, item.segment_id)
-    authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and payload.get(
-        'recovery_version'
-    ) != 1
+    # Vendor words already carry the vendor's labels; with its turns they join
+    # the same unit scope, centroids and conversation resolver as GPU units.
+    vendor_turns = vendor_speaker_authority(payload)
+    authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and (
+        payload.get('recovery_version') != 1 or vendor_turns
+    )
     if authoritative:
         # The legacy grouper imputes None from adjacent voices. Keep each gap an
         # explicit anonymous abstention instead of borrowing a speaker/owner.
@@ -342,7 +333,9 @@ def build_incoming(
             abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
             segment.is_user, segment.person_id = False, None
             segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
-            segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
+            segment.speaker_match_source = (
+                'batch_abstention' if abstained else 'batch_vendor' if vendor_turns else 'batch_pyannote'
+            )
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
     finished = datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc)
     # Projected sync must use the same narrow admission rules as legacy sync.
@@ -654,9 +647,11 @@ class Projector:
             except SyncAssignmentSuperseded:
                 self.supersede(session)
             except SyncAssignmentConflict as error:
-                if not quarantines_assignment_conflict(error, job):
+                if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
-                persist_disposition(session, quarantined=True)
+                receipt = persist_disposition(session, quarantined=True)
+                if receipt.get('state') == 'quarantined':
+                    log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     raise
@@ -839,20 +834,27 @@ class Projector:
             if max_pages is not None and pages >= max_pages:
                 return counts
 
-    def release_held_scan(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
+    def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
         """One bounded page of held units whose record target may be restored."""
-        from database.batch_pipeline_projection_release import release_page
+        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_page
 
+        enabled = projection_hold_recovery_enabled()
+        started = time.monotonic()
         counts, self.release_after = release_page(
-            self.store, limit=limit, after_id=self.release_after, now=self.clock()
+            self.store,
+            limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
+            after_id=self.release_after,
+            now=self.clock(),
+            deadline=time.monotonic() + RELEASE_TICK_SECONDS if enabled else None,
         )
-        if counts.get('released'):
+        if counts.get('examined'):
             logger.info(
-                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d',
+                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d',
                 counts['released'],
                 counts['examined'],
                 counts['waiting'],
                 counts['error'],
+                int((time.monotonic() - started) * 1000),
             )
         return counts
 
@@ -864,6 +866,7 @@ class Projector:
             'transcript_segments': [],
             'data_protection_level': binding.data_protection_level,
             '_batch_require_live_target': True,
+            '_batch_redrive_target': bool(session.entry.get('projection_redriven_at')),
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
         try:
@@ -933,7 +936,7 @@ class Projector:
         conflicts retry with a durable bound. ``ProjectionBlocked`` and privacy
         fences keep their own, more precise dispositions and never pass here.
         """
-        if head_holds_without_retry(error, job) or head_retry_bound_exceeded(entry, self.clock()):
+        if head_holds_without_retry(error, job, now=self.clock()) or head_retry_bound_exceeded(entry, self.clock()):
             return self._hold_failing_head(segment_id, job, binding)
         self._note_head_blocked(segment_id, error)
         return False
@@ -1045,6 +1048,8 @@ class Projector:
                         }
                     if (binding.record_origin or policy.require_live_target) and context.target_id:
                         incoming['_batch_require_live_target'] = True
+                    if entry.get('projection_redriven_at'):
+                        incoming['_batch_redrive_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
                     if context.lineage_eligible:
@@ -1103,9 +1108,11 @@ class Projector:
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
             except SyncAssignmentConflict as error:
-                if not quarantines_assignment_conflict(error, job):
+                if not quarantines_assignment_conflict(error, job, now=self.clock()):
                     raise
                 receipt = persist_disposition(session, quarantined=True)
+                if receipt.get('state') == 'quarantined':
+                    log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     if policy.projection_contention:
@@ -1240,7 +1247,10 @@ class Projector:
                 )
         if not survivors:
             return
-        audio = self.fetch_audio(item)
+        try:
+            audio = self.fetch_audio(item)
+        except NotFound:  # Transcript is projected; close like a no-survivor input.
+            return artifact_missing.record('playback')
         audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
         if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
             import io

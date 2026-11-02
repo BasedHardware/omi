@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Notater begynner når den endelige utskriften kommer.",
     "episodeOnDeviceNotesFootnote": "Utarbeidet på telefonen din mens du snakker. De fullstendige notatene kommer med den endelige utskriften.",
     "episodeOnThisPhone": "På denne telefonen",
-    "liveCardTitle": "Direkte",
     "livePreviewBehind": "Endelig utskrift omtrent {duration} bak",
     "livePreviewCatchingUp": "Endelig utskrift tar igjen",
     "livePreviewNoEngineBody": "Ordene dine vises her ett til to minutter etter at du har sagt dem.",
     "livePreviewNoEngineTitle": "Tar opp trygt",
-    "livePreviewOnPhoneDivider": "Direkte på denne telefonen",
+    "livePreviewOnPhoneDivider": "Akkurat nå, på denne telefonen",
     "livePreviewTurnOnLiveText": "Slå på direkte tekst",
     "deviceCatchUpOnItsWay": "på vei",
     "deviceCatchUpWhenOnline": "når du er på nett",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Årlig betaling er ikke tilgjengelig for abonnementet ditt akkurat nå.",
     "yearlySwitchDoneTitle": "Du betaler nå årlig",
     "yearlySwitchDoneBody": "{amount} belastet i dag. Fornyes {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} deler} one{{count} del} two{{count} deler} few{{count} deler} many{{count} deler} other{{count} deler}}",
     "chatAppsWaitingMessageIn": "Send meldingen i {app}. Denne skjermen oppdateres så snart Omi får den.",
-    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}."
+    "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}.",
+    "episodeWritingNotes": "Skriver notater…",
+    "episodeWritingNotesDetail": "Vi gjør først ferdig transkripsjonen. Du kan forlate denne siden.",
+    "episodeCoversUpTo": "Dekker frem til {time} · fullstendige notater til slutt",
+    "liveTranscribedUpTo": "Transkribert frem til {time}",
+    "liveAudioSaved": "{duration} lagret",
+    "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting."
 }

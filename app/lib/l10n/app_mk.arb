@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "Белешките започнуваат кога ќе пристигне конечната транскрипција.",
     "episodeOnDeviceNotesFootnote": "Се создаваат на твојот телефон додека зборуваш. Целосните белешки доаѓаат со конечната транскрипција.",
     "episodeOnThisPhone": "На овој телефон",
-    "liveCardTitle": "Во живо",
     "livePreviewBehind": "Конечната транскрипција доцни околу {duration}",
     "livePreviewCatchingUp": "Конечната транскрипција стигнува",
     "livePreviewNoEngineBody": "Твоите зборови се појавуваат тука минута-две откако ќе ги изговориш.",
     "livePreviewNoEngineTitle": "Безбедно снима",
-    "livePreviewOnPhoneDivider": "Во живо на овој телефон",
+    "livePreviewOnPhoneDivider": "Токму сега, на овој телефон",
     "livePreviewTurnOnLiveText": "Вклучи текст во живо",
     "deviceCatchUpOnItsWay": "на пат",
     "deviceCatchUpWhenOnline": "кога ќе сте онлайн",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "Годишното плаќање моментално не е достапно за вашиот план.",
     "yearlySwitchDoneTitle": "Сега плаќате годишно",
     "yearlySwitchDoneBody": "Денес се наплатени {amount}. Обновување на {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} дела} one{{count} дел} two{{count} дела} few{{count} дела} many{{count} дела} other{{count} дела}}",
     "chatAppsWaitingMessageIn": "Испратете ја пораката во {app}. Овој екран се ажурира штом Omi ќе ја добие.",
-    "chatAppsCodeExpiredMessageIn": "Добијте нов код и испратете го од {app}."
+    "chatAppsCodeExpiredMessageIn": "Добијте нов код и испратете го од {app}.",
+    "episodeWritingNotes": "Пишуваме белешки…",
+    "episodeWritingNotesDetail": "Прво ја завршуваме транскрипцијата. Може да ја напуштите страницата.",
+    "episodeCoversUpTo": "Опфаќа до {time} · целосни белешки на крајот",
+    "liveTranscribedUpTo": "Транскрибирано до {time}",
+    "liveAudioSaved": "Зачувани {duration}",
+    "liveAudioSavedDetail": "Говорниците и конечната транскрипција ќе се појават тука при прикачувањето."
 }

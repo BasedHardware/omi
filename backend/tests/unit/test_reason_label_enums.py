@@ -75,6 +75,9 @@ CLOSED_HELPERS = frozenset(
         'utils.episodes.metrics._label',  # value if in the given frozenset vocabulary else 'other'
         'utils.stt.provider_resilience.circuit_trip_reason',  # fixed auth/quota/5xx/latency/no_text/connect/capacity groups else 'unknown'
         'utils.other.audio_outbox_metrics.bounded_custody_failure_reason',  # CUSTODY_FAILURE_REASONS else 'other'
+        'utils.batch_pipeline.vendor_route_metrics._vendor',  # VENDOR_SERVICES else 'unknown'
+        'utils.batch_pipeline.vendor_route_metrics._late_outcome',  # LATE_RESULT_OUTCOMES else 'unknown'
+        'utils.batch_pipeline.vendor_health._provider',  # VENDOR_SERVICES else 'unknown'
     }
 )
 

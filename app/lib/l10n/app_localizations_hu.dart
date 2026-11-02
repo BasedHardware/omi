@@ -14731,9 +14731,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeOnThisPhone => 'Ezen a telefonon';
 
   @override
-  String get liveCardTitle => 'Élő';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'A végleges átirat kb. $duration késésben van';
   }
@@ -14748,7 +14745,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Biztonságosan rögzít';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Élő ezen a telefonon';
+  String get livePreviewOnPhoneDivider => 'Épp most, ezen a telefonon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Élő szöveg bekapcsolása';
@@ -14994,21 +14991,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rész',
-      many: '$count rész',
-      few: '$count rész',
-      two: '$count rész',
-      one: '$count rész',
-      zero: '$count rész',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Küldd el az üzenetet az $app alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.';
   }
@@ -15017,4 +14999,28 @@ class AppLocalizationsHu extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Kérj új kódot, és küldd el az $app alkalmazásból.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Jegyzetek írása…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time-ig · teljes jegyzetek a végén';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Átírva eddig: $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration mentve';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
 }

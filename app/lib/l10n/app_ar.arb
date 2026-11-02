@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "تبدأ الملاحظات عند وصول النسخ النهائي.",
     "episodeOnDeviceNotesFootnote": "تُصاغ على هاتفك أثناء حديثك. تصل الملاحظات الكاملة مع النسخ النهائي.",
     "episodeOnThisPhone": "على هذا الهاتف",
-    "liveCardTitle": "مباشر",
     "livePreviewBehind": "النسخ النهائي متأخر بنحو {duration}",
     "livePreviewCatchingUp": "النسخ النهائي يلحق",
     "livePreviewNoEngineBody": "تظهر كلماتك هنا بعد دقيقة أو دقيقتين من قولها.",
     "livePreviewNoEngineTitle": "يسجّل بأمان",
-    "livePreviewOnPhoneDivider": "مباشر على هذا الهاتف",
+    "livePreviewOnPhoneDivider": "الآن، على هذا الهاتف",
     "livePreviewTurnOnLiveText": "تشغيل النص المباشر",
     "deviceCatchUpOnItsWay": "في الطريق",
     "deviceCatchUpWhenOnline": "عند الاتصال بالإنترنت",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "الدفع السنوي غير متاح لخطتك حاليًا.",
     "yearlySwitchDoneTitle": "أصبحت على الدفع السنوي",
     "yearlySwitchDoneBody": "تم خصم {amount} اليوم. يتجدد في {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} أجزاء} one{{count} جزء} two{{count} جزءان} few{{count} أجزاء} many{{count} جزءًا} other{{count} جزء}}",
     "chatAppsWaitingMessageIn": "أرسل الرسالة من تطبيق {app}. تتحدث هذه الشاشة فور وصولها إلى Omi.",
-    "chatAppsCodeExpiredMessageIn": "احصل على رمز جديد وأرسله من {app}."
+    "chatAppsCodeExpiredMessageIn": "احصل على رمز جديد وأرسله من {app}.",
+    "episodeWritingNotes": "جارٍ كتابة الملاحظات…",
+    "episodeWritingNotesDetail": "ننهي النص أولًا. يمكنك مغادرة هذه الصفحة.",
+    "episodeCoversUpTo": "يغطي حتى {time} · الملاحظات الكاملة عند الانتهاء",
+    "liveTranscribedUpTo": "تم النسخ حتى {time}",
+    "liveAudioSaved": "تم حفظ {duration}",
+    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع."
 }

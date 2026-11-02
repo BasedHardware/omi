@@ -26,7 +26,11 @@ from utils.observability.reasons import SyncCaptureTimeReason
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import capture_clock, lanes
 from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeRejected, capture_time_rejection
+from utils.sync.clock_run import clock_run_from_path
+from utils.sync.empty_upload import nonempty_manifest_claims
+from utils.sync.files import get_timestamp_from_path
 from utils.sync.pipeline import _retrieve_file_paths_v2
+from utils.sync.upload_names import canonical_sync_upload_filenames
 
 
 def _capture_time_counter(outcome: str) -> float:
@@ -873,3 +877,120 @@ def test_mixed_empty_clip_preserves_manifest_proof_for_remaining_audio(client, m
     response = client.post('/v2/sync-local-files', files=[('files', (empty_name, b'')), ('files', (audio_name, audio))])
     assert response.status_code == 202, response.text
     assert seen_names == [empty_name, audio_name]
+
+
+# --- trailing collision sequence (released apps: `<stem>_<ts>_u<n>.bin`) ---
+#
+# Prod 10-31 18Z..11-01 18Z: 4,374 of 12,531 invalid_capture_time refusals
+# (~367 of 428 users) were `rejected_malformed`, and their claimed audio start
+# sat days in the past: a sound clock, refused only because the name ends in
+# `u<n>`. Same file, same refusal, on every retry.
+
+
+def _collided(seconds_from_now: float, run: str = '') -> str:
+    stamp = (datetime.now(timezone.utc) + timedelta(seconds=seconds_from_now)).timestamp()
+    clock = f'_clke{run}' if run else ''
+    return f'audio_omi_opus_16000_1_fs160{clock}_{stamp:.0f}_u3.bin'
+
+
+@pytest.mark.parametrize(
+    'name, expected',
+    [
+        ('audio_omi_opus_16000_1_fs160_1761955200_u3.bin', 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin'),
+        (
+            'audio_omi_opus_16000_1_fs160_clkeab12cd_1761955200_u0.bin',
+            'audio_omi_opus_16000_1_fs160_u0_clkeab12cd_1761955200.bin',
+        ),
+        ('audio_omi_opus_16000_1_fs160_1761955200.5_u12.bin', 'audio_omi_opus_16000_1_fs160_u12_1761955200.5.bin'),
+        # Already canonical, ordinary, or not a collision tail: untouched.
+        ('audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin'),
+        ('audio_omi_opus_16000_1_fs160_1761955200.bin', 'audio_omi_opus_16000_1_fs160_1761955200.bin'),
+        ('audio_omi_opus_16000_1_fs160_not-a-number.bin', 'audio_omi_opus_16000_1_fs160_not-a-number.bin'),
+        ('audio_omi_opus_16000_1_fs160_1761955200_ux.bin', 'audio_omi_opus_16000_1_fs160_1761955200_ux.bin'),
+        ('', ''),
+    ],
+)
+def test_canonical_name_moves_trailing_collision_sequence_before_capture_time(name, expected):
+    assert canonical_sync_upload_filenames([name]) == [expected]
+
+
+def test_canonical_name_keeps_capture_time_and_clock_run():
+    original = 'audio_omi_opus_16000_1_fs160_clkeab12cd_1761955200_u3.bin'
+    [canonical] = canonical_sync_upload_filenames([original])
+
+    assert get_timestamp_from_path(canonical) == 1761955200
+    assert clock_run_from_path(canonical) == 'ab12cd'
+    with pytest.raises(ValueError):
+        get_timestamp_from_path(original)
+
+
+def test_canonical_names_never_collapse_two_uploads_into_one_staged_file():
+    names = ['audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'audio_omi_opus_16000_1_fs160_1761955200_u3.bin']
+
+    assert canonical_sync_upload_filenames(names) == names
+
+
+def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monkeypatch):
+    staged = []
+    real_retrieve = router._retrieve_file_paths_v2
+
+    def capture(files, uid, job_id):
+        staged.extend(f.filename for f in files)
+        return real_retrieve(files, uid, job_id)
+
+    monkeypatch.setattr(router, '_retrieve_file_paths_v2', capture)
+    before = _capture_time_counter('rejected_malformed')
+    name = _collided(-10)
+
+    response = _post_sync(client, name)
+
+    assert response.status_code == 202, response.text
+    assert staged == [name.replace('_u3.bin', '.bin').replace('_fs160_', '_fs160_u3_')]
+    assert _capture_time_counter('rejected_malformed') == before
+
+
+def test_manifest_claim_follows_its_file_to_the_canonical_name():
+    collided, plain = 'audio_omi_opus_16000_1_fs160_1761955200_u3.bin', 'audio_omi_opus_16000_1_fs160_1761955300.bin'
+    claims = [{'name': collided, 'sha256': 'a'}, {'name': plain, 'sha256': 'b'}]
+    staged = canonical_sync_upload_filenames([collided, plain])
+
+    assert nonempty_manifest_claims(claims, staged) == [
+        {'name': plain, 'sha256': 'b'},
+        {'name': 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'sha256': 'a'},
+    ]
+    # Unrenamed requests keep the verified claims exactly as before.
+    assert nonempty_manifest_claims(claims, [collided, plain]) == claims
+
+
+def test_v2_route_keeps_manifest_proof_for_collision_suffixed_upload(client, monkeypatch):
+    collided, plain = _collided(-20), _filename(-10)
+    audio_a, audio_b = b'\x01\0\0\0\x42', b'\x01\0\0\0\x43'
+    claims = sorted(
+        [
+            {'name': collided, 'sha256': hashlib.sha256(audio_a).hexdigest()},
+            {'name': plain, 'sha256': hashlib.sha256(audio_b).hexdigest()},
+        ],
+        key=lambda item: item['name'],
+    )
+    seen_names = []
+
+    def verified(_token, _uid, _device, _conversation, filenames):
+        seen_names.extend(filenames)
+        return claims
+
+    monkeypatch.setattr(router, 'verify_capture_manifest', verified)
+    monkeypatch.setattr(router, '_capture_matches_server_conversation', lambda *_a, **_k: True)
+    response = client.post('/v2/sync-local-files', files=[('files', (collided, audio_a)), ('files', (plain, audio_b))])
+
+    assert response.status_code == 202, response.text
+    assert seen_names == [collided, plain]
+
+
+def test_v2_route_still_refuses_collision_suffixed_upload_with_broken_clock(client):
+    before = _capture_time_counter('rejected_future')
+
+    response = _post_sync(client, _collided(5 * 365 * 86400, run='ab12cd'))
+
+    assert response.status_code == 400, response.text
+    assert response.json()['code'] == 'invalid_capture_time'
+    assert _capture_time_counter('rejected_future') == before + 1

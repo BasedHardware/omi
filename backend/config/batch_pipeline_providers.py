@@ -1,6 +1,7 @@
 """Worker-only provider selection; no serving path is enabled by these settings."""
 
 from config.refactor_switches import default_off as rollout_default_off
+from config.refactor_switches import default_on as rollout_default_on
 
 import os
 import math
@@ -30,6 +31,10 @@ class ProviderConfig:
     # (diarizer/batch_pipeline_flight_qualify.py).
     flight_batching: bool = False
     flight_batch_seconds: float = 1800
+    # Serial chain: one WeSpeaker trunk forward per chunk of one unit, pooled
+    # per local speaker, instead of one per (chunk, speaker) pair. Never packs
+    # across units. Kill switch; the flight path always shares the trunk.
+    shared_embedding_trunk: bool = True
 
     def __post_init__(self):
         if self.pool_kind not in {'dedicated_batch', 'shared_live'}:
@@ -86,4 +91,9 @@ def provider_config() -> ProviderConfig:
             os.getenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'false').strip().lower() == 'true',
         ),
         flight_batch_seconds=float(os.getenv('BATCH_PIPELINE_FLIGHT_BATCH_SECONDS', '1800')),
+        # Ship-on: only an explicit 'false' restores the per-pair forward.
+        shared_embedding_trunk=rollout_default_on(
+            'BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED',
+            os.getenv('BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED', 'true').strip().lower() != 'false',
+        ),
     )
