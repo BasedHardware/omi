@@ -262,6 +262,8 @@ def test_metric_and_log_labels_cannot_contain_identifiers(caplog):
     metrics._LOG_AT.clear()
     with caplog.at_level('WARNING'):
         metrics.compare(unsafe, unsafe, 'allow')
-    assert unsafe not in caplog.text
+    for identifier in unsafe.split('/'):
+        assert identifier not in caplog.text
+        assert identifier not in repr(metrics.DECISION_MISMATCH.collect())
+        assert identifier not in repr(metrics._LOG_AT)
     assert 'family=batch' in caplog.text and 'live=unknown' in caplog.text
-    assert unsafe not in repr(metrics.DECISION_MISMATCH.collect())
