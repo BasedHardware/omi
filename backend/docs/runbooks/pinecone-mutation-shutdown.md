@@ -1,7 +1,10 @@
 # Pinecone mutation shutdown
 
 Every admitted mutation is tracked in the serving process, including migration
-copy tickets. Shutdown closes local admission and marks live tickets `uncertain`.
+copy tickets. On SIGTERM a chained server signal handler schedules settlement
+immediately, before Uvicorn waits for active requests. The handler does no IO
+and does not lock the registry. The lifespan shutdown retries the drain.
+Shutdown closes local admission and marks live tickets `uncertain`.
 An admission racing shutdown settles before returning to its provider caller.
 Provider interruption (`KeyboardInterrupt`/`SystemExit`) also settles uncertainty
 before re-raising. A failed finish write attempts uncertain settlement using the
@@ -26,7 +29,7 @@ provider acknowledgement cannot clear a ticket already marked uncertain.
   `modal/job.py`) and operator scripts do not use those lifespans and have no
   shutdown drain hook. Their shared mutation callers still settle
   catchable provider interruptions and finish-write failures. No process signal
-  handler or operator behavior is changed here.
+  handler or operator behavior is changed for those standalone entrypoints.
 
 The drain runs before other application cleanup consumes the shutdown grace.
 It offloads synchronous Firestore settlement independently of the shared DB

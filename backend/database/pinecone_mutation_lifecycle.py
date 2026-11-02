@@ -8,7 +8,8 @@ to its provider caller. No provider work is retried by this registry.
 import asyncio
 from collections.abc import Callable
 import logging
-from threading import Lock
+import signal
+from threading import Lock, current_thread, main_thread
 from typing import Any
 
 from prometheus_client import Counter, Gauge
@@ -17,6 +18,48 @@ logger = logging.getLogger(__name__)
 PENDING = Gauge('omi_pinecone_mutations_inflight', 'Process-local admitted or admitting Pinecone mutations')
 UNCERTAIN = Counter('omi_pinecone_mutation_uncertain_marks_total', 'Successful uncertain settlement calls')
 DRAIN_ERRORS = Counter('omi_pinecone_mutation_drain_errors_total', 'Failed shutdown settlement calls')
+
+
+def install_shutdown_drain(drain: Callable[[], Any]) -> Callable[[], None]:
+    """Schedule settlement on SIGTERM before Uvicorn waits for active requests.
+
+    Only chain an installed server handler. Standalone jobs, default/ignored
+    signals and event loops hosted outside the main thread are left alone.
+    The signal handler only schedules work; it never locks the registry or
+    performs provider/Firestore IO.
+    """
+    if current_thread() is not main_thread():
+        return lambda: None
+    previous = signal.getsignal(signal.SIGTERM)
+    if not callable(previous):
+        return lambda: None
+    loop = asyncio.get_running_loop()
+    scheduled = False
+
+    def launch() -> None:
+        from utils.executors import start_background_task
+
+        start_background_task(drain_on_shutdown(drain), name='pinecone:shutdown-drain')
+
+    def handle(signum: int, frame: Any) -> None:
+        nonlocal scheduled
+        try:
+            if not scheduled:
+                scheduled = True
+                loop.call_soon_threadsafe(launch)
+        except RuntimeError:
+            # A closing loop cannot schedule; still deliver the server signal.
+            pass
+        finally:
+            previous(signum, frame)
+
+    signal.signal(signal.SIGTERM, handle)
+
+    def restore() -> None:
+        if signal.getsignal(signal.SIGTERM) is handle:
+            signal.signal(signal.SIGTERM, previous)
+
+    return restore
 
 
 async def drain_on_shutdown(drain: Callable[[], Any], *, timeout: float = 5.0) -> None:
