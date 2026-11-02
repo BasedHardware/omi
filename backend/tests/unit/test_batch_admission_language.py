@@ -1,7 +1,10 @@
 """New-custody language exclusion; existing receipts and the kill path stay intact."""
 
 from copy import deepcopy
+import hashlib
+import io
 from types import SimpleNamespace
+import wave
 from unittest.mock import Mock
 
 import pytest
@@ -144,10 +147,20 @@ async def test_supported_conversation_overrides_unsupported_user_preference(monk
     assert probe.call_args.args[0] == 'en'
 
 
-def decision(language, safe, confidence=0.99):
+def decision(language, safe, confidence=0.99, evidence='audio_lid'):
     return SimpleNamespace(
-        language=language, parakeet_safe=safe, evidence='audio_lid', confidence=confidence, probe_seconds=6.0
+        language=language, parakeet_safe=safe, evidence=evidence, confidence=confidence, probe_seconds=6.0
     )
+
+
+SPEECH = b'synthetic-speech-probe-wav'
+
+
+def speaking(monkeypatch, *results):
+    """Strict-VAD speech probes per unit, in order (default: every unit has speech)."""
+    probe = Mock(side_effect=list(results)) if results else Mock(return_value=SPEECH)
+    monkeypatch.setattr(intake, '_speech_probe', probe)
+    return probe
 
 
 @pytest.mark.asyncio
@@ -157,6 +170,7 @@ async def test_unknown_multilingual_upload_admits_after_a_parakeet_safe_sample(
     monkeypatch, inherit, user_language, conversation
 ):
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
+    speaking(monkeypatch)
     excluded = Mock()
     monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
     evidence = IntakeRouteEvidence()
@@ -164,10 +178,78 @@ async def test_unknown_multilingual_upload_admits_after_a_parakeet_safe_sample(
         monkeypatch, user_language=user_language, conversation_language=conversation, mode='on', evidence=evidence
     )
     assert admitted(response, staged) and not evidence.language_excluded
-    # The declared user language is never pinned: the audio itself is classified.
-    assert probe.call_args.args[0] == 'multi'
+    # The declared user language is never pinned: the unit's speech itself is classified, once.
+    assert probe.call_count == 1 and probe.call_args.args[:2] == ('multi', SPEECH)
     assert probe.staged_context['stt_language'] == 'en'
     excluded.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_silent_leading_unit_waits_unstaged_and_replays_first_after_a_speech_sample(monkeypatch):
+    vad = speaking(monkeypatch, None, SPEECH)
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', unit_count=2)
+    assert admitted(response, staged) and vad.call_count == 2
+    # The speech unit decided first; the silent unit was staged first, under its own index and LID.
+    assert probe.call_args_list[0].args[1] == SPEECH and probe.call_count == 2
+    assert staged[0].segment_id == hashlib.sha256(b'new:0').hexdigest()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('vad', [[None], [RuntimeError('vad')], [None, None, None]])
+async def test_silent_unclassifiable_or_over_bound_upload_keeps_legacy_without_a_probe(monkeypatch, vad):
+    monkeypatch.setattr(intake, 'SAMPLE_SCAN_SECONDS', 2)
+    speaking(monkeypatch, *vad)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', mode='on', unit_count=len(vad), evidence=evidence
+    )
+    assert response is None and staged == [] and not probe.called and evidence.language_excluded
+
+
+@pytest.mark.asyncio
+async def test_sample_probe_is_authorized_as_the_unit_it_replays_as(monkeypatch):
+    # No conversation id on the upload: the unit's derived chunk conversation must be the one
+    # the sample's privacy guard checks, before any audio reaches the vendor.
+    speaking(monkeypatch, None, SPEECH)
+    guarded = []
+
+    def classify(*args, **kwargs):
+        guarded.append(kwargs['before_probe'].item)
+        return decision('en', True)
+
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', unit_count=2, decision=classify)
+    assert admitted(response, staged)
+    sampled_item = guarded[0]
+    assert sampled_item.segment_id == hashlib.sha256(b'new:1').hexdigest()
+    assert sampled_item.conversation_id and sampled_item.unit_kind == 'capture_span'
+    replayed_speech_unit = intake.chunk_identity('synthetic-owner', 'omi', None, False, sampled_item.capture_at)
+    assert sampled_item.conversation_id == replayed_speech_unit
+    assert sampled_item.capture_at != staged[0].capture_at  # unit 1, not the held unit 0
+
+
+@pytest.mark.asyncio
+async def test_self_lid_sample_does_not_admit(monkeypatch):
+    # Worker self-LID evidence is bound to the unit's first 30 s, which a speech sample is not.
+    speaking(monkeypatch)
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', mode='on', decision=decision('en', True, evidence='self_lid')
+    )
+    assert response is None and staged == []
+
+
+def test_speech_probe_concatenates_at_most_thirty_seconds_of_strict_speech(monkeypatch):
+    from utils.stt import local_vad
+
+    spans = [{'start': 1.0, 'end': 21.0}, {'start': 30.0, 'end': 50.0}]
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: spans)
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as target:
+        target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        target.writeframes(b'\x01\x00' * 16000 * 60)
+    with wave.open(io.BytesIO(intake._speech_probe(body.getvalue())), 'rb') as probe:
+        assert probe.getnframes() == 30 * 16000
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: [])
+    assert intake._speech_probe(body.getvalue()) is None
 
 
 @pytest.mark.asyncio
@@ -175,6 +257,7 @@ async def test_unknown_multilingual_upload_admits_after_a_parakeet_safe_sample(
     'sample', [decision('ja', False), decision('en', False, 0.4), decision('und', False, 0.0), decision('zh', False)]
 )
 async def test_unsafe_or_unavailable_sample_keeps_the_upload_on_legacy(monkeypatch, sample):
+    speaking(monkeypatch)
     writer = Mock(side_effect=AssertionError('unsafe sample wrote batch custody'))
     excluded = Mock()
     monkeypatch.setattr(intake, 'admit', writer)
@@ -196,6 +279,7 @@ async def test_refused_sample_probe_keeps_the_refusal_instead_of_legacy(monkeypa
     # unsafe-sample legacy route, so the client keeps its audio and retries.
     monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: False)
     monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    speaking(monkeypatch)
     unsafe = decision('und', False, 0.0)
 
     def refused(*args, **kwargs):

@@ -61,6 +61,7 @@ async def upload(
     store=None,
     decision=None,
     evidence=None,
+    unit_count=1,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -95,7 +96,8 @@ async def upload(
         return 'synthetic://staged-audio'
 
     def units(*args, **kwargs):
-        yield audio_unit(100, b'\x01\x00' * int(seconds * 16000))
+        for index in range(unit_count):
+            yield audio_unit(100 + index * seconds, b'\x01\x00' * int(seconds * 16000))
 
     monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store if store is not None else MemoryStore())
