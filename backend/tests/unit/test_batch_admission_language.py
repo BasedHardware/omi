@@ -189,9 +189,48 @@ async def test_silent_leading_unit_waits_unstaged_and_replays_first_after_a_spee
     vad = speaking(monkeypatch, None, SPEECH)
     response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', unit_count=2)
     assert admitted(response, staged) and vad.call_count == 2
-    # The speech unit decided first; the silent unit was staged first, under its own index and LID.
-    assert probe.call_args_list[0].args[1] == SPEECH and probe.call_count == 2
+    # The whole upload was classified first (one probe, on the speech unit); the silent unit was
+    # staged first, under its own index, with the upload's verified language rather than its own LID.
+    assert probe.call_args_list[0].args[1] == SPEECH and probe.call_count == 1
     assert staged[0].segment_id == hashlib.sha256(b'new:0').hexdigest()
+    assert probe.staged_context['stt_language'] == 'en'
+
+
+async def _upload_all_units(monkeypatch, **kwargs):
+    """Stage every unit (admission itself then fails closed); returns staged contexts in order."""
+    contexts = []
+    original = intake.with_context
+
+    def capture(wav, context):
+        contexts.append(context)
+        return original(wav, context)
+
+    monkeypatch.setattr(intake, 'with_context', capture)
+    monkeypatch.setattr(intake, 'admit', Mock(side_effect=RuntimeError('stop before admission')))
+    response, staged, probe = await upload(monkeypatch, mode='on', stop_after_staging=False, **kwargs)
+    return response, staged, probe, contexts
+
+
+@pytest.mark.asyncio
+async def test_an_unsafe_later_unit_keeps_the_whole_upload_on_legacy_before_staging(monkeypatch):
+    speaking(monkeypatch, SPEECH, SPEECH)
+    answers = iter([decision('en', True), decision('ja', False)])
+    response, staged, probe, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=2, decision=lambda *a, **k: next(answers)
+    )
+    assert response is None and staged == [] and contexts == [] and probe.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_each_speech_unit_keeps_its_own_language_and_silent_units_take_the_first(monkeypatch):
+    speaking(monkeypatch, SPEECH, None, SPEECH)
+    answers = iter([decision('en', True), decision('es', True)])
+    response, staged, probe, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=3, decision=lambda *a, **k: next(answers)
+    )
+    assert response.status_code == 503 and len(staged) == 3 and probe.call_count == 2
+    assert [context['stt_language'] for context in contexts] == ['en', 'en', 'es']
+    assert {context['stt_language_evidence'] for context in contexts} == {'audio_lid'}
 
 
 @pytest.mark.asyncio
