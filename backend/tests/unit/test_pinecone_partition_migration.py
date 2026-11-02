@@ -33,6 +33,9 @@ class Provider(migration.PartitionTransport):
         self.missing_query_lsn = False
         self.stale_fetch_records = {}
         self.page_size = 2
+        # namespace -> {id: score offset}; models the provider scoring one
+        # record slightly differently per namespace.
+        self.score_jitter = defaultdict(dict)
 
     @staticmethod
     def _predicate(where):
@@ -112,7 +115,12 @@ class Provider(migration.PartitionTransport):
                 next_token = '2'
             return {'vectors': {row['id']: row for row in page}, 'pagination': {'next': next_token}}, {}
         assert path == 'query'
-        rows.sort(key=lambda row: (-sum(a * b for a, b in zip(row['values'], payload['vector'])), row['id']))
+        jitter = self.score_jitter[namespace]
+
+        def score(row):
+            return sum(a * b for a, b in zip(row['values'], payload['vector'])) + jitter.get(row['id'], 0.0)
+
+        rows.sort(key=lambda row: (-score(row), row['id']))
         rows = rows[: payload['topK']]
         if namespace == self.reverse_namespace:
             rows.reverse()
@@ -120,7 +128,7 @@ class Provider(migration.PartitionTransport):
         headers = {} if self.missing_query_lsn else {'x-pinecone-max-indexed-lsn': str(indexed)}
         matches = []
         for row in rows:
-            match = {'id': row['id'], 'score': 0.9}
+            match = {'id': row['id'], 'score': score(row)}
             if payload.get('includeMetadata'):
                 match['metadata'] = deepcopy(row['metadata'])
             if payload.get('includeValues'):
@@ -243,6 +251,48 @@ def test_parity_and_identity_failures_never_authorize_cutover(setup, failure):
     with pytest.raises(migration.MigrationNotReady):
         runner.qualify('run', dimension=2)
     assert state.get_route(key, firestore_client=db).primary_namespace == key.family
+
+
+def test_near_tied_neighbours_swapped_by_provider_scoring_still_qualify(setup):
+    key, db, provider, runner = setup
+    # c and d score 0.5 and 0.5004 against probe a; the bucket scores d 6e-4 lower,
+    # so the two swap, as measured on the dev index for identical copies.
+    provider.records[key.family]['d'] = record('d', values=[0.5004, 0.4996])
+    provider.score_jitter[key.partition_namespace]['d'] = -0.0006
+    receipt = runner.qualify('run', dimension=2)
+    assert receipt['records'] == 4
+    assert any(check['exact_order'] is False for check in receipt['query_checks'])
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def test_score_drift_beyond_tolerance_never_authorizes_cutover(setup):
+    key, db, provider, runner = setup
+    provider.score_jitter[key.partition_namespace]['c'] = -0.01
+    with pytest.raises(migration.MigrationNotReady, match='scores differ'):
+        runner.qualify('run', dimension=2)
+    assert state.get_route(key, firestore_client=db).primary_namespace == key.family
+
+
+def _matches(*pairs):
+    return [{'id': id, 'score': score} for id, score in pairs]
+
+
+def test_search_parity_accepts_only_tie_level_differences():
+    old = _matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('d', 0.7))
+    assert migration.search_parity(old, list(old)) is True
+    # Near-tied pair swapped.
+    assert migration.search_parity(old, _matches(('a', 0.9), ('b', 0.8), ('d', 0.7002), ('c', 0.7))) is False
+    # Cutoff exchange between items tied with the last kept score.
+    assert migration.search_parity(old, _matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('e', 0.7003))) is False
+    for new, reason in (
+        (_matches(('b', 0.8), ('a', 0.9), ('c', 0.70005), ('d', 0.7)), 'order'),
+        (_matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('e', 0.75)), 'membership'),
+        (_matches(('a', 0.9), ('b', 0.8), ('c', 0.70005)), 'membership'),
+        (_matches(('a', 0.9), ('b', 0.81), ('c', 0.70005), ('d', 0.7)), 'scores differ'),
+        ([{'id': 'a'}, *old[1:]], 'comparable scores'),
+    ):
+        with pytest.raises(migration.MigrationNotReady, match=reason):
+            migration.search_parity(old, new)
 
 
 def test_indexing_lag_times_out_without_false_success(setup, monkeypatch):

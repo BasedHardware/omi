@@ -143,6 +143,27 @@ def test_dirty_priority_orders_backlog_and_staleness_not_user_document_id(runtim
     assert dream_scheduler.due_time(busy, NOW) < dream_scheduler.due_time(new, NOW)
 
 
+@pytest.mark.parametrize('last', [None, 'invalid', datetime(2026, 1, 1), dream_scheduler.EPOCH])
+@pytest.mark.parametrize('score', [0, 6, 500])
+def test_never_attempted_due_time_is_now_not_epoch_minus_score(last, score):
+    state = {'last_attempt_at': last, 'score': score}
+    assert dream_scheduler.due_time(state, NOW) == NOW
+
+
+def test_backdating_cannot_cross_epoch():
+    state = {'last_pass_at': dream_scheduler.EPOCH + timedelta(minutes=1), 'score': 6}
+    assert dream_scheduler.due_time(state, NOW) == NOW
+
+
+def test_discovery_does_not_write_pre_epoch_sentinel(monkeypatch):
+    store = DreamFirestore()
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
+    monkeypatch.setattr(dream_scheduler, 'candidate_page', lambda **kwargs: page_of([('never-attempted', {})]))
+    store.collection('dream_users').document('never-attempted').set({'score': 6})
+    dream_scheduler.discover(store, NOW, pages=1)
+    assert store.rows[('dream_due', 'never-attempted')]['due_at'] == NOW
+
+
 @pytest.mark.parametrize(
     'raw,bucket,hours',
     [
