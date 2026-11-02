@@ -262,7 +262,15 @@ def get_screen_activity_summary(
         last_observed_at=rows[-1].get('timestamp') if rows else None,
     )
 
-    coverage.devices = [ScreenDeviceCoverage.model_validate(device) for device in observed_device_coverage(rows)]
+    coverage.devices = [
+        ScreenDeviceCoverage(
+            device_id=device['device_id'],
+            first_observed_at=device['first_observed_at'],
+            last_observed_at=device['last_observed_at'],
+            synced_through=None,
+        )
+        for device in observed_device_coverage(rows)
+    ]
 
     apps: Dict[str, Dict[str, Any]] = {}
     for row in rows:
