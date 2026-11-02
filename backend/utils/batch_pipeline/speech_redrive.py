@@ -384,13 +384,14 @@ def prepared_independent_one(
     clock=time.time,
     independent_stt=second_transcribe,
 ):
-    """Operator take-over of a sealed prepared epoch-1 intent; one Soniox call at most.
+    """Operator take-over of a sealed epoch-1 intent, with one bounded failed-call retry.
 
     Only this path may admit a language-guarded unit above the global 60s
     independent bound, and only up to ``max_seconds`` for ids the sealed plan
-    froze. The existing epoch-1 token fence (``RecoveryStore.start``) stays the
-    sole paid-intent CAS: no new intent is created, custody is preserved, and
-    nothing is deleted. A unit that #23795's duration-limit refusal already
+    froze. The initial epoch-1 token fence (``RecoveryStore.start``) remains the
+    paid-intent CAS. A caught provider failure may explicitly rotate that token
+    once while retaining its receipt; a running/uncertain or spent intent never
+    retries. Custody is preserved and nothing is deleted. A duration-limit refusal already
     settled without ever starting the intent is admitted through the mirrored
     ``RecoveryStore.start_duration_limited``; a spent intent never reopens. The
     sealed cohort file and the lead's approved plan sha are the audit trail;
