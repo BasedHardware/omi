@@ -7074,3 +7074,27 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_cloud_task_scopes_privacy_before_first_await_and_closes_on_cancellation(monkeypatch):
+    from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
+
+    module, saved_modules, *_ = _load_sync_router_for_fast_path()
+    observed = []
+
+    def cancel_at_first_await():
+        observed.append(current_attempt())
+        assert observed[-1] is not None
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(module, 'get_sync_ledger_fence_mode', cancel_at_first_await)
+    try:
+        with batch_privacy_attempt() as parent:
+            with pytest.raises(asyncio.CancelledError):
+                await module._run_sync_job_attempt(MagicMock(), 0, {})
+            assert current_attempt() is parent
+            assert len(observed) == 1 and observed[0] is not parent and observed[0]._closed
+        assert current_attempt() is None
+    finally:
+        _restore_modules(saved_modules)

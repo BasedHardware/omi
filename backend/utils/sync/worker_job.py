@@ -14,6 +14,7 @@ from omi_logging import configure_logging
 configure_logging(service='sync-backfill-worker')
 logger = logging.getLogger(__name__)
 
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from utils.sync.worker_client import ControlClient
 
 
@@ -108,6 +109,7 @@ async def cleanup_terminal(payload: dict, job: dict) -> None:
     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
 
 
+@with_batch_privacy_attempt
 async def execute(lease: dict, client: ControlClient) -> bool:
     from database import sync_jobs
     from database.account_deletion_marker import account_deletion_blocks_user_work
