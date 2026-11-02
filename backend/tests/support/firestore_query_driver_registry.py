@@ -2515,6 +2515,13 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.sync_backfill_sequencer.worker_candidates',
+        neutrals={'limit': _LIMIT},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_backfill_sequencer.due_pending',
         domains={'now': [None, T0]},
         neutrals={'limit': _LIMIT},
@@ -2547,6 +2554,7 @@ _add(
         'database.sync_backfill_sequencer.finish_job',
         base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
         domains={'now': [None, T0]},
+        neutrals={'worker_token': (None, 'execution fencing does not change the pending-presence query')},
         setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
         patchers=_SYNC_PROD,
     )

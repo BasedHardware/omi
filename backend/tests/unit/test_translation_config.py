@@ -8,6 +8,15 @@ import yaml
 from config.translation import TranslationProvider, _positive_float, resolve_translation_profile
 
 
+@pytest.fixture(autouse=True)
+def _fast_safe_yaml_for_chart_and_manifest_fixtures(monkeypatch):
+    # Keep the same safe YAML schema and every assertion, without spending
+    # the call-phase CPU budget on Python tokenization of large manifests
+    # (runtime_env.yaml alone cost ~1s CPU under SafeLoader; run
+    # 41468678725 tripped the 1.00s fast-unit guard on it).
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
+
+
 @pytest.mark.parametrize('raw', ['nan', 'inf', '+inf', '-inf', 'NaN'])
 def test_positive_float_rejects_non_finite_values(raw: str) -> None:
     with pytest.raises(ValueError, match='finite'):
