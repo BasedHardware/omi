@@ -274,6 +274,19 @@ def test_recorded_lineage_survives_nested_claim_arrays_as_one_string():
     assert isinstance(record, str) and recorded_lineage(record) == ORIGINAL_LINEAGE
 
 
+def test_recorded_lineage_expires_with_the_intake_receipt_and_never_mirrors():
+    # It lives on the intake document, so the receipt TTL deletes it; the Postgres mirror, which no TTL
+    # reaches, never holds a copy (lead ebf868, Luna r3).
+    from database.jobstore.dual_store import UNMIRRORED_FIELDS
+
+    policy = json.loads(
+        (Path(__file__).resolve().parents[2] / 'deploy' / 'batch-pipeline' / 'retention.json').read_text()
+    )
+    assert policy['field'] == 'expires_at'
+    assert {'batch_pipeline_prod_intakes', 'batch_pipeline_dev_intakes'} <= set(policy['collection_groups'])
+    assert 'repair_lineage' in UNMIRRORED_FIELDS
+
+
 @pytest.mark.parametrize('intake', [None, {}, {'repair_languages': {'bad': ORIGINAL_LANGUAGE}}])
 def test_legacy_intake_without_recorded_lineage_always_holds(intake):
     # The original context lived only in the missing artifact; nothing durable records it.
