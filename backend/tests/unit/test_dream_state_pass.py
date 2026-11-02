@@ -337,7 +337,7 @@ def test_state_pass_times_out_as_a_whole():
             verifier_seconds=1,
             verifier_completion_tokens=1024,
             tokens=100000,
-            spent=lambda: 0,
+            spent=lambda: 5,
         )
 
     import utils.dream_state_pass as sp
@@ -351,7 +351,8 @@ def test_state_pass_times_out_as_a_whole():
     original_get = profile_db.get_profile_v2
     profile_db.get_profile_v2 = lambda uid: None
     try:
-        assert asyncio.run(run())['status'] == 'timeout'
+        summary = asyncio.run(run())
+        assert summary['status'] == 'timeout' and summary['total_tokens'] == 5
     finally:
         sp.people_page, sp.tasks_page, sp.memories_page, sp.conversation_index = original
         profile_db.get_profile_v2 = original_get
@@ -493,12 +494,28 @@ def test_failure_label_names_the_cause_without_model_text():
         StatePlan.model_validate({'cleanup': 'synthetic-secret', 'synthetic-secret-key': 1})
     label = dream_state_pass.failure_label(caught.value)
 
-    assert label.startswith('ValidationError ') and 'cleanup:' in label
-    assert 'synthetic-secret' not in label
+    assert label.startswith('ValidationError__') and label.isidentifier()
+    assert 'secret' not in label
     assert dream_state_pass.failure_label(ValueError('dream_input_token_budget')) == (
-        'ValueError dream_input_token_budget'
+        'ValueError__dream_input_token_budget'
     )
+    assert dream_state_pass.failure_label(ValueError('synthetic_owner_word')) == 'ValueError'
     assert dream_state_pass.failure_label(ValueError('free text from a model')) == 'ValueError'
+
+
+def test_a_named_failure_survives_the_dream_pass_log_line(runtime, state_env, monkeypatch):
+    from utils import dream_telemetry
+
+    async def model(uid, lane, mount, messages):
+        if mount.schema is StatePlan:
+            raise ValueError('dream_input_token_budget')
+        return await _loop_and_state_model([], StatePlan())(uid, lane, mount, messages)
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+
+    assert dream_telemetry.pass_payload(report)['levers']['state_pass']['failure'] == (
+        'ValueError__dream_input_token_budget'
+    )
 
 
 def test_a_failed_state_pass_reports_the_tokens_it_spent(monkeypatch):
@@ -531,4 +548,4 @@ def test_a_failed_state_pass_reports_the_tokens_it_spent(monkeypatch):
     )
 
     assert summary['status'] == 'failed' and summary['total_tokens'] == 777
-    assert summary['failure'] == 'ValueError synthetic_failure'
+    assert summary['failure'] == 'ValueError'
