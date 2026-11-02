@@ -80,16 +80,18 @@ def transcribe(item, binding, audio, *, multilingual=None, force_recognition=Fal
     return words_payload(duration, spans, words, language, worker_speech=worker_speech)
 
 
-def second_transcribe(item, audio, empty, second_chance=False):
+def second_transcribe(item, audio, empty, second_chance=False, takeover_max_seconds=None):
     """One independent Soniox async call after Modulate's validated empty response."""
     from utils.stt.soniox_batch import transcribe as soniox_transcribe
 
     # Reuse the first call's strict VAD instead of running it again.
     output, duration, spans = independent_audio(item, audio, empty)
+    # Only an operator take-over carries its sealed plan bound to the Soniox gate.
+    scoped = {'takeover_max_seconds': takeover_max_seconds} if takeover_max_seconds is not None else {}
     response = at_stage(
         'provider',
         'provider_failed',
-        lambda: soniox_transcribe(output, duration, second_chance=second_chance),
+        lambda: soniox_transcribe(output, duration, second_chance=second_chance, **scoped),
     )
     return independent_payload(response, duration, spans, getattr(empty, 'worker_speech', None))
 
