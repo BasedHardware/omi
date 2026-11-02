@@ -149,16 +149,16 @@ def verify_source_tripwire(source_path: Path) -> bool:
     """Static tripwire: verify that the C source code preserves the required bounding constants."""
     print(f"[STATIC TRIPWIRE] Verifying firmware source contract in {source_path.name}...")
     content = source_path.read_text(encoding="utf-8")
-    
+
     if "ATT_NOTIFICATION_HEADER_SIZE" not in content:
         print("FAIL: ATT_NOTIFICATION_HEADER_SIZE definition missing in transport.c")
         return False
-        
+
     pattern = r"MIN\s*\(\s*current_mtu\s*-\s*ATT_NOTIFICATION_HEADER_SIZE\s*-\s*NET_BUFFER_HEADER_SIZE"
     if not re.search(pattern, content):
         print("FAIL: packet_size calculation does not subtract ATT_NOTIFICATION_HEADER_SIZE")
         return False
-        
+
     print("PASS: Source code correctly bounds packet_size with ATT_NOTIFICATION_HEADER_SIZE.")
     return True
 
@@ -200,20 +200,20 @@ def run_behavioral_simulation() -> int:
     NET_BUFFER_HEADER_SIZE = 3
     ATT_NOTIFICATION_HEADER_SIZE = 3
     RING_BUFFER_HEADER_SIZE = 2
-    
+
     failed = 0
     for mtu, size, transient_failures, sequence in TEST_CASES:
         tx_buffer = bytearray(size + RING_BUFFER_HEADER_SIZE)
         for i in range(size):
             tx_buffer[i + RING_BUFFER_HEADER_SIZE] = (i * 17 + 3) & 0xFF
-            
+
         received = bytearray()
         accepted = 0
         calls = 0
         failures_left = transient_failures
         audio_tx_sem = 8
         packet_next_index = sequence
-        
+
         def bt_gatt_notify_cb(p_len, data):
             nonlocal calls, failures_left, accepted
             calls += 1
@@ -231,26 +231,26 @@ def run_behavioral_simulation() -> int:
         index = 0
         max_retries = 3
         success = True
-        
+
         while offset < size:
             chunk_cap = mtu - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE
             packet_size = min(chunk_cap, size - offset)
-            
+
             assert audio_tx_sem > 0
             audio_tx_sem -= 1
-            
+
             p_id = packet_next_index
             packet_next_index = (packet_next_index + 1) & 0xFFFF
-            
+
             packet = bytearray(mtu)
             packet[0] = p_id & 0xFF
             packet[1] = (p_id >> 8) & 0xFF
             packet[2] = index
             packet[NET_BUFFER_HEADER_SIZE : NET_BUFFER_HEADER_SIZE + packet_size] = buffer[offset : offset + packet_size]
-            
+
             offset += packet_size
             index += 1
-            
+
             retry = 0
             while retry < max_retries:
                 err = bt_gatt_notify_cb(packet_size + NET_BUFFER_HEADER_SIZE, packet)
@@ -259,12 +259,12 @@ def run_behavioral_simulation() -> int:
                     continue
                 audio_tx_sem += 1
                 break
-                
+
             if retry >= max_retries:
                 audio_tx_sem += 1
                 success = False
                 break
-                
+
         expected_success = transient_failures < 3 or size == 0
         chunk_cap = mtu - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE
         chunks = 0 if size == 0 else (size + chunk_cap - 1) // chunk_cap
@@ -274,26 +274,26 @@ def run_behavioral_simulation() -> int:
             ok = ok and (received == buffer) and (accepted == chunks)
         else:
             ok = ok and (accepted == 0) and (calls == 3)
-            
+
         status = "PASS" if ok else "FAIL"
         if not ok:
             failed += 1
         print(f"  [{status}] MTU={mtu:3d} audio_bytes={size:3d} retries={transient_failures} -> delivered={len(received)} chunks={accepted}")
-        
+
     print(f"\n{len(TEST_CASES) - failed} of {len(TEST_CASES)} test cases passed ({failed} failed)")
     return failed
 
 def main():
     default_path = Path(__file__).resolve().parent.parent / "omi" / "src" / "lib" / "core" / "transport.c"
     source_path = Path(sys.argv[1]) if len(sys.argv) > 1 else default_path
-    
+
     if not source_path.exists():
         print(f"Error: file not found: {source_path}")
         return 1
-        
+
     if not verify_source_tripwire(source_path):
         return 1
-        
+
     # Attempt C production seam compilation if compiler is present
     c_res = run_c_seam(source_path)
     if c_res >= 0:
