@@ -20,6 +20,7 @@ from tests.unit.test_batch_language_eligibility import admitted, upload
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
+from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.sync import final_pass_rehome
 
@@ -189,11 +190,11 @@ async def test_silent_leading_unit_waits_unstaged_and_replays_first_after_a_spee
     vad = speaking(monkeypatch, None, SPEECH)
     response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', unit_count=2)
     assert admitted(response, staged) and vad.call_count == 2
-    # The whole upload was classified first (one probe, on the speech unit); the silent unit was
-    # staged first, under its own index, with the upload's verified language rather than its own LID.
-    assert probe.call_args_list[0].args[1] == SPEECH and probe.call_count == 1
+    # The whole upload was classified first (the speech unit's probe); the silent unit was then
+    # staged first, under its own index and its own per-unit LID, never the speech unit's language.
+    assert probe.call_args_list[0].args[1] == SPEECH and probe.call_count == 2
+    assert probe.call_args_list[1].args[1] != SPEECH
     assert staged[0].segment_id == hashlib.sha256(b'new:0').hexdigest()
-    assert probe.staged_context['stt_language'] == 'en'
 
 
 async def _upload_all_units(monkeypatch, **kwargs):
@@ -222,15 +223,34 @@ async def test_an_unsafe_later_unit_keeps_the_whole_upload_on_legacy_before_stag
 
 
 @pytest.mark.asyncio
-async def test_each_speech_unit_keeps_its_own_language_and_silent_units_take_the_first(monkeypatch):
+async def test_each_speech_unit_keeps_its_own_language_and_a_silent_unit_never_inherits_one(monkeypatch):
     speaking(monkeypatch, SPEECH, None, SPEECH)
-    answers = iter([decision('en', True), decision('es', True)])
+    # Two speech samples in the pre-pass, then the silent unit's own per-unit LID during replay.
+    answers = iter([decision('en', True), decision('es', True), decision('und', False, 0.0)])
     response, staged, probe, contexts = await _upload_all_units(
         monkeypatch, user_language='en', unit_count=3, decision=lambda *a, **k: next(answers)
     )
-    assert response.status_code == 503 and len(staged) == 3 and probe.call_count == 2
-    assert [context['stt_language'] for context in contexts] == ['en', 'en', 'es']
-    assert {context['stt_language_evidence'] for context in contexts} == {'audio_lid'}
+    assert response.status_code == 503 and len(staged) == 3 and probe.call_count == 3
+    # The silent unit keeps the unknown-language barrier for any speech the worker VAD finds.
+    assert [context['stt_language'] for context in contexts] == ['en', 'und', 'es']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('single,expected', [(False, intake.SAMPLE_SCAN_SECONDS), (True, 7200.0)])
+async def test_sampled_upload_decodes_units_no_longer_than_the_hold_bound(monkeypatch, single, expected):
+    speaking(monkeypatch)
+    bounds = []
+
+    def decode_for_intake(paths, max_seconds, *args, **kwargs):
+        bounds.append(max_seconds)
+        yield audio_unit(100, b'\x01\x00' * 16000)
+
+    monkeypatch.setattr(intake, 'decode_for_intake', decode_for_intake)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=7200.0)
+    )
+    response, staged, _ = await upload(monkeypatch, user_language='en', single=single, mode='on')
+    assert admitted(response, staged) and bounds == [expected]
 
 
 @pytest.mark.asyncio

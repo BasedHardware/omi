@@ -615,12 +615,14 @@ async def accept_upload(
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
+        # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
+        max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
         iterator = (
-            decode(config.max_unit_seconds)
+            decode(max_unit_seconds)
             if decode is not None
             else decode_for_intake(
                 paths,
-                config.max_unit_seconds,
+                max_unit_seconds,
                 uid,
                 {**(intake_context or {}), 'client_device_id': client_device_id},
                 decoder=decode_units,
@@ -645,13 +647,16 @@ async def accept_upload(
 
         # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
         # speech must be Parakeet-safe vendor audio LID, so no admitted unit meets the worker's
-        # language barrier. Silent units replay with the upload's first verified language.
+        # language barrier. Strict-silent units keep today's own per-unit LID (an unknown answer
+        # preserves the barrier for speech the worker VAD finds); no unit inherits another's language.
         queue, decisions, first = [], {}, None
         if sampled:
             while unit := await run_blocking(sync_executor, _next_unit, iterator):
-                queue.append(unit)
-                if len(queue) > 128 or sum(u.duration_seconds for u in queue) > SAMPLE_SCAN_SECONDS:
+                if len(queue) >= 128 or sum(u.duration_seconds for u in queue) + unit.duration_seconds > (
+                    SAMPLE_SCAN_SECONDS
+                ):
                     return _sampled_refusal(target, user, evidence)
+                queue.append(unit)
                 try:
                     speech = await run_blocking(sync_executor, _speech_probe, unit.wav)
                 except Exception:
@@ -688,9 +693,9 @@ async def accept_upload(
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
             item = unit_item(unit, len(items))
-            if sampled:
-                # Classified above under fresh authority; a silent unit takes the upload's language.
-                language_decision = decisions.get(len(items), first)
+            if len(items) in decisions:
+                # This unit's speech was classified above under fresh authority.
+                language_decision = decisions[len(items)]
             else:
                 probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
                 # Every self/vendor classification gets fresh dispatch authority on CPU.
