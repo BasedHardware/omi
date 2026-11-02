@@ -34,6 +34,9 @@ def values():
         refusal_baseline_ready_min=12,
         refusal_baseline_ready_max=12,
         refusal_baseline_coverage=1,
+        # 10 live requests at 2 per pod: the live load needs the fixture's 5 pods.
+        live_requests_max=10,
+        gpu_util_max=1,
     )
     return result
 
@@ -498,13 +501,17 @@ def test_ready_and_scheduling():
     _, state, _ = guard.decide(hpa, dep, [], values(), {}, 0)
     dep['status']['readyReplicas'] = 4
     assert guard.decide(hpa, dep, [], values(), state, 900)[0] == 'TRIP'
-    dep['status']['readyReplicas'] = 5
     event = {
         'reason': 'FailedScheduling',
         'involvedObject': {'kind': 'Pod', 'name': 'prod-omi-parakeet-x'},
         'lastTimestamp': '1970-01-01T00:15:00Z',
     }
-    assert guard.decide(hpa, dep, [event], values(), state, 900)[0] == 'TRIP'
+    verdict, _, reading = guard.decide(hpa, dep, [event], values(), state, 900)
+    assert verdict == 'TRIP' and 'FailedScheduling_in_15m' in reading['trips']
+    # Ready covers the live load: a Pending pod is surplus, not harm.
+    dep['status']['readyReplicas'] = 5
+    verdict, _, reading = guard.decide(hpa, dep, [event], values(), state, 900)
+    assert verdict == 'CLEAN' and reading['pending_beyond_load'] == 1
     assert not guard.scheduling_failures([event], 'other', 900)
     assert not guard.scheduling_failures([event], 'prod-omi-parakeet', 1801)
 
@@ -1099,8 +1106,137 @@ def test_autoscaling_does_not_restart_window_or_hide_ready_shortfall():
     hpa['status']['desiredReplicas'] = 8
     verdict, state, _ = guard.decide(hpa, dep, [], values(), state, 300)
     assert verdict == 'WARMUP' and state['since'] == 0
-    verdict, state, reading = guard.decide(hpa, dep, [], values(), state, 900)
+    verdict, state, reading = guard.decide(hpa, dep, [], dict(values(), live_requests_max=16), state, 900)
     assert verdict == 'TRIP' and 'ready_shortfall' in reading['trips']
+
+
+def failed_scheduling(count, at='1970-01-01T00:15:00Z'):
+    return [
+        {
+            'reason': 'FailedScheduling',
+            'involvedObject': {'kind': 'Pod', 'name': f'prod-omi-parakeet-p{i}'},
+            'lastTimestamp': at,
+        }
+        for i in range(count)
+    ]
+
+
+def stockout(desired, ready):
+    """A pool that holds `ready` L4 nodes while the HPA asks for `desired` pods."""
+    hpa, dep = objects()
+    hpa['status']['desiredReplicas'] = desired
+    dep['status']['readyReplicas'] = ready
+    _, state, _ = guard.decide(hpa, dep, [], values(), {}, 0)
+    return hpa, dep, state
+
+
+def test_pending_pods_beyond_the_live_load_never_trip():
+    # 2026-10-30..11-02: 31 rollbacks, 28 on capacity signals alone. After
+    # each rollback expired and the schedule lowered the floor, the 900s
+    # scale-down window still held desired at 11-12 and the rollback's own
+    # 12th pod had left FailedScheduling events on a 10-node L4 pool, so the
+    # next run tripped again. Load needed 3-7 pods; ready was 10.
+    hpa, dep, state = stockout(desired=12, ready=10)
+    v = dict(values(), live_requests_max=14, gpu_util_max=11)  # needs max(7, ceil(10*11/35)=4)
+    verdict, _, reading = guard.decide(hpa, dep, failed_scheduling(7), v, state, 900)
+    assert verdict == 'CLEAN', reading
+    assert reading['load_need'] == 7 and reading['pending_beyond_load'] == 7
+
+
+def test_scale_up_waiting_for_a_node_is_not_harm_while_ready_covers_load():
+    # 10-31 07:40Z: desired 5, ready 4 for one new pod's node; the load needed 2.
+    hpa, dep, state = stockout(desired=5, ready=4)
+    verdict, _, _ = guard.decide(hpa, dep, failed_scheduling(1), dict(values(), live_requests_max=4), state, 900)
+    assert verdict == 'CLEAN'
+
+
+@pytest.mark.parametrize(
+    'requests,gpu,ready,trip',
+    [
+        (18, 1, 7, True),  # requests need 9 on a 7-node pool at peak: real stockout
+        (14, 1, 7, False),  # needs exactly 7
+        (2, 60, 7, True),  # GPU work 7 x 60% needs ceil(12) > 7
+        (2, 35, 7, False),  # 7 x 35% needs exactly 7
+        (0, 0, 0, True),  # nothing ready never passes as an idle fleet
+    ],
+)
+def test_ready_short_of_the_live_load_still_trips_with_its_scheduling_evidence(requests, gpu, ready, trip):
+    hpa, dep, state = stockout(desired=12, ready=ready)
+    v = dict(values(), live_requests_max=requests, gpu_util_max=gpu)
+    verdict, _, reading = guard.decide(hpa, dep, failed_scheduling(3), v, state, 900)
+    assert (verdict == 'TRIP') == trip, reading
+    if trip:
+        assert 'ready_shortfall' in reading['trips'] and 'FailedScheduling_in_15m' in reading['trips']
+
+
+def test_capacity_need_never_exceeds_what_the_hpa_asked_for():
+    # Load beyond desired is the HPA's job (scale-out is unchanged); ready ==
+    # desired is not a shortfall even if the 15-minute load max is higher.
+    hpa, dep, state = stockout(desired=6, ready=6)
+    assert guard.decide(hpa, dep, [], dict(values(), live_requests_max=20), state, 900)[0] == 'CLEAN'
+
+
+@pytest.mark.parametrize('key', ['live_requests_max', 'gpu_util_max'])
+def test_missing_live_load_is_blind_not_clean(key):
+    hpa, dep, state = stockout(desired=12, ready=10)
+    v = values()
+    del v[key]
+    verdict, _, reading = guard.decide(hpa, dep, failed_scheduling(2), v, state, 900)
+    assert verdict == 'BLIND' and f'missing_or_nonfinite_{key}' in reading['blind']
+
+
+def test_load_queries_read_the_hpa_inputs_over_the_lookback_window():
+    q = guard.queries('prod-omi-backend')
+    assert '[15m:1m]' in q['live_requests_max'] and 'parakeet_active_batch_requests' in q['live_requests_max']
+    assert 'parakeet_active_streams{namespace="prod-omi-backend",container="parakeet"}' in q['live_requests_max']
+    assert q['gpu_util_max'] == (
+        'max_over_time(avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{namespace="prod-omi-backend",container="parakeet"}'
+        '[1m]))[15m:1m])'
+    )
+
+
+def test_rollback_holds_while_ready_is_short_of_the_live_load_then_expires(monkeypatch, caplog):
+    # A tripped floor returns to schedule only after one full window in which
+    # latency is clean AND ready covers the live load, so a real peak stockout
+    # cannot cycle rollback -> expiry -> lower -> trip every 50 minutes.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [4] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    client.hpa['status']['desiredReplicas'] = 12
+    client.dep['status']['readyReplicas'] = 7
+    client.signals['live_requests_max'] = 18  # needs 9 of the 7 the pool holds
+    for now in (1000, 1300, 1600, 1900, 2200):
+        assert guard.run(client, False, now) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    client.signals['live_requests_max'] = 10  # load falls to 5 pods
+    for now in (2500, 2800, 3100):
+        guard.run(client, False, now)
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    assert guard.run(client, False, 3400) == 0  # 900s clean with ready >= load
+    assert 'parakeet_rollback_expired' in caplog.text
+
+
+def test_lowered_floor_does_not_retrip_on_its_own_rollback_residue(monkeypatch, caplog):
+    # The 11-01 sequence end to end: expiry, scheduled lower, then the next run
+    # still sees desired 11 (900s window) and the rollback's FailedScheduling.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [4] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['status']['desiredReplicas'] = 11
+    client.dep['status']['readyReplicas'] = 10
+    client.signals.update(live_requests_max=10, gpu_util_max=11)
+    events = {'items': failed_scheduling(6, at='1970-01-01T01:00:00Z')}
+    original = client.kube
+    client.kube = lambda path, patch=None: events if path == 'events' and patch is None else original(path, patch)
+    assert guard.run(client, False, 2700) == 0  # parked at 12: arming clock seeds
+    assert guard.run(client, False, 3600) == 0  # armed: the schedule lowers 12 -> 4
+    assert client.patches[-1][1][1] == {'op': 'replace', 'path': '/spec/minReplicas', 'value': 4}
+    client.hpa['spec']['minReplicas'] = 4
+    client.patches = []
+    assert guard.run(client, False, 3900) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    assert '"parakeet_rollback"' not in caplog.text
 
 
 # Batch admission rollback shares this chart's registered behavioral suite.
