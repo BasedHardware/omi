@@ -737,11 +737,20 @@ def _copy_audio_chunks_for_merge(
                 buckets[name] = _get_storage_client().bucket(name)
             target = buckets[name]
             source_blob = target.blob(chunk["path"])
+            source_generation = chunk.get("generation")
             if not skip_existing:
-                _copy_chunk_with_backoff(uid, target, source_blob, new_path)
+                _copy_chunk_with_backoff(uid, target, source_blob, new_path, source_generation=source_generation)
             else:
                 identity = _copied_source_identity(chunk)
-                _copy_bridge_chunk(uid, target, source_blob, new_path, identity, existing_in(name).get(new_path))
+                _copy_bridge_chunk(
+                    uid,
+                    target,
+                    source_blob,
+                    new_path,
+                    identity,
+                    existing_in(name).get(new_path),
+                    source_generation=source_generation,
+                )
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -767,6 +776,7 @@ def _copy_chunk_with_backoff(
     source_blob: Any,
     new_path: str,
     *,
+    source_generation: Optional[int] = None,
     if_generation_match: Optional[int] = None,
     bridge: bool = False,
 ) -> None:
@@ -774,12 +784,13 @@ def _copy_chunk_with_backoff(
     for attempt in range(1, _COPY_RATE_LIMIT_ATTEMPTS + 1):
         try:
             with owner_storage_write_gate(uid, bucket):
-                if if_generation_match is None:
-                    bucket.copy_blob(source_blob, bucket, new_path)
-                else:
-                    # retry=None: the library's conditional policy would otherwise
-                    # retry 429 for up to two minutes, unbounded and uncounted.
-                    bucket.copy_blob(source_blob, bucket, new_path, if_generation_match=if_generation_match, retry=None)
+                kwargs: Dict[str, Any] = {}
+                if source_generation is not None:
+                    kwargs['source_generation'] = source_generation
+                if if_generation_match is not None:
+                    kwargs['if_generation_match'] = if_generation_match
+                    kwargs['retry'] = None
+                bucket.copy_blob(source_blob, bucket, new_path, **kwargs)
         except google_exceptions.TooManyRequests:
             if bridge:
                 OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='rate_limited').inc()
@@ -809,7 +820,16 @@ def _same_object(blob: Any, identity: Dict) -> bool:
     )
 
 
-def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, identity: Dict, current: Any) -> None:
+def _copy_bridge_chunk(
+    uid: str,
+    bucket: Any,
+    source_blob: Any,
+    new_path: str,
+    identity: Dict,
+    current: Any,
+    *,
+    source_generation: Optional[int] = None,
+) -> None:
     """Idempotent bridge copy: skip identical bytes, never overwrite a concurrent writer."""
     if current is not None and _same_object(current, identity):
         OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='skipped').inc()
@@ -819,7 +839,15 @@ def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, i
         # A GCS listing always carries a generation; None (test doubles only) keeps
         # the pre-idempotency unconditional copy.
         generation = getattr(current, 'generation', None) if current is not None else 0
-        _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation, bridge=True)
+        _copy_chunk_with_backoff(
+            uid,
+            bucket,
+            source_blob,
+            new_path,
+            source_generation=source_generation,
+            if_generation_match=generation,
+            bridge=True,
+        )
     except google_exceptions.PreconditionFailed:
         winner = bucket.get_blob(new_path, retry=None)
         # Archive packs list no checksum; their capture-named object of the same size

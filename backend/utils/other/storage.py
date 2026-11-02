@@ -1090,7 +1090,23 @@ def upload_audio_chunks_batch(
     return committed_paths + [path]
 
 
-def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float]) -> None:
+def _safe_delete_chunk_blob(blob: Any, expected_generation: Optional[int] = None) -> None:
+    try:
+        if expected_generation is not None:
+            blob.delete(if_generation_match=expected_generation)
+        else:
+            blob.delete()
+    except (PreconditionFailed, NotFound):
+        pass
+
+
+def delete_audio_chunks(
+    uid: str,
+    conversation_id: str,
+    timestamps: List[float],
+    *,
+    generations_by_path: Optional[Dict[str, int]] = None,
+) -> None:
     """Delete audio chunks after they've been merged.
 
     Handles both single-chunk blobs (per-timestamp lookup) and batch blobs
@@ -1098,10 +1114,23 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
     regional-cohort owner's batches live in BUCKET_AUDIO_DERIVED.
     """
     for name in _chunk_bucket_names(private_cloud_sync_bucket):
-        _delete_audio_chunks_in(_get_storage_client().bucket(name), uid, conversation_id, timestamps)
+        _delete_audio_chunks_in(
+            _get_storage_client().bucket(name),
+            uid,
+            conversation_id,
+            timestamps,
+            generations_by_path=generations_by_path,
+        )
 
 
-def _delete_audio_chunks_in(bucket: Any, uid: str, conversation_id: str, timestamps: List[float]) -> None:
+def _delete_audio_chunks_in(
+    bucket: Any,
+    uid: str,
+    conversation_id: str,
+    timestamps: List[float],
+    *,
+    generations_by_path: Optional[Dict[str, int]] = None,
+) -> None:
     deleted_batch_paths: set[str] = set()
 
     for timestamp in timestamps:
@@ -1115,7 +1144,8 @@ def _delete_audio_chunks_in(bucket: Any, uid: str, conversation_id: str, timesta
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
             blob = bucket.blob(chunk_path)
             if blob.exists():
-                blob.delete()
+                gen = generations_by_path.get(chunk_path) if generations_by_path else None
+                _safe_delete_chunk_blob(blob, gen)
 
         # Try batch blobs: exact single-timestamp batch (e.g. "1000.000.batch.bin")
         for batch_ext in ('.batch.enc', '.batch.bin'):
@@ -1123,7 +1153,8 @@ def _delete_audio_chunks_in(bucket: Any, uid: str, conversation_id: str, timesta
             if batch_path not in deleted_batch_paths:
                 blob = bucket.blob(batch_path)
                 if blob.exists():
-                    blob.delete()
+                    gen = generations_by_path.get(batch_path) if generations_by_path else None
+                    _safe_delete_chunk_blob(blob, gen)
                     deleted_batch_paths.add(batch_path)
 
     # Scan for range-named batch blobs whose start timestamp matches any requested timestamp
@@ -1139,7 +1170,8 @@ def _delete_audio_chunks_in(bucket: Any, uid: str, conversation_id: str, timesta
         if '-' in timestamp_str:
             start_ts = timestamp_str.split('-', 1)[0]
             if start_ts in ts_set:
-                blob.delete()
+                gen = generations_by_path.get(blob.name) if generations_by_path else None
+                _safe_delete_chunk_blob(blob, gen)
                 deleted_batch_paths.add(blob.name)
 
 
