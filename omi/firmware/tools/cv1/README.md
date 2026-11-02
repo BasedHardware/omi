@@ -32,6 +32,16 @@ This is a fixed key-free build profile for reviewed source and an existing trust
 
 Startup fixtures are sanitized derivatives; radio fixtures omit unrelated device identifiers. They characterize observed formats and failures, not a full firmware emulator. Shared C parameter cases, Python methods, compilation and actual device evidence are separate coverage categories. Imported receipts and captures are labelled `operator_supplied`: these tools check that their bytes are unchanged, not that a device produced them, so they are not hardware evidence on their own.
 
+## Unattended bench cycle
+
+```sh
+python3 bench_loop.py dry-run --candidate-job CANDIDATE.json --restore-job RESTORE.json --profile PROFILE.json --contract CONTRACT.json --pins PINS.json --bench-dir NEW_DIR --output NEW_DIR/run
+```
+
+This drives the app-only cycle against a simulated device: admit, identity, baseline check, flash, verify, boot check, restore. It can't reach hardware. Jobs, profile and contract follow `job_dry_run.py`, and the pins file holds `protected_sha256` and `restore_image_sha256`.
+
+The driver holds the safety rules in code: only pages in `[0x10000,0xF6000)` can be erased, identity is read fresh before every erase and program, nothing is retried, restore runs after any write that fails or finishes, and the lease goes idle only with restoration proof or an untouched device. A crash gets no restore. The bench stays blocked until someone reconciles it by hand, as it does after any quarantine. A live adapter stays in the private bench profile, outside this repository, and passing here says nothing about hardware or release.
+
 ## Radio tests on an opened board
 
 The mainboard has no antenna part. `RF_COM` ends at pogo pad PP1, labelled "Dual band Antenna" in `omi/hardware/consumer/electrical/mainboard/schematic.pdf`, and the BOM lists six `CA02-PG07` pogo pins and no antenna, so the aluminum covers appear to be the radiator; no document states this and it has not been tested. With its covers off, a board on a jig may have no working antenna contact. One such board advertised at about -100 dBm on a nearby Mac and was not seen at all by another. That is one observation, not a specification, and it does not show that any other board is healthy. Restore the antenna contact before drawing a conclusion from BLE range or RSSI, in either direction.
