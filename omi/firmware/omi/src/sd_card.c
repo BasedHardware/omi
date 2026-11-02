@@ -868,6 +868,7 @@ static int flush_current_batch(bool sync_requested)
 
     ret = sync_media();
     if (ret != 0) {
+        omi_diagnostics_inc_storage_error();
         LOG_ERR("batch media sync failed at sector %u: %d", sector, ret);
         return -EIO;
     }

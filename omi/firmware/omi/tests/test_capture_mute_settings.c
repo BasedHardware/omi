@@ -9,11 +9,15 @@
 static uint8_t persisted;
 static int save_error;
 static unsigned writes;
+static size_t stored_len = 1;
+static int read_result = 1;
 
 static int read_muted(void *arg, void *destination, size_t length)
 {
     (void) arg;
     assert(length == 1);
+    if (read_result != 1)
+        return read_result;
     memcpy(destination, &persisted, length);
     return (int) length;
 }
@@ -26,7 +30,7 @@ int settings_subsys_init(void)
 int settings_load_subtree(const char *name)
 {
     assert(strcmp(name, "omi") == 0);
-    return registered_settings_set("muted", 1, read_muted, NULL);
+    return registered_settings_set("muted", stored_len, read_muted, NULL);
 }
 
 int settings_save_one(const char *name, const void *value, size_t len)
@@ -64,6 +68,25 @@ int main(void)
     assert(!capture_mute_is_set()); /* failure cannot masquerade as durable mute */
     assert(app_settings_init() == 0);
     assert(!capture_mute_is_set());
+
+    /* An unreadable stored mute may be a user's pause: it must not resume capture. */
+    stored_len = 2;
+    assert(app_settings_init() != 0);
+    assert(capture_mute_is_set());
+    stored_len = 1;
+    assert(capture_mute_gatt_write(&resume, 1, 0) == BT_GATT_ERR(BT_ATT_ERR_UNLIKELY));
+    save_error = 0;
+    assert(capture_mute_gatt_write(&resume, 1, 0) == 1);
+    assert(capture_mute_should_capture());
+    read_result = -EIO;
+    assert(app_settings_init() != 0);
+    assert(capture_mute_is_set());
+    read_result = 0;
+    assert(app_settings_init() != 0);
+    assert(capture_mute_is_set());
+    read_result = 1;
+    assert(app_settings_init() == 0);
+    assert(capture_mute_should_capture());
 
     const unsigned before = writes;
     assert(capture_mute_gatt_write(&pause, 1, 1) == BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET));

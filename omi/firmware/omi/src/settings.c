@@ -56,16 +56,20 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
     }
 
     if (settings_name_steq(name, "muted", &next) && !next) {
+        /* An unreadable mute may be a user's pause, so stay muted. The app reads this
+         * state back, and an explicit unmute rewrites the setting (issue #5054). */
         if (len != sizeof(muted)) {
+            muted = 1U;
             return -EINVAL;
         }
         rc = read_cb(cb_arg, &muted, sizeof(muted));
-        if (rc >= 0) {
+        if (rc == sizeof(muted)) {
             muted = muted ? 1U : 0U;
             LOG_INF("Loaded muted: %u", muted);
             return 0;
         }
-        return rc;
+        muted = 1U;
+        return rc < 0 ? rc : -EIO;
     }
 
     if (settings_name_steq(name, "rtc_timestamp", &next) && !next) {

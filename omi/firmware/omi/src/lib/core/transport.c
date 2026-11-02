@@ -1437,7 +1437,8 @@ void pusher(void)
 #endif
 
             bool sent = false;
-            if (conn && is_subscribed) {
+            /* Issue #5054: a mute also stops frames already queued from reaching the phone. */
+            if (conn && is_subscribed && capture_mute_should_capture()) {
                 sent = push_to_gatt(conn);
             }
 
