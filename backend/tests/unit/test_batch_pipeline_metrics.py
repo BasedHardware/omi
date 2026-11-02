@@ -485,42 +485,54 @@ def test_sim_store_oldest_and_capacity_parity():
     store = SimStore(customer)
 
     # 1. Capacity: only unattempted or allowed merge-pending ready jobs due by now
-    store.apply(('jobs', 'j_ready_unattempted'), {
-        'id': 'j_ready_unattempted',
-        'priority': 1,
-        'state': 'ready',
-        'merge_pending': True,
-        'compute_decision': {'outcome': 'unattempted'},
-        'available_at': 100.0,
-        'enqueued_at': 90.0,
-    })
-    store.apply(('jobs', 'j_ready_allowed'), {
-        'id': 'j_ready_allowed',
-        'priority': 1,
-        'state': 'ready',
-        'merge_pending': True,
-        'compute_decision': {'outcome': 'allowed'},
-        'available_at': 105.0,
-        'enqueued_at': 95.0,
-    })
-    store.apply(('jobs', 'j_ready_held'), {
-        'id': 'j_ready_held',
-        'priority': 1,
-        'state': 'ready',
-        'merge_pending': True,
-        'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
-        'available_at': 100.0,
-        'enqueued_at': 80.0,
-    })
-    store.apply(('jobs', 'j_future'), {
-        'id': 'j_future',
-        'priority': 1,
-        'state': 'ready',
-        'merge_pending': True,
-        'compute_decision': {'outcome': 'unattempted'},
-        'available_at': 120.0,
-        'enqueued_at': 100.0,
-    })
+    store.apply(
+        ('jobs', 'j_ready_unattempted'),
+        {
+            'id': 'j_ready_unattempted',
+            'priority': 1,
+            'state': 'ready',
+            'merge_pending': True,
+            'compute_decision': {'outcome': 'unattempted'},
+            'available_at': 100.0,
+            'enqueued_at': 90.0,
+        },
+    )
+    store.apply(
+        ('jobs', 'j_ready_allowed'),
+        {
+            'id': 'j_ready_allowed',
+            'priority': 1,
+            'state': 'ready',
+            'merge_pending': True,
+            'compute_decision': {'outcome': 'allowed'},
+            'available_at': 105.0,
+            'enqueued_at': 95.0,
+        },
+    )
+    store.apply(
+        ('jobs', 'j_ready_held'),
+        {
+            'id': 'j_ready_held',
+            'priority': 1,
+            'state': 'ready',
+            'merge_pending': True,
+            'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+            'available_at': 100.0,
+            'enqueued_at': 80.0,
+        },
+    )
+    store.apply(
+        ('jobs', 'j_future'),
+        {
+            'id': 'j_future',
+            'priority': 1,
+            'state': 'ready',
+            'merge_pending': True,
+            'compute_decision': {'outcome': 'unattempted'},
+            'available_at': 120.0,
+            'enqueued_at': 100.0,
+        },
+    )
 
     assert store.ready_for_capacity(1, now=110.0) == 2
     assert store.ready_for_capacity(1, now=102.0) == 1
@@ -536,14 +548,17 @@ def test_sim_store_oldest_and_capacity_parity():
     # When all merge_pending jobs are allowance holds, returns None
     store.rows.clear()
     store._by_state.clear()
-    store.apply(('jobs', 'held1'), {
-        'id': 'held1',
-        'priority': 1,
-        'state': 'ready',
-        'merge_pending': True,
-        'last_policy_hold': {'reason': 'allowance_exhausted'},
-        'enqueued_at': 50.0,
-    })
+    store.apply(
+        ('jobs', 'held1'),
+        {
+            'id': 'held1',
+            'priority': 1,
+            'state': 'ready',
+            'merge_pending': True,
+            'last_policy_hold': {'reason': 'allowance_exhausted'},
+            'enqueued_at': 50.0,
+        },
+    )
     assert store.oldest(1, ready_only=False) is None
 
 
@@ -577,4 +592,3 @@ def test_postgres_store_oldest_and_capacity_query_contract():
         (60.0, {'compute_decision': {'outcome': 'allowed'}}),
     ]
     assert store.oldest(1, ready_only=False) == 60.0
-
