@@ -167,6 +167,8 @@ def test_filter_plans_mobile_new_user_sees_only_unlimited_v2(load_subscription, 
             filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=platform)
             plan_ids = [d['plan_id'] for d in filtered]
             assert plan_ids == ['unlimited_v2'], (platform, plan_ids)
+            assert [d['title'] for d in filtered] == ['Omi Pro']
+        assert sub_mod.get_plan_display_name(PlanType.unlimited_v2) == 'Omi Pro'
 
     monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     with load_subscription() as sub_mod:
@@ -464,9 +466,9 @@ def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription, monke
     """End-to-end catalog resolution for a web client (X-App-Platform: web).
 
     2026-10-24 ruling: a new web buyer gets the single-plan catalog (Omi Pro
-    only) under canonical titles — never the legacy 'Omi Pro' / 'Unlimited
-    Plan' rename, and never deprecated Neo. With the kill switch off, web again
-    renders the full new catalog: Plus + Unlimited (mobile tiers) AND Operator
+    only) under its canonical Omi Pro title, and never deprecated Neo.
+    With the kill switch off, web again renders the full catalog: Plus + Omi Pro
+    (mobile tiers) AND Operator
     + Architect (desktop tiers), still Neo-free.
     """
     with load_subscription() as sub_mod:
@@ -478,9 +480,9 @@ def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription, monke
     by_id = {d['plan_id']: d for d in filtered}
     assert set(by_id) == {'unlimited_v2'}, by_id
     assert 'unlimited' not in by_id  # Neo hidden
-    assert by_id['unlimited_v2']['title'] == 'Unlimited'
+    assert by_id['unlimited_v2']['title'] == 'Omi Pro'
     titles = [d['title'] for d in filtered]
-    assert 'Omi Pro' not in titles
+    assert titles == ['Omi Pro']
     assert 'Unlimited Plan' not in titles
 
     monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')

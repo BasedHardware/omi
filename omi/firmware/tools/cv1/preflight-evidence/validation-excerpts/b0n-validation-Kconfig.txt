@@ -1,0 +1,17 @@
+60: source "${ZEPHYR_BASE}/../nrf/subsys/fw_info/Kconfig.template.fw_info_ext_api"
+61:
+62: endif # SECURE_BOOT_VALIDATION
+63:
+64: config SB_VALIDATE_FW_SIGNATURE
+65: 	bool
+66: 	default y if !SOC_NRF5340_CPUNET
+67: 	help
+68: 	  Signature validation.
+69:
+70: config SB_VALIDATE_FW_HASH
+71: 	bool
+72: 	default y
+73: 	depends on SOC_NRF5340_CPUNET
+74: 	help
+75: 	  Hash validation (not secure). Only meant for nRF5340 network core
+76: 	  since the app core will do the signature validation.
