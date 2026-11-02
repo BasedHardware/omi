@@ -247,6 +247,15 @@ async def run(lease: dict) -> int:
 async def process_entry(lease: dict) -> None:
     try:
         status = await run(lease)
+        # This process deliberately never imports main's lifespan. Flush its
+        # own buffered holds and tracked work before a normal child exit.
+        # Lease loss/cancellation bypasses this path: the parent must first
+        # terminate every executor leaf while the Redis fence is retained.
+        from utils.executors import drain_background_tasks
+        from utils.sync.cap_hold_lifecycle import flush_active
+
+        await flush_active(timeout=30.0)
+        await drain_background_tasks(timeout=10.0)
     except BaseException as error:
         logger.warning('event=sync_pull_worker outcome=job_process_stopped exception_type=%s', type(error).__name__)
         status = 2
