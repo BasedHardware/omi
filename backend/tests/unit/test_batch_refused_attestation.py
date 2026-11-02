@@ -3,6 +3,7 @@
 from copy import deepcopy
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -49,6 +50,41 @@ def test_proof_refuses_missing_or_contradictory_evidence(change):
         proof['usage_evidence_sha256'] = ''
     with pytest.raises(scope.ScopeRefused):
         checked_proof(proof, {})
+
+
+def test_cli_attestation_apply_refuses_before_cloud_or_secret_requirements(monkeypatch):
+    module = load_operator()
+    cloud = Mock(side_effect=AssertionError('cloud must not be constructed'))
+    monkeypatch.setattr(module.firestore, 'Client', cloud)
+    monkeypatch.setattr(
+        module.sys,
+        'argv',
+        [
+            'operator',
+            '--stage',
+            'prod',
+            '--quarantined-after',
+            '2026-11-01T00:00:00Z',
+            '--quarantined-before',
+            '2026-11-02T00:00:00Z',
+            '--cohort-file',
+            'unused',
+            '--unit-ids-file',
+            'unused',
+            '--expect-count',
+            '4',
+            '--expect-speech-count',
+            '4',
+            '--paid-epoch',
+            '3',
+            '--independent-language',
+            '--attest-refused-before-call',
+            '--apply',
+        ],
+    )
+    with pytest.raises(module.held.Refused, match='attestation_apply_not_supported'):
+        module.main()
+    cloud.assert_not_called()
 
 
 def test_attested_takeover_dry_run_never_writes_or_fetches_audio(
