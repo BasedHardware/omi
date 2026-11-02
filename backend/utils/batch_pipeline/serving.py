@@ -128,8 +128,10 @@ class Serving:
                     await self.projector.start_followups(priority, discover=False)
             elif priority or self.projector.has_async_followups or owes:
                 await self.projector.start_followups(priority or ())
-        # Owners the sweep or a wake discovered drain continuously in this process.
-        if self.projector and getattr(self.projector, 'owes_drains', False) is True:
+        # A recovery wake may leave a durable owner continuation, but it must
+        # not consume the process-wide queue of owners discovered by a sweep.
+        # The periodic maintenance owner starts those drains on its next pass.
+        if self.projector and not owner_only and getattr(self.projector, 'owes_drains', False) is True:
             self.projector.start_drains()
         # Deferred search/people-stats work left by walks converges off the chain.
         if self.projector and getattr(self.projector, 'owes_index', False) is True:

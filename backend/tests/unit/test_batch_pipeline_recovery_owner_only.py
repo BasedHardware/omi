@@ -40,6 +40,8 @@ async def test_recovery_scope_skips_all_global_work_and_kill_switch_restores_it(
     projector = Mock(has_async_followups=True)
     projector.project_owner.return_value = ['recovered']
     projector.start_followups = AsyncMock()
+    projector.owes_drains = True
+    projector.start_drains = Mock()
     service = Serving(MemoryStore(), projector=projector, metrics=Mock(), leader=Mock())
     service._maintain = Mock()
     service.drain_owner = Mock()
@@ -54,11 +56,33 @@ async def test_recovery_scope_skips_all_global_work_and_kill_switch_restores_it(
         service.metrics.refresh.assert_not_called()
         assert service.drain_owner.call_count == 1
         projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
+        projector.start_drains.assert_not_called()
     else:
         service._maintain.assert_called_once_with(recover_quarantine=False)
         projector.sweep.assert_called_once()
         service.metrics.refresh.assert_called_once()
         projector.start_followups.assert_awaited_once_with(['recovered'])
+        projector.start_drains.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_owner_wake_leaves_process_wide_drain_queue_for_periodic_owner():
+    projector = projector_for(ResultLog())
+    projector.drain_requests = {'unrelated-owner': None}
+
+    def project(owner_id, *, recovered):
+        projector.request_drain(owner_id)
+        return [recovered]
+
+    projector.project_owner = Mock(side_effect=project)
+    projector.start_followups = AsyncMock()
+    service = Serving(MemoryStore(), projector=projector)
+
+    await service.reconcile_async(owner_id=BURST, recovered='recovered', owner_only=True)
+
+    assert projector.drains is None
+    assert projector.drain_requests == {'unrelated-owner': None, BURST: None}
+    projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
 
 
 def test_owner_scope_commits_recovered_unit_before_projection_without_global_work():
