@@ -270,8 +270,10 @@ Table to serve: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`
 - `selection: ordered`, rows `gpu_unsupported: [modulate, soniox]` and
   `*: [gpu, modulate, soniox]`. Soniox is `failover_only`.
 - Modulate `daily_audio_hours_cap` 3,000 (a durable daily budget, about 2x the
-  expected 100% batch load). Soniox cap 600 (a full Modulate outage day,
-  $60 at list).
+  expected 100% batch load). Soniox cap 1,000: it covers a mean full
+  Modulate outage day of unsupported-language STT (about 900 audio-h/day)
+  for about $100 at list. On a peak day, units past the cap hold with their
+  audio and redrive when Modulate returns.
 - `gpu_floor_percent` 0: ordered GPU-first already keeps every Parakeet unit
   on the floor.
 - Overflow throughput is capped by `provider-stt`'s 10 dispatches/s.
@@ -287,12 +289,18 @@ backend-integration. A comma-free delimiter is needed because the JSON
 contains commas:
 
 ```
-TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
-for s in backend-sync backend-sync-backfill backend-integration; do
-  gcloud run services update "$s" --region us-central1 --project based-hardware \
-    --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"
-done
+(
+  set -e
+  TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
+  for s in backend-sync backend-sync-backfill backend-integration; do
+    gcloud run services update "$s" --region us-central1 --project based-hardware \
+      --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"
+  done
+) || echo "STOPPED on a failed update: run the rollback on the services already updated"
 ```
+
+The subshell stops at the first failed update, so the services never stay
+split between two tables without a message saying so.
 
 Once served, Soniox failover is live for vendor-routed units even at routing
 percent 0, because the stage reads the served table. Overflow needs the cohort

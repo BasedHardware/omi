@@ -112,8 +112,10 @@ def test_without_soniox_admission_a_modulate_outage_holds_instead_of_failing_ove
 
 
 def test_vendor_spend_is_capped_per_day(table):
-    # Soniox is failover-only at $0.10/h list: its cap bounds a full Modulate outage day.
-    assert 0 < table.routes['soniox'].daily_audio_hours_cap <= 600
+    # Soniox is failover-only at $0.10/h list. Its cap covers a mean full Modulate outage day of
+    # unsupported-language STT (~900 audio-h/day, 7-day legacy meter) and bounds that day near $100;
+    # past the cap units hold with their audio and redrive when Modulate returns.
+    assert 900 <= table.routes['soniox'].daily_audio_hours_cap <= 1200
     # Modulate's cap is a durable daily budget about 2x the expected 100% batch load (unsupported-language
     # STT ~900 audio-h/day moved from legacy, plus peak overflow), never low enough to bind in normal days.
     assert 2000 <= table.routes['modulate'].daily_audio_hours_cap <= 4000

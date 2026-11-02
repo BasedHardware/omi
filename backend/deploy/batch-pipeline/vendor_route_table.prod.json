@@ -20,7 +20,7 @@
     },
     "soniox": {
       "price_usd_per_audio_hour": null,
-      "daily_audio_hours_cap": 600.0,
+      "daily_audio_hours_cap": 1000.0,
       "monthly_budget_usd": null,
       "failover_only": true,
       "speaker_turns": "discard"
