@@ -16,6 +16,10 @@ from artifact_preflight import strict_json
 from bench_loop import StageFailed
 
 
+# Well above any real receipt; a larger one is refused rather than stored.
+MAX_RECEIPT_BYTES = 4 * 1024 * 1024
+
+
 class BLECheck:
     def __init__(self, profile, receipt_path, runner=subprocess.run):
         self.profile = dict(profile)
@@ -39,6 +43,8 @@ class BLECheck:
             raise ValueError('audio requires a private expected_serial')
         if self.receipt_path.exists() or self.receipt_path.is_symlink():
             raise FileExistsError(self.receipt_path)
+        if not self.receipt_path.parent.is_dir():
+            raise NotADirectoryError(self.receipt_path.parent)
 
     def remote(self, argv, timeout):
         # ssh joins its remote argv into shell text: quote each argument explicitly.
@@ -55,13 +61,20 @@ class BLECheck:
             argv += ['--expect-serial', self.profile['expected_serial']]
         try:
             self.remote(argv, 65)
-            data = self.remote(['/bin/cat', remote_path], 20).stdout
+            data = self.remote(['/usr/bin/head', '-c', str(MAX_RECEIPT_BYTES + 1), remote_path], 20).stdout
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
             # Remote errors can include argv (and the private serial), stdout or
             # stderr. None of that belongs in the skipped stage's receipt.
             return {'result': 'skipped', 'reason': 'central_unreachable: BLE was not tested'}
+        # The remote copy holds private identifiers, and it's already been fetched.
+        try:
+            self.remote(['/bin/rm', '-f', remote_path], 20)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+            pass
         if isinstance(data, str):
             data = data.encode('utf-8')
+        if len(data) > MAX_RECEIPT_BYTES:
+            raise StageFailed('ble_invalid_receipt', 'receipt too large')
         # Preserve exactly what was fetched, including malformed/empty evidence.
         fd = os.open(self.receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'wb') as stream:
@@ -72,15 +85,16 @@ class BLECheck:
         except (ValueError, KeyError, TypeError) as failure:
             raise StageFailed('ble_invalid_receipt') from failure
         known = ('passed', 'no_advertisement', 'permission_denied', 'bluetooth_off',
-                 'connect_failed', 'gatt_failed', 'audio_failed')
+                 'connect_failed', 'gatt_failed', 'audio_failed', 'interrupted')
         if outcome not in known:
-            return {'result': 'failed', 'reason': 'ble_' + str(outcome)}
+            # An unknown value is untrusted receipt data, so it stays out of the summary.
+            return {'result': 'failed', 'reason': 'ble_unknown_outcome'}
         identity = receipt.get('identity')
         status = identity.get('status') if isinstance(identity, dict) else None
         if status in ('wrong', 'absent'):
             return {'result': 'skipped', 'reason': f'identity_{status} ({outcome}): '
                     'identity was not established; BLE was not tested'}
-        if outcome in ('no_advertisement', 'permission_denied', 'bluetooth_off', 'connect_failed'):
+        if outcome in ('no_advertisement', 'permission_denied', 'bluetooth_off', 'connect_failed', 'interrupted'):
             return {'result': 'skipped', 'reason': outcome + ': BLE was not tested'}
         if outcome == 'passed':
             if self.profile.get('expected_serial') and status == 'matched':

@@ -8,7 +8,7 @@ import unittest
 from unittest import mock
 
 from bench_loop import StageFailed
-from ble_check import BLECheck
+from ble_check import BLECheck, MAX_RECEIPT_BYTES
 
 
 class BLETests(unittest.TestCase):
@@ -24,16 +24,18 @@ class BLETests(unittest.TestCase):
     @staticmethod
     def receipt_runner(receipt):
         return mock.Mock(side_effect=[subprocess.CompletedProcess([], 0, b''),
-                                      subprocess.CompletedProcess([], 0, json.dumps(receipt).encode())])
+                                      subprocess.CompletedProcess([], 0, json.dumps(receipt).encode()),
+                                      subprocess.CompletedProcess([], 0, b'')])
 
     def test_fixed_launch_and_fetch(self):
         self.assertEqual(BLECheck(self.profile, self.path, self.runner)()['result'], 'passed')
-        launch, fetch = self.runner.call_args_list
+        launch, fetch, remove = self.runner.call_args_list
         self.assertEqual(launch.args[0][:4], ['/usr/bin/ssh', '-oBatchMode=yes', '-oConnectTimeout=10', 'synthetic-receiver'])
         argv = shlex.split(launch.args[0][4])
         self.assertEqual(argv[:10], ['/usr/bin/open', '-n', '-W', '/tmp/Helper App.app', '--args', 'session', '--seconds', '20', '--output', argv[9]])
         self.assertEqual(argv[10:], ['--expect-serial', self.serial])
-        self.assertEqual(shlex.split(fetch.args[0][4]), ['/bin/cat', argv[9]])
+        self.assertEqual(shlex.split(fetch.args[0][4]), ['/usr/bin/head', '-c', str(MAX_RECEIPT_BYTES + 1), argv[9]])
+        self.assertEqual(shlex.split(remove.args[0][4]), ['/bin/rm', '-f', argv[9]])
         self.assertEqual(json.loads(self.path.read_bytes())['outcome'], 'passed')
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
 
@@ -41,7 +43,7 @@ class BLETests(unittest.TestCase):
         for outcome, result in [('passed', 'passed'), ('no_advertisement', 'skipped'),
                                 ('permission_denied', 'skipped'), ('connect_failed', 'skipped'),
                                 ('gatt_failed', 'failed'), ('audio_failed', 'failed'),
-                                ('bluetooth_off', 'skipped'), ('unknown', 'failed')]:
+                                ('bluetooth_off', 'skipped'), ('interrupted', 'skipped'), ('unknown', 'failed')]:
             with self.subTest(outcome=outcome):
                 runner = self.receipt_runner(dict(outcome=outcome, identity=dict(status='matched')))
                 r = BLECheck(self.profile, self.path.with_name(outcome + '.json'), runner)()
@@ -49,6 +51,31 @@ class BLETests(unittest.TestCase):
                 if result == 'skipped':
                     self.assertEqual(r['reason'], outcome + ': BLE was not tested')
                     self.assertNotIn(self.serial, json.dumps(r))
+
+    def test_unknown_outcome_stays_out_of_the_reason(self):
+        r = BLECheck(self.profile, self.path, self.receipt_runner(dict(outcome=self.serial)))()
+        self.assertEqual(r, dict(result='failed', reason='ble_unknown_outcome'))
+
+    def test_oversized_receipt_is_refused_and_not_stored(self):
+        runner = mock.Mock(side_effect=[subprocess.CompletedProcess([], 0, b''),
+                                        subprocess.CompletedProcess([], 0, b' ' * (MAX_RECEIPT_BYTES + 1)),
+                                        subprocess.CompletedProcess([], 0, b'')])
+        with self.assertRaises(StageFailed) as caught:
+            BLECheck(self.profile, self.path, runner)()
+        self.assertEqual(caught.exception.code, 'ble_invalid_receipt')
+        self.assertFalse(self.path.exists())
+
+    def test_failed_remote_cleanup_keeps_the_result(self):
+        runner = mock.Mock(side_effect=[subprocess.CompletedProcess([], 0, b''),
+                                        subprocess.CompletedProcess([], 0, json.dumps(dict(outcome='passed', identity=dict(status='matched'))).encode()),
+                                        subprocess.TimeoutExpired('ssh', 20)])
+        self.assertEqual(BLECheck(self.profile, self.path, runner)()['result'], 'passed')
+
+    def test_missing_local_receipt_directory_is_refused_up_front(self):
+        runner = mock.Mock()
+        with self.assertRaises(NotADirectoryError):
+            BLECheck(self.profile, Path(self.tmp.name) / 'missing' / 'receipt.json', runner)
+        runner.assert_not_called()
 
     def test_pass_requires_established_identity(self):
         identities = [None, {}, [], dict(status=None), dict(status='not_requested'),
@@ -125,7 +152,8 @@ class BLETests(unittest.TestCase):
 
     def test_malformed_and_empty_arrived_receipts_still_fail(self):
         for i, data in enumerate((b'', b'{}', b'[]', b'invalid', b'{"outcome":"passed","outcome":"gatt_failed"}')):
-            runner = mock.Mock(side_effect=[subprocess.CompletedProcess([], 0, b''), subprocess.CompletedProcess([], 0, data)])
+            runner = mock.Mock(side_effect=[subprocess.CompletedProcess([], 0, b''), subprocess.CompletedProcess([], 0, data),
+                                            subprocess.CompletedProcess([], 0, b'')])
             path = self.path.with_name(str(i))
             with self.assertRaises(StageFailed) as caught:
                 BLECheck(self.profile, path, runner)()

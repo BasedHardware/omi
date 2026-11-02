@@ -76,9 +76,11 @@ outcomes. Process crashes still require manual reconciliation.
 The private JSON profile specifies `ssh_host` (one SSH config host alias), absolute
 remote `app` and `receipt_dir` paths, and optional `mode` (`session`, the default,
 or `audio`) and `expected_serial`. Audio requires the independently obtained
-private serial. Session uses a fixed 20-second deadline; audio uses a fixed
-3-second capture. The remote receipt directory must already exist. The adapter
-launches the app with `open -n -W` through SSH, then fetches its unique JSON receipt;
+private serial. Session asks the helper for a 20-second deadline and audio for a
+3-second capture. SSH allows 65 seconds for the launch and 20 each for the receipt
+fetch and its removal. The remote receipt directory must already exist. The adapter
+launches the app with `open -n -W` through SSH, then fetches its unique JSON receipt
+(up to 4 MiB; larger fails as `ble_invalid_receipt`) and removes the remote copy;
 Launch Services exit status alone never establishes a pass. Remote launch or fetch
 errors are skipped as `central_unreachable: BLE was not tested`, without including
 argv, stdout or stderr. Malformed or empty receipts that arrived still fail as
@@ -90,7 +92,7 @@ Only receipt outcome `passed` with `identity.status == matched` and a configured
 but cannot produce a BLE pass. Other identity statuses on a passed receipt are
 skipped because identity was not established. Identity statuses `wrong` and
 `absent` are skipped with that status named, including on `gatt_failed` receipts.
-`no_advertisement`, `permission_denied`, `bluetooth_off` and `connect_failed` are
+`no_advertisement`, `permission_denied`, `bluetooth_off`, `connect_failed` and `interrupted` are
 also skipped with an explicit “BLE was not tested” reason. On this antenna-less
 bench, missing advertisements or a failed connection cannot diagnose firmware
 health. Other `gatt_failed`, `audio_failed` and unknown outcomes fail; unknown
