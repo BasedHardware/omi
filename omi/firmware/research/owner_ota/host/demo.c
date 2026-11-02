@@ -153,7 +153,8 @@ static int isolation(void *p)
 } /* HOST STUB ONLY */
 static struct cv1_flash flash(struct view *v)
 {
-    return (struct cv1_flash) {v, rd, erase, program, isolation};
+    struct cv1_flash flash = {v, rd, erase, program, isolation};
+    return flash;
 }
 static uint32_t bank_size(struct bank *b)
 {
@@ -516,10 +517,14 @@ int main(int argc, char **argv)
     d.powered = 1;
     d.cut = -1;
     d.initializing = 1;
-    d.trial = (struct view) {&d, 0};
-    d.reference = (struct view) {&d, 1};
-    for (unsigned k = 0; k < 2; k++)
-        d.bank[k] = (struct bank) {&d, k, 0, 0};
+    struct view trial_view = {&d, 0};
+    struct view reference_view = {&d, 1};
+    d.trial = trial_view;
+    d.reference = reference_view;
+    for (unsigned k = 0; k < 2; k++) {
+        struct bank bank = {&d, k, 0, 0};
+        d.bank[k] = bank;
+    }
     if (read_policy(argv[1]) || hash(d.internal + DATA_BASE, INTERNAL_SIZE - DATA_BASE, d.initial_data_hash) ||
         hash(d.internal, PERSONAL_BASE, d.initial_root_hash) || hash(d.external, BANK0, d.initial_external_guards))
         return fail("init", -1);

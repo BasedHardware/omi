@@ -18,5 +18,6 @@ static int release(void *c, uint64_t t)
 }
 struct cv1_source cv1_bound_source(struct cv1_storage_binding *b)
 {
-    return (struct cv1_source) {b, acquire, read_source, check, release};
+    struct cv1_source source = {b, acquire, read_source, check, release};
+    return source;
 }
