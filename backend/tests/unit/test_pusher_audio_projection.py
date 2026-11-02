@@ -482,3 +482,15 @@ def test_terminal_projection_failure_retains_independent_close_debt(world, monke
         cache.finish(cid)
     assert not cache.close_debt
     assert world.stored[0]['chunk_timestamps'] == [100, 101]
+
+
+def test_seal_retry_does_not_repeat_successful_close_listing(world):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    assert cache.finish('c') is True
+    before = len(world.lists)
+    assert cache.finish('c') is None
+    assert len(world.lists) == before
+    cache.refresh('c', [world.add(101)])
+    assert cache.finish('c') is True
+    assert world.stored[0]['chunk_timestamps'] == [100, 101]

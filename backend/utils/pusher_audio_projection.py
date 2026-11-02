@@ -97,11 +97,14 @@ class PusherAudioProjection:
         self.uid = uid
         self.has_uploaded_paths = False
         self.close_debt: set[str] = set()
+        self.finished: set[str] = set()
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.get(conversation_id)
+        if not force:
+            self.finished.discard(conversation_id)
         # A failed refresh keeps a close-time full rebuild due, but cannot
         # lend an old inventory to the next flush.
         self.has_uploaded_paths = self.has_uploaded_paths or bool(paths)
@@ -196,11 +199,13 @@ class PusherAudioProjection:
         raise RuntimeError('audio projection refresh exhausted')
 
     def finish(self, conversation_id: str) -> bool | None:
-        if not enabled() or not self.has_uploaded_paths:
+        if not enabled() or not self.has_uploaded_paths or conversation_id in self.finished:
             return None  # Rollback/unknown writer retains per-flush-only behavior.
         result = self.refresh(conversation_id, force=True)
         self.inventory.pop(conversation_id, None)
         self.close_debt.discard(conversation_id)
+        if len(self.finished) < MAX_CONVERSATIONS:
+            self.finished.add(conversation_id)
         return result
 
     async def finish_pending(self, conv_id: str, deleted_conversations: set[str], identity_refreshed: set[str]) -> bool:
@@ -222,6 +227,8 @@ class PusherAudioProjection:
             self.close_retries.pop(conv_id, None)
             self.inventory.pop(conv_id, None)
             self.close_debt.discard(conv_id)
+            if len(self.finished) < MAX_CONVERSATIONS:
+                self.finished.add(conv_id)
             record_failure('projection', reason='invalid_argument' if isinstance(exc, InvalidArgument) else 'transient')
             record_fallback(
                 component='pusher',
