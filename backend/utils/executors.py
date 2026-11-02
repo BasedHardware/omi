@@ -288,7 +288,12 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
-postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+postprocess_executor = MonitoredThreadPoolExecutor(
+    name="postprocess",
+    # backend-integration raises this: its enrichment handler holds a thread per LLM-bound request.
+    max_workers=int(os.getenv('POSTPROCESS_EXECUTOR_WORKERS', '24')),
+    thread_name_prefix="postproc",
+)
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
 # Prompt-list verification may outlive its caller while a provider finishes.

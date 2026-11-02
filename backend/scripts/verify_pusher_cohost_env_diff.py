@@ -369,6 +369,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
+            # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).
+            "AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT",
             "REDIS_DB_HOST",
             "TYPESENSE_HOST",
             # Process-local final-pass shadow is admitted only on the prod pusher.

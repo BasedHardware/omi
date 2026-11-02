@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from config.batch_conversation_speakers import sync_off_enabled
+from config.batch_conversation_speakers import sync_off_enabled, vendor_evidence_refused, vendor_speaker_authority
 from database import batch_voice_evidence as storage
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -52,8 +52,8 @@ def prepare(projector, item, binding, conversation_id):
         artifacts.verify_voice_retention()
         job_result = projector.store.ref('results', item.segment_id).get().to_dict() or {}
         payload = projector.load_result(item, job_result['result']['result_uri'])
-        if payload.get('recovery_version') == 1:
-            return  # Recovered provider words do not have pyannote authority.
+        if payload.get('recovery_version') == 1 and not vendor_speaker_authority(payload):
+            return  # Recovered provider words without vendor turns have no voice authority.
         wav = projector.fetch_audio(item)
         stop = time.monotonic() + 8
 
@@ -88,7 +88,7 @@ def load_vectors(uid, conversation, deadline, *, store=None, artifacts=None):
     grouped = {}
     for segment in conversation.transcript_segments:
         key = provider_key(segment)
-        if key is None or segment.speaker_match_source == 'batch_abstention':
+        if key is None or segment.speaker_match_source == 'batch_abstention' or vendor_evidence_refused(segment):
             continue
         scope = key[0].split('\0')[-1]
         if scope.startswith('final:batch:') and not scope.startswith('final:batch:conversation:'):

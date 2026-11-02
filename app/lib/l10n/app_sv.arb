@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Anteckningar börjar när den slutgiltiga transkriptionen kommer.",
     "episodeOnDeviceNotesFootnote": "Utarbetade på din telefon medan du pratar. De fullständiga anteckningarna kommer med den slutgiltiga transkriptionen.",
     "episodeOnThisPhone": "På den här telefonen",
-    "liveCardTitle": "Live",
     "livePreviewBehind": "Slutgiltig transkription cirka {duration} efter",
     "livePreviewCatchingUp": "Slutgiltig transkription ikapp",
     "livePreviewNoEngineBody": "Dina ord visas här en till två minuter efter att du sagt dem.",
     "livePreviewNoEngineTitle": "Spelar in säkert",
-    "livePreviewOnPhoneDivider": "Live på den här telefonen",
+    "livePreviewOnPhoneDivider": "Just nu, på den här telefonen",
     "livePreviewTurnOnLiveText": "Aktivera live-text",
     "deviceCatchUpOnItsWay": "på väg",
     "deviceCatchUpWhenOnline": "när du är online",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Årsbetalning är inte tillgänglig för ditt abonnemang just nu.",
     "yearlySwitchDoneTitle": "Du betalar nu årsvis",
     "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} delar} one{{count} del} two{{count} delar} few{{count} delar} many{{count} delar} other{{count} delar}}",
     "chatAppsWaitingMessageIn": "Skicka meddelandet i {app}. Den här skärmen uppdateras så fort Omi får det.",
-    "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}."
+    "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}.",
+    "episodeWritingNotes": "Skriver anteckningar…",
+    "episodeWritingNotesDetail": "Vi gör först klart transkriptionen. Du kan lämna den här sidan.",
+    "episodeCoversUpTo": "Täcker fram till {time} · fullständiga anteckningar när det är klart",
+    "liveTranscribedUpTo": "Transkriberat fram till {time}",
+    "liveAudioSaved": "{duration} sparat",
+    "liveAudioSavedDetail": "Talare och den slutliga transkriptionen visas här under uppladdningen."
 }

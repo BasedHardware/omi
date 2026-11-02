@@ -284,6 +284,7 @@ def project_episode(
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)
     assert wire is not None  # Non-null input always has a wire projection.

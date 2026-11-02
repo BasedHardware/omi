@@ -211,7 +211,7 @@ void main() {
     test('holds on processing, never exposing draft notes', () {
       final held = rows(const Duration(minutes: 14)).single;
       expect(held.isProcessing, isTrue);
-      expect(held.episode, isNull);
+      expect(held.episode?.id, 'e', reason: 'the row opens the same page throughout');
       expect(held.conversation.id, 'episode:e');
       expect(held.episodeConversationIds, {'a', 'b'});
     });
@@ -220,13 +220,11 @@ void main() {
       expect(done.isProcessing, isFalse);
       expect(done.episode?.id, 'e');
     });
-    test('a summary that never lands gives way to the plain conversations', () {
-      final fallback = rows(Episode.summaryWait);
-      expect(fallback.map((r) => r.conversation.id), ['b', 'a']);
-      expect(fallback.any((r) => r.isProcessing || r.episode != null), isFalse);
-    });
-    test('the fallback cannot resurrect a conversation still streaming', () {
-      expect(rows(Episode.summaryWait, live: {'a'}).map((r) => r.conversation.id), ['b']);
+    test('a summary that never lands keeps the one row', () {
+      final row = rows(Episode.summaryWait).single;
+      expect(row.conversation.id, 'episode:e');
+      expect(row.isProcessing, isFalse);
+      expect(row.episode?.id, 'e');
     });
     test('notes alone do not count as a summary', () {
       final notesOnly = [

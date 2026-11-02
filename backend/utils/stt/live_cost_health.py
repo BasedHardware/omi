@@ -13,7 +13,7 @@ from typing import Any, Callable, ContextManager
 
 from config import live_stt_state
 from config.live_stt_resilience import escape_trial_votes_enabled
-from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
+from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned, window_ja_admits
 from utils.stt.live_gate import GateState, begin_trial, transition, generation_allows, reset_generation_floor
 from utils.stt.live_metrics import (
     COST_BENCH,
@@ -286,7 +286,11 @@ class CostHealthMixin(ABC):
             # A malformed ramp (e.g. strict window percent) proves nothing:
             # keep the cohort-only rule rather than guess an escape.
             servable = [
-                target for target in targets if target.capable(language) and assigned(uid, target.id, target.ramp())
+                target
+                for target in targets
+                if target.capable(language)
+                and assigned(uid, target.id, target.ramp())
+                and window_ja_admits(target, uid, language)
             ]
         except (ValueError, TypeError):
             return {}

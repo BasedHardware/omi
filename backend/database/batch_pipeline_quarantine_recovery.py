@@ -412,6 +412,10 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
     query = collection
     if owner_id is not None:
         query = query.where('owner_id', '==', owner_id)
+    # A quarantine-held projection also marks its committed job recovery_state=held
+    # for the held-partial scan; prepare() refuses those, so they must not fill the page.
+    # Equality-only filters: served by single-field index merging, no composite.
+    query = query.where('state', '==', 'quarantined')
     query = query.where('recovery_state', 'in', ['held', 'prepared', 'running'])
     if owner_id is None:
         # A document-reference cursor requires no extra document read.

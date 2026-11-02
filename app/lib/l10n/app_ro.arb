@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Notele încep când sosește transcrierea finală.",
     "episodeOnDeviceNotesFootnote": "Sunt schițate pe telefonul tău în timp ce vorbești. Notele complete sosesc odată cu transcrierea finală.",
     "episodeOnThisPhone": "Pe acest telefon",
-    "liveCardTitle": "Live",
     "livePreviewBehind": "Transcrierea finală întârzie cu aproximativ {duration}",
     "livePreviewCatchingUp": "Transcrierea finală se actualizează",
     "livePreviewNoEngineBody": "Cuvintele tale apar aici la unul sau două minute după ce le rostești.",
     "livePreviewNoEngineTitle": "Se înregistrează în siguranță",
-    "livePreviewOnPhoneDivider": "Live pe acest telefon",
+    "livePreviewOnPhoneDivider": "Chiar acum, pe acest telefon",
     "livePreviewTurnOnLiveText": "Activează textul live",
     "deviceCatchUpOnItsWay": "se încarcă",
     "deviceCatchUpWhenOnline": "când ești online",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Plata anuală nu este disponibilă acum pentru planul tău.",
     "yearlySwitchDoneTitle": "Acum plătești anual",
     "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} de părți} one{{count} parte} two{{count} de părți} few{{count} părți} many{{count} de părți} other{{count} de părți}}",
     "chatAppsWaitingMessageIn": "Trimite mesajul din {app}. Acest ecran se actualizează de îndată ce Omi îl primește.",
-    "chatAppsCodeExpiredMessageIn": "Obține un cod nou și trimite-l din {app}."
+    "chatAppsCodeExpiredMessageIn": "Obține un cod nou și trimite-l din {app}.",
+    "episodeWritingNotes": "Scriem notițele…",
+    "episodeWritingNotesDetail": "Mai întâi terminăm transcrierea. Poți părăsi această pagină.",
+    "episodeCoversUpTo": "Până la {time} · notițe complete la final",
+    "liveTranscribedUpTo": "Transcris până la {time}",
+    "liveAudioSaved": "{duration} salvate",
+    "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă."
 }

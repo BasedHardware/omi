@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "চূড়ান্ত ট্রান্সক্রিপ্ট এলে নোট শুরু হবে।",
     "episodeOnDeviceNotesFootnote": "আপনি বলার সময় এগুলো আপনার ফোনেই তৈরি হয়। সম্পূর্ণ নোটগুলো চূড়ান্ত ট্রান্সক্রিপ্টের সাথে আসবে।",
     "episodeOnThisPhone": "এই ফোনে",
-    "liveCardTitle": "লাইভ",
     "livePreviewBehind": "চূড়ান্ত ট্রান্সক্রিপ্ট প্রায় {duration} পিছিয়ে",
     "livePreviewCatchingUp": "চূড়ান্ত ট্রান্সক্রিপ্ট ধরার চেষ্টা করছে",
     "livePreviewNoEngineBody": "বলার এক-দুই মিনিট পরে আপনার কথাগুলো এখানে দেখা যাবে।",
     "livePreviewNoEngineTitle": "নিরাপদে রেকর্ড হচ্ছে",
-    "livePreviewOnPhoneDivider": "এই ফোনে লাইভ",
+    "livePreviewOnPhoneDivider": "এইমাত্র, এই ফোনে",
     "livePreviewTurnOnLiveText": "লাইভ টেক্সট চালু করুন",
     "deviceCatchUpOnItsWay": "পথে আছে",
     "deviceCatchUpWhenOnline": "অনলাইনে এলে",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "এই মুহূর্তে আপনার প্ল্যানের জন্য বার্ষিক বিলিং উপলব্ধ নয়।",
     "yearlySwitchDoneTitle": "আপনি এখন বার্ষিক প্ল্যানে",
     "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।",
-    "episodePartsCount": "{count, plural, zero{{count}টি অংশ} one{{count}টি অংশ} two{{count}টি অংশ} few{{count}টি অংশ} many{{count}টি অংশ} other{{count}টি অংশ}}",
     "chatAppsWaitingMessageIn": "{app} অ্যাপে মেসেজটি পাঠান। Omi পাওয়ামাত্র এই স্ক্রিন আপডেট হবে।",
-    "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।"
+    "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।",
+    "episodeWritingNotes": "নোট লেখা হচ্ছে…",
+    "episodeWritingNotesDetail": "আগে ট্রান্সক্রিপ্ট শেষ করা হচ্ছে। আপনি এই পেজ ছেড়ে যেতে পারেন।",
+    "episodeCoversUpTo": "{time} পর্যন্ত · শেষ হলে সম্পূর্ণ নোট",
+    "liveTranscribedUpTo": "{time} পর্যন্ত ট্রান্সক্রাইব হয়েছে",
+    "liveAudioSaved": "{duration} সংরক্ষিত",
+    "liveAudioSavedDetail": "আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।"
 }

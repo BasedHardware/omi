@@ -53,6 +53,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import os
 import re
 import threading
 from typing import Any, Callable, Iterable
@@ -69,6 +70,7 @@ __all__ = [
     'FIRESTORE_BILLED_WRITES',
     'FIRESTORE_BILLED_WRITES_BY_CALLER',
     'FIRESTORE_BILLED_WRITES_BY_ORIGIN',
+    'FIRESTORE_NOOP_WRITES_BY_CALLER',
     'FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW',
     'MAX_WRITE_CALLERS',
     'install_document_write_probe',
@@ -109,6 +111,20 @@ FIRESTORE_AMBIGUOUS_COMMIT_WRITES = Counter(
 )
 
 
+# Cloud Monitoring reports ~15-20% of writes as UPDATE_NOOP (billed, changed
+# nothing) with no caller. A Commit's WriteResult.update_time is the document's
+# previous update time when the write changed nothing, so it is earlier than the
+# response's commit_time; a write that changed the document carries commit_time.
+# Lower bound: when one Commit writes a document twice, the second write's
+# "previous" time is this commit, whether or not it changed anything, so a
+# repeated-document no-op is not counted (the response cannot tell them apart).
+FIRESTORE_NOOP_WRITES_BY_CALLER = Counter(
+    'omi_firestore_noop_writes_by_caller_total',
+    'Committed Firestore writes that left the document unchanged (billed as writes), by collection and call site.',
+    ['collection', 'caller'],
+)
+
+
 FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW = Counter(
     'omi_firestore_write_caller_label_overflow_total',
     'Firestore write caller labels dropped because the bounded write caller set is full.',
@@ -128,6 +144,21 @@ _WRITE_PLUMBING_MODULES = frozenset(
         'database.list_projection',
         'database.memory_change_head',
         'database.action_item_write_fence',
+        # The transactional callback has returned before the SDK commits, so the
+        # retry helper would otherwise be the first frame for every caller of it
+        # (~50% of Cloud Run writes on 2026-11-01).
+        'database.firestore_transaction_retry',
+    }
+)
+# Generic write helpers inside product modules: name the function that called them.
+# The enrichment outbox CAS loop alone was ~3.1M writes/day on 2026-11-01.
+_WRITE_PLUMBING_FUNCTIONS = frozenset(
+    {
+        ('utils.enrichment.outbox', '_cas'),
+        ('utils.enrichment.outbox', '_mutate'),
+        ('utils.enrichment.outbox', 'mutate_row'),
+        # FirestoreEnrichmentOutbox's adapter in front of mutate_row.
+        ('database.outbox_firestore', '_mutate'),
     }
 )
 _CALLER_RE = re.compile(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*){0,6}:[A-Za-z_][A-Za-z0-9_]{0,60}$')
@@ -164,7 +195,13 @@ def _call_site() -> str:
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
-            if module in _WRITE_PLUMBING_MODULES or is_plumbing_module(module) or not name or name.startswith('<'):
+            if (
+                module in _WRITE_PLUMBING_MODULES
+                or (module, name) in _WRITE_PLUMBING_FUNCTIONS
+                or is_plumbing_module(module)
+                or not name
+                or name.startswith('<')
+            ):
                 frame = frame.f_back
                 continue
             return _bound_caller(f'{module}:{name}')
@@ -262,6 +299,39 @@ def _applied(writes: list, response: Any) -> list:
     return [write for write, status in zip(writes, statuses) if not getattr(status, 'code', 0)]
 
 
+def _timestamp(value: Any) -> tuple[int, int]:
+    return value.seconds, value.nanos
+
+
+def _record_noops(writes: list, response: Any, caller: str) -> None:
+    """Count Commit writes whose result update_time predates commit_time. Never raises."""
+    try:
+        pb = type(response).pb(response)
+        results = list(pb.write_results)
+        if len(results) != len(writes) or not pb.HasField('commit_time'):
+            return
+        committed = _timestamp(pb.commit_time)
+        tally: dict[str, int] = {}
+        for write, result in zip(writes, results):
+            if not result.HasField('update_time') or _timestamp(result.update_time) >= committed:
+                continue  # Deletes carry no update_time; a changed document carries commit_time.
+            _, _, parts = write_op(write)
+            collection = collection_pattern(parts) if parts else _UNKNOWN
+            tally[collection] = tally.get(collection, 0) + 1
+        for collection, amount in tally.items():
+            FIRESTORE_NOOP_WRITES_BY_CALLER.labels(collection=collection, caller=caller).inc(amount)
+    except Exception:
+        pass  # Attribution must never affect a write.
+
+
+def _after(writes: list, response: Any, caller: str, partial: bool) -> None:
+    if partial:
+        _record(_applied(writes, response), caller)
+        return
+    _record(writes, caller)
+    _record_noops(writes, response, caller)
+
+
 def _record_ambiguous(writes: list, error: BaseException) -> None:
     """A Commit whose outcome is unknown may still have applied. Count it apart. Never raises."""
     try:
@@ -285,7 +355,7 @@ def _wrap(original: Any, *, partial: bool) -> Any:
             except BaseException as error:
                 _record_ambiguous(writes, error)
                 raise
-            _record(_applied(writes, response) if partial else writes, caller)
+            _after(writes, response, caller, partial)
             return response
 
         return async_call
@@ -299,7 +369,7 @@ def _wrap(original: Any, *, partial: bool) -> Any:
         except BaseException as error:
             _record_ambiguous(writes, error)
             raise
-        _record(_applied(writes, response) if partial else writes, caller)
+        _after(writes, response, caller, partial)
         return response
 
     return call
@@ -323,10 +393,21 @@ def _patch(cls: Any, name: str, factory: Callable[[Any], Any]) -> None:
 _installed = False
 
 
+def probe_enabled() -> bool:
+    """Kill switch, on unless the literal ``false``.
+
+    Off means the transport is never wrapped, so the labelled write series are
+    never created in that process. Set per service: a Cloud Run service close
+    to its GMP sidecar ``samples`` limit (backend/deploy/cloud_run_gmp_sidecar.yaml)
+    would otherwise lose its whole scrape, not just these series.
+    """
+    return os.getenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', 'true').strip().lower() != 'false'
+
+
 def install_document_write_probe() -> None:
-    """Wrap the transport's Commit and BatchWrite. Idempotent. ImportError skips the install."""
+    """Wrap the transport's Commit and BatchWrite. Idempotent. ImportError or the kill switch skips the install."""
     global _installed
-    if _installed:
+    if _installed or not probe_enabled():
         return
     try:
         from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient

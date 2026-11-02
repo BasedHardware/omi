@@ -9,6 +9,7 @@ import hashlib
 import logging
 import os
 import re
+import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
@@ -72,6 +73,8 @@ class FirestoreTransaction:
         self.cache: dict[tuple[str, str], dict] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
+        # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
+        self.external: dict[Any, tuple[Any, dict]] = {}
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -104,6 +107,15 @@ class FirestoreTransaction:
             raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
+    def defer_set(self, ref: Any, value: dict) -> None:
+        """Set a document outside the batch tables at flush, after every read of this transaction.
+
+        Firestore refuses any transactional read after the first write, and flush itself reads
+        privacy state. A joining writer that set its document on the raw transaction mid-body made
+        every later read fail (ReadAfterWriteError: staging 11-01, every provider-route upload 503).
+        """
+        self.external[ref.path] = (ref, deepcopy(value))
+
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
@@ -135,7 +147,7 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) + len(self.patches) > 450:
+        if len(self.writes) + len(self.patches) + len(self.external) > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
@@ -157,6 +169,8 @@ class FirestoreTransaction:
             self.transaction.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():
             self.transaction.update(self._ref(table, key), fields)
+        for ref, value in self.external.values():
+            self.transaction.set(ref, value)
 
 
 class FirestoreStore:
@@ -215,6 +229,9 @@ class FirestoreStore:
 
     def ready_for_capacity(self, priority: int, now: float) -> int:
         return ready_for_capacity(self.client, self.namespace, priority, now)
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        return oldest_admissible_ready(self.client, self.namespace, priority, now)
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
@@ -464,6 +481,26 @@ def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
 
 
+def is_policy_hold(job: dict[str, Any], now: float | None = None) -> bool:
+    """A parked obligation the uncommitted-age proxy must not measure: an allowance hold, or a live
+    ``vendor_held`` provider unit (vendor_route_contracts.is_vendor_policy_hold). A vendor hold
+    whose redrive is overdue past the stale grace is measured again, so a dead redrive surfaces.
+    """
+    if is_allowance_policy_hold(job):
+        return True
+    if job.get('state') != 'vendor_held':
+        return False
+    from config.batch_pipeline_vendor_failover import held_redrive_seconds, held_stale_grace_seconds
+    from utils.batch_pipeline.vendor_route_contracts import is_vendor_policy_hold
+
+    return is_vendor_policy_hold(
+        job,
+        time.time() if now is None else now,
+        redrive_seconds=held_redrive_seconds(),
+        stale_grace_seconds=held_stale_grace_seconds(),
+    )
+
+
 def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -> int:
     """Count work awaiting a first/re-authorized attempt, never held legacy debt.
 
@@ -492,13 +529,54 @@ def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -
     return count
 
 
+# Bounded ready prefix the vendor-overflow backlog read walks (route selection, one read per
+# refresh in the healthy case). Policy holds and deferred rows at the head are skipped.
+ADMISSIBLE_READY_SCAN_LIMIT = 20
+
+
+def is_admissible_ready(job: dict[str, Any], now: float) -> bool:
+    """The ``ready_for_capacity`` predicate on one ready row: work a GPU would run if it had a lane."""
+    decision = job.get('compute_decision')
+    available_at = job.get('available_at')
+    return (
+        job.get('merge_pending') is True
+        and isinstance(decision, dict)
+        and decision.get('outcome') in ('unattempted', 'allowed')
+        and isinstance(available_at, (int, float))
+        and available_at <= now
+        and not is_policy_hold(job, now)
+    )
+
+
+def oldest_admissible_ready(client: Any, namespace: str, priority: int, now: float) -> float | None:
+    """Enqueue time of the oldest admissible ready unit, or None when the bounded prefix has none.
+
+    Same index as ``oldest(ready_only=True)``. A due allowance hold back in ``ready`` carries an
+    hours-old enqueue time, so it is skipped rather than read as GPU backlog. A prefix made only of
+    skipped rows reads as no backlog: overflow then fails toward GPU, which is today's routing.
+    """
+    docs = (
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .order_by('enqueued_at')
+        .limit(ADMISSIBLE_READY_SCAN_LIMIT)
+        .stream()
+    )
+    for doc in docs:
+        job = doc.to_dict()
+        if is_admissible_ready(job, now):
+            return job['enqueued_at']
+    return None
+
+
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:
     query = client.collection(f'{namespace}_jobs').where('priority', '==', priority)
     if ready_only:
         docs = list(query.where('state', '==', 'ready').order_by('enqueued_at').limit(1).stream())
         return docs[0].to_dict()['enqueued_at'] if docs else None
     # The uncommitted-age proxy must measure the oldest real commitment: walk a
-    # bounded prefix of the FIFO and skip allowance policy holds. Early return
+    # bounded prefix of the FIFO and skip allowance and vendor policy holds. Early return
     # keeps the healthy case a one-document read; a sentinel row beyond the
     # bound (limit + 1) distinguishes truncation from a FIFO that happens to be
     # exactly as long as the bound.
@@ -515,7 +593,7 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
             break  # the sentinel row exists: the scan was truncated
         job = doc.to_dict()
-        if is_allowance_policy_hold(job):
+        if is_policy_hold(job):
             oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
             continue
         return job['enqueued_at']

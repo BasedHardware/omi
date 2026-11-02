@@ -339,3 +339,21 @@ def test_home_list_counts_shown_and_hidden_members_without_identity(monkeypatch)
     home_read.project_episode('u', _episode('c'), members={'c': _short_row()}, list_row=True)
     home_read.project_episode('u', _episode('c'), members={'c': _short_row()})
     assert counted == [{'shown': 1, 'hidden': 1}, {'shown': 0, 'hidden': 1}]
+
+
+def test_members_read_in_recorded_order_not_arrival_order(monkeypatch):
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    later, earlier = START + timedelta(hours=3), START
+    members = {
+        'later': {'id': 'later', 'started_at': later, 'status': 'completed'},
+        'earlier': {'id': 'earlier', 'started_at': earlier, 'status': 'completed'},
+    }
+    episode = {
+        'id': 'e',
+        'status': 'closed',
+        'started_at': START,
+        'last_activity_at': later,
+        'conversation_ids': ['later', 'earlier'],
+    }
+    projected = home_read.project_episode('u', episode, members=members)
+    assert [m['id'] for m in projected['members']] == ['earlier', 'later']

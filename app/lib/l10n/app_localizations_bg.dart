@@ -14724,9 +14724,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get episodeOnThisPhone => 'На този телефон';
 
   @override
-  String get liveCardTitle => 'На живо';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Окончателната транскрипция изостава с около $duration';
   }
@@ -14741,7 +14738,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Записва безопасно';
 
   @override
-  String get livePreviewOnPhoneDivider => 'На живо на този телефон';
+  String get livePreviewOnPhoneDivider => 'Току-що, на този телефон';
 
   @override
   String get livePreviewTurnOnLiveText => 'Включи текста на живо';
@@ -14986,21 +14983,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count части',
-      many: '$count части',
-      few: '$count части',
-      two: '$count части',
-      one: '$count част',
-      zero: '$count части',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Изпрати съобщението от $app. Този екран се обновява веднага щом Omi го получи.';
   }
@@ -15009,4 +14991,28 @@ class AppLocalizationsBg extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Вземи нов код и го изпрати от $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Пишем бележките…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Първо довършваме транскрипцията. Можете да напуснете страницата.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Обхваща до $time · пълните бележки при приключване';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Транскрибирано до $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Запазени $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Говорителите и окончателната транскрипция ще се появят тук при качването.';
 }

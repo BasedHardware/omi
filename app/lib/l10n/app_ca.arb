@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Les notes comencen quan arriba la transcripció final.",
     "episodeOnDeviceNotesFootnote": "Redactades al teu telèfon mentre parles. Les notes completes arriben amb la transcripció final.",
     "episodeOnThisPhone": "En aquest telèfon",
-    "liveCardTitle": "En directe",
     "livePreviewBehind": "La transcripció final va amb uns {duration} de retard",
     "livePreviewCatchingUp": "La transcripció final s’està posant al dia",
     "livePreviewNoEngineBody": "Les teves paraules apareixen aquí un o dos minuts després de dir-les.",
     "livePreviewNoEngineTitle": "Enregistrant de forma segura",
-    "livePreviewOnPhoneDivider": "En directe en aquest telèfon",
+    "livePreviewOnPhoneDivider": "Ara mateix, en aquest telèfon",
     "livePreviewTurnOnLiveText": "Activa el text en directe",
     "deviceCatchUpOnItsWay": "en camí",
     "deviceCatchUpWhenOnline": "quan hi hagi connexió",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "El pagament anual no està disponible per al teu pla ara mateix.",
     "yearlySwitchDoneTitle": "Ara pagues anualment",
     "yearlySwitchDoneBody": "Avui s'han cobrat {amount}. Es renova el {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}",
     "chatAppsWaitingMessageIn": "Envia el missatge a {app}. Aquesta pantalla s'actualitzarà quan l'Omi el rebi.",
-    "chatAppsCodeExpiredMessageIn": "Obtén un codi nou i envia'l des de {app}."
+    "chatAppsCodeExpiredMessageIn": "Obtén un codi nou i envia'l des de {app}.",
+    "episodeWritingNotes": "S'estan escrivint les notes…",
+    "episodeWritingNotesDetail": "Primer acabem la transcripció. Pots sortir d'aquesta pàgina.",
+    "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",
+    "liveTranscribedUpTo": "Transcrit fins a les {time}",
+    "liveAudioSaved": "{duration} desats",
+    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi."
 }

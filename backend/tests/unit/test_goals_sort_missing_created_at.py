@@ -126,12 +126,29 @@ def test_get_user_goals_handles_non_datetime_created_at(goals):
 
 def test_get_user_goals_does_not_drop_active_goals_behind_ended_first_page(goals):
     docs = [
-        _Doc('g1_achieved', {'id': 'g1_achieved', 'status': 'achieved', 'is_active': True, 'created_at': BASE.replace(day=1)}),
-        _Doc('g2_abandoned', {'id': 'g2_abandoned', 'status': 'abandoned', 'is_active': True, 'created_at': BASE.replace(day=2)}),
-        _Doc('g3_achieved', {'id': 'g3_achieved', 'status': 'achieved', 'is_active': True, 'created_at': BASE.replace(day=3)}),
-        _Doc('g4_active', {'id': 'g4_active', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=4)}),
-        _Doc('g5_active', {'id': 'g5_active', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=5)}),
-        _Doc('g6_active', {'id': 'g6_active', 'status': 'paused', 'is_active': True, 'created_at': BASE.replace(day=6)}),
+        _Doc(
+            'g1_achieved',
+            {'id': 'g1_achieved', 'status': 'achieved', 'is_active': True, 'created_at': BASE.replace(day=1)},
+        ),
+        _Doc(
+            'g2_abandoned',
+            {'id': 'g2_abandoned', 'status': 'abandoned', 'is_active': True, 'created_at': BASE.replace(day=2)},
+        ),
+        _Doc(
+            'g3_achieved',
+            {'id': 'g3_achieved', 'status': 'achieved', 'is_active': True, 'created_at': BASE.replace(day=3)},
+        ),
+        _Doc(
+            'g4_active',
+            {'id': 'g4_active', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=4)},
+        ),
+        _Doc(
+            'g5_active',
+            {'id': 'g5_active', 'status': 'background', 'is_active': True, 'created_at': BASE.replace(day=5)},
+        ),
+        _Doc(
+            'g6_active', {'id': 'g6_active', 'status': 'paused', 'is_active': True, 'created_at': BASE.replace(day=6)}
+        ),
     ]
     chain = goals.db.collection.return_value.document.return_value.collection.return_value
     saved_where = chain.where.return_value
@@ -165,4 +182,3 @@ def test_get_user_goals_returns_oldest_active_goals_regardless_of_doc_id_order(g
 
     assert [g['id'] for g in result] == ['goal_d', 'goal_e', 'goal_f']
     assert goals.get_user_goals('uid1', limit=0) == []
-

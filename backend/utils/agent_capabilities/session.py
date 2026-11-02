@@ -26,7 +26,7 @@ from models.agent_tools import (
 )
 from models.agent_edit import HarnessEdit
 from models.agent_refs import base_ref, canonical_ref
-from utils.agent_capabilities.evidence import EvidenceRecords
+from utils.agent_capabilities.evidence import EvidenceRecords, model_view
 from utils.agent_capabilities.staging import Staged, stage
 from utils.agent_capabilities.reads import unavailable_is_transient
 from utils.agent_capabilities.errors import rejection_code, schema_feedback, actionable
@@ -110,7 +110,7 @@ class Session:
         self.known.update(base_ref(ref) for ref in self.records)
         self.known.update(base_ref(ref) for ref in self.seed.get('targets', []))
         self.known.update(person['ref'] for person in self.seed.get('confirmed_people', []))
-        self.read_bytes = serialized_bytes(self.records)
+        self.read_bytes = serialized_bytes(self._model_records())
         self.unavailable.update(self.seed.get('unavailable_targets', {}))
 
     async def search(self, request):
@@ -190,6 +190,9 @@ class Session:
                 self.counters['search_' + key] += max(0, int(count))
         return result
 
+    def _model_records(self):
+        return {ref: model_view(ref, row) for ref, row in self.records.items()}
+
     async def read(self, request):
         output, errors = {}, {}
         remaining = min(self.limits.read_call_bytes, self.limits.read_bytes - self.read_bytes)
@@ -227,7 +230,8 @@ class Session:
                 )
                 self.unavailable[base] = False
                 continue
-            size = serialized_bytes({base: row})
+            visible = model_view(base, row)
+            size = serialized_bytes({base: visible})
             if size > remaining:
                 errors[ref] = dict(
                     code='agent_read_byte_budget',
@@ -239,7 +243,7 @@ class Session:
                 continue
             self.records[base] = row
             self.unavailable.pop(base, None)
-            output[base] = row
+            output[base] = visible
             remaining -= size
             self.read_bytes += size
         return {
@@ -400,7 +404,7 @@ class Session:
             + model_json(
                 {
                     **self.seed,
-                    'records': self.records,
+                    'records': self._model_records(),
                     'budget': {
                         'turns': self.limits.turns,
                         'tools': self.limits.tools,
