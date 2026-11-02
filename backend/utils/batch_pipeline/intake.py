@@ -193,6 +193,8 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
+    from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
+
     def read(tx):
         intake = tx.get('intakes', job_id)
         if not intake:
@@ -211,7 +213,11 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             # Completed content whose conversation the user deleted is final:
             # ACK without IDs so the phone stops re-uploading deleted audio.
             # Unfinished work and every other denial keep the 409.
-            terminal = _deleted_conversation_status(ledger, intake, job_id) if is_conversation_deleted(error) else None
+            terminal = (
+                _deleted_conversation_status(ledger, intake, job_id)
+                if is_conversation_deleted(error) and not any(artifact_missing(job) for job in jobs)
+                else None
+            )
             if terminal is None:
                 raise
             generation = jobs[0].get('privacy_generation') if jobs else None
@@ -219,6 +225,25 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
             return terminal
         result = ledger.get('result')
+        missing = sum(artifact_missing(job) for job in jobs)
+        if missing:
+            # Must precede both all-success and held-partial completion. Phones
+            # acknowledge only `completed`; missing bytes remain in custody.
+            projected = sum(job.get('state') == 'committed' for job in jobs)
+            return {
+                'job_id': job_id,
+                'status': 'failed',
+                'reason_code': REASON_CODE,
+                'lane': intake['lane'],
+                'total_files': intake['total_files'],
+                'total_segments': len(jobs),
+                'processed_segments': projected,
+                'successful_segments': projected,
+                'failed_segments': missing,
+                'errors': [],
+                'result': result if is_valid_partial_sync_content_result(result) else None,
+                'poll_after_ms': 0,
+            }
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
             for job in jobs:
