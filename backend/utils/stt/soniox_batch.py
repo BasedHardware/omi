@@ -13,7 +13,7 @@ import time
 from uuid import UUID
 
 import httpx
-from config.batch_language_recovery import allowed
+from config.batch_language_recovery import MAX_AUDIO_SECONDS, allowed
 from config.batch_pipeline import second_multilingual_enabled
 from config.prerecorded_stt import SONIOX_HELD_RECOVERY_MODEL, require_provider_environment
 from utils.http_client import get_stt_client, get_stt_semaphore
@@ -92,13 +92,26 @@ def _bounded_unit(duration):
     return type(duration) in (int, float) and math.isfinite(duration) and 0 < duration <= 7200
 
 
-def authorization(duration, *, second_chance=False, failover=False):
+def takeover_admitted(duration, max_seconds):
+    """A sealed operator take-over: above the runtime one-minute bound, up to the plan's scoped bound."""
+    return (
+        _bounded_unit(duration)
+        and type(max_seconds) in (int, float)
+        and math.isfinite(max_seconds)
+        and MAX_AUDIO_SECONDS < duration <= max_seconds
+        and provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    )
+
+
+def authorization(duration, *, second_chance=False, failover=False, takeover_max_seconds=None):
     # The ordinary second chance is bounded by the admitted unit (max two
     # hours), independently of the guarded path's opt-in one-minute budget.
     # Batch provider-STT failover is bounded the same way, but is admitted by
     # the prerecorded surface and the stage's paid-once attempt record instead.
     if failover:
         admitted = _bounded_unit(duration) and provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    elif takeover_max_seconds is not None:
+        admitted = takeover_admitted(duration, takeover_max_seconds)
     else:
         admitted = (
             _bounded_unit(duration) and second_multilingual_enabled() if second_chance else allowed(duration)
@@ -162,11 +175,12 @@ def transcribe(
     *,
     language=None,
     second_chance=False,
+    takeover_max_seconds=None,
     client_factory=httpx.Client,
     clock=time.monotonic,
     sleep=time.sleep,
 ):
-    headers = authorization(duration, second_chance=second_chance)
+    headers = authorization(duration, second_chance=second_chance, takeover_max_seconds=takeover_max_seconds)
     file_id, transcription_id = None, None
     deadline = clock() + DEADLINE_SECONDS
     # HTTP transport defaults to zero retries. Each paid POST occurs once.

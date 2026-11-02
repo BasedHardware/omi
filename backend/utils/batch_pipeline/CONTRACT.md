@@ -77,6 +77,14 @@ record. Live transcription is a preview; the batch result is the record.
   quarantine); VAD/silence evidence in the result payload (`contracts.py:projection_speech_spans`);
   `omi_batch_pipeline_events_total` counts are best effort, the job records are the census.
 
+Held partial uploads return nonterminal `processing/batch_unit_held`, with a
+five-minute poll hint. Projected conversations stay visible independently of
+upload completion, including after 30 minutes. Only all-unit completion can
+acknowledge the phone's custody WAL; a partial ledger never authorizes that
+acknowledgement or phone-local age eviction. Polling does not retry audio or
+consume the client's failure budget. Pending phone bytes remain until recovery
+or explicit user deletion; storage pressure cannot evict them.
+
 ## Trips: which invariant each enforces
 
 Registry: omi-workspace `infra/rollout/trips.toml` (rollback authority only with a

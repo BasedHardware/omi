@@ -1316,7 +1316,9 @@ def test_partial_refuses_a_completed_or_foreign_ledger(setup):
     assert client.rows == before
 
 
-def test_partial_status_answers_completed_with_held_span(setup):
+def test_partial_status_preserves_custody_with_held_span(setup):
+    import json
+    from pathlib import Path
     from utils.batch_pipeline.intake import durable_status
 
     client, store, binding, _, _, _ = setup
@@ -1330,9 +1332,25 @@ def test_partial_status_answers_completed_with_held_span(setup):
     }
     result, _ = ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
     status = durable_status(store, binding.owner_id, binding.job_id)
-    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+    assert status['status'] == 'processing' and status['reason_code'] == 'batch_unit_held'
     assert status['failed_segments'] == 1 and status['successful_segments'] == 1
-    assert status['result'] == result and status['poll_after_ms'] == 0 and status['errors'] == []
+    assert status['result'] == result and status['poll_after_ms'] == 300000 and status['errors'] == []
+    golden = json.loads((Path(__file__).parents[1] / 'fixtures/held_partial_status.json').read_text())
+    assert status == golden
+
+
+def test_deleting_a_projected_sibling_cannot_ack_unresolved_partial_custody(setup):
+    from utils.batch_pipeline.intake import _deleted_conversation_status
+
+    client, store, binding, *_ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert (
+        _deleted_conversation_status(
+            ledger_row(client, binding), {'lane': 'backfill', 'total_files': 1}, binding.job_id
+        )
+        is None
+    )
 
 
 def test_recovery_disabled_unit_completes_partial_then_upgrades_after_recovery(setup, monkeypatch):
