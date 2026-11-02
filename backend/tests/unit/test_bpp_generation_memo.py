@@ -239,6 +239,9 @@ def test_failed_reads_never_publish_partial_decisions(monkeypatch, reads, failur
 
 def test_real_sdk_transaction_retry_revalidates_token_and_denies(monkeypatch, reads):
     enabled(monkeypatch)
+    # This test isolates the SDK callback retry. Current main normally gives
+    # retries to a separate fresh-transaction budget, covered below.
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: False)
     db = database()
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
     transaction = db.transaction()
@@ -257,6 +260,42 @@ def test_real_sdk_transaction_retry_revalidates_token_and_denies(monkeypatch, re
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
             store.run(lambda view: view.check_privacy(UID, ['source'], 7))
     assert len(commits) == 1
+    assert Counter(reads)[TOKEN_PATH] == 2
+
+
+def test_outer_contention_retry_uses_fresh_transaction_and_revalidates_token(monkeypatch, reads):
+    from functools import partial
+
+    enabled(monkeypatch)
+    db = database()
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    original_transaction = db.transaction
+    commits = []
+
+    def transaction(*, max_attempts=None):
+        tx = original_transaction(max_attempts=max_attempts)
+
+        def commit():
+            commits.append(tx)
+            db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+            db.rows[('users', UID, 'deleted_conversations', 'source')] = {}
+            raise Aborted('synthetic concurrent deletion')
+
+        monkeypatch.setattr(tx, '_commit', commit)
+        return tx
+
+    monkeypatch.setattr(db, 'transaction', transaction)
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: True)
+    monkeypatch.setattr(
+        storage,
+        'run_with_transaction_contention_retry',
+        partial(storage.run_with_transaction_contention_retry, sleep=lambda delay: None, random_value=lambda: 0.0),
+    )
+    with batch_privacy_attempt():
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+    assert len(commits) == 1
+    assert len(db.transactions) == 2 and db.transactions[0] is not db.transactions[1]
     assert Counter(reads)[TOKEN_PATH] == 2
 
 
