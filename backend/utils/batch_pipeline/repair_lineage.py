@@ -32,3 +32,13 @@ def recorded_lineage(record: str) -> dict:
     if not isinstance(payload, dict) or set(payload) != set(LINEAGE_KEYS):
         raise ValueError('recorded lineage has the wrong shape')
     return payload
+
+
+def language_proof(language: str, decision) -> dict:
+    """The frozen language fields of one staged unit, as admission records them for a later repair."""
+    return {
+        'stt_language': language,
+        'stt_language_evidence': decision.evidence,
+        'stt_language_confidence': decision.confidence,
+        'stt_language_probe_seconds': decision.probe_seconds,
+    }

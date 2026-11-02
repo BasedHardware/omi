@@ -37,7 +37,7 @@ from database.sync_ledger import (
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
-from utils.batch_pipeline.repair_lineage import lineage_record
+from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -417,37 +417,26 @@ async def accept_upload(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
-        if repair_job_id is not None and not _repair_owner_matches(previous, repair_job_id):
-            # A regrouped/subset retry must never enter fresh admission. The
-            # client retains every surviving file and the original repair tag.
-            return JSONResponse(
-                status_code=409,
-                content={
-                    'code': 'sync_repair_bundle_changed',
-                    'detail': 'The original complete upload is required; retain local audio',
-                },
-            )
+        refused = await _repair_prior_upload(
+            store,
+            previous,
+            uid,
+            content_id,
+            paths,
+            repair_job_id,
+            decode,
+            {
+                'source': source,
+                'should_lock': should_lock,
+                'conversation_id': conversation_id,
+                'client_device_id': client_device_id,
+                'client_platform': client_platform,
+                'intake_context': intake_context,
+            },
+        )
+        if refused is not None:
+            return refused
         if previous.get('dispatch_protocol') == 'batch_v1':
-            if previous.get('artifact_missing_units'):
-                # A fresh owner would lose batch checkpoint identities. Repair
-                # only missing spans under the original content/job binding.
-                from utils.batch_pipeline.artifact_reupload import restore_upload
-
-                repair_artifacts = await run_blocking(storage_executor, artifacts_for, store)
-                await restore_upload(
-                    store,
-                    uid,
-                    content_id,
-                    paths,
-                    source=source,
-                    should_lock=should_lock,
-                    conversation_id=conversation_id,
-                    client_device_id=client_device_id,
-                    client_platform=client_platform,
-                    intake_context=intake_context,
-                    artifacts=repair_artifacts,
-                    decode=decode,
-                )
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
@@ -834,12 +823,7 @@ async def accept_upload(
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
                 else 'und' if language_guard_enabled() else input_language
             )
-            repair_languages[item.segment_id] = {
-                'stt_language': frozen_language,
-                'stt_language_evidence': language_decision.evidence,
-                'stt_language_confidence': language_decision.confidence,
-                'stt_language_probe_seconds': language_decision.probe_seconds,
-            }
+            repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
             frozen = await run_blocking(
                 sync_executor,
                 with_context,
@@ -856,11 +840,8 @@ async def accept_upload(
                     'client_device_id': client_device_id,
                     'client_platform': client_platform,
                     'conversation_id': conversation_id,
-                    'stt_language': frozen_language,
                     'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
-                    'stt_language_evidence': language_decision.evidence,
-                    'stt_language_confidence': language_decision.confidence,
-                    'stt_language_probe_seconds': language_decision.probe_seconds,
+                    **proof,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
@@ -906,7 +887,7 @@ async def accept_upload(
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
                 'repair_lineage': lineage_record(intake_context),
-                'repair_languages': {item.segment_id: repair_languages[item.segment_id] for item in items},
+                'repair_languages': repair_languages,
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),
@@ -984,6 +965,33 @@ def privacy_blocked_response() -> JSONResponse:
             'detail': 'Capture is unavailable for server processing',
         },
     )
+
+
+async def _repair_prior_upload(
+    store, previous: dict, uid: str, content_id: str, paths, repair_job_id: str | None, decode, binding: dict
+) -> JSONResponse | None:
+    """The original batch owner's missing-span repair; a 409 when the retry is not that upload.
+
+    Kept out of ``accept_upload`` so that function stays within the type checker's complexity bound.
+    """
+    if repair_job_id is not None and not _repair_owner_matches(previous, repair_job_id):
+        # A regrouped/subset retry must never enter fresh admission. The
+        # client retains every surviving file and the original repair tag.
+        return JSONResponse(
+            status_code=409,
+            content={
+                'code': 'sync_repair_bundle_changed',
+                'detail': 'The original complete upload is required; retain local audio',
+            },
+        )
+    if previous.get('dispatch_protocol') == 'batch_v1' and previous.get('artifact_missing_units'):
+        # A fresh owner would lose batch checkpoint identities. Repair
+        # only missing spans under the original content/job binding.
+        from utils.batch_pipeline.artifact_reupload import restore_upload
+
+        repair_artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        await restore_upload(store, uid, content_id, paths, artifacts=repair_artifacts, decode=decode, **binding)
+    return None
 
 
 def _repair_owner_matches(ledger: dict, job_id: object) -> bool:
