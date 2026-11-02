@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
+from database._client import is_transient_availability_error
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
@@ -59,6 +60,8 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
     OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL,
     PUSHER_ACTIVE_WS_CONNECTIONS,
+    PUSHER_ADMISSION_SHED_EXHAUSTED_TOTAL,
+    PUSHER_ADMISSION_SHED_RETRIES_TOTAL,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
 )
 from utils.readiness import ReadinessGate
@@ -200,6 +203,97 @@ async def _close_websocket_best_effort(websocket: WebSocket, code: int, uid: str
         logger.error(f"Error closing WebSocket: {e}")
 
 
+# Session-admission transient shed. The four admission profile reads below
+# (webhook delay, audio-apps count, private-cloud flag, protection level) are
+# a session's FIRST Firestore round trips: a pod that just started — or just
+# finished a deploy — reaches them before any gRPC channel is warm, and a
+# momentarily unavailable data plane answers with the same availability trio
+# every Firestore boundary in this codebase already classifies as transient
+# (``database._client.is_transient_availability_error``: 503
+# ServiceUnavailable, 504 DeadlineExceeded, 500 InternalServerError, plus the
+# SDK's drained-gapic-retry envelope carrying one of those as its cause).
+# Left un-shedded, one such blip walked straight into the admission ``except
+# Exception``: journey outcome ``failure``, close 1011, and one full uvicorn
+# ``Exception in ASGI application`` traceback per dropped session (prod
+# pusher 2026-10-31: bursts inside ~60s of pod starts), while the failed read
+# had committed nothing. The shed re-asks the SAME read a bounded number of
+# times behind a short doubling backoff — an admission read commits nothing,
+# so a re-read is a strictly faithful retry — and a drained budget ends the
+# not-yet-started session cleanly (journey ``cancelled``, close 1013 Try
+# Again Later, ``pusher_admission_shed_exhausted_total``), handing recovery
+# to the client's own reconnect cadence: the same retryable-refusal contract
+# the listen side's admission fences already speak through ``run_critical_ws``
+# (transient admission faults close 1013 there). Every retry and every
+# exhaustion is counted by read name so pod-start cold-channel churn stays
+# measurable without touching the loud boundaries. A cancel is never absorbed
+# by the shed — the pod-teardown boundary owns that classification, while
+# serving and during drain alike — and permanent refusals, quota pressure and
+# unknown failures keep the loud first-attempt arm.
+PUSHER_ADMISSION_TRANSIENT_ATTEMPTS = 3
+PUSHER_ADMISSION_TRANSIENT_BACKOFF_SECONDS = 0.25
+
+
+class _AdmissionTransientExhausted(Exception):
+    """The admission shed's bounded transient budget drained.
+
+    Raised by ``_admission_read_with_transient_shed`` when every attempt
+    answered with a member of the availability trio. The caller ends the
+    session cleanly (journey ``cancelled``, close 1013) instead of recording
+    an application failure for a session that never started and never
+    committed anything. ``__cause__`` carries the last transient, so the
+    exhaustion log line keeps the fault type without a traceback.
+    """
+
+    def __init__(self, read: str):
+        super().__init__(f'admission read {read} unavailable after {PUSHER_ADMISSION_TRANSIENT_ATTEMPTS} attempts')
+        self.read = read
+
+
+async def _admission_read_with_transient_shed(pool, fn, *args):
+    """Run one session-admission read behind the bounded transient shed.
+
+    A cold Firestore gRPC channel (or cold Redis connection — the webhook
+    lookup is Redis-backed) answers a momentary availability failure that the
+    next redial answers where this attempt failed: the session is not yet
+    established and the read commits nothing, so re-asking the same question
+    a bounded number of times with a short doubling backoff is a strictly
+    faithful retry. When the budget drains, raise ``_AdmissionTransientExhausted``
+    so the caller ends the session cleanly (journey ``cancelled``, close 1013)
+    instead of classifying the drop as an application fault (1011 + uvicorn
+    traceback). A cancel is re-raised untouched — the pod-teardown boundary
+    owns that classification — and permanent refusals or unknown failures
+    propagate to the caller's loud arm unchanged.
+    """
+
+    read = getattr(fn, '__name__', 'admission_read')
+    last_transient = None
+    for attempt in range(PUSHER_ADMISSION_TRANSIENT_ATTEMPTS):
+        try:
+            return await run_blocking(pool, fn, *args)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            if not is_transient_availability_error(error):
+                raise
+            last_transient = error
+            PUSHER_ADMISSION_SHED_RETRIES_TOTAL.labels(read=read).inc()
+            if attempt < PUSHER_ADMISSION_TRANSIENT_ATTEMPTS - 1:
+                backoff = PUSHER_ADMISSION_TRANSIENT_BACKOFF_SECONDS * (2**attempt)
+                logger.warning(
+                    'Pusher session admission read hit a transient availability blip '
+                    '(attempt %d/%d, retrying in %.2fs) read=%s type=%s uid=%s',
+                    attempt + 1,
+                    PUSHER_ADMISSION_TRANSIENT_ATTEMPTS,
+                    backoff,
+                    read,
+                    type(error).__name__,
+                    args[0] if args else '',
+                )
+                await asyncio.sleep(backoff)
+    PUSHER_ADMISSION_SHED_EXHAUSTED_TOTAL.labels(read=read).inc()
+    raise _AdmissionTransientExhausted(read) from last_transient
+
+
 async def _dispatch_transcript_item(
     uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
 ) -> None:
@@ -282,13 +376,20 @@ async def _websocket_util_trigger(
     drain_started_event = ReadinessGate.drain_wait_event()
 
     try:
-        # audio bytes
-        audio_bytes_webhook_delay_seconds = await run_blocking(db_executor, get_audio_bytes_webhook_seconds, uid)
+        # Session-admission profile reads — the session's first Firestore/Redis
+        # round trips. Each rides the bounded transient shed: a pod-start cold
+        # channel's momentary availability blip must not end an accepted
+        # session as a fault (see the shed block above).
+        audio_bytes_webhook_delay_seconds = await _admission_read_with_transient_shed(
+            db_executor, get_audio_bytes_webhook_seconds, uid
+        )
         audio_bytes_trigger_delay_seconds = 4
-        has_audio_apps_enabled = await run_blocking(db_executor, is_audio_bytes_app_enabled, uid)
-        private_cloud_sync_enabled = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+        has_audio_apps_enabled = await _admission_read_with_transient_shed(db_executor, is_audio_bytes_app_enabled, uid)
+        private_cloud_sync_enabled = await _admission_read_with_transient_shed(
+            db_executor, users_db.get_user_private_cloud_sync_enabled, uid
+        )
         cached_protection_level = (
-            (await run_blocking(db_executor, users_db.get_data_protection_level, uid))
+            (await _admission_read_with_transient_shed(db_executor, users_db.get_data_protection_level, uid))
             if private_cloud_sync_enabled
             else None
         )
@@ -303,6 +404,24 @@ async def _websocket_util_trigger(
             return
         journey_attempt.finish('cancelled')
         raise
+    except _AdmissionTransientExhausted as exhausted:
+        # The shed's budget drained on momentary availability blips: this
+        # session never started, nothing was committed, and the client's own
+        # reconnect cadence is the recovery. End it cleanly — journey outcome
+        # ``cancelled`` (not ``failure``) and close 1013 Try Again Later so
+        # the peer sees a deliberate, retryable refusal — instead of the 1011
+        # plus full uvicorn traceback the un-shedded boundary produced. The
+        # cause keeps the last fault type in the log line without a traceback.
+        logger.warning(
+            'Pusher session admission dropped behind persistent transient availability '
+            '(shed exhausted) read=%s cause=%s uid=%s',
+            exhausted.read,
+            type(exhausted.__cause__).__name__,
+            uid,
+        )
+        journey_attempt.finish('cancelled')
+        await _close_websocket_best_effort(websocket, 1013, uid)
+        return
     except Exception:
         journey_attempt.finish('failure')
         raise
