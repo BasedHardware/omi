@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 215,
+  "count": 217,
   "names": {
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
@@ -96,6 +96,8 @@
     "BATCH_PIPELINE_WORKER_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_WORKER_IO_CONCURRENCY": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_WORKER_PIPELINE_DEPTH": {"seeded": "2026-10-25"},
+    "BATCH_PIPELINE_WORKER_PROCESSES": {"owner": "planscost / two-lane lead", "review_by": "2026-11-30"},
+    "BATCH_PIPELINE_WORKER_PROCESS_INDEX": {"owner": "planscost / two-lane lead", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_WORKER_RELEASE": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED": {"seeded": "2026-10-25"},

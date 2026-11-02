@@ -535,15 +535,10 @@ async def test_v1_shaped_offer_computes_identity_before_legacy_decode(repository
 
 
 def test_sibling_processes_in_one_pod_never_settle_each_others_shadow_job(repository, monkeypatch):
-    from utils.batch_pipeline.shadow_worker import shadow_worker_id
-
     monkeypatch.setenv('POD_NAME', 'worker-pod')
-    monkeypatch.delenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX', raising=False)
-    single = shadow_worker_id()
-    monkeypatch.setenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX', '0')
-    first = ShadowRunner(repository, Mock()).worker_id
-    monkeypatch.setenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX', '1')
-    second = ShadowRunner(repository, Mock()).worker_id
+    single = ShadowRunner(repository, Mock()).worker_id
+    first = ShadowRunner(repository, Mock(), process_index=0).worker_id
+    second = ShadowRunner(repository, Mock(), process_index=1).worker_id
     assert len({single, first, second}) == 3
 
     repository.offer(second)

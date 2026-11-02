@@ -257,7 +257,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             # GPU batch hands over after the TTL. Fails open on store errors.
             leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
             inline_metrics=False,  # supervise() samples on its own task.
-            shadow=ShadowRunner(ShadowStore(store), shadow_recover),
+            shadow=ShadowRunner(ShadowStore(store), shadow_recover, process_index=process_index()),
         )
         # Sibling processes share the pod's queue view: one sampler per pod
         # keeps Firestore reads and the HPA's per-pod series as with one process.
@@ -273,6 +273,14 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
 # runtime with its own models, leases and fences, exactly like another replica;
 # it serves probes and metrics on loopback only. The parent owns the pod's port.
 PROCESS_INDEX_ENV = 'BATCH_PIPELINE_WORKER_PROCESS_INDEX'
+
+
+def process_index() -> int | None:
+    """This child's index under the per-pod supervisor; None in a single-process pod."""
+    raw = os.getenv(PROCESS_INDEX_ENV)
+    return int(raw) if raw is not None and raw.isdigit() else None
+
+
 CHILD_PORT_BASE = 8081
 CHILD_PROBE_SECONDS = 5
 

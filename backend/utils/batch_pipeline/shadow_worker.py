@@ -12,23 +12,15 @@ from utils.batch_pipeline.shadow_metrics import GPU
 from utils.executors import db_executor, sync_executor, run_blocking, start_background_task
 
 
-def shadow_worker_id() -> str:
-    """Shadow slot owner: the pod, plus the process index when a pod runs several pump processes.
-
-    Sibling processes share POD_NAME; a shared id would let one sibling's offer settle the other's
-    running shadow job as dropped. A single-process pod keeps its pod-only id.
-    """
-    identity = os.getenv('POD_NAME', os.getenv('HOSTNAME', ''))
-    index = os.getenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX')
-    if index is not None:
-        identity = f'{identity}/{index}'
-    return hashlib.sha256(identity.encode()).hexdigest()
-
-
 class ShadowRunner:
-    def __init__(self, repository, recovery: Callable[[str], object]):
+    def __init__(self, repository, recovery: Callable[[str], object], *, process_index: int | None = None):
         self.repository, self.recovery = repository, recovery
-        self.worker_id = shadow_worker_id()
+        # Sibling pump processes share the pod name; a shared slot owner would let one
+        # sibling's offer settle the other's running shadow job as dropped.
+        identity = os.getenv('POD_NAME', os.getenv('HOSTNAME', ''))
+        if process_index is not None:
+            identity = f'{identity}/{process_index}'
+        self.worker_id = hashlib.sha256(identity.encode()).hexdigest()
         self._reap_at = 0.0
         self._recovering = False
         self._taking = False
