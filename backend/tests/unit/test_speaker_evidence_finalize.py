@@ -153,6 +153,7 @@ def test_decoded_overlap_refuses_only_affected_windows_in_all_modes(monkeypatch,
     session = SimpleNamespace(
         deadline=float('inf'),
         in_budget=lambda: True,
+        release_pcm=lambda: None,
         chunks=chunks,
         limit_hit=False,
         fetch=lambda path: b'\0\0' * (4 * 16000),

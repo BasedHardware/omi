@@ -57,6 +57,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 220.21,
     "failure": "worker_failed",
@@ -265,6 +268,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 494.07,
     "failure": "worker_failed",
@@ -361,6 +367,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 328.42,
     "failure": "worker_failed",
@@ -457,6 +466,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 547.49,
     "failure": "worker_failed",

@@ -14,11 +14,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
 from database._client import get_firestore_client
-from database import sync_redrive
+from database import sync_redrive, sync_jobs
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
@@ -76,7 +77,7 @@ def _pending_ref(client: Any, uid: str, job_id: str) -> Any:
 
 
 def _pending_for_uid(client: Any, uid: str) -> Any:
-    return client.collection(PENDING_COLLECTION).where('uid', '==', uid)
+    return client.collection(PENDING_COLLECTION).where(filter=FieldFilter('uid', '==', uid))
 
 
 def _data(snapshot: Any) -> dict[str, Any]:
@@ -284,7 +285,7 @@ def due_pending(
     client = firestore_client or get_firestore_client()
     docs = (
         client.collection(PENDING_COLLECTION)
-        .where('reconcile_at', '<=', now or _now())
+        .where(filter=FieldFilter('reconcile_at', '<=', now or _now()))
         .limit(max(1, min(limit, 500)))
         .stream()
     )
@@ -509,8 +510,12 @@ def claim_next(
 
 def begin_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
-) -> bool:
-    """A stale Cloud Task epoch can never enter the transcription pipeline."""
+) -> Optional[dict[str, Any]]:
+    """Fence the delivery, then return its prior job state in the same DB leaf.
+
+    Stale epochs perform no job read. The snapshot only carries retry history;
+    the handler must still re-read under its run lock and before completion.
+    """
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
@@ -533,9 +538,12 @@ def begin_job(
         return True
 
     try:
-        return commit(client.transaction())
+        began = commit(client.transaction())
     except NotFound:
-        return False
+        return None
+    if not began:
+        return None
+    return {'job': sync_jobs.get_sync_job(job_id)}
 
 
 def renew_job(
@@ -603,7 +611,10 @@ def due_owners(
     _require_production()
     client = firestore_client or get_firestore_client()
     docs = (
-        client.collection(COLLECTION).where('reconcile_at', '<=', now or _now()).limit(max(1, min(limit, 500))).stream()
+        client.collection(COLLECTION)
+        .where(filter=FieldFilter('reconcile_at', '<=', now or _now()))
+        .limit(max(1, min(limit, 500)))
+        .stream()
     )
     return [{'uid': doc.id, **_data(doc)} for doc in docs]
 

@@ -49,7 +49,7 @@
     <div class="plan" id="yearly" data-interval="year">
       <div class="radio"></div>
       <div class="t"><div class="title">Yearly <span class="badge" id="yearly-badge"></span></div><div class="sub" id="yearly-sub"></div></div>
-      <div class="price"><b id="yearly-price"></b><span>/ month</span></div>
+      <div class="price"><b id="yearly-price"></b><span>/ year</span></div>
     </div>
     <div class="plan" id="monthly" data-interval="month">
       <div class="radio"></div>
@@ -70,9 +70,18 @@
     if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
     else console.log('[OmiPaywall]', JSON.stringify(msg));
   }
-  function money(minor, currency) {
-    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
-    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  // Current hosts supply strings from Flutter's shared minor-unit formatter.
+  // Keep old released hosts safe while the static page rolls out independently.
+  function money(interval, perMonth) {
+    var supplied = q.get(interval + (perMonth ? '_per_month_price' : '_price'));
+    if (supplied) return supplied;
+    var code = (q.get(interval + '_currency') || 'usd').toUpperCase();
+    var minor = Number(q.get(interval + '_amount'));
+    if (perMonth && interval === 'year') minor = Math.round(minor / 12);
+    var zero = ['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','VND','VUV','XAF','XOF','XPF'];
+    var digits = zero.includes(code) ? 0 : (['BHD','JOD','KWD','OMR','TND'].includes(code) ? 3 : 2);
+    var amount = (minor / Math.pow(10, digits)).toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+    return (code === 'USD' ? 'US$' : (code === 'JPY' ? '¥' : code + ' ')) + amount;
   }
   var name = q.get('name');
   if (name) document.getElementById('eyebrow').textContent = 'For ' + name;
@@ -83,14 +92,14 @@
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
   var yc = q.get('year_currency'), mc = q.get('month_currency');
   if (year != null) {
-    document.getElementById('yearly-price').textContent = money(Math.round(year / 12), yc);
-    document.getElementById('yearly-sub').textContent = money(year, yc) + ' · Yearly';
+    document.getElementById('yearly-price').textContent = money('year', false);
+    document.getElementById('yearly-sub').textContent = money('year', true) + ' / month · billed yearly';
     if (month) { var pct = Math.round((1 - year / (month * 12)) * 100); if (pct > 0) document.getElementById('yearly-badge').textContent = 'Save ~' + pct + '%'; else document.getElementById('yearly-badge').classList.add('hidden'); }
     else document.getElementById('yearly-badge').classList.add('hidden');
   } else { document.getElementById('yearly').classList.add('hidden'); selected = 'month'; }
   if (month != null) {
-    document.getElementById('monthly-price').textContent = money(month, mc);
-    document.getElementById('monthly-sub').textContent = money(month, mc) + ' · Monthly';
+    document.getElementById('monthly-price').textContent = money('month', false);
+    document.getElementById('monthly-sub').textContent = money('month', false) + ' · Monthly';
   } else document.getElementById('monthly').classList.add('hidden');
   if (year == null && month == null) { document.getElementById('cta').disabled = true; document.getElementById('body').textContent = 'Unable to load plans'; }
 

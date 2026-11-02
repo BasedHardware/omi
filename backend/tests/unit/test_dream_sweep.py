@@ -97,3 +97,42 @@ def test_route_returns_counts_only(client, monkeypatch, caplog):
     logged = caplog.text
     assert 'candidates=4 complete=1 failed=1 not_admitted=1 deadline=1 waiting=0 failure_types=synthetic:1' in logged
     assert UID not in logged and 'private' not in logged
+
+
+def test_half_hour_tick_kill_switch(client, monkeypatch):
+    monkeypatch.setattr(
+        cloud_tasks.id_token,
+        'verify_oauth2_token',
+        lambda *a, **k: {'email': INVOKER, 'email_verified': True},
+    )
+    drain = AsyncMock(return_value=[])
+    monkeypatch.setattr(dream_agent, 'drain', drain)
+    half = {
+        'Authorization': 'Bearer valid',
+        'X-CloudScheduler-JobName': dream_sweep.SWEEP_JOB,
+        'X-CloudScheduler-ScheduleTime': '2026-10-30T09:30:00.123456+00:00',
+    }
+    monkeypatch.setenv('DREAM_HALF_HOUR_SWEEP_ENABLED', 'false')
+    assert client.post('/v2/dream-agent/sweep', headers=half).json() == {'skipped': 'half_hour_disabled'}
+    drain.assert_not_called()
+    top = {**half, 'X-CloudScheduler-ScheduleTime': '2026-10-30T09:00:00.123456+00:00'}
+    assert client.post('/v2/dream-agent/sweep', headers=top).status_code == 200
+    assert drain.await_count == 1
+    monkeypatch.delenv('DREAM_HALF_HOUR_SWEEP_ENABLED')
+    client.post('/v2/dream-agent/sweep', headers=half)
+    assert drain.await_count == 2
+
+
+def test_sweep_job_ticks_twice_an_hour_inside_its_drain():
+    jobs = load_yaml(ROOT / 'backend/deploy/scheduler/jobs.yaml')
+    found = [
+        job
+        for env in jobs['environments'].values()
+        for job in env.get('jobs') or []
+        if isinstance(job, dict) and job.get('name') == dream_sweep.SWEEP_JOB
+    ]
+    assert found and all(job['schedule'] == '0,30 * * * *' for job in found)
+    # A 30-minute cadence must never overlap the previous drain.
+    from config.dream_agent import DRAIN_TIMEOUT_SECONDS
+
+    assert DRAIN_TIMEOUT_SECONDS + 60 < 30 * 60

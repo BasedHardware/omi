@@ -73,6 +73,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
         {"name": "BATCH_LIVE_STT_RETIRE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "RECORD_SEAL_OVERLAP_TRIM_ENABLED", "value": "true"},
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
@@ -98,8 +99,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BUCKET_BATCH_PIPELINE", "value": ""},
         {"name": "BATCH_PIPELINE_UNIT_SECONDS", "value": "3600"},
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
-        {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "false"},
-        {"name": "REPEAT_WORK_REVISION_ENABLED", "value": "false"},
+        {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -396,14 +396,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         '"FIRESTORE_READ_LEDGER", "value": "1"},\n        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},',
     )
     # Keep dev snapshots complete while individual tests remove unrelated
-    # gateway/secret fields. Train 1 switches remain explicitly off in dev.
+    # gateway/secret fields. The repeat-work coalesce/dedupe switches resolve
+    # from code defaults since 2026-11-01 and are forbidden_env on the sync
+    # hosts, so dev snapshots must not carry them.
     for service in ('backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
             r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},'
-            r'\n        {"name": "CONVERSATION_LLM_INPUT_DEDUPE_ENABLED", "value": "false"},',
+            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},',
             payload,
             count=1,
             flags=re.DOTALL,
@@ -2926,7 +2926,46 @@ def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
     errors = validator.validate_speaker_embedding_hosts('prod', env_config)
     messages = [error.message for error in errors]
     assert any('not cluster-local DNS' in message for message in messages)
-    assert any('must match gke/backend-listen' in message for message in messages)
+    assert any('approved internal-ALB route' in message for message in messages)
+
+
+def test_speaker_embedding_cloud_run_must_use_approved_ilb_route():
+    validator = load_validator()
+    wrong = 'http://172.16.160.20/other'
+    env_config = {
+        'cloud_run': {
+            'services': {
+                'backend': {'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': wrong}}},
+                'backend-sync': {'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': wrong}}},
+            }
+        }
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+
+    assert errors
+    assert all('approved internal-ALB route' in error.message for error in errors)
+    assert all('http://172.16.160.20/diarizer' in error.message for error in errors)
+
+
+def test_speaker_embedding_disagreement_inside_one_topology_fails():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://a.example/diarizer'}},
+            },
+            'pusher': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://b.example/diarizer'}},
+            },
+        }
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+
+    assert len(errors) == 1
+    assert errors[0].scope == 'prod/speaker-embedding'
+    assert 'disagrees across hosts' in errors[0].message
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
@@ -3355,3 +3394,19 @@ def test_prod_backend_billing_key_rejects_non_public_binding(monkeypatch, mutati
         entry['valueFrom'] = {'secretKeyRef': {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}}
     errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
     assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)
+
+
+def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
+    from scripts.runtime_env_validation import manifest as manifest_validation
+
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = copy.deepcopy(validator._get_env_config(manifest, 'prod'))
+    gateway_env = env_config['llm_gateway']['env']
+    assert gateway_env['OMI_FLAGS_SOURCE']['value'] == 'omi'
+    assert 'PROACTIVITY_V2_POSTHOG_TOKEN' not in gateway_env
+    assert manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config) == []
+
+    gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
+    errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
+    assert [error.scope for error in errors] == ['prod/llm_gateway']

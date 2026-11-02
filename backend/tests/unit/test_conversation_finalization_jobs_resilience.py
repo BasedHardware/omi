@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+from database.conversation_finalization_values import parse_timestamp
+
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -15,40 +18,40 @@ def test_parse_timestamp_variants():
     """Verify _parse_timestamp handles aware, naive, ISO strings, epoch, and malformed inputs."""
     # Aware datetime
     aware_dt = datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc)
-    parsed = cfj._parse_timestamp(aware_dt)
+    parsed = parse_timestamp(aware_dt)
     assert parsed == aware_dt
     assert parsed.tzinfo == timezone.utc
 
     # Naive datetime
     naive_dt = datetime(2026, 9, 30, 12, 0, 0)
-    parsed_naive = cfj._parse_timestamp(naive_dt)
+    parsed_naive = parse_timestamp(naive_dt)
     assert parsed_naive is not None
     assert parsed_naive.tzinfo == timezone.utc
     assert parsed_naive.year == 2026 and parsed_naive.hour == 12
 
     # ISO-8601 strings
-    assert cfj._parse_timestamp("2026-09-30T12:00:00Z") == aware_dt
-    assert cfj._parse_timestamp("2026-09-30T12:00:00+00:00") == aware_dt
-    assert cfj._parse_timestamp("2026-09-30T12:00:00") == aware_dt
+    assert parse_timestamp("2026-09-30T12:00:00Z") == aware_dt
+    assert parse_timestamp("2026-09-30T12:00:00+00:00") == aware_dt
+    assert parse_timestamp("2026-09-30T12:00:00") == aware_dt
 
     # Numeric epoch timestamps
     epoch_sec = 1790769600.0  # 2026-09-30 12:00:00 UTC
-    assert cfj._parse_timestamp(epoch_sec) == aware_dt
-    assert cfj._parse_timestamp(int(epoch_sec)) == aware_dt
-    assert cfj._parse_timestamp(str(epoch_sec)) == aware_dt
+    assert parse_timestamp(epoch_sec) == aware_dt
+    assert parse_timestamp(int(epoch_sec)) == aware_dt
+    assert parse_timestamp(str(epoch_sec)) == aware_dt
 
     # Malformed / boundary inputs
-    assert cfj._parse_timestamp(None) is None
-    assert cfj._parse_timestamp("") is None
-    assert cfj._parse_timestamp("   ") is None
-    assert cfj._parse_timestamp("not-a-date") is None
-    assert cfj._parse_timestamp(True) is None
-    assert cfj._parse_timestamp(False) is None
-    assert cfj._parse_timestamp(float("nan")) is None
-    assert cfj._parse_timestamp(float("inf")) is None
-    assert cfj._parse_timestamp(float("-inf")) is None
-    assert cfj._parse_timestamp(-100) is None
-    assert cfj._parse_timestamp(10**15) is None
+    assert parse_timestamp(None) is None
+    assert parse_timestamp("") is None
+    assert parse_timestamp("   ") is None
+    assert parse_timestamp("not-a-date") is None
+    assert parse_timestamp(True) is None
+    assert parse_timestamp(False) is None
+    assert parse_timestamp(float("nan")) is None
+    assert parse_timestamp(float("inf")) is None
+    assert parse_timestamp(float("-inf")) is None
+    assert parse_timestamp(-100) is None
+    assert parse_timestamp(10**15) is None
 
 
 def test_get_finalization_job_summary_naive_and_malformed():
@@ -175,7 +178,7 @@ def test_complete_orphan_conversation_naive_matching():
 
     # Caller passes aware datetime
     expected_aware = datetime(2026, 9, 29, 8, 0, 0, tzinfo=timezone.utc)
-    res = cfj._complete_orphan_conversation_txn(
+    res = processing_recovery._complete_orphan_conversation_txn(
         transaction=mock_txn,
         conversation_ref=mock_ref,
         expected_admitted_at=expected_aware,
@@ -200,7 +203,7 @@ def test_complete_unstampable_orphan_conversation_naive_update_time():
     mock_ref.get.return_value = mock_snapshot
 
     stale_before = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
-    res = cfj._complete_unstampable_orphan_conversation_txn(
+    res = processing_recovery._complete_unstampable_orphan_conversation_txn(
         transaction=mock_txn,
         conversation_ref=mock_ref,
         stale_before=stale_before,

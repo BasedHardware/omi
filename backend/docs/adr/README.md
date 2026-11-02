@@ -16,6 +16,7 @@ silent permission.
 | [0004](0004-sync-off-speaker-centroids.md) | Speaker evidence for sync-off batch units | Accepted | 2026-10-27 |
 | [0005](0005-rulings-live-in-adrs.md) | Ratified rulings live in ADRs, not in scripts | Accepted | 2026-11-15 |
 | [0006](0006-pipeline-flag-budget.md) | A CI flag budget for the pipeline env surface | Accepted | 2026-11-15 |
+| [0007](0007-partial-retained-recordings.md) | Finish unprovable recordings explicitly partial | Accepted | 2026-11-07 |
 
 Related contracts: [batch record lane](../../utils/batch_pipeline/CONTRACT.md),
 [deletion map](../deletion-map.md).

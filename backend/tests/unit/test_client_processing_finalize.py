@@ -249,6 +249,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.other.storage', AutoMockModule('utils.other.storage'))
     cloud_tasks = add('utils.cloud_tasks', AutoMockModule('utils.cloud_tasks'))
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
     add('utils.observability.fallback', AutoMockModule('utils.observability.fallback'))
     add('utils.observability.finalization', AutoMockModule('utils.observability.finalization'))
     add('utils.metrics', AutoMockModule('utils.metrics'))
@@ -2585,3 +2586,20 @@ def test_summary_kill_switch_keeps_finalize_and_late_bind_projection_free(monkey
     existing = _in_progress()
     assert conv._bind_late_client_projection(_UID, existing, projection) is existing
     bind.assert_not_called()
+
+
+def test_scope_only_attribution_change_drops_projection_at_router_and_transaction_bind(stack):
+    _pc, conv = stack
+    segments = [
+        {'text': 'I agree', 'speaker_id': 0, 'speaker_id_scope': 'first'},
+        {'text': 'I refuse', 'speaker_id': 0, 'speaker_id_scope': 'first'},
+    ]
+    projection = _projection(digest=transcript_sha256(segments)).model_dump(mode='json')
+    assert conv._accepted_client_projection(projection, segments) is not None
+    segments[1]['speaker_id_scope'] = 'second'
+    assert projection['transcript_sha256'] == transcript_sha256(segments)
+    assert conv._accepted_client_projection(projection, segments) is None
+    updates = conversations_db.extra_updates_with_bound_client_processing(
+        _UID, {'transcript_segments': segments}, {'client_processing': projection, 'status': 'processing'}
+    )
+    assert updates == {'status': 'processing'} and not updates.submitted_projection_bound

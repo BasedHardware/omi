@@ -114,14 +114,17 @@ enum MeetingDetectionTiming {
   static let confirmationPeriod: TimeInterval = 10
   /// Capture closes on the off edge; a confirmed conversation can resume for four minutes.
   static let resumeWindow: TimeInterval = 240
+  /// A known Meet code survives tab switches and microphone inactivity for at most 15 minutes.
+  /// Resuming beyond the ordinary window requires that exact code, not calendar overlap.
+  static let meetingCodeResumeWindow: TimeInterval = 15 * 60
   /// Covers the observed 150s output gap with headroom, but an AFK messaging app
   /// holding the microphone must return to output corroboration after five minutes.
   static let inputOnlySustainPeriod: TimeInterval = 300
   /// Calendar lookup is optional; a hung EventKit request is retired on the next poll.
   static let calendarProbeTimeout: TimeInterval = 10
-  /// Five-minute input-only sustain + 8s off grace + four-minute resume, with
-  /// nearly a minute for polling/provider latency. Orphaned sockets stay bounded.
-  static let conversationTimeout: TimeInterval = 600
+  /// Five-minute input-only sustain + 8s off grace + 15-minute code resume, with
+  /// margin for polling/provider latency. Orphaned sockets stay bounded.
+  static let conversationTimeout: TimeInterval = 22 * 60
   /// Wait after confirmation before announcing. Calls ending earlier never show a card.
   static let noticeDelay: TimeInterval = 35
 }

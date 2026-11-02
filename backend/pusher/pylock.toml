@@ -130,13 +130,13 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa
 
 [[packages]]
 name = "cryptography"
-version = "48.0.1"
-sdist = { url = "https://files.pythonhosted.org/packages/12/45/870e7f4bef50e5f53b9f51d4428aee5290eedf58ba443f16b1ebb7ab8e66/cryptography-48.0.1.tar.gz", upload-time = 2026-06-09T22:32:31Z, size = 832989, hashes = { sha256 = "266f4ee051abb2f725b74ef8072b521ce1feacf685a3364fa6a6b45548db791a" } }
+version = "50.0.2"
+sdist = { url = "https://files.pythonhosted.org/packages/9d/af/182eb91b0df3fe75c4d9f26fe70684569566745f6ba7e5c9c73a862c5252/cryptography-50.0.2.tar.gz", upload-time = 2026-09-30T15:30:04Z, size = 880623, hashes = { sha256 = "7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5" } }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/87/c85d147b53323c7eb4d850920c8901377323c2a0ff8d79c262d4fee89aa2/cryptography-48.0.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2026-06-09T22:31:40Z, size = 4713235, hashes = { sha256 = "f0d27a5696721ef7a672b8c810f6aded391058e0b9486e63e6d93baf765da691" } },
-    { url = "https://files.pythonhosted.org/packages/d2/bb/cc4b78784f97efc8c5874c2a9743708d172be6663024b34a0467885ae0c8/cryptography-48.0.1-cp311-abi3-manylinux_2_28_x86_64.whl", upload-time = 2026-06-09T22:31:31Z, size = 4746137, hashes = { sha256 = "3752f2dbc8f07a30aad2932c986cea495b03bb554887828225da104f732852b6" } },
-    { url = "https://files.pythonhosted.org/packages/5f/9f/a1bc8bcc798811b8527eb374bbccf30a3f3e806829d967118222bf1125eb/cryptography-48.0.1-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2026-06-09T22:31:45Z, size = 4696782, hashes = { sha256 = "86be3b1b0b6bf09482fb50a979c508d2950ed95f5621ec77f4e385962006b83a" } },
-    { url = "https://files.pythonhosted.org/packages/78/13/fba657f958d2af66ea959a4ba01212632089249d34af1ae48054136344d7/cryptography-48.0.1-cp39-abi3-manylinux_2_28_x86_64.whl", upload-time = 2026-06-09T22:31:22Z, size = 4731873, hashes = { sha256 = "88c852a0ae366e262e5a1744b685e6a433dc8788dd2a277e418bf4904203609d" } },
+    { url = "https://files.pythonhosted.org/packages/21/69/64cef1f702bf6657e0cc186ed1a2891d50d29fb41586b254e1c07adea261/cryptography-50.0.2-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2026-09-30T14:43:49Z, size = 4719841, hashes = { sha256 = "630ebfea3bf689d075f82316324ff7433dc447fe6bc1bfc76524b74b4a9567d2" } },
+    { url = "https://files.pythonhosted.org/packages/1a/f1/b474e930c4d910328780e3940da76f5aa5cbc48ce1fc14e44d239d9ea9db/cryptography-50.0.2-cp311-abi3-manylinux_2_28_x86_64.whl", upload-time = 2026-09-30T14:43:55Z, size = 4753050, hashes = { sha256 = "4061c0079120205fb760c58acab6443e217307dcf05e3702cf970e0689972856" } },
+    { url = "https://files.pythonhosted.org/packages/bf/f1/1c1f6874e8550cfddd4b688ceb38cefb6ed15ceed224d56f133f3d88c214/cryptography-50.0.2-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2026-09-30T15:29:26Z, size = 4749145, hashes = { sha256 = "ee247f5c245c9a2fe7c8e2214e295918838e44e00a45a6718451e4004219e767" } },
+    { url = "https://files.pythonhosted.org/packages/4f/87/ef344a9e616871f2519c22d6afcda79ddd5d35e9592d95eb6e677608d055/cryptography-50.0.2-cp39-abi3-manylinux_2_28_x86_64.whl", upload-time = 2026-09-30T15:29:32Z, size = 4781387, hashes = { sha256 = "f21e8a22c8605750c7af886bab299a363721264061b4ac0a30efb73cfd58efc5" } },
 ]
 
 [[packages]]
@@ -571,9 +571,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/88/ef/eb23f262cca3c0c
 
 [[packages]]
 name = "pillow"
-version = "12.3.0"
-sdist = { url = "https://files.pythonhosted.org/packages/1c/3d/bb7fca845737cf9d7dbde16ed1843984665ff2e0a518f5db43e77ec540b9/pillow-12.3.0.tar.gz", upload-time = 2026-07-01T11:56:38Z, size = 47025035, hashes = { sha256 = "3b8182a766685eaa002637e28b4ec8d6b18819a0c71f579bf0dbaa5830297cce" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/3b/2d/ede717bc1144f63886c21fd349bb95860b0d1a21149ff16f2bb362b612b6/pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2026-07-01T11:53:53Z, size = 6934408, hashes = { sha256 = "23d27a3e0307ec2244cc51e7287b919aa68d097504ebe19df4e76a98a3eea5bd" } }]
+version = "13.0.0"
+sdist = { url = "https://files.pythonhosted.org/packages/ce/a4/9cc30690a394a8305e8be4c9036aa16d0dfddadd09079860b582f562496d/pillow-13.0.0.tar.gz", upload-time = 2026-10-16T22:18:09Z, size = 47058631, hashes = { sha256 = "cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/36/46/f509b74787f40ce0627501089d630b2c741b63b244c1f40b640b3b01e181/pillow-13.0.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2026-10-16T22:15:31Z, size = 7140667, hashes = { sha256 = "a625df9a2a5597fa5e5266e01aefc82604bb85d291e3547981e863560d75da6c" } }]
 
 [[packages]]
 name = "pinecone"
@@ -699,8 +699,8 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/a6/53/d78dc063216e62f
 [[packages]]
 name = "pyjwt"
 version = "2.15.1"
-sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", upload-time = 2026-09-28T18:40:42.598678Z, size = 121252, hashes = { sha256 = "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", upload-time = 2026-09-28T18:40:41.429003Z, size = 33860, hashes = { sha256 = "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193" } }]
+sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", upload-time = 2026-09-28T18:40:42Z, size = 121252, hashes = { sha256 = "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", upload-time = 2026-09-28T18:40:41Z, size = 33860, hashes = { sha256 = "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193" } }]
 
 [[packages]]
 name = "pyparsing"

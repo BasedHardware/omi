@@ -23,6 +23,7 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 _database_stubs = [
     "database",
     "database._client",
+    "database.account_deletion_marker",
     "database.mem_db",
     "database.redis_db",
     "database.memories",
@@ -118,6 +119,9 @@ _db_pkg = types.ModuleType("database")
 _db_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
 _install_module("database", _db_pkg)
 _install_module("database._client", MagicMock())
+_deletion_marker_stub = types.ModuleType("database.account_deletion_marker")
+_deletion_marker_stub.account_deletion_blocks_user_work = lambda _uid: False
+_install_module("database.account_deletion_marker", _deletion_marker_stub)
 
 for submod in [
     "redis_db",

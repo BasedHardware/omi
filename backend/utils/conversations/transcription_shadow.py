@@ -25,6 +25,7 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from config.batch_pipeline import RecordOwnerContention
 from config.policy import resolve_batch_policy
 from utils.manual_speaker_assignments import manual_owner_reserved
@@ -467,11 +468,11 @@ def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
     SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
 
 
-def _legacy_final_pass_allowed() -> bool:
+def _legacy_final_pass_allowed(uid: str) -> bool:
     """Blocking (the pass runs on its own executor): new legacy final-pass work only at ``on``."""
     from utils.sync import legacy_dark
 
-    return legacy_dark.legacy_admission_allowed()
+    return legacy_dark.legacy_admission_allowed(uid=uid)
 
 
 def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict, *, policy=None) -> dict | None:
@@ -485,7 +486,7 @@ def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict, *, policy=Non
         # Once legacy sync is draining/dark no new legacy final-pass owner (and no new
         # final pass) may start: the conversation stays unowned for batch admission to
         # claim (M3 re-review; final_pass_rehome moves the owners that already exist).
-        if not _legacy_final_pass_allowed():
+        if not _legacy_final_pass_allowed(uid):
             return None
         if not policy.live_admission_enabled:
             return raw
@@ -612,7 +613,10 @@ def _store_result(uid: str, conversation_id: str, result: dict[str, Any], *, ver
         # Account deletion persists this marker before its recursive sweep.
         # Reading it in the same transaction fences a child commit after that
         # sweep has passed the conversation, even while the parent still exists.
-        if deletion_marker.get(transaction=transaction).exists:
+        deletion = deletion_marker.get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+        ):
             return
         snapshot = parent.get(transaction=transaction)
         if not snapshot.exists or (snapshot.to_dict() or {}).get('deleted'):

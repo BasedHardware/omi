@@ -79,6 +79,12 @@ LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL = Counter(
     ['param'],
 )
 
+FLEX_FIRST_TOTAL = Counter(
+    'llm_gateway_flex_first_total',
+    'Flex-first attempts on background lanes by outcome (flex served, or fell back to standard)',
+    ['lane_id', 'outcome'],
+)
+
 STREAM_TTFB_SECONDS = Histogram(
     'llm_gateway_stream_ttfb_seconds',
     'Time to first non-empty stream chunk by bounded API surface, provider, and credential source',

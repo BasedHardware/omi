@@ -33,7 +33,14 @@ class Request:
 @pytest.fixture
 def lane(monkeypatch):
     state = SimpleNamespace(
-        event=None, current=None, replacement=None, calls=[], error=None, owner=True, stripe_obj=None
+        event=None,
+        current=None,
+        replacement=None,
+        calls=[],
+        error=None,
+        owner=True,
+        stripe_obj=None,
+        deletion_blocked=False,
     )
 
     async def run_blocking(executor, fn, *args, **kwargs):
@@ -58,6 +65,7 @@ def lane(monkeypatch):
     monkeypatch.setattr(payment.time, 'time', lambda: NOW)
     monkeypatch.setattr(payment.stripe_utils, 'parse_event', lambda *args: state.event)
     monkeypatch.setattr(payment, 'record_subscription_event', lambda **kwargs: None)
+    monkeypatch.setattr(payment, 'account_deletion_blocks_user_work', lambda _uid: state.deletion_blocked)
     monkeypatch.setattr(payment, 'get_plan_type_from_price_id', lambda price: PlanType(price.removeprefix('price_')))
     monkeypatch.setattr(payment, 'get_plan_limits', lambda plan: PlanLimits(transcription_seconds=123))
     monkeypatch.setattr(payment, 'get_basic_plan_limits', lambda: PlanLimits(transcription_seconds=7))
@@ -86,6 +94,7 @@ def lane(monkeypatch):
     )
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', effect('stripe_metadata'))
     monkeypatch.setattr(payment.stripe.Subscription, 'cancel', effect('stripe_cancel'))
+    monkeypatch.setattr(payment.stripe_utils, 'cancel_subscription_for_account_deletion', effect('deletion_cancel'))
     return state
 
 
@@ -193,6 +202,53 @@ def test_retry_currently_repeats_writes_and_unlocks(lane):
     run(lane)
     assert [name for name, _ in lane.calls].count('write') == 2
     assert [name for name, _ in lane.calls].count('conversations') == 2
+
+
+@pytest.mark.parametrize('kind', ['customer.subscription.created', 'customer.subscription.updated'])
+def test_pending_deletion_cancels_late_subscription_webhook_without_entitlement_writes(lane, kind):
+    lane.deletion_blocked = True
+    lane.event = event(kind, 'active', sub_id='sub-late')
+
+    assert run(lane) == {'status': 'success', 'message': 'Account deletion is in progress.'}
+
+    assert lane.current is None
+    assert lane.calls == [('deletion_cancel', ('sub-late',))]
+
+
+def test_pending_deletion_cancels_late_checkout_without_entitlement_writes(lane):
+    lane.deletion_blocked = True
+    lane.event = {
+        'id': 'evt-checkout',
+        'type': 'checkout.session.completed',
+        'data': {
+            'object': {
+                'id': 'cs-late',
+                'client_reference_id': 'fixture-user',
+                'subscription': 'sub-checkout-late',
+                'metadata': {'sub_type': PlanType.plus.value},
+            }
+        },
+    }
+
+    assert run(lane) == {'status': 'success', 'message': 'Account deletion is in progress.'}
+
+    assert lane.current is None
+    assert lane.calls == [('deletion_cancel', ('sub-checkout-late',))]
+
+
+def test_pending_deletion_authority_outage_retries_webhook_before_entitlement_mutation(lane, monkeypatch):
+    lane.event = event('customer.subscription.created', 'active', sub_id='sub-late')
+
+    def unavailable(_uid):
+        raise RuntimeError('synthetic marker outage')
+
+    monkeypatch.setattr(payment, 'account_deletion_blocks_user_work', unavailable)
+    with pytest.raises(HTTPException) as error:
+        run(lane)
+
+    assert error.value.status_code == 503
+    assert lane.current is None
+    assert lane.calls == []
 
 
 @pytest.mark.parametrize('status', ['active', 'trialing'])

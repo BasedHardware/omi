@@ -6,7 +6,9 @@ from datetime import datetime, timezone, timedelta
 from google.cloud import firestore
 from database import firestore_transaction_retry
 from database._client import get_firestore_client
-from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
+from database.account_deletion_marker import account_deletion_blocks_user_work
+from config.dream_agent import allowlist_uids, backed_off_hunt_interval, eligibility, eligible, enabled, hunt_interval
+from config import dream_levers
 from utils.observability.fallback import record_fallback
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -30,13 +32,20 @@ def priority(row, now, *, weight=1):
     return max(0, (now - last).total_seconds()) + min(500, row.get('score', 0)) * 60, row.get('score', 0)
 
 
-def due_time(state, now):
+def owner_hunt_interval(uid, state):
+    """Today's hunt interval, backed off by the owner's dry-hunt streak when the lever serves them."""
+    if uid is not None and dream_levers.arm(dream_levers.HUNT_BACKOFF_MODE_ENV, uid) == 'serve':
+        return backed_off_hunt_interval(state.get('size_bucket'), state.get('dry_hunts'))
+    return hunt_interval(state.get('size_bucket'))
+
+
+def due_time(state, now, uid=None):
     last = state.get('last_attempt_at') or state.get('last_pass_at') or EPOCH
     if not isinstance(last, datetime) or last.tzinfo is None:
         last = EPOCH
     if state.get('score', 0) > 0:
         return last - timedelta(minutes=min(500, state['score']))
-    return last + hunt_interval(state.get('size_bucket'))
+    return last + owner_hunt_interval(uid, state)
 
 
 def candidate_page(*, after=None, limit=499, transaction=None, firestore_client=None):
@@ -133,7 +142,14 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                     )
                     if snapshot.exists
                 }
-                eligible_owners = {row.id: eligible(row.id, row.to_dict() or {}) for row in chunk}
+                # The account-deletion marker is pinned to the customer data
+                # plane, which may differ from this queue's compute database.
+                # Read it through the shared authority outside this transaction;
+                # the worker repeats the check immediately before execution.
+                deletion_blocked = {row.id: account_deletion_blocks_user_work(row.id) for row in chunk}
+                eligible_owners = {
+                    row.id: eligible(row.id, row.to_dict() or {}) and not deletion_blocked[row.id] for row in chunk
+                }
                 # dream_users state only feeds due_time() for owners this chunk
                 # is about to enqueue; skip the bulk read when none qualify.
                 state_refs = [
@@ -152,8 +168,8 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                 for row in chunk:
                     target = database.collection('dream_due').document(row.id)
                     if eligible_owners[row.id]:
-                        if row.id not in queued:
-                            tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
+                        if row.id not in queued and not _parked(row.id, states.get(row.id, {})):
+                            tx.set(target, {'due_at': due_time(states.get(row.id, {}), now, row.id)})
                     elif row.id in queued:
                         tx.delete(target)
                 if listed is None and final_chunk:
@@ -165,6 +181,70 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
         after = rows[-1].id
 
 
+def _parked(uid, state):
+    """Idle-skip serve owners with no pending score wait for mark_dirty, not a timed hunt.
+
+    Fails open: any doubt (lever error, a score, an unreadable state) enqueues as before.
+    """
+    try:
+        return (
+            dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, uid) == 'serve'
+            and not state.get('score', 0)
+            and not _backlog_owed(uid)
+        )
+    except Exception:
+        return False
+
+
+def _backlog_owed(uid):
+    from config import required_memory_intake
+
+    return required_memory_intake.backlog_enabled(uid)
+
+
+# Payoff ordering (lever B2). Owners overdue this long run first in due order, so
+# reordering can delay an owner by at most this much beyond today's queue.
+# Payoff first (David 2026-10-30). Only a month-overdue owner jumps the payoff order:
+# at 10-30 the oldest 200 due rows were all past a 7-day bound, so ranking was FIFO.
+PAYOFF_AGING = timedelta(days=30)
+# Heavy owners made 582 of 596 applied edits in the 10-29 shadow day.
+PAYOFF_HEAVY_BONUS = 20
+PAYOFF_RANKED = 1000
+
+
+def payoff_order(rows, now, *, firestore_client=None):
+    """Rank due (uid, due_at) rows: aged owners first, then new material and recent yield.
+
+    Reads one dream_users doc per ranked owner (at most PAYOFF_RANKED, in
+    DISCOVERY_TRANSACTION_ROWS bulk gets). Owners past the ranked window keep due order.
+    """
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    head, tail = rows[:PAYOFF_RANKED], rows[PAYOFF_RANKED:]
+    states = {}
+    for start in range(0, len(head), DISCOVERY_TRANSACTION_ROWS):
+        refs = [
+            database.collection('dream_users').document(uid)
+            for uid, _ in head[start : start + DISCOVERY_TRANSACTION_ROWS]
+        ]
+        for snapshot in database.get_all(refs, timeout=3):
+            states[snapshot.id] = snapshot.to_dict() or {}
+
+    def key(row):
+        uid, due_at = row
+        due = due_at if isinstance(due_at, datetime) else now
+        if now - due >= PAYOFF_AGING:
+            return (0, 0.0, due)
+        state = states.get(uid, {})
+        payoff = (
+            min(50, max(0, int(state.get('score', 0) or 0)))
+            + 5 * min(10, max(0, int(state.get('last_yield', 0) or 0)))
+            + (PAYOFF_HEAVY_BONUS if state.get('size_bucket') == 'heavy' else 0)
+        )
+        return (1, -float(payoff), due)
+
+    return [uid for uid, _ in sorted(head, key=key)] + [uid for uid, _ in tail]
+
+
 def remove_due(uid, *, firestore_client=None):
     """Drop an ineligible scheduler row, retaining owner state and dirty work.
 
@@ -174,7 +254,7 @@ def remove_due(uid, *, firestore_client=None):
     database.collection('dream_due').document(uid).delete()
 
 
-def candidates(*, limit=5000, now=None, firestore_client=None):
+def candidates(*, limit=5000, now=None, firestore_client=None, with_due=False):
     if limit <= 0 or not enabled():
         return []
     database = firestore_client if firestore_client is not None else get_firestore_client()
@@ -193,7 +273,19 @@ def candidates(*, limit=5000, now=None, firestore_client=None):
         .limit(min(limit, 5000))
         .stream(timeout=3)
     )
-    return [row.id for row in rows]
+    if with_due:
+        selected = [(row.id, (row.to_dict() or {}).get('due_at')) for row in rows]
+    else:
+        selected = [(row.id, None) for row in rows]
+    eligible_rows = []
+    for uid, due_at in selected:
+        if account_deletion_blocks_user_work(uid):
+            remove_due(uid, firestore_client=database)
+            continue
+        eligible_rows.append((uid, due_at))
+    if with_due:
+        return eligible_rows
+    return [uid for uid, _due_at in eligible_rows]
 
 
 def required_retry_page(*, limit=4990, firestore_client=None):
@@ -213,7 +305,7 @@ def required_retry_page(*, limit=4990, firestore_client=None):
         rows = candidate_page(after=after, limit=min(499, budget - len(owners)), firestore_client=database)
         if not rows:
             break
-        owners.extend(row.id for row in rows)
+        owners.extend(row.id for row in rows if not account_deletion_blocks_user_work(row.id))
         after = rows[-1].id
     return owners, before
 

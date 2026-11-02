@@ -16,9 +16,10 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
-# All backend, backend-listen, and pusher metrics endpoints import this module.
-# The pinned prometheus_client (0.21.1) otherwise exports a second _created
+# All metrics endpoints import this module. prometheus_client otherwise exports a second _created
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
@@ -33,6 +34,12 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 )
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
+)
+
+OMI_FLAG_DUAL_READ_TOTAL = Counter(
+    'omi_flag_dual_read_total',
+    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
+    ['flag', 'outcome'],
 )
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
@@ -642,10 +649,10 @@ OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
 OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_client_journey_terminal_total',
     (
-        'Terminal client-segmented product journey outcomes by bounded labels. '
+        'Terminal client-segmented product journey outcomes; reason is a closed issue class or none. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
-    ['journey', 'client_kind', 'app_build', 'outcome'],
+    ['journey', 'client_kind', 'app_build', 'outcome', 'reason'],
 )
 
 OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
@@ -1258,8 +1265,8 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
 # series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
 OMI_SYNC_INTAKE_TOTAL = Counter(
     'omi_sync_intake_total',
-    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
-    ['outcome'],
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome and projected encoded-size bucket',
+    ['outcome', 'projected_size_bucket'],
 )
 
 # One decision per safety-WAL upload that carries a recording id and audio

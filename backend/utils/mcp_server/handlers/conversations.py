@@ -169,7 +169,7 @@ def fetch_conversation_for_detail(
         uid,
         [str(conversation_id)],
         include_transcript=True,
-        include_discarded=True,
+        include_discarded=False,
         extra_field_paths=extra_field_paths,
     )
     return conversations[0] if conversations else None
@@ -331,7 +331,7 @@ def get_conversations_by_ids(
         uid,
         conversation_ids,
         include_transcript=True,
-        include_discarded=True,
+        include_discarded=False,
     )
     by_id = {str(conversation.get("id")): conversation for conversation in conversations}
     not_found = [conversation_id for conversation_id in conversation_ids if conversation_id not in by_id]

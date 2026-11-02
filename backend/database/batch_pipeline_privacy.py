@@ -29,6 +29,15 @@ class BatchPrivacyReason(str, Enum):
     UNKNOWN = 'unknown'
 
 
+STRUCTURAL_REASONS = frozenset(
+    {
+        BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
+        BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
+        BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+    }
+)
+
+
 class BatchPrivacyBlocked(RuntimeError):
     """A deleted, migrating or E2EE owner/source cannot accept server results."""
 
@@ -155,7 +164,9 @@ def assert_batch_write_allowed(
             if row.get('record_lane_owner') == 'batch_live_v1' and (
                 row.get('uses_custom_stt')
                 or not row.get('private_cloud_sync_enabled')
-                or not data.get('private_cloud_sync_enabled', False)
+                # Match users.get_user_private_cloud_sync_enabled without an
+                # out-of-transaction read: absent means enabled, opt-out wins.
+                or not data.get('private_cloud_sync_enabled', True)
             ):
                 raise BatchPrivacyBlocked('recording_privacy_changed')
             if redirected and not conversation.exists:

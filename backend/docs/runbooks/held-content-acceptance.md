@@ -101,6 +101,9 @@ original-lane-eligible recovery; an intentionally waiting item is not a stall.
 The operator must have the following dashboard/alerts before starting the watch.
 Every promotion gate below requires a fresh fleet snapshot:
 `max(omi_held_content_fleet_snapshot_timestamp_seconds) > time() - 300`.
+The redrive refresh interval defaults to 120 seconds, leaving 180 seconds under
+that age limit for aggregation completion and Scheduler delay; preserve that
+headroom when tuning `CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS`.
 Read each fleet gauge from the newest snapshot:
 
 `max(<gauge> and on (instance) (omi_held_content_fleet_snapshot_timestamp_seconds == on () group_left() max(omi_held_content_fleet_snapshot_timestamp_seconds)))`

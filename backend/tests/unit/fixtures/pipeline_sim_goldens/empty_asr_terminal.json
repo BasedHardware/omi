@@ -8,6 +8,9 @@
    "duration_seconds": 4.86,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 4.86,
     "failure": "worker_failed",
@@ -27,7 +30,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -75,6 +86,9 @@
    "duration_seconds": 6.33,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 6.33,
     "failure": "worker_failed",
@@ -94,7 +108,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -142,6 +164,9 @@
    "duration_seconds": 11.3,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 11.3,
     "failure": "worker_failed",
@@ -161,7 +186,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -209,6 +242,9 @@
    "duration_seconds": 9.74,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 9.74,
     "failure": "worker_failed",
@@ -228,7 +264,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -276,6 +320,9 @@
    "duration_seconds": 10.89,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-5",
     "duration_seconds": 10.89,
     "failure": "worker_failed",
@@ -295,7 +342,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {

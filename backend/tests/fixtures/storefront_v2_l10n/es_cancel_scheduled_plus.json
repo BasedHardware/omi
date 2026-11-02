@@ -10,8 +10,11 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": true,
-    "line": "Estás en Plus · $19.99/mes",
-    "legacy_note": null
+    "line": "Estás en Plus · US$19.99/mes",
+    "legacy_note": null,
+    "amount_minor": 1999,
+    "currency": "usd",
+    "line_template": "Estás en Plus · {price}/mes"
   },
   "usage": {
     "kind": "unavailable",
@@ -44,7 +47,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/mes",
+          "headline": "US$19.99/mes",
           "subline": null,
           "renewal_line": "Se renueva cada mes hasta que canceles. Cancela cuando quieras en los ajustes."
         }
@@ -68,7 +71,7 @@
           "interval": "month",
           "amount_minor": 0,
           "currency": "usd",
-          "headline": "$0",
+          "headline": "US$0",
           "subline": null,
           "renewal_line": null
         }
@@ -96,7 +99,7 @@
           "interval": "month",
           "amount_minor": 4999,
           "currency": "usd",
-          "headline": "$49.99/mes",
+          "headline": "US$49.99/mes",
           "subline": null,
           "renewal_line": "Se renueva cada mes hasta que canceles. Cancela cuando quieras en los ajustes."
         },
@@ -105,8 +108,8 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$41.66/mes",
-          "subline": "$499.90 facturado al año · 2 meses gratis",
+          "headline": "US$41.66/mes",
+          "subline": "US$499.90 facturado al año · 2 meses gratis",
           "renewal_line": "Se renueva cada año hasta que canceles. Cancela cuando quieras en los ajustes.",
           "months_free": 2
         }
@@ -133,7 +136,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/mes",
+          "headline": "US$199/mes",
           "subline": null,
           "renewal_line": "Se renueva cada mes hasta que canceles. Cancela cuando quieras en los ajustes."
         },
@@ -142,8 +145,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/mes",
-          "subline": "$1,990 facturado al año · 2 meses gratis",
+          "headline": "US$165.83/mes",
+          "subline": "US$1,990 facturado al año · 2 meses gratis",
           "renewal_line": "Se renueva cada año hasta que canceles. Cancela cuando quieras en los ajustes.",
           "months_free": 2
         }

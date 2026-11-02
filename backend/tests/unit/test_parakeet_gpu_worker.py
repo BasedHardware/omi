@@ -369,6 +369,15 @@ class TestExtractResults:
         assert seg["start"] == 0.1235
         assert seg["end"] == 1.9877
 
+    def test_extract_token_text_lists_as_strings(self):
+        hyp = MagicMock()
+        hyp.text = "今日。"
+        hyp.timestamp = {
+            "char": [{"char": ["今日"], "start": 0.0, "end": 0.4}, {"char": ["。"], "start": 0.4, "end": 0.4}],
+        }
+        out = GPUWorker._extract_results([hyp], timestamps=True)
+        assert [c["char"] for c in out[0]["timestamp"]["char"]] == ["今日", "。"]
+
 
 class TestGPUWorkerGC:
     def test_gc_collect_increments_counter(self):

@@ -10,6 +10,7 @@ from tests.unit.test_live_replay_provider_pairs import setup_receiver, stop, unt
 from utils.observability import demand_cohort as telemetry
 from utils.stt import live_chain, live_session, parakeet_window as window, replay_delivery, streaming as st
 from utils.stt.live_gate import GateState
+from utils.stt.live_metrics import soniox_idle_metrics
 from utils.stt.soniox_idle import IdleSonioxSocket
 from utils.stt.recovery_state import MAX_RECOVERY_EPISODES
 from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
@@ -69,6 +70,44 @@ async def onset(actual, data, start=2160000):
     assert not buffer
 
 
+def reopen_observations() -> float:
+    return sum(
+        sample.value for sample in soniox_idle_metrics().latency.collect()[0].samples if sample.name.endswith('_count')
+    )
+
+
+@pytest.mark.asyncio
+async def test_unset_flag_keeps_inplace_reopen_for_first_text(monkeypatch):
+    """The shipped default must not delay first text with idle handling.
+
+    Default-on reselect retired the serving leg at every idle onset and rebuilt
+    through the full chain; at fleet scale that churn exhausted chains and
+    terminated sessions, and first text waited for the user's next utterance
+    (2026-10-27 listen bb5f6e7 regression, listenlat RCA). With the flag unset
+    the waking speech is served by the in-place reopen instead: same logical
+    leg, no teardown, and a reopen latency observation is recorded.
+    """
+    monkeypatch.delenv('STT_IDLE_REOPEN_COST_RESELECT_ENABLED', raising=False)
+    actual, _, raws, _, _, old, idle, _ = await idle_receiver(monkeypatch, enabled=True, benched=True)
+    monkeypatch.delenv('STT_IDLE_REOPEN_COST_RESELECT_ENABLED', raising=False)  # ship-shape: flag unset
+    data = b'\x31\x01' * 1600
+    try:
+        await close_idle(idle)
+        before = reopen_observations()
+        await onset(actual, data)
+        await until(lambda: idle.idle_cost_reselect_requested or idle._idle_since is None)
+        assert idle.idle_cost_reselect_requested is False
+        assert idle._idle_since is None
+        serving = getattr(actual.stt_socket, 'connection', actual.stt_socket)
+        assert serving is old  # same logical leg behind any tail wrapper; no teardown
+        assert old.leg_outcome.reason != 'normal_close'
+        await until(lambda: raws[-1]._ws.byte_count >= len(data))
+        assert reopen_observations() == before + 1
+    finally:
+        await actual._drain_stt_sockets()
+        await stop(raws)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'language,benched,enabled,modulate,expected',
@@ -86,6 +125,9 @@ async def test_idle_reopen_rechecks_cost_stage_language_and_kill_switch(
     actual, _, raws, legs, observations, old, idle, _ = await idle_receiver(
         monkeypatch, language=language, enabled=enabled, benched=benched, modulate=modulate
     )
+    if not enabled:
+        # Both switches off: the one-time English failback (test_idle_parakeet_failback) is its own path.
+        monkeypatch.setenv('STT_IDLE_PARAKEET_FAILBACK_ENABLED', 'false')
     data = b'\x31\x01' * 1600
     try:
         # A former session failure cannot keep a now recovered target excluded.

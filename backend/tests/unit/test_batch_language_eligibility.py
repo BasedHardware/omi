@@ -10,14 +10,20 @@ from unittest.mock import Mock
 from prometheus_client import REGISTRY
 import pytest
 
-from config.batch_pipeline import known_unsupported_batch_language, language_eligibility_enabled
+from config.batch_pipeline import (
+    known_unsupported_batch_language,
+    language_eligibility_enabled,
+    language_inheritance_enabled,
+)
 from config.policy import BatchUnitPolicy
+from diarizer.batch_pipeline_models import stt_language
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake
 from utils.batch_pipeline.artifacts import ProtectionContext
-from utils.batch_pipeline.audio import audio_unit
+from utils.batch_pipeline.audio import audio_unit, read_context
 from utils.stt import batch_language
 from utils.sync.legacy_dark import LegacySyncMode
+from utils import funded_processing, stt_cap_dispatch
 
 ROUTE_METRIC = 'omi_batch_pipeline_language_route_total'
 EXCLUDED_LABELS = {'surface': 'intake', 'language_class': 'unsupported', 'route': 'multilingual'}
@@ -29,11 +35,35 @@ def excluded_count() -> float:
 
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
+    # Language eligibility cases have a funded/consented synthetic owner;
+    # per-probe refusals are exercised by test_batch_serving_language_probe.
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: True)
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    # This suite pins the former eligibility switch independently of the new
+    # all-mode admission exclusion (covered by test_batch_admission_language).
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raising=False)
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
 
 
-async def upload(monkeypatch, *, user_language, single=False, conversation_language=None, mode='on', owner=None):
+async def upload(
+    monkeypatch,
+    *,
+    user_language,
+    single=False,
+    conversation_language=None,
+    mode='on',
+    owner=None,
+    real_language=False,
+    seconds=1,
+    stop_after_staging=True,
+    store=None,
+    decision=None,
+    evidence=None,
+    unit_count=1,
+    paths=(),
+):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
     probe = Mock(
@@ -41,6 +71,10 @@ async def upload(monkeypatch, *, user_language, single=False, conversation_langu
             language='en', parakeet_safe=True, evidence='audio_lid', confidence=0.99, probe_seconds=6.0
         )
     )
+    if decision is not None:
+        probe = Mock(side_effect=decision) if callable(decision) else Mock(return_value=decision)
+    if real_language:
+        probe = Mock(wraps=batch_language.resolve_language)
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
 
     def authorize(store, seed, snapshots):
@@ -57,13 +91,17 @@ async def upload(monkeypatch, *, user_language, single=False, conversation_langu
 
     def stage(work, body):
         staged.append(work)
-        raise RuntimeError('stop after synthetic staging')
+        probe.staged_context = read_context(body)
+        if stop_after_staging:
+            raise RuntimeError('stop after synthetic staging')
+        return 'synthetic://staged-audio'
 
     def units(*args, **kwargs):
-        yield audio_unit(100, b'\x01\x00' * 16000)
+        for index in range(unit_count):
+            yield audio_unit(100 + index * seconds, b'\x01\x00' * int(seconds * 16000))
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
-    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store if store is not None else MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
     monkeypatch.setattr(intake, 'decode_units', units)
@@ -73,7 +111,7 @@ async def upload(monkeypatch, *, user_language, single=False, conversation_langu
         uid='synthetic-owner',
         job_id='new',
         content_id='new',
-        paths=[],
+        paths=list(paths),
         lane='fresh',
         recording_age_seconds=0,
         source='omi',
@@ -82,6 +120,7 @@ async def upload(monkeypatch, *, user_language, single=False, conversation_langu
         client_device_id=None,
         client_platform='ios',
         policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+        evidence=evidence,
     )
     return response, staged, probe
 
@@ -175,3 +214,108 @@ async def test_durable_batch_sync_owner_never_falls_through_to_legacy(monkeypatc
 )
 def test_known_unsupported_requires_a_recognized_non_parakeet_code(language, known):
     assert known_unsupported_batch_language(language) is known
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('seconds', [4, 9.9, 10, 30])
+@pytest.mark.parametrize('ambient_language', ['vi', 'ja', 'ko'])
+@pytest.mark.parametrize('single', [False, True])
+async def test_bound_english_piece_never_redetects_ambient_language(monkeypatch, seconds, ambient_language, single):
+    detect = Mock(return_value=batch_language.LanguageDecision(ambient_language, 0.99, 'audio_lid', seconds))
+    monkeypatch.setattr(batch_language, 'detect', detect)
+    self_gate = Mock(return_value=(False, None))
+    monkeypatch.setattr(batch_language, '_self_gate', self_gate)
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='vi',
+        conversation_language='en-US',
+        real_language=True,
+        seconds=seconds,
+        single=single,
+    )
+    assert admitted(response, staged)
+    assert probe.call_args.args[0] == 'en'
+    assert probe.staged_context['stt_language'] == 'en'
+    assert probe.staged_context['stt_language_evidence'] == 'declared'
+    assert stt_language(probe.staged_context, duration_seconds=seconds) == 'en'
+    detect.assert_not_called()
+    self_gate.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('conversation_language', [None, '', 'multi', 'und', 'auto', 'xx'])
+async def test_unknown_conversation_uses_user_language_without_single_mode(monkeypatch, conversation_language):
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language=conversation_language,
+        real_language=True,
+    )
+    assert admitted(response, staged)
+    assert probe.staged_context['stt_language'] == 'en'
+    assert probe.staged_context['stt_language_evidence'] == 'declared'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('language', [None, '', 'multi', 'und', 'unknown', 'auto', 'xx'])
+@pytest.mark.parametrize('single', [False, True])
+@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
+async def test_both_unknown_still_detect_per_piece(monkeypatch, language, single, mode):
+    detect = Mock(return_value=batch_language.LanguageDecision('en', 0.99, 'audio_lid', 4))
+    monkeypatch.setattr(batch_language, 'detect', detect)
+    monkeypatch.setattr(batch_language, '_self_gate', lambda *args, **kwargs: (False, None))
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language=language,
+        conversation_language=language,
+        real_language=True,
+        seconds=4,
+        single=single,
+        mode=mode,
+    )
+    assert admitted(response, staged)
+    assert probe.staged_context['stt_language'] == 'en'
+    assert probe.staged_context['stt_language_evidence'] == 'audio_lid'
+    detect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_inheritance_kill_switch_restores_per_piece_detection(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', ' false ')
+    detect = Mock(return_value=batch_language.LanguageDecision('vi', 0.99, 'audio_lid', 4))
+    monkeypatch.setattr(batch_language, 'detect', detect)
+    monkeypatch.setattr(batch_language, '_self_gate', lambda *args, **kwargs: (False, None))
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        real_language=True,
+        seconds=4,
+    )
+    assert admitted(response, staged)
+    assert probe.staged_context['stt_language'] == 'vi'
+    detect.assert_called_once()
+
+
+@pytest.mark.parametrize('raw', [None, '', 'true', 'TRUE', 'garbage'])
+def test_inheritance_on_by_default(monkeypatch, raw):
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raising=False)
+    if raw is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raw)
+    assert language_inheritance_enabled()
+
+
+@pytest.mark.asyncio
+async def test_parakeet_only_language_is_inherited(monkeypatch):
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='mt',
+        real_language=True,
+        seconds=4,
+    )
+    assert admitted(response, staged)
+    assert probe.call_args.args[0] == 'mt'
+    assert probe.staged_context['stt_language'] == 'mt'
+    assert probe.staged_context['stt_language_evidence'] == 'declared'
+    assert stt_language(probe.staged_context, duration_seconds=4) == 'mt'

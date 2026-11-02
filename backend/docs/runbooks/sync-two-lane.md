@@ -254,10 +254,10 @@ persistence failure, without exception text, paths or ids.
 
 A canonical conversation near Firestore's 1 MiB limit rolls new speech over to
 another conversation instead of failing after paid transcription:
-`sync_assignment_target outcome=size_rollover` (with `trigger=estimate` or
+`sync_assignment_target reason=size_rollover outcome=rolled_over` (with `trigger=estimate` or
 `trigger=commit_limit`) and `omi_fallback_event component=sync_dispatch
-to=size_rollover` count it, `outcome=size_limit_retry` counts the one commit
-backstop retry, and `outcome=size_rollover_unavailable` means the speech had no
+to=size_rollover` count it, `reason=size_limit_retry outcome=rejected` counts the one commit
+backstop retry, and `reason=size_rollover_unavailable outcome=unavailable` means the speech had no
 safe home, so the original write was attempted unchanged. `firestore_error=document_size_limit`
 should then be rare; when it still occurs it names `sync_day_index`, `sync_recent`,
 a `donor`, or a `conversation` rejected a second time after the backstop retry.
@@ -265,6 +265,14 @@ a `donor`, or a `conversation` rejected a second time after the backstop retry.
 stepped past. When the only id the chunk can create a conversation under is its own
 existing or redirected anchor, there is no safe home: fences hold, but the write
 can fail again after the backstop, so `size_rollover_unavailable` is not a recovery.
+
+Size observations carry hashed `job_ref`/`attempt_ref`, the rejected plan's
+`segments_bucket`/`speech_seconds_bucket`, and closed
+`rollover_target_kind=new_row|sibling_row|none`. `stage=commit` confirms a rollover;
+`stage=plan` is only a transaction-body observation. A final size exception keeps
+the last rejected document's buckets with `outcome=rejected`. Absent job context
+uses `none` refs. See the [size attribution contract](../../utils/sync/ARCHITECTURE.md#conversation-size)
+for bucket boundaries and the change from normalized to hashed refs.
 
 ### Internal failures are not `upstream_error`
 

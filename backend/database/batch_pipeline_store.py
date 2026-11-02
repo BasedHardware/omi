@@ -5,16 +5,26 @@ The transaction callback must be pure; it may be retried by Firestore.
 """
 
 from copy import deepcopy
+import hashlib
+import logging
 import os
 import re
+import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
+from config.batch_pipeline import contention_retry_enabled, SCHEDULER_SHARDS
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.batch_pipeline_transaction_labels import (
+    current_operation,
+    pull_operation as pull_operation,
+)
 from utils.sync.stage import collection_name
 
 # Every state an obligation can drain from. Assignment needs only ``pending``;
@@ -25,6 +35,7 @@ PROJECTION_ASSIGNMENT_STATES = ('pending',)
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
 T = TypeVar('T')
+logger = logging.getLogger(__name__)
 
 
 class Transaction(Protocol):
@@ -43,7 +54,11 @@ class Store(Protocol):
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
+    def ready_for_capacity(self, priority: int, now: float) -> int: ...
+    def control_candidate(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
+    ) -> str | None: ...
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
@@ -58,6 +73,8 @@ class FirestoreTransaction:
         self.cache: dict[tuple[str, str], dict] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
+        # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
+        self.external: dict[Any, tuple[Any, dict]] = {}
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -90,6 +107,15 @@ class FirestoreTransaction:
             raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
+    def defer_set(self, ref: Any, value: dict) -> None:
+        """Set a document outside the batch tables at flush, after every read of this transaction.
+
+        Firestore refuses any transactional read after the first write, and flush itself reads
+        privacy state. A joining writer that set its document on the raw transaction mid-body made
+        every later read fail (ReadAfterWriteError: staging 11-01, every provider-route upload 503).
+        """
+        self.external[ref.path] = (ref, deepcopy(value))
+
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
@@ -121,7 +147,7 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) + len(self.patches) > 450:
+        if len(self.writes) + len(self.patches) + len(self.external) > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
@@ -143,6 +169,8 @@ class FirestoreTransaction:
             self.transaction.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():
             self.transaction.update(self._ref(table, key), fields)
+        for ref, value in self.external.values():
+            self.transaction.set(ref, value)
 
 
 class FirestoreStore:
@@ -174,14 +202,24 @@ class FirestoreStore:
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
     def run(self, body):
+        client = self.client
+
         @firestore.transactional
         def commit(transaction):
-            view = FirestoreTransaction(self.client, self.namespace, transaction)
+            view = FirestoreTransaction(client, self.namespace, transaction)
             result = body(view)
             view.flush()
             return result
 
-        return commit(self.client.transaction())
+        if not contention_retry_enabled():
+            return commit(client.transaction())
+        # The outer budget owns fresh transaction IDs and all retries. The
+        # SDK's same-ID commit loop would multiply the contention window.
+        return run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            commit,
+            operation_name=current_operation(),
+        )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)
@@ -189,8 +227,33 @@ class FirestoreStore:
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return oldest(self.client, self.namespace, priority, ready_only=ready_only)
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
-        return control_candidate(self.client, self.namespace, priority, pool, now)
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return ready_for_capacity(self.client, self.namespace, priority, now)
+
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        return oldest_admissible_ready(self.client, self.namespace, priority, now)
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
+
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        # One conditional write, no transaction or retrying read set. A stale
+        # hint can only lose the CAS, never authorize two simultaneous owners.
+        with pull_operation('claim', shard):
+            ref = self.client.collection(f'{self.namespace}_pull_claims').document(shard)
+            snapshot = ref.get()
+            if (snapshot.to_dict() or {}).get('expires_at', 0) > now:
+                return False
+            value = {'token': token, 'expires_at': now + ttl}
+            try:
+                if snapshot.exists:
+                    ref.update(value, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
+                else:
+                    ref.create(value, retry=None)
+            except (AlreadyExists, FailedPrecondition, Aborted):
+                logger.info('event=batch_shard_contention operation=batch_claim shard=%s outcome=busy', shard)
+                return False
+            return True
 
     def oldest_retry(self, priority: int) -> float | None:
         return oldest_retry(self.client, self.namespace, priority)
@@ -418,13 +481,102 @@ def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
 
 
+def is_policy_hold(job: dict[str, Any], now: float | None = None) -> bool:
+    """A parked obligation the uncommitted-age proxy must not measure: an allowance hold, or a live
+    ``vendor_held`` provider unit (vendor_route_contracts.is_vendor_policy_hold). A vendor hold
+    whose redrive is overdue past the stale grace is measured again, so a dead redrive surfaces.
+    """
+    if is_allowance_policy_hold(job):
+        return True
+    if job.get('state') != 'vendor_held':
+        return False
+    from config.batch_pipeline_vendor_failover import held_redrive_seconds, held_stale_grace_seconds
+    from utils.batch_pipeline.vendor_route_contracts import is_vendor_policy_hold
+
+    return is_vendor_policy_hold(
+        job,
+        time.time() if now is None else now,
+        redrive_seconds=held_redrive_seconds(),
+        stale_grace_seconds=held_stale_grace_seconds(),
+    )
+
+
+def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -> int:
+    """Count work awaiting a first/re-authorized attempt, never held legacy debt.
+
+    New admission explicitly records unattempted; existing workers already
+    replace it with allowed/held or clear it on an unevaluated refusal. Reusing
+    that authoritative state avoids a new eligibility bit that old workers
+    would fail to clear during a mixed-version roll. Unmarked legacy jobs remain
+    durable/drainable but cannot buy GPUs. This hint never grants paid compute.
+    """
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .where('merge_pending', '==', True)
+        .where('compute_decision.outcome', 'in', ['unattempted', 'allowed'])
+        .where('available_at', '<=', now)
+    )
+    count = query.count().get()[0][0].value
+    # The pinned SDK decodes integer_value=0 through ``integer or double``,
+    # yielding 0.0. Preserve that real empty result; do not coerce missing,
+    # fractional, negative or otherwise malformed responses into capacity.
+    if type(count) is float and count == 0.0:
+        count = 0
+    if type(count) is not int or count < 0:
+        raise ValueError('nonnegative integer capacity count required')
+    return count
+
+
+# Bounded ready prefix the vendor-overflow backlog read walks (route selection, one read per
+# refresh in the healthy case). Policy holds and deferred rows at the head are skipped.
+ADMISSIBLE_READY_SCAN_LIMIT = 20
+
+
+def is_admissible_ready(job: dict[str, Any], now: float) -> bool:
+    """The ``ready_for_capacity`` predicate on one ready row: work a GPU would run if it had a lane."""
+    decision = job.get('compute_decision')
+    available_at = job.get('available_at')
+    return (
+        job.get('merge_pending') is True
+        and isinstance(decision, dict)
+        and decision.get('outcome') in ('unattempted', 'allowed')
+        and isinstance(available_at, (int, float))
+        and available_at <= now
+        and not is_policy_hold(job, now)
+    )
+
+
+def oldest_admissible_ready(client: Any, namespace: str, priority: int, now: float) -> float | None:
+    """Enqueue time of the oldest admissible ready unit, or None when the bounded prefix has none.
+
+    Same index as ``oldest(ready_only=True)``. A due allowance hold back in ``ready`` carries an
+    hours-old enqueue time, so it is skipped rather than read as GPU backlog. A prefix made only of
+    skipped rows reads as no backlog: overflow then fails toward GPU, which is today's routing.
+    """
+    docs = (
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .order_by('enqueued_at')
+        .limit(ADMISSIBLE_READY_SCAN_LIMIT)
+        .stream()
+    )
+    for doc in docs:
+        job = doc.to_dict()
+        if is_admissible_ready(job, now):
+            return job['enqueued_at']
+    return None
+
+
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:
     query = client.collection(f'{namespace}_jobs').where('priority', '==', priority)
     if ready_only:
         docs = list(query.where('state', '==', 'ready').order_by('enqueued_at').limit(1).stream())
         return docs[0].to_dict()['enqueued_at'] if docs else None
     # The uncommitted-age proxy must measure the oldest real commitment: walk a
-    # bounded prefix of the FIFO and skip allowance policy holds. Early return
+    # bounded prefix of the FIFO and skip allowance and vendor policy holds. Early return
     # keeps the healthy case a one-document read; a sentinel row beyond the
     # bound (limit + 1) distinguishes truncation from a FIFO that happens to be
     # exactly as long as the bound.
@@ -441,7 +593,7 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
             break  # the sentinel row exists: the scan was truncated
         job = doc.to_dict()
-        if is_allowance_policy_hold(job):
+        if is_policy_hold(job):
             oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
             continue
         return job['enqueued_at']
@@ -453,7 +605,9 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
     return None
 
 
-def control_candidate(client: Any, namespace: str, priority: int, pool: str, now: float) -> str | None:
+def control_candidate(
+    client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
+) -> str | None:
     if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
         raise ValueError('bounded priority and pool required')
     prefix = f'p{priority}_'
@@ -465,9 +619,14 @@ def control_candidate(client: Any, namespace: str, priority: int, pool: str, now
         .where(available, '<=', now)
         .order_by(service)
         .order_by(available)
-        .limit(1)
+        .limit(SCHEDULER_SHARDS if worker_id else 1)
         .stream()
     )
+    if worker_id:
+        # Service remains the primary fairness key. Only equal-service shards
+        # use worker affinity, and a busy shard can be skipped without writes.
+        docs = [doc for doc in docs if doc.id not in exclude]
+        docs.sort(key=lambda doc: (doc.to_dict()[service], hashlib.sha256(f'{worker_id}:{doc.id}'.encode()).digest()))
     return docs[0].id if docs else None
 
 

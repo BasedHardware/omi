@@ -109,8 +109,9 @@ through the same workflow using the recorded previous source SHA.
 
 NLLB records the currently serving immutable digest in the deployment annotation
 `omi.me/previous-image-digest` before each normal workflow rollout. Normal releases deploy the resolved candidate
-digest; retries of an already-serving candidate retain the original rollback receipt. To recover,
-dispatch the same `gcp_nllb_translation.yml` workflow with `environment=prod` and
+digest; retries of an already-serving candidate retain the original rollback receipt. Prod NLLB
+is retired (2026-11-02; translation runs on Luna), so this path is development only. To recover,
+dispatch the same `gcp_nllb_translation.yml` workflow with `environment=development` and
 `rollback_digest=<recorded sha256 digest>`. This uses protected-main tooling,
 validates the receipt and registry artifact, and replays the existing image without
 rebuilding historical sources that predate the runtime-image registry. Rollback

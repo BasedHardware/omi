@@ -3,9 +3,13 @@
 
 One process-wide cache entry with a 30s TTL. Reads run on the rollout executor, never on the
 event loop, with a 1s timeout and SDK retries off. On a read error or a malformed document the
-last-known-good value is served indefinitely (source="lkg"); a cold start with nothing loaded
-serves each caller's env_default (source="env_default"). A value is never raised above LKG on
-error. The bucket functions in config/ are untouched; only the percent source moves here.
+last-known-good value is served indefinitely (source="lkg"). A cold start serves zero while
+its first read is pending; after a confirmed read error or missing config, it may use the
+caller's env_default. A value is never raised above LKG on error. The bucket functions in
+config/ are untouched; only the percent source moves here.
+
+Legacy retirement is stricter: a read error serves mode on until a successful
+read, while the other admission percents retain their last-known-good values.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import contextvars
 from dataclasses import dataclass
 import datetime as dt
 import logging
+import math
 import os
 from threading import RLock
 import time
@@ -25,6 +30,7 @@ from typing import Any, Callable, Literal, Mapping
 from prometheus_client import Gauge
 
 from config import rollout_cohorts as policy
+from config.policy.batch import COHORT_SALTS, cohort_bucket
 from config.rollout_cohorts import rollout_environment
 from database import rollout_cohorts as store
 from utils import executors
@@ -36,14 +42,14 @@ LEGACY_SYNC_MODES = store.LEGACY_SYNC_MODES
 TTL_SECONDS = 30.0
 COLD_READ_WAIT_SECONDS = 1.25
 LKG_ALERT_SECONDS = 300.0
-SOURCES = ('firestore', 'lkg', 'env_default')
+SOURCES = ('firestore', 'lkg', 'env_default', 'pending')
 
 LegacySyncMode = Literal['on', 'draining', 'dark']
 logger = logging.getLogger(__name__)
 
 RUNTIME_PERCENT_SOURCE = Gauge(
     'omi_runtime_percent_source',
-    'Current source of runtime percents (1 for the active source): ramp, lkg, or env_default.',
+    'Current source of runtime percents (1 for the active source): firestore, lkg, env_default, or pending.',
     ['source'],
 )
 RUNTIME_PERCENT_ERROR_SECONDS = Gauge(
@@ -65,7 +71,7 @@ class RampSnapshot:
     percents: Mapping[str, float]
     legacy_sync: LegacySyncMode
     locked_by: str | None
-    source: Literal['firestore', 'lkg', 'env_default']
+    source: Literal['firestore', 'lkg', 'env_default', 'pending']
     env: str | None = None
     updated_at: str | None = None
     updated_by: str | None = None
@@ -87,10 +93,13 @@ def deployment_env() -> str:
 
 
 def clamp_nesting(percents: Mapping[str, float]) -> dict[str, float]:
-    """batch-live-stt-retire never exceeds batch-pipeline at read time (E decision 2)."""
+    """Batch-nested names and legacy retirement never exceed batch admission at read time."""
     clamped = dict(percents)
-    if 'batch-live-stt-retire' in clamped:
-        clamped['batch-live-stt-retire'] = min(clamped['batch-live-stt-retire'], clamped.get('batch-pipeline', 0.0))
+    for name in store.BATCH_NESTED_RAMP_NAMES:
+        if name in clamped:
+            clamped[name] = min(clamped[name], clamped.get('batch-pipeline', 0.0))
+    if 'legacy-sync' in clamped:
+        clamped['legacy-sync'] = min(clamped['legacy-sync'], clamped.get('batch-pipeline', 0.0))
     return clamped
 
 
@@ -181,6 +190,7 @@ class _RampCache:
     def snapshot_now(self) -> RampSnapshot:
         with self.lock:
             loaded, error_since = self.loaded, self.error_since
+            pending = self.inflight is not None
         error_seconds = 0.0 if error_since is None else max(0.0, time.monotonic() - error_since)
         if loaded is None:
             return RampSnapshot(
@@ -188,10 +198,10 @@ class _RampCache:
                 percents=MappingProxyType({}),
                 legacy_sync='on',
                 locked_by=None,
-                source='env_default',
+                source='env_default' if error_since is not None or not pending else 'pending',
                 error_seconds=error_seconds,
             )
-        source: Literal['firestore', 'lkg', 'env_default']
+        source: Literal['firestore', 'lkg', 'env_default', 'pending']
         if error_since is not None:
             source = 'lkg'
         elif loaded.env_doc is None:
@@ -250,17 +260,42 @@ def runtime_percent(name: str, *, env_default: float) -> float:
     if name not in RAMP_NAMES:
         return env_default
     try:
-        value = ramp_snapshot().percents.get(name)
+        snapshot = ramp_snapshot()
+        if snapshot.source == 'pending':
+            return 0.0
+        value = snapshot.percents.get(name)
     except Exception:
         logger.warning('event=runtime_percent_read outcome=snapshot_failed served=env_default')
         return env_default
     return env_default if value is None else value
 
 
-def legacy_sync_mode() -> LegacySyncMode:
-    """'on' | 'draining' | 'dark' for this environment; 'on' until a document says otherwise."""
+def legacy_sync_mode(uid: str | None = None) -> LegacySyncMode:
+    """Retire only the stable cohort; absent/invalid scope keeps legacy on.
+
+    Ownerless maintenance may stop globally only at an explicit 100%. The mode
+    and percent come from one snapshot, so rollback remains one mode write.
+    """
     try:
-        return ramp_snapshot().legacy_sync
+        snapshot = ramp_snapshot()
+        mode = snapshot.legacy_sync
+        percent = snapshot.percents.get('legacy-sync', 0.0)
+        batch_percent = snapshot.percents.get('batch-pipeline', 0.0)
+        if (
+            snapshot.source != 'firestore'
+            or mode not in LEGACY_SYNC_MODES
+            or any(
+                isinstance(value, bool) or not math.isfinite(value) or not 0 <= value <= 100
+                for value in (percent, batch_percent)
+            )
+        ):
+            return 'on'
+        percent = min(percent, batch_percent)
+        if uid is None:
+            return mode if percent == 100 else 'on'
+        if not policy.valid_uid(uid) or cohort_bucket(uid, COHORT_SALTS['batch-pipeline']) >= percent:
+            return 'on'
+        return mode
     except Exception:
         logger.warning('event=runtime_percent_read outcome=snapshot_failed served=on')
         return 'on'

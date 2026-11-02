@@ -13,6 +13,7 @@ from google.api_core.exceptions import Aborted, InvalidArgument, ServiceUnavaila
 
 import database.firestore_transaction_retry as firestore_transaction_retry
 from database import conversations as conversations_db
+from database import sync_assignment as assignment_timing
 from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     run_with_transaction_contention_retry,
@@ -472,12 +473,13 @@ def test_timing_reports_bounded_error_and_off_is_silent(sdk_assignment, caplog):
 
 
 def test_timing_plan_excludes_nested_encode_and_counts_donors(sdk_assignment, monkeypatch, caplog):
-    import time as real_time
+    clock = FakeClock(now=0.0)
+    monkeypatch.setattr(assignment_timing, 'time', clock)
 
     store, _ = sdk_assignment()
 
     def body(transaction, user_ref, incoming, **kwargs):
-        real_time.sleep(0.01)
+        clock.sleep(0.01)
         kwargs['encode']({'id': 'canonical'})
         merged = {**incoming, 'sync_merged_from': ['d1', 'd2']}
         transaction.set(store.doc_ref, merged)
@@ -485,7 +487,7 @@ def test_timing_plan_excludes_nested_encode_and_counts_donors(sdk_assignment, mo
 
     monkeypatch.setattr(assignment, 'assign_in_transaction', body)
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args: None)
-    monkeypatch.setattr(conversations_db, 'encode_sync_assignment_plan', lambda *args: real_time.sleep(0.05) or {})
+    monkeypatch.setattr(conversations_db, 'encode_sync_assignment_plan', lambda *args: clock.sleep(0.05) or {})
     with caplog.at_level('INFO', logger=conversations_db.logger.name):
         conversations_db.assign_sync_conversation(
             'synthetic-unit', chunk('canonical', 1000), firestore_client=store, timing=True

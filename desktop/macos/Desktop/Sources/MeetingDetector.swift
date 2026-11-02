@@ -341,11 +341,27 @@ final class MeetingDetector {
     hasObservedState = true
 
     if let offAt = resumeOffAt {
-      let expired = now().timeIntervalSince(offAt) >= resumeWindow
+      let elapsed = now().timeIntervalSince(offAt)
+      let confirmedMeetIDs = confirmedCallIDs.filter { $0.hasPrefix("meet:") }
+      let observedMeetIDs = callIDs.filter { $0.hasPrefix("meet:") }
+      let codeConflict =
+        !confirmedMeetIDs.isEmpty && !observedMeetIDs.isEmpty
+        && confirmedMeetIDs.isDisjoint(with: observedMeetIDs)
+      // Retain the original conversation while the tab is hidden. Only a matching
+      // code may use the longer hold; even the same calendar event cannot join two codes.
+      let expired =
+        confirmedMeetIDs.isEmpty
+        ? elapsed >= resumeWindow : elapsed > MeetingDetectionTiming.meetingCodeResumeWindow
       let matches =
-        !confirmedCallIDs.isDisjoint(with: callIDs)
-        || !confirmedCalendarIDs.isDisjoint(with: calendarEventIDs)
+        !codeConflict
+        && (!confirmedMeetIDs.isDisjoint(with: observedMeetIDs)
+          || (elapsed < resumeWindow
+            && (!confirmedCallIDs.isDisjoint(with: callIDs)
+              || !confirmedCalendarIDs.isDisjoint(with: calendarEventIDs))))
       if expired || (detected && !matches) {
+        log(
+          "MeetingDetector: confirmation ENDED reason=\(expired ? "resume_expired" : "identity_mismatch") gapSeconds=\(Int(elapsed)) codeConflict=\(codeConflict)"
+        )
         endConfirmedMeeting(at: offAt)
       } else if detected {
         // The call survived the capture gap. Re-adopt identities (including a new

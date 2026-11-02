@@ -28,3 +28,8 @@ tolerations:
 worker:
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false
+recordSealSweeper:
+  # Producer identity proof is scoped to prod; dev validation is hermetic, no ambient writes.
+  enabled: false
+recordSealRepair:
+  enabled: false

@@ -8723,6 +8723,28 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteReasonOther => 'Lainnya';
 
   @override
+  String get deletePauseInsteadTitle => 'Jeda Omi saja?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Hentikan perekaman dan simpan semuanya. Kembali kapan saja.';
+
+  @override
+  String get deletePauseRecordingLine => 'Perekaman akan berhenti. Tidak ada rekaman baru saat Anda pergi.';
+
+  @override
+  String get deletePauseKeepLine => 'Kenangan, percakapan, dan aplikasi Anda tetap seperti semula.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Anda tetap masuk. Lanjutkan perekaman kapan saja. Langganan Anda tetap berjalan seperti biasa.';
+
+  @override
+  String get pauseOmiButton => 'Jeda Omi';
+
+  @override
+  String get continueDeletingButton => 'Lanjutkan Penghapusan';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Beri tahu kami lebih banyak';
 
   @override
@@ -8742,6 +8764,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Akun Anda tidak dapat dipulihkan — bahkan oleh tim dukungan.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman masih diproses. Jika dihapus sekarang, rekaman ini akan hilang.',
+      one: '1 rekaman masih diproses. Jika dihapus sekarang, rekaman ini akan hilang.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Masuk lagi dalam $days hari untuk memulihkan akun Anda.',
+      one: 'Masuk lagi dalam 1 hari untuk memulihkan akun Anda.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Ketik DELETE untuk konfirmasi';
@@ -8847,12 +8891,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Obrolan: \$$used / \$$limit digunakan bulan ini';
+    return 'Obrolan: $used / $limit digunakan bulan ini';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Obrolan: \$$used digunakan bulan ini';
+    return 'Obrolan: $used digunakan bulan ini';
   }
 
   @override
@@ -13311,6 +13355,30 @@ class AppLocalizationsId extends AppLocalizations {
   String get paywallOutlineHeadline => 'Jangan pernah melewatkan satu kata pun lagi.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/tahun',
+        'other': '/bulan',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/tahun',
+        'other': '/bulan',
+      },
+    );
+    return 'Gratis $days hari, lalu $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13633,32 +13701,6 @@ class AppLocalizationsId extends AppLocalizations {
       locale: localeName,
       other: '$count rekaman',
       one: '1 rekaman',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String onTheWaySummary(String totals) {
-    return '$totals dalam perjalanan';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count sedang diunggah';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count hampir siap';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count perlu perhatian',
-      one: '1 perlu perhatian',
     );
     return '$_temp0';
   }
@@ -14418,6 +14460,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get episodeMoments => 'Momen';
 
   @override
+  String get episodeFollowUps => 'Tindak lanjut';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
   String get episodeSoFar => 'Sejauh ini';
 
   @override
@@ -14445,13 +14493,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Buka Episode Sebelumnya';
-
-  @override
   String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
-
-  @override
-  String get episodeOpenAll => 'Buka Semua';
 
   @override
   String get episodeWrapUpNow => 'Selesaikan Sekarang';
@@ -14589,22 +14631,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get othersSpeakerLabel => 'Lainnya';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Selesai';
@@ -14634,4 +14664,319 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Unggahan dijeda sejenak — akan dilanjutkan otomatis';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Melanjutkan “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· sejak $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Catatan dimulai saat transkrip final tiba.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Disusun di ponselmu sementara kamu bicara. Catatan lengkap tiba bersama transkrip final.';
+
+  @override
+  String get episodeOnThisPhone => 'Di ponsel ini';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Transkrip final tertunda sekitar $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Transkrip final sedang menyusul';
+
+  @override
+  String get livePreviewNoEngineBody => 'Kata-katamu muncul di sini satu hingga dua menit setelah kamu mengucapkannya.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Merekam dengan aman';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Baru saja, di ponsel ini';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Aktifkan teks langsung';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'dalam perjalanan';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'saat online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Masih memproses $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Mengunggah sendiri. Percakapan terisi seiring datangnya.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Mengunggah sendiri setelah Anda kembali online. Percakapan terisi seiring datangnya.';
+
+  @override
+  String get onTheWayDayUploading => 'Mengunggah';
+
+  @override
+  String get onTheWayDayNext => 'Berikutnya';
+
+  @override
+  String get onTheWayDayQueued => 'Dalam antrean';
+
+  @override
+  String get onTheWayNoDate => 'Tanpa tanggal';
+
+  @override
+  String get onTheWayFootnote =>
+      'Rekaman yang gagal terus dicoba ulang di latar belakang. Apa pun yang tidak bisa kami transkripsikan akan otomatis dilaporkan ke kami.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detail untuk dukungan';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count klip pendek disembunyikan',
+      one: '1 klip pendek disembunyikan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Tampilkan';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sembunyikan $count klip pendek',
+      one: 'Sembunyikan 1 klip pendek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count rekaman belum diunggah. Jika dihapus sekarang, rekaman ini akan hilang — biarkan aplikasi tetap terbuka hingga pengunggahan selesai.',
+      one:
+          '1 rekaman belum diunggah. Jika dihapus sekarang, rekaman ini akan hilang — biarkan aplikasi tetap terbuka hingga pengunggahan selesai.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Tinjau dampaknya pada data Anda sebelum pergi.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi dijeda. Lanjutkan perekaman kapan saja.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman masih diproses. Rekaman tersebut akan disimpan di akun Anda selama ',
+      one: '1 rekaman masih diproses. Rekaman ini akan disimpan di akun Anda selama ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days hari.',
+      one: '1 hari.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Kenangan dan percakapan Anda akan dihapus setelah $days hari.',
+      one: 'Kenangan dan percakapan Anda akan dihapus setelah 1 hari.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Aplikasi dan integrasi Anda akan langsung terputus.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Langganan Anda langsung dibatalkan.';
+
+  @override
+  String get deleteRestoreTitle => 'Akun Anda menunggu penghapusan';
+
+  @override
+  String get deleteRestoreSubtitle => 'Berubah pikiran? Pulihkan akun Anda sebelum dihapus.';
+
+  @override
+  String get deleteRestoreKeepData => 'Pulihkan kenangan dan percakapan Anda.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Langganan Anda tetap dibatalkan. Hubungkan kembali aplikasi dan integrasi setelah memulihkan akun.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Anda memiliki $days hari lagi untuk memulihkan akun Anda.',
+      one: 'Anda memiliki 1 hari lagi untuk memulihkan akun Anda.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Pulihkan akun saya';
+
+  @override
+  String get deleteFinishButton => 'Selesaikan penghapusan';
+
+  @override
+  String get deleteFinishNowButton => 'Hapus akun saya sekarang';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Ini akan mengakhiri masa pemulihan. Akun dan rekaman Anda akan dihapus secara permanen.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'Anda memiliki waktu kurang dari satu hari untuk memulihkan akun Anda.';
+
+  @override
+  String get deleteFinishNowTitle => 'Hapus Akun Anda?';
+
+  @override
+  String get syncHealthAlerts => 'Peringatan kesehatan sinkronisasi';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Beri tahu saya jika Omi tidak menyinkronkan rekaman selama lebih dari sehari';
+
+  @override
+  String get syncStallAlertTitle => 'Omi tidak tersinkronisasi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Tidak ada rekaman dari Omi Anda yang tersinkronisasi selama lebih dari $hours jam. Buka Omi untuk memeriksa koneksi perangkat Anda.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi tidak tersinkronisasi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tidak ada rekaman yang tersinkronisasi selama lebih dari $hours jam';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Beranda';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
+
+  @override
+  String get yearlySwitchTitle => 'Beralih ke Tahunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Hemat $amount per tahun';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Hemat $amount per tahun dengan bayar tahunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Paket yang sama, dibayar setahun sekali';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Paket';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per tahun';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Dibayar hari ini';
+
+  @override
+  String get yearlySwitchRenews => 'Diperpanjang';
+
+  @override
+  String get yearlySwitchCreditNote => 'Termasuk kredit untuk sisa bulan ini.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pembayaran ditolak. Anda tetap bayar bulanan.';
+
+  @override
+  String get yearlySwitchFailed => 'Tidak dapat beralih. Anda tetap bayar bulanan.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Tidak dapat memuat harga Anda.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Pembayaran tahunan belum tersedia untuk paket Anda saat ini.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Anda sekarang bayar tahunan';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount ditagih hari ini. Diperpanjang $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Kirim pesan di $app. Layar ini akan diperbarui segera setelah Omi menerimanya.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dapatkan kode baru lalu kirim dari $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Menulis catatan…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Menyelesaikan transkrip dulu. Anda boleh meninggalkan halaman ini.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Mencakup hingga $time · catatan lengkap saat selesai';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Ditranskripsi hingga $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration tersimpan';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
 }

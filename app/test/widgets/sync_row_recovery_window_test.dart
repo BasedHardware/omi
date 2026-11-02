@@ -209,13 +209,13 @@ void main() {
     expect(find.text('Delete'), findsOneWidget);
   });
 
-  testWidgets('an invalid-date refusal keeps its Retry: it resends and stays honest', (tester) async {
+  testWidgets('an invalid-date refusal offers no manual Retry', (tester) async {
     await pumpRow(
         tester, makeWal(WalStatus.uploadRejected)..uploadRejectionReason = WalUploadRejection.invalidCaptureTime);
 
     expect(find.text('Invalid recording date'), findsOneWidget);
-    expect(find.text('Try Again'), findsOneWidget, reason: 'a manual retry may still be what the user wants');
-    expect(find.text('Delete'), findsNothing);
+    expect(find.text('Try Again'), findsNothing, reason: 'Omi owns automatic refusal recovery');
+    expect(find.text('Delete'), findsOneWidget);
   });
 
   testWidgets('a too-large refusal offers Delete even while the failed-sync banner points at its row', (tester) async {

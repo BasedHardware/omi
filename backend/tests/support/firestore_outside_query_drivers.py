@@ -67,6 +67,15 @@ def _driver(
     DRIVERS[function] = entry
 
 
+_driver(
+    'utils.batch_pipeline.record_seal_nojob.discover',
+    domains={'after': [None, f'users/{UID}/conversations/record']},
+    neutrals={'limit': (128, 'bounds the operator discovery page only')},
+    profile='operational-record-seal-nojob-backfill',
+    serving=False,
+)
+
+
 def _feedback_rows(client, combo, trial):
     session = 'session-1' if trial == 1 else None
     client.queue_results(
@@ -493,4 +502,13 @@ _driver(
     base={'job_id': 'legacy-job', 'uid': UID, 'job': None},
     patchers=(_completed_status_enabled,),
     profile='expired-legacy-handle',
+)
+
+
+_driver(
+    'utils.episodes.home_read.list_episode_window',
+    base={'uid': UID, 'start': T0},
+    domains={'end': (T0, T1)},
+    neutrals={'limit': LIMIT, 'cursor': (None, 'snapshot continuation changes the position only')},
+    profile='request-episode-home',
 )

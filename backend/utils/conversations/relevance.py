@@ -219,7 +219,10 @@ def find_neighbor(
     best: Optional[Neighbor] = None
     for row in rows:
         other_id = row.get('id')
-        other_start, other_end = row.get('started_at'), row.get('finished_at')
+        from utils.conversations.recorded_time import conversation_span
+
+        span = conversation_span(row)
+        other_start, other_end = (span.recorded_start, span.recorded_end) if span else (None, None)
         if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
             continue
         if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):
@@ -247,6 +250,7 @@ def decide_relevance(
     model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
+    occasion_retains: Callable[[], Optional[str]] = lambda: None,
     jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
     arm: RelevanceArm = 'nano',
     record_arm: bool = False,
@@ -314,6 +318,18 @@ def decide_relevance(
         return keep('policy', 'exempt')
     if user_kept:
         return keep('user', 'restored')
+
+    # A member is evidence of the whole occasion. A continuation can only be
+    # hidden after transactional absorption proves its content reached a survivor.
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        occasion_reason = occasion_retains()
+        if occasion_reason:
+            return keep('policy', occasion_reason)
+        adjacent = neighbor()
+        if adjacent is not None:
+            return replace(keep('policy', 'occasion_neighbor'), neighbor_id=adjacent.conversation_id)
 
     # Photos carry content the transcript rules cannot see, and a trusted wake
     # word is judged by the model's wake-word rules (an invocation the

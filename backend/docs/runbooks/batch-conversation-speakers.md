@@ -51,6 +51,15 @@ resolver completion; they do not prove human attribution accuracy. Qualify real
 audio separately through the authorized staging fixtures; synthetic tests prove
 constraints and identity policy only.
 
+Per-window audio evidence: a manifest that disagrees with the listed objects abstains only the windows it
+overlaps, for batch-authoritative conversations and beta clients. `SPEAKER_PER_WINDOW_ENABLED=false` restores
+the whole-recording refusal; set it on processing services. Refusals appear by reason on the
+`conversation_speaker_audio_evidence` log line.
+
+Inside that cohort, a `sync:` segment refused only because `.batch.enc` overlaps it is proven and cut on
+`.opus.enc` alone. `final:batch:` segments stay refused: desktop record units are timed on `.batch.enc` and the
+conversation does not say which store timed a segment. `SPEAKER_SYNC_STORE_ENABLED=false` restores the refusal.
+
 Rollback: set `BATCH_CONVERSATION_SPEAKERS_ENABLED=false` on processing hosts.
 That stops automatic batch linking/naming, including when speaker-evidence mode
 serves. It preserves existing transcript and manual labels; it does not rewrite

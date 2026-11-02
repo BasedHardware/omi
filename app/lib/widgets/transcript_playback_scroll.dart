@@ -18,20 +18,11 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
       var anchorIndex = 0;
       var anchorViewportOffset = 0.0;
       if (!isAtBottom) {
-        var closestTop = double.infinity;
-        for (final index in _builtSegmentIndices()) {
-          final segment = widget.segments[index];
-          final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
-          if (renderObject is! RenderBox) continue;
-          final viewport = RenderAbstractViewport.of(renderObject);
-          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
-          final bottom = top + renderObject.size.height;
-          if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
-            closestTop = top;
-            anchorId = segment.id;
-            anchorIndex = index;
-            anchorViewportOffset = top;
-          }
+        final visible = _topVisibleSegment();
+        if (visible != null) {
+          anchorIndex = visible.index;
+          anchorId = widget.segments[anchorIndex].id;
+          anchorViewportOffset = visible.top;
         }
       }
       scrollState.update(
@@ -46,34 +37,97 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     _setIsAtBottom(isAtBottom);
   }
 
-  /// Rows in the sliver's layout/cache window, excluding headings and spacing.
-  /// Scroll updates must not probe a GlobalKey for every line in the recording:
-  /// a saved conversation can have thousands of lines but only a few mounted.
-  Iterable<int> _builtSegmentIndices() sync* {
+  // Reveal coordinates remain valid even when a notification arrives during
+  // layout, before the viewport has updated its slivers' paint transforms.
+  double _viewportTopOf(RenderBox row) {
+    widget.onScrollRevealProbe?.call();
+    final viewport = RenderAbstractViewport.of(row);
+    return viewport.getOffsetToReveal(row, 0).offset -
+        _scrollController.offset +
+        (_endAnchored ? _scrollController.position.viewportDimension * (viewport as RenderViewport).anchor : 0);
+  }
+
+  List<RenderSliverMultiBoxAdaptor> _listSlivers() {
+    // The scrollable owns these slivers for its mounted lifetime. Discover
+    // them once, rather than walking the render tree on every notification.
+    // A mode change replaces the scrollable and detaches the old slivers.
+    if (_cachedListSlivers.isNotEmpty && _cachedListSlivers.every((sliver) => sliver.attached)) {
+      return _cachedListSlivers;
+    }
+    _cachedListSlivers.clear();
     final root = _listKey.currentContext?.findRenderObject();
-    if (root == null) return;
-    RenderSliverMultiBoxAdaptor? sliver;
-    void findSliver(RenderObject object) {
-      if (sliver != null) return;
+    void visit(RenderObject object) {
+      widget.onScrollGeometryProbe?.call();
       if (object is RenderSliverMultiBoxAdaptor) {
-        sliver = object;
+        _cachedListSlivers.add(object);
       } else {
-        object.visitChildren(findSliver);
+        object.visitChildren(visit);
       }
     }
 
-    findSliver(root);
-    final rows = sliver;
-    if (rows == null) return;
-    var child = rows.firstChild;
-    while (child != null) {
-      final itemIndex = (child.parentData! as SliverMultiBoxAdaptorParentData).index;
-      if (itemIndex != null) {
-        final segmentIndex = itemIndex - widget.leadingItems.length - 1;
-        if (segmentIndex >= 0 && segmentIndex < widget.segments.length) yield segmentIndex;
+    if (root != null) visit(root);
+    return _cachedListSlivers;
+  }
+
+  /// Direct children in the slivers' layout/cache window, never kept-alive
+  /// offscreen rows. Mapping an index and reading its layout offset both take
+  /// constant work, independent of transcript length or row depth.
+  Iterable<({int index, RenderBox row})> _builtSegmentRows() sync* {
+    final slivers = _listSlivers();
+    for (var sliverIndex = 0; sliverIndex < slivers.length; sliverIndex++) {
+      final rows = slivers[sliverIndex];
+      var child = rows.firstChild;
+      while (child != null) {
+        var itemIndex = (child.parentData! as SliverMultiBoxAdaptorParentData).index;
+        if (itemIndex != null) {
+          if (_endAnchored) {
+            itemIndex = sliverIndex == 0 ? _liveBoundary - 1 - itemIndex : _liveBoundary + itemIndex;
+          }
+          final segmentIndex = itemIndex - widget.leadingItems.length - 1;
+          if (segmentIndex >= 0 && segmentIndex < widget.segments.length) {
+            yield (index: segmentIndex, row: child);
+          }
+        }
+        child = rows.childAfter(child);
       }
-      child = rows.childAfter(child);
     }
+  }
+
+  Iterable<int> _builtSegmentIndices() => _builtSegmentRows().map((entry) => entry.index);
+
+  ({int index, double top})? _topVisibleSegment() {
+    ({int index, double top})? visible;
+    final viewportHeight = _scrollController.position.viewportDimension;
+    // Resolve the sliver origin once. Every remaining row position is just
+    // arithmetic on SliverList's existing layout offsets, including the
+    // upward-growing live history. No per-row key lookup or reveal walk.
+    RenderObject? previousSliver;
+    var originTop = 0.0;
+    var originOffset = 0.0;
+    var originHeight = 0.0;
+    var reverse = false;
+    for (final entry in _builtSegmentRows()) {
+      widget.onScrollGeometryProbe?.call();
+      final row = entry.row;
+      final parentData = row.parentData! as SliverMultiBoxAdaptorParentData;
+      if (!identical(row.parent, previousSliver)) {
+        previousSliver = row.parent;
+        originTop = _viewportTopOf(row);
+        originOffset = parentData.layoutOffset!;
+        originHeight = row.size.height;
+        reverse = _endAnchored && identical(previousSliver, _cachedListSlivers.first);
+      }
+      final delta = parentData.layoutOffset! - originOffset;
+      final rowTop = reverse ? originTop - delta - row.size.height + originHeight : originTop + delta;
+      // The segment key is inside its inter-row spacing. Preserve the same
+      // intersection rule as the content box used by search and playback.
+      final top = rowTop + (widget.separator && entry.index > 0 ? 4 : 0);
+      final bottom = rowTop + row.size.height;
+      if (bottom > 0 && top < viewportHeight && (visible == null || top < visible.top)) {
+        visible = (index: entry.index, top: top);
+      }
+    }
+    return visible;
   }
 
   /// Scrolls the playback follow target into the top third. Triggered only on a
@@ -215,9 +269,8 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
       if (!mounted || generation != _locateGeneration || !_scrollController.hasClients) return;
       final renderObject = _segmentKeys[segmentId]?.currentContext?.findRenderObject();
       if (renderObject is! RenderBox) return;
-      final viewport = RenderAbstractViewport.of(renderObject);
       final position = _scrollController.position;
-      final target = (viewport.getOffsetToReveal(renderObject, 0).offset - position.viewportDimension * alignment)
+      final target = (position.pixels + _viewportTopOf(renderObject) - position.viewportDimension * alignment)
           .clamp(position.minScrollExtent, position.maxScrollExtent);
       await _scrollController.animateTo(
         target,
@@ -253,21 +306,8 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   void _reportTopVisibleSegment() {
     final onTop = widget.onTopVisibleSegmentChanged;
     if (onTop == null || !_scrollController.hasClients) return;
-    TranscriptSegment? topSegment;
-    var closestTop = double.infinity;
-    final currentScroll = _scrollController.offset;
-    for (final index in _builtSegmentIndices()) {
-      final segment = widget.segments[index];
-      final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
-      if (renderObject is! RenderBox) continue;
-      final viewport = RenderAbstractViewport.of(renderObject);
-      final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
-      final bottom = top + renderObject.size.height;
-      if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
-        closestTop = top;
-        topSegment = segment;
-      }
-    }
+    final visible = _topVisibleSegment();
+    final topSegment = visible == null ? null : widget.segments[visible.index];
     if (topSegment != null && !identical(topSegment, _lastReportedTopSegment)) {
       _lastReportedTopSegment = topSegment;
       onTop(topSegment);

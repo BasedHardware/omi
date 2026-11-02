@@ -55,6 +55,17 @@ scrape_jobs:
     coverage_alert: null
     coverage_status: declared
 
+  # GPU batch-pipeline workers (HPA external-metric path, #23891). Targets
+  # exist only while the release runs; the adapter requires a fresh per-pod
+  # three-priority sample, so absence makes the HPA read unavailable, never a
+  # fabricated zero.
+  - name: batch-pipeline-worker-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: null
+    coverage_status: declared
+
   - name: backend-listen-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token

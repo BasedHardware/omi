@@ -1064,11 +1064,11 @@ class TestSyncedWriterTimestamps:
 
         docs = [SimpleNamespace(reference=SimpleNamespace(id=f"a{i}")) for i in range(3)]
         _, _, written = self._fake_db(monkeypatch, action_items_db, docs)
-        import database.account_deletion_marker as marker
+        from database import _client
 
         miss = SimpleNamespace(exists=False, to_dict=lambda: None)
         monkeypatch.setattr(
-            marker,
+            _client,
             'get_data_plane_firestore_client',
             lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
         )

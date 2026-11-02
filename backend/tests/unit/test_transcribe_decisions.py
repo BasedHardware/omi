@@ -217,6 +217,29 @@ def test_conversation_lifecycle_actions():
     )
 
 
+def test_desktop_meeting_timeout_outlasts_code_resume_but_still_expires():
+    # The desktop meeting socket requests 22 minutes: 5m sustain + 8s off
+    # grace + 15m code resume, with margin. Ambient still requests 120s.
+    meeting_timeout = effective_conversation_timeout(1320, is_multi_channel=False)
+    assert meeting_timeout == 1320
+    for gap, timeout, expected in [
+        (568, meeting_timeout, ConversationLifecycleAction.continue_current),
+        (300 + 8 + 900, meeting_timeout, ConversationLifecycleAction.continue_current),
+        (1320, meeting_timeout, ConversationLifecycleAction.process_and_create_new),
+        (568, effective_conversation_timeout(120, False), ConversationLifecycleAction.process_and_create_new),
+    ]:
+        assert (
+            decide_lifecycle_action(
+                conversation_exists=True,
+                status='in_progress',
+                in_progress_status='in_progress',
+                seconds_since_last_update=gap,
+                conversation_creation_timeout=timeout,
+            )
+            == expected
+        )
+
+
 def test_cross_source_in_progress_must_not_attach():
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source='omi') is True
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source=None) is True

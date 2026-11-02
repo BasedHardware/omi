@@ -169,6 +169,31 @@ def test_missing_key_refuses_before_http(monkeypatch):
     factory.assert_not_called()
 
 
+@pytest.mark.parametrize('seconds', [0.5, 61, 7200])
+def test_second_chance_is_ship_on_and_separate_from_guarded_cap(key, monkeypatch, seconds):
+    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+    monkeypatch.delenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', raising=False)
+    assert module.authorization(seconds, second_chance=True)
+    with pytest.raises(module.SonioxBatchError):
+        module.authorization(seconds)
+
+
+@pytest.mark.parametrize('seconds', [0, -1, 7200.1, float('inf'), float('nan'), True])
+def test_second_chance_refuses_invalid_duration_before_http(key, seconds):
+    factory = Mock()
+    with pytest.raises(module.SonioxBatchError):
+        module.transcribe(b'synthetic', seconds, second_chance=True, client_factory=factory)
+    factory.assert_not_called()
+
+
+def test_second_chance_kill_switch_refuses_before_http(key, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'false')
+    factory = Mock()
+    with pytest.raises(module.SonioxBatchError):
+        module.transcribe(b'synthetic', 5, second_chance=True, client_factory=factory)
+    factory.assert_not_called()
+
+
 def test_provider_ids_cannot_escape_authenticated_path(key):
     calls = []
 

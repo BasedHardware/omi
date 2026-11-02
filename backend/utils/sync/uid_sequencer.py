@@ -164,7 +164,7 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _Cl
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
     if not registry.production_stage():
         return False
-    if not legacy_dark.sequencer_dispatch_allowed():
+    if not legacy_dark.sequencer_dispatch_allowed(uid=uid):
         # Legacy-dark: ``dark`` claims and dispatches nothing (contract (h)).
         return False
     remaining, direct_job_id = (
@@ -525,6 +525,11 @@ def reconcile_uid(
     if not registry.production_stage():
         return 'disabled'
     current = now or datetime.now(timezone.utc)
+    if not legacy_dark.sequencer_dispatch_allowed(uid=uid):
+        # Rotate the bounded scan without claiming or dispatching this owner;
+        # dark entries must not starve owners outside a partial cohort.
+        registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
+        return 'legacy_dark'
     sample = registry.waiting_sample(uid, now=current)
     waiting, oldest_age = sample['depth'], sample['age_seconds']
     logger.info(
@@ -696,6 +701,9 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
         progress = _ClaimProgress()
         try:
             registry.defer_pending(job['id'], now=now)
+            if not legacy_dark.sequencer_dispatch_allowed(uid=job['uid']):
+                outcomes['legacy_dark'] = outcomes.get('legacy_dark', 0) + 1
+                continue
             # Reuse the existing bounded page, independent of newest selection
             # and of this UID's live reservation. Age is only a cheap filter;
             # exact Redis absence, run-lock and ledger proofs still decide.

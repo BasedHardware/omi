@@ -11,6 +11,11 @@ from database.firestore_index_registry import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _keep_test_recipients_active(monkeypatch):
+    monkeypatch.setattr(notifications_module, 'account_deletion_blocks_user_work', lambda _uid: False)
+
+
 def _filter_tuple(field_filter):
     return (field_filter.field_path, field_filter.op_string, field_filter.value)
 
@@ -146,6 +151,21 @@ def test_indexed_selection_keeps_tokenless_users(monkeypatch):
     result = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)
 
     assert result == [('u1', DeferredTokens(None), 'UTC')]
+
+
+def test_indexed_selection_skips_pending_deletion_users(monkeypatch):
+    fake = _FakeDb(
+        {
+            'pending': {'time_zone': 'UTC', 'fcm_token': 'pending-token'},
+            'active': {'time_zone': 'UTC', 'fcm_token': 'active-token'},
+        }
+    )
+    monkeypatch.setattr(notifications_module, 'get_firestore_client', lambda: fake)
+    monkeypatch.setattr(notifications_module, 'account_deletion_blocks_user_work', lambda uid: uid == 'pending')
+
+    result = notifications_module.get_users_for_daily_summary_indexed(['UTC'], 22)
+
+    assert [uid for uid, _tokens, _zone in result] == ['active']
 
 
 @pytest.mark.parametrize(

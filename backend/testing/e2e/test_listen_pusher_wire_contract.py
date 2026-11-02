@@ -112,10 +112,23 @@ def _receive_modulate_segment(websocket: Any) -> list[dict[str, Any]]:
 
 
 def _make_live_conversation_stale(uid: str, conversation_id: str) -> None:
-    """Advance persisted state; the test releases the real lifecycle loop explicitly."""
+    """Age the complete recorded window before releasing the real lifecycle loop."""
+    from utils.conversations.recorded_time import conversation_span
 
-    get_mock_firestore().collection('users').document(uid).collection('conversations').document(conversation_id).update(
-        {'finished_at': datetime.now(timezone.utc) - timedelta(minutes=3)}
+    ref = get_mock_firestore().collection('users').document(uid).collection('conversations').document(conversation_id)
+    row = ref.get().to_dict()
+    span = conversation_span(row)
+    assert span is not None
+    end = datetime.now(timezone.utc) - timedelta(minutes=3)
+    shift = end - span.recorded_end
+    ref.update(
+        {
+            'started_at': row['started_at'] + shift,
+            'recorded_start': span.recorded_start + shift,
+            'recorded_end': end,
+            'last_speech_at': end,
+            'finished_at': end,
+        }
     )
 
 

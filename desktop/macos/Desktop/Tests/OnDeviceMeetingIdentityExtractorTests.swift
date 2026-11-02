@@ -72,8 +72,11 @@ final class OnDeviceMeetingIdentityExtractorTests: XCTestCase {
       Set(body.keys),
       [
         "calendar_event_id", "calendar_source", "title", "start_time", "end_time", "participants", "platform",
+        "participant_sources",
       ])
     XCTAssertEqual(body["calendar_source"] as? String, "screen_activity")
+    let sources = try XCTUnwrap(body["participant_sources"] as? [String: Any])
+    XCTAssertEqual(Set(sources.keys), ["observed_screen_listing", "observed_call_tiles"])
     XCTAssertNil(body["meeting_link"])
     XCTAssertNil(body["notes"])
     XCTAssertNil(body["ocrText"])

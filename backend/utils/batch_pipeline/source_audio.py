@@ -70,11 +70,19 @@ def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_bucket
         raise ValueError('retained audio reference is outside admitted source')
 
 
-def read_reference(client, ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str], key: bytes) -> bytes:
+def read_reference(
+    client, ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str], key: bytes, *, source_metadata=False
+) -> bytes:
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
     blob = client.bucket(ref['bucket']).blob(ref['path'], generation=generation)
     leaf_timings.call('download_metadata', blob.reload, if_generation_match=generation, timeout=30, retry=None)
+    if source_metadata:
+        # Admission needs the source metadata in the manifest, including the
+        # legacy sample rate. Reuse this generation-pinned GET, not a second one.
+        ref['metadata'] = blob.metadata or {}
+        if 'sample_rate' not in ref:
+            ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
     if not blob.size or not 0 < blob.size <= MAX_SOURCE_BYTES:
         raise ValueError('retained audio source exceeds size budget')
     raw = leaf_timings.call('download', blob.download_as_bytes, if_generation_match=generation, timeout=60, retry=None)
@@ -92,10 +100,17 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         raise ValueError('retained audio manifest binding mismatch')
     pcm = bytearray(round(item.duration_seconds * 16000) * 2)
     previous = 0
+    previous_key, previous_source = None, b''
     for ref in manifest['references']:
-        source = fetch(ref)
-        if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
-            raise ValueError('retained PCM digest changed')
+        source_key = tuple(ref.get(name) for name in ('bucket', 'path', 'generation', 'pcm_sha256'))
+        pinned = all(value is not None for value in source_key)
+        if pinned and source_key == previous_key:
+            source = previous_source
+        else:
+            source = fetch(ref)
+            if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
+                raise ValueError('retained PCM digest changed')
+            previous_key, previous_source = source_key if pinned else None, source
         start, offset, frames = ref['start_frame'], ref['offset_frame'], ref['frames']
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:
             raise ValueError('invalid retained audio slice')

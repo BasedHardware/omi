@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
-from config.batch_language_recovery import language_guarded
+from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
@@ -182,6 +182,12 @@ def register_batch_artifact(
         redrive_write = (
             (
                 (policy.speech_empty_multilingual and redrive.get('paid_epoch') == 2)
+                or (
+                    policy.recovery_enabled
+                    and redrive.get('paid_epoch') == REPAIR_EPOCH
+                    and redrive.get('provider') == REPAIR_PROVIDER
+                    and words_repair_eligible(job)
+                )
                 or (
                     policy.recovery_enabled
                     and language_guarded(job)

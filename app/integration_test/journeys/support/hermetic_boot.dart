@@ -8,6 +8,7 @@ import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/preferences.dart';
@@ -221,7 +222,7 @@ String get journeyLane => Platform.environment['OMI_JOURNEY_LANE'] ?? 'hermetic'
 /// pipeline here: nothing in flight, nothing uploaded — the card stays hidden
 /// and does no I/O, without constructing a real [SyncProvider] and its
 /// background sync machinery inside hermetic tests.
-class InertSyncProvider extends ChangeNotifier implements SyncProvider {
+class InertSyncProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   SyncState get syncState => const SyncState();
 

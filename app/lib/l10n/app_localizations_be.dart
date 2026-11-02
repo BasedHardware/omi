@@ -8743,6 +8743,28 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deleteReasonOther => 'Іншае';
 
   @override
+  String get deletePauseInsteadTitle => 'Прыпыніць Omi замест выдалення?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Спыніце запіс і захавайце ўсё. Вяртайцеся ў любы час.';
+
+  @override
+  String get deletePauseRecordingLine => 'Запіс спыніцца. Пакуль вас няма, новыя запісы не будуць стварацца.';
+
+  @override
+  String get deletePauseKeepLine => 'Вашы ўспаміны, размовы і праграмы застануцца без змен.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Вы застаняцеся ў сістэме. Аднавіць запіс можна ў любы час. Ваша падпіска працягнецца без змен.';
+
+  @override
+  String get pauseOmiButton => 'Прыпыніць Omi';
+
+  @override
+  String get continueDeletingButton => 'Працягнуць выдаленне';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Раскажыце падрабязней';
 
   @override
@@ -8762,6 +8784,28 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Ваш уліковы запіс нельга аднавіць — нават службай падтрымкі.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісаў яшчэ апрацоўваюцца. Калі выдаліць іх цяпер, яны будуць страчаны.',
+      one: 'Адзін запіс яшчэ апрацоўваецца. Калі выдаліць яго цяпер, ён будзе страчаны.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Увайдзіце зноў на працягу $days дзён, каб аднавіць уліковы запіс.',
+      one: 'Увайдзіце зноў на працягу 1 дня, каб аднавіць уліковы запіс.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Увядзіце DELETE для пацвярджэння';
@@ -8867,12 +8911,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit выкарыстана ў гэтым месяцы';
+    return 'Чат: $used / $limit выкарыстана ў гэтым месяцы';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used выкарыстана ў гэтым месяцы';
+    return 'Чат: $used выкарыстана ў гэтым месяцы';
   }
 
   @override
@@ -13334,6 +13378,30 @@ class AppLocalizationsBe extends AppLocalizations {
   String get paywallOutlineHeadline => 'Больш не прапусціце ніводнага слова.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/год',
+        'other': '/месяц',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/год',
+        'other': '/месяц',
+      },
+    );
+    return '$days дзён бясплатна, потым $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13657,32 +13725,6 @@ class AppLocalizationsBe extends AppLocalizations {
       locale: localeName,
       other: 'Запісаў: $count',
       one: '1 запіс',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String onTheWaySummary(String totals) {
-    return '$totals у дарозе';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Запампоўваецца: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Амаль гатова: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Патрабуюць увагі: $count',
-      one: '1 патрабуе ўвагі',
     );
     return '$_temp0';
   }
@@ -14439,6 +14481,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get episodeMoments => 'Моманты';
 
   @override
+  String get episodeFollowUps => 'Наступныя крокі';
+
+  @override
+  String get episodeOpenTranscript => 'Адкрыць расшыфроўку';
+
+  @override
   String get episodeSoFar => 'Пакуль што';
 
   @override
@@ -14466,13 +14514,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Адкрыць папярэдні эпізод';
-
-  @override
   String get episodeNotesSoon => 'Нататкі з’явяцца пасля першых хвілін размовы.';
-
-  @override
-  String get episodeOpenAll => 'Адкрыць усё';
 
   @override
   String get episodeWrapUpNow => 'Завяршыць зараз';
@@ -14610,22 +14652,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get othersSpeakerLabel => 'Іншыя';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Гатова';
@@ -14655,4 +14685,317 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Выгрузка часова прыпынена — яна аўтаматычна адновіцца';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Працяг «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· з $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Нататкі з’явяцца, калі прыбудзе канчатковая расшыфроўка.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Ствараюцца на вашым тэлефоне, пакуль вы гаварыце. Поўныя нататкі з’явяцца разам з канчатковай расшыфроўкай.';
+
+  @override
+  String get episodeOnThisPhone => 'На гэтым тэлефоне';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Канчатковая расшыфроўка адстае прыблізна на $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Канчатковая расшыфроўка даганяе';
+
+  @override
+  String get livePreviewNoEngineBody => 'Вашы словы з’явяцца тут праз хвіліну-две пасля таго, як вы іх вымовіце.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Бяспечны запіс';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Толькі што, на гэтым тэлефоне';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Уключыць жывы тэкст';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'у дарозе';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'пры злучэнні з інтэрнэтам';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration яшчэ загружаецца';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Загрузка ідзе аўтаматычна. Размовы з\'яўляюцца па меры прыбыцця запісаў.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Загрузка ідзе аўтаматычна, калі вы зноў будзеце онлайн. Размовы з\'яўляюцца па меры прыбыцця запісаў.';
+
+  @override
+  String get onTheWayDayUploading => 'Загружаецца';
+
+  @override
+  String get onTheWayDayNext => 'Наступныя';
+
+  @override
+  String get onTheWayDayQueued => 'У чарзе';
+
+  @override
+  String get onTheWayNoDate => 'Без даты';
+
+  @override
+  String get onTheWayFootnote =>
+      'Запісы, якія не ўдалося загрузіць, працягнуць спробы ў фонавым рэжыме. Пра ўсё, што мы не зможам пераўтварыць у тэкст, нам паведамяць аўтаматычна.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Падрабязнасці для падтрымкі';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Схаваныя кароткія запісы: $count',
+      one: '1 кароткі запіс схаваны',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Паказаць';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Схаваць кароткія запісы: $count',
+      one: 'Схаваць 1 кароткі запіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count запісаў яшчэ не загружаны. Калі выдаліць іх цяпер, яны будуць страчаны — пакіньце праграму адкрытай, каб завяршыць загрузку.',
+      one:
+          'Адзін запіс яшчэ не загружаны. Калі выдаліць яго цяпер, ён будзе страчаны — пакіньце праграму адкрытай, каб завяршыць загрузку.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Перш чым сысці, даведайцеся, што будзе з вашымі данымі.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi прыпынены. Аднавіць запіс можна ў любы час.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісаў яшчэ апрацоўваюцца. Яны будуць захоўвацца ў вашым акаўнце яшчэ ',
+      one: '1 запіс яшчэ апрацоўваецца. Ён будзе захоўвацца ў вашым акаўнце яшчэ ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days дзён.',
+      one: '1 дзень.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Вашы ўспаміны і размовы будуць выдалены праз $days дзён.',
+      one: 'Вашы ўспаміны і размовы будуць выдалены праз 1 дзень.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Вашы праграмы і інтэграцыі будуць адключаны адразу.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Ваша падпіска будзе адменена адразу.';
+
+  @override
+  String get deleteRestoreTitle => 'Ваш уліковы запіс чакае выдалення';
+
+  @override
+  String get deleteRestoreSubtitle => 'Перадумалі? Аднавіце ўліковы запіс, пакуль яго не выдалілі.';
+
+  @override
+  String get deleteRestoreKeepData => 'Аднавіце свае ўспаміны і размовы.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Падпіска застанецца скасаванай. Пасля аднаўлення зноў падключыце праграмы і інтэграцыі.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'У вас засталося $days дзён, каб аднавіць ваш рахунак.',
+      one: 'У вас застаўся 1 дзень, каб аднавіць ваш рахунак.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Аднавіць мой уліковы запіс';
+
+  @override
+  String get deleteFinishButton => 'Завяршыць выдаленне';
+
+  @override
+  String get deleteFinishNowButton => 'Выдаліць мой уліковы запіс цяпер';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Пасля гэтага аднаўленне будзе немагчымае. Ваш уліковы запіс і запісы будуць выдалены назаўжды.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'У вас засталося менш за дзень, каб аднавіць ваш рахунак.';
+
+  @override
+  String get deleteFinishNowTitle => 'Выдаліць ваш рахунак?';
+
+  @override
+  String get syncHealthAlerts => 'Апавяшчэнні пра стан сінхранізацыі';
+
+  @override
+  String get syncHealthAlertsDescription => 'Апавяшчаць, калі запісы Omi не сінхранізуюцца больш за суткі';
+
+  @override
+  String get syncStallAlertTitle => 'Omi не сінхранізуецца';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Запісы з вашага Omi не сінхранізаваліся больш за $hours гадзін. Адкрыйце Omi, каб праверыць падключэнне прылады.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не сінхранізуецца';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Запісы не сінхранізаваліся больш за $hours гадзін';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Штодзённыя рэзюмэ на галоўнай';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
+
+  @override
+  String get yearlySwitchTitle => 'Перайсці на гадавы';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Зэканомце $amount за год';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Зэканомце $amount за год з гадавой аплатай';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Той жа план, аплата раз на год';
+
+  @override
+  String get yearlySwitchPlanLabel => 'План';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price за год';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Да аплаты сёння';
+
+  @override
+  String get yearlySwitchRenews => 'Падаўжэнне';
+
+  @override
+  String get yearlySwitchCreditNote => 'Уключае крэдыт за астатак гэтага месяца.';
+
+  @override
+  String get yearlySwitchDeclined => 'Аплата адхілена. Вы застаяцеся на штомесячнай аплаце.';
+
+  @override
+  String get yearlySwitchFailed => 'Не ўдалося перайсці. Вы застаяцеся на штомесячнай аплаце.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Не ўдалося загрузіць цану.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Гадавая аплата зараз недаступная для вашага плана.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Цяпер у вас гадавая аплата';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Сёння спісана $amount. Падаўжэнне $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Адпраў паведамленне ў праграме $app. Гэты экран абновіцца, як толькі Omi яго атрымае.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Атрымай новы код і адпраў яго з праграмы $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Пішам нататкі…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Ахоплівае да $time · поўныя нататкі пасля завяршэння';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Транскрыбавана да $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Захавана $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
 }

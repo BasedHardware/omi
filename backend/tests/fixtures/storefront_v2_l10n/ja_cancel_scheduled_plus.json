@@ -10,8 +10,11 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": true,
-    "line": "現在 Plus を利用中 · $19.99/月",
-    "legacy_note": null
+    "line": "現在 Plus を利用中 · US$19.99/月",
+    "legacy_note": null,
+    "amount_minor": 1999,
+    "currency": "usd",
+    "line_template": "現在 Plus を利用中 · {price}/月"
   },
   "usage": {
     "kind": "unavailable",
@@ -44,7 +47,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/月",
+          "headline": "US$19.99/月",
           "subline": null,
           "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
         }
@@ -68,7 +71,7 @@
           "interval": "month",
           "amount_minor": 0,
           "currency": "usd",
-          "headline": "$0",
+          "headline": "US$0",
           "subline": null,
           "renewal_line": null
         }
@@ -96,7 +99,7 @@
           "interval": "month",
           "amount_minor": 4999,
           "currency": "usd",
-          "headline": "$49.99/月",
+          "headline": "US$49.99/月",
           "subline": null,
           "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
         },
@@ -105,8 +108,8 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$41.66/月",
-          "subline": "年額 $499.90 · 2か月無料",
+          "headline": "US$41.66/月",
+          "subline": "年額 US$499.90 · 2か月無料",
           "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
           "months_free": 2
         }
@@ -133,7 +136,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/月",
+          "headline": "US$199/月",
           "subline": null,
           "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
         },
@@ -142,8 +145,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/月",
-          "subline": "年額 $1,990 · 2か月無料",
+          "headline": "US$165.83/月",
+          "subline": "年額 US$1,990 · 2か月無料",
           "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
           "months_free": 2
         }

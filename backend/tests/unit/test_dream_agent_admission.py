@@ -106,7 +106,7 @@ async def test_authoritative_store_still_rejects_deleted_allowlisted_owner(admis
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     admission.rows[('users', UID)]['deleted'] = True
     model = AsyncMock(side_effect=AssertionError('deleted owner reached model'))
-    assert await dream_agent.run_pass(UID, turn=model) == {'status': 'not_admitted'}
+    assert await dream_agent.run_pass(UID, turn=model) == {'status': 'not_admitted', 'reason': 'ineligible'}
     dream_capacity.claim.assert_awaited_once()
     dream_capacity.release.assert_awaited_once()
     model.assert_not_awaited()
@@ -146,7 +146,7 @@ async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission
                 release.set()
                 await pulse
             expected = (
-                {'status': 'waiting', 'reason': 'reserved_capacity'}
+                {'status': 'waiting', 'reason': 'reserved_capacity', 'wait_cause': 'gateway'}
                 if membership is True
                 else (
                     {'status': 'waiting', 'reason': 'eligibility_unavailable'}

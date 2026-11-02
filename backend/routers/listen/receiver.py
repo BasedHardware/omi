@@ -20,11 +20,12 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
+from config.server_batch import suppress_live as server_batch_suppresses_live
 from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
-from routers.listen.local_preview import admit_local_preview
+from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
@@ -1006,6 +1007,8 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
+        if getattr(self.host, 'server_batch_only', False) is True:
+            return None  # Includes failover, reconnect and idle-reopen callers.
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
 
@@ -1309,6 +1312,14 @@ class ListenReceiver(ReplayFilterMixin):
             return await ListenReceiver._initialize_stt(self)
 
     async def _initialize_stt(self) -> bool:
+        self.host.server_batch_only = server_batch_suppresses_live(self.host)
+        self.host.server_batch_initialized = True
+        if self.host.server_batch_only:
+            self.cloud_live_suppressed = True
+            if not getattr(self, '_server_batch_logged', False):
+                logger.info('event=server_batch_only_admission mode=enabled')
+                self._server_batch_logged = True
+            return True
         capture_batch_preview(self.host, select_provider=False)
         mode = resolve_cloud_live_stt_mode()
         if getattr(self, '_cloud_live_mode', None) is None:
@@ -1477,6 +1488,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not getattr(self, '_cloud_live_opening', False) or getattr(self, '_deferred_open_counted', False):
             return
         self._deferred_open_counted = True
+        self._deferred_open_at = time.monotonic()  # Teardown observes the open duration.
         try:
             OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
                 deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
@@ -1487,6 +1499,8 @@ class ListenReceiver(ReplayFilterMixin):
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
 
+        if getattr(self.host, 'server_batch_only', False) is True:
+            return True
         self._cloud_live_opening = True
         self.cloud_live_suppressed = False
         if not await self.initialize_stt():
@@ -2048,6 +2062,10 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
+            buffer.clear()  # PCM forwarding and raw custody run independently below.
+            self._stt_buffer_start_sample = None
+            return
         if buffer and getattr(self, 'cloud_live_suppressed', False):
             if not await self._open_deferred_stream():
                 return
@@ -2055,6 +2073,8 @@ class ListenReceiver(ReplayFilterMixin):
         if admission is not None and getattr(self, 'cap_paused', False) and admission.allowed(self.host.stt_service):
             if not await self.initialize_stt():
                 return
+            if not getattr(self, 'cap_paused', False):
+                self.note_deferred_stream_opened()  # No-op unless a deferred open was waiting on the cap.
         if admission is not None and not admission.packet_allowed(
             buffer, self.host.stt_service, self.host.request.sample_rate
         ):
@@ -2558,7 +2578,7 @@ class ListenReceiver(ReplayFilterMixin):
             else None
         )
         frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
-        shadow = edge_shadow.session_mirror(self)
+        shadow = None if getattr(self.host, 'server_batch_only', False) is True else edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
                 frame_timer.stop()
@@ -2782,6 +2802,7 @@ class ListenReceiver(ReplayFilterMixin):
             except Exception as error:
                 logger.warning('shutdown transport abort failed: %s', type(error).__name__)
         self._release_drained_sockets()
+        note_deferred_stream_closed(self)
 
     async def _teardown_body(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
         request = self.host.request
@@ -2869,6 +2890,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.use_custom_stt:
             await self._flush_stt_buffer(buffer, force=True)
         await self._drain_stt_sockets()
+        note_deferred_stream_closed(self)  # After the final flush, which can itself open the stream.
         if self.recovery is not None and self._replay_tail_bytes:
             REPLAY_SKIPPED.labels(source=provider_family(self._serving_provider()), successor='unknown').inc(
                 self._replay_tail_bytes / (2 * request.sample_rate)

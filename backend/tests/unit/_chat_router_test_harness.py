@@ -108,6 +108,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
     install('utils.messaging.app_awareness', ModuleType('utils.messaging.app_awareness'))
     load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
 
+    deletion_marker = install('database.account_deletion_marker')
+    deletion_marker.account_deletion_blocks_user_work = MagicMock(return_value=False)
+
     notification_db = install('database.notifications')
     notification_db.get_user_time_zone = MagicMock(return_value=None)
     notification_db.set_user_time_zone = MagicMock()

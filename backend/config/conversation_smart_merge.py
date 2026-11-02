@@ -101,8 +101,12 @@ MERGE_THRESHOLD = 0.35
 # (``models/conversation_continuity.DEFAULT_GAP_SECONDS``); both the recorded gap
 # and the speech gap must reach it, which also skips sync shards whose start
 # drifted. Above one hour only 2 of 9 pairs were continuations.
-MIN_GAP_SECONDS = 120
-MAX_GAP_SECONDS = 60 * 60
+from config import recorded_time_tolerances as tolerances
+
+MIN_GAP_SECONDS = tolerances.CONTINUE_GAP_SECONDS
+STRETCH_LINK_SECONDS = tolerances.CLOSE_GAP_SECONDS
+MAX_GAP_SECONDS = tolerances.MERGE_ELIGIBILITY_GAP_SECONDS
+MAX_MERGED_SPAN_SECONDS = tolerances.MERGE_STORAGE_SPAN_SECONDS
 
 # Both sides need this many transcript words; the benchmark sampled only such
 # pairs, and near-empty fragments were its main missed-merge class.
@@ -115,7 +119,6 @@ JEV_MAX_ATTEMPTS = 1
 # Chain-aware state (benchmark input variant iv). A stretch links conversations
 # whose recorded gap is strictly under STRETCH_LINK_SECONDS.
 MAX_STRETCH_FRAGMENTS = 4
-STRETCH_LINK_SECONDS = 30 * 60
 STRETCH_SUMMARY_CHARS = 400
 TRANSCRIPT_EXCERPT_CHARS = 2_500
 # A fragment is A (full summary) in the next decision, so the ledger keeps more than the stretch shows.
@@ -124,7 +127,6 @@ LEDGER_TITLE_CHARS = 300
 
 # Snowball guards. The benchmark scored pairs, not merged spans; it suggested a
 # 3-4 h cap without measuring one, so this takes the conservative end.
-MAX_MERGED_SPAN_SECONDS = 3 * 60 * 60
 MAX_MERGED_SEGMENTS = 4_000
 MAX_FRAGMENTS = 12
 

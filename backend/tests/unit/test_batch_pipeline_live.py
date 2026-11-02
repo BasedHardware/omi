@@ -1,5 +1,6 @@
 """Synthetic record ownership, raw-reference and annotation contracts."""
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -18,6 +19,113 @@ from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
 from utils.sync.assignment_errors import SyncAssignmentConflict
+
+
+@pytest.mark.asyncio
+async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    for i in range(10):
+        store.rows['jobs', str(i)] = {
+            'state': 'record_pending',
+            'available_at': 0,
+            'partial_coordinator': i == 0,
+        }
+    slow, full, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    active, peak, completed = 0, 0, []
+
+    async def admit(store, pending):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            if pending.get('partial_coordinator'):
+                slow.set()
+                await release.wait()
+            else:
+                if active == live.RECORD_DRAIN_CONCURRENCY:
+                    full.set()
+                await slow.wait()
+                await full.wait()
+                completed.append(1)
+        finally:
+            active -= 1
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    with caplog.at_level('INFO', logger=live.__name__):
+        task = asyncio.create_task(live.drain_recordings(store))
+        try:
+            await asyncio.wait_for(full.wait(), timeout=1)
+            for _ in range(50):
+                if len(completed) == 9:
+                    break
+                await asyncio.sleep(0.001)
+            assert len(completed) == 9
+            assert not task.done()
+            assert peak == live.RECORD_DRAIN_CONCURRENCY
+        finally:
+            release.set()
+            await task
+    events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
+    assert len(events) == 1
+    assert 'row_count=10 partial_count=1 seconds=' in events[0]
+    assert all(row['state'] == 'record_pending' and 'expires_at' not in row for row in store.rows.values())
+
+
+@pytest.mark.asyncio
+async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
+    original_run = store.run
+    slow, release = asyncio.Event(), asyncio.Event()
+
+    def run(body):
+        result = original_run(body)
+        if result.get('broken'):
+            raise RuntimeError('synthetic store failure')
+        return result
+
+    store.rows['jobs', 'bad']['broken'] = True
+    monkeypatch.setattr(store, 'run', run)
+
+    async def admit(store, pending):
+        slow.set()
+        await release.wait()
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    task = asyncio.create_task(live.drain_recordings(store))
+    try:
+        await asyncio.wait_for(slow.wait(), timeout=1)
+        assert not task.done()
+    finally:
+        release.set()
+        with pytest.raises(RuntimeError, match='synthetic store failure'):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_drain_emits_one_identifier_free_pass_on_query_failure(monkeypatch, caplog):
+    from utils.batch_pipeline import live
+
+    def unavailable(*args):
+        raise RuntimeError('synthetic-private-message')
+
+    store = MemoryStore()
+    monkeypatch.setattr(store, 'due', unavailable)
+    with caplog.at_level('INFO', logger=live.__name__), pytest.raises(RuntimeError):
+        await live.drain_recordings(store)
+    assert len(caplog.records) == 1
+    assert 'row_count=0 partial_count=0 seconds=' in caplog.text
+    assert 'synthetic-private-message' not in caplog.text
+
+
+@pytest.fixture(autouse=True)
+def protocol_ready(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
 
 
 def recording(**changes):
@@ -106,7 +214,7 @@ def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypa
     store = MemoryStore()
     register_recording('synthetic', recording(), store=store, now=0)
     content, segment = record_identity('synthetic', 'record')
-    store.rows['conversations', 'synthetic/record'] = recording()
+    store.rows['conversations', 'synthetic/record'] = recording(record_audio_closed=True)
     item = WorkItem(
         segment,
         'synthetic',
@@ -149,6 +257,37 @@ def test_projection_replaces_provisional_instead_of_appending_and_keeps_id():
     assert result['transcript_segments'][0]['id'] == 'new'
     assert result['sync_content_revision'] == result['record_projection_revision'] == 1
     assert survivors[0]['speaker_id_scope'] == 'final:batch:unit'
+
+
+RULE_DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'}
+
+
+def test_projection_text_supersedes_an_automatic_discard():
+    original = recording(transcript_segments=[], discarded=True, relevance_decision=dict(RULE_DISCARD))
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
+    assert result['discarded'] is False and result['relevance_decision'] is None
+    assert [s['id'] for s in result['transcript_segments']] == ['new']
+    assert original['discarded'] is True
+
+
+def test_projection_without_new_text_keeps_the_automatic_discard():
+    original = recording(discarded=True, relevance_decision=dict(RULE_DISCARD))
+    result, new = replace_record(original, incoming(), {'start': 100, 'end': 102, 'preserve_existing': True})
+    assert not new
+    assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
+
+
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'discarded': True},
+        {'discarded': True, 'relevance_decision': dict(RULE_DISCARD), 'sync_relevance_user_kept': False},
+        {'discarded': True, 'relevance_decision': {**RULE_DISCARD, 'verdict': 'keep'}},
+    ],
+)
+def test_projection_never_overrides_a_user_discard(changes):
+    with pytest.raises(SyncAssignmentConflict, match='discarded'):
+        replace_record(recording(**changes), incoming(), {'start': 100, 'end': 102})
 
 
 def test_projection_waits_for_finalize_without_mutating_provisional():
@@ -218,7 +357,9 @@ def test_reference_scope_and_generation_are_fail_closed(change):
         )
 
 
-async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch):
+@pytest.mark.parametrize('server_only', [False, True])
+@pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
+async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only, barrier_change):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
@@ -226,6 +367,11 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
+    if server_only:
+        current['external_data'] = {**(current.get('external_data') or {}), 'server_batch_only': True}
+        current.update(
+            has_content=True, server_batch_audio_start=100, server_batch_audio_end=101, transcript_segments=[]
+        )
     register_recording('synthetic', current, store=store, now=0)
     content, segment = record_identity('synthetic', 'record')
     pending = store.rows['jobs', segment]
@@ -264,7 +410,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
             }
         ],
     )
-    monkeypatch.setattr(live, 'read_reference', lambda *args: b'\x01\x00' * 16000)
+    monkeypatch.setattr(live, 'read_reference', lambda *args, **kwargs: b'\x01\x00' * 16000)
     manifests = []
 
     def stage(item, body):
@@ -275,6 +421,18 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
             'owner_id': item.owner_id,
             'privacy_generation': 0,
         }
+        if barrier_change == 'pending':
+            current.update(record_upload_sessions={'new': True}, record_audio_closed=False)
+        elif barrier_change == 'failed':
+            current.update(record_upload_failed=True, record_audio_closed=False)
+        elif barrier_change == 'resealed':
+            # A producer can upload and seal again during staging. A closed
+            # boolean alone cannot prove that these manifests include it.
+            current.update(record_upload_revision=1, record_audio_closed=True)
+        elif barrier_change == 'protocol_closed':
+            monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false')
+        if barrier_change:
+            store.rows['conversations', 'synthetic/record'].update(current)
         return uri
 
     monkeypatch.setattr(
@@ -287,13 +445,38 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
         ),
     )
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    if barrier_change:
+        with pytest.raises(ValueError, match='barrier'):
+            await live.admit_recording(store, pending, now=1)
+        assert store.rows['jobs', segment]['state'] == 'record_pending'
+        assert ('content', 'synthetic/' + content) not in store.rows
+        return
     result = await live.admit_recording(store, pending, now=1)
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     assert store.rows['jobs', segment]['state'] == 'ready'
     assert manifests[0]['references'][0]['generation'] == 1
     assert store.rows['jobs', segment]['projection_binding']['native_record']
+    assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.
     assert listings == [{'max_count': 4096, 'require_archive': True}]
+
+
+@pytest.mark.parametrize('setting', [None, 'false', 'typo'])
+async def test_protocol_cutover_defers_without_reading_archive_or_expiring_obligation(monkeypatch, setting):
+    from utils.batch_pipeline import live
+
+    if setting is None:
+        monkeypatch.delenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY')
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', setting)
+    store = MemoryStore()
+    register_recording('synthetic', recording(), store=store, now=0)
+    _, segment = record_identity('synthetic', 'record')
+    pending = dict(store.rows['jobs', segment])
+    with pytest.raises(ValueError, match='cutover barrier closed'):
+        await live.admit_recording(store, pending, now=10**10)
+    assert store.rows['jobs', segment] == pending
+    assert pending['state'] == 'record_pending'
 
 
 @pytest.mark.parametrize('language,admitted', [('en', True), ('vi', False), ('multi', False)])

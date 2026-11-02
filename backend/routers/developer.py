@@ -6,6 +6,7 @@ from routers.developer_segments_models import (
     CaptureEvidenceLineage,
     CaptureEvidenceLineageUnit,
 )
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -32,6 +33,7 @@ from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
@@ -100,7 +102,6 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations.transcript_hash import (
     stored_transcript_segment,
-    transcript_sha256,
     transcript_sha256_for_binding,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -1246,13 +1247,13 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         returned_count = len(summaries)
         status = 200
         return {'summaries': summaries}
@@ -1287,9 +1288,14 @@ def get_developer_daily_summary(
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
+        try:
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
@@ -1772,6 +1778,29 @@ def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
     return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
 
 
+# Recording facts that identify a blank-id upload: the same values hash to one
+# conversation across retries, different recordings hash apart. Routing fields a
+# retry may legitimately resend differently (folder, calendar context, client
+# projection, finalization reason) are deliberately absent so a retry lands on
+# the first attempt's conversation instead of forking a duplicate.
+_BLANK_SESSION_ID_IDENTITY_FIELDS = frozenset(
+    {'source', 'started_at', 'finished_at', 'language', 'geolocation', 'transcript_segments'}
+)
+
+
+def _derived_client_session_id(uid: str, request: CreateConversationFromTranscriptRequest) -> str:
+    """Stable retry identity for uploads whose client persisted a blank session id.
+
+    These clients resend byte-identical requests (BasedHardware/omi#15500), so a
+    digest of the recording's own facts is identical on every retry while a
+    different recording — different segments or clock — digests apart.
+    """
+    payload = dict(request.model_dump(mode='json', by_alias=False, include=_BLANK_SESSION_ID_IDENTITY_FIELDS))
+    payload['uid'] = uid
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return f'derived:{digest}'
+
+
 def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
     external_data = conversation.get('external_data') or {}
     if external_data.get('from_segments_client_session_id') != client_session_id:
@@ -1874,16 +1903,13 @@ def _bind_projection_to_segments(
     row must bind through ``transcript_sha256_for_binding``, which refuses a
     legacy row whose identity was written before canonicalization: there, a
     matching digest would not imply matching rendered attribution. Request
-    segments are not stored yet -- they are canonicalized on write -- so they
-    bind with the plain client-reproducible digest.
+    segments have already been canonicalized by ingest. Both paths share the
+    fail-closed scope guard without changing the client-reproducible encoding.
     """
-    if stored:
-        expected = transcript_sha256_for_binding(segments or [])
-        if expected is None:
-            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
-            return None
-    else:
-        expected = transcript_sha256(segments or [])
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical' if stored else 'unsafe_ingest_binding', raw)
+        return None
     if expected != projection.transcript_sha256:
         _log_client_projection_rejected('hash_mismatch', raw)
         return None
@@ -2048,6 +2074,14 @@ def _ingest_conversation_from_segments(
 
     if request.chunk_count is None and len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    # A sent-blank client_session_id must not take the unkeyed create path: these
+    # clients resend byte-identical requests, so a lost 200 followed by the retry
+    # would fork a duplicate conversation (Luna review of #23886). Derive the
+    # stable id the client failed to send; an id that was never sent keeps the
+    # plain create path.
+    if request.client_session_id is None and request.sent_blank_client_session_id:
+        request = request.model_copy(update={'client_session_id': _derived_client_session_id(uid, request)})
 
     request, covered_response = developer_segments.admit_segments(uid, request, ConversationResponse)
     if covered_response is not None:

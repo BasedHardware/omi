@@ -114,6 +114,30 @@ def test_a_timeout_is_retried_once_then_answers(gateway):
     assert [entry['outcome'] for entry in recorded] == ['success']
 
 
+def test_direct_dispatch_attempts_are_measured_in_conversation_scope(gateway, monkeypatch):
+    from utils.sync import repeat_work_metrics as metrics
+
+    _, script, _ = gateway
+    script.extend([_raise(httpx.ReadTimeout('slow')), _respond(200, _ok_body())])
+    monkeypatch.setattr(metrics, 'revision_reuse', lambda: True)
+    feature = 'jev_conversation_relevance'
+    before = {
+        outcome: metrics.PHASE_A_CALLS.labels(feature, outcome)._value.get() for outcome in ('completed', 'failed')
+    }
+    legacy = {outcome: metrics.CALLS.labels(outcome)._value.get() for outcome in before}
+    outer_scope = metrics._scope.get()
+
+    @metrics.conversation_scope
+    def dispatch(uid, conversation_id):
+        return ask_jev('state', QUESTIONS, lane='conversation_relevance')
+
+    assert dispatch('test-user', 'test-conversation') is not None
+    assert metrics._scope.get() is outer_scope
+    for outcome in before:
+        assert metrics.PHASE_A_CALLS.labels(feature, outcome)._value.get() == before[outcome] + 1
+        assert metrics.CALLS.labels(outcome)._value.get() == legacy[outcome]
+
+
 def test_two_timeouts_return_none(gateway):
     requests, script, recorded = gateway
     script.extend([_raise(httpx.ReadTimeout('slow')), _raise(httpx.ReadTimeout('slow'))])

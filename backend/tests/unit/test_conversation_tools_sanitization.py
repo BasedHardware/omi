@@ -95,6 +95,12 @@ _users_db_mod.get_people_by_ids = MagicMock(return_value=[])
 
 _vector_db_mod = _mod("database.vector_db")
 
+# This fixture tests semantic-search exception rendering; direct transcript
+# serving is exercised with real modules by test_direct_transcript_search and
+# the HTTP journey, rather than importing it through this legacy DB stub.
+_direct_transcript_mod = _mod("utils.retrieval.tool_services.transcript_search")
+_direct_transcript_mod.search_saved_transcripts_text = MagicMock(return_value='Error: transcript search unavailable')
+
 # Stub models.other
 _models_other_mod = _mod("models.other")
 _models_other_mod.Person = MagicMock

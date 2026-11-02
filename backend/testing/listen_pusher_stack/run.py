@@ -35,6 +35,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
+from testing.listen_pusher_stack.recorded_clock import age_conversation
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -634,9 +635,7 @@ class Stack:
         )
 
     def age_conversation(self, uid: str, conversation_id: str) -> None:
-        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
-            {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
-        )
+        age_conversation(self.firestore, uid, conversation_id)
 
     def release_inline_finalization(self) -> None:
         if not self.hold_inline_finalization:
