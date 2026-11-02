@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from collections.abc import Mapping
@@ -70,9 +71,9 @@ async def shutdown_event() -> None:
     # then drained by drain_background_tasks within the bounded grace period.
     ReadinessGate.begin_drain()
     from database.pinecone_partition_state import drain_mutations
-    from utils.executors import db_executor, run_blocking
 
-    await run_blocking(db_executor, drain_mutations)
+    # A blocked provider may occupy every shared DB worker during shutdown.
+    await asyncio.to_thread(drain_mutations)
     await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()

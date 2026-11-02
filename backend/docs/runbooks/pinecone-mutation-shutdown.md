@@ -22,13 +22,15 @@ provider acknowledgement cannot clear a ticket already marked uncertain.
 * Cloud Tasks jobs running on those services share the same process hook.
 * The dedicated `utils.sync.worker_runtime` idle pull worker does not execute
   pipelines or mutate Pinecone and needs no mutation hook.
-* Standalone Python jobs and operator scripts do not use those lifespans and
-  have no shutdown drain hook. Their shared mutation callers still settle
+* Standalone Python jobs (including `modal/x_connector_sync_job.py` and
+  `modal/job.py`) and operator scripts do not use those lifespans and have no
+  shutdown drain hook. Their shared mutation callers still settle
   catchable provider interruptions and finish-write failures. No process signal
   handler or operator behavior is changed here.
 
 The drain runs before other application cleanup consumes the shutdown grace.
-It performs synchronous Firestore settlement on the existing DB executor; it
+It offloads synchronous Firestore settlement independently of the shared DB
+executor, whose workers may all be blocked in provider calls. It
 does not wait for provider calls to finish. Firestore RPC latency and platform
 shutdown grace still bound what can persist. SIGKILL, OOM, a blocked event loop
 that never reaches lifespan shutdown, or exhaustion of platform grace can leave

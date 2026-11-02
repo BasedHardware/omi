@@ -489,8 +489,8 @@ async def shutdown_event():
     from database.pinecone_partition_state import drain_mutations
 
     # Run before other bounded drains consume the platform shutdown grace.
-    # Firestore IO belongs off the event loop; late admissions settle themselves.
-    await run_blocking(db_executor, drain_mutations)
+    # Do not queue behind the same DB workers whose provider calls are draining.
+    await asyncio.to_thread(drain_mutations)
 
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:
