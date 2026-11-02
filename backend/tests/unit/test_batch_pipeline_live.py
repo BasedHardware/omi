@@ -389,7 +389,10 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 @pytest.mark.parametrize('server_only', [False, True])
 @pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
-async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only, barrier_change):
+@pytest.mark.parametrize('language', ['en', 'multi'])
+async def test_native_admission_stages_references_and_drains_after_rollback(
+    monkeypatch, server_only, barrier_change, language
+):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
@@ -397,6 +400,22 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
+    current['language'] = language
+    proofs = []
+
+    async def prove(store, artifacts, item, manifest):
+        proofs.append(manifest)
+        return {
+            **manifest,
+            'context': {
+                **manifest['context'],
+                'stt_language': 'en',
+                'stt_language_evidence': 'audio_lid',
+                'stt_language_confidence': 0.99,
+            },
+        }
+
+    monkeypatch.setattr(live, 'prove_manifest', prove)
     if server_only:
         current['external_data'] = {**(current.get('external_data') or {}), 'server_batch_only': True}
         current.update(
@@ -485,6 +504,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     assert store.rows['jobs', segment]['state'] == 'ready'
     assert manifests[0]['references'][0]['generation'] == 1
+    assert bool(proofs) is server_only
+    assert manifests[0]['context']['stt_language'] == ('en' if server_only else language)
     assert store.rows['jobs', segment]['projection_binding']['native_record']
     assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.

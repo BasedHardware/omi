@@ -1195,6 +1195,12 @@ OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
     ['mode'],
 )
 
+OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL = Counter(
+    'omi_listen_server_batch_suppression_total',
+    'Server batch suppression decisions at STT initialization (including reinitialization), closed reason set',
+    ['decision', 'reason', 'client_platform'],
+)
+
 OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
     'omi_listen_local_preview_sessions_total',
     'Listen sessions by mobile local-preview lane admission outcome (closed reason set)',
