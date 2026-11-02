@@ -9,17 +9,24 @@ from types import SimpleNamespace
 import urllib.error
 import urllib.request
 
+import numpy as np
 from prometheus_client import CollectorRegistry
 import pytest
 
+from config.batch_pipeline_providers import provider_config
 from diarizer import batch_pipeline_runtime as runtime
+from diarizer.batch_pipeline import SAMPLE_RATE
 from diarizer.batch_pipeline_models import ParakeetWords, pin_parakeet_decoding
 
 
 class FakeASR:
     def __init__(self):
         self.cfg = SimpleNamespace(
-            decoding=SimpleNamespace(compute_timestamps=False, greedy=SimpleNamespace(use_cuda_graph_decoder=True))
+            decoding=SimpleNamespace(
+                strategy='greedy_batch',
+                compute_timestamps=False,
+                greedy=SimpleNamespace(use_cuda_graph_decoder=True),
+            )
         )
         self.rebuilds = 0
         self.change_decoding_strategy(self.cfg.decoding)
@@ -27,10 +34,17 @@ class FakeASR:
     def change_decoding_strategy(self, config, verbose=False):
         self.cfg.decoding = deepcopy(config)
         self.rebuilds += 1
-        computer = SimpleNamespace(allow_cuda_graphs=config.greedy.use_cuda_graph_decoder, full_graph=None)
+        if config.strategy != 'greedy_batch':
+            # Non-batched TDT greedy has no label-looping computer.
+            self.decoding = SimpleNamespace(decoding=SimpleNamespace())
+            return
+        allowed = config.greedy.use_cuda_graph_decoder
+        computer = SimpleNamespace(
+            allow_cuda_graphs=allowed, cuda_graphs_mode='full_graph' if allowed else None, full_graph=None
+        )
 
         def disable():
-            computer.allow_cuda_graphs = False
+            computer.cuda_graphs_mode = None
             computer.full_graph = None
 
         self.decoding = SimpleNamespace(
@@ -44,30 +58,90 @@ class FakeASR:
             updated.compute_timestamps = True
             self.change_decoding_strategy(updated)
         return [
-            SimpleNamespace(text='hello', timestamp={'word': [{'word': 'hello', 'start': 0, 'end': 0.1}]})
+            SimpleNamespace(text='hello', timestamp={'word': [{'word': 'hello', 'start': 2.0, 'end': 2.1}]})
             for _ in samples
         ]
 
 
-def test_graph_policy_persists_through_first_and_repeated_timestamp_calls():
+@pytest.mark.parametrize('cuda_graphs', [True, False])
+def test_graph_policy_persists_through_first_and_repeated_timestamp_calls(cuda_graphs):
     model = FakeASR()
-    pin_parakeet_decoding(model)
-    provider = ParakeetWords(model, enforce_eager=True)
+    model.cfg.decoding.strategy = 'greedy'
+    model.cfg.decoding.greedy.use_cuda_graph_decoder = not cuda_graphs
+    pin_parakeet_decoding(model, cuda_graphs=cuda_graphs)
+    provider = ParakeetWords(model, cuda_graphs=cuda_graphs)
     rebuilds = model.rebuilds
+    computer = model.decoding.decoding.decoding_computer
     for _ in range(3):
         assert provider.transcribe_batch([[0.0]])[0][0]['word'] == 'hello'
+        assert model.cfg.decoding.strategy == 'greedy_batch'
         assert model.cfg.decoding.compute_timestamps
-        assert model.cfg.decoding.greedy.use_cuda_graph_decoder is False
-        assert model.decoding.decoding.decoding_computer.allow_cuda_graphs is False
+        assert model.cfg.decoding.greedy.use_cuda_graph_decoder is cuda_graphs
+        assert computer.allow_cuda_graphs is cuda_graphs
+        assert (computer.cuda_graphs_mode is not None) is cuda_graphs
+    # The single-item recovery retry runs under the same asserted mode.
+    words = provider.recover_empty(np.ones(SAMPLE_RATE, dtype=np.float32), 272)
+    assert [w['word'] for w in words] == ['hello']
     assert model.rebuilds == rebuilds
 
 
 def test_runtime_graph_regression_fails_closed_even_if_config_still_off():
     model = FakeASR()
-    pin_parakeet_decoding(model)
+    pin_parakeet_decoding(model, cuda_graphs=False)
     model.decoding.decoding.decoding_computer.allow_cuda_graphs = True
     with pytest.raises(RuntimeError, match='graph policy'):
-        ParakeetWords(model, enforce_eager=True).transcribe_batch([[0.0]])
+        ParakeetWords(model, cuda_graphs=False).transcribe_batch([[0.0]])
+
+
+def test_silent_eager_fallback_fails_closed_when_graphs_are_chosen():
+    model = FakeASR()
+    pin_parakeet_decoding(model, cuda_graphs=True)
+    model.decoding.decoding.disable_cuda_graphs()
+    with pytest.raises(RuntimeError, match='graph policy'):
+        ParakeetWords(model, cuda_graphs=True).transcribe_batch([[0.0]])
+
+
+def test_graph_mode_is_also_checked_after_transcription():
+    model = FakeASR()
+    pin_parakeet_decoding(model, cuda_graphs=True)
+    transcribe = model.transcribe
+
+    def drop_graphs(samples, **kwargs):
+        model.decoding.decoding.disable_cuda_graphs()
+        return transcribe(samples, **kwargs)
+
+    model.transcribe = drop_graphs
+    with pytest.raises(RuntimeError, match='graph policy'):
+        ParakeetWords(model, cuda_graphs=True).transcribe_batch([[0.0]])
+
+
+@pytest.mark.parametrize('mode', ['no_graphs', None])
+def test_graphs_chosen_rejects_non_graph_modes(mode):
+    model = FakeASR()
+    model.change_decoding_strategy = lambda config, verbose=False: None
+    model.decoding.decoding.decoding_computer.cuda_graphs_mode = mode
+    with pytest.raises(RuntimeError, match='graph policy'):
+        pin_parakeet_decoding(model, cuda_graphs=True)
+
+
+def test_decoding_without_label_looping_computer_fails_closed():
+    model = FakeASR()
+    model.change_decoding_strategy(SimpleNamespace(**{**vars(model.cfg.decoding), 'strategy': 'greedy'}))
+    for cuda_graphs in (True, False):
+        with pytest.raises(RuntimeError, match='graph policy'):
+            ParakeetWords(model, cuda_graphs=cuda_graphs).transcribe_batch([[0.0]])
+
+
+@pytest.mark.parametrize(
+    'value, expected',
+    [(None, True), ('', True), ('false', False), (' FALSE ', False), ('TRUE', True), (' true ', True)],
+)
+def test_asr_cuda_graphs_kill_switch(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED', value)
+    assert provider_config().asr_cuda_graphs is expected
 
 
 def test_synchronize_runs_on_success_and_failure_and_errors_cannot_publish():
@@ -239,7 +313,9 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
     assert ('vad-model', segmentation) in calls
     assert ('asr-revision', startup.ASR_REVISION) in calls
     assert ('diarizer-revision', startup.DIARIZER_REVISION) in calls
-    assert asr.cfg.decoding.greedy.use_cuda_graph_decoder is False
+    # Graph decoding ships on; the kill switch restores asserted eager decoding.
+    assert asr.cfg.decoding.greedy.use_cuda_graph_decoder is True
+    assert worker.words.cuda_graphs is True
     fake_torch.cuda.device_count = lambda: 2
     startup_calls = list(calls)
     with pytest.raises(RuntimeError, match='exactly one'):

@@ -61,7 +61,7 @@ from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, r
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.stage_timings import StageTimings
-from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults
+from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
 
@@ -297,9 +297,14 @@ class _DecodePrefetch:
         self._futures: dict[int, Future] = {}
         self._submitted = 0
         self._consumed = 0
-        if prepared is not None and self._items and prepared.item is self._items[0]:
-            self._futures[0] = prepared.future
-            self._submitted = 1
+        if prepared is not None:
+            # Leading decodes prepared outside the GPU section, matched by
+            # position and object identity only.
+            for index, (item, future) in enumerate(prepared.decodes()):
+                if index >= len(self._items) or self._items[index] is not item:
+                    break
+                self._futures[index] = future
+                self._submitted = index + 1
 
     def _fill(self):
         while self._submitted < len(self._items):
@@ -476,10 +481,24 @@ class PipelineWorker:
 
     def prepare_first(self, items):
         # IO=1 is the existing serial rollback. No models or privacy shortcuts.
+        # Prepares the longest admitted prefix that fits the shared decode
+        # budget, so the GPU section does not wait on artifact fetches; the
+        # kill switch restores first-item-only preparation.
         if self._io is None or not items:
             return None
-        future = self._decode_budget.submit(self._io, self._decode_context, items[0])
-        return FirstDecode(self._decode_budget, items[0], future) if future is not None else None
+        handles = []
+        try:
+            for item in items if self.config.prepare_flight else items[:1]:
+                future = self._decode_budget.submit(self._io, self._decode_context, item)
+                if future is None:
+                    break
+                handles.append(FirstDecode(self._decode_budget, item, future))
+        except BaseException:
+            for handle in handles:
+                handle.cancel()
+                handle.close()
+            raise
+        return PreparedFlight(handles) if handles else None
 
     def _fatal(self, exc):
         self._unavailable = True
@@ -637,6 +656,7 @@ class PipelineWorker:
             if self._unavailable:
                 raise FatalGpuError('GPU chain unavailable; restart required')
             pending, group, seconds = [], [], 0
+            handle = prepared
             # Bound decoded host memory to two audio-hours (~460 MB float32).
             try:
                 for item in items:
@@ -652,6 +672,12 @@ class PipelineWorker:
                 for receipt in pending:
                     receipt.close()
                 raise
+            release = getattr(handle, 'release_settled', None)
+            if release is not None:
+                # Every group has dropped its waveforms: return the prepared
+                # reservations now so the waiting lane can prepare its whole
+                # flight. The owner's final close still drains the rest.
+                release()
             return PendingResults(
                 lambda: [result for receipt in pending for result in receipt.settle()],
                 [future for receipt in pending for future in receipt.futures],
