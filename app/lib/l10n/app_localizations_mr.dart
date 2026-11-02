@@ -12520,43 +12520,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reviewChangesSectionOther => 'इतर बदल';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count संभाषणे',
-      one: '1 संभाषण',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ठिकाणे',
-      one: '1 ठिकाण',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'सर्व $count दाखवा';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'सर्व पूर्ववत करा';
 
   @override
-  String get reviewChangeSeeEvidence => 'पुरावा पहा';
-
-  @override
   String get reviewChangeViewConversation => 'संभाषण पहा';
-
-  @override
-  String get reviewChangeViewTask => 'कार्य पहा';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12631,10 +12598,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get dreamReportTitle => 'Dream अहवाल';
 
   @override
-  String get dreamReportShadowBanner =>
-      'पूर्वावलोकन मोड: Dream काय बदलले असते ते दाखवते, पण तुमच्या खात्यात अजून काहीही बदलत नाही.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream हे बदल स्वतःच लागू करते. कोणताही बदल अलीकडील बदल मध्ये पूर्ववत करा.';
 
   @override
@@ -12679,14 +12642,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get dreamReportNothingFound => 'दुरुस्त करण्यासारखे काही नाही';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '$records आयटम वाचले · $tokens टोकन';
-  }
-
-  @override
-  String get dreamReportWouldFix => 'दुरुस्त केले असते';
-
-  @override
   String get dreamReportFixed => 'दुरुस्त केले';
 
   @override
@@ -12699,27 +12654,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get dreamReportLearnedWords => 'शिकलेले शब्द';
 
   @override
-  String get dreamReportFeedback => 'Omi टीमला कळवले';
-
-  @override
   String get dreamReportDeletedItem => 'हटवलेला आयटम';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'आज $count/$limit पास';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count बदल प्रतीक्षेत',
-      one: '1 बदल प्रतीक्षेत',
-      zero: 'कोणताही बदल प्रतीक्षेत नाही',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12747,28 +12682,6 @@ class AppLocalizationsMr extends AppLocalizations {
       one: '1 सूचना',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count जुने बदल वगळले',
-      one: '1 जुना बदल वगळला',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'गोपनीयतेसाठी $count अहवाल रोखले',
-      one: 'गोपनीयतेसाठी 1 अहवाल रोखला',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13517,15 +13430,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String syncCardReadyAmount(String amount) {
     return '$amount सिंकसाठी तयार';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → फोन';
-
-  @override
-  String get syncStepLabelUpload => 'अपलोड';
-
-  @override
-  String get syncStepLabelTranscribe => 'ट्रान्सक्रिप्शन';
 
   @override
   String get syncDetailsTitle => 'सिंक तपशील';
@@ -14676,13 +14580,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'अंतिम ट्रान्स्क्रिप्ट आल्यावर नोट्स सुरू होतील.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'तुम्ही बोलत असताना तुमच्या फोनवरच तयार होतात. संपूर्ण नोट्स अंतिम ट्रान्स्क्रिप्टसोबत येतील.';
-
-  @override
-  String get episodeOnThisPhone => 'या फोनवर';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'अंतिम ट्रान्स्क्रिप्ट सुमारे $duration मागे आहे';
   }
@@ -14692,9 +14589,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'तुम्ही बोलल्याच्या एक-दोन मिनिटांनी तुमचे शब्द येथे दिसतील.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'सुरक्षित रेकॉर्ड होत आहे';
 
   @override
   String get livePreviewOnPhoneDivider => 'आत्ताच, या फोनवर';
@@ -14707,11 +14601,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'ऑनलाइन झाल्यावर';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration प्रक्रियेत आहे';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'आपोआप अपलोड होते. संभाषण आल्याबरोबर भरत जातात.';
@@ -14734,9 +14623,6 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'अपयशी ठरलेली रेकॉर्डिंग पार्श्वभूमीमध्ये पुन्हा प्रयत्न करत राहतात. आम्ही लिप्यंतरित करू न शकणारे मजकूर आपोआप आम्हाला नोंदवला जातो.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'समर्थनासाठी तपशील';
 
   @override
   String homeNoiseFoldHidden(int count) {

@@ -12543,43 +12543,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reviewChangesSectionOther => 'Іншыя змены';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Размоў: $count',
-      one: '1 размова',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Месцаў: $count',
-      one: '1 месца',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Паказаць усе ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Адрабіць усё';
 
   @override
-  String get reviewChangeSeeEvidence => 'Паказаць доказы';
-
-  @override
   String get reviewChangeViewConversation => 'Адкрыць размову';
-
-  @override
-  String get reviewChangeViewTask => 'Адкрыць задачу';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12654,10 +12621,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get dreamReportTitle => 'Справаздача Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Рэжым папярэдняга прагляду: Dream паказвае, што б змяніў, але ў вашым акаўнце пакуль нічога не мяняецца.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream прымяняе гэтыя змены сам. Адмяніць любую з іх можна ў раздзеле «Нядаўнія змены».';
 
@@ -12703,14 +12666,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get dreamReportNothingFound => 'Няма чаго выпраўляць';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Прачытана элементаў: $records · токенаў: $tokens';
-  }
-
-  @override
-  String get dreamReportWouldFix => 'Выправіў бы';
-
-  @override
   String get dreamReportFixed => 'Выпраўлена';
 
   @override
@@ -12723,27 +12678,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get dreamReportLearnedWords => 'Вывучаныя словы';
 
   @override
-  String get dreamReportFeedback => 'Адпраўлена камандзе Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Выдалены элемент';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count з $limit запускаў сёння';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count змены чакаюць',
-      one: '1 змена чакае',
-      zero: 'Няма змен у чаканні',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12771,28 +12706,6 @@ class AppLocalizationsBe extends AppLocalizations {
       one: '1 прапанова',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count больш старыя змены прапушчаны',
-      one: '1 больш старая змена прапушчана',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count справаздачы затрыманы з меркаванняў прыватнасці',
-      one: '1 справаздача затрымана з меркаванняў прыватнасці',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13546,15 +13459,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String syncCardReadyAmount(String amount) {
     return '$amount гатова да сінхранізацыі';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → тэлефон';
-
-  @override
-  String get syncStepLabelUpload => 'Загрузка';
-
-  @override
-  String get syncStepLabelTranscribe => 'Расшыфроўка';
 
   @override
   String get syncDetailsTitle => 'Дэталі сінхранізацыі';
@@ -14700,13 +14604,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Нататкі з’явяцца, калі прыбудзе канчатковая расшыфроўка.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Ствараюцца на вашым тэлефоне, пакуль вы гаварыце. Поўныя нататкі з’явяцца разам з канчатковай расшыфроўкай.';
-
-  @override
-  String get episodeOnThisPhone => 'На гэтым тэлефоне';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Канчатковая расшыфроўка адстае прыблізна на $duration';
   }
@@ -14716,9 +14613,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Вашы словы з’явяцца тут праз хвіліну-две пасля таго, як вы іх вымовіце.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Бяспечны запіс';
 
   @override
   String get livePreviewOnPhoneDivider => 'Толькі што, на гэтым тэлефоне';
@@ -14731,11 +14625,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'пры злучэнні з інтэрнэтам';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration яшчэ загружаецца';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Загрузка ідзе аўтаматычна. Размовы з\'яўляюцца па меры прыбыцця запісаў.';
@@ -14759,9 +14648,6 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Запісы, якія не ўдалося загрузіць, працягнуць спробы ў фонавым рэжыме. Пра ўсё, што мы не зможам пераўтварыць у тэкст, нам паведамяць аўтаматычна.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Падрабязнасці для падтрымкі';
 
   @override
   String homeNoiseFoldHidden(int count) {

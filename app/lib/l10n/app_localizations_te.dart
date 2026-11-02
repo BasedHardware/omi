@@ -12564,43 +12564,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reviewChangesSectionOther => 'ఇతర మార్పులు';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count సంభాషణలు',
-      one: '1 సంభాషణ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count చోట్ల',
-      one: '1 చోటు',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'మొత్తం $count చూపించు';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'అన్నీ రద్దు చేయి';
 
   @override
-  String get reviewChangeSeeEvidence => 'ఆధారం చూడండి';
-
-  @override
   String get reviewChangeViewConversation => 'సంభాషణ చూడండి';
-
-  @override
-  String get reviewChangeViewTask => 'పనిని చూడండి';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12675,10 +12642,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dreamReportTitle => 'Dream నివేదిక';
 
   @override
-  String get dreamReportShadowBanner =>
-      'ప్రివ్యూ మోడ్: Dream ఏమి మారుస్తుందో చూపిస్తుంది, కానీ మీ ఖాతాలో ఇంకా ఏమీ మారదు.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream ఈ మార్పులను స్వయంగా వర్తింపజేస్తుంది. ఏదైనా మార్పును ఇటీవలి మార్పులు లో రద్దు చేయవచ్చు.';
 
@@ -12724,14 +12687,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dreamReportNothingFound => 'సరిచేయడానికి ఏమీ లేదు';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '$records అంశాలు చదివింది · $tokens టోకెన్లు';
-  }
-
-  @override
-  String get dreamReportWouldFix => 'సరిచేసేది';
-
-  @override
   String get dreamReportFixed => 'సరిచేసింది';
 
   @override
@@ -12744,27 +12699,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dreamReportLearnedWords => 'నేర్చుకున్న పదాలు';
 
   @override
-  String get dreamReportFeedback => 'Omi బృందానికి నివేదించింది';
-
-  @override
   String get dreamReportDeletedItem => 'తొలగించిన అంశం';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'ఈరోజు $count/$limit పాస్‌లు';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count మార్పులు వేచి ఉన్నాయి',
-      one: '1 మార్పు వేచి ఉంది',
-      zero: 'వేచి ఉన్న మార్పులు లేవు',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12792,28 +12727,6 @@ class AppLocalizationsTe extends AppLocalizations {
       one: '1 సూచన',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count పాత మార్పులు దాటవేయబడ్డాయి',
-      one: '1 పాత మార్పు దాటవేయబడింది',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'గోప్యత కోసం $count నివేదికలు ఆపివేయబడ్డాయి',
-      one: 'గోప్యత కోసం 1 నివేదిక ఆపివేయబడింది',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13565,15 +13478,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String syncCardReadyAmount(String amount) {
     return '$amount సింక్ కోసం సిద్ధంగా ఉంది';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → ఫోన్';
-
-  @override
-  String get syncStepLabelUpload => 'అప్‌లోడ్';
-
-  @override
-  String get syncStepLabelTranscribe => 'ట్రాన్స్క్రిప్షన్';
 
   @override
   String get syncDetailsTitle => 'సింక్ వివరాలు';
@@ -14728,13 +14632,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'చివరి ట్రాన్స్‌క్రిప్ట్ వచ్చినప్పుడు నోట్స్ ప్రారంభమవుతాయి.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'మీరు మాట్లాడుతున్నప్పుడు మీ ఫోన్‌లోనే రూపొందుతాయి. పూర్తి నోట్స్ చివరి ట్రాన్స్‌క్రిప్ట్‌తో వస్తాయి.';
-
-  @override
-  String get episodeOnThisPhone => 'ఈ ఫోన్‌లో';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'చివరి ట్రాన్స్‌క్రిప్ట్ సుమారు $duration వెనుకబడి ఉంది';
   }
@@ -14744,9 +14641,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'మీరు చెప్పిన ఒకటి రెణ्टు నిమిషాల్లో మీ మాటలు ఇక్కడ కనిపిస్తాయి.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'సురక్షితంగా రికార్డ్ అవుతోంది';
 
   @override
   String get livePreviewOnPhoneDivider => 'ఇప్పుడే, ఈ ఫోన్‌లో';
@@ -14759,11 +14653,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'ఆన్‌లైన్‌కి వచ్చాక';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration పూర్తి అవుతోంది';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'తానంతట తానే అప్‌లోడ్ అవుతుంది. చేరుకున్న కొద్దీ సంభాషణలు ఏర్పడతాయి.';
@@ -14787,9 +14676,6 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'విఫలమైన రికార్డింగ్‌లు నేపథ్యంలో మళ్లీ ప్రయత్నిస్తూనే ఉంటాయి. మేము ట్రాన్స్‌క్రైబ్ చేయలేనివి ఆటోమేటిక్‌గా మాకు నివేదించబడతాయి.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'సపోర్ట్ కోసం వివరాలు';
 
   @override
   String homeNoiseFoldHidden(int count) {

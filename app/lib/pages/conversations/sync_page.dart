@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -81,7 +82,7 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
         // Which refusal it was, in On the Way's words.
-        return (Colors.redAccent, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
+        return (Colors.grey.shade500, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -104,11 +105,11 @@ class WalListItem extends StatelessWidget {
       );
     }
     // No upload can resolve these, so offer removal rather than a chevron that
-    // leads to a detail page with nothing actionable on it.
+    // leads to a detail page with nothing actionable on it. A refusal is not
+    // offered here: the swipe still removes it, after confirmation.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio ||
-        uploadRefusal) {
+        state == WalSyncDisplayState.unsupportedAudio) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -527,7 +528,8 @@ class _SyncPageState extends State<SyncPage> {
       }
     } else if (syncProvider.isRateLimited) {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
-      titleColor = Colors.orangeAccent;
+      // An edge throttle clears on its own, so it reads as a neutral pause, not an amber warning.
+      if (syncProvider.rateLimitReason != RateLimitReason.edgeThrottle) titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
       final job = syncProvider.offlineServerProcessingSeconds;
@@ -782,6 +784,7 @@ class _SyncPageState extends State<SyncPage> {
                     children: [
                       const SizedBox(height: 16),
                       _buildProcessCard(syncProvider),
+                      const OnDeviceChargerWaitLine(),
                       const SizedBox(height: 16),
                       _buildConversationsCreatedCard(syncProvider),
                       _buildSettingsCard(),

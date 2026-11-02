@@ -12533,43 +12533,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewChangesSectionOther => 'Kiti pakeitimai';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Pokalbių: $count',
-      one: '1 pokalbis',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Vietų: $count',
-      one: '1 vieta',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Rodyti visus ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Atšaukti viską';
 
   @override
-  String get reviewChangeSeeEvidence => 'Žiūrėti įrodymus';
-
-  @override
   String get reviewChangeViewConversation => 'Peržiūrėti pokalbį';
-
-  @override
-  String get reviewChangeViewTask => 'Peržiūrėti užduotį';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12644,10 +12611,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dreamReportTitle => 'Dream ataskaita';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Peržiūros režimas: Dream parodo, ką pakeistų, bet jūsų paskyroje kol kas niekas nesikeičia.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream šiuos pakeitimus taiko pats. Bet kurį galite atšaukti skiltyje Naujausi pakeitimai.';
 
@@ -12693,14 +12656,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dreamReportNothingFound => 'Nėra ką taisyti';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Perskaityta elementų: $records · žetonų: $tokens';
-  }
-
-  @override
-  String get dreamReportWouldFix => 'Ką pataisytų';
-
-  @override
   String get dreamReportFixed => 'Pataisyta';
 
   @override
@@ -12713,27 +12668,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dreamReportLearnedWords => 'Išmokti žodžiai';
 
   @override
-  String get dreamReportFeedback => 'Pranešta Omi komandai';
-
-  @override
   String get dreamReportDeletedItem => 'Ištrintas elementas';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'Šiandien $count iš $limit ciklų';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count pakeitimų laukia',
-      one: '1 pakeitimas laukia',
-      zero: 'Nėra laukiančių pakeitimų',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12761,28 +12696,6 @@ class AppLocalizationsLt extends AppLocalizations {
       one: '1 pasiūlymas',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count senesnių pakeitimų praleista',
-      one: '1 senesnis pakeitimas praleistas',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ataskaitų sulaikyta dėl privatumo',
-      one: '1 ataskaita sulaikyta dėl privatumo',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13535,15 +13448,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String syncCardReadyAmount(String amount) {
     return '$amount paruošta sinchronizuoti';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → telefonas';
-
-  @override
-  String get syncStepLabelUpload => 'Įkėlimas';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transkribavimas';
 
   @override
   String get syncDetailsTitle => 'Sinchronizavimo informacija';
@@ -14688,13 +14592,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Pastabos prasidės, kai atvyks galutinė transkripcija.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Kuriamos telefone, kol kalbate. Pilnos pastabos atvyks kartu su galutine transkripcija.';
-
-  @override
-  String get episodeOnThisPhone => 'Šiame telefone';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Galutinė transkripcija atsilieka maždaug $duration';
   }
@@ -14704,9 +14601,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Tavo žodžiai čia pasirodo po minutės ar dviejų.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Saugiai įrašinėja';
 
   @override
   String get livePreviewOnPhoneDivider => 'Ką tik, šiame telefone';
@@ -14719,11 +14613,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'prisijungus';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration apdorojama';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Įkeliama automatiškai. Pokalbiai atsiras, vos įrašams pasiekus serverį.';
@@ -14747,9 +14636,6 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Išsami informacija palaikymo komandai';
 
   @override
   String homeNoiseFoldHidden(int count) {

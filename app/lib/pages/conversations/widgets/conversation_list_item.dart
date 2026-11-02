@@ -19,7 +19,7 @@ import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
-import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -234,7 +234,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      routeToPage(context, const UsagePage());
+      unawaited(openLockedRecordingChoice(context));
       return;
     }
     if (widget.homeEpisode case final episode?) {
@@ -960,7 +960,7 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    routeToPage(context, const UsagePage());
+    await openLockedRecordingChoice(context);
   }
 
   @override

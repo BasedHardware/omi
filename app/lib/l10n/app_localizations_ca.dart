@@ -12578,43 +12578,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reviewChangesSectionOther => 'Altres canvis';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count converses',
-      one: '1 conversa',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count llocs',
-      one: '1 lloc',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Mostra-ho tot ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Desfés-ho tot';
 
   @override
-  String get reviewChangeSeeEvidence => 'Mostra les proves';
-
-  @override
   String get reviewChangeViewConversation => 'Mostra la conversa';
-
-  @override
-  String get reviewChangeViewTask => 'Mostra la tasca';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12689,10 +12656,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dreamReportTitle => 'Informe de Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Mode de vista prèvia: Dream mostra què canviaria, però encara no es modifica res al teu compte.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream aplica aquests canvis per si sol. Desfés qualsevol d\'ells a Canvis recents.';
 
@@ -12738,14 +12701,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dreamReportNothingFound => 'Res a corregir';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'S\'han llegit $records elements · $tokens tokens';
-  }
-
-  @override
-  String get dreamReportWouldFix => 'Corregiria';
-
-  @override
   String get dreamReportFixed => 'Corregit';
 
   @override
@@ -12758,27 +12713,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dreamReportLearnedWords => 'Paraules que ha après';
 
   @override
-  String get dreamReportFeedback => 'Informat a l\'equip d\'Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Element eliminat';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count de $limit execucions avui';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count canvis en espera',
-      one: '1 canvi en espera',
-      zero: 'Cap canvi en espera',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12806,28 +12741,6 @@ class AppLocalizationsCa extends AppLocalizations {
       one: '1 suggeriment',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count canvis anteriors omesos',
-      one: '1 canvi anterior omès',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count informes retinguts per privacitat',
-      one: '1 informe retingut per privacitat',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13581,15 +13494,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String syncCardReadyAmount(String amount) {
     return '$amount a punt per sincronitzar';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → mòbil';
-
-  @override
-  String get syncStepLabelUpload => 'Pujada';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transcripció';
 
   @override
   String get syncDetailsTitle => 'Detalls de la sincronització';
@@ -14740,13 +14644,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Les notes comencen quan arriba la transcripció final.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Redactades al teu telèfon mentre parles. Les notes completes arriben amb la transcripció final.';
-
-  @override
-  String get episodeOnThisPhone => 'En aquest telèfon';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'La transcripció final va amb uns $duration de retard';
   }
@@ -14756,9 +14653,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Les teves paraules apareixen aquí un o dos minuts després de dir-les.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
 
   @override
   String get livePreviewOnPhoneDivider => 'Ara mateix, en aquest telèfon';
@@ -14771,11 +14665,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'quan hi hagi connexió';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Falten $duration per pujar';
-  }
 
   @override
   String get onTheWayUploadsByItself =>
@@ -14800,9 +14689,6 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se\'ns notifica automàticament.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Detalls per al suport';
 
   @override
   String homeNoiseFoldHidden(int count) {

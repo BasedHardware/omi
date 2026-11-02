@@ -22353,47 +22353,17 @@ abstract class AppLocalizations {
   /// **'Other changes'**
   String get reviewChangesSectionOther;
 
-  /// How many conversations one change touched
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
-  String reviewChangeConversationCount(int count);
-
-  /// How many places in transcripts one change touched
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 place} other{{count} places}}'**
-  String reviewChangePlaceCount(int count);
-
-  /// Button opening every place a change landed
-  ///
-  /// In en, this message translates to:
-  /// **'Show all {count}'**
-  String reviewChangeShowAll(int count);
-
   /// Button undoing every instance of one change
   ///
   /// In en, this message translates to:
   /// **'Undo all'**
   String get reviewChangeUndoAll;
 
-  /// Button showing the conversation evidence behind a change
-  ///
-  /// In en, this message translates to:
-  /// **'See evidence'**
-  String get reviewChangeSeeEvidence;
-
   /// Button opening the conversation a change came from
   ///
   /// In en, this message translates to:
   /// **'View conversation'**
   String get reviewChangeViewConversation;
-
-  /// Button opening the tasks list from a task change
-  ///
-  /// In en, this message translates to:
-  /// **'View task'**
-  String get reviewChangeViewTask;
 
   /// Undo all finished with some failures
   ///
@@ -22527,12 +22497,6 @@ abstract class AppLocalizations {
   /// **'Dream Report'**
   String get dreamReportTitle;
 
-  /// Banner when the agent runs in shadow mode. Keep 'Dream' untranslated.
-  ///
-  /// In en, this message translates to:
-  /// **'Preview mode: Dream shows what it would change, but nothing in your account changes yet.'**
-  String get dreamReportShadowBanner;
-
   /// Banner when the agent applies edits. 'Recent Changes' is the name of another screen.
   ///
   /// In en, this message translates to:
@@ -22617,18 +22581,6 @@ abstract class AppLocalizations {
   /// **'Nothing to fix'**
   String get dreamReportNothingFound;
 
-  /// Technical stats for a run: items read and model tokens used.
-  ///
-  /// In en, this message translates to:
-  /// **'Read {records} items · {tokens} tokens'**
-  String dreamReportStats(int records, int tokens);
-
-  /// Section label for edits proposed in preview mode.
-  ///
-  /// In en, this message translates to:
-  /// **'Would fix'**
-  String get dreamReportWouldFix;
-
   /// Section label for edits that were applied.
   ///
   /// In en, this message translates to:
@@ -22653,29 +22605,11 @@ abstract class AppLocalizations {
   /// **'Words it learned'**
   String get dreamReportLearnedWords;
 
-  /// Section label for anonymous diagnostics sent to developers. 'Omi' is a product name.
-  ///
-  /// In en, this message translates to:
-  /// **'Reported to the Omi team'**
-  String get dreamReportFeedback;
-
   /// Label for an edit whose target no longer exists.
   ///
   /// In en, this message translates to:
   /// **'Deleted item'**
   String get dreamReportDeletedItem;
-
-  /// How many scheduled agent passes ran today out of the daily limit.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} of {limit} passes today'**
-  String dreamReportPasses(int count, int limit);
-
-  /// How many changed items are queued for the agent to look at.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}'**
-  String dreamReportQueued(int count);
 
   /// Remaining manual runs today.
   ///
@@ -22688,18 +22622,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{fixes, plural, =1{1 fix} other{{fixes} fixes}} · {asks, plural, =1{1 suggestion} other{{asks} suggestions}}'**
   String dreamReportFound(int fixes, int asks);
-
-  /// How many old queued changes were dropped because the queue was full.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}'**
-  String dreamReportDropped(int count);
-
-  /// Diagnostics the privacy filter refused to send.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}'**
-  String dreamReportPrivacyHeld(int count);
 
   /// No description provided for @speakerTagPromptExcerptSaved.
   ///
@@ -23960,24 +23882,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{amount} ready to sync'**
   String syncCardReadyAmount(String amount);
-
-  /// Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi → phone'**
-  String get syncStepLabelDownload;
-
-  /// Tiny label under the second of three Offline Sync progress segments: uploading to Omi.
-  ///
-  /// In en, this message translates to:
-  /// **'Upload'**
-  String get syncStepLabelUpload;
-
-  /// Tiny label under the third of three Offline Sync progress segments: server transcription.
-  ///
-  /// In en, this message translates to:
-  /// **'Transcribe'**
-  String get syncStepLabelTranscribe;
 
   /// Title of the Offline Sync diagnostics sheet and the link on the status card that opens it.
   ///
@@ -25899,18 +25803,6 @@ abstract class AppLocalizations {
   /// **'Notes start when the final transcript arrives.'**
   String get episodeNotesStartWithTranscript;
 
-  /// Footnote under on-device live notes.
-  ///
-  /// In en, this message translates to:
-  /// **'Drafted on your phone as you talk. The full notes arrive with the final transcript.'**
-  String get episodeOnDeviceNotesFootnote;
-
-  /// Tag on notes drafted on-device from the live preview.
-  ///
-  /// In en, this message translates to:
-  /// **'On this phone'**
-  String get episodeOnThisPhone;
-
   /// Quiet line: how far the final transcript lags the live preview.
   ///
   /// In en, this message translates to:
@@ -25928,12 +25820,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your words show up here a minute or two after you say them.'**
   String get livePreviewNoEngineBody;
-
-  /// No-engine preview card title.
-  ///
-  /// In en, this message translates to:
-  /// **'Recording safely'**
-  String get livePreviewNoEngineTitle;
 
   /// Divider between the final transcript and the on-device preview lines.
   ///
@@ -25958,12 +25844,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'when online'**
   String get deviceCatchUpWhenOnline;
-
-  /// Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.
-  ///
-  /// In en, this message translates to:
-  /// **'{duration} catching up'**
-  String onTheWayCatchingUp(String duration);
 
   /// One quiet line under the On the Way headline and progress bar: the user does not need to do anything; conversations appear as the audio arrives on the server.
   ///
@@ -26006,12 +25886,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recordings that fail keep retrying in the background. Anything we can\'t transcribe is reported to us automatically.'**
   String get onTheWayFootnote;
-
-  /// Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team.
-  ///
-  /// In en, this message translates to:
-  /// **'Details for support'**
-  String get onTheWayDetailsForSupport;
 
   /// Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.
   ///

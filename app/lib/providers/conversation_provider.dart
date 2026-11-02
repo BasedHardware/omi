@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/providers/conversation_noise_fold.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -83,7 +82,7 @@ Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterabl
   return grouped;
 }
 
-class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
+class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
   @override
@@ -344,7 +343,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   }
 
   void clearUserData() {
-    resetFoldedNoise();
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -642,7 +640,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
     SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
-    resetFoldedNoise();
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -651,7 +648,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
-      fetchConversations().then((_) => refreshFoldedNoiseCounts());
+      fetchConversations();
     }
 
     PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -1145,7 +1142,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _cancelInitialFetchRetry();
     final fetched = await fetchConversations();
     if (!fetched || !_isSignedIn()) return;
-    unawaited(refreshFoldedNoiseCounts());
     await checkHasDailySummaries();
   }
 
@@ -1451,7 +1447,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     }
     setLoadingConversations(false);
     notifyListeners();
-    unawaited(refreshFoldedNoiseCounts());
     return true;
   }
 
@@ -1644,7 +1639,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
-    dropFromFoldedNoise(conversation.id);
     for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
     }

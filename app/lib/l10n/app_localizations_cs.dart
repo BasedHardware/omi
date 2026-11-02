@@ -12513,43 +12513,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reviewChangesSectionOther => 'Další změny';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Konverzací: $count',
-      one: '1 konverzace',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Míst: $count',
-      one: '1 místo',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Zobrazit vše ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Vrátit vše';
 
   @override
-  String get reviewChangeSeeEvidence => 'Zobrazit důkazy';
-
-  @override
   String get reviewChangeViewConversation => 'Zobrazit konverzaci';
-
-  @override
-  String get reviewChangeViewTask => 'Zobrazit úkol';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12624,10 +12591,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get dreamReportTitle => 'Zpráva Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Režim náhledu: Dream ukazuje, co by změnil, ale ve vašem účtu se zatím nic nemění.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream tyto změny provádí sám. Libovolnou z nich můžete vrátit v Nedávných změnách.';
 
@@ -12673,14 +12636,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get dreamReportNothingFound => 'Není co opravovat';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Přečteno položek: $records · tokenů: $tokens';
-  }
-
-  @override
-  String get dreamReportWouldFix => 'Opravil by';
-
-  @override
   String get dreamReportFixed => 'Opraveno';
 
   @override
@@ -12693,27 +12648,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get dreamReportLearnedWords => 'Naučená slova';
 
   @override
-  String get dreamReportFeedback => 'Nahlášeno týmu Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Smazaná položka';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'Dnes $count z $limit průchodů';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count změn čeká',
-      one: '1 změna čeká',
-      zero: 'Žádné čekající změny',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12741,28 +12676,6 @@ class AppLocalizationsCs extends AppLocalizations {
       one: '1 návrh',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count starších změn přeskočeno',
-      one: '1 starší změna přeskočena',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count hlášení zadrženo z důvodu soukromí',
-      one: '1 hlášení zadrženo z důvodu soukromí',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13513,15 +13426,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String syncCardReadyAmount(String amount) {
     return '$amount připraveno k synchronizaci';
   }
-
-  @override
-  String get syncStepLabelDownload => 'Omi → telefon';
-
-  @override
-  String get syncStepLabelUpload => 'Nahrání';
-
-  @override
-  String get syncStepLabelTranscribe => 'Přepis';
 
   @override
   String get syncDetailsTitle => 'Podrobnosti synchronizace';
@@ -14665,13 +14569,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Poznámky začnou, až dorazí konečný přepis.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Vytváří se na tvém telefonu, zatímco mluvíš. Kompletní poznámky dorazí s konečným přepisem.';
-
-  @override
-  String get episodeOnThisPhone => 'V tomto telefonu';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konečný přepis má zpoždění přibližně $duration';
   }
@@ -14681,9 +14578,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Tvé slova se zde zobrazí jednu až dvě minuty po vyslovení.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Bezpečně nahrává';
 
   @override
   String get livePreviewOnPhoneDivider => 'Právě teď, na tomto telefonu';
@@ -14696,11 +14590,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'až bude připojení';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Zbývá zpracovat $duration';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Nahrává se samo. Konverzace se doplňují, jakmile nahrávky dorazí.';
@@ -14724,9 +14613,6 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nahrávky, které se nepodaří nahrát, se na pozadí odesílají znovu a znovu. Cokoli, co nedokážeme přepsat, se nám hlásí automaticky.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Podrobnosti pro podporu';
 
   @override
   String homeNoiseFoldHidden(int count) {

@@ -13,6 +13,7 @@ import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/pages/conversations/widgets/sync_details_sheet.dart';
 import 'package:omi/pages/conversations/widgets/sync_step_bar.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -127,6 +128,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   delegate: SliverChildListDelegate.fixed([
                     const SizedBox(height: 8),
                     _buildOverallStatusCard(syncProvider, syncState),
+                    const OnDeviceChargerWaitLine(),
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
                     if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
@@ -208,7 +210,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
-      titleColor = Colors.orangeAccent;
+      // An edge throttle clears on its own, so it reads as a neutral pause, not an amber warning.
+      if (p.rateLimitReason != RateLimitReason.edgeThrottle) titleColor = Colors.orangeAccent;
     } else if (isActive || uploaded > 0) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
