@@ -13,7 +13,7 @@ from config import audio_archive
 from database import conversations as conversations_db, conversation_tombstones
 from database._client import get_firestore_client
 from database.audio_chunk_metadata import audio_chunk_entry
-from utils.other import storage
+from utils.other import storage, raw_audio_read
 from utils.observability.fallback import record_fallback
 from utils.executors import run_blocking, storage_executor
 from utils.other.audio_outbox_metrics import record_failure
@@ -111,7 +111,9 @@ class PusherAudioProjection:
         if not audio_archive.admitted(self.uid, 'READ'):
             return chunks
         packs = storage.list_packs(storage.get_private_cloud_sync_bucket(), self.uid, conversation_id)
-        return sorted([*chunks, *storage.uncovered_raw_packs(packs, chunks)], key=lambda chunk: chunk['timestamp'])
+        return sorted(
+            [*chunks, *raw_audio_read.uncovered_raw_packs(packs, chunks)], key=lambda chunk: chunk['timestamp']
+        )
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.pop(conversation_id, None)
