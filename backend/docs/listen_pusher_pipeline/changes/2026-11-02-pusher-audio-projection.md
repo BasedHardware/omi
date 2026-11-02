@@ -16,22 +16,28 @@ Full listing happens on the first flush, after 300 seconds measured from the
 last full listing (appends never reset that clock), on a changed stored
 projection or failed optimistic revision precondition, and on exact-metadata
 read failure. Raw archive READ cohorts keep listing: pack overlays can subtract
-and split encoded coverage. Missing immutable identities, cache capacity limits
+and split encoded coverage. Mutable/spanless or non-batch sources, replays/equal clocks, missing immutable identities, cache capacity limits
 (128 conversations / 2,048 total cached chunks per socket), missing upload paths and
 new connections also retain full rebuilding. Two pods exchanging projection
 updates invalidate each other's caches instead of overwriting a known newer
-inventory. The incremental update uses the existing Firestore document read;
-there is no extra per-flush Firestore read or write.
+inventory. Full rebuilds capture the stored projection before LIST and fence the
+write against that view, including first flush and conflict recovery. The
+incremental update uses the existing Firestore document read. Each eligible full
+rebuild adds one small projection snapshot read; no Firestore writes are saved.
 
 Explicit recording close, conversation switch and socket disconnect rebuild even
-when the final audio batch was already flushed. Close-time rebuild precedes the
+when the final audio batch was already flushed. Close-time rebuild attempts precede the
 record seal and inline-drain notification. Shutdown uses the same existing
 tracked socket/drain lifecycle; abrupt process death cannot run cleanup. It does
 not introduce a five-minute unprojected tail: every successful flush has already
 projected its own exact uploaded objects. Existing durable raw-live media and
 generation-pinned outbox manifests remain independently discoverable after a
 crash; failed projection retries retain their existing custody/failure behavior.
-Finalization is supplementary, not a proof: process_conversation skips recovery,
+Close-only failures retry twice; deterministic InvalidArgument is terminal and
+other exhausted rediscovery failures report degraded raw recovery without
+aborting the custody seal. Every successful flush already publishes its own
+current audio; this additional listing is optional rediscovery, not a custody
+barrier. Finalization is supplementary, not a proof: process_conversation skips recovery,
 reprocess and sync-off cases and catches rebuild failures; sync pipeline rebuilds
 only its assigned response conversations.
 

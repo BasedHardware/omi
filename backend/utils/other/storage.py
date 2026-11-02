@@ -48,6 +48,7 @@ from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from database.audio_chunk_metadata import PRIVATE_CLOUD_EXTENSIONS, audio_chunk_entry
 from database.audio_timeline import (
     chunk_span,
     chunk_span_bounds,
@@ -97,7 +98,6 @@ OPUS_FRAME_SIZE = audio_opus.OPUS_FRAME_SIZE
 opuslib = audio_opus.opuslib
 
 # Valid private cloud sync extensions (longest first for correct matching)
-PRIVATE_CLOUD_EXTENSIONS = ['.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin']
 
 storage_client = None
 _storage_client_lock = threading.Lock()
@@ -1143,72 +1143,6 @@ def _delete_audio_chunks_in(bucket: Any, uid: str, conversation_id: str, timesta
                 deleted_batch_paths.add(blob.name)
 
 
-def _audio_chunk_entry(blob: Any, *, source_identity: bool) -> Optional[Dict[str, Any]]:
-    """One shared parser for listings and exact-path metadata reads."""
-    filename = blob.name.split('/')[-1]
-    has_valid_ext = any(filename.endswith(ext) for ext in PRIVATE_CLOUD_EXTENSIONS)
-    if has_valid_ext:
-        try:
-            timestamp_str = _strip_extension(filename)
-            is_batch = '.batch.' in filename
-
-            if is_batch and '-' in timestamp_str:
-                # Batch blob with timestamp range: "first_ts-last_ts"
-                first_ts_str, _ = timestamp_str.split('-', 1)
-                timestamp = float(first_ts_str)
-            else:
-                timestamp = float(timestamp_str)
-
-            chunk_entry = {
-                'timestamp': timestamp,
-                'path': blob.name,
-                'size': blob.size,
-                'is_batch': is_batch,
-                'generation': getattr(blob, 'generation', None),
-            }
-            if source_identity or playback_on_demand():
-                chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
-                chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
-            blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
-            if blob_bucket != private_cloud_sync_bucket:
-                chunk_entry['bucket'] = blob_bucket
-            span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
-            if span is not None:
-                chunk_entry['span'] = span
-            return chunk_entry
-        except ValueError:
-            return None
-    return None
-
-
-def get_uploaded_audio_chunks(uid: str, conversation_id: str, paths: List[str]) -> List[Dict[str, Any]]:
-    """Read exact encoded objects; never discover siblings or raw archive packs.
-
-    Regional objects win at duplicate paths, matching list_audio_chunks.
-    A missing/unknown object refuses the incremental projection.
-    """
-    prefix = f'chunks/{uid}/{conversation_id}/'
-    names = _chunk_bucket_names(private_cloud_sync_bucket)
-    chunks = []
-    for path in dict.fromkeys(paths):
-        if not path.startswith(prefix) or '/' in path[len(prefix) :]:
-            raise ValueError('projection requires an encoded conversation chunk')
-        entry = None
-        for name in reversed(names):
-            blob = _get_storage_client().bucket(name).get_blob(path)
-            if blob is not None:
-                entry = _audio_chunk_entry(blob, source_identity=True)
-                break
-        if entry is None or not entry.get('generation'):
-            raise ValueError('projection chunk metadata unavailable')
-        span = entry.get('span')
-        if span and span['start'] != entry['timestamp']:
-            entry['legacy_timestamp'] = entry['timestamp']
-            entry['timestamp'] = span['start']
-        chunks.append(entry)
-    return chunks
-
-
 def list_audio_chunks(
     uid: str,
     conversation_id: str,
@@ -1250,7 +1184,7 @@ def list_audio_chunks(
             raise TimeoutError('speaker audio listing budget exhausted')
         if deadline is not None and (time.monotonic() >= deadline or index >= 10000):
             raise TimeoutError('speaker audio listing budget exhausted')
-        entry = _audio_chunk_entry(blob, source_identity=source_identity)
+        entry = audio_chunk_entry(blob, source_identity=source_identity, primary_bucket=private_cloud_sync_bucket)
         if entry is not None:
             chunks.append(entry)
 

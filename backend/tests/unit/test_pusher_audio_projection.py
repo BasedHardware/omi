@@ -34,6 +34,7 @@ def world(monkeypatch):
     lists = []
     gets = []
     stored = []
+    rows = {}
     writes = []
     gone = [False]
     conflict = [False]
@@ -70,14 +71,22 @@ def world(monkeypatch):
         if gone[0]:
             return False
         if expected_audio_files is not None:
-            if conflict[0] or db.audio_files_revision(stored) != db.audio_files_revision(expected_audio_files):
+            if conflict[0] or db.audio_files_revision(rows.get(cid, [])) != db.audio_files_revision(
+                expected_audio_files
+            ):
                 conflict[0] = False
                 raise db.AudioFilesChanged()
-        stored[:] = deepcopy(payload['audio_files'])
+        rows[cid] = deepcopy(payload['audio_files'])
+        stored[:] = rows[cid]
         writes.append(deepcopy(stored))
         return True
 
     monkeypatch.setattr(db, 'update_conversation', update)
+    monkeypatch.setattr(
+        db,
+        'get_conversation_raw_snapshot',
+        lambda uid, cid, **kw: {'audio_files': deepcopy(rows.get(cid, [])), 'deleted': gone[0]},
+    )
     return SimpleNamespace(
         add=add,
         lists=lists,
@@ -161,7 +170,7 @@ def test_revision_race_and_metadata_failure_rebuild_in_same_flush(world, monkeyp
     world.conflict[0] = True
     cache.refresh('c', [world.add(101)])
     assert len(world.lists) == 2
-    monkeypatch.setattr(storage, 'get_uploaded_audio_chunks', MagicMock(side_effect=OSError()))
+    monkeypatch.setattr(projection, 'get_uploaded_audio_chunks', MagicMock(side_effect=OSError()))
     cache.refresh('c', [world.add(102)])
     assert len(world.lists) == 3
     projection.record_fallback.assert_called_once()
@@ -214,12 +223,12 @@ def test_exact_metadata_prefers_regional_copy_like_full_listing(world, monkeypat
     monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'regional')
     path = world.add(100)
     world.add(100, bucket='regional', generation=2)
-    exact = storage.get_uploaded_audio_chunks('u', 'c', [path])
+    exact = projection.get_uploaded_audio_chunks('u', 'c', [path])
     listed = storage.list_audio_chunks('u', 'c', source_identity=True)
     assert exact == listed
     assert exact[0]['generation'] == 2
     with pytest.raises(ValueError):
-        storage.get_uploaded_audio_chunks('u', 'c', ['raw-live/u/c/pack'])
+        projection.get_uploaded_audio_chunks('u', 'c', ['raw-live/u/c/pack'])
 
 
 @pytest.mark.parametrize('failure', ['changed', 'raced', 'deleted'])
@@ -275,6 +284,7 @@ async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monke
     learning = MagicMock()
     identity = MagicMock()
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', learning)
+    monkeypatch.setattr(projection, 'schedule_person_voice_learning_retry', learning)
     monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', identity)
     loop = asyncio.get_running_loop()
     handled = asyncio.Event()
@@ -349,3 +359,82 @@ async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monke
         assert learning.call_count >= 3
     assert identity.called
     assert 'c' in identity.call_args.args[1]
+
+
+def test_full_listing_race_cannot_clobber_other_pod(world, monkeypatch):
+    listing = storage.list_audio_chunks
+    cache = projection.PusherAudioProjection('u')
+    a = world.add(100)
+    once = [True]
+
+    def racing_list(*args, **kwargs):
+        old = listing(*args, **kwargs)
+        if once[0]:
+            once[0] = False
+            world.add(101)
+            newer = [
+                af.model_dump()
+                for af in db.create_audio_files_from_chunks('u', 'c', listed_chunks=listing(*args, **kwargs))
+            ]
+            db.update_conversation('u', 'c', {'audio_files': newer})
+        return old
+
+    monkeypatch.setattr(storage, 'list_audio_chunks', racing_list)
+    assert cache.refresh('c', [a]) is True
+    assert world.stored[0]['chunk_timestamps'] == [100, 101]
+    assert len(world.writes) == 2  # only the peer and the successful rebuild
+
+
+@pytest.mark.parametrize('spanless', [True, False])
+def test_mutable_or_nonbatch_sources_never_enter_inventory(world, spanless):
+    a = world.add(100)
+    blob = next(iter(world.blobs.values()))
+    if spanless:
+        blob.metadata = None
+    else:
+        key = next(iter(world.blobs))
+        del world.blobs[key]
+        blob.name = a.replace('.batch.bin', '.opus')
+        a = blob.name
+        world.blobs[key[0], a] = blob
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [a])
+    assert not cache.inventory
+    cache.refresh('c', [world.add(101)])
+    assert len(world.lists) == 2
+    assert not cache.inventory
+
+
+def test_cache_cap_miss_still_rebuilds_on_explicit_close(world, monkeypatch):
+    monkeypatch.setattr(projection, 'MAX_CONVERSATIONS', 1)
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    cache.refresh('other', [world.add(101, cid='other')])
+    before = len(world.lists)
+    assert cache.finish('other') is True
+    assert len(world.lists) == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('deterministic', [False, True])
+async def test_close_discovery_errors_are_bounded_and_cannot_abort_custody(world, monkeypatch, deterministic):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    error = projection.InvalidArgument('private path') if deterministic else OSError('private path')
+    finish = MagicMock(side_effect=error)
+    monkeypatch.setattr(cache, 'finish', finish)
+    identities = set()
+    if not deterministic:
+        assert await cache.finish_pending('c', set(), identities) is False
+        assert await cache.finish_pending('c', set(), identities) is False
+    assert await cache.finish_pending('c', set(), identities) is True
+    assert finish.call_count == (1 if deterministic else 3)
+    assert not cache.inventory and not cache.close_retries
+    assert not identities
+
+
+def test_empty_listing_still_observes_deleted_owner(world):
+    world.gone[0] = True
+    cache = projection.PusherAudioProjection('u')
+    assert cache.refresh('c', ['chunks/u/c/100.000.batch.bin']) is False
+    assert not world.writes

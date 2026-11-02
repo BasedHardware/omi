@@ -9,7 +9,7 @@ from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
-from utils.pusher_audio_projection import PusherAudioProjection
+from utils.pusher_audio_projection import PusherAudioProjection, projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
@@ -21,9 +21,7 @@ from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
 import database.conversations as conversations_db
-from database import conversation_tombstones
 from database import users as users_db
-from database._client import get_firestore_client
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
@@ -140,26 +138,6 @@ def _projection_grpc_code(exc: BaseException) -> str:
     if isinstance(code, StatusCode):
         return code.name
     return 'UNKNOWN'
-
-
-def _projection_owner_gone(uid: str, conversation_id: str) -> bool:
-    """Deletion-intent read for a projection NotFound: owner gone, or live?
-
-    Same tombstone read as the custody write gate (utils/other/storage.py);
-    a missing conversation doc covers hard-deleted rows without a tombstone.
-    Runs only on the NotFound arm, so live conversations pay no extra reads.
-    """
-    if conversation_tombstones.is_deleted(uid, conversation_id):
-        return True
-    doc = (
-        get_firestore_client()
-        .collection('users')
-        .document(uid)
-        .collection('conversations')
-        .document(conversation_id)
-        .get()
-    )
-    return not doc.exists
 
 
 # Queue size limits
@@ -549,18 +527,6 @@ async def _run_websocket_util_trigger(
     audio_projection = PusherAudioProjection(uid)
     deleted_conversations: set[str] = set()
 
-    async def finish_audio_projection(conv_id: str, identity_refreshed: set[str]) -> None:
-        if conv_id in deleted_conversations:
-            audio_projection.inventory.pop(conv_id, None)
-            return
-        applied = await run_blocking(storage_executor, audio_projection.finish, conv_id)
-        if applied:
-            schedule_person_voice_learning_retry(uid, conv_id)
-            if len(identity_refreshed) < 128:
-                identity_refreshed.add(conv_id)
-        elif applied is False:
-            deleted_conversations.add(conv_id)
-
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
         # contiguous batch for the legacy playback projection, preserving the
@@ -617,6 +583,7 @@ async def _run_websocket_util_trigger(
                     deleted_conversations.add(conv_id)
                 projection_retries.pop(conv_id, None)
             except AudioChunkContentConflict:
+                audio_projection.inventory.pop(conv_id, None)
                 # Deterministic projection conflict: different bytes already
                 # live at this run's content-addressed name. Every retry would
                 # re-run the same collision, so the batch drops now.
@@ -635,6 +602,7 @@ async def _run_websocket_util_trigger(
                 )
                 logger.warning('Durable audio projection conflict; archive receipt retained')
             except InvalidArgument as exc:
+                audio_projection.inventory.pop(conv_id, None)
                 # Custody and its generation-pinned manifest remain durable.
                 # Retrying a deterministic projection rejection cannot repair
                 # the payload, and a sticky custody failure would strand it.
@@ -669,10 +637,12 @@ async def _run_websocket_util_trigger(
                 # as live rather than propagate out of the drain loop.
                 gone = False
                 try:
-                    gone = await run_blocking(db_executor, _projection_owner_gone, uid, conv_id)
+                    gone = await run_blocking(db_executor, projection_owner_gone, uid, conv_id)
                 except Exception:
                     logger.warning('Durable audio projection gone-owner check failed; treating as transient')
                 if gone:
+                    deleted_conversations.add(conv_id)
+                    audio_projection.inventory.pop(conv_id, None)
                     projection_retries.pop(conv_id, None)
                     logger.info('Durable audio projection skipped; conversation gone')
                     return
@@ -716,6 +686,7 @@ async def _run_websocket_util_trigger(
             # inheriting this one's exhaustion, and the entry stops
             # counting toward the bounded retry map.
             projection_retries.pop(conv_id, None)
+            audio_projection.inventory.pop(conv_id, None)
             await record_barrier.fail_recording(conv_id)
             record_failure('projection', reason='transient')
             record_fallback(
@@ -782,7 +753,8 @@ async def _run_websocket_util_trigger(
                 ):
                     # Wake even on projection failure so the receiver can
                     # observe its sticky failure without waiting out the budget.
-                    await finish_audio_projection(conv_id, identity_refreshed)
+                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                        continue
                     inline_projection_drained.set()
                     await inline_finish_done.wait()
                     if conv_id not in record_close_requests:
@@ -793,14 +765,17 @@ async def _run_websocket_util_trigger(
                     and conv_id not in pending_refs
                     and not durable_queue.has_conversation(conv_id)
                 ):
-                    await finish_audio_projection(conv_id, identity_refreshed)
+                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                        continue
                     if not await record_barrier.finish_recording(conv_id):
                         continue
                 elif conv_id in pending_refs or durable_queue.has_conversation(conv_id):
                     continue
                 retire_record_close(conv_id)
         for conv_id in list(audio_projection.inventory):
-            await finish_audio_projection(conv_id, identity_refreshed)
+            for _ in range(PROJECTION_RETRY_BUDGET + 1):
+                if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    break
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -1142,14 +1117,17 @@ async def _run_websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in ready_batches)
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
-                    await finish_audio_projection(conv_id, identity_refreshed)
+                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                        continue
                     if await record_barrier.finish_recording(conv_id):
                         retire_record_close(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
         for conv_id in list(audio_projection.inventory):
-            await finish_audio_projection(conv_id, identity_refreshed)
+            for _ in range(PROJECTION_RETRY_BUDGET + 1):
+                if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    break
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 

@@ -1,5 +1,6 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
+from utils import pusher_audio_projection
 import asyncio
 from concurrent.futures import Future
 from collections import deque
@@ -2165,7 +2166,9 @@ async def test_notfound_on_tombstoned_conversation_drops_refs_without_custody_fa
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
-    monkeypatch.setattr(pusher.conversation_tombstones, 'is_deleted', lambda uid, conv_id: tombstoned['now'])
+    monkeypatch.setattr(
+        pusher_audio_projection.conversation_tombstones, 'is_deleted', lambda uid, conv_id: tombstoned['now']
+    )
     failure_marker = record_audio_db.mark_record_upload_failed  # the fixture's MagicMock
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
     real_receive = sock.receive_bytes
@@ -2211,7 +2214,9 @@ async def test_notfound_on_hard_deleted_conversation_doc_drops_refs(remote, monk
     failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
     # The remote fixture already pins conversation_tombstones.is_deleted to False.
-    monkeypatch.setattr(pusher, 'get_firestore_client', lambda: _firestore_client_with_conversation(False))
+    monkeypatch.setattr(
+        pusher_audio_projection, 'get_firestore_client', lambda: _firestore_client_with_conversation(False)
+    )
     failure_marker = record_audio_db.mark_record_upload_failed
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
     real_receive = sock.receive_bytes
@@ -2259,7 +2264,9 @@ async def test_notfound_on_live_conversation_keeps_transient_retry_and_terminal_
     failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
     # The remote fixture already pins conversation_tombstones.is_deleted to False.
-    monkeypatch.setattr(pusher, 'get_firestore_client', lambda: _firestore_client_with_conversation(True))
+    monkeypatch.setattr(
+        pusher_audio_projection, 'get_firestore_client', lambda: _firestore_client_with_conversation(True)
+    )
     seal = MagicMock(return_value=None)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
