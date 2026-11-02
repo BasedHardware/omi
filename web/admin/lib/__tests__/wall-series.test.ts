@@ -1757,6 +1757,35 @@ describe("variable margin frames (David 2026-10-23)", () => {
     expect(last.costPerMonth).not.toBeNull(); // the cost stays visible
   });
 
+  it("labels a metered D−2 as live when billing has only reached D−3", async () => {
+    const cutoff = isoDay(shiftDay(end, -2));
+    const s = sources();
+    s.billing = vi.fn(async () => ({
+      ...(await billing()),
+      daily: billingDays.filter((d) => d.date < cutoff),
+    }));
+    s.live = vi.fn(async () => ({
+      runAt: now.toISOString(),
+      days: {
+        [cutoff]: {
+          date: cutoff,
+          queryEnd: `${isoDay(shiftDay(end, -1))}T00:00:00.000Z`,
+          fraction: 1,
+          metered: { cloudRun: 5, firestore: 0, gcs: 0, logging: 0 },
+          producedAt: now.toISOString(),
+        },
+      },
+    }));
+    const f = await all(null, s);
+    const last = f.health.variableMargin.at(-1)!;
+    expect(last.date).toBe(`${cutoff}T00:00:00Z`);
+    expect(last.live).toBe(1);
+    expect(last.marginPct).not.toBeNull();
+    expect(String(f.health.variableMarginStatus[0].text)).not.toContain(
+      "no fresh metered day"
+    );
+  });
+
   it("says the MRR is missing instead of borrowing the neighbour day's book", async () => {
     const s = sources();
     const cutoff = isoDay(shiftDay(end, -2));

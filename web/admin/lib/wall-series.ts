@@ -1000,7 +1000,7 @@ export function healthFrames(
     return {
       date: ts(d.date),
       // 1 for a live (metered, estimated) day; settled days are 0.
-      live: d.date > cutoff ? 1 : 0,
+      live: d.date > settledEnd ? 1 : 0,
       gcp: d.gcp,
       vertexLlm: d.vertexLlm,
       openai: d.openai,
@@ -1042,7 +1042,10 @@ export function healthFrames(
       oneTimeExcluded: d.oneTime || null,
       // The snapshot uses estimates; measured vendor lines own the all-in total.
       total:
-        d.date > cutoff || d.sttMeasured || d.saasMeasured || d.infraMeasured
+        d.date > settledEnd ||
+        d.sttMeasured ||
+        d.saasMeasured ||
+        d.infraMeasured
           ? d.total
           : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
@@ -1102,7 +1105,7 @@ export function healthFrames(
     spliced,
     (d) =>
       finopsMrr(legs.finops, new Date(ts(d))) ??
-      (d > cutoff ? latestBook : null),
+      (d > settledEnd ? latestBook : null),
     { feesCash: vendor.infraStripeFeesCash }
   );
   const liveSeries = variable;
@@ -1114,7 +1117,7 @@ export function healthFrames(
     sonioxRate,
     (d) => finopsMrr(legs.finops, new Date(ts(d)))
   );
-  const liveDayCount = spliced.filter((d) => d.date > cutoff).length;
+  const liveDayCount = spliced.filter((d) => d.date > settledEnd).length;
   const pct = (v: number | null) => (v == null ? "—" : `${v.toFixed(1)}%`);
   const pp = (v: number | null) =>
     v == null ? "n/a" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`;
@@ -1133,7 +1136,7 @@ export function healthFrames(
     (liveDayCount === 0
       ? "Live estimate unavailable: no fresh metered day"
       : `Live est. through ${liveHead?.date ?? "—"}${
-          liveHead && liveHead.date > cutoff ? "" : " (settled only)"
+          liveHead && liveHead.date > settledEnd ? "" : " (settled only)"
         } · settled D-2: ${pct(recon.settledPct)}, variance ${pp(
           recon.variancePp
         )}`) +
@@ -1171,11 +1174,11 @@ export function healthFrames(
     variableMargin: variable.map((p, i, all) => ({
       date: ts(p.date),
       marginPct:
-        i === all.length - 1 && !(liveHead && liveHead.date > cutoff)
+        i === all.length - 1 && !(liveHead && liveHead.date > settledEnd)
           ? null
           : round(p.marginPct, 1),
       // 1 for a live (metered, estimated) day; settled days are 0.
-      live: p.date > cutoff ? 1 : 0,
+      live: p.date > settledEnd ? 1 : 0,
       costPerMonth: round(p.costPerMonth, 0),
       mrr: p.mrr == null ? null : round(p.mrr, 0),
       goalCost: round(p.goalCost, 0),
@@ -1196,7 +1199,7 @@ export function healthFrames(
             costPerMonth: round(liveHead.costPerMonth, 0),
             mrr: liveHead.mrr == null ? null : round(liveHead.mrr, 0),
             goalCost: round(liveHead.goalCost, 0),
-            live: liveHead.date > cutoff ? 1 : 0,
+            live: liveHead.date > settledEnd ? 1 : 0,
           },
         ]
       : [],
