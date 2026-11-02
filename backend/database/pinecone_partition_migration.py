@@ -97,6 +97,12 @@ def search_parity(old: list[dict], new: list[dict], tolerance: float = SEARCH_SC
     return [match['id'] for match in old] == [match['id'] for match in new]
 
 
+# Payload-proof query packing. A 3072-d record with modest metadata serializes to about 45 KB in a query
+# response (30 records measured at 1.37 MB on the dev index, 100 at 4.5 MB, 2026-11-02).
+PAYLOAD_PROOF_MAX_RECORDS = 100
+PAYLOAD_PROOF_MAX_BYTES = 3_500_000
+
+
 IDENTITY_FIELDS = {
     'ns1': ('memory_id',),
     'ns2': ('memory_id',),
@@ -268,8 +274,19 @@ class PartitionTransport:
 
         visit(selectors, 0, [])
 
-    def verify_payloads(self, namespace: str, uid: str, probe: list[float], lsn: int, groups: dict) -> None:
+    def verify_payloads(
+        self, namespace: str, uid: str, probe: list[float], lsn: int, groups: dict, sizes: dict | None = None
+    ) -> None:
+        """Prove every record's fresh payload, packing identity groups into as few queries as fit.
+
+        A query's read cost is set by the namespace it scans, not by how many matches it returns, so
+        fewer, fuller queries prove the same records for less. Each query stays within a response-byte
+        budget estimated from the copied records' serialized sizes. Without sizes, the old 30-record
+        groups apply.
+        """
         selectors, expected = [], {}
+        batch_bytes = 0
+        unknown_size = PAYLOAD_PROOF_MAX_BYTES // 30
 
         def check() -> None:
             if not selectors:
@@ -294,11 +311,16 @@ class PartitionTransport:
         for selector_json, records in groups.items():
             if len(records) > 30:
                 raise MigrationNotReady('Too many provider identities share a source key for bounded payload proof')
-            if len(expected) + len(records) > 30:
+            group_bytes = sum((sizes or {}).get(vector_id, unknown_size) for vector_id in records)
+            if expected and (
+                len(expected) + len(records) > PAYLOAD_PROOF_MAX_RECORDS
+                or batch_bytes + group_bytes > PAYLOAD_PROOF_MAX_BYTES
+            ):
                 check()
-                selectors, expected = [], {}
+                selectors, expected, batch_bytes = [], {}, 0
             selectors.append(json.loads(selector_json))
             expected.update(records)
+            batch_bytes += group_bytes
         check()
 
 
@@ -359,6 +381,7 @@ class OwnerMigration:
         samples: list[list[float]] = []
         expected: dict[str, str] = {}
         groups: dict[str, dict[str, str]] = {}
+        sizes: dict[str, int] = {}
         before = self._route()
         if before.pending_count or before.uncertain_count:
             raise MigrationNotReady('Source has unfinished mutations')
@@ -383,6 +406,8 @@ class OwnerMigration:
                     raise MigrationNotReady('Record lacks an authoritative identity filter for payload proof')
                 selector = json.dumps({field: {'$eq': metadata[field]} for field in fields}, sort_keys=True)
                 groups.setdefault(selector, {})[vector_id] = expected[vector_id]
+                # Response bytes for this match: the record plus score, used to pack proof queries.
+                sizes[vector_id] = len(json.dumps(record, allow_nan=False).encode()) + 64
                 if len(samples) < 3:
                     samples.append(record['values'])
             for batch in bounded_upsert_batches(records, target):
@@ -412,8 +437,8 @@ class OwnerMigration:
         target_ids = self.transport.fresh_inventory(target, self.key.uid, probe, last_target_lsn, groups)
         if source_ids != set(expected) or target_ids != set(expected):
             raise MigrationNotReady('Fresh complete inventory differs from the copied snapshot')
-        self.transport.verify_payloads(source, self.key.uid, probe, source_barrier, groups)
-        self.transport.verify_payloads(target, self.key.uid, probe, last_target_lsn, groups)
+        self.transport.verify_payloads(source, self.key.uid, probe, source_barrier, groups, sizes)
+        self.transport.verify_payloads(target, self.key.uid, probe, last_target_lsn, groups, sizes)
         query_checks = []
         source_indexed = 0
         for vector in samples or [probe]:
