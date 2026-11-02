@@ -305,18 +305,83 @@ def test_crash_after_paid_call_reconciles_without_a_second_call(world, monkeypat
     assert vendor.calls == 1 and job(store, 'p1')['state'] == 'result_ready'
 
 
-def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch):
+@pytest.mark.parametrize('stored_speech', [None, 0.0, 0.5])
+def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch, stored_speech):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
     artifacts, vendor = Artifacts(), Vendor()
     artifacts.fail_persist = True
     stage(store, artifacts, vendor).run('p1')
-    outcome = stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 0.5
+
+    def legacy_or_silence(tx):
+        row = tx.get('jobs', 'p1')
+        if stored_speech is None:
+            row['provider_intent'].pop('measured_vad_speech_seconds')
+        else:
+            row['provider_intent']['measured_vad_speech_seconds'] = stored_speech
+        tx.put('jobs', 'p1', row)
+
+    store.run(legacy_or_silence)
+    inspect = Mock(side_effect=AssertionError('reconciliation must not inspect audio'))
+    replay = stage(store, artifacts, vendor, inspect=inspect, now=200.0 + ABANDON_SECONDS + 1)
+    outcome = replay.run('p1')
     assert (outcome.outcome, outcome.provider_reason) == ('done', 'provider_failed')
     row = job(store, 'p1')
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == {'stage': 'provider', 'reason': 'abandoned_running'}
-    assert vendor.calls == 1
+    if stored_speech is None:
+        assert 'measured_held_vad_speech_seconds' not in row
+    else:
+        assert row['measured_held_vad_speech_seconds'] == stored_speech
+    # The builtin route's terminal hold stays outside recovery; duplicate
+    # deliveries neither re-download audio nor reopen a paid intent.
+    assert replay.protocol.fence.prepare('p1', OWNER, 1200.0) is None
+    assert replay.run('p1').reason == 'superseded'
+    assert vendor.calls == 1 and artifacts.fetches == 1
+    inspect.assert_not_called()
+
+
+def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+
+    def vendor(work, language, inspected, *, service):
+        row = job(store, 'p1')
+        assert row['provider_intent']['measured_vad_speech_seconds'] == 0.5
+        # A concurrent delivery cannot overwrite the winning intent's evidence.
+        losing = provider_stt.ProviderSttStore(store).start(
+            'p1', 'loser', 201.0, service, measured_vad_speech_seconds=0.0
+        )
+        assert losing['provider_intent'] == row['provider_intent']
+        return Vendor()(work, language, inspected, service=service)
+
+    assert stage(store, Artifacts(), vendor).run('p1').reason == 'processed'
+
+
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('incoming,expected', [(None, 0.5), (0.0, 0.5), (1.0, 1.0)])
+def test_every_terminal_hold_reuses_intent_vad(world, monkeypatch, terminal, incoming, expected):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    protocol = provider_stt.ProviderSttStore(store)
+    protocol.start('p1', 'paid-once', 200.0, 'modulate', measured_vad_speech_seconds=0.5)
+    failure = {'stage': 'provider', 'reason': 'provider_failed'}
+    if terminal:
+        # Exhausted failover returns to pending with the prior intent intact.
+        def pending(tx):
+            row = tx.get('jobs', 'p1')
+            row['state'] = PENDING
+            tx.put('jobs', 'p1', row)
+
+        store.run(pending)
+        assert protocol.terminal('p1', 202.0, failure, measured_held_vad_speech_seconds=incoming)
+    else:
+        assert (
+            protocol.settle('p1', 'paid-once', 202.0, failure=failure, measured_held_vad_speech_seconds=incoming)
+            == 'settled'
+        )
+    assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
 
 
 @pytest.mark.parametrize(
