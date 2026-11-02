@@ -1,6 +1,13 @@
 {
   "entries": [
     {
+      "path": "utils/sync/worker_runtime.py",
+      "function": "create_app.lifespan",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Dedicated pull-process lifecycle, not post-response pipeline work. The poll loop is stopped and joined during lifespan shutdown. At S2 it executes no audio; an unexpected accepted lease is handed back. Losing the process at SIGKILL retains the durable sequencer reservation and named Cloud Tasks fallback, recovered through the unchanged 1800s owner lease. Empty authenticated pulls and interruptible shutdown are exercised by test_sync_worker_runtime.py."
+    },
+    {
       "path": "routers/sync.py",
       "function": "_run_sync_job_attempt",
       "kind": "start_background_task",
