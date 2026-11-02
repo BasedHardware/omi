@@ -172,6 +172,8 @@ Make the description specific to THIS person based on what you see in their conv
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
             loaded = cast(Any, loaded[0])
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for decision style")
         result = cast(Dict[str, str], loaded)
 
         logger.info(f"[Wrapped]     - Decision style: {result.get('name')}")
@@ -230,7 +232,11 @@ Be specific with actual phrases from their conversations. Avoid generic filler w
 
         loaded: Any = json.loads(content)
         phrases_loaded: Any = cast(Dict[str, Any], loaded).get("phrases", []) if isinstance(loaded, dict) else loaded
-        phrases = cast(List[Dict[str, Any]], phrases_loaded)
+        if not isinstance(phrases_loaded, list):
+            raise ValueError("Expected JSON list for top phrases")
+        phrases = [p for p in cast(List[Dict[str, Any]], phrases_loaded) if isinstance(p, dict)]
+        if not phrases:
+            raise ValueError("Expected non-empty JSON list of objects for top phrases")
 
         logger.info(f"[Wrapped]     - Found {len(phrases)} top phrases")
         return phrases[:5]
@@ -332,7 +338,12 @@ Be specific and reference actual events from the conversations. Make titles catc
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list) and loaded:
+            loaded = loaded[0]
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for memorable days")
+        result = cast(Dict[str, Any], loaded)
         logger.info(f"[Wrapped]     - Successfully parsed memorable days")
         return result
 
@@ -406,7 +417,12 @@ Pick something genuinely funny and retell it in an entertaining way. Make the us
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list) and loaded:
+            loaded = loaded[0]
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for funniest event")
+        result = cast(Dict[str, Any], loaded)
         logger.warning(f"[Wrapped]     - Successfully parsed funniest event: {result.get('title', 'Unknown')}")
         return result
 
@@ -466,7 +482,12 @@ Frame it in a lighthearted, relatable way - we've all been there! Make it funny 
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
 
-        result = json.loads(content)
+        loaded: Any = json.loads(content)
+        if isinstance(loaded, list) and loaded:
+            loaded = loaded[0]
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for embarrassing event")
+        result = cast(Dict[str, Any], loaded)
         logger.warning(f"[Wrapped]     - Successfully parsed embarrassing event: {result.get('title', 'Unknown')}")
         return result
 
@@ -530,11 +551,18 @@ IMPORTANT:
             content = content.split("```")[1].split("```")[0].strip()
 
         loaded: Any = json.loads(content)
-        if not isinstance(loaded, list):
-            loaded = [loaded]
+        if isinstance(loaded, dict):
+            if isinstance(loaded.get("buddies"), list):
+                loaded = loaded["buddies"]
+            else:
+                raise ValueError("Expected JSON list or buddies wrapper for top buddies")
+        elif not isinstance(loaded, list):
+            raise ValueError("Expected JSON list for top buddies")
 
-        # Ensure we have exactly 5
-        result = cast(List[Dict[str, Any]], loaded)[:5]
+        # Ensure we have valid dict entries (up to 5)
+        result = [b for b in cast(List[Dict[str, Any]], loaded) if isinstance(b, dict)][:5]
+        if not result:
+            raise ValueError("Expected non-empty JSON list of objects for top buddies")
 
         logger.info(f"[Wrapped]     - Successfully parsed {len(result)} buddies")
         return result
@@ -608,6 +636,8 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
             loaded = cast(Any, loaded[0])
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for obsessions")
         result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Obsessions found: {result}")
@@ -664,9 +694,16 @@ Include a mix of movies they mentioned AND movies that match their vibe/interest
 
         loaded: Any = json.loads(content)
         if isinstance(loaded, list):
-            return cast(List[str], loaded)[:5]
-        result = cast(Dict[str, Any], loaded)
-        movies = cast(List[str], result.get("movies", []))
+            movies_raw: Any = loaded
+        elif isinstance(loaded, dict):
+            movies_raw = loaded.get("movies")
+        else:
+            movies_raw = None
+        if not isinstance(movies_raw, list):
+            raise ValueError("Expected JSON list for movie recommendations")
+        movies = [str(m) for m in movies_raw if isinstance(m, str) and m.strip()]
+        if not movies:
+            raise ValueError("Expected non-empty movie recommendations list")
         logger.info(f"[Wrapped]     - Movie recommendations: {movies}")
         return movies[:5]
 
@@ -730,6 +767,8 @@ Be specific and empathetic. These should feel personal and meaningful."""
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
             loaded = cast(Any, loaded[0])
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for struggles and wins")
         result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Struggles and wins found")
@@ -755,6 +794,9 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
     and stores the result in Firestore.
     """
     if not generated_compute_allowed(uid, 'wrapped_analysis', allow_byok=False):
+        wrapped_db.update_wrapped_status(
+            uid, year, WrappedStatus.ERROR, error="Failed to generate Wrapped. Please try again later."
+        )
         return
     import time
 
@@ -1031,3 +1073,4 @@ def _send_wrapped_ready_notification(uid: str):
         logger.info(f"[Wrapped] Notification sent successfully to user {uid}")
     except Exception as e:
         logger.error(f"[Wrapped] ERROR: Failed to send notification to user {uid}: {e}")
+
