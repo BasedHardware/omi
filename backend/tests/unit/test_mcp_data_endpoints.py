@@ -1074,6 +1074,7 @@ class TestScreenActivity:
             'first_observed_at': '2026-07-03 01:00:00.000',
             'last_observed_at': '2026-07-03 12:00:00.000',
             'capture_completeness': 'unknown',
+            'devices': [],
         }
         summary = {'apps': {}, 'total_screenshots': 5000, 'coverage': coverage}
         monkeypatch.setattr(

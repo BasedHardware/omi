@@ -1,6 +1,6 @@
 """Read-time coverage of synced screen observations, independent of semantic memory."""
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -13,3 +13,4 @@ class ScreenActivityCoverage(BaseModel):
     last_observed_at: Optional[str] = None
     # A bounded cloud query cannot attest to device capture state or unsynced rows.
     capture_completeness: Literal['unknown'] = 'unknown'
+    devices: list[dict[str, Any]] = Field(default_factory=list)

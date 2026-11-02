@@ -197,6 +197,28 @@ def get_screen_activity_page(
     return results[:limit], len(results) > limit
 
 
+def observed_device_coverage(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Observed bounds are not acknowledgements of complete capture or sync."""
+    devices: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        device = str(row.get('clientDeviceId') or row.get('deviceName') or 'unknown')
+        stamp = row.get('timestamp')
+        if not isinstance(stamp, str) or not stamp:
+            continue
+        bounds = devices.setdefault(
+            device,
+            {
+                'device_id': device,
+                'first_observed_at': stamp,
+                'last_observed_at': stamp,
+                'synced_through': None,
+            },
+        )
+        bounds['first_observed_at'] = min(bounds['first_observed_at'], stamp)
+        bounds['last_observed_at'] = max(bounds['last_observed_at'], stamp)
+    return [devices[key] for key in sorted(devices)]
+
+
 def get_screen_activity_summary(
     uid: str,
     start_date: Optional[DateInput] = None,
@@ -230,6 +252,8 @@ def get_screen_activity_summary(
         first_observed_at=rows[0].get('timestamp') if rows else None,
         last_observed_at=rows[-1].get('timestamp') if rows else None,
     )
+
+    coverage.devices = observed_device_coverage(rows)
 
     apps: Dict[str, Dict[str, Any]] = {}
     for row in rows:

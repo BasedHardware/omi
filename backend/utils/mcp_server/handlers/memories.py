@@ -384,6 +384,7 @@ def memories_page_core(
             position={"uml": resume_uml},
             filters=filters,
         )
+    result["memories"] = [memory_api_payload(memory, MemoryApiExposure.CANONICAL) for memory in result["memories"]]
     result["effective_limit"] = limit
     return result
 

@@ -6,6 +6,7 @@ Legacy users must stay untiered at API boundaries so desktop/mobile clients do
 not infer Short-term/Long-term rollout state from internal defaults.
 """
 
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable
 
@@ -60,6 +61,22 @@ def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExp
             payload["layer"] = tier
     for field in BELIEF_VIEW_FIELDS:
         payload.pop(field, None)
+    # Source time is independent of storage insertion and later product edits.
+    # Legacy rows without provenance stay explicitly unknown.
+    evidence = payload.get('evidence') or []
+    for target, source in (('source_at', 'captured_at'), ('extracted_at', 'extracted_at')):
+        values = [item.get(source) for item in evidence if isinstance(item, dict) and item.get(source) is not None]
+        dated = []
+        for value in values:
+            try:
+                stamp = (
+                    value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                )
+                stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
+                dated.append((stamp.timestamp(), value))
+            except (ValueError, TypeError, OverflowError):
+                continue
+        payload[target] = min(dated, key=lambda item: item[0])[1] if dated else None
     return payload
 
 
@@ -71,4 +88,7 @@ def memory_api_payloads(
 
 def memory_write_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExposure) -> Dict[str, Any]:
     """Serialize one memory for persistence through the selected memory system."""
-    return memory_api_payload(value, exposure)
+    payload = memory_api_payload(value, exposure)
+    payload.pop('source_at', None)
+    payload.pop('extracted_at', None)
+    return payload
