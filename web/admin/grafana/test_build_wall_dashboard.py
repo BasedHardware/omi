@@ -269,12 +269,30 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(status["gridPos"], {**panel["gridPos"], "y": panel["gridPos"]["y"] + panel["gridPos"]["h"],
                                              "h": 1})
 
+    def test_all_in_tiles_name_their_scope_and_status_carries_settled_variance(self):
+        board = load("omi-tv-v2")
+        # Relabelled so the names say what they include (David 2026-11-02): the
+        # stat names stay short (no wrap at 1440), the description carries scope.
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        blob = json.dumps(health, ensure_ascii=False)
+        self.assertIn("All-in/day", blob)
+        self.assertIn("All-in/user", blob)
+        self.assertNotIn('"Cost / day"', blob)
+        self.assertNotIn('"Cost / user"', blob)
+        status = next(p for p in board["panels"]
+                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
+        # The live headline's settled D−2 figure and variance fold into this
+        # line, so the board keeps its layout.
+        self.assertIn("settled D−2", status["description"])
+        self.assertIn("variance", status["description"])
+
     def test_variable_margin_tile_big_number_sparkline_and_target(self):
         from build_wall_dashboard import STATUS_GOOD
         board = load("omi-tv-v2")
-        tile = next(p for p in board["panels"] if p["title"] == "Variable margin")
-        # The big number is the latest margin %, with the 60-day daily series
-        # as the stat's own sparkline; 50% is the threshold (green at/above).
+        tile = next(p for p in board["panels"] if p["title"] == "Variable margin (live est.)")
+        # The big number is the latest margin % (today's live estimate), with
+        # the 60-day daily series as the stat's own sparkline; the goal is the
+        # threshold (green at/above).
         self.assertEqual(tile["type"], "stat")
         self.assertEqual(tile["targets"][0]["url"].rsplit("/", 1)[1], "health")
         self.assertEqual(tile["targets"][0]["root_selector"], "frames.variableMargin")
@@ -284,13 +302,14 @@ class WallV2Contract(unittest.TestCase):
         # explicit no-value marker, not an older non-null margin (Luna r3 P2).
         self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
         self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
-        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no MRR book")
+        # No live estimate (or no MRR book) shows no value, never a settled number as live.
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no live est.")
         self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
         steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
         self.assertEqual([s["value"] for s in steps], [None, 50])
         self.assertEqual(steps[1]["color"], STATUS_GOOD)
         # The definition is on the wall, not in a separate doc.
-        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate and Stripe fees",
+        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone",
                        "Goal 50%", "60 days", "non-USD paying subscriptions", "no MRR book"):
             self.assertIn(phrase, tile["description"])
         # The secondary chart: cost run rate vs MRR with the 50% target marked.
