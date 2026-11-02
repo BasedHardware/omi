@@ -7338,10 +7338,10 @@ A disabled recovery setting, lower runtime cap or temporary allowance refusal
 for an otherwise eligible window keeps its existing retry behavior.
 
 A retained-audio manifest that fails structural validation (not JSON, a
-malformed shape, binding mismatch, no references, an empty or overlapping
-slice, or a slice beyond its source or capture) can never materialize, so a
-retry rereads the same bytes. Recovery
-records an `invalid_retained_manifest` refusal and enters `failed_held` before
+malformed shape, binding mismatch, no references, a reference without its
+owner-scoped path or generation, an empty or overlapping slice, or a slice
+beyond its source or capture) can never materialize, so a retry rereads the
+same bytes. Recovery records an `invalid_retained_manifest` refusal and enters `failed_held` before
 any paid start, and the delivery answers 2xx. The unit leaves the recovery
 candidate set, so neither a Cloud Tasks retry nor the sweep re-wakes it. The
 manifest and its sources stay in place. A changed source digest, a reference

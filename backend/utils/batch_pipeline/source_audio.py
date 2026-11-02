@@ -63,15 +63,18 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
 
 
 def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str]) -> None:
+    if ref.get('bucket') not in allowed_buckets:
+        # The allowed set is deploy configuration, not the manifest: stay retryable.
+        raise ValueError('retained audio reference is outside admitted source')
     path = ref.get('path', '')
     if (
-        ref.get('bucket') not in allowed_buckets
+        not isinstance(path, str)
         or not path.startswith((f'chunks/{uid}/{conversation_id}/', f'raw-live/{uid}/{conversation_id}/'))
         or any(part in {'.', '..'} for part in path.split('/'))
         or not str(ref.get('generation', '')).isdigit()
         or int(ref['generation']) <= 0
     ):
-        raise ValueError('retained audio reference is outside admitted source')
+        raise InvalidRetainedManifest('retained audio reference is outside admitted source')
 
 
 def read_reference(
@@ -93,6 +96,10 @@ def read_reference(
     return decode_source(raw, ref, key)
 
 
+def _well_formed(ref: dict) -> bool:
+    return isinstance(ref.get('pcm_sha256'), str) and isinstance(ref.get('path', ''), str)
+
+
 def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
     try:
         manifest = json.loads(body[len(MAGIC) :])
@@ -102,10 +109,7 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
     if (
         not isinstance(references, list)
         or not isinstance(manifest.get('context'), dict)
-        or not all(
-            isinstance(ref, dict) and isinstance(ref.get('pcm_sha256'), str) and isinstance(ref.get('path', ''), str)
-            for ref in references
-        )
+        or not all(isinstance(ref, dict) and _well_formed(ref) for ref in references)
     ):
         raise InvalidRetainedManifest('malformed retained audio manifest')
     if (

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401
-from utils.batch_pipeline.source_audio import MAGIC, InvalidRetainedManifest, materialize
+from utils.batch_pipeline.source_audio import MAGIC, InvalidRetainedManifest, materialize, read_reference
 
 SOURCE = b'\1\0' * 16000
 ITEM = SimpleNamespace(owner_id='o', conversation_id='c', capture_at=1, duration_seconds=1.0)
@@ -23,7 +23,19 @@ def manifest(*references):
 
 def ref(start, frames, offset=0):
     digest = hashlib.sha256(SOURCE).hexdigest()
-    return {'path': 'p', 'pcm_sha256': digest, 'start_frame': start, 'offset_frame': offset, 'frames': frames}
+    return {
+        'bucket': 'b',
+        'path': 'p',
+        'generation': 1,
+        'pcm_sha256': digest,
+        'start_frame': start,
+        'offset_frame': offset,
+        'frames': frames,
+    }
+
+
+def without(name):
+    return {k: v for k, v in ref(0, 8000).items() if k != name}
 
 
 @pytest.mark.parametrize(
@@ -66,6 +78,37 @@ def test_malformed_manifest_shape_never_escapes_as_another_error(body):
     with pytest.raises(InvalidRetainedManifest):
         materialize(body, ITEM, lambda r: fetched.append(r) or SOURCE)
     assert not fetched
+
+
+def real_reader(ref_):
+    # Validation precedes any storage read, so no client is constructed.
+    return read_reference(None, ref_, 'o', 'c', {'b'}, b'\0' * 32)
+
+
+@pytest.mark.parametrize(
+    'bad',
+    [
+        without('path'),
+        {**ref(0, 8000), 'path': ''},
+        {**ref(0, 8000), 'path': 7},
+        {**ref(0, 8000), 'path': 'chunks/other/c/x.bin'},
+        {**ref(0, 8000), 'path': 'chunks/o/c/../x.bin'},
+        without('generation'),
+        {**ref(0, 8000), 'path': 'chunks/o/c/x.bin', 'generation': 0},
+        {**ref(0, 8000), 'path': 'chunks/o/c/x.bin', 'generation': 'latest'},
+    ],
+)
+def test_reference_outside_its_owner_scope_is_permanent_at_the_real_reader(bad):
+    """Luna r2: a reference missing or outside its pinned owner location is a manifest defect."""
+    with pytest.raises(InvalidRetainedManifest):
+        materialize(manifest(bad), ITEM, real_reader)
+
+
+def test_unconfigured_bucket_keeps_the_retryable_error():
+    """The allowed buckets are deploy config; a misconfiguration must not mass-hold units."""
+    with pytest.raises(ValueError) as error:
+        materialize(manifest({**ref(0, 8000), 'bucket': 'other', 'path': 'chunks/o/c/x.bin'}), ITEM, real_reader)
+    assert not isinstance(error.value, InvalidRetainedManifest)
 
 
 def test_valid_manifest_still_materializes():
