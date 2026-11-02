@@ -181,7 +181,6 @@ def test_ordinary_route_does_not_bypass_funding(setup, monkeypatch, legacy_depen
     assert dispatch(store, artifacts, binding, original) == 'allowance_held'
     marker = row(client)['speech_redrive']
     assert marker == previous
-    assert marker['prior_speech_redrive'] == previous
     soniox.assert_not_called()
     modulate.assert_not_called()
 
