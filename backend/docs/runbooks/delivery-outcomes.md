@@ -7,13 +7,15 @@ summary, sync callback and action-item export boundaries. `kind` is one of
 children. No owner, key, conversation, job, path or provider text is a label.
 
 Summary outcomes emit after the write commits, once across transaction retries.
-An unchanged banked summary or discarded output is a no-op. Local-only work is
+An unchanged banked summary, discarded output or intentionally waived short-clip
+summary is a no-op. A kept minimum with open summary debt and local-only work are
 deferred. An empty-output obligation exhausted by the consumer is failed.
 The existing first-summary receipt, latency and debt contracts are unchanged.
 
 Sync callback holds, absent/redirected targets, open live targets and fences are
 deferred; settled holds and discarded output are no-ops. A persisted visible
-result is delivered. Export counters count one result per item, including
+result with visible summary is delivered; a kept minimum without confirmed summary
+remains deferred. Export counters count one result per item, including
 no-integration/already-exported no-ops and device enqueue/lease deferrals.
 Device enqueue is not proof of device delivery. Failed attempts can be retried,
 so these are attempt counters, not unique deliveries or a billing ledger.

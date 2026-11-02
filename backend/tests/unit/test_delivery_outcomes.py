@@ -48,7 +48,7 @@ def test_untrusted_labels_are_rejected_before_child_creation(monkeypatch):
         ({}, {'summary_completed_at': 1, 'structured': {'title': 'Same'}}, 'no_op'),
         ({}, {'structured': {'title': 'Same'}}, 'no_op'),
         ({'discarded': True}, {}, 'no_op'),
-        ({'summary_output_present': False}, {}, 'no_op'),
+        ({'summary_output_present': False}, {}, 'deferred'),
         ({'deferred': True}, {}, 'deferred'),
         ({'processing_state': 'local_pending'}, {}, 'deferred'),
         ({'status': 'processing'}, {}, None),
@@ -198,6 +198,56 @@ def test_malformed_summary_observation_does_not_reject_a_write():
     write = dict(status='completed', structured={'sections': 7})
     assert delivery.summary_terminal_outcome({}, write) is None
     assert write == dict(status='completed', structured={'sections': 7})
+
+
+def test_real_minimum_preparation_keeps_open_summary_debt_deferred(monkeypatch):
+    from utils.conversations import summary_delivery
+
+    monkeypatch.setattr(summary_delivery, 'enabled', lambda uid: True)
+    write = dict(status='completed', structured={'title': 'Waiting', 'title_provenance': 'server_minimum'})
+    summary_delivery.prepare(write, 'synthetic', now=100)
+    assert write['summary_due_at'] > 100 and write['summary_output_present'] is False
+    assert delivery.summary_terminal_outcome({}, write) == 'deferred'
+    assert summary_delivery.creation_result(write, 'synthetic') is None
+
+
+def test_intentionally_waived_short_clip_debt_is_not_pending(monkeypatch):
+    from utils.conversations import summary_delivery
+
+    monkeypatch.setattr(summary_delivery, 'enabled', lambda uid: True)
+    write = dict(
+        status='completed',
+        structured={'title': 'Short capture', 'title_provenance': 'server_minimum'},
+        relevance_decision={'verdict': 'keep', 'decided_by': 'rule', 'reason': 'content_below_floor'},
+    )
+    summary_delivery.prepare(write, 'synthetic', now=100)
+    assert write['summary_due_at'] is None and write['summary_output_present'] is False
+    assert delivery.summary_terminal_outcome({}, write) == 'no_op'
+
+
+@pytest.mark.parametrize(
+    'patch,expected',
+    [
+        ({'discarded': True}, 'no_op'),
+        ({'discarded': True, 'deferred': True}, 'no_op'),
+        ({'processing_deferred': True}, 'deferred'),
+        ({'deferred': True}, 'deferred'),
+        ({'terminal_no_derived_effects': True}, 'deferred'),
+        ({'is_locked': True}, 'deferred'),
+        ({'processing_state': 'local_pending'}, 'deferred'),
+        ({}, 'delivered'),
+        ({'structured': {'title': 'Waiting'}}, 'deferred'),
+    ],
+)
+def test_sync_terminals_prioritize_discard_and_debt_without_changing_results(observed, patch, expected):
+    from utils.conversations.summary_delivery import present
+
+    row = dict(structured={'overview': 'Retained summary'}, **{})
+    row.update(patch)
+    result = SimpleNamespace(**row)
+    assert delivery.sync_refreshed(row, lambda raw: result, present) is result
+    assert delivery.sync_done(result) is result
+    assert observed == [('sync', expected), ('sync', expected)]
 
 
 @pytest.mark.asyncio

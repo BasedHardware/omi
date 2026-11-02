@@ -157,7 +157,7 @@ from utils.other.storage import (
     upload_syncing_temporal_file,
 )
 from utils.observability.fallback import record_fallback
-from utils.observability.delivery import observe_sync_failures, sync_result, sync_refreshed, sync_defer
+from utils.observability.delivery import observe_sync_failures, sync_result, sync_refreshed, sync_defer, sync_done
 from utils.observability.transcription import record_sync_transcription_outcome
 from config.transcription_final_pass import sync_enabled_for
 from utils.speaker_assignment import process_speaker_assigned_segments
@@ -1267,7 +1267,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
-    return sync_result('no_op' if processed_conversation.discarded else 'delivered', processed_conversation)
+    return sync_done(processed_conversation)
 
 
 def _speaker_identity_dependencies() -> SpeakerIdentityDependencies:

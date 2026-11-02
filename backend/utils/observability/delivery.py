@@ -62,9 +62,13 @@ def summary_terminal_outcome(existing: dict[str, Any], write: dict[str, Any]) ->
     """Classify final committed processing output; no state/receipt changes."""
     if write.get('status') != 'completed' or not ({'summary_output_present', 'structured'} & write.keys()):
         return None
+    if write.get('discarded'):
+        return 'no_op'
     if (
         write.get('terminal_no_derived_effects')
         or write.get('deferred')
+        or write.get('processing_deferred')
+        or write.get('is_locked')
         or write.get('processing_state') == 'local_pending'
     ):
         return 'deferred'
@@ -76,8 +80,12 @@ def summary_terminal_outcome(existing: dict[str, Any], write: dict[str, Any]) ->
             rich = present(write.get('structured'))
     except (AttributeError, TypeError, ValueError):
         return None  # Malformed observation must not reject an otherwise valid write.
-    if write.get('discarded') or not rich:
-        return 'no_op'
+    if not rich:
+        from utils.conversations.minimum_derived import intentional_short_clip_minimum
+
+        if intentional_short_clip_minimum(write):
+            return 'no_op'
+        return 'deferred'  # A kept minimum still owes its first summary.
     return (
         'no_op'
         if existing.get('structured') is not None and existing.get('structured') == write.get('structured')
@@ -134,9 +142,34 @@ def sync_refreshed(
     present: Callable[[Any], bool],
 ) -> Result | None:
     result = decode(row) if row else None
-    outcome = (
-        'delivered'
-        if row and present(row.get('structured'))
-        else 'no_op' if row and row.get('discarded') else 'deferred'
-    )
-    return sync_result(outcome, result)
+    return sync_result(_sync_outcome(row, present), result)
+
+
+def _sync_outcome(value: Any, present: Callable[[Any], bool]) -> str:
+    from utils.conversations.summary_delivery import field
+
+    if field(value, 'discarded', False) is True:
+        return 'no_op'
+    if (
+        any(
+            field(value, name, False) is True
+            for name in (
+                'deferred',
+                'processing_deferred',
+                'terminal_no_derived_effects',
+                'is_locked',
+            )
+        )
+        or field(value, 'processing_state') == 'local_pending'
+    ):
+        return 'deferred'
+    try:
+        return 'delivered' if present(field(value, 'structured')) else 'deferred'
+    except (AttributeError, TypeError, ValueError):
+        return 'deferred'
+
+
+def sync_done(result: Result) -> Result:
+    from utils.conversations.summary_delivery import present
+
+    return sync_result(_sync_outcome(result, present), result)

@@ -7,7 +7,7 @@ direct path until pipeline.py is unfrozen (#21932/#20662) or deleted (C11);
 """
 
 from __future__ import annotations
-from utils.observability.delivery import observe_sync_failures, sync_result, sync_refreshed, sync_defer
+from utils.observability.delivery import observe_sync_failures, sync_result, sync_refreshed, sync_defer, sync_done
 
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
@@ -276,4 +276,4 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
     logger.info('event=sync_reprocess_callback outcome=processed')
-    return sync_result('no_op' if processed_conversation.discarded else 'delivered', processed_conversation)
+    return sync_done(processed_conversation)
