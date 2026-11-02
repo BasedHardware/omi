@@ -290,6 +290,15 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+# Optional per-window LID must not hold the shared sync coordination pool.
+# Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
+record_language_executor = MonitoredThreadPoolExecutor(
+    name="record_language",
+    max_workers=4,
+    max_queue_size=8,
+    wait_on_saturation=True,
+    thread_name_prefix="record-language",
+)
 postprocess_executor = MonitoredThreadPoolExecutor(
     name="postprocess",
     # backend-integration raises this: its enrichment handler holds a thread per LLM-bound request.
@@ -330,6 +339,7 @@ _ALL_EXECUTORS = [
     llm_executor,
     stripe_executor,
     sync_executor,
+    record_language_executor,
     postprocess_executor,
     cleanup_executor,
     storage_executor,

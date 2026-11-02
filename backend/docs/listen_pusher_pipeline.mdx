@@ -416,6 +416,12 @@ projection without deleting its archived bytes. Raw capacity/upload failures
 retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
 are audio receipts; `capture_committed` remains transcript coverage.
 `AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+`AUDIO_CUSTODY_FRAMED_PERCENT` defaults to `0`, independently of archive percent.
+Admitted v2 16 kHz pusher windows retain frame starts, sample counts and gap
+markers across send pauses. The 60 s / 16 MiB and 4096-frame bounds still
+apply. Raw/PCM discovery exposes frame spans with decoded sample offsets;
+receipt-based WAL release remains per part, with both immutable generations
+and plaintext digests. Readers continue walking old framed objects at percent 0.
 See [custody, recovery, metrics and acceptance](runbooks/audio-durable-outbox.md).
 
 ## Production runtime identity

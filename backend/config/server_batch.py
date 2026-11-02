@@ -1,4 +1,4 @@
-"""Platform-scoped, consented server batch capture. Desktop on, mobile dark."""
+"""Platform-scoped, consented server batch capture with separate auto-language admission."""
 
 import math
 import os
@@ -10,6 +10,43 @@ from config.policy.batch import parse_percent
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 MARKER = 'server_batch_only'
+AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
+SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
+AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
+
+
+def undeclared(host) -> bool:
+    params = getattr(getattr(host.request, 'websocket', None), 'query_params', None)
+    return isinstance(params, Mapping) and 'language' not in params
+
+
+def request_language(host) -> str:
+    # FastAPI's English default is a live compatibility choice, not a user
+    # declaration and never permission to label retained audio English.
+    return '' if undeclared(host) else normalized_stt_language(getattr(host.request, 'language', None))
+
+
+def capture_language(host):
+    return 'multi' if request_language(host) in AUTO_LANGUAGES else host.language
+
+
+def continuation_language(host, capture: Mapping | None = None):
+    if request_language(host) in AUTO_LANGUAGES:
+        if capture is None:
+            return None  # Find the prior pointer before validating its owner/language.
+        if owned(capture) and language_compatible(capture, request_language(host)):
+            return capture.get('language')
+    return getattr(host, 'language', None)
+
+
+def auto_selected(owner_id: str, platform: str | None) -> bool:
+    percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0'))
+    return bool(
+        platform in {'ios', 'android'}
+        and owner_id
+        and percent > 0
+        and cohort_bucket(owner_id, AUTO_COHORT_SALT) < percent
+    )
 
 
 def enabled() -> bool:
@@ -43,8 +80,13 @@ def eligible(capture: Mapping, owner_id: str, *, batch_admitted: bool = False) -
         and not any(capture.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         and not external.get('onboarding_session_id')
         and capture.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
-        and normalized_stt_language(capture.get('language'))
-        in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+        and (
+            normalized_stt_language(capture.get('language')) in SUPPORTED
+            or (
+                normalized_stt_language(capture.get('language')) in AUTO_LANGUAGES
+                and auto_selected(owner_id, capture.get('client_platform'))
+            )
+        )
     )
 
 
@@ -85,59 +127,101 @@ def has_audio(capture: Mapping) -> bool:
 
 
 def language_compatible(capture: Mapping, language: str | None) -> bool:
-    return not owned(capture) or normalized_stt_language(capture.get('language')) == normalized_stt_language(language)
+    stored, requested = normalized_stt_language(capture.get('language')), normalized_stt_language(language)
+    return not owned(capture) or stored == requested or (stored in AUTO_LANGUAGES and requested in AUTO_LANGUAGES)
 
 
 def capture_compatible(host, capture: Mapping) -> bool:
     return not owned(capture) or bool(
-        language_compatible(capture, host.request.language) and request_eligible(host, existing_capture=True)
+        language_compatible(capture, request_language(host)) and request_eligible(host, existing_capture=True)
     )
 
 
 def suppress_live(host) -> bool:
+    from utils.metrics import OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL
+    from utils.observability.reasons import ReasonFamily, ServerBatchSuppressionReason, reason_label
+    from utils.observability.transcription import bounded_client_platform
+
     capture = getattr(host, 'batch_record_capture', None) or {}
-    return bool(
-        audio_outbox_enabled()
-        and owned(capture)
-        and language_compatible(capture, host.request.language)
-        and getattr(host, 'private_cloud_sync_enabled', False)
-        and not getattr(host, 'use_custom_stt', False)
-        and not getattr(host, 'is_multi_channel', False)
-        and not getattr(host.request, 'onboarding_mode', False)
-        and getattr(host, 'pusher_enabled', False)
-        and request_eligible(host, existing_capture=True)
-    )
+    reason = request_reason(host, existing_capture=owned(capture))
+    if not owned(capture) and not enabled():
+        reason = 'not_enabled'
+    if reason is None and not language_compatible(capture, request_language(host)):
+        reason = 'profile_mismatch'
+    if reason is None and not owned(capture):
+        reason = 'capture_not_owned' if enabled() else 'not_enabled'
+    suppressed = reason is None
+    try:
+        OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL.labels(
+            decision='suppressed' if suppressed else 'live',
+            reason=reason_label(ReasonFamily.LIVE_STT, reason or 'suppressed', ServerBatchSuppressionReason),
+            client_platform=bounded_client_platform(
+                getattr(getattr(host, 'client_device_context', None), 'platform', None)
+            ),
+        ).inc()
+    except Exception:
+        pass  # Telemetry cannot interrupt provider admission.
+    return suppressed
 
 
 def request_eligible(host, *, existing_capture: bool = False) -> bool:
-    """No inferred English admission for multi/auto/unknown request languages."""
-    language = normalized_stt_language(getattr(host.request, 'language', None))
+    return request_reason(host, existing_capture=existing_capture) is None
+
+
+def request_reason(host, *, existing_capture: bool = False) -> str | None:
+    """A learned profile selects the cohort, never the recognizer language proof."""
+    # Cap-paused bootstrap has no request yet and cannot own batch custody.
+    if getattr(host, 'request', None) is None:
+        return 'not_enabled'
+    language = request_language(host)
     profile = getattr(host, 'language_profile', None)
+    primary = getattr(profile, 'primary', None)
     expected = getattr(profile, 'expected', ())
-    supported = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
-    return bool(
-        (enabled() or existing_capture)
-        and (not getattr(host, 'server_batch_initialized', False) or getattr(host, 'server_batch_only', False))
-        and audio_outbox_enabled()
-        and getattr(host, 'private_cloud_sync_enabled', False)
-        and getattr(host, 'pusher_enabled', False)
-        and os.getenv('HOSTED_PUSHER_API_URL')
-        and not host.use_custom_stt
-        and not getattr(host, 'server_batch_byok', False)
-        and not host.is_multi_channel
-        and host.request.source != 'phone_call'
-        and not host.request.onboarding_mode
-        and (
-            existing_capture
-            or selected(
-                host.request.uid,
-                getattr(getattr(host, 'client_device_context', None), 'platform', None),
-                host.request.source,
-            )
-        )
-        and language == normalized_stt_language(host.language)
-        and language in supported
-        and getattr(profile, 'primary', None) == language
-        and expected
-        and all(normalized_stt_language(code) in supported for code in expected)
-    )
+    platform = getattr(getattr(host, 'client_device_context', None), 'platform', None)
+    if not enabled() and not existing_capture:
+        return 'not_enabled'
+    if getattr(host, 'server_batch_initialized', False) and not getattr(host, 'server_batch_only', False):
+        return 'not_enabled'
+    if not getattr(host, 'private_cloud_sync_enabled', False):
+        return 'private_sync_off'
+    if host.use_custom_stt or getattr(host, 'server_batch_byok', False):
+        return 'custom_stt'
+    if host.is_multi_channel:
+        return 'multi_channel'
+    if host.request.source == 'phone_call':
+        return 'phone_call'
+    if host.request.onboarding_mode:
+        return 'onboarding'
+    if (
+        not audio_outbox_enabled()
+        or not getattr(host, 'pusher_enabled', False)
+        or not os.getenv('HOSTED_PUSHER_API_URL')
+    ):
+        return 'pusher_unavailable'
+    # Lookup callers do not have the stored capture yet. Allow them to find a
+    # prior durable owner across rollback; suppress_live separately requires it.
+    if not existing_capture and not selected(host.request.uid, platform, host.request.source):
+        return 'platform_unselected'
+    resolved = normalized_stt_language(host.language)
+    if (
+        not undeclared(host)
+        and language != resolved
+        and not (language in AUTO_LANGUAGES and resolved in AUTO_LANGUAGES)
+    ):
+        return 'profile_mismatch'
+    auto = language in AUTO_LANGUAGES
+    if auto:
+        if not (existing_capture or auto_selected(host.request.uid, platform)):
+            return 'language_auto'
+        if getattr(profile, 'source', None) != 'learned':
+            return 'profile_mismatch'
+    elif language not in SUPPORTED:
+        return 'language_unsupported'
+    if (
+        (not auto and primary not in SUPPORTED)
+        or (not auto and primary != language)
+        or not expected
+        or not all(normalized_stt_language(code) in SUPPORTED for code in expected)
+    ):
+        return 'profile_mismatch'
+    return None

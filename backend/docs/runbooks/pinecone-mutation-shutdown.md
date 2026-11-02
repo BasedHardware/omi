@@ -23,8 +23,10 @@ provider acknowledgement cannot clear a ticket already marked uncertain.
   backend-listen use `main:app` and drain from its FastAPI shutdown event.
 * Pusher uses `pusher.main:app` and drains from its lifespan shutdown.
 * Cloud Tasks jobs running on those services share the same process hook.
-* The dedicated `utils.sync.worker_runtime` idle pull worker does not execute
-  pipelines or mutate Pinecone and needs no mutation hook.
+* The dedicated `utils.sync.worker_runtime` parent does not mutate Pinecone;
+  its isolated `utils.sync.worker_job` child runs the pipeline and drains before
+  normal `os._exit`. Lease loss, work deadline and forced process-group SIGKILL
+  retain the existing fencing protocol and cannot run a shutdown hook.
 * Standalone Python jobs (including `modal/x_connector_sync_job.py` and
   `modal/job.py`) and operator scripts do not use those lifespans and have no
   shutdown drain hook. Their shared mutation callers still settle

@@ -7,6 +7,8 @@ from collections.abc import Awaitable, Callable
 
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
+from config.audio_custody import framed_pack
+from utils.other.audio_frame_table import FRAME_SCHEMA
 from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
 from models.message_event import AudioCustodyEvent
 from utils.executors import db_executor, run_blocking, storage_executor
@@ -248,6 +250,14 @@ class LiveAudioArchive:
         request = self.host.request
         context = request.client_device_context
         raw, metadata = await run_blocking(storage_executor, pack.encoded, preserve_pcm=self.durable)
+        if (
+            self.durable
+            and framed_pack(request.uid)
+            and all(frame['samples'] > 0 for frame in self.frames.get(id(pack), []))
+        ):
+            metadata.update(
+                frame_schema=FRAME_SCHEMA, gap_count=sum(frame['gap_before'] for frame in self.frames.get(id(pack), []))
+            )
         headers = getattr(request.websocket, 'headers', {})
         metadata.update(
             firmware=headers.get('x-omi-firmware-version'),
