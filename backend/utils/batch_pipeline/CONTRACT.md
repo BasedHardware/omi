@@ -84,6 +84,9 @@ acknowledge the phone's custody WAL; a partial ledger never authorizes that
 acknowledgement or phone-local age eviction. Polling does not retry audio or
 consume the client's failure budget. Pending phone bytes remain until recovery
 or explicit user deletion; storage pressure cannot evict them.
+`tests/unit/test_batch_pipeline_custody_property.py` checks this over every unit
+state and ledger shape and pins each answer in `tests/fixtures/custody_status_shapes.json`,
+which the phone replays through its terminal policy (`app/test/unit/custody_status_shapes_test.dart`).
 
 ## Trips: which invariant each enforces
 
