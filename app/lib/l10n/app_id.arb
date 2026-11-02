@@ -3383,6 +3383,7 @@
     "firmwareUpdateFailedTitle": "Pembaruan Gagal",
     "firmwareUpdateFailedMessage": "Pembaruan tidak selesai. Perangkat Anda masih memakai firmware saat ini dan aman digunakan. Pastikan terisi daya dan dekat ponsel, lalu coba lagi.",
     "firmwareDownloadFailedMessage": "Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.",
+    "firmwareBatteryUnavailable": "Level baterai belum tersedia. Tunggu sebentar dan sambungkan kembali jika masih seperti ini.",
     "firmwareBatteryTooLow": "Baterai {level}%. Isi daya perangkat minimal 15% sebelum memperbarui.",
     "startUpdate": "Mulai Pembaruan",
     "otaNotSupported": "Firmware ini tidak dapat diperbarui melalui Wi-Fi.",

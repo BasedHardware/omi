@@ -3390,6 +3390,7 @@
     "firmwareUpdateFailedTitle": "Opdateringen mislykkedes",
     "firmwareUpdateFailedMessage": "Opdateringen blev ikke færdig. Din enhed kører stadig den nuværende firmware og er sikker at bruge. Hold den opladet og tæt på telefonen, og prøv igen.",
     "firmwareDownloadFailedMessage": "Opdateringen kunne ikke hentes, og din enhed er ikke ændret. Tjek din internetforbindelse, og prøv igen.",
+    "firmwareBatteryUnavailable": "Batteriniveauet er ikke tilgængeligt endnu. Vent et øjeblik, og tilslut igen, hvis det fortsætter.",
     "firmwareBatteryTooLow": "Batteriet er på {level} %. Oplad enheden til mindst 15 %, før du opdaterer.",
     "startUpdate": "Start opdatering",
     "otaNotSupported": "Denne firmware kan ikke opdateres via Wi-Fi.",

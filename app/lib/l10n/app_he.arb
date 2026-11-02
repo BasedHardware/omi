@@ -10771,6 +10771,7 @@
     "firmwareUpdateFailedTitle": "העדכון נכשל",
     "firmwareUpdateFailedMessage": "העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.",
     "firmwareDownloadFailedMessage": "לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.",
+    "firmwareBatteryUnavailable": "רמת הסוללה עדיין אינה זמינה. יש להמתין רגע ולהתחבר מחדש אם המצב נמשך.",
     "firmwareBatteryTooLow": "הסוללה על {level}%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.",
     "startUpdate": "התחלת העדכון",
     "otaNotSupported": "לא ניתן לעדכן את הקושחה הזו דרך Wi-Fi.",

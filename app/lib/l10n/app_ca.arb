@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "L'actualització ha fallat",
     "firmwareUpdateFailedMessage": "L'actualització no ha acabat. El dispositiu continua amb el firmware actual i es pot fer servir amb seguretat. Mantén-lo carregat i a prop del telèfon i torna-ho a provar.",
     "firmwareDownloadFailedMessage": "No s'ha pogut baixar l'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.",
+    "firmwareBatteryUnavailable": "El nivell de bateria encara no està disponible. Espera un moment i torna a connectar el dispositiu si continua així.",
     "firmwareBatteryTooLow": "La bateria és al {level}%. Carrega el dispositiu com a mínim fins al 15% abans d'actualitzar.",
     "startUpdate": "Inicia l'actualització",
     "otaNotSupported": "Aquest firmware no es pot actualitzar per Wi-Fi.",

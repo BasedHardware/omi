@@ -10518,6 +10518,9 @@ class AppLocalizationsAr extends AppLocalizations {
       'تعذّر تنزيل التحديث ولم يتغير جهازك. تحقق من اتصالك بالإنترنت، ثم حاول مرة أخرى.';
 
   @override
+  String get firmwareBatteryUnavailable => 'مستوى البطارية غير متاح بعد. انتظر لحظة، وأعد الاتصال إذا استمر ذلك.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'البطارية عند $level%. اشحن جهازك إلى 15% على الأقل قبل التحديث.';
   }

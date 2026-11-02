@@ -3383,6 +3383,7 @@
     "firmwareUpdateFailedTitle": "Échec de la mise à jour",
     "firmwareUpdateFailedMessage": "La mise à jour n'a pas abouti. Votre appareil utilise toujours le firmware actuel et peut être utilisé sans risque. Gardez-le chargé et près du téléphone, puis réessayez.",
     "firmwareDownloadFailedMessage": "La mise à jour n'a pas pu être téléchargée et votre appareil n'a pas été modifié. Vérifiez votre connexion internet, puis réessayez.",
+    "firmwareBatteryUnavailable": "Le niveau de batterie n'est pas encore disponible. Patientez un instant et reconnectez l'appareil si cela persiste.",
     "firmwareBatteryTooLow": "La batterie est à {level} %. Chargez votre appareil à au moins 15 % avant la mise à jour.",
     "startUpdate": "Lancer la mise à jour",
     "otaNotSupported": "Ce firmware ne peut pas être mis à jour par Wi-Fi.",

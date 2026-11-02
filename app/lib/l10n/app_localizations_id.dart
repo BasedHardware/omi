@@ -10588,6 +10588,10 @@ class AppLocalizationsId extends AppLocalizations {
       'Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Level baterai belum tersedia. Tunggu sebentar dan sambungkan kembali jika masih seperti ini.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Baterai $level%. Isi daya perangkat minimal 15% sebelum memperbarui.';
   }

@@ -10674,6 +10674,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'La mise à jour n\'a pas pu être téléchargée et votre appareil n\'a pas été modifié. Vérifiez votre connexion internet, puis réessayez.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Le niveau de batterie n\'est pas encore disponible. Patientez un instant et reconnectez l\'appareil si cela persiste.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'La batterie est à $level %. Chargez votre appareil à au moins 15 % avant la mise à jour.';
   }

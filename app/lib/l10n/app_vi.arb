@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Cập nhật thất bại",
     "firmwareUpdateFailedMessage": "Bản cập nhật chưa hoàn tất. Thiết bị vẫn dùng firmware hiện tại và an toàn để sử dụng. Hãy sạc và để gần điện thoại, rồi thử lại.",
     "firmwareDownloadFailedMessage": "Không tải được bản cập nhật và thiết bị không bị thay đổi. Hãy kiểm tra kết nối internet rồi thử lại.",
+    "firmwareBatteryUnavailable": "Chưa có thông tin mức pin. Hãy đợi một lát và kết nối lại nếu tình trạng này vẫn tiếp diễn.",
     "firmwareBatteryTooLow": "Pin đang ở mức {level}%. Hãy sạc thiết bị lên ít nhất 15% trước khi cập nhật.",
     "startUpdate": "Bắt đầu cập nhật",
     "otaNotSupported": "Không thể cập nhật firmware này qua Wi-Fi.",

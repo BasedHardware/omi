@@ -12487,6 +12487,10 @@
     "@firmwareDownloadFailedMessage": {
         "description": "Firmware download failed"
     },
+    "firmwareBatteryUnavailable": "Battery level isn't available yet. Wait a moment and reconnect if it stays this way.",
+    "@firmwareBatteryUnavailable": {
+        "description": "Shown when a pendant firmware update is blocked because its battery level is unknown and it is not charging."
+    },
     "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 15% before updating.",
     "@firmwareBatteryTooLow": {
         "description": "Firmware update blocked by low battery",

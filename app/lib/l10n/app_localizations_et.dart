@@ -10576,6 +10576,10 @@ class AppLocalizationsEt extends AppLocalizations {
       'Värskendust ei õnnestunud alla laadida ja seadet ei muudetud. Kontrolli internetiühendust ja proovi uuesti.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Aku laetuse tase pole veel saadaval. Oodake veidi ja ühendage seade uuesti, kui see ei muutu.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Aku on $level%. Lae seade enne värskendamist vähemalt 15%-ni.';
   }

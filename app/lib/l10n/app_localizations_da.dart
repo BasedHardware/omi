@@ -10573,6 +10573,10 @@ class AppLocalizationsDa extends AppLocalizations {
       'Opdateringen kunne ikke hentes, og din enhed er ikke ændret. Tjek din internetforbindelse, og prøv igen.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Batteriniveauet er ikke tilgængeligt endnu. Vent et øjeblik, og tilslut igen, hvis det fortsætter.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Batteriet er på $level %. Oplad enheden til mindst 15 %, før du opdaterer.';
   }

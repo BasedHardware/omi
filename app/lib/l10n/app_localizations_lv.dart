@@ -10613,6 +10613,10 @@ class AppLocalizationsLv extends AppLocalizations {
       'Atjauninājumu neizdevās lejupielādēt, un ierīce netika mainīta. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Akumulatora uzlādes līmenis vēl nav pieejams. Uzgaidiet brīdi un izveidojiet savienojumu vēlreiz, ja nekas nemainās.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Akumulators ir $level%. Pirms atjaunināšanas uzlādējiet ierīci vismaz līdz 15%.';
   }

@@ -10611,6 +10611,10 @@ class AppLocalizationsNl extends AppLocalizations {
       'De update kon niet worden gedownload en je apparaat is niet gewijzigd. Controleer je internetverbinding en probeer het opnieuw.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Het batterijniveau is nog niet beschikbaar. Wacht even en verbind opnieuw als dit zo blijft.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'De batterij staat op $level%. Laad je apparaat op tot minstens 15% voordat je bijwerkt.';
   }

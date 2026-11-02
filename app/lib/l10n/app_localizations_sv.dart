@@ -10588,6 +10588,10 @@ class AppLocalizationsSv extends AppLocalizations {
       'Uppdateringen kunde inte laddas ned och enheten har inte ändrats. Kontrollera internetanslutningen och försök igen.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Batterinivån är inte tillgänglig än. Vänta en stund och anslut igen om det fortsätter så här.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Batteriet är på $level %. Ladda enheten till minst 15 % innan du uppdaterar.';
   }

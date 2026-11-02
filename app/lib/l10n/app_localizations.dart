@@ -19287,6 +19287,12 @@ abstract class AppLocalizations {
   /// **'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.'**
   String get firmwareDownloadFailedMessage;
 
+  /// Shown when a pendant firmware update is blocked because its battery level is unknown and it is not charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery level isn\'t available yet. Wait a moment and reconnect if it stays this way.'**
+  String get firmwareBatteryUnavailable;
+
   /// Firmware update blocked by low battery
   ///
   /// In en, this message translates to:

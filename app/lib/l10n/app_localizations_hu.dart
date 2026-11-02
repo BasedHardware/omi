@@ -10628,6 +10628,10 @@ class AppLocalizationsHu extends AppLocalizations {
       'A frissítést nem sikerült letölteni, az eszköz nem változott. Ellenőrizd az internetkapcsolatot, majd próbáld újra.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Az akkumulátor töltöttsége még nem érhető el. Várjon egy kicsit, és csatlakozzon újra, ha ez nem változik.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Az akkumulátor $level%-on áll. Frissítés előtt töltsd legalább 15%-ra.';
   }

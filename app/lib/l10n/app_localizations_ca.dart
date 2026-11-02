@@ -10641,6 +10641,10 @@ class AppLocalizationsCa extends AppLocalizations {
       'No s\'ha pogut baixar l\'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'El nivell de bateria encara no està disponible. Espera un moment i torna a connectar el dispositiu si continua així.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'La bateria és al $level%. Carrega el dispositiu com a mínim fins al 15% abans d\'actualitzar.';
   }

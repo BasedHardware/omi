@@ -10609,6 +10609,10 @@ class AppLocalizationsBs extends AppLocalizations {
       'Ažuriranje nije moguće preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu, pa pokušajte ponovo.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Nivo baterije još nije dostupan. Sačekajte trenutak i ponovo se povežite ako se to ne promijeni.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Baterija je na $level%. Napunite uređaj na najmanje 15% prije ažuriranja.';
   }

@@ -231,6 +231,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   /// A failed update says why, whether the device is safe, and what to do next (onboarding-home #16).
   Widget _buildFailedSection(FirmwareUpdateFailure failure) {
+    final batteryWarning = _batteryWarning();
     final message = switch (failure) {
       FirmwareUpdateFailure.download => context.l10n.firmwareDownloadFailedMessage,
       FirmwareUpdateFailure.install => context.l10n.firmwareUpdateFailedMessage,
@@ -263,15 +264,21 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           ),
         ),
         const SizedBox(height: OmiSpacing.xl),
+        if (batteryWarning != null) ...[
+          _warningCard(batteryWarning),
+          const SizedBox(height: OmiSpacing.md),
+        ],
         OmiButton(
           key: const Key('firmware_update_try_again'),
           label: context.l10n.tryAgain,
           leading: const FaIcon(FontAwesomeIcons.arrowRotateLeft),
           expand: true,
-          onPressed: () {
-            clearFirmwareFailure();
-            _startUpdate();
-          },
+          onPressed: batteryWarning != null
+              ? null
+              : () {
+                  clearFirmwareFailure();
+                  _startUpdate();
+                },
         ),
         const SizedBox(height: OmiSpacing.xs),
         OmiButton.secondary(
@@ -288,7 +295,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   /// risky-version warning, then the checklist sheet with the "don't close the app" warning.
   Future<void> _startUpdate() async {
     final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-    if (_batteryTooLow(deviceProvider)) return;
+    if (_batteryBlocksUpdate(deviceProvider)) return;
     var targetVersion = latestFirmwareDetails['version']?.toString() ?? '';
     if (targetVersion.startsWith('3.0.17')) {
       final confirmed = await showOmiConfirm(
@@ -305,22 +312,39 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       context: context,
       steps: otaUpdateSteps,
       onUpdateStart: () async {
+        // Battery and charging may have changed while a confirmation was open.
+        if (!mounted || _batteryBlocksUpdate(deviceProvider)) return;
         deviceProvider.setFirmwareUpdateInProgress(true);
         if (await downloadFirmware()) {
+          if (!mounted) return;
+          // Downloading can take time; check again before handing off to the bootloader.
+          if (_batteryBlocksUpdate(deviceProvider)) {
+            deviceProvider.resetFirmwareUpdateState();
+            return;
+          }
           await startDfu(widget.device!);
         }
       },
     );
   }
 
-  bool _batteryTooLow(DeviceProvider provider) =>
-      provider.batteryLevel > 0 && provider.batteryLevel < kFirmwareUpdateMinBattery && !provider.isCharging;
+  bool _batteryBlocksUpdate(DeviceProvider provider) =>
+      !canStartFirmwareUpdate(batteryLevel: provider.batteryLevel, isCharging: provider.isCharging);
+
+  String? _batteryWarning() {
+    final (batteryLevel, isCharging) = context.select<DeviceProvider, (int, bool)>(
+      (provider) => (provider.batteryLevel, provider.isCharging),
+    );
+    if (canStartFirmwareUpdate(batteryLevel: batteryLevel, isCharging: isCharging)) return null;
+    return batteryLevel < 0
+        ? context.l10n.firmwareBatteryUnavailable
+        : context.l10n.firmwareBatteryTooLow(batteryLevel);
+  }
 
   Widget _buildUpdateSection() {
     dynamic changelogData = latestFirmwareDetails['changelog'];
     bool hasChangelog = changelogData != null && changelogData is List && (List<String>.from(changelogData)).isNotEmpty;
-    final deviceProvider = context.watch<DeviceProvider>();
-    final batteryTooLow = _batteryTooLow(deviceProvider);
+    final batteryWarning = _batteryWarning();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -405,8 +429,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
         // Action buttons
         if (shouldUpdate && firmwareUpdatePolicy.allowsOmiFirmwareUpdate) ...[
-          if (batteryTooLow) ...[
-            _warningCard(context.l10n.firmwareBatteryTooLow(deviceProvider.batteryLevel)),
+          if (batteryWarning != null) ...[
+            _warningCard(batteryWarning),
             const SizedBox(height: OmiSpacing.md),
           ],
           OmiButton(
@@ -418,7 +442,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     : context.l10n.updateNow,
             leading: const FaIcon(FontAwesomeIcons.download),
             expand: true,
-            onPressed: batteryTooLow ? null : _startUpdate,
+            onPressed: batteryWarning != null ? null : _startUpdate,
           ),
         ],
 

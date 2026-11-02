@@ -10576,6 +10576,10 @@ class AppLocalizationsSk extends AppLocalizations {
       'Aktualizáciu sa nepodarilo stiahnuť a zariadenie sa nezmenilo. Skontrolujte pripojenie na internet a skúste to znova.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Úroveň batérie zatiaľ nie je k dispozícii. Chvíľu počkajte a ak sa nič nezmení, zariadenie znova pripojte.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Batéria je na $level %. Pred aktualizáciou nabite zariadenie aspoň na 15 %.';
   }

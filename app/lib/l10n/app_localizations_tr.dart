@@ -10595,6 +10595,10 @@ class AppLocalizationsTr extends AppLocalizations {
       'Güncelleme indirilemedi ve cihazınız değişmedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Pil seviyesi henüz kullanılamıyor. Biraz bekleyin ve bu durum devam ederse yeniden bağlanın.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Pil %$level seviyesinde. Güncellemeden önce cihazınızı en az %15\'e kadar şarj edin.';
   }

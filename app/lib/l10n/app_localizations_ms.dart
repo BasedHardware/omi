@@ -10605,6 +10605,10 @@ class AppLocalizationsMs extends AppLocalizations {
       'Kemas kini tidak dapat dimuat turun dan peranti anda tidak berubah. Semak sambungan internet, kemudian cuba lagi.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Tahap bateri belum tersedia. Tunggu sebentar dan sambung semula jika keadaan ini berterusan.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Bateri pada $level%. Cas peranti sekurang-kurangnya 15% sebelum mengemas kini.';
   }

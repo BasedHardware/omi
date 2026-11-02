@@ -10618,6 +10618,10 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'ಬ್ಯಾಟರಿ ಮಟ್ಟ ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ. ಸ್ವಲ್ಪ ಕಾಯಿರಿ, ಇದೇ ರೀತಿ ಮುಂದುವರಿದರೆ ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'ಬ್ಯಾಟರಿ $level% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 15% ಚಾರ್ಜ್ ಮಾಡಿ.';
   }

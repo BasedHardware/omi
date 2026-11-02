@@ -10585,6 +10585,10 @@ class AppLocalizationsCs extends AppLocalizations {
       'Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Úroveň baterie zatím není k dispozici. Chvíli počkejte, a pokud se nic nezmění, zařízení znovu připojte.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Baterie je na $level %. Před aktualizací nabijte zařízení alespoň na 15 %.';
   }

@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Päivitys epäonnistui",
     "firmwareUpdateFailedMessage": "Päivitys ei valmistunut. Laitteessasi on yhä nykyinen laiteohjelmisto, ja sitä on turvallista käyttää. Pidä se ladattuna ja lähellä puhelinta ja yritä uudelleen.",
     "firmwareDownloadFailedMessage": "Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.",
+    "firmwareBatteryUnavailable": "Akun varaustaso ei ole vielä saatavilla. Odota hetki ja yhdistä uudelleen, jos tilanne ei muutu.",
     "firmwareBatteryTooLow": "Akun varaus on {level} %. Lataa laite vähintään 15 %:iin ennen päivitystä.",
     "startUpdate": "Aloita päivitys",
     "otaNotSupported": "Tätä laiteohjelmistoa ei voi päivittää Wi-Fin kautta.",

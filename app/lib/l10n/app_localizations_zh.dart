@@ -10406,6 +10406,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareDownloadFailedMessage => '无法下载更新，你的设备未作任何更改。请检查网络连接，然后重试。';
 
   @override
+  String get firmwareBatteryUnavailable => '暂时无法获取电量。请稍等片刻，如果仍然如此，请重新连接。';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return '电量为 $level%。更新前请将设备充电至至少 15%。';
   }

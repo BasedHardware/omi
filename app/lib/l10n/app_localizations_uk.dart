@@ -10607,6 +10607,10 @@ class AppLocalizationsUk extends AppLocalizations {
       'Не вдалося завантажити оновлення, пристрій не змінено. Перевірте підключення до інтернету і спробуйте знову.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Рівень заряду батареї поки недоступний. Зачекайте трохи й підключіть пристрій знову, якщо нічого не зміниться.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Заряд акумулятора $level%. Перед оновленням зарядіть пристрій щонайменше до 15%.';
   }

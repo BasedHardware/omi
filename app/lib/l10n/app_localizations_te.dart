@@ -10634,6 +10634,10 @@ class AppLocalizationsTe extends AppLocalizations {
       'అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం, మీ పరికరం మారలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'బ్యాటరీ స్థాయి ఇంకా అందుబాటులో లేదు. కొద్దిసేపు వేచి ఉండండి, ఇలాగే ఉంటే మళ్లీ కనెక్ట్ చేయండి.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'బ్యాటరీ $level% ఉంది. అప్‌డేట్ చేసే ముందు పరికరాన్ని కనీసం 15% ఛార్జ్ చేయండి.';
   }

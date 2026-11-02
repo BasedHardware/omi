@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Oppdateringen mislyktes",
     "firmwareUpdateFailedMessage": "Oppdateringen ble ikke fullført. Enheten bruker fortsatt nåværende fastvare og er trygg å bruke. Hold den ladet og nær telefonen, og prøv igjen.",
     "firmwareDownloadFailedMessage": "Oppdateringen kunne ikke lastes ned, og enheten er ikke endret. Sjekk internettforbindelsen og prøv igjen.",
+    "firmwareBatteryUnavailable": "Batterinivået er ikke tilgjengelig ennå. Vent et øyeblikk og koble til på nytt hvis det fortsetter.",
     "firmwareBatteryTooLow": "Batteriet er på {level} %. Lad enheten til minst 15 % før du oppdaterer.",
     "startUpdate": "Start oppdatering",
     "otaNotSupported": "Denne fastvaren kan ikke oppdateres over Wi-Fi.",

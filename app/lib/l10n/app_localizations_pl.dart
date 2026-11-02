@@ -10619,6 +10619,10 @@ class AppLocalizationsPl extends AppLocalizations {
       'Nie udało się pobrać aktualizacji, urządzenie nie zostało zmienione. Sprawdź połączenie z internetem i spróbuj ponownie.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Poziom baterii nie jest jeszcze dostępny. Poczekaj chwilę i połącz urządzenie ponownie, jeśli nic się nie zmieni.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Bateria ma $level%. Przed aktualizacją naładuj urządzenie do co najmniej 15%.';
   }

@@ -10565,6 +10565,10 @@ class AppLocalizationsHi extends AppLocalizations {
       'अपडेट डाउनलोड नहीं हो सका और आपके डिवाइस में कोई बदलाव नहीं हुआ। इंटरनेट कनेक्शन जाँचें, फिर दोबारा कोशिश करें।';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'बैटरी का स्तर अभी उपलब्ध नहीं है। थोड़ा इंतज़ार करें और अगर ऐसा ही रहे तो फिर से कनेक्ट करें।';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'बैटरी $level% है। अपडेट से पहले डिवाइस को कम से कम 15% तक चार्ज करें।';
   }

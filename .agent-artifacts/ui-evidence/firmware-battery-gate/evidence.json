@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-firmware-battery-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update page with an unknown pendant battery level: waiting and reconnect guidance with the update button disabled. Rendered from the real page with synthetic state and product fonts using flutter-render-evidence.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -10598,6 +10598,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Não foi possível baixar a atualização e seu dispositivo não foi alterado. Verifique sua conexão com a internet e tente de novo.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'O nível da bateria ainda não está disponível. Aguarde um momento e reconecte o dispositivo se continuar assim.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'A bateria está em $level%. Carregue o dispositivo até pelo menos 15% antes de atualizar.';
   }

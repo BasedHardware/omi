@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Update fehlgeschlagen",
     "firmwareUpdateFailedMessage": "Das Update wurde nicht abgeschlossen. Dein Gerät läuft weiter mit der aktuellen Firmware und kann sicher genutzt werden. Lade es auf, halte es in der Nähe deines Telefons und versuche es erneut.",
     "firmwareDownloadFailedMessage": "Das Update konnte nicht geladen werden, dein Gerät wurde nicht verändert. Prüfe deine Internetverbindung und versuche es erneut.",
+    "firmwareBatteryUnavailable": "Der Akkustand ist noch nicht verfügbar. Warte einen Moment und verbinde das Gerät erneut, falls es so bleibt.",
     "firmwareBatteryTooLow": "Der Akku steht bei {level} %. Lade dein Gerät vor dem Update auf mindestens 15 %.",
     "startUpdate": "Update starten",
     "otaNotSupported": "Diese Firmware kann nicht über WLAN aktualisiert werden.",

@@ -10623,6 +10623,10 @@ class AppLocalizationsBg extends AppLocalizations {
       'Актуализацията не можа да бъде изтеглена и устройството не е променено. Проверете интернет връзката и опитайте отново.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Нивото на батерията все още не е налично. Изчакайте малко и се свържете отново, ако това продължи.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Батерията е $level%. Заредете устройството поне до 15%, преди да актуализирате.';
   }

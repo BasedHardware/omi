@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Kemas Kini Gagal",
     "firmwareUpdateFailedMessage": "Kemas kini tidak selesai. Peranti anda masih menggunakan perisian tegar semasa dan selamat digunakan. Pastikan ia dicas dan dekat dengan telefon, kemudian cuba lagi.",
     "firmwareDownloadFailedMessage": "Kemas kini tidak dapat dimuat turun dan peranti anda tidak berubah. Semak sambungan internet, kemudian cuba lagi.",
+    "firmwareBatteryUnavailable": "Tahap bateri belum tersedia. Tunggu sebentar dan sambung semula jika keadaan ini berterusan.",
     "firmwareBatteryTooLow": "Bateri pada {level}%. Cas peranti sekurang-kurangnya 15% sebelum mengemas kini.",
     "startUpdate": "Mulakan Kemas Kini",
     "otaNotSupported": "Perisian tegar ini tidak boleh dikemas kini melalui Wi-Fi.",

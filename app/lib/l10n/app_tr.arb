@@ -3383,6 +3383,7 @@
     "firmwareUpdateFailedTitle": "Güncelleme Başarısız",
     "firmwareUpdateFailedMessage": "Güncelleme tamamlanmadı. Cihazınız hâlâ mevcut yazılımda ve güvenle kullanılabilir. Şarjlı ve telefonunuza yakın tutun, sonra tekrar deneyin.",
     "firmwareDownloadFailedMessage": "Güncelleme indirilemedi ve cihazınız değişmedi. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+    "firmwareBatteryUnavailable": "Pil seviyesi henüz kullanılamıyor. Biraz bekleyin ve bu durum devam ederse yeniden bağlanın.",
     "firmwareBatteryTooLow": "Pil %{level} seviyesinde. Güncellemeden önce cihazınızı en az %15'e kadar şarj edin.",
     "startUpdate": "Güncellemeyi Başlat",
     "otaNotSupported": "Bu yazılım Wi-Fi üzerinden güncellenemez.",

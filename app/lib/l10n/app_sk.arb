@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Aktualizácia zlyhala",
     "firmwareUpdateFailedMessage": "Aktualizácia sa nedokončila. Zariadenie má stále súčasný firmvér a je bezpečné ho používať. Nabite ho, majte ho pri telefóne a skúste to znova.",
     "firmwareDownloadFailedMessage": "Aktualizáciu sa nepodarilo stiahnuť a zariadenie sa nezmenilo. Skontrolujte pripojenie na internet a skúste to znova.",
+    "firmwareBatteryUnavailable": "Úroveň batérie zatiaľ nie je k dispozícii. Chvíľu počkajte a ak sa nič nezmení, zariadenie znova pripojte.",
     "firmwareBatteryTooLow": "Batéria je na {level} %. Pred aktualizáciou nabite zariadenie aspoň na 15 %.",
     "startUpdate": "Spustiť aktualizáciu",
     "otaNotSupported": "Tento firmvér nie je možné aktualizovať cez Wi-Fi.",

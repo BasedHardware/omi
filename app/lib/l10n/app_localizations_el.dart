@@ -10656,6 +10656,10 @@ class AppLocalizationsEl extends AppLocalizations {
       'Δεν ήταν δυνατή η λήψη της ενημέρωσης και η συσκευή σας δεν άλλαξε. Ελέγξτε τη σύνδεση στο διαδίκτυο και δοκιμάστε ξανά.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Το επίπεδο μπαταρίας δεν είναι ακόμη διαθέσιμο. Περιμένετε λίγο και συνδεθείτε ξανά αν παραμείνει έτσι.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Η μπαταρία είναι στο $level%. Φορτίστε τη συσκευή τουλάχιστον στο 15% πριν από την ενημέρωση.';
   }

@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Actualizarea a eșuat",
     "firmwareUpdateFailedMessage": "Actualizarea nu s-a încheiat. Dispozitivul are în continuare firmware-ul actual și poate fi folosit în siguranță. Ține-l încărcat și aproape de telefon, apoi încearcă din nou.",
     "firmwareDownloadFailedMessage": "Actualizarea nu a putut fi descărcată, iar dispozitivul nu a fost modificat. Verifică conexiunea la internet, apoi încearcă din nou.",
+    "firmwareBatteryUnavailable": "Nivelul bateriei nu este încă disponibil. Așteptați puțin și reconectați dispozitivul dacă situația persistă.",
     "firmwareBatteryTooLow": "Bateria este la {level}%. Încarcă dispozitivul la cel puțin 15% înainte de actualizare.",
     "startUpdate": "Pornește actualizarea",
     "otaNotSupported": "Acest firmware nu poate fi actualizat prin Wi-Fi.",

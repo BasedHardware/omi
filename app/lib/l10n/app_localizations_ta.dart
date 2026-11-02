@@ -10662,6 +10662,10 @@ class AppLocalizationsTa extends AppLocalizations {
       'புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை, உங்கள் சாதனம் மாற்றப்படவில்லை. இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'பேட்டரி அளவு இன்னும் கிடைக்கவில்லை. சிறிது நேரம் காத்திருந்து, இதே நிலை நீடித்தால் மீண்டும் இணைக்கவும்.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'பேட்டரி $level% உள்ளது. புதுப்பிக்கும் முன் சாதனத்தை குறைந்தது 15% சார்ஜ் செய்யவும்.';
   }

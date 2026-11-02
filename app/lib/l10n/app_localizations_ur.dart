@@ -10597,6 +10597,10 @@ class AppLocalizationsUr extends AppLocalizations {
       'اپ ڈیٹ ڈاؤن لوڈ نہیں ہو سکی اور آپ کی ڈیوائس تبدیل نہیں ہوئی۔ انٹرنیٹ کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'بیٹری کی سطح ابھی دستیاب نہیں ہے۔ کچھ دیر انتظار کریں اور اگر یہی حالت رہے تو دوبارہ منسلک ہوں۔';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'بیٹری $level% ہے۔ اپ ڈیٹ سے پہلے ڈیوائس کو کم از کم 15% تک چارج کریں۔';
   }

@@ -10422,6 +10422,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareDownloadFailedMessage => 'アップデートをダウンロードできませんでした。デバイスは変更されていません。インターネット接続を確認して、もう一度お試しください。';
 
   @override
+  String get firmwareBatteryUnavailable => 'バッテリー残量はまだ取得できていません。少し待っても変わらない場合は、再接続してください。';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'バッテリー残量は $level% です。アップデート前に 15% 以上まで充電してください。';
   }

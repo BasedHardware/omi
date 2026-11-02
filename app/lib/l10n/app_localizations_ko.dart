@@ -10426,6 +10426,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareDownloadFailedMessage => '업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.';
 
   @override
+  String get firmwareBatteryUnavailable => '아직 배터리 잔량을 확인할 수 없습니다. 잠시 기다린 후에도 그대로라면 다시 연결해 주세요.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return '배터리가 $level%입니다. 업데이트 전에 기기를 15% 이상 충전하세요.';
   }

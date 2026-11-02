@@ -10594,6 +10594,10 @@ class AppLocalizationsSr extends AppLocalizations {
       'Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Ниво батерије још није доступан. Сачекајте тренутак и поново се повежите ако се то не промени.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Батерија је на $level%. Пре ажурирања напуните уређај на најмање 15%.';
   }

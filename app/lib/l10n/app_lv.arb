@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Atjaunināšana neizdevās",
     "firmwareUpdateFailedMessage": "Atjaunināšana netika pabeigta. Ierīcē joprojām ir pašreizējā programmaparatūra, un to ir droši lietot. Uzlādējiet to, turiet tālruņa tuvumā un mēģiniet vēlreiz.",
     "firmwareDownloadFailedMessage": "Atjauninājumu neizdevās lejupielādēt, un ierīce netika mainīta. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
+    "firmwareBatteryUnavailable": "Akumulatora uzlādes līmenis vēl nav pieejams. Uzgaidiet brīdi un izveidojiet savienojumu vēlreiz, ja nekas nemainās.",
     "firmwareBatteryTooLow": "Akumulators ir {level}%. Pirms atjaunināšanas uzlādējiet ierīci vismaz līdz 15%.",
     "startUpdate": "Sākt atjaunināšanu",
     "otaNotSupported": "Šo programmaparatūru nevar atjaunināt, izmantojot Wi-Fi.",

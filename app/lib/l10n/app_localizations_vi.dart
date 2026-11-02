@@ -10584,6 +10584,10 @@ class AppLocalizationsVi extends AppLocalizations {
       'Không tải được bản cập nhật và thiết bị không bị thay đổi. Hãy kiểm tra kết nối internet rồi thử lại.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Chưa có thông tin mức pin. Hãy đợi một lát và kết nối lại nếu tình trạng này vẫn tiếp diễn.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 15% trước khi cập nhật.';
   }

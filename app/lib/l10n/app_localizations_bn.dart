@@ -10586,6 +10586,10 @@ class AppLocalizationsBn extends AppLocalizations {
       'আপডেট ডাউনলোড করা যায়নি, আপনার ডিভাইসে কোনো পরিবর্তন হয়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'ব্যাটারির চার্জের মাত্রা এখনও পাওয়া যাচ্ছে না। একটু অপেক্ষা করুন, আর একই অবস্থা থাকলে আবার সংযোগ করুন।';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'ব্যাটারি $level%। আপডেটের আগে ডিভাইসটি অন্তত 15% চার্জ করুন।';
   }

@@ -10615,6 +10615,10 @@ class AppLocalizationsSl extends AppLocalizations {
       'Posodobitve ni bilo mogoče prenesti in naprava ni bila spremenjena. Preverite internetno povezavo in poskusite znova.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Raven baterije še ni na voljo. Počakajte trenutek in se znova povežite, če se stanje ne spremeni.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Baterija je na $level %. Pred posodobitvijo napolnite napravo na vsaj 15 %.';
   }

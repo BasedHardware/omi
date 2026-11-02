@@ -10586,6 +10586,10 @@ class AppLocalizationsFi extends AppLocalizations {
       'Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Akun varaustaso ei ole vielä saatavilla. Odota hetki ja yhdistä uudelleen, jos tilanne ei muutu.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Akun varaus on $level %. Lataa laite vähintään 15 %:iin ennen päivitystä.';
   }

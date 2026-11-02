@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "アップデートに失敗しました",
     "firmwareUpdateFailedMessage": "アップデートは完了しませんでした。デバイスは現在のファームウェアのままで、安全に使用できます。充電してスマートフォンの近くに置き、もう一度お試しください。",
     "firmwareDownloadFailedMessage": "アップデートをダウンロードできませんでした。デバイスは変更されていません。インターネット接続を確認して、もう一度お試しください。",
+    "firmwareBatteryUnavailable": "バッテリー残量はまだ取得できていません。少し待っても変わらない場合は、再接続してください。",
     "firmwareBatteryTooLow": "バッテリー残量は {level}% です。アップデート前に 15% 以上まで充電してください。",
     "startUpdate": "アップデートを開始",
     "otaNotSupported": "このファームウェアは Wi-Fi 経由で更新できません。",

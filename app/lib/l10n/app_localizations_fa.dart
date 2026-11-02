@@ -10580,6 +10580,10 @@ class AppLocalizationsFa extends AppLocalizations {
       'به‌روزرسانی دانلود نشد و دستگاه شما تغییری نکرد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'سطح باتری هنوز در دسترس نیست. کمی صبر کنید و اگر وضعیت همین‌طور ماند، دوباره متصل شوید.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'باتری $level٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۱۵٪ شارژ کنید.';
   }

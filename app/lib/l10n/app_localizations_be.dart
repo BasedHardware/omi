@@ -10613,6 +10613,10 @@ class AppLocalizationsBe extends AppLocalizations {
       'Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Узровень зараду батарэі пакуль недаступны. Пачакайце крыху і падключыце прыладу зноў, калі нічога не зменіцца.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Зарад батарэі $level%. Зарадзіце прыладу хаця б да 15% перад абнаўленнем.';
   }

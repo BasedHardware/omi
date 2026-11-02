@@ -10671,6 +10671,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Das Update konnte nicht geladen werden, dein Gerät wurde nicht verändert. Prüfe deine Internetverbindung und versuche es erneut.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Der Akkustand ist noch nicht verfügbar. Warte einen Moment und verbinde das Gerät erneut, falls es so bleibt.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Der Akku steht bei $level %. Lade dein Gerät vor dem Update auf mindestens 15 %.';
   }

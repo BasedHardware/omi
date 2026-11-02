@@ -10500,6 +10500,9 @@ class AppLocalizationsHe extends AppLocalizations {
       'לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.';
 
   @override
+  String get firmwareBatteryUnavailable => 'רמת הסוללה עדיין אינה זמינה. יש להמתין רגע ולהתחבר מחדש אם המצב נמשך.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'הסוללה על $level%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.';
   }

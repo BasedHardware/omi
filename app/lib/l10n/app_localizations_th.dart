@@ -10525,6 +10525,10 @@ class AppLocalizationsTh extends AppLocalizations {
       'ดาวน์โหลดอัปเดตไม่ได้ และอุปกรณ์ของคุณไม่มีการเปลี่ยนแปลง ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองอีกครั้ง';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'ยังไม่สามารถดูระดับแบตเตอรี่ได้ กรุณารอสักครู่ แล้วเชื่อมต่อใหม่หากยังเป็นเช่นเดิม';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'แบตเตอรี่อยู่ที่ $level% ชาร์จอุปกรณ์ให้ได้อย่างน้อย 15% ก่อนอัปเดต';
   }

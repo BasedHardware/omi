@@ -10635,6 +10635,10 @@ class AppLocalizationsRo extends AppLocalizations {
       'Actualizarea nu a putut fi descărcată, iar dispozitivul nu a fost modificat. Verifică conexiunea la internet, apoi încearcă din nou.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Nivelul bateriei nu este încă disponibil. Așteptați puțin și reconectați dispozitivul dacă situația persistă.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Bateria este la $level%. Încarcă dispozitivul la cel puțin 15% înainte de actualizare.';
   }

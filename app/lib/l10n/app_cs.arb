@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Aktualizace se nezdařila",
     "firmwareUpdateFailedMessage": "Aktualizace nebyla dokončena. Zařízení má stále současný firmware a je bezpečné ho používat. Nabijte ho, mějte ho u telefonu a zkuste to znovu.",
     "firmwareDownloadFailedMessage": "Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.",
+    "firmwareBatteryUnavailable": "Úroveň baterie zatím není k dispozici. Chvíli počkejte, a pokud se nic nezmění, zařízení znovu připojte.",
     "firmwareBatteryTooLow": "Baterie je na {level} %. Před aktualizací nabijte zařízení alespoň na 15 %.",
     "startUpdate": "Spustit aktualizaci",
     "otaNotSupported": "Tento firmware nelze aktualizovat přes Wi-Fi.",

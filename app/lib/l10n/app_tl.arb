@@ -10771,6 +10771,7 @@
     "firmwareUpdateFailedTitle": "Nabigo ang Update",
     "firmwareUpdateFailedMessage": "Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.",
     "firmwareDownloadFailedMessage": "Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.",
+    "firmwareBatteryUnavailable": "Hindi pa available ang antas ng baterya. Maghintay sandali at kumonekta muli kung ganito pa rin.",
     "firmwareBatteryTooLow": "Nasa {level}% ang baterya. I-charge ang device nang hindi bababa sa 15% bago mag-update.",
     "startUpdate": "Simulan ang Update",
     "otaNotSupported": "Hindi maa-update ang firmware na ito sa Wi-Fi.",

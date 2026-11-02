@@ -10771,6 +10771,7 @@
     "firmwareUpdateFailedTitle": "Ažuriranje nije uspjelo",
     "firmwareUpdateFailedMessage": "Ažuriranje nije završeno. Uređaj je i dalje na trenutnom firmveru i siguran je za upotrebu. Držite ga napunjenim i blizu telefona, pa pokušajte ponovo.",
     "firmwareDownloadFailedMessage": "Ažuriranje nije moguće preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu, pa pokušajte ponovo.",
+    "firmwareBatteryUnavailable": "Nivo baterije još nije dostupan. Sačekajte trenutak i ponovo se povežite ako se to ne promijeni.",
     "firmwareBatteryTooLow": "Baterija je na {level}%. Napunite uređaj na najmanje 15% prije ažuriranja.",
     "startUpdate": "Pokreni ažuriranje",
     "otaNotSupported": "Ovaj firmver se ne može ažurirati preko Wi-Fi mreže.",

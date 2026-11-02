@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Error en la actualización",
     "firmwareUpdateFailedMessage": "La actualización no terminó. Tu dispositivo sigue con el firmware actual y es seguro usarlo. Mantenlo cargado y cerca del teléfono, y vuelve a intentarlo.",
     "firmwareDownloadFailedMessage": "No se pudo descargar la actualización y tu dispositivo no cambió. Revisa tu conexión a internet y vuelve a intentarlo.",
+    "firmwareBatteryUnavailable": "El nivel de batería aún no está disponible. Espera un momento y vuelve a conectar el dispositivo si sigue así.",
     "firmwareBatteryTooLow": "La batería está al {level} %. Carga el dispositivo al menos al 15 % antes de actualizar.",
     "startUpdate": "Iniciar actualización",
     "otaNotSupported": "Este firmware no se puede actualizar por Wi-Fi.",

@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Update mislukt",
     "firmwareUpdateFailedMessage": "De update is niet voltooid. Je apparaat draait nog op de huidige firmware en is veilig te gebruiken. Houd het opgeladen en dicht bij je telefoon en probeer het opnieuw.",
     "firmwareDownloadFailedMessage": "De update kon niet worden gedownload en je apparaat is niet gewijzigd. Controleer je internetverbinding en probeer het opnieuw.",
+    "firmwareBatteryUnavailable": "Het batterijniveau is nog niet beschikbaar. Wacht even en verbind opnieuw als dit zo blijft.",
     "firmwareBatteryTooLow": "De batterij staat op {level}%. Laad je apparaat op tot minstens 15% voordat je bijwerkt.",
     "startUpdate": "Update starten",
     "otaNotSupported": "Deze firmware kan niet via wifi worden bijgewerkt.",

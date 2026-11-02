@@ -3348,6 +3348,7 @@
     "firmwareUpdateFailedTitle": "Atnaujinti nepavyko",
     "firmwareUpdateFailedMessage": "Atnaujinimas nebaigtas. Įrenginyje vis dar yra dabartinė programinė aparatinė įranga, jį saugu naudoti. Įkraukite jį, laikykite prie telefono ir bandykite dar kartą.",
     "firmwareDownloadFailedMessage": "Atnaujinimo atsisiųsti nepavyko, įrenginys nepakeistas. Patikrinkite interneto ryšį ir bandykite dar kartą.",
+    "firmwareBatteryUnavailable": "Akumuliatoriaus įkrovos lygis dar nepasiekiamas. Šiek tiek palaukite ir prisijunkite iš naujo, jei niekas nepasikeis.",
     "firmwareBatteryTooLow": "Akumuliatorius {level} %. Prieš atnaujindami įkraukite įrenginį bent iki 15 %.",
     "startUpdate": "Pradėti atnaujinimą",
     "otaNotSupported": "Šios programinės aparatinės įrangos negalima atnaujinti per „Wi-Fi“.",

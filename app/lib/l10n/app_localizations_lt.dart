@@ -10601,6 +10601,10 @@ class AppLocalizationsLt extends AppLocalizations {
       'Atnaujinimo atsisiųsti nepavyko, įrenginys nepakeistas. Patikrinkite interneto ryšį ir bandykite dar kartą.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Akumuliatoriaus įkrovos lygis dar nepasiekiamas. Šiek tiek palaukite ir prisijunkite iš naujo, jei niekas nepasikeis.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
     return 'Akumuliatorius $level %. Prieš atnaujindami įkraukite įrenginį bent iki 15 %.';
   }
