@@ -15,6 +15,7 @@ import {
   LiveDay,
   LiveDoc,
   liveDates,
+  producedDates,
   DAY_MS,
 } from "./wall-live";
 
@@ -43,34 +44,75 @@ export function trailingMean(days: CostDay[]): CostDay | null {
   return out as unknown as CostDay;
 }
 
-/** The producer's document state for each live UTC day (today and yesterday):
- * fresh, early (a partial day before LIVE_MIN_FRACTION), missing, or stale
- * (the producer's last run is older than LIVE_STALE_MS, so every day is). */
+/** The producer's state for each metered UTC day (D-2, yesterday, today), read
+ * from that row's own produced-at: a closed or partial row whose own value is
+ * older than LIVE_STALE_MS is stale, whatever other rows the run wrote. */
 export type LiveState = "fresh" | "early" | "missing" | "stale";
 export function liveDayStates(
   doc: LiveDoc | null,
   now: number
 ): { date: string; state: LiveState; estimated: string[] }[] {
-  const runFresh = liveRunFresh(doc, now);
-  return liveDates(now).map((date) => {
+  return producedDates(now).map((date) => {
     const day = doc?.days[date];
     const estimated = day?.estimated ?? [];
-    if (!runFresh) return { date, state: "stale", estimated };
     if (!day) return { date, state: "missing", estimated };
+    if (now - Date.parse(day.producedAt) > LIVE_STALE_MS)
+      return { date, state: "stale", estimated };
     if (day.fraction < 1 && day.fraction < LIVE_MIN_FRACTION)
       return { date, state: "early", estimated };
-    // A partial day whose own value is old (the run skipped it) is stale.
-    if (day.fraction < 1 && now - Date.parse(day.producedAt) > LIVE_STALE_MS)
-      return { date, state: "stale", estimated };
     return { date, state: "fresh", estimated };
   });
 }
 
-/** The producer's last run is recent enough to trust its values. */
-export function liveRunFresh(doc: LiveDoc | null, now: number): boolean {
-  if (!doc?.runAt) return false;
-  return now - Date.parse(doc.runAt) <= LIVE_STALE_MS;
+/** The live days the margin may use: rows after the settled end and up to
+ * today, each only while its own produced-at is fresh; a partial day also
+ * needs LIVE_MIN_FRACTION of data. `settledEnd` defaults to D-2. */
+export function liveCostDays(
+  doc: LiveDoc | null,
+  base: CostDay | null,
+  now: number,
+  sonioxRate: number | null,
+  settledEnd?: string
+): CostDay[] {
+  if (!doc || !base) return [];
+  const today = liveDates(now)[1];
+  const lower = settledEnd ?? shiftIso(liveDates(now)[0], -1);
+  const dates = Object.keys(doc.days)
+    .filter((d) => d <= today && d > lower)
+    .sort();
+  const out: CostDay[] = [];
+  for (const date of dates) {
+    const day = doc.days[date];
+    if (now - Date.parse(day.producedAt) > LIVE_STALE_MS) continue;
+    if (day.fraction < 1 && day.fraction < LIVE_MIN_FRACTION) continue;
+    out.push(liveCostDay(day, base, sonioxRate));
+  }
+  return out;
 }
+
+/** The live days up to the first day the producer did not supply. Live days
+ * after a missing day would make the window cross a hole, so they are cut and
+ * the margin for those days reads unavailable (no point) instead. */
+export function liveUntilGap(settledEnd: string, live: CostDay[]): CostDay[] {
+  if (live.length === 0) return [];
+  const byDate = new Map(live.map((d) => [d.date, d]));
+  const last = live
+    .map((d) => d.date)
+    .sort()
+    .at(-1)!;
+  const out: CostDay[] = [];
+  for (let d = shiftIso(settledEnd, 1); d <= last; d = shiftIso(d, 1)) {
+    const day = byDate.get(d);
+    if (!day) break;
+    out.push(day);
+  }
+  return out;
+}
+
+const shiftIso = (day: string, n: number) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + n * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
 
 /** One live UTC day as a cost day. Metered lines are scaled from the covered
  * window to a full day; the other GCP lines are calibration constants; the
@@ -124,42 +166,6 @@ export function liveCostDay(
     infraMeasured: false,
     total,
   };
-}
-
-/** The live days the margin may use: those in the document after the settled
- * end (`settledEnd`, default: yesterday and today only) and up to today. A
- * closed day is used while the producer run is fresh; a partial day also needs
- * LIVE_MIN_FRACTION of data and its own fresh value. A dead producer makes every
- * live day absent (its state is named by `liveDayStates`), never a silent $0. */
-export function liveCostDays(
-  doc: LiveDoc | null,
-  base: CostDay | null,
-  now: number,
-  sonioxRate: number | null,
-  settledEnd?: string
-): CostDay[] {
-  if (!doc || !base || !liveRunFresh(doc, now)) return [];
-  const [yesterday, today] = liveDates(now);
-  // Default lower bound: D-2, so only yesterday and today are read.
-  const lower =
-    settledEnd ??
-    new Date(Date.parse(`${yesterday}T00:00:00Z`) - DAY_MS)
-      .toISOString()
-      .slice(0, 10);
-  const dates = Object.keys(doc.days)
-    .filter((d) => d <= today && d > lower)
-    .sort();
-  const out: CostDay[] = [];
-  for (const date of dates) {
-    const day = doc.days[date];
-    const closed = day.fraction >= 1;
-    if (!closed) {
-      if (day.fraction < LIVE_MIN_FRACTION) continue;
-      if (now - Date.parse(day.producedAt) > LIVE_STALE_MS) continue;
-    }
-    out.push(liveCostDay(day, base, sonioxRate));
-  }
-  return out;
 }
 
 /** Settled days up to `cutoff`, live days after it, each day exactly once.

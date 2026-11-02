@@ -24,6 +24,7 @@ import {
   liveCostDay,
   liveCostDays,
   liveDayStates,
+  liveUntilGap,
   reconcileLive,
   spliceCostDays,
   trailingMean,
@@ -159,7 +160,7 @@ describe("liveCostDays: freshness and the partial-day rule", () => {
 
   it("uses yesterday (closed) and today (partial, fresh, past 2 hours)", () => {
     const today = liveDay("2026-11-01", 6 / 24, now - 60_000, 10);
-    const yesterday = liveDay("2026-10-31", 1, now - 3_600_000, 10);
+    const yesterday = liveDay("2026-10-31", 1, now - 60_000, 10);
     const out = liveCostDays(doc([yesterday, today]), base, now, 500);
     expect(out.map((d) => d.date)).toEqual(["2026-10-31", "2026-11-01"]);
   });
@@ -424,19 +425,62 @@ describe("Luna r1 fixes: unavailable metering, pricing flags, trailing basis, de
     );
   });
 
-  it("a closed day whose producer is stale is not used and its state says so", () => {
+  it("a closed day whose own row is older than the staleness limit is stale, even when another row is fresh", () => {
     const now = at("2026-11-01", 6);
-    const dead = liveDay("2026-10-31", 1, now, 10);
-    // The producer's last run is 3 hours old: a dead job, not a closed day.
+    const yesterdayOld = liveDay("2026-10-31", 1, now - 3 * 3_600_000, 10);
+    const todayFresh = liveDay("2026-11-01", 6 / 24, now, 10);
     const doc: LiveDoc = {
-      runAt: new Date(now - 3 * 3_600_000).toISOString(),
-      days: { [dead.date]: dead },
+      runAt: new Date(now).toISOString(),
+      days: {
+        [yesterdayOld.date]: yesterdayOld,
+        [todayFresh.date]: todayFresh,
+      },
     };
-    expect(
-      liveCostDays(doc, trailingMean(settledDays("2026-10-30", 7)), now, 500)
-    ).toHaveLength(0);
+    const base = trailingMean(settledDays("2026-10-30", 7));
+    const used = liveCostDays(doc, base, now, 500).map((d) => d.date);
+    expect(used).toEqual(["2026-11-01"]);
     const states = liveDayStates(doc, now);
     expect(states.find((s) => s.date === "2026-10-31")!.state).toBe("stale");
+    expect(states.find((s) => s.date === "2026-11-01")!.state).toBe("fresh");
+  });
+
+  it("a day the producer did not supply cuts the live days after it (no window across a hole)", () => {
+    const settled = settledDays("2026-10-28", 14); // settled ends D-4 here
+    const d2 = liveDay("2026-10-30", 1, at("2026-11-01"), 10);
+    const today = liveDay("2026-11-01", 1, at("2026-11-01"), 10);
+    const base = trailingMean(settled.slice(-7))!;
+    const now = at("2026-11-01", 6);
+    const live = liveCostDays(
+      {
+        runAt: new Date(now).toISOString(),
+        days: { [d2.date]: d2, [today.date]: today },
+      },
+      base,
+      now,
+      500,
+      "2026-10-28"
+    );
+    // 10-29 is missing from both sources: nothing after it is used.
+    expect(liveUntilGap("2026-10-28", live)).toEqual([]);
+    const withD29 = liveCostDays(
+      {
+        runAt: new Date(now).toISOString(),
+        days: {
+          "2026-10-29": liveDay("2026-10-29", 1, at("2026-11-01"), 10),
+          [d2.date]: d2,
+          [today.date]: today,
+        },
+      },
+      base,
+      now,
+      500,
+      "2026-10-28"
+    );
+    // 10-31 is missing from both, so today (11-01) is cut off behind it.
+    expect(liveUntilGap("2026-10-28", withD29).map((d) => d.date)).toEqual([
+      "2026-10-29",
+      "2026-10-30",
+    ]);
   });
 
   it("settled ending at D-3 with live D-2 and D-1: no day falls in neither source", () => {

@@ -497,7 +497,7 @@ def variable_margin_stat():
     (the explicit no-value marker) rather than an older non-null margin."""
     panel = {"type": "stat", "title": "Variable margin (live est.)", "description": VARIABLE_MARGIN, "datasource": DS,
              "targets": [target("health", "variableMargin", [("marginPct", "Variable margin", "number")])],
-             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no MRR book",
+             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no live est.",
                                           # Below the goal is red; at/above is green.
                                           "color": {"mode": "thresholds"},
                                           "thresholds": {"mode": "absolute", "steps": [

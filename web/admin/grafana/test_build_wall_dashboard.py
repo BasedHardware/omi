@@ -302,7 +302,8 @@ class WallV2Contract(unittest.TestCase):
         # explicit no-value marker, not an older non-null margin (Luna r3 P2).
         self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
         self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
-        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no MRR book")
+        # No live estimate (or no MRR book) shows no value, never a settled number as live.
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no live est.")
         self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
         steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
         self.assertEqual([s["value"] for s in steps], [None, 50])

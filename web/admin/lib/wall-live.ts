@@ -115,6 +115,18 @@ export function liveDates(now: number): string[] {
   return [isoOf(Date.parse(`${today}T00:00:00Z`) - DAY_MS), today];
 }
 
+/** Every day the producer re-meters on each run: D-2 (kept live so a midnight
+ * billing lag never leaves it in neither source), yesterday and today. Each row
+ * ages on its own produced-at, so a row the run skipped goes stale. */
+export function producedDates(now: number): string[] {
+  const [yesterday, today] = liveDates(now);
+  return [
+    isoOf(Date.parse(`${yesterday}T00:00:00Z`) - DAY_MS),
+    yesterday,
+    today,
+  ];
+}
+
 /** The metered window for a UTC day at `now`, or null when it has not begun
  * (after the lag). A closed day's window is the whole day. */
 export function liveWindow(

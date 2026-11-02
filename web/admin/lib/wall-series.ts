@@ -74,6 +74,7 @@ import { readLiveDoc } from "./wall-live-store";
 import {
   liveCostDays,
   liveDayStates,
+  liveUntilGap,
   reconcileLive,
   spliceCostDays,
   trailingMean,
@@ -970,21 +971,19 @@ export function healthFrames(
   // day in neither source.
   const settledEnd =
     days.filter((d) => d.date <= cutoff).at(-1)?.date ?? cutoff;
-  const spliced = spliceCostDays(
-    days,
-    liveCostDays(
-      legs.live ?? null,
-      trailingMean(
-        days
-          .filter((d) => d.date <= settledEnd)
-          .slice(-VARIABLE_MARGIN_RUN_DAYS)
-      ),
-      now.getTime(),
-      sonioxRate,
-      settledEnd
+  const liveAll = liveCostDays(
+    legs.live ?? null,
+    trailingMean(
+      days.filter((d) => d.date <= settledEnd).slice(-VARIABLE_MARGIN_RUN_DAYS)
     ),
+    now.getTime(),
+    sonioxRate,
     settledEnd
   );
+  // A missing metered day cuts the live days after it: no window crosses a hole.
+  const liveDays = liveUntilGap(settledEnd, liveAll);
+  const liveGapped = liveDays.length < liveAll.length;
+  const spliced = spliceCostDays(days, liveDays, settledEnd);
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
     (net?.trend || []).map((t) => [t.date, t.value])
@@ -1139,6 +1138,7 @@ export function healthFrames(
           recon.variancePp
         )}`) +
     (liveFlags.length ? ` · producer ${liveFlags.join(", ")}` : "") +
+    (liveGapped ? " · live cut at a day the producer did not supply" : "") +
     (liveEstimated.length
       ? ` · Cloud Run estimated (default size or request-billed, no request metrics): ${liveEstimated.join(
           ", "
@@ -1166,11 +1166,16 @@ export function healthFrames(
     // fees), trailing-7-day run rate against that day's book. MRR comes from
     // the day's own snapshot — a day without one keeps its cost point and
     // nulls the margin, never borrowing a neighbour's book.
-    variableMargin: variable.map((p) => ({
+    // The headline is live only when a live day sits after the cutoff. Otherwise
+    // the last point is a settled value and is shown as no value, never as live.
+    variableMargin: variable.map((p, i, all) => ({
       date: ts(p.date),
+      marginPct:
+        i === all.length - 1 && !(liveHead && liveHead.date > cutoff)
+          ? null
+          : round(p.marginPct, 1),
       // 1 for a live (metered, estimated) day; settled days are 0.
       live: p.date > cutoff ? 1 : 0,
-      marginPct: round(p.marginPct, 1),
       costPerMonth: round(p.costPerMonth, 0),
       mrr: p.mrr == null ? null : round(p.mrr, 0),
       goalCost: round(p.goalCost, 0),

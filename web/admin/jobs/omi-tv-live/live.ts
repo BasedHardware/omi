@@ -9,7 +9,7 @@ import {
   LiveDay,
   LiveQuantities,
   DAY_MS,
-  liveDates,
+  producedDates,
   liveWindow,
   estimatedServices,
   meteredUsd,
@@ -236,7 +236,7 @@ export async function main(now = Date.now()) {
   const bearer = await token();
   const produced: LiveDay[] = [];
   const unavailable: { date: string; families: string[] }[] = [];
-  for (const date of liveDates(now)) {
+  for (const date of producedDates(now)) {
     const window = liveWindow(date, now);
     if (!window) continue;
     const quantities = await quantitiesFor(window.start, window.end, bearer);

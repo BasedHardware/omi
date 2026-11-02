@@ -3879,7 +3879,7 @@
         "defaults": {
           "unit": "percent",
           "decimals": 1,
-          "noValue": "no MRR book",
+          "noValue": "no live est.",
           "color": {
             "mode": "thresholds"
           },

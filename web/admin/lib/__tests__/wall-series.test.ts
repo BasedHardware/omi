@@ -1713,8 +1713,13 @@ describe("variable margin frames (David 2026-10-23)", () => {
       STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
     const cost = perDay * MARGIN_DAYS_PER_MONTH;
     expect(last.costPerMonth).toBe(Math.round(cost));
-    expect(last.marginPct).toBe(
-      Math.round(((100 * (mrr - cost)) / mrr) * 10) / 10
+    // The cutoff point is settled, not live: its headline margin is no value.
+    expect(last.marginPct).toBeNull();
+    const prev = rows.at(-2)!;
+    expect(prev.marginPct as number).toBeCloseTo(
+      (100 * ((prev.mrr as number) - (prev.costPerMonth as number))) /
+        (prev.mrr as number),
+      0
     );
     expect(last.goalCost).toBe(Math.round(mrr * (1 - VARIABLE_MARGIN_TARGET)));
     expect(last.missing).toBe("Modulate");
@@ -1741,6 +1746,15 @@ describe("variable margin frames (David 2026-10-23)", () => {
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "MRR: FinOps plan book $938/mo — 33 non-USD paying subs excluded"
     );
+  });
+
+  it("with no live estimate the headline is no value, never the settled cutoff as live", async () => {
+    // sources() carries no live document: the last point is settled D−2.
+    const f = await all(null, sources());
+    const last = f.health.variableMargin.at(-1)!;
+    expect(last.live).toBe(0);
+    expect(last.marginPct).toBeNull();
+    expect(last.costPerMonth).not.toBeNull(); // the cost stays visible
   });
 
   it("says the MRR is missing instead of borrowing the neighbour day's book", async () => {
