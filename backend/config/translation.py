@@ -211,6 +211,7 @@ def viewed_translation_profile(legacy: TranslationProfile, config: OnDemandTrans
         nllb_timeout_seconds=legacy.nllb_timeout_seconds,
         cache_ttl_seconds=legacy.cache_ttl_seconds,
         negative_cache_ttl_seconds=legacy.negative_cache_ttl_seconds,
+        deprecated_tokens=legacy.deprecated_tokens,
         max_batch_size=min(config.max_segments, 50),
         policy_version='viewed_v1',
         max_output_tokens=config.max_output_tokens,

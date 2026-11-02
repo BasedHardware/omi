@@ -17,6 +17,14 @@ def test_defaults_ship_on_demand_on_with_stop_switches():
     assert viewed.policy_version == 'viewed_v1'
 
 
+def test_viewed_profile_keeps_deprecated_provider_diagnostics():
+    # Viewed live and on-open calls must still report a stale "gemini" env.
+    legacy = resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': 'gemini'})
+    viewed = viewed_translation_profile(legacy, resolve_ondemand_config({}))
+    assert viewed.providers == (TranslationProvider.luna,)
+    assert viewed.deprecated_tokens == ('gemini',)
+
+
 def test_live_and_onopen_stop_switches():
     config = resolve_ondemand_config(
         {
