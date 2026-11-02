@@ -130,6 +130,15 @@ class Client:
         return {'accepted': self.accepted}
 
 
+@pytest.mark.parametrize('project', ['', '   '])
+def test_bootstrap_refuses_unpinned_customer_project_before_clients(monkeypatch, project):
+    monkeypatch.setenv('OMI_DEPLOYMENT', 'production')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('OMI_CUSTOMER_DATA_PROJECT', project)
+    with pytest.raises(RuntimeError, match='explicit stage and customer data project'):
+        worker_job.bootstrap()
+
+
 async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monkeypatch):
     redis, pipeline, cleanup = execution
     process = AsyncMock()

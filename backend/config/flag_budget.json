@@ -20,9 +20,8 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 222,
+  "count": 221,
   "names": {
-    "OMI_CUSTOMER_DATA_PROJECT": {"owner": "infracost / syncsplit data-plane qualification", "review_by": "2026-11-09"},
     "SYNC_BACKFILL_WORKER_API_URL": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},
     "SYNC_BACKFILL_WORKER_AUDIENCE": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
