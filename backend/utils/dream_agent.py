@@ -359,6 +359,7 @@ async def run_session(
             'arm': arm,
             'would_serve': would_serve,
             'status': summary.get('status'),
+            'failure': summary.get('failure', 'none'),
             **{
                 key: summary.get(key, 0)
                 for key in (
