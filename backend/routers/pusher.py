@@ -20,6 +20,7 @@ from starlette.websockets import WebSocketState
 from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
+from database.privacy_check_metrics import with_session_census
 from database import users as users_db
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
@@ -1875,6 +1876,7 @@ async def _run_websocket_util_trigger(
 
 
 @router.websocket("/v1/trigger/listen")
+@with_session_census('pusher')
 async def websocket_endpoint_trigger(
     websocket: WebSocket,
     uid: str,

@@ -6,7 +6,7 @@ SDK encoding, Commit hooks, and server atomicity are exercised.
 """
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import inspect
 import os
 from types import SimpleNamespace
@@ -27,7 +27,8 @@ def world(monkeypatch):
     from google.cloud import firestore
     from google.cloud.firestore_v1.types import CommitRequest
     from database import _client, batch_pipeline_privacy as privacy, batch_privacy_write_fence as fence
-    from database import conversations, users, recording_sessions
+    from database import conversations, users, recording_sessions, fsr_read_cache
+    import fakeredis
 
     client = firestore.Client(project='demo-wq26', credentials=AnonymousCredentials())
     uid = 'wq26-' + uuid4().hex
@@ -36,6 +37,8 @@ def world(monkeypatch):
     token = client.document(f'batch_pipeline_privacy/{privacy.privacy_owner_key(uid)}')
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: client)
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(fsr_read_cache, '_redis', lambda: redis)
     for module in (users, conversations):
         monkeypatch.setattr(module, 'db', client)
     for module in (conversations, recording_sessions):
@@ -80,10 +83,12 @@ def world(monkeypatch):
         users=users,
     )
     client.close()  # Unique synthetic owners live only in this disposable emulator.
+    redis.close()
 
 
 WRITERS = [
     'consent',
+    'consent_speaker_only',
     'retraction',
     'tombstone',
     'protection_start',
@@ -98,6 +103,10 @@ WRITERS = [
     'account_marker_create',
     'account_marker_complete',
     'account_marker_late_cleanup',
+    'grace_intent',
+    'grace_promote',
+    'grace_actions_complete',
+    'grace_restore',
     'sync_merge',
     'smart_merge',
     'recording_delete',
@@ -110,28 +119,17 @@ WRITERS = [
 ]
 
 
-def test_absent_cloud_sync_consent_is_allowed_then_explicit_opt_out_invalidates(world):
-    from google.cloud import firestore
-    from database.batch_privacy_attempt import batch_privacy_attempt
-
-    world.user.update({'private_cloud_sync_enabled': firestore.DELETE_FIELD})
-    with batch_privacy_attempt():
-        assert world.check() == 7
-        assert world.check() == 7
-        before = world.token.get().to_dict()
-        world.user.update({'private_cloud_sync_enabled': False})
-        after = world.token.get().to_dict()
-        assert before['memo_token'] != after['memo_token']
-        assert before['generation'] == after['generation'] == 7
-        with pytest.raises(world.privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
-            world.check()
-
-
 @pytest.mark.parametrize('writer', WRITERS)
 def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, monkeypatch, writer):
     from google.cloud import firestore
     from database import speaker_auto_enroll, conversation_tombstones, from_segments_chunks, batch_pipeline_purge
-    from database import account_deletion_transitions, legal_holds, recording_sessions, smart_merge
+    from database import (
+        account_deletion_transitions,
+        account_deletion_grace,
+        legal_holds,
+        recording_sessions,
+        smart_merge,
+    )
     from database.batch_privacy_attempt import batch_privacy_attempt
     from utils.sync.assignment import assign_in_transaction
 
@@ -161,7 +159,9 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
     w.requests.clear()
     with batch_privacy_attempt():
         assert w.check() == 7  # Warm the cross-transaction decision.
-        if writer == 'consent':
+        if writer == 'consent_speaker_only':
+            speaker_auto_enroll.update_privacy(w.uid, {}, firestore_client=w.client)
+        elif writer == 'consent':
             speaker_auto_enroll.update_privacy(w.uid, {'private_cloud_sync_enabled': False}, firestore_client=w.client)
             denial = 'recording_privacy_changed'
         elif writer == 'retraction':
@@ -236,6 +236,17 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
             ref.update({'wipe_status': 'pending'})
             assert account_deletion_transitions.record_late_agent_vm_cleanup(w.client.transaction(), ref, 'vm', 'zone')
             denial = 'account_deleted'
+        elif writer.startswith('grace_'):
+            result = account_deletion_grace.mark_user_deletion_grace_intent(
+                w.uid, datetime.now(timezone.utc) + timedelta(days=1)
+            )
+            if writer == 'grace_promote':
+                assert account_deletion_grace.promote_grace_to_immediate(w.uid)
+            elif writer in {'grace_actions_complete', 'grace_restore'}:
+                assert account_deletion_grace.mark_user_deletion_grace_actions_complete(w.uid, result['wipe_job_id'])
+                if writer == 'grace_restore':
+                    assert account_deletion_grace.restore_user_deletion(w.uid) == 'restored'
+            denial = None if writer == 'grace_restore' else 'account_deleted'
         elif writer == 'recording_delete':
             assert recording_sessions.tombstone_and_delete_empty_conversation(
                 w.uid, 'target', None, firestore_client=w.client
@@ -468,6 +479,76 @@ def test_real_account_subtree_wipe_keeps_blocked_token_outside_user_walk(world, 
             w.check()
 
 
+@pytest.mark.parametrize('bulk', [False, True])
+@pytest.mark.parametrize(
+    'mutation', ['hard_delete', 'masked_delete', 'replacement', 'nested_state', 'null_state', 'transform']
+)
+def test_privacy_authority_delete_preserves_blocked_generation_and_purge(world, bulk, mutation):
+    from google.cloud import firestore
+
+    w = world
+    w.token.set({'generation': 7, 'blocked': True, 'purging': True}, merge=True)
+    before = w.token.get().to_dict()
+    w.requests.clear()
+    batch = w.client.batch()
+    batch.delete(w.source)
+    if mutation == 'hard_delete':
+        batch.delete(w.token)
+    elif mutation == 'masked_delete':
+        batch.update(w.token, dict.fromkeys(['generation', 'blocked', 'purging'], firestore.DELETE_FIELD))
+    elif mutation == 'replacement':
+        batch.set(w.token, {'metadata': True})
+    elif mutation == 'nested_state':
+        batch.update(w.token, {'blocked.nested': firestore.DELETE_FIELD})
+    elif mutation == 'null_state':
+        batch.update(w.token, {'blocked': None})
+    else:
+        batch.update(w.token, {'generation': firestore.Increment(1)})
+    with pytest.raises(ValueError, match='batch privacy authority'):
+        if bulk:
+            w.client._firestore_api.batch_write(
+                database=w.client._database_string,
+                writes=batch._write_pbs,
+            )
+        else:
+            batch.commit()
+    assert w.requests == []
+    assert w.token.get().to_dict() == before
+    assert w.source.get().exists
+
+    @firestore.transactional
+    def deny_without_expected_generation(tx):
+        return w.privacy.assert_batch_write_allowed(w.client, tx, w.uid, conversation_ids=['source'])
+
+    with pytest.raises(w.privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+        deny_without_expected_generation(w.client.transaction())
+
+
+def test_canonical_purge_finish_rejects_stale_generation_and_memo_stays_blocked(world):
+    from google.cloud import firestore
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    w = world
+
+    @firestore.transactional
+    def check_generation_eight(tx):
+        return w.privacy.assert_batch_write_allowed(
+            w.client, tx, w.uid, conversation_ids=['source'], expected_generation=8
+        )
+
+    with batch_privacy_attempt():
+        assert w.check() == 7  # A prior allowed decision must not survive purge entry.
+        assert w.privacy.advance_privacy_generation(w.client, w.uid, blocked=False) == 8
+        pending = w.token.get().to_dict()
+        assert pending['purging'] is True
+        w.privacy.finish_privacy_purge(w.client, w.uid, 7)
+        assert w.token.get().to_dict() == pending
+        with pytest.raises(w.privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+            check_generation_eight(w.client.transaction())
+        w.privacy.finish_privacy_purge(w.client, w.uid, 8)
+        assert check_generation_eight(w.client.transaction()) == 8
+
+
 def test_standalone_platform_backfill_installs_fence_before_admin_client(world, monkeypatch):
     import sys
     from scripts import backfill_user_signup_platform as backfill
@@ -503,3 +584,20 @@ def test_standalone_platform_backfill_installs_fence_before_admin_client(world, 
     assert w.token.get().to_dict()['generation'] == 7
     assert len(w.requests) == 1
     assert w.requests[0].writes[-1].update.name == w.token._document_path
+
+
+def test_absent_cloud_sync_consent_is_allowed_then_explicit_opt_out_invalidates(world):
+    from google.cloud import firestore
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    world.user.update({'private_cloud_sync_enabled': firestore.DELETE_FIELD})
+    with batch_privacy_attempt():
+        assert world.check() == 7
+        assert world.check() == 7
+        before = world.token.get().to_dict()
+        world.user.update({'private_cloud_sync_enabled': False})
+        after = world.token.get().to_dict()
+        assert before['memo_token'] != after['memo_token']
+        assert before['generation'] == after['generation'] == 7
+        with pytest.raises(world.privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
+            world.check()
