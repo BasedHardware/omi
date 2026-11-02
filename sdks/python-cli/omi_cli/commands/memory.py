@@ -72,7 +72,7 @@ def get_memory(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         try:
-            item = client.get(f"/v1/dev/user/memories/{memory_id}")
+            item = client.get(f"/v1/dev/user/memories/{path_segment(memory_id)}")
         except NotFoundError:
             # Exit code 5 — preserves the documented "not found" agent contract
             # for a missing resource.

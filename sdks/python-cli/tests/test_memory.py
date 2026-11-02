@@ -126,6 +126,24 @@ def test_memory_get_uses_direct_endpoint(authed_profile, respx_mock, cli_runner)
     assert payload["content"] == "found me"
 
 
+def test_memory_get_traversal_id_cannot_reach_conversations(authed_profile, respx_mock, cli_runner) -> None:
+    """A traversal ID in ``memory get`` must stay inside the memories segment.
+
+    Before the fix, httpx resolved the dot-segments and this GET landed on
+    /v1/dev/user/conversations/abc — a different resource than the one asked for.
+    """
+    conversations = respx_mock.get("/v1/dev/user/conversations/abc").respond(
+        json={"id": "abc", "content": "not a memory"}
+    )
+    memory = respx_mock.get("/v1/dev/user/memories/x%2F..%2F..%2Fconversations%2Fabc").respond(
+        status_code=404, json={"detail": "Memory not found"}
+    )
+    result = cli_runner.invoke(app, ["--json", "memory", "get", "x/../../conversations/abc"])
+    assert not conversations.called
+    assert memory.called
+    assert result.exit_code == 5
+
+
 def test_memory_get_pretty_renders_item(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.get("/v1/dev/user/memories/m1").respond(
         json={"id": "m1", "content": "hello", "category": "core", "visibility": "private", "tags": []}
