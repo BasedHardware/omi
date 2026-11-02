@@ -605,6 +605,14 @@ env:
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "16"
+  # Japanese window on the Reazon ja pool (parakeet chart ja block). David 2026-11-02
+  # (lead ruling cd1cca): 25% now, 100% after a clean cohort read. Roll parakeet first
+  # and see prod-omi-parakeet-ja Ready; misses fall back to Soniox/Modulate.
+  # Rollback: PARAKEET_JA_WINDOW_PERCENT "0" (or empty URL, the kill switch).
+  - name: HOSTED_PARAKEET_JA_API_URL
+    value: "http://prod-omi-parakeet-ja.prod-omi-backend.svc.cluster.local:8080"
+  - name: PARAKEET_JA_WINDOW_PERCENT
+    value: "25"
   # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
   - name: PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED
     value: "false"
