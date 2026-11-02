@@ -161,6 +161,36 @@ def test_external_transactions_keep_authorities_in_the_conflict_set(world, monke
     assert reads == [('account_deletions', UID), ('legal_hold_deletion_gates', UID)]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('session', [False, True])
+async def test_stale_running_gate_clear_is_not_reused_after_clock_moves_back(world, monkeypatch, session):
+    from utils.executors import db_executor, run_blocking
+
+    db, _, _, _ = world
+    enable(monkeypatch, 'legal_hold_fence_cache', *(['privacy_session_token'] if session else []))
+    now = datetime(2026, 11, 2, 12, tzinfo=timezone.utc)
+    clock = [now]
+    db.rows[('legal_hold_deletion_gates', UID)] = {
+        'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'account_deletion',
+        'token': 'synthetic',
+        'state': 'running',
+        'started_at': now - timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1),
+    }
+    original = legal_holds._gate_blocks
+    monkeypatch.setattr(legal_holds, '_gate_blocks', lambda gate, observed: original(gate, clock[0]))
+
+    @metrics.with_session_census('listen')
+    async def exercise():
+        assert await run_blocking(db_executor, external, db)
+        clock[0] -= timedelta(seconds=2)
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            await run_blocking(db_executor, external, db)
+
+    await exercise()
+
+
 @pytest.mark.parametrize('token', [None, {}, {'memo_token': 'bad', 'memo_schema': 1}])
 def test_missing_or_malformed_token_forces_live_negatives(world, monkeypatch, token):
     db, reads, _, _ = world

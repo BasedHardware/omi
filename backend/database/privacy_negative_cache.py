@@ -12,7 +12,7 @@ from database.batch_privacy_attempt import token_version
 from database import privacy_check_metrics as metrics
 
 
-def _candidate(family, uid, client, variant, live, cache_family, *, shadow):
+def _candidate(family, uid, client, variant, live, cache_family, *, shadow, reuse_allowed):
     from database.batch_pipeline_privacy import PRIVACY_COLLECTION, privacy_owner_key
     from database.fsr_read_cache import cached_read, plane_id
 
@@ -38,9 +38,10 @@ def _candidate(family, uid, client, variant, live, cache_family, *, shadow):
         nonlocal fetched
         fetched = True
         metrics.memo_result(family, 'miss')
-        return {'version': version, 'clear': live()}
+        clear = live()
+        return {'version': version, 'clear': clear, 'reusable': clear is True and reuse_allowed()}
 
-    # The envelope contains only an opaque token and a bool. Variant hashes
+    # The envelope contains only an opaque token and bools. Variant hashes
     # separate conversations; absence for one ID never proves absence for another.
     envelope = cached_read(
         cache_family,
@@ -48,19 +49,21 @@ def _candidate(family, uid, client, variant, live, cache_family, *, shadow):
         plane_id(client) + ':' + hashlib.sha256(variant.encode()).hexdigest(),
         fetch,
         seconds=30,
-        cacheable=lambda value: isinstance(value, dict) and value.get('clear') is True,
+        cacheable=lambda value: (
+            isinstance(value, dict) and value.get('clear') is True and value.get('reusable') is True
+        ),
         validate=lambda value: value.get('version') == version,
         shadow=shadow,
     )
     clear = envelope['clear']
     if not fetched:
         metrics.memo_result(family, 'hit')
-    if session_on and holder is not None and clear is True:
+    if session_on and holder is not None and clear is True and envelope.get('reusable') is True:
         holder.put(key, version, True)
     return clear
 
 
-def decide(family, uid, client, variant, live, cache_family, *, blocked=()):
+def decide(family, uid, client, variant, live, cache_family, *, blocked=(), reuse_allowed=lambda: True):
     """Return live authority in shadow mode; candidate faults cannot change it."""
     shadow = lever_enabled('privacy_checks_shadow', uid)
     enforce = lever_enabled(cache_family, uid) or (
@@ -71,7 +74,9 @@ def decide(family, uid, client, variant, live, cache_family, *, blocked=()):
     function = (
         live
         if shadow or not enforce
-        else lambda: _candidate(family, uid, client, variant, live, cache_family, shadow=False)
+        else lambda: _candidate(
+            family, uid, client, variant, live, cache_family, shadow=False, reuse_allowed=reuse_allowed
+        )
     )
     reason = 'allow'
     try:
@@ -81,23 +86,25 @@ def decide(family, uid, client, variant, live, cache_family, *, blocked=()):
         reason = 'destructive_operation'
         metrics.decision(family, reason)
         if shadow:
-            _shadow(family, uid, client, variant, live, cache_family, reason, blocked)
+            _shadow(family, uid, client, variant, live, cache_family, reason, blocked, reuse_allowed)
         raise
     except Exception:
         metrics.decision(family, 'authority_unavailable')
         raise
     metrics.decision(family, reason)
     if shadow:
-        _shadow(family, uid, client, variant, live, cache_family, reason, blocked)
+        _shadow(family, uid, client, variant, live, cache_family, reason, blocked, reuse_allowed)
     return result
 
 
-def _shadow(family, uid, client, variant, live, cache_family, reason, blocked):
+def _shadow(family, uid, client, variant, live, cache_family, reason, blocked, reuse_allowed):
     try:
         with metrics.mode_scope('shadow'):
             metrics.called(family)
             try:
-                clear = _candidate(family, uid, client, variant, live, cache_family, shadow=True)
+                clear = _candidate(
+                    family, uid, client, variant, live, cache_family, shadow=True, reuse_allowed=reuse_allowed
+                )
                 candidate = 'allow' if clear else 'conversation_deleted'
             except blocked:
                 candidate = 'destructive_operation'

@@ -49,6 +49,8 @@ separate proposal; it would couple writes to Redis availability and requires
 fault-injection evidence and measured savings before approval.
 
 `legal_hold_fence_cache` stores only clear decisions for the marker plus gate.
+Clear decisions from running gates (including stale/obsolete gates) stay live:
+a backwards wall-clock adjustment can change their verdict without a writer.
 Gate placement, acquisition (including stale takeover), and finish use
 `cache_writer`. `tombstone_negative_cache` stores only per-ID negatives under a
 per-owner generation; absence for one conversation never proves owner-wide

@@ -500,8 +500,10 @@ def external_write_fence(
         return
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     kwargs = {'transaction': transaction} if transaction is not None else {}
+    reusable = False
 
     def live():
+        nonlocal reusable
         account_payload = _snapshot_payload(
             metrics.read_snapshot('external', _document(client, f"account_deletions/{uid}"), **kwargs),
             label="account deletion authority",
@@ -519,6 +521,9 @@ def external_write_fence(
         )
         if _gate_blocks(gate, datetime.now(timezone.utc)):
             raise DestructiveOperationInProgress("external data write blocked by destructive operation")
+        # A backwards clock adjustment can change a stale-running verdict
+        # without changing the writer token. Only timeless clears are reusable.
+        reusable = gate is None or gate['state'] != 'running'
         return True
 
     if transaction is not None:
@@ -541,6 +546,7 @@ def external_write_fence(
             live,
             'legal_hold_fence_cache',
             blocked=(DestructiveOperationInProgress,),
+            reuse_allowed=lambda: reusable,
         )
     # Transactional reads hold the authorities through provider upload and
     # manifest commit. Nested storage gates reuse this exact synchronous scope;
