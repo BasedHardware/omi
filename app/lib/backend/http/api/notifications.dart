@@ -14,19 +14,20 @@ Future<void> syncUserTimeZoneServer({required String timeZone}) async {
   );
 }
 
-Future<void> saveFcmTokenServer({required String token, required String timeZone}) async {
+Future<bool> saveFcmTokenServer({required String token, required String timeZone, bool Function()? canSend}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/fcm-token',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'fcm_token': token, 'time_zone': timeZone}),
+    canSend: canSend,
+    signOutOn401: false,
   );
 
-  Logger.debug('saveToken: ${response?.body}');
   if (response?.statusCode == 200) {
     final data = wire.GeneratedFcmTokenResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
-    Logger.debug(data.status == 'Ok' ? "Token saved successfully" : "Token save returned ${data.status}");
-  } else {
-    Logger.debug("Failed to save token");
+    return data.status == 'Ok';
   }
+  Logger.debug('Push token persistence deferred (status=${response?.statusCode})');
+  return false;
 }

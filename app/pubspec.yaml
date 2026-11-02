@@ -191,6 +191,7 @@ dev_dependencies:
   flutter_flavorizr: ^2.2.3
   flutter_gen_runner: 5.15.0
   pigeon: ^26.0.1
+  firebase_messaging_platform_interface: ^4.6.5
 
 flutter_launcher_icons:
   android: true
