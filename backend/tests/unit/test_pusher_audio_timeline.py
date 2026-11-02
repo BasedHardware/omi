@@ -89,11 +89,15 @@ class HeldOpenWebSocket(FakeWebSocket):
 
 
 class BoundaryFrameWebSocket(FakeWebSocket):
-    """Deliver a final short frame just after the size-ready uploader tick."""
+    """Deliver a final short frame between the size-ready tick and the next one.
+
+    The delay is 1.5 process intervals, so a loaded host has half an interval
+    of slack either side before the frame misses the grace tick.
+    """
 
     async def receive_bytes(self):
         if len(self.frames) == 1:
-            await asyncio.sleep(0.03)
+            await asyncio.sleep(0.3)
         return await super().receive_bytes()
 
 
@@ -478,7 +482,7 @@ async def test_conversation_switch_reenables_reconcile_listing(env, monkeypatch)
 
 @pytest.mark.parametrize('audio_timeline', [None, AUDIO_TIMELINE_PROTOCOL])
 async def test_size_boundary_frame_persists_in_previous_batch(env, monkeypatch, audio_timeline):
-    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.02)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.2)
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 1.0)
     full = b'\x01\x00' * RATE
     boundary = b'\x02\x00' * 160  # one 10 ms frame, below 1 KB
