@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cv1-battery-soc
+    command: ["bash", "omi/firmware/omi/tests/battery/run.sh"]
+    triggers: ["omi/firmware/omi/src/battery.c", "omi/firmware/omi/src/lib/core/lib/battery/battery.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/battery/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#20483: charger voltage must not inflate the last off-charger SOC; reject edge-spanning samples and keep disconnected BAS current"
   - id: firmware-ota-slot-geometry
     command: ["python3", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
     triggers: ["omi/firmware/boards/omi/pm_static.yml", "omi/firmware/tools/cv1/pinned-partitions.yml", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]

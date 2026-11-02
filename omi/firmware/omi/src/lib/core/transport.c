@@ -686,7 +686,9 @@ void broadcast_battery_level(struct k_work *work_item)
 
     int battery_err = battery_get_millivolt(&battery_millivolt);
     if (battery_err == 0) {
-        omi_diagnostics_set_battery_mv(battery_millivolt);
+        struct battery_diagnostics battery;
+        battery_get_diagnostics(&battery);
+        omi_diagnostics_set_battery_mv(battery.millivolts);
     } else {
         omi_diagnostics_set_battery_mv(UINT16_MAX);
     }
@@ -701,12 +703,11 @@ void broadcast_battery_level(struct k_work *work_item)
              * The old storage_transfer_active() early-return meant the app never
              * got a battery update for the whole (often long) duration of a sync. */
             (void) notify_charging_status(current_connection, false);
-
-            // Use the Zephyr BAS function to set (and notify) the battery level
-            int err = bt_bas_set_battery_level(battery_percentage);
-            if (err) {
-                LOG_ERR("Error updating battery level: %d", err);
-            }
+        }
+        // Keep the readable BAS byte current even when there is no connection.
+        int err = bt_bas_set_battery_level(battery_percentage);
+        if (err) {
+            LOG_ERR("Error updating battery level: %d", err);
         }
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
