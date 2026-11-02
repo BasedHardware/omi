@@ -417,8 +417,6 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: MCP_OAUTH_CHATGPT_CLIENT_ID
-        HOSTED_TRANSLATION_API_URL:
-          category: service_discovery
         RAPID_API_HOST:
           config_map:
             name: '{env}-omi-backend-config'

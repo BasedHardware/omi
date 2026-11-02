@@ -348,4 +348,11 @@ def entries():
             expect_observed=False,
             body_digest='51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_scan_pass',
+            covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
+            reason='durable-cursor wrapper over release_page; the cursor is one document get and set',
+            expect_observed=False,
+            body_digest='1b9c67910b80e2628cf61514e1b24875242fc623069e6a2f64764cb90f2fa27e',
+        ),
     )

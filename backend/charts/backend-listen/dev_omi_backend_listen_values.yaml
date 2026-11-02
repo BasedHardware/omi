@@ -405,8 +405,10 @@ env:
     value: "http://172.16.48.49/diarizer"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://172.16.48.49/nllb"
+  # Mirrors prod (Luna only). The dev NLLB service stays reachable at
+  # HOSTED_TRANSLATION_API_URL for experiments: set this to "nllb,luna".
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,gemini"
+    value: "luna"
   - name: TRANSLATION_CACHE_TTL
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL

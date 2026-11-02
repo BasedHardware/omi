@@ -653,10 +653,9 @@ env:
     value: "120"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
-  - name: HOSTED_TRANSLATION_API_URL
-    value: "http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080"
+  # All live translation runs on Luna; the NLLB GPU service is retired in prod.
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,gemini"
+    value: "luna"
   - name: TRANSLATION_CACHE_TTL
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL

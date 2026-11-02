@@ -265,9 +265,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_OAUTH_CHATGPT_CLIENT_ID
-          HOSTED_TRANSLATION_API_URL:
-            category: service_discovery
-            value: http://172.16.48.49/nllb
           RAPID_API_HOST:
             config_map:
               name: dev-omi-backend-config
@@ -320,6 +317,9 @@ environments:
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: ''
+          HOSTED_TRANSLATION_API_URL:
+            category: service_discovery
+            value: http://172.16.48.49/nllb
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -2341,9 +2341,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_CHATGPT_CLIENT_ID
-          HOSTED_TRANSLATION_API_URL:
-            category: service_discovery
-            value: http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080
           RAPID_API_HOST:
             config_map:
               name: prod-omi-backend-config
