@@ -280,7 +280,7 @@ class Probe:
     def fleet_case(self) -> dict:
         from database import sync_backfill_sequencer as registry, sync_jobs
 
-        if registry.worker_candidates():
+        if any(registry.worker_candidates()):
             raise ProbeRefused('staging window has pre-existing worker-eligible heads')
         fixture = seed()
         enqueue_fixture(fixture)
@@ -300,9 +300,9 @@ class Probe:
     def run(self) -> dict:
         from database import sync_backfill_sequencer as registry
 
-        if registry.worker_candidates():
-            raise ProbeRefused('staging window has pre-existing worker-eligible heads')
         try:
+            if any(registry.worker_candidates()):
+                raise ProbeRefused('staging window has pre-existing worker-eligible heads')
             self.rpc_cases()
             self.no_worker_case()
             self.death_case()

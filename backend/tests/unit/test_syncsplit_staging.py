@@ -2,10 +2,12 @@
 
 import json
 import logging
+from unittest.mock import MagicMock
 import httpx
 import pytest
 
 from scripts.staging import syncsplit as kit
+from tests.unit.test_sync_backfill_uid_sequencer import db
 from tests.unit.test_staging_fence import _clean_env
 from utils.staging_fence import StagingFenceError
 
@@ -150,3 +152,116 @@ def test_waiter_has_deadline_and_stops_on_first_failure(monkeypatch):
     with pytest.raises(kit.ProbeRefused, match='first failure'):
         kit.wait_until(failed, 60, deadline=100)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('mode', ['run', 'fleet_case'])
+@pytest.mark.parametrize('occupied', [False, True])
+def test_probe_checks_generator_contents_before_starting(monkeypatch, tmp_path, mode, occupied):
+    from database import sync_backfill_sequencer as registry, sync_jobs
+
+    def candidates():
+        if occupied:
+            yield {'uid': 'synthetic'}
+        else:
+            yield from ()
+
+    monkeypatch.setattr(registry, 'worker_candidates', candidates)
+    fixture = {'job_id': 'job'}
+    seed = MagicMock(return_value=fixture)
+    enqueue = MagicMock()
+    monkeypatch.setattr(kit, 'seed', seed)
+    monkeypatch.setattr(kit, 'enqueue_fixture', enqueue)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'execution_drive': 'pull'})
+    probe = kit.Probe(BASE, tmp_path / 'unused-token')
+    probe.rpc_cases = MagicMock()
+    probe.no_worker_case = MagicMock()
+    probe.death_case = MagicMock()
+    probe.terminal_fallback = lambda _: True
+    try:
+        if occupied:
+            with pytest.raises(kit.ProbeRefused, match='pre-existing'):
+                getattr(probe, mode)()
+            seed.assert_not_called()
+            probe.rpc_cases.assert_not_called()
+        else:
+            receipt = getattr(probe, mode)()
+            assert receipt['result'] == 'PASS'
+            if mode == 'run':
+                probe.rpc_cases.assert_called_once()
+                probe.no_worker_case.assert_called_once()
+                probe.death_case.assert_called_once()
+            else:
+                seed.assert_called_once()
+                enqueue.assert_called_once_with(fixture)
+        if mode == 'run':
+            assert probe.http.is_closed
+    finally:
+        probe.http.close()
+
+
+def test_rpc_cases_exercise_real_seed_and_owner_fences(db, monkeypatch, tmp_path):
+    from database import sync_backfill_sequencer as registry
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'false')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    operations = []
+
+    def rpc(operation, body=None):
+        operations.append(operation)
+        if operation == 'claim':
+            return {'lease': worker_control.claim()}
+        return {'accepted': getattr(worker_control, operation)(**body)}
+
+    probe = kit.Probe(BASE, tmp_path / 'unused-token')
+    probe.rpc = rpc
+    try:
+        probe.rpc_cases()
+        assert probe.passed == ['claim', 'heartbeat', 'duplicate-claim', 'complete', 'fail']
+        assert set(operations) == {'claim', 'heartbeat', 'complete', 'fail'}
+        owners = [row for path, row in db.docs.items() if path[0] == registry.COLLECTION]
+        assert len(owners) == 2
+        assert all('active_job_id' not in owner for owner in owners)
+    finally:
+        probe.http.close()
+
+
+@pytest.mark.parametrize('drive', [None, 'pull'])
+def test_fleet_requires_installed_execution_marker(monkeypatch, tmp_path, drive):
+    from database import sync_backfill_sequencer as registry, sync_jobs
+
+    monkeypatch.setattr(registry, 'worker_candidates', lambda: iter(()))
+    monkeypatch.setattr(kit, 'seed', lambda: {'job_id': 'job'})
+    monkeypatch.setattr(kit, 'enqueue_fixture', lambda _: None)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'execution_drive': drive})
+    probe = kit.Probe(BASE, tmp_path / 'unused-token')
+    probe.terminal_fallback = lambda _: True
+    try:
+        if drive == 'pull':
+            assert probe.fleet_case()['fleet_execution'] == 'PASS'
+        else:
+            with pytest.raises(kit.ProbeRefused, match='installed worker'):
+                probe.fleet_case()
+    finally:
+        probe.http.close()
+
+
+@pytest.mark.parametrize('mode', ['run', 'fleet'])
+def test_main_reaches_documented_mode_and_closes_client(monkeypatch, tmp_path, capsys, mode):
+    path = tmp_path / 'token'
+    path.write_text('synthetic-token')
+    path.chmod(0o600)
+    monkeypatch.setattr('sys.argv', ['syncsplit', mode, '--target', BASE, '--token-file', str(path)])
+    monkeypatch.setattr(kit, 'validate_configuration', lambda *args: None)
+    probe = MagicMock()
+    probe.run.return_value = probe.fleet_case.return_value = {'result': 'PASS'}
+    monkeypatch.setattr(kit, 'Probe', lambda *args: probe)
+    assert kit.main() == 0
+    assert json.loads(capsys.readouterr().out) == {'result': 'PASS'}
+    (probe.run if mode == 'run' else probe.fleet_case).assert_called_once()
+    if mode == 'fleet':
+        probe.http.close.assert_called_once()
