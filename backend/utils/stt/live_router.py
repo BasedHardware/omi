@@ -78,9 +78,9 @@ def permission_reason(
     account_states=None,
 ) -> str | None:
     """Closed deny reason for one target, or None when dialing is permitted."""
-    from config.stt_provider_policy import STTServingSurface, provider_is_enabled
+    from config.live_stt_gpu_fleet import gpu_fleet_off
 
-    if not provider_is_enabled(target.family, STTServingSurface.STREAMING):
+    if gpu_fleet_off() and target.family in {'parakeet', 'modulate'}:
         return 'capability'
     if 'streaming' not in target.features:
         return 'capability'
