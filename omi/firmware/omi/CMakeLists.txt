@@ -23,6 +23,11 @@ if(CONFIG_OMI_ENABLE_T5838_AAD)
     # Hardware AAD is integrated into mic.c; t5838_aad.c is the low-level driver.
     list(APPEND app_sources src/t5838_aad.c)
 endif()
+
+if(CONFIG_OMI_SDHC_SPI_CMD12_FIX)
+    # Zephyr's SPI SD host driver with the CMD12 reply fix, built instead of the stock one.
+    list(APPEND app_sources src/sdfix/sdhc_spi_cmd12_fix.c)
+endif()
 file(GLOB core_sources
     src/lib/core/config.h
     src/lib/core/codec.c
