@@ -912,6 +912,10 @@ def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
     # validation. A module-level import would make those suites stub a graph they never call.
     from database.apps import get_app_by_id_db
     from utils.apps import get_available_app_model_by_id, is_user_app_enabled
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
+
+    if app_id == DEFAULT_SUMMARY_APP_ID:
+        return default_summary_app()
 
     if get_app_by_id_db(app_id) is None:
         raise HTTPException(status_code=404, detail='App not found')

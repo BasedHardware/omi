@@ -101,6 +101,7 @@ from models.users import (
     LocationContextConsentUpdate,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
+from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_by_id
 from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
@@ -1062,7 +1063,11 @@ def set_preferred_app_for_user(
 
     app_id_to_set = app_id
 
-    selected_app = get_available_app_by_id(app_id_to_set, uid)
+    selected_app = (
+        default_summary_app()
+        if app_id_to_set == DEFAULT_SUMMARY_APP_ID
+        else get_available_app_by_id(app_id_to_set, uid)
+    )
     if not selected_app:
         raise HTTPException(status_code=410, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
 
