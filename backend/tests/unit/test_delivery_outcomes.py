@@ -27,13 +27,14 @@ def observed(monkeypatch):
 
 
 def test_untrusted_labels_are_rejected_before_child_creation(monkeypatch):
+    assert delivery.OUTCOMES == frozenset({'delivered', 'no_op', 'deferred', 'failed'})
     calls = []
     monkeypatch.setattr(
         delivery,
         'DELIVERY_OUTCOME',
         SimpleNamespace(labels=lambda **labels: SimpleNamespace(inc=lambda count: calls.append((labels, count)))),
     )
-    for unsafe in ('X' * 28, 'person@example.invalid', '/conversations/private/job'):
+    for unsafe in ('X' * 28, 'person@example.invalid', '/conversations/private/job', 'unknown'):
         delivery.record_delivery(unsafe, 'no_op')
         delivery.record_delivery('summary', unsafe)
     assert calls == []

@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Any, Awaitable, Callable, TypeVar, cast, overload
 
 from prometheus_client import Counter
+from utils.observability.reasons import DeliveryOutcome, ReasonFamily, reason_label, reason_values
 
 DELIVERY_OUTCOME = Counter(
     'omi_delivery_outcome_total',
@@ -11,7 +12,7 @@ DELIVERY_OUTCOME = Counter(
     ['kind', 'outcome'],
 )
 KINDS = frozenset({'summary', 'sync', 'action_item_export'})
-OUTCOMES = frozenset({'delivered', 'no_op', 'deferred', 'failed'})
+OUTCOMES = reason_values(DeliveryOutcome)
 AsyncFunction = TypeVar('AsyncFunction', bound=Callable[..., Awaitable[Any]])
 SyncFunction = TypeVar('SyncFunction', bound=Callable[..., Any])
 Result = TypeVar('Result')
@@ -21,7 +22,9 @@ def record_delivery(kind: str, outcome: str, count: int = 1) -> None:
     # Reject unknown values before creating a child: IDs/text cannot become
     # labels, even when a future caller accidentally supplies them.
     if kind in KINDS and outcome in OUTCOMES and count > 0:
-        DELIVERY_OUTCOME.labels(kind=kind, outcome=outcome).inc(count)
+        DELIVERY_OUTCOME.labels(kind=kind, outcome=reason_label(ReasonFamily.DELIVERY, outcome, DeliveryOutcome)).inc(
+            count
+        )
 
 
 def observe_action_export(function: AsyncFunction) -> AsyncFunction:
