@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 224,
+  "count": 225,
   "names": {
     "SYNC_BACKFILL_WORKER_API_URL": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},
     "SYNC_BACKFILL_WORKER_AUDIENCE": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},
@@ -191,6 +191,7 @@
     "SPEAKER_CLUSTERING_MAX_SPEAKERS": {"seeded": "2026-10-25"},
     "STT_CIRCUIT_GAUGE_REFRESH_SECONDS": {"seeded": "2026-10-25"},
     "STT_FAILOVER_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
+    "STT_GPU_FLEET_OFF": {"owner": "gpufleetoff / two-lane lead", "review_by": "2026-11-15"},
     "STT_IDLE_REOPEN_COST_RESELECT_ENABLED": {"owner": "idlereopen / two-lane lead", "review_by": "2026-11-26"},
     "STT_IDLE_PARAKEET_FAILBACK_ENABLED": {"owner": "liveoptimal / two-lane lead", "review_by": "2026-12-01"},
     "STT_FALLBACK_LIVENESS_GRACE_SECONDS": {"seeded": "2026-10-25"},

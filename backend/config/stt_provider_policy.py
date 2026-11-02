@@ -12,6 +12,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Final, Mapping
 
+from config.live_stt_gpu_fleet import gpu_fleet_off
+
 
 class STTServingSurface(str, Enum):
     STREAMING = 'streaming'
@@ -337,6 +339,10 @@ def deepgram_provider_for_runtime(self_hosted: bool) -> str:
 
 def provider_is_enabled(provider: str, surface: STTServingSurface) -> bool:
     """Return whether a provider may serve the specified product surface."""
+    if gpu_fleet_off() and (
+        provider == PARAKEET_PROVIDER or (provider == MODULATE_PROVIDER and surface == STTServingSurface.STREAMING)
+    ):
+        return False
     return surface in PROVIDER_SERVING_SURFACES.get(provider, frozenset())
 
 
