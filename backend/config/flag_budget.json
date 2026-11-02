@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 215,
+  "count": 216,
   "names": {
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
@@ -28,6 +28,7 @@
     "BATCH_VENDOR_ROUTING_SHADOW_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTE_TABLE": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_FAILOVER_ENABLED": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
+    "STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP": {"owner": "lidprobe / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_REDRIVE_ENABLED": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_REDRIVE_SECONDS": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_STALE_GRACE_SECONDS": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
