@@ -137,7 +137,7 @@ def entries(frames: list[dict], rate: int, source: dict[str, Any]) -> list[dict]
             'is_batch': False,
         }
         previous = result[-1] if result else None
-        expected = previous['timestamp'] + previous['span']['samples'] / 16000 if previous else 0.0
+        expected = previous['raw_end'] if previous else 0.0
         if (
             previous
             and not frame['gap_before']

@@ -9,7 +9,9 @@ over later overlapping raw receipts, independent of listing/window order.
 
 Frame rendition offsets and lengths use cumulative whole-stream resampler
 boundaries. Original capture offsets/counts remain available to readers at other
-output rates. Captured bytes, frame starts, gaps and samples are unchanged. Frame
+output rates. Contiguity uses original capture endpoints, so rendition rounding
+cannot create a false gap or overlap between adjacent frames. Captured bytes,
+frame starts, gaps and samples are unchanged. Frame
 validation shares pusher's existing 1 ms overlap tolerance; accepted jitter no
 longer prevents a receipt. Replay proof caches and charges whole objects by
 bucket/path/generation, then selects each span independently.
