@@ -229,6 +229,8 @@ def redrive_one(
         )
         if refused:
             return refused
+    if preflight is None:
+        return 'fenced'
     audio, duration, spans, worker = preflight
     measured = sum(span['end'] - span['start'] for span in spans)
     # The same bound acoustic proof applies to ordinary worker failures. This

@@ -13,7 +13,9 @@ def utc(value):
         stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
     except ValueError:
         raise scope.ScopeRefused('attestation_utc_required')
-    scope.require(stamp.utcoffset() is not None and stamp.utcoffset().total_seconds() == 0, 'attestation_utc_required')
+    offset = stamp.utcoffset()
+    if offset is None or offset.total_seconds() != 0:
+        raise scope.ScopeRefused('attestation_utc_required')
     return stamp.timestamp()
 
 
@@ -109,7 +111,10 @@ def refused_candidate(job, *, prepared, after, cutoff, max_seconds, window):
     )
     when = marker.get('started_at', marker.get('prepared_at'))
     scope.require(
-        type(when) in {int, float} and math.isfinite(when) and window[0] <= when < window[1],
+        isinstance(when, (int, float))
+        and not isinstance(when, bool)
+        and math.isfinite(when)
+        and window[0] <= when < window[1],
         'attempt_outside_attested_window',
     )
     return scope.digest({'job': job, 'attested_intent': marker})
