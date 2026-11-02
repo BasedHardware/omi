@@ -99,6 +99,7 @@ def redrive_one(
     independent_language=False,
     repair=False,
     ordinary_empty_independent=False,
+    retry_failed=False,
 ):
     """One explicit retry after a caught provider failure; uncertain process loss holds.
 
@@ -128,7 +129,7 @@ def redrive_one(
         return 'disabled'
     elif independent_redrive(original_job) != independent_language:
         return 'independent_plan_required'
-    protocol = SpeechRedriveStore(store, server_flags=server_flags)
+    protocol = SpeechRedriveStore(store, server_flags=server_flags, max_attempts=2 if retry_failed else 1)
     prior_marker = original_job.get('speech_redrive') or {}
     preflight = None
     if (

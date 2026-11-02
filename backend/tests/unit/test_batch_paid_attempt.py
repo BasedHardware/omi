@@ -26,6 +26,7 @@ def run(store, artifacts, binding, old, stt):
         server_flags=SERVING_ENV,
         clock=lambda: 100,
         stt=stt,
+        retry_failed=True,
     )
 
 
@@ -92,7 +93,7 @@ def test_retry_token_fences_late_success_and_cas(setup, monkeypatch, legacy_depe
     client, store, binding, artifacts, _, _, old = enabled(setup, monkeypatch, legacy_dependencies)
     stt = Mock(side_effect=RecoveryFailure('provider', 'provider_failed'))
     run(store, artifacts, binding, old, stt)
-    protocol = SpeechRedriveStore(store, server_flags=SERVING_ENV)
+    protocol = SpeechRedriveStore(store, server_flags=SERVING_ENV, max_attempts=2)
     first = deepcopy(row(client)['speech_redrive'])
     second = protocol.prepare('bad', binding.owner_id, 'plan', old, 101)['speech_redrive']
     assert second['token'] != first['token']

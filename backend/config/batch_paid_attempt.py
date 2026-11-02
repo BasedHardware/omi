@@ -9,6 +9,7 @@ def retryable(marker, state):
         and marker.get('paid_state') == 'attempted'
         and type(marker.get('attempt_count')) is int
         and marker['attempt_count'] == 1
+        and marker.get('max_attempts') == 2
         and bool(marker.get('settled_at'))
         and (marker.get('failure') or {}).get('stage') == 'provider'
         and (marker.get('failure') or {}).get('reason') in {'provider_failed', 'operation_failed'}
@@ -17,11 +18,12 @@ def retryable(marker, state):
     )
 
 
-def attempted(marker, provider=None):
+def attempted(marker, provider=None, *, max_attempts=None):
     marker.update(
         paid_state='attempted',
         attempt_count=marker.get('attempt_count', 0) + 1,
         paid_provider=provider or marker['provider'],
+        max_attempts=max_attempts or marker.get('max_attempts', 1),
     )
 
 

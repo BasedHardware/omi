@@ -809,6 +809,7 @@ def main():
                     independent_language=args.independent_language,
                     repair=repair,
                     ordinary_empty_independent=ordinary_empty,
+                    retry_failed=True,
                 )
             outcomes[outcome] += 1
             if not scope.successful(outcome):

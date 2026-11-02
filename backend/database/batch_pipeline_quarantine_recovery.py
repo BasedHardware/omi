@@ -230,7 +230,7 @@ class RecoveryStore:
             job['recovery']['provider'] = provider
             job['recovery']['started_at'] = now
             if operator_paid_attempt:
-                attempted(job['recovery'], 'soniox')
+                attempted(job['recovery'], 'soniox', max_attempts=2)
             tx.put('jobs', segment_id, job)
             return True
 
@@ -341,7 +341,7 @@ class RecoveryStore:
             recovery.pop('settled_at', None)
             recovery.update(provider='modulate', started_at=now)
             if operator_paid_attempt:
-                attempted(recovery, 'soniox')
+                attempted(recovery, 'soniox', max_attempts=2)
             job['recovery_state'] = 'running'
             tx.put('jobs', segment_id, job)
             return True

@@ -98,11 +98,14 @@ def expected_route(job, marker):
 
 
 class SpeechRedriveStore:
-    def __init__(self, store, *, server_flags):
+    def __init__(self, store, *, server_flags, max_attempts=1):
         """Operator-only. `server_flags` is the serving role's live settings for an
         unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
         self.server_flags = server_flags
+        if max_attempts not in {1, 2}:
+            raise ValueError('bounded paid attempts required')
+        self.max_attempts = max_attempts
 
     def checked(self, tx, segment_id):
         return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
@@ -216,7 +219,7 @@ class SpeechRedriveStore:
                     or marker.get('silent', False) is not silent
                 ):
                     raise ProjectionBlocked('different speech redrive intent')
-                if retryable(marker, marker.get('state')):
+                if self.max_attempts == 2 and retryable(marker, marker.get('state')):
                     if not self.terminal(job, existing, now):
                         raise ProjectionBlocked('terminal held obligation required')
                     marker = renewed(marker, token)
@@ -239,6 +242,7 @@ class SpeechRedriveStore:
                 'prepared_at': now,
                 'privacy_generation': binding.privacy_generation,
                 'prior_recovery': deepcopy(expected_recovery),
+                'max_attempts': self.max_attempts,
             }
             if ordinary_empty_independent:
                 job['speech_redrive']['ordinary_empty_independent'] = True
