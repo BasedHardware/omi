@@ -146,6 +146,43 @@ def test_transaction_retry_helper_is_not_the_caller(client, transport, monkeypat
     assert _by_caller('users/memories', 'set', caller) == before + 1
 
 
+@pytest.mark.parametrize('method', ['commit', 'batch_write'])
+def test_batch_privacy_fence_preserves_writer_attribution(client, transport, monkeypatch, method):
+    from database import batch_privacy_write_fence as fence
+
+    monkeypatch.setattr(FirestoreClient, 'commit', fence._wrap_commit(FirestoreClient.commit))
+    monkeypatch.setattr(FirestoreClient, 'batch_write', fence._wrap_bulk(FirestoreClient.batch_write))
+    caller = f'{__name__}:test_batch_privacy_fence_preserves_writer_attribution'
+    source_before = _by_caller('users/conversations', 'set', caller)
+    token_before = _by_caller('batch_pipeline_privacy', 'merge', caller)
+    if method == 'commit':
+        client.document('users/u1/conversations/c1').set({'record_lane_owner': 'batch_live_v1'})
+    else:
+        client._firestore_api.batch_write(
+            request={
+                'database': client._database_string,
+                'writes': [Write(update=Document(name=f'{ROOT}/users/u1/conversations/c1'))],
+            }
+        )
+    assert _by_caller('users/conversations', 'set', caller) == source_before + 1
+    assert _by_caller('batch_pipeline_privacy', 'merge', caller) == token_before + 1
+    assert len(transport.requests) == 1
+    assert len(transport.requests[0].writes) == 2
+
+
+@pytest.mark.parametrize(
+    'parts,expected',
+    [
+        (('users', 'u' * 28, 'deleted_conversations', 'private-conversation'), 'users/deleted_conversations'),
+        (('batch_pipeline_privacy', 'private-owner-token'), 'batch_pipeline_privacy'),
+        (('legal_holds', 'u' * 28), 'legal_holds'),
+        (('legal_hold_deletion_gates', 'u' * 28), 'legal_hold_deletion_gates'),
+    ],
+)
+def test_privacy_authority_labels_drop_document_identifiers(parts, expected):
+    assert probe.collection_pattern(parts) == expected
+
+
 def test_generic_write_helper_names_its_caller(client, transport):
     # A helper registered as (module, function) plumbing is skipped like a plumbing module.
     def _cas(ref):

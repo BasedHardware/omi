@@ -14,7 +14,19 @@ relevance step (``utils/conversations/relevance.py``).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any
+
+BATCH_RECORD_OWNERS = frozenset({'batch_live_v1', 'batch_sync_v1'})
+SETTLING_ROW_MAX_SECONDS = 60
+# The batch timeliness alarm: a row still unsettled here is an incident to show, not a fragment to hide.
+SETTLING_MAX_HOLD_SECONDS = 2 * 60 * 60
+SETTLING_FIELDS = (
+    'record_lane_owner',
+    'record_projection_revision',
+    'record_upload_failed',
+    'record_audio_partial',
+)
 
 
 def _value(value: Any) -> Any:
@@ -129,3 +141,33 @@ def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
     if data.get('sync_relevance') != 'review':
         return False
     return not is_user_curated(data)
+
+
+def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """Whether a short batch-owned row should wait off Home for its audio.
+
+    Live text on a batch-owned row is provisional: batch replaces it or a later
+    recording absorbs the row. Until then a short row reads as a confusing
+    fragment ("Brief Conversation Fragment", 45s). Only presentation waits, so
+    this is no discard and no low-signal verdict; nothing is stored. Readers
+    enforce the deadline, so a lost worker cannot hide a recording forever.
+    """
+    from config.episodes import home_hide_below_floor_rows_enabled
+
+    if not home_hide_below_floor_rows_enabled():
+        return False
+    if data.get('record_lane_owner') not in BATCH_RECORD_OWNERS or is_user_curated(data):
+        return False
+    if data.get('record_projection_revision') or data.get('record_upload_failed') or data.get('record_audio_partial'):
+        return False
+    if _value(data.get('status')) != 'completed':
+        return False
+    started, finished = data.get('started_at'), data.get('finished_at')
+    if not isinstance(started, datetime) or not isinstance(finished, datetime):
+        return False
+    current = datetime.now(timezone.utc).timestamp() if now is None else now
+    if current - finished.timestamp() >= SETTLING_MAX_HOLD_SECONDS:
+        return False
+    structured = data.get('structured')
+    server_minimum = isinstance(structured, Mapping) and structured.get('title_provenance') == 'server_minimum'
+    return server_minimum or (finished - started).total_seconds() < SETTLING_ROW_MAX_SECONDS

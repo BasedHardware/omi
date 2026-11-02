@@ -263,6 +263,15 @@ def entries():
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
         ),
         DriverEntry(
+            'database.batch_pipeline_store.timeliness_sample',
+            domains={'namespace': namespaces, 'terminal_empty_processed': [False, True]},
+            neutrals={
+                'epoch': (1.0, 'cohort boundary operand only'),
+                'now': (10000.0, 'SLA cutoff operand only; due > epoch drives the new-breach counts'),
+                'sla': (7200.0, 'SLA width operand only'),
+            },
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.first_pending',
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
