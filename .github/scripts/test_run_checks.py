@@ -417,19 +417,28 @@ class RunnerBehaviorTests(unittest.TestCase):
         checks: list[dict[str, object]],
         *,
         changed_files: tuple[str, ...] = ("backend/example.py",),
+        append_trace: bool = True,
     ) -> tuple[Path, Path]:
         """Create a tiny committed repo that exercises the real runner CLI."""
         scripts = root / "checks"
         scripts.mkdir(parents=True)
         runs_file = root / "runs.txt"
+        run_markers = root / "run-markers"
+        run_markers.mkdir()
         manifest_lines = ["checks:"]
         for spec in checks:
             check_id = str(spec["id"])
             script = scripts / f"{check_id}.py"
             exit_code = int(spec.get("exit_code", 0))
+            trace = (
+                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                if append_trace
+                else ""
+            )
             script.write_text(
                 "from pathlib import Path\n"
-                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                f"Path({json.dumps(str(run_markers / check_id))}).touch()\n"
+                f"{trace}"
                 f"raise SystemExit({exit_code})\n",
                 encoding="utf-8",
             )
@@ -546,9 +555,13 @@ class RunnerBehaviorTests(unittest.TestCase):
                     {"id": "body-first", "requires_pr_body": True, "exit_code": 3},
                     {"id": "body-second", "requires_pr_body": True, "exit_code": 4},
                 ],
+                append_trace=False,
             )
             result = self._run_cli(root, manifest, changed, "--metadata-only")
-            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+            # Shared append traces can lose an entry on Windows. Independent
+            # receipts prove each parallel check ran; serial order tests below
+            # still assert the append trace, and result assertions stay intact.
+            runs = [path.name for path in (root / "run-markers").iterdir()]
 
         self.assertEqual(result.returncode, 1)
         # Python checks may run in parallel, so only the set of runs is fixed; the summary stays in manifest order.
@@ -1563,8 +1576,48 @@ class ParallelRunnerTests(unittest.TestCase):
         self.assert_finished_checks_keep_their_real_result(parent_start_delay=0)
 
     def test_finished_checks_keep_their_result_when_parent_is_delayed_after_launch(self) -> None:
-        """Force the fast-failure interleaving that used to bypass the sleep barrier."""
+        """The readiness handshake survives a parent descheduled during launch."""
         self.assert_finished_checks_keep_their_real_result(parent_start_delay=0.5)
+
+    def test_completed_results_survive_a_failure_before_the_first_poll(self) -> None:
+        """Exercise an actual early exit without the ready/release sleep hook."""
+        real_popen = subprocess.Popen
+        processes = {}
+        observed_before_poll = []
+        quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [self.script(root, name, body) for name, body in quick.items()]
+            checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
+
+            def start(command, *args, **kwargs):
+                process = real_popen(command, *args, **kwargs)
+                name = Path(command[1]).stem if len(command) > 1 else None
+                if name in quick:
+                    processes[name] = process
+                if name in {"bad", "slow"}:
+                    # bad exits before its siblings launch; before returning
+                    # the last launch, all quick exits must already be visible.
+                    required = ("bad",) if name == "bad" else tuple(quick)
+                    deadline = time.monotonic() + 120
+                    while (
+                        not all(key in processes and processes[key].poll() is not None for key in required)
+                        and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.02)
+                    if name == "slow":
+                        observed_before_poll.append(all(processes[key].poll() is not None for key in quick))
+                return process
+
+            with patch("run_checks.subprocess.Popen", start):
+                result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
+            self.assertEqual(observed_before_poll, [True])
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS fine", stdout)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("CANCELLED fine", stdout)
+            self.assertNotIn("CANCELLED also-bad", stdout)
+            self.assertIn("Manifest checks failed: bad, also-bad", stderr)
 
     def assert_finished_checks_keep_their_real_result(self, *, parent_start_delay: float) -> None:
         real_sleep = time.sleep
