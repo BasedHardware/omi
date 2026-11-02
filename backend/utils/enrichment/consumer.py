@@ -18,6 +18,7 @@ longer owns a lease. Every lease heartbeats (120s lease, 30s beat), so a long su
 """
 
 from __future__ import annotations
+from utils.observability.delivery import record_delivery
 
 import logging
 import threading
@@ -169,6 +170,7 @@ class EnrichmentConsumer:
                 get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
             ):
                 return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+            record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(tokens[4])
