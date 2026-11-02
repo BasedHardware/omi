@@ -174,8 +174,13 @@ scale it with `kubectl scale deploy/<release>-t4 --replicas=N` (N at most the
 Pending L4 count) and back to 0 when they schedule. Helm upgrades keep the live
 count. The L4 HPA's chain-busy metric is namespace-wide, so serving T4 replicas
 raise the L4 recommendation; scale the fallback to 0 as L4 workers schedule
-and the 1800s scale-down window sheds the excess. The bench did not cover flight batching, pipeline depth 2 or lease and
-storage IO; watch the T4 replicas' stage timings and peak memory on first use.
+and the 1800s scale-down window sheds the excess. The bench did not cover flight
+batching, pipeline depth 2 or lease and storage IO. Keep the fallback at zero
+until one T4 running the exact release image passes an approved isolated
+qualification with synthetic audio: a complete flight at production batch/depth
+settings, lease loss and recovery without lost or duplicate projection, and
+encrypted staging through result projection. Record that evidence before
+production activation; the loader bench alone does not qualify the worker.
 
 At the 100% admission target this adds a second GPU supply source before the
 fresh queue reaches saturation. While legacy sync is on, saturated admission
@@ -193,8 +198,10 @@ These are us-central1 list rates, not billed spend or commitments:
 [N1 VM pricing](https://cloud.google.com/products/compute/pricing/general-purpose)
 and [T4 pricing](https://cloud.google.com/products/compute/gpus-pricing).
 There is no reservation, commitment or storage migration. Set N to at most
-the lesser of eight and Pending L4 pods; increase only after the first T4's
-stage timing, memory and fresh-owner wait are healthy. Scale to zero when
+the lesser of eight and Pending L4 pods. Start production with one T4 only
+after that full-flight qualification passes. Expand beyond one only after its
+complete flight and result projection succeed, and its stage timing, peak
+memory and fresh-owner wait are healthy. Scale to zero when
 L4s recover; `t4Fallback.enabled=false` removes the sibling on the next chart
 upgrade. Setting `t4Fallback.replicas=0` alone does not stop a live sibling:
 Helm deliberately preserves its operator-set count.
