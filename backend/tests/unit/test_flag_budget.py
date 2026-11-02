@@ -70,6 +70,7 @@ SCOPE = (
     'config/prerecorded_*.py',
     'config/live_stt_*.py',
     'config/transcription_final_pass.py',
+    'utils/pusher_audio_projection.py',
 )
 
 

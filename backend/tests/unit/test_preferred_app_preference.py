@@ -77,3 +77,21 @@ def test_delete_route_is_registered_beside_put():
         for method in getattr(route, 'methods', set())
     }
     assert {'PUT', 'DELETE'} <= methods
+
+
+def test_builtin_preference_persists_without_marketplace_install_and_omi_clears(monkeypatch):
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_db, 'r', fake)
+
+    def unexpected_catalog_lookup(*args):
+        pytest.fail('built-in preference must not require a marketplace installation')
+
+    monkeypatch.setattr(users_router, 'get_available_app_by_id', unexpected_catalog_lookup)
+    response = users_router.set_preferred_app_for_user(app_id=DEFAULT_SUMMARY_APP_ID, uid=UID)
+    assert response['status'] == 'ok'
+    assert redis_db.get_user_preferred_app(UID) == DEFAULT_SUMMARY_APP_ID
+
+    users_router.clear_preferred_app_for_user(uid=UID)
+    assert redis_db.get_user_preferred_app(UID) is None

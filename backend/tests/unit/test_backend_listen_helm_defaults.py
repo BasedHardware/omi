@@ -88,6 +88,7 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
     assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
     if env_name == 'prod':
+        assert 'name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT\n              value: "0"' in rendered
         token = _env_value(_load_values(expected['values_file']), 'POSTHOG_PRODUCT_CAPTURE_TOKEN')
         assert token and f'name: POSTHOG_PRODUCT_CAPTURE_TOKEN\n              value: "{token}"' in rendered
     assert f'image: "{expected["image_repository"]}:abc1234"' in rendered
@@ -128,6 +129,13 @@ def test_prod_listen_carries_the_paired_100_mobile_batch_only_percent():
         text=True,
     ).stdout
     assert 'name: SERVER_BATCH_ONLY_MOBILE_PERCENT\n              value: "100"' in rendered
+
+
+def test_prod_visible_restore_starts_at_zero_in_its_own_roll():
+    values = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
+    flag = 'SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT'
+    assert _env_value(values, flag) == '0'
+    assert sum(entry.get('name') == flag for entry in values['env']) == 1
 
 
 def test_backend_listen_helm_template_requires_image_tag():
