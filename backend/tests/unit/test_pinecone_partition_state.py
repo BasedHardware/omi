@@ -15,6 +15,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 
 @pytest.fixture
 def db(monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
     client = StrictFirestore()
 
     # Narrow delete extension, proved by the real-emulator completion test below.
@@ -42,6 +43,50 @@ def db(monkeypatch):
 @pytest.fixture
 def key():
     return state.PartitionKey('test-index', 'ns2', 'test-owner')
+
+
+def test_admission_racing_shutdown_settles_before_provider_can_receive_ticket(db, key, monkeypatch):
+    begin = state._begin_mutation
+
+    def begin_during_shutdown(*args):
+        assert state.drain_mutations() == 0
+        return begin(*args)
+
+    monkeypatch.setattr(state, '_begin_mutation', begin_during_shutdown)
+    with pytest.raises(state.PartitionBusy, match='during shutdown'):
+        state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == 0
+    assert route.uncertain_count == 1
+    with pytest.raises(RuntimeError, match='draining'):
+        state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+
+
+def test_failed_uncertain_write_remains_registered_for_another_drain(db, key, monkeypatch):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    mark = state._mark_mutation_uncertain
+
+    def fail(*args):
+        raise RuntimeError('Firestore unavailable')
+
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', fail)
+    assert state.drain_mutations() == 0
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', mark)
+    assert state.drain_mutations() == 1
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
+    state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
+
+
+def test_registry_capacity_rejects_before_durable_admission(db, key, monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(limit=1))
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    with pytest.raises(RuntimeError, match='registry is full'):
+        state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    state.finish_mutation(key, ticket, firestore_client=db)
+    state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
 
 
 def receipt(key, route, **changes):

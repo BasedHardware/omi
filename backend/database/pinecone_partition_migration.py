@@ -357,7 +357,7 @@ class OwnerMigration:
             with external_write_fence(self.key.uid, firestore_client=self.firestore_client):
                 attempted = True
                 yield
-        except Exception:
+        except BaseException:
             if attempted and ids != [BARRIER_ID]:
                 state.mark_mutation_uncertain(self.key, ticket, firestore_client=self.firestore_client)
             else:
