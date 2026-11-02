@@ -74,8 +74,10 @@ All labels are closed enums with no owner, conversation, job or session IDs.
 
 Mismatch logs contain only fixed family and decision names and are sampled to
 one line per family/minute. Shadow reads have their own `mode=shadow` label so
-they do not inflate the live baseline. Do not interpret a zero mismatch counter
-without a nonzero comparison denominator as qualification.
+they do not inflate the live baseline. Qualification needs actual eligible memo
+hits on each candidate family/plane and a match-plus-mismatch denominator;
+ineligible live fallbacks or shadow errors do not prove cache correctness.
+Unresolved shadow errors or missing candidate coverage block qualification.
 
 ## Deploy and ramp
 
@@ -92,7 +94,9 @@ without a nonzero comparison denominator as qualification.
    snapshots. Shadow wins if an enforcement lever is also present.
 3. Require **at least 14 days** of all-plane shadow and **zero unexplained
    `decision_mismatch`**, plus the emulator writer matrix and privacy contracts.
-   Count/classify benign concurrent ordering rather than discarding it.
+   Count/classify benign concurrent ordering rather than discarding it. Grade
+   memo economics against the scope's 30% repeat-key hit-rate bar; a cache with
+   insufficient repeat-key traffic has no demonstrated saving.
 4. Infracost owns expansion and the first enforcement decision is due **14 days
    after shadow reaches all planes**. Remove shadow for the qualified cohort,
    then ramp each independent lever (`bpp_generation_memo`,

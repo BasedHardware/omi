@@ -148,13 +148,17 @@ def _wrap_commit(original: Any) -> Any:
     return wrapped
 
 
-def _bulk_parts(request):
-    prepared = BatchWriteRequest(request)
+def _bulk_parts(request, kwargs):
+    fields = {key: kwargs.pop(key) for key in ('database', 'writes', 'labels') if key in kwargs}
+    if request is not None and any(value is not None for value in fields.values()):
+        raise ValueError('request and flattened batch-write fields cannot both be supplied')
+    supplied = request if request is not None else fields
+    prepared = BatchWriteRequest(supplied)
     # BatchWrite is non-atomic and forbids duplicate documents. Relevant writes
     # become independent atomic Commits, each containing its own fence. Unrelated
     # writes retain BatchWrite, its labels and its per-write status semantics.
     indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write])]
-    return prepared, indices
+    return supplied, prepared, indices
 
 
 def _bulk_failure(error):
@@ -192,9 +196,9 @@ def _wrap_bulk(original: Any) -> Any:
 
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
-            prepared, indices = _bulk_parts(request)
+            supplied, prepared, indices = _bulk_parts(request, kwargs)
             if not indices:
-                return await original(client, request=request, **kwargs)
+                return await original(client, request=supplied, **kwargs)
             if prepared.labels:
                 # Commit has no labels field. Refuse before any writes rather
                 # than silently lose a caller's billing attribution.
@@ -218,9 +222,9 @@ def _wrap_bulk(original: Any) -> Any:
 
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
-            prepared, indices = _bulk_parts(request)
+            supplied, prepared, indices = _bulk_parts(request, kwargs)
             if not indices:
-                return original(client, request=request, **kwargs)
+                return original(client, request=supplied, **kwargs)
             if prepared.labels:
                 raise ValueError('labeled batch privacy bulk writes require atomic Commit migration')
             individual = {}

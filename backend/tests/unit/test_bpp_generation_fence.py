@@ -245,6 +245,38 @@ def test_unrelated_bulk_labels_are_preserved_byte_for_byte():
     assert seen == [request] and seen[0] is request
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+async def test_flattened_bulk_authorities_cannot_bypass_atomic_token(monkeypatch, asynchronous):
+    captured = []
+
+    def commit(client, request=None, **kwargs):
+        captured.append(CommitRequest(request))
+        return CommitResponse(write_results=[WriteResult(), WriteResult()])
+
+    def bulk(client, request=None, **kwargs):
+        raise AssertionError('authority must use atomic Commit, never raw BatchWrite')
+
+    client = SimpleNamespace()
+    if asynchronous:
+
+        async def acommit(client, request=None, **kwargs):
+            return commit(client, request, **kwargs)
+
+        async def abulk(client, request=None, **kwargs):
+            return bulk(client, request, **kwargs)
+
+        client.commit = lambda **kwargs: fence._wrap_commit(acommit)(client, **kwargs)
+        call = fence._wrap_bulk(abulk)(client, database='db', writes=[Write(delete=f'{ROOT}/users/u')])
+        result = await call
+    else:
+        client.commit = lambda **kwargs: fence._wrap_commit(commit)(client, **kwargs)
+        result = fence._wrap_bulk(bulk)(client, database='db', writes=[Write(delete=f'{ROOT}/users/u')])
+    assert len(captured) == 1 and len(captured[0].writes) == 2
+    assert captured[0].writes[-1].update.name == TOKEN
+    assert len(result.status) == 1 and result.status[0].code == 0
+
+
 def test_installer_only_skips_fileless_sdk_stubs_and_propagates_real_import_failure(monkeypatch):
     import builtins
 
