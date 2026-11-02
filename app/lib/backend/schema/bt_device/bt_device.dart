@@ -370,8 +370,10 @@ class BtDevice {
       // device. With two saved devices (Omi + OmiGlass) the primary slot is
       // not necessarily the device asking, so match by id rather than
       // assuming the primary.
-      final saved = SharedPreferencesUtil().btDevices.where((device) => device.id == id).firstOrNull;
-      if (saved == null) return this;
+      // Nothing remembered at all stays BtDevice.empty(), as before.
+      final preferences = SharedPreferencesUtil();
+      final saved = preferences.btDevices.where((device) => device.id == id).firstOrNull;
+      if (saved == null) return preferences.btDevice.id.isEmpty ? BtDevice.empty() : this;
       return copyWith(
         name: saved.name,
         type: saved.type,

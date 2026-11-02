@@ -586,64 +586,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  /// Omi + OmiGlass can be connected together (audio from the pendant, photos
-  /// from the glasses). Shows the paired second device with its status, or the
-  /// action to pair one when the primary device is part of that family.
-  Widget? _secondDeviceGroup(DeviceProvider provider) {
-    final l10n = context.l10n;
-    final primary = provider.connectedDevice ?? provider.pairedDevice;
-    final companion = provider.pairedCompanionDevice;
-
-    if (companion == null) {
-      final canPairSecond = primary != null &&
-          primary.id.isNotEmpty &&
-          (primary.type == DeviceType.omi || primary.type == DeviceType.openglass);
-      if (!canPairSecond) return null;
-      return OmiSettingsGroup(
-        key: const Key('second_device_section'),
-        header: l10n.secondDevice,
-        children: [
-          OmiSettingsRow(
-            key: const Key('pair_second_device_button'),
-            leading: const FaIcon(FontAwesomeIcons.plus),
-            title: l10n.pairSecondDevice,
-            subtitle: l10n.pairSecondDeviceDescription,
-            onTap: () => routeToPage(context, const ConnectDevicePage()),
-          ),
-        ],
-      );
-    }
-
-    final isCompanionConnected = provider.companionDevice?.id == companion.id;
-    final companionBattery = provider.companionBatteryLevel;
-    final statusLabel = isCompanionConnected
-        ? (companionBattery > 0 ? '${l10n.connected} · $companionBattery%' : l10n.connected)
-        : l10n.offline;
-    return OmiSettingsGroup(
-      key: const Key('second_device_section'),
-      header: l10n.secondDevice,
-      children: [
-        OmiSettingsRow(
-          leading: SizedBox(
-            width: 24,
-            height: 24,
-            child: Image.asset(DeviceUtils.getDeviceImageFromBtDevice(companion), fit: BoxFit.contain),
-          ),
-          title: companion.name,
-          value: statusLabel,
-        ),
-        OmiSettingsRow(
-          key: const Key('forget_second_device_button'),
-          leading: const FaIcon(FontAwesomeIcons.linkSlash),
-          title: l10n.forgetSecondDevice,
-          isDestructive: true,
-          showChevron: false,
-          onTap: () => provider.forgetCompanionDevice(),
-        ),
-      ],
-    );
-  }
-
   Widget _forgetGroup(DeviceProvider provider) {
     final l10n = context.l10n;
     return OmiSettingsGroup(
@@ -710,10 +652,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             _customizationGroup(paired ?? connected, provider)
           else
             const DeviceDisconnectedCard(),
-          if (_secondDeviceGroup(provider) case final secondDevice?) ...[
-            gap,
-            secondDevice,
-          ],
+          const _SecondDeviceGroup(),
           gap,
           _deviceGroup(provider),
           gap,
@@ -950,5 +889,82 @@ class _PendingSyncChip extends StatelessWidget {
         style: OmiType.footnote.copyWith(color: OmiColors.warning, fontWeight: FontWeight.w500),
       ),
     );
+  }
+}
+
+/// Omi + OmiGlass can be connected together (audio from the pendant, photos
+/// from the glasses). Shows the paired second device with its status, or the
+/// action to pair one when the primary device is part of that family.
+///
+/// Its own widget, selecting only what it shows: the page watches every
+/// DeviceProvider notification, and this section must not rebuild or relayout
+/// with them.
+class _SecondDeviceGroup extends StatelessWidget {
+  const _SecondDeviceGroup();
+
+  @override
+  Widget build(BuildContext context) {
+    final (canPairSecond, companionId, isCompanionConnected, companionBattery) =
+        context.select<DeviceProvider, (bool, String?, bool, int)>((provider) {
+      final primary = provider.connectedDevice ?? provider.pairedDevice;
+      final companion = provider.pairedCompanionDevice;
+      return (
+        primary != null &&
+            primary.id.isNotEmpty &&
+            (primary.type == DeviceType.omi || primary.type == DeviceType.openglass),
+        companion?.id,
+        companion != null && provider.companionDevice?.id == companion.id,
+        companion == null ? -1 : provider.companionBatteryLevel,
+      );
+    });
+    final l10n = context.l10n;
+    final Widget group;
+    if (companionId == null) {
+      if (!canPairSecond) return const SizedBox.shrink();
+      group = OmiSettingsGroup(
+        key: const Key('second_device_section'),
+        header: l10n.secondDevice,
+        children: [
+          OmiSettingsRow(
+            key: const Key('pair_second_device_button'),
+            leading: const FaIcon(FontAwesomeIcons.plus),
+            title: l10n.pairSecondDevice,
+            subtitle: l10n.pairSecondDeviceDescription,
+            onTap: () => routeToPage(context, const ConnectDevicePage()),
+          ),
+        ],
+      );
+    } else {
+      final provider = context.read<DeviceProvider>();
+      final companion = provider.pairedCompanionDevice;
+      if (companion == null) return const SizedBox.shrink();
+      final statusLabel = isCompanionConnected
+          ? (companionBattery > 0 ? '${l10n.connected} · $companionBattery%' : l10n.connected)
+          : l10n.offline;
+      group = OmiSettingsGroup(
+        key: const Key('second_device_section'),
+        header: l10n.secondDevice,
+        children: [
+          OmiSettingsRow(
+            leading: SizedBox(
+              width: 24,
+              height: 24,
+              child: Image.asset(DeviceUtils.getDeviceImageFromBtDevice(companion), fit: BoxFit.contain),
+            ),
+            title: companion.name,
+            value: statusLabel,
+          ),
+          OmiSettingsRow(
+            key: const Key('forget_second_device_button'),
+            leading: const FaIcon(FontAwesomeIcons.linkSlash),
+            title: l10n.forgetSecondDevice,
+            isDestructive: true,
+            showChevron: false,
+            onTap: () => provider.forgetCompanionDevice(),
+          ),
+        ],
+      );
+    }
+    return Padding(padding: const EdgeInsets.only(top: OmiSpacing.xxl), child: group);
   }
 }

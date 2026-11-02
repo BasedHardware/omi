@@ -277,6 +277,9 @@ void main() {
 
   group('Forget Device in Device Settings with a pendant and glasses saved', () {
     const unmanage = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice';
+    // Forget disarms native saved reconnect before releasing the device; an unanswered
+    // platform call would park the forget inside the widget test's fake clock.
+    const configureSavedReconnect = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.configureSavedReconnect';
     final unmanaged = <String>[];
 
     setUp(() {
@@ -294,10 +297,14 @@ void main() {
         unmanaged.add((BleHostApi.pigeonChannelCodec.decodeMessage(message) as List<Object?>).first! as String);
         return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]);
       });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+          configureSavedReconnect, (_) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]));
     });
 
     tearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(unmanage, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler(configureSavedReconnect, null);
     });
 
     /// Both devices saved (pendant primary, glasses companion), [connected] the one the page shows.
