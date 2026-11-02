@@ -106,6 +106,7 @@ const _notifications = 'lib/pages/settings/notifications_settings_page.dart';
 const _voice = 'lib/pages/settings/voice_settings_page.dart';
 const _device = 'lib/pages/settings/device_settings.dart';
 const _deviceInfo = 'lib/pages/settings/device/device_info_groups.dart';
+const _deviceButtons = 'lib/pages/settings/device/device_button_gesture_rows.dart';
 const _permissions = 'lib/pages/settings/permissions_page.dart';
 const _developer = 'lib/pages/settings/developer.dart';
 
@@ -263,13 +264,13 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   // Device (only while connected)
   SettingsSearchEntry('firmware', (l) => l.firmware, SettingsDestination.device, _deviceInfo,
       visible: _whenDeviceConnected),
-  SettingsSearchEntry('singleTap', (l) => l.singleTap, SettingsDestination.device, _device,
+  SettingsSearchEntry('singleTap', (l) => l.singleTap, SettingsDestination.device, _deviceButtons,
       visible: _whenDeviceConnected),
-  SettingsSearchEntry('doubleTap', (l) => l.doubleTap, SettingsDestination.device, _device,
+  SettingsSearchEntry('doubleTap', (l) => l.doubleTap, SettingsDestination.device, _deviceButtons,
       visible: _whenDeviceConnected),
-  SettingsSearchEntry('tripleTap', (l) => l.tripleTap, SettingsDestination.device, _device,
+  SettingsSearchEntry('tripleTap', (l) => l.tripleTap, SettingsDestination.device, _deviceButtons,
       visible: _whenDeviceConnected),
-  SettingsSearchEntry('longPress', (l) => l.longPress, SettingsDestination.device, _device,
+  SettingsSearchEntry('longPress', (l) => l.longPress, SettingsDestination.device, _deviceButtons,
       visible: _whenDeviceConnected),
   SettingsSearchEntry('ledBrightness', (l) => l.ledBrightness, SettingsDestination.device, _device,
       visible: _whenDeviceConnected),

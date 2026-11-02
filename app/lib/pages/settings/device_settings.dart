@@ -399,6 +399,29 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Sections.
 
+  // DeviceProvider ticks rebuild this page, and a rebuilt OmiSettingsRow relays out and repaints
+  // its whole group. Reuse the group while everything it reads is unchanged, so a tick skips it.
+  Object? _customizationInputs;
+  Widget? _customizationGroupCache;
+
+  Widget _cachedCustomizationGroup(BtDevice? device, DeviceProvider provider) {
+    final inputs = (
+      device,
+      provider,
+      Localizations.localeOf(context),
+      _isFindingDevice,
+      _omiButtonActionsEnabled,
+      _buttonGestureRows,
+      (_isDimRatioLoaded, _hasDimmingFeature, _dimRatio),
+      (_isMicGainLoaded, _hasMicGainFeature, _micGain),
+    );
+    if (_customizationGroupCache == null || inputs != _customizationInputs) {
+      _customizationInputs = inputs;
+      _customizationGroupCache = _customizationGroup(device, provider);
+    }
+    return _customizationGroupCache!;
+  }
+
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
@@ -638,7 +661,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             gap,
           ],
           if (provider.isConnected)
-            _customizationGroup(paired ?? connected, provider)
+            _cachedCustomizationGroup(paired ?? connected, provider)
           else
             const DeviceDisconnectedCard(),
           gap,
