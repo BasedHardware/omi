@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from google.cloud import firestore
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from database import review_store
 from models.agent_edit import DreamHarnessEdit
@@ -342,6 +342,21 @@ async def check_lines(lines, records, verify_turn, *, tokens, deadline_seconds):
 # --- the pass ------------------------------------------------------------------------------------
 
 
+def failure_label(error: Exception) -> str:
+    """One bare identifier naming the cause, never model text; dream_pass drops anything else."""
+    label = type(error).__name__
+    code = str(error)
+    if isinstance(error, ValidationError):
+        items = error.errors(include_input=False, include_url=False, include_context=False)
+        first = min(items, key=lambda item: [str(part) for part in item['loc']])
+        parts = [part for part in first['loc'] if isinstance(part, str)]
+        # An extra key's name is model-authored.
+        label = '__'.join([label, *(parts[:-1] if first['type'] == 'extra_forbidden' else parts), first['type']])
+    elif code.startswith(('dream_', 'agent_')):
+        label += '__' + code
+    return label[:64] if label[:64].isidentifier() else type(error).__name__
+
+
 async def run(
     uid: str,
     *,
@@ -386,9 +401,12 @@ async def run(
             )
     except TimeoutError:
         summary['status'] = 'timeout'
+        summary['total_tokens'] = spent()
     except Exception as error:
         logger.warning('event=dream_lever_error lever=state_pass exc=%s', type(error).__name__)
         summary['status'] = 'failed'
+        summary['failure'] = failure_label(error)
+        summary['total_tokens'] = spent()
     doc = summary.pop('_profile_doc', None)
     if summary['status'] != 'ready' or doc is None:
         return summary

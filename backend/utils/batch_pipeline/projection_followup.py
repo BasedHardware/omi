@@ -13,10 +13,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from config.batch_pipeline import projection_followup_page_enabled
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
+from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
@@ -44,8 +46,30 @@ class ProjectionFollowups:
         self.owed: dict[str, None] = {}
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
+        self.page = 0
+        self.pages: dict[str, int] = {}
+        self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
 
     def candidates(self):
+        if projection_followup_page_enabled():
+            # The query is already the durable receipt hint. Do not refetch
+            # each result twice just to choose work. Filter pinned sync policy
+            # before queueing so it cannot delay async recovery/owed rows.
+            # Keep retrying unchanged receipts: a sibling or destination can
+            # unblock them without changing this result's version.
+            self.discovery.states = PROJECTION_FINISH_STATES
+            candidates = []
+            for sid in self.discovery.next(limit=100):
+                job = self.projector.store.ref('jobs', sid).get().to_dict() or {}
+                raw = (job.get('policy_parts') or {}).get('projection')
+                if raw is None:
+                    # Legacy unpinned policy follows the same privacy-aware
+                    # resolution as before. The common pinned path is one read.
+                    raw = self.projector.store.read(sid)[0]['policy_parts']['projection']
+                if ProjectionPolicy.from_dict(raw).async_projection:
+                    candidates.append(sid)
+            return candidates
+        self.discovery.states = None
         store = self.projector.store
         # Assignment failures/partial multipart output must not consume the
         # follow-up slots ahead of rows that have actually persisted.
@@ -63,6 +87,7 @@ class ProjectionFollowups:
         # cursor. They wait for the next discovery pass and join behind its page,
         # so they never jump discovered work and never keep discovery from running.
         for segment in tail:
+            self.forget_page(segment)  # Owed recovery work always probes completion.
             if segment in self.owed:
                 continue
             if len(self.owed) < MAX_OWED:
@@ -76,6 +101,8 @@ class ProjectionFollowups:
             # segment claims and receipt fences are unchanged; discovery resumes
             # once the queue drains.
             first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
+            for segment in first:
+                self.forget_page(segment)  # Targeted recovery wakes always probe completion.
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
@@ -97,6 +124,12 @@ class ProjectionFollowups:
         # ahead of the discovered page instead of replacing the queue.
         queued = list(self.pending)
         discovered = [segment for segment in segments if segment not in self.tasks and segment not in queued]
+        # Each discovered page gets fresh probes. Keep older page markers
+        # until its queued/running tasks finish; they never suppress a new page.
+        self.page += 1
+        for segment in discovered:
+            if segment not in self.owed:
+                self.pages[segment] = self.page
         owed = [
             segment
             for segment in self.owed
@@ -120,14 +153,22 @@ class ProjectionFollowups:
                 self.after = segment
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done))
 
+    def forget_page(self, segment):
+        page = self.pages.pop(segment, None)
+        if page is not None and page not in self.pages.values():
+            self.completion_attempts = {key for key in self.completion_attempts if key[0] != page}
+
     def finished(self, segment, task):
         self.tasks.pop(segment, None)
+        self.forget_page(segment)
         if task.cancelled():
             # Global background-task shutdown must not replenish a cancelled
             # worker with another task after the shutdown snapshot was taken.
             self.closed = True
             self.pending.clear()
             self.owed.clear()
+            self.pages.clear()
+            self.completion_attempts.clear()
         self.launch()  # Refill immediately, without another 20s serving sleep.
 
     def read_persisted(self, segment):
@@ -166,6 +207,13 @@ class ProjectionFollowups:
             if not acquired:
                 return
             job, entry, binding = await run_blocking(db_executor, self.read_persisted, segment)
+            if projection_followup_page_enabled():
+                policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                if not policy.async_projection:
+                    return  # The synchronous sweep owns these receipts.
+            was_ready = entry['projection']['state'] == 'ready' and all(
+                part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
+            )
             item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
             parts = entry.get('projection_parts')
             for index, receipt in (
@@ -174,7 +222,21 @@ class ProjectionFollowups:
                 await self.finish_part(item, binding, receipt, int(index) if index is not None else None)
             # Usage is resolved only when every sibling has ready receipts;
             # complete() atomically fences ledger/usage/client status as before.
-            await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+            page = self.pages.get(segment, 0)
+            key = (page, binding)
+            coalesce = projection_followup_page_enabled() and was_ready and page != 0
+            if coalesce:
+                if key in self.completion_attempts:
+                    return
+                self.completion_attempts.add(key)
+            try:
+                await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+            except BaseException:
+                # Failure/cancellation is not a readiness result. Another
+                # sibling in this page may immediately retry the probe.
+                if coalesce:
+                    self.completion_attempts.discard(key)
+                raise
         except (ProjectionBlocked, BatchPrivacyBlocked):
             logger.info('event=batch_projection_followup outcome=blocked')
         except Exception as error:

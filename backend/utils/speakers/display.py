@@ -116,7 +116,7 @@ def prompt_speaker_map(transcript: str, mapping: Mapping[Any, str | None]) -> tu
 
 def sanitize_speaker_text(text: str) -> str:
     """Generated prose and replayed state cannot reintroduce old numeric placeholders."""
-    return re.sub(r'(?i)\b(?:speaker|spk)[ _](?:c?\d+)\b', 'a speaker', text)
+    return re.sub(r'\b(?:(?i:(?:speaker|spk)[ _]c?\d+)|(?:Speaker|SPEAKER)[ _][A-Z])\b', 'a speaker', text)
 
 
 def evidence_voice_keys(evidence: Any) -> dict[str, str]:

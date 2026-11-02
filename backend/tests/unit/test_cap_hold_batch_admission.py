@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.responses import JSONResponse
 
+from database.cap_recovery_pacing import Decision
 from utils.batch_pipeline import cap_hold_admission as adapter
 from utils.batch_pipeline import intake
 from utils.sync import cap_hold, cap_hold_recovery
@@ -48,6 +49,15 @@ def test_only_unspent_sealed_holds_are_eligible(row, expected):
     assert adapter.enabled_for(row, LegacySyncMode.DRAINING) is expected
     assert adapter.enabled_for(row, LegacySyncMode.DARK) is expected
     assert adapter.enabled_for(row, LegacySyncMode.ON) is False
+
+
+def test_cap_hold_retirement_reads_the_hold_owner(monkeypatch):
+    from utils.sync import legacy_dark
+
+    seen = []
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: seen.append(uid) or LegacySyncMode.DRAINING)
+    assert adapter.enabled_for({'state': 'held'}, uid=UID)
+    assert seen == [UID]
 
 
 def test_held_wav_becomes_bounded_units_on_the_capture_clock(tmp_path):
@@ -160,18 +170,24 @@ def hook(monkeypatch):
     monkeypatch.setattr(cap_hold_recovery, '_erase', lambda uid, snapshot, current: events.append(('erase',)))
     monkeypatch.setattr(cap_hold_recovery, '_settle_and_erase', lambda *a: events.append(('settle_and_erase',)))
     monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: True)
+    paced = []
+    monkeypatch.setattr(
+        cap_hold_recovery.cap_recovery_pacing,
+        'reserve',
+        lambda seconds: paced.append(seconds) or Decision('granted'),
+    )
 
     async def selected_lane(uid, current):
         return 'sync'  # main #22494: recovery follows the hold's original lane (missing legacy origin = sync)
 
     monkeypatch.setattr(cap_hold_recovery, '_selected_lane', selected_lane)
     snapshot = SimpleNamespace(id='hold-1', reference=object(), to_dict=lambda: dict(row))
-    return SimpleNamespace(events=events, snapshot=snapshot, row=row)
+    return SimpleNamespace(events=events, snapshot=snapshot, row=row, paced=paced)
 
 
 @pytest.mark.asyncio
 async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
 
     async def admit(uid, snapshot, row):
         return adapter.HeldAdmission('admitted', 'bp_job')
@@ -184,17 +200,18 @@ async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monk
         lambda uid, hold_id, **kwargs: hook.events.append(('reserve', hold_id, kwargs['batch_job_id'])),
     )
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    # No erase at hand-off: until batch projects it, the staged batch object is the only other copy
+    # and the batch bucket may expire it by age. finish_handoff erases after projection.
     assert hook.events == [
         ('reserve', 'hold-1', 'bp_job'),
         ('save', {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}),
-        ('erase',),
         ('release', 'lease'),
     ]
 
 
 @pytest.mark.asyncio
 async def test_unadmitted_hold_stays_held_for_the_next_sweep(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
 
     async def admit(uid, snapshot, row):
         return adapter.HeldAdmission('retry')
@@ -206,14 +223,14 @@ async def test_unadmitted_hold_stays_held_for_the_next_sweep(hook, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_on_keeps_the_legacy_recovery_path(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: False)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: False)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert ('legacy',) in hook.events and ('erase',) not in hook.events
 
 
 @pytest.mark.asyncio
 async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
     monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: False)
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('gated owner admitted'))
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
@@ -221,12 +238,139 @@ async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_reselecting_a_batch_admitted_row_is_a_no_op(hook, monkeypatch):
+async def test_hand_off_spends_the_recovery_pacing_budget_first(hook, monkeypatch):
+    hook.row.update(seconds=13.3)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+
+    async def admit(uid, snapshot, row):
+        hook.events.append(('admit',))
+        return adapter.HeldAdmission('admitted', 'bp_job')
+
+    monkeypatch.setattr(adapter, 'admit_held', admit)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'reserve', lambda *a, **k: None)
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.paced == [13.3]
+    assert hook.events[0] == ('admit',)  # nothing saved before the grant; admission follows it
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'decision', [Decision('deferred', 12.5), Decision('refused', 60, 'unavailable')], ids=['deferred', 'refused']
+)
+async def test_unpaced_hand_off_keeps_the_audio_held_and_schedules_a_retry(hook, monkeypatch, decision):
+    hook.row.update(seconds=30.0)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+    monkeypatch.setattr(cap_hold_recovery.cap_recovery_pacing, 'reserve', lambda seconds: decision)
+    monkeypatch.setattr(cap_hold_recovery.time, 'time', lambda: 1000.0)
+    monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('admitted without a pacing grant'))
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
+    assert hook.events == [
+        (
+            'save',
+            {
+                'next_attempt_at': 1000.0 + decision.retry_after,
+                'pacing_deferred_since': 1000.0,
+                'pacing_reason': decision.reason,
+            },
+        ),
+        ('release', 'lease'),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_hold_larger_than_the_burst_is_charged_one_full_bucket(hook, monkeypatch):
+    # 60 audio-h/h with a 60 s burst is a 3600 s bucket; a 2 h hold must not be refused as oversized forever.
+    monkeypatch.setenv('CAP_HOLD_RECOVERY_AUDIO_HOURS_PER_HOUR', '60')
+    hook.row.update(seconds=7200.0)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+
+    async def admit(uid, snapshot, row):
+        return adapter.HeldAdmission('admitted', 'bp_job')
+
+    monkeypatch.setattr(adapter, 'admit_held', admit)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'reserve', lambda *a, **k: None)
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.paced == [3600.0]
+
+
+@pytest.mark.asyncio
+async def test_a_granted_hand_off_clears_an_earlier_pacing_deferral(hook, monkeypatch):
+    hook.row.update(seconds=10.0, pacing_deferred_since=900.0, pacing_reason='capacity', next_attempt_at=950.0)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
+
+    async def admit(uid, snapshot, row):
+        return adapter.HeldAdmission('admitted', 'bp_job')
+
+    monkeypatch.setattr(adapter, 'admit_held', admit)
+    monkeypatch.setattr(cap_hold_recovery.cap_hold_reservations, 'reserve', lambda *a, **k: None)
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.events[0] == ('save', {'pacing_deferred_since': 0, 'pacing_reason': '', 'next_attempt_at': 0})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('projected, erased', [(True, [('erase',)]), (False, [])], ids=['projected', 'pending'])
+async def test_reselecting_a_batch_admitted_row_erases_only_after_projection(hook, monkeypatch, projected, erased):
     hook.row.update(state='batch_admitted', batch_job_id='bp_job')
     monkeypatch.setattr(cap_hold, 'claim', lambda *a: pytest.fail('terminal hand-off claimed again'))
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('terminal hand-off re-admitted'))
+    monkeypatch.setattr(adapter, 'handoff_projected', lambda uid, job_id: projected)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
-    assert hook.events == [('erase',)]  # finishes an interrupted erase only; never settles (no double bill)
+    assert hook.events == erased  # never settles (no double bill); never erases unprojected audio
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'row',
+    [
+        {'state': 'held', 'batch_job_id': 'bp_job'},
+        {'state': 'batch_admitted'},
+        {'state': 'purged', 'batch_job_id': 'bp_job'},
+    ],
+    ids=['not-handed-off', 'no-job', 'already-purged'],
+)
+async def test_finish_handoff_ignores_rows_that_are_not_pending_hand_offs(hook, monkeypatch, row):
+    monkeypatch.setattr(adapter, 'handoff_projected', lambda *a: pytest.fail('status read for a non hand-off'))
+    assert await cap_hold_recovery.finish_handoff(UID, hook.snapshot, row) is False
+    assert hook.events == []
+
+
+@pytest.mark.asyncio
+async def test_finish_handoff_keeps_the_audio_when_the_status_read_fails(hook, monkeypatch):
+    def unreadable(uid, job_id):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(adapter, 'handoff_projected', unreadable)
+    row = {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}
+    assert await cap_hold_recovery.finish_handoff(UID, hook.snapshot, row) is False
+    assert hook.events == []
+
+
+class _LedgerStore:
+    def __init__(self, intakes, content):
+        self.docs = {'intakes': intakes, 'content': content}
+
+    def run(self, operation):
+        return operation(SimpleNamespace(get=lambda collection, key: self.docs[collection].get(key)))
+
+
+_COMPLETED = {'new_memories': [], 'updated_memories': [], 'total_segments': 1, 'failed_segments': 0, 'errors': []}
+
+
+@pytest.mark.parametrize(
+    'intake, ledger, expected',
+    [
+        ({'owner_id': UID, 'content_id': 'c'}, {'status': 'completed', 'result': _COMPLETED}, True),
+        ({'owner_id': UID, 'content_id': 'c'}, {'status': 'processing'}, False),
+        ({'owner_id': UID, 'content_id': 'c'}, {'status': 'partial', 'result': _COMPLETED}, False),
+        ({'owner_id': UID, 'content_id': 'c'}, None, False),
+        ({'owner_id': 'someone-else', 'content_id': 'c'}, {'status': 'completed', 'result': _COMPLETED}, False),
+        (None, None, False),
+    ],
+    ids=['completed', 'processing', 'partial', 'no-ledger', 'foreign-owner', 'no-intake'],
+)
+def test_handoff_projected_needs_a_completed_ledger_for_this_owner(intake, ledger, expected):
+    store = _LedgerStore({'bp_job': intake} if intake else {}, {f'{UID}/c': ledger} if ledger else {})
+    assert adapter.handoff_projected(UID, 'bp_job', store=store) is expected
 
 
 def test_batch_admitted_transition_leaves_nothing_held_so_checkpoint_decrements_the_summary():

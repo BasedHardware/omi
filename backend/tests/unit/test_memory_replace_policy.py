@@ -359,6 +359,9 @@ def test_canonical_capture_preserves_prior_state_when_the_extractor_never_return
 
 def test_canonical_capture_survives_an_external_text_extractor_failure(monkeypatch):
     """External-integration intake has the same extractor-failure boundary."""
+    # This asserts the eager extraction seam; the dedupe-on external path
+    # (prompt-memories resolution + l1 fingerprint) is covered separately.
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource

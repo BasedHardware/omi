@@ -144,9 +144,7 @@ final episodeScenarios = <AuditScenario>[
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Yesterday'), findsOneWidget);
       expect(find.text('Planning Saturday’s trail'), findsOneWidget);
-      final snippet = a.tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(snippet.textSpan!.toPlainText(), endsWith('The newest line keeps my label.'));
+      expect(find.textContaining('The newest line keeps my label.'), findsNothing);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       expect(find.text('A quick call about the garden'), findsOneWidget);
       await a.shot('Open full Home with its header, Today live episode and Yesterday rows');
@@ -196,7 +194,7 @@ final episodeScenarios = <AuditScenario>[
         ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
       ]);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
-      expect(find.textContaining('2 parts'), findsOneWidget);
+      expect(find.textContaining('2 parts'), findsNothing);
       expect(find.text('Dinner at the noodle house'), findsNothing);
       expect(find.text('Coffee and a new book'), findsOneWidget);
       await a.shot('Open Home with closed episode rows');

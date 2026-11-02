@@ -1692,6 +1692,7 @@ class TestAsyncCoordinatorBehavioral:
     def fenced_worker_module(self, monkeypatch):
         # This harness fakes the eager worker; hold scheduling is exercised by the consumer tests.
         monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+        monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
         """Build the import-heavy behavioral harness outside the test call budget."""
         module, stubs = self._load_sync_module()
         # Release prior cyclic mock graphs during harness setup, so a full-heap
@@ -2720,6 +2721,9 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].compute_sync_segment_id = MagicMock(return_value='segment-1')
             stubs['pipeline'].process_segment = MagicMock(return_value=True)
             stubs['pipeline'].checkpoint_sync_content_partial_result.side_effect = RuntimeError('ledger unavailable')
+            stubs['pipeline'].checkpoint_and_mark_sync_segment = MagicMock(
+                side_effect=RuntimeError('ledger unavailable')
+            )
 
             await module._run_full_pipeline_background_async(
                 'checkpoint-job',
@@ -4032,7 +4036,8 @@ class TestBulkheadExecutors:
         assert 'sync_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=16' in source
         assert 'postprocess_executor = MonitoredThreadPoolExecutor(' in source
-        assert 'max_workers=24' in source
+        # Default 24; backend-integration sets POSTPROCESS_EXECUTOR_WORKERS (prod overlay).
+        assert "max_workers=int(os.getenv('POSTPROCESS_EXECUTOR_WORKERS', '24'))" in source
         assert 'storage_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=128' in source
 
