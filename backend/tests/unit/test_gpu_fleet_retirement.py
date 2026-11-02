@@ -55,16 +55,19 @@ def test_cost_router_and_explicit_registry_cannot_escape_retirement(retired):
 
 
 def test_language_probe_window_endpoint_and_idle_failback_do_not_dial_gpu(retired, monkeypatch):
+    from config.policy.listen import window_pressure_allocation
     from config.parakeet_ja import window_endpoint
     from config.live_stt_idle import idle_parakeet_failback_enabled
     from utils.stt import language_gate
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://retired.invalid')
     monkeypatch.setenv('STT_IDLE_PARAKEET_FAILBACK_ENABLED', 'true')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setattr(language_gate.httpx, 'Client', lambda **kw: pytest.fail('retired language probe dialed'))
     assert language_gate.self_detect(b'audio', surface='batch') is None
     assert window_endpoint('en') == ''
     assert not idle_parakeet_failback_enabled()
+    assert window_pressure_allocation() == 0
 
 
 def test_retirement_requires_soniox_key_even_for_old_secret_model_chain(streaming_module):

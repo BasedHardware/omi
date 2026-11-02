@@ -154,6 +154,10 @@ def _window_percent(env, *, strict=False):
 
 def window_pressure_allocation() -> float:
     """Process-start poller activation retains its original un-clamped input."""
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        return 0.0
     return float(os.environ.get('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
 
 
