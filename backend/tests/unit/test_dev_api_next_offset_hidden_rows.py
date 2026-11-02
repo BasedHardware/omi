@@ -55,8 +55,8 @@ def listing(monkeypatch):
     _install_listing(monkeypatch, {row['id']: row for row in ROWS})
     monkeypatch.delenv('OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED', raising=False)
     monkeypatch.setattr(developer, 'check_conversation_transcript_read_limit', lambda *a, **k: None)
-    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *a: None)
-    monkeypatch.setattr(developer, 'populate_folder_names', lambda *a: None)
+    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *a, **k: None)
+    monkeypatch.setattr(developer, 'populate_folder_names', lambda *a, **k: None)
 
 
 def _page(offset: int):
