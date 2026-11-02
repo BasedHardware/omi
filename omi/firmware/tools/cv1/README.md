@@ -57,3 +57,51 @@ See [OTA development design and migration limits](../../docs/ota-development.md)
 [The concrete design](../../docs/ota-development.md) compares an OTA-installed secure supervisor with a bootloader-delegation/internal-swap option against the retained CV1 map. ota-development-plan.json is an engineering budget, not a flash layout. Run `python3 -m unittest -v test_ota_development_model` from this directory for24 proposed-contract simulations. These are arithmetic/state tests with assumed authorization/isolation, not TrustZone/cryptography/bootloader/device proof. Current firmware still lacks owner enrollment and protected return-to-stock; no bootloader/key/protection behavior is implemented.
 
 Independent in-place design review has NOT cleared Option A for implementation or interruption-safe bootstrap: conventional versions can trigger old-loader secondary erasure after a torn primary header; attribution, shared-bus proxy and recovery-mode contracts remain unresolved. The model tests characterize the revised384KiB-bank proposal, not a working protected updater. The prior overlap warning is conditional on caller rounding; the retained driver performs bounded4KiB erases. The optional [pinned-loader source audit](source_review/README.md) and [bootstrap/ownership contract](../../docs/ota-bootstrap-contract.md) record the exact failure path, maximum-version tradeoff and raw-HCI trust boundary. See the design review disposition before any implementation.
+
+## Optional post-boot checks
+
+Private controllers can call `bench_loop.run(..., checks=[('ble', check)])`.
+Each zero-argument callable runs once, after candidate `boot_check` and before
+restore, as a stage with its supplied unique name. It returns a dictionary with
+`result` equal to `passed`, `failed`, or `skipped`; a skip requires a nonempty
+`reason`. A failed check, invalid result or exception stops further checks and
+restores, with `candidate_failed_restored` and the existing quarantine policy.
+A skip permits subsequent checks and restore, but produces
+`candidate_incomplete_restored`, never a pass. Successful restoration after skips
+can release the lease. `checks_ran` lists attempted checks; `checks` also records
+checks that were not reached. Restore failures retain precedence over all check
+outcomes. Process crashes still require manual reconciliation.
+
+`ble_check.BLECheck(private_profile, new_local_receipt_path)` supplies this hook.
+The private JSON profile specifies `ssh_host` (one SSH config host alias), absolute
+remote `app` and `receipt_dir` paths, and optional `mode` (`session`, the default,
+or `audio`) and `expected_serial`. Audio requires the independently obtained
+private serial. Session uses a fixed 20-second deadline; audio uses a fixed
+3-second capture. The remote receipt directory must already exist. The adapter
+launches the app with `open -n -W` through SSH, then fetches its unique JSON receipt;
+Launch Services exit status alone never establishes a pass. Remote launch or fetch
+errors are skipped as `central_unreachable: BLE was not tested`, without including
+argv, stdout or stderr. Malformed or empty receipts that arrived still fail as
+`ble_invalid_receipt`; local receipt I/O errors also fail. Nothing is retried, and
+this module does nothing on import.
+
+Only receipt outcome `passed` with `identity.status == matched` and a configured
+`expected_serial` can pass. A session profile without `expected_serial` is allowed
+but cannot produce a BLE pass. Other identity statuses on a passed receipt are
+skipped because identity was not established. Identity statuses `wrong` and
+`absent` are skipped with that status named, including on `gatt_failed` receipts.
+`no_advertisement`, `permission_denied`, `bluetooth_off` and `connect_failed` are
+also skipped with an explicit “BLE was not tested” reason. On this antenna-less
+bench, missing advertisements or a failed connection cannot diagnose firmware
+health. Other `gatt_failed`, `audio_failed` and unknown outcomes fail; unknown
+outcomes never become a pass or skip based on identity metadata. An audio pass
+establishes notification continuity, not decoded audio quality. Profiles and fetched
+receipts can contain private identifiers and must stay outside Git. This tool does not prepare remote
+hosts, grant Bluetooth permission, change TCC or retry another target.
+
+Offline verification (no SSH, radio or jig):
+
+```sh
+python3 -m unittest discover -s omi/firmware/tools/cv1 -p test_bench_loop.py -v
+python3 -m unittest discover -s omi/firmware/tools/cv1 -p test_ble_check.py -v
+```
