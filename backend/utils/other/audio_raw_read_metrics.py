@@ -2,6 +2,7 @@
 
 import logging
 
+from google.cloud.exceptions import NotFound
 from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def error_result(error: Exception) -> str:
         ChecksumMismatch: 'checksum_mismatch',
         DecodeError: 'decode_error',
         DecryptError: 'decrypt_error',
+        NotFound: 'no_pack',
     }
     return results.get(type(error), 'other')
 
