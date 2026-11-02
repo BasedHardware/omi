@@ -6,6 +6,7 @@ from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGI
 
 from config.batch_timeliness import (
     SLA_SECONDS,
+    TERMINAL_EMPTY_IS_PROCESSED,
     batch_timeliness_alarm_enabled,
     timeliness_epoch,
     timeliness_interval_seconds,
@@ -228,7 +229,14 @@ class QueueMetrics:
             self.timeliness_samples.labels('disabled').inc()
             return
         try:
-            sample = timeliness_sample(store.client, store.namespace, timeliness_epoch(), now, SLA_SECONDS)
+            sample = timeliness_sample(
+                store.client,
+                store.namespace,
+                timeliness_epoch(),
+                now,
+                SLA_SECONDS,
+                terminal_empty_processed=TERMINAL_EMPTY_IS_PROCESSED,
+            )
         except Exception as error:
             self.timeliness_samples.labels('error').inc()
             logging.getLogger(__name__).warning(

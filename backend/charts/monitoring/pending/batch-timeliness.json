@@ -306,7 +306,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_scan_truncated{leg=\"uncommitted\"})",
+          "expr": "max(omi_batch_timeliness_scan_truncated)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -385,7 +385,7 @@
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "A bounded timeliness walk has been full for 30 minutes, so an older unpublished unit may be unmeasured and the 2h alarm could miss it.",
       "user_impact": "A late batch transcript could go unnoticed in the blind leg.",
-      "scope": "omi_batch_timeliness_scan_truncated{leg=\"uncommitted\"}: the vendor-held or retry walk is full of holds or pre-epoch units. Projection truncation is informational: siblings of one upload share an admission time, so the oldest committed rows already carry it.",
+      "scope": "omi_batch_timeliness_scan_truncated{leg}: a walk page is full and may hide an older admission (uncommitted: vendor-held, ready or retry walks; projection: more than 50 pending rows since the epoch, common during large catch-up uploads).",
       "verification": "Count the leg with the batch custody census (counts only, ro-prod) and compare its oldest admission time with the gauge.",
       "safe_next_action": "If the blind leg holds real late work, treat it as a 2h breach. If it is deliberate holds, record that and widen the bound in code.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",

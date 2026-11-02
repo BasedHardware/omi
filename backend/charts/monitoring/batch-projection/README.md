@@ -16,7 +16,7 @@ per process):
 | `omi_batch_timeliness_new_oldest_age_seconds{leg}` | oldest unpublished unit admitted at or after the epoch. `uncommitted`, `quarantined` and `assignment_held` clock from `enqueued_at`; `projection` and `quarantine_held_rows` clock from `committed_at`, a lower bound |
 | `omi_batch_timeliness_new_over_sla_units{leg}` | units admitted at or after the epoch and unpublished past 2 h, per leg |
 | `omi_batch_timeliness_backlog_units{leg}` | unpublished units from before the epoch; visible, never alarmed |
-| `omi_batch_timeliness_scan_truncated{leg}` | 1 when a bounded walk may hide an older unit. The blind rule fires on `uncommitted` after 30 minutes; `projection` truncation is informational, because siblings of one upload share an admission time |
+| `omi_batch_timeliness_scan_truncated{leg}` | 1 when a walk page is full and may hide an older admission (`uncommitted`, `projection`); the blind rule fires after 30 minutes, which is expected during large catch-up uploads |
 | `omi_batch_timeliness_samples_total{outcome}` | `ok`, `error`, `disabled` |
 
 Legs:

@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 from prometheus_client import CollectorRegistry
 
+from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED
 from database.batch_pipeline_store import TIMELINESS_HOLD_SCAN_LIMIT, timeliness_sample
 from utils.batch_pipeline.metrics import QueueMetrics
 
@@ -97,8 +98,10 @@ class _Client:
         return [_Doc(by_id[ref.id]) for ref in refs if ref.id in by_id]
 
 
-def _sample(jobs=(), results=(), now=NOW):
-    return timeliness_sample(_Client(jobs, results), 'ns', EPOCH, now, SLA)
+def _sample(jobs=(), results=(), now=NOW, terminal_empty_processed=False):
+    return timeliness_sample(
+        _Client(jobs, results), 'ns', EPOCH, now, SLA, terminal_empty_processed=terminal_empty_processed
+    )
 
 
 def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
@@ -125,6 +128,7 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
         'assignment_held': 1,
         'projection': 0,
         'quarantine_held_rows': 1,
+        'terminal_empty': 0,
     }
     assert sample['backlog'] == {
         'uncommitted_incl_holds': 0,
@@ -132,6 +136,7 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
         'assignment_held': 1,
         'projection': 0,
         'quarantine_held_rows': 1,
+        'terminal_empty': 0,
     }
     assert sample['new_oldest']['projection'] is None
     assert sample['new_oldest']['uncommitted'] is None
@@ -203,6 +208,62 @@ def test_a_prefix_of_only_pre_epoch_retries_reports_truncation():
     sample = _sample(jobs=rows)
     assert sample['new_oldest']['uncommitted'] is None
     assert sample['truncated']['uncommitted'] is True
+
+
+def test_a_full_page_ordered_by_another_clock_is_truncated_even_with_admitted_rows():
+    # 20 recent admissions precede a 3-hour-old unit by retry time; the gauge cannot see it, so it says so.
+    recent = [
+        {'state': 'retry', 'priority': 0, 'enqueued_at': NOW - 600 + i, 'retry_started_at': NOW - 3000 + i}
+        for i in range(TIMELINESS_HOLD_SCAN_LIMIT)
+    ]
+    old = {'state': 'retry', 'priority': 0, 'enqueued_at': NOW - 3 * 3600, 'retry_started_at': NOW - 60}
+    sample = _sample(jobs=recent + [old])
+    assert sample['new_oldest']['uncommitted'] == NOW - 600
+    assert sample['truncated']['uncommitted'] is True
+
+
+def _empty(at, speech=0):
+    """Terminal empty_asr: recovery settled empty and failed held; ``speech`` is the measured held VAD census."""
+    return {
+        'state': 'quarantined',
+        'recovery_state': 'failed_held',
+        'recovery': {'failure': {'stage': 'response_validation', 'reason': 'empty_asr'}},
+        'measured_held_vad_speech_seconds': speech,
+        'enqueued_at': at,
+    }
+
+
+def test_terminal_empty_counts_as_unprocessed_by_default_and_stays_visible():
+    assert TERMINAL_EMPTY_IS_PROCESSED is False
+    sample = _sample(jobs=[_empty(EPOCH + 60), _empty(EPOCH - 60)])
+    assert sample['new_oldest']['quarantined'] == EPOCH + 60
+    assert sample['new_over_sla']['quarantined'] == 1
+    assert sample['new_over_sla']['terminal_empty'] == 1
+    assert sample['backlog']['terminal_empty'] == 1
+
+
+def test_switched_on_terminal_empty_without_speech_is_processed_but_measured_speech_still_alarms():
+    jobs = [_empty(EPOCH + 60), _empty(EPOCH + 90, speech=1.2), _empty(NOW - 600)]
+    sample = _sample(jobs=jobs, terminal_empty_processed=True)
+    assert sample['new_oldest']['quarantined'] == EPOCH + 90
+    assert sample['new_over_sla']['quarantined'] == 1
+    assert sample['new_over_sla']['terminal_empty'] == 1
+    only_empty = _sample(jobs=[_empty(EPOCH + 60)], terminal_empty_processed=True)
+    assert only_empty['new_oldest']['quarantined'] is None
+    assert only_empty['new_over_sla']['quarantined'] == 0
+
+
+def test_switched_on_a_page_of_terminal_empties_never_hides_a_breach():
+    empties = [_empty(EPOCH + i) for i in range(TIMELINESS_HOLD_SCAN_LIMIT * 2)]
+    late = {'state': 'quarantined', 'recovery_state': 'prepared', 'enqueued_at': EPOCH + 3600}
+    sample = _sample(jobs=empties + [late], terminal_empty_processed=True)
+    assert sample['new_over_sla']['quarantined'] == 1
+    assert NOW - sample['new_oldest']['quarantined'] > SLA
+    # Counts are exact, so a page of exempt rows is not blindness.
+    assert sample['truncated']['uncommitted'] is False
+    quiet = _sample(jobs=empties + [{**late, 'enqueued_at': NOW - 600}], terminal_empty_processed=True)
+    assert quiet['new_over_sla']['quarantined'] == 0
+    assert quiet['new_oldest']['quarantined'] is None
 
 
 def test_no_new_unit_can_breach_before_two_hours_after_the_epoch():

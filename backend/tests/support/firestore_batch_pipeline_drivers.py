@@ -264,7 +264,7 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.timeliness_sample',
-            domains={'namespace': namespaces},
+            domains={'namespace': namespaces, 'terminal_empty_processed': [False, True]},
             neutrals={
                 'epoch': (1.0, 'cohort boundary operand only'),
                 'now': (10000.0, 'SLA cutoff operand only; due > epoch drives the new-breach counts'),
