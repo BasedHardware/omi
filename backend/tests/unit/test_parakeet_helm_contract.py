@@ -307,3 +307,49 @@ def test_headless_batch_pressure_service_selects_each_ready_gpu_pod(environment)
     assert services[f'{name}-headless']['spec']['clusterIP'] == 'None'
     assert services[f'{name}-headless']['spec']['selector'] == services[name]['spec']['selector']
     assert services[f'{name}-headless']['spec']['ports'][0]['port'] == 8080
+
+
+def test_prod_ja_pool_serves_reazon_with_its_own_attention_and_unique_env():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            'prod-omi-parakeet',
+            str(CHART),
+            '-f',
+            str(CHART / 'prod_omi_parakeet_values.yaml'),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    documents = [document for document in yaml.safe_load_all(rendered) if document]
+    deployments = {d['metadata']['name']: d for d in documents if d.get('kind') == 'Deployment'}
+    services = {d['metadata']['name']: d for d in documents if d.get('kind') == 'Service'}
+
+    def env(name):
+        entries = deployments[name]['spec']['template']['spec']['containers'][0]['env']
+        names = [entry['name'] for entry in entries]
+        assert len(names) == len(set(names)), name
+        return {entry['name']: entry.get('value') for entry in entries}
+
+    ja, main = env('prod-omi-parakeet-ja'), env('prod-omi-parakeet')
+    assert deployments['prod-omi-parakeet-ja']['spec']['replicas'] == 1
+    assert ja['PARAKEET_MODEL'] == 'reazon-research/reazonspeech-nemo-v2'
+    assert ja['PARAKEET_LID_MODEL'] == 'off'
+    assert ja['PARAKEET_ATTENTION_MODE'] == 'local'
+    assert ja['PARAKEET_LOCAL_ATTN_CONTEXT'] == '256,256'
+    # The v3 pool keeps its own model and attention; the ja override never leaks back.
+    assert main['PARAKEET_MODEL'] == 'nvidia/parakeet-tdt-0.6b-v3'
+    assert main['PARAKEET_ATTENTION_MODE'] == 'auto'
+    assert main['PARAKEET_LOCAL_ATTN_CONTEXT'] == '128,128'
+    # Separate selectors: the v3 Service, headless pool and HPA never pick up ja pods.
+    assert services['prod-omi-parakeet-ja']['spec']['selector'] != services['prod-omi-parakeet']['spec']['selector']
+    assert (
+        services['prod-omi-parakeet-headless']['spec']['selector'] == services['prod-omi-parakeet']['spec']['selector']
+    )

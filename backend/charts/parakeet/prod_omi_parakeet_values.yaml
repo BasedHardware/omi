@@ -290,6 +290,23 @@ strategy:
     maxUnavailable: 1
     maxSurge: 0
 
+# Japanese live-window pool (templates/ja-deployment.yaml), one L4. Reazon, not
+# parakeet-tdt_ctc-0.6b-ja: the NVIDIA model drops 9-18% of speech on mixed-speaker
+# 20 s windows. On public Common Voice 20 s windows Reazon reads 9.58 kana CER
+# against Soniox stt-rt-v5 at 7.99 (1.20x, +1.59 points, hyp/ref 0.987; jasoniox2
+# 2026-11-02). Its native local-attention context is 256,256. The pod serves no
+# traffic until listen sets HOSTED_PARAKEET_JA_API_URL and PARAKEET_JA_WINDOW_PERCENT;
+# rollback is percent 0, then enabled: false.
+ja:
+  enabled: true
+  replicaCount: 1
+  model: reazon-research/reazonspeech-nemo-v2
+  extraEnv:
+    - name: PARAKEET_ATTENTION_MODE
+      value: "local"
+    - name: PARAKEET_LOCAL_ATTN_CONTEXT
+      value: "256,256"
+
 # Route activation does not switch callers. Install the shared Gateway first.
 gateway:
   enabled: true
