@@ -443,8 +443,11 @@ export const CAPTURE_SEGMENTS = [
 ] as const;
 
 /** One matured weekly new-user cohort split by platform and by "device": paired
- * within 48 hours of first seen. A buyer who never paired counts as organic, so
- * the split is a proxy. Kept (activated, then active in days 7–35) needs the
+ * Omi hardware within 48 hours of first seen. Mobile and macOS both send
+ * `device_vendor` 'omi' for Omi and Omi Glass; `type` covers older mobile
+ * builds. Other vendors (Apple Watch, Limitless, …) also send Device Paired and
+ * stay organic. A buyer who never paired counts as organic, so the split is a
+ * proxy. Kept (activated, then active in days 7–35) needs the
  * scan to run 28 days past `end`, so it is complete only once `end` is at least
  * 28 days old; later scan days that have not happened yet read nothing.
  * Columns: entry, device, people, onboarded, conv1, conv7, activated, kept.
@@ -462,7 +465,8 @@ export function deviceFunnelQuery(end: Date) {
     people AS (SELECT actor,min(anchor) a,
       coalesce(nullIf(argMinIf(p,tuple(timestamp,${PLATFORM_RANK_SQL}),p!='unknown'),''),'unknown') entry,
       min(timestamp) first_event,
-      countIf(event='Device Paired' AND timestamp < anchor + interval 2 day) > 0 device,
+      countIf(event='Device Paired' AND (properties.device_vendor='omi' OR properties.type IN ('omi','openglass'))
+        AND timestamp < anchor + interval 2 day) > 0 device,
       countIf(event='Onboarding Completed' AND timestamp < anchor + interval 7 day) > 0 onboarded,
       countIf(cap AND qt >= anchor AND qt < anchor + interval 1 day) > 0 conv1,
       countIf(cap AND qt >= anchor AND qt < anchor + interval 7 day) > 0 conv7,

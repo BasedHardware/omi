@@ -591,12 +591,13 @@ def curve_options(panel):
 
 def funnel_row():
     """Below the TV's fixed wall: a full-width row reached by scrolling."""
-    proxy = ("Device = paired an Omi within 48 hours of first seen. It is a proxy: a buyer who never paired counts as "
+    proxy = ("Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as "
              "organic, and pairing is itself an early success, so the gap between the two is overstated. ")
     series_colors = [color("Device", MAGENTA), color("Organic", NEUTRAL)]
     funnel = chart("Funnel · device vs organic",
                    proxy + "Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old "
-                   "enough to measure it. Install is not shown because PostHog sees nobody before sign-up; first "
+                   "enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the "
+                   "clients that report it. Install is not shown because PostHog sees nobody before sign-up; first "
                    "summary is not shown because it has no event.",
                    [target("activation", "funnel", [("step", "Step", "string"), ("Device", "Device", "number"),
                                                     ("Organic", "Organic", "number")])],

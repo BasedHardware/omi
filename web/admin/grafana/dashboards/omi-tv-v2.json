@@ -6985,7 +6985,7 @@
     {
       "type": "barchart",
       "title": "Funnel \u00b7 device vs organic",
-      "description": "Device = paired an Omi within 48 hours of first seen. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old enough to measure it. Install is not shown because PostHog sees nobody before sign-up; first summary is not shown because it has no event.",
+      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the clients that report it. Install is not shown because PostHog sees nobody before sign-up; first summary is not shown because it has no event.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -7135,7 +7135,7 @@
     {
       "type": "timeseries",
       "title": "Activated \u00b7 device vs organic",
-      "description": "Device = paired an Omi within 48 hours of first seen. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation for each matured weekly cohort, dated by its last day.",
+      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation for each matured weekly cohort, dated by its last day.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -7287,7 +7287,7 @@
     {
       "type": "barchart",
       "title": "Funnel by platform",
-      "description": "Device = paired an Omi within 48 hours of first seen. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation in the latest matured weekly new-user cohort, by the platform users first arrived on, with its size in the label. Small platforms move a lot week to week.",
+      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation in the latest matured weekly new-user cohort, by the platform users first arrived on, with its size in the label. Small platforms move a lot week to week.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"

@@ -629,8 +629,11 @@ const FUNNEL_PLATFORMS: Record<string, string> = {
 const PEOPLE = 3;
 const ACTIVATED = 7;
 const KEPT = 8;
+// Only these clients send Onboarding Completed (Windows and web do not), so
+// the Onboarded step counts people who entered on one of them.
+const ONBOARDING_PLATFORMS: unknown[] = ["ios", "android", "macos"];
+const ONBOARDED = 4;
 const FUNNEL_STEPS = [
-  ["Onboarded", 4],
   ["Conversation, day 1", 5],
   ["Conversation, week 1", 6],
   ["Activated", ACTIVATED],
@@ -662,6 +665,11 @@ export function funnelFrames(legs: Legs, now: Date) {
           Device: percent(count(device(latest), PEOPLE), people),
           Organic: percent(count(organic(latest), PEOPLE), people),
         },
+        split(
+          "Onboarded (phone and Mac)",
+          latest.filter((r) => ONBOARDING_PLATFORMS.includes(r[1])),
+          ONBOARDED
+        ),
         ...FUNNEL_STEPS.map(([step, column]) => split(step, latest, column)),
       ]
     : [];

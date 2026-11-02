@@ -1758,6 +1758,22 @@ describe("funnelFrames", () => {
     });
   });
 
+  it("counts Onboarded only on clients that report it", () => {
+    const rows = Object.assign(
+      [
+        [0, "ios", 0, 10, 5, 0, 0, 0, 0],
+        [0, "windows", 0, 10, 0, 0, 0, 0, 0],
+      ],
+      { sourceRefreshedAt: null }
+    );
+    const { funnel } = funnelFrames({ deviceFunnel: rows }, now);
+    expect(funnel[1]).toEqual({
+      step: "Onboarded (phone and Mac)",
+      Device: null,
+      Organic: 50,
+    });
+  });
+
   it("orders platforms by size and leaves an absent split empty", () => {
     const { funnelPlatforms } = funnelFrames({ deviceFunnel }, now);
     expect(funnelPlatforms).toEqual([
