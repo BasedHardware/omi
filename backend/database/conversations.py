@@ -2085,9 +2085,22 @@ def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
     return True
 
 
+class AudioFilesChanged(RuntimeError):
+    """A concurrent projection writer invalidated the pusher's cached inventory."""
+
+
+def audio_files_revision(files: list[dict]) -> list[tuple]:
+    return [(af.get('id'), af.get('source_fingerprint')) for af in files]
+
+
 @after_write('conversations')
 def update_conversation(
-    uid: str, conversation_id: str, update_data: dict, *, record_owner_out: dict | None = None
+    uid: str,
+    conversation_id: str,
+    update_data: dict,
+    *,
+    record_owner_out: dict | None = None,
+    expected_audio_files: list[dict] | None = None,
 ) -> bool:
     """Apply ``update_data`` to a conversation.
 
@@ -2106,6 +2119,11 @@ def update_conversation(
     if not doc_snapshot.exists:
         return False
 
+    if expected_audio_files is not None and audio_files_revision(
+        doc_snapshot.to_dict().get('audio_files') or []
+    ) != audio_files_revision(expected_audio_files):
+        raise AudioFilesChanged('audio projection changed')
+
     if record_owner_out is not None:
         owner = doc_snapshot.to_dict().get('record_lane_owner')
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
@@ -2119,7 +2137,17 @@ def update_conversation(
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
-        doc_ref.update(prepared_data)
+        if expected_audio_files is None:
+            doc_ref.update(prepared_data)
+        else:
+            # Also fence a writer arriving after the read, including label edits.
+            doc_ref.update(
+                prepared_data, option=get_firestore_client().write_option(last_update_time=doc_snapshot.update_time)
+            )
+    except FailedPrecondition as exc:
+        if expected_audio_files is not None:
+            raise AudioFilesChanged('audio projection changed during update') from exc
+        raise
     except NotFound:
         # The conversation was deleted between the existence read above and
         # this commit. The contract of this function is to report a gone owner
@@ -2206,6 +2234,8 @@ def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, fire
 def create_audio_files_from_chunks(
     uid: str,
     conversation_id: str,
+    *,
+    listed_chunks: Optional[List[dict]] = None,
 ) -> List[AudioFile]:
     """
     Create audio file records by merging chunks from a conversation.
@@ -2219,7 +2249,7 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks = list_audio_chunks(uid, conversation_id, source_identity=True)
+    chunks = list_audio_chunks(uid, conversation_id, source_identity=True) if listed_chunks is None else listed_chunks
     if not chunks:
         return []
 

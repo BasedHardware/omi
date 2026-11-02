@@ -9,6 +9,7 @@ from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from config.audio_outbox import enabled as audio_outbox_enabled
+from utils.pusher_audio_projection import PusherAudioProjection
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
@@ -545,6 +546,21 @@ async def _run_websocket_util_trigger(
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
 
+    audio_projection = PusherAudioProjection(uid)
+    deleted_conversations: set[str] = set()
+
+    async def finish_audio_projection(conv_id: str, identity_refreshed: set[str]) -> None:
+        if conv_id in deleted_conversations:
+            audio_projection.inventory.pop(conv_id, None)
+            return
+        applied = await run_blocking(storage_executor, audio_projection.finish, conv_id)
+        if applied:
+            schedule_person_voice_learning_retry(uid, conv_id)
+            if len(identity_refreshed) < 128:
+                identity_refreshed.add(conv_id)
+        elif applied is False:
+            deleted_conversations.add(conv_id)
+
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
         # contiguous batch for the legacy playback projection, preserving the
@@ -557,7 +573,7 @@ async def _run_websocket_util_trigger(
         async def flush_refs(conv_id: str) -> None:
             refs = pending_refs.pop(conv_id, [])
             queued_at.pop(conv_id, None)
-            if not refs:
+            if not refs or conv_id in deleted_conversations:
                 return
 
             try:
@@ -580,7 +596,7 @@ async def _run_websocket_util_trigger(
                     # not capture positions. Preserve the old continuous batch
                     # and its first timestamp; jitter cannot create v2 spans.
                     chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
-                await run_blocking(
+                uploaded_paths = await run_blocking(
                     storage_executor,
                     upload_audio_chunks_batch,
                     chunks,
@@ -592,21 +608,13 @@ async def _run_websocket_util_trigger(
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
-                audio_files = await run_blocking(
-                    storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
-                )
-                if audio_files:
-                    applied = await run_blocking(
-                        storage_executor,
-                        conversations_db.update_conversation,
-                        uid,
-                        conv_id,
-                        {'audio_files': [af.model_dump() for af in audio_files]},
-                    )
-                    if applied:
-                        schedule_person_voice_learning_retry(uid, conv_id)
-                        if len(identity_refreshed) < 128:
-                            identity_refreshed.add(conv_id)
+                applied = await run_blocking(storage_executor, audio_projection.refresh, conv_id, uploaded_paths)
+                if applied:
+                    schedule_person_voice_learning_retry(uid, conv_id)
+                    if len(identity_refreshed) < 128:
+                        identity_refreshed.add(conv_id)
+                elif applied is False:
+                    deleted_conversations.add(conv_id)
                 projection_retries.pop(conv_id, None)
             except AudioChunkContentConflict:
                 # Deterministic projection conflict: different bytes already
@@ -774,6 +782,7 @@ async def _run_websocket_util_trigger(
                 ):
                     # Wake even on projection failure so the receiver can
                     # observe its sticky failure without waiting out the budget.
+                    await finish_audio_projection(conv_id, identity_refreshed)
                     inline_projection_drained.set()
                     await inline_finish_done.wait()
                     if conv_id not in record_close_requests:
@@ -784,11 +793,14 @@ async def _run_websocket_util_trigger(
                     and conv_id not in pending_refs
                     and not durable_queue.has_conversation(conv_id)
                 ):
+                    await finish_audio_projection(conv_id, identity_refreshed)
                     if not await record_barrier.finish_recording(conv_id):
                         continue
                 elif conv_id in pending_refs or durable_queue.has_conversation(conv_id):
                     continue
                 retire_record_close(conv_id)
+        for conv_id in list(audio_projection.inventory):
+            await finish_audio_projection(conv_id, identity_refreshed)
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -854,7 +866,6 @@ async def _run_websocket_util_trigger(
         # Conversations deleted underneath us (e.g. discarded as empty at rollover).
         # Their chunks can never be referenced, played or cleaned up again, so we
         # stop uploading rather than leaving more orphans in the bucket (#11742).
-        deleted_conversations: set[str] = set()
         identity_refreshed: set[str] = set()
         # Set when the storage authority refuses this account's writes because a
         # destructive operation owns the gate (account deletion in progress): the
@@ -916,7 +927,7 @@ async def _run_websocket_util_trigger(
             nonlocal application_failed, upload_fenced
             if not batch or len(batch['data']) == 0:
                 return
-            if upload_fenced:
+            if upload_fenced or batch['conversation_id'] in deleted_conversations:
                 # The fence latched earlier this session: this batch was already
                 # queued before the refusal — drop it instead of replaying a
                 # write the authority has refused for the rest of the session.
@@ -945,7 +956,7 @@ async def _run_websocket_util_trigger(
                 reconcile_prefix = conv_id in v2_replay_seen or v2_reconcile_exempt.get(conv_id) != batch_generation
                 if not reconcile_prefix:
                     PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL.inc()
-                await run_blocking(
+                uploaded_paths = await run_blocking(
                     storage_executor,
                     cast(Any, upload_audio_chunks_batch),
                     chunks_to_upload,
@@ -971,33 +982,22 @@ async def _run_websocket_util_trigger(
                     v2_flushed_runs.append((timestamp, batch['end'], hashlib.sha256(chunk_data).hexdigest()))
                 del chunks_to_upload
                 try:
-                    audio_files = await run_blocking(
-                        storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
-                    )
-                    if audio_files:
-                        files_payload = [af.model_dump() for af in audio_files]
-                        applied = await run_blocking(
-                            storage_executor,
-                            conversations_db.update_conversation,
-                            uid,
-                            conv_id,
-                            {'audio_files': files_payload},
+                    applied = await run_blocking(storage_executor, audio_projection.refresh, conv_id, uploaded_paths)
+                    if applied:
+                        schedule_person_voice_learning_retry(uid, conv_id)
+                        if len(identity_refreshed) < 128:
+                            identity_refreshed.add(conv_id)
+                    elif applied is False:
+                        deleted_conversations.add(conv_id)
+                        logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
+                        record_fallback(
+                            component='pusher',
+                            from_mode='private_cloud_sync',
+                            to_mode='drop',
+                            reason='policy',
+                            outcome='exhausted',
+                            log=logger,
                         )
-                        if applied:
-                            schedule_person_voice_learning_retry(uid, conv_id)
-                            if len(identity_refreshed) < 128:
-                                identity_refreshed.add(conv_id)
-                        else:
-                            deleted_conversations.add(conv_id)
-                            logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
-                            record_fallback(
-                                component='pusher',
-                                from_mode='private_cloud_sync',
-                                to_mode='drop',
-                                reason='policy',
-                                outcome='exhausted',
-                                log=logger,
-                            )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))
@@ -1142,11 +1142,14 @@ async def _run_websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in ready_batches)
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
+                    await finish_audio_projection(conv_id, identity_refreshed)
                     if await record_barrier.finish_recording(conv_id):
                         retire_record_close(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
+        for conv_id in list(audio_projection.inventory):
+            await finish_audio_projection(conv_id, identity_refreshed)
         if identity_refreshed:
             schedule_completed_identity_retries(uid, identity_refreshed)
 
@@ -1314,6 +1317,13 @@ async def _run_websocket_util_trigger(
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
+            if current_conversation_id in deleted_conversations:
+                # A gone-owner result is terminal for both encoded projection
+                # and future raw custody windows in this socket.
+                audio_budget.release(len(private_cloud_sync_buffer))
+                _reset_private_cloud_buffer()
+                durable_window_frames.clear()
+                return
             if durable_audio:
                 if durable_commit_unresolved:
                     raise RuntimeError('custody commit unresolved; producer fence retained')
