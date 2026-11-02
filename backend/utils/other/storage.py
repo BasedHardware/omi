@@ -15,6 +15,7 @@ from utils.other.playback_cache import write_once, cached_manifest
 from utils.other.playback_identity import playback_manifest_recovery_enabled
 from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PCM_WRITES_AVOIDED
+from utils.other.audio_raw_read_metrics import log_failure
 from utils.other.raw_audio_read import (
     list_packs,
     read_pack,
@@ -1371,12 +1372,14 @@ def download_and_decode_chunk_blob(
             on_failure('missing_blob')
         return None
 
+    failure_result = 'decrypt_error' if encrypted else 'decode_error'
     try:
         if encrypted:
             raw_data = encryption.decrypt_audio_file(chunk_data, uid)
         else:
             raw_data = chunk_data
 
+        failure_result = 'decode_error'
         if is_opus:
             pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
             del raw_data
@@ -1384,10 +1387,10 @@ def download_and_decode_chunk_blob(
             pcm_data = raw_data
 
         return _align_pcm16_frames(pcm_data, path)
-    except Exception as e:
+    except Exception:
         if on_failure:
             on_failure('decode_failed')
-        logger.warning(f"Failed to decode/decrypt {path}: {e}")
+        log_failure(failure_result, 'opus' if is_opus else 'pcm16')
         return None
 
 
