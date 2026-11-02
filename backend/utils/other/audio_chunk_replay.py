@@ -5,6 +5,7 @@ and ``list_chunks`` seams so this module never imports ``storage`` itself.
 """
 
 import math
+from functools import partial
 import time
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
@@ -138,6 +139,18 @@ def verify_frame_overlaps(uid, conversation_id, pcm, frames, sample_rate, *, buc
             if decoded[key][left : left + count] != pcm[right : right + count]:
                 raise AudioChunkContentConflict('framed replay conflicts with committed PCM')
         offset += frame['samples'] * 2
+
+
+def frame_overlap_verifier(uid, conversation_id, sample_rate, bucket, list_chunks, bucket_for):
+    return partial(
+        verify_frame_overlaps,
+        uid,
+        conversation_id,
+        sample_rate=sample_rate,
+        bucket=bucket,
+        list_chunks=list_chunks,
+        bucket_for=bucket_for,
+    )
 
 
 def reconcile_committed_prefix(

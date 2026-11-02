@@ -67,7 +67,7 @@ from utils.other.audio_chunk_replay import (
     AudioChunkContentConflict,
     RECONCILE_MAX_ATTEMPTS,
     reconcile_committed_prefix,
-    verify_frame_overlaps,
+    frame_overlap_verifier,
 )
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
@@ -973,17 +973,8 @@ def upload_audio_chunks_batch(
             owner_storage_write_gate,
             archive_capture=_archive_pusher_capture if audio_packs.enabled() else None,
             verify_overlap=(
-                (
-                    lambda pcm, frames: verify_frame_overlaps(
-                        uid,
-                        conversation_id,
-                        pcm,
-                        frames,
-                        sample_rate,
-                        bucket=private_bucket,
-                        list_chunks=list_audio_chunks,
-                        bucket_for=lambda name: _get_storage_client().bucket(name),
-                    )
+                frame_overlap_verifier(
+                    uid, conversation_id, sample_rate, private_bucket, list_audio_chunks, _get_storage_client().bucket
                 )
                 if reconcile_prefix
                 else None
