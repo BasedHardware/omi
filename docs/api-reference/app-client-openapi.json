@@ -29414,8 +29414,7 @@
           },
           "devices": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ScreenDeviceCoverage"
             },
             "title": "Devices",
             "type": "array"
@@ -29669,6 +29668,40 @@
           "last_id"
         ],
         "title": "ScreenActivitySyncResponse",
+        "type": "object"
+      },
+      "ScreenDeviceCoverage": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "title": "First Observed At",
+            "type": "string"
+          },
+          "last_observed_at": {
+            "title": "Last Observed At",
+            "type": "string"
+          },
+          "synced_through": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Through"
+          }
+        },
+        "required": [
+          "device_id",
+          "first_observed_at",
+          "last_observed_at"
+        ],
+        "title": "ScreenDeviceCoverage",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {

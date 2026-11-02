@@ -49,7 +49,11 @@ def summary_read_payload(row: dict) -> dict:
     # generation time; only legacy successful rows lack this field entirely.
     result['generated_at'] = row.get('generated_at', row.get('created_at')) if result['status'] == 'generated' else None
     result['covers_until'] = row.get('covers_until') or result['generated_at']
-    result['coverage_basis'] = row.get('coverage_basis') or 'generation_time_upper_bound; late arrivals not included'
+    result['coverage_basis'] = row.get('coverage_basis') or (
+        'generation_time_upper_bound; late arrivals not included'
+        if result['generated_at'] is not None
+        else 'unavailable; no generated summary'
+    )
     result['memories_learned_count'] = len(learned)
     result['memories_learned_coverage'] = row.get('memories_learned_coverage') or (
         'legacy_review_selection; coverage_unknown; not all stored memories'

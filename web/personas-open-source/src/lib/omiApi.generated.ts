@@ -4743,7 +4743,7 @@ export interface ScreenActivityAppSummary {
 
 export interface ScreenActivityCoverage {
   capture_completeness?: "unknown";
-  devices?: Array<Record<string, unknown>>;
+  devices?: Array<ScreenDeviceCoverage>;
   first_observed_at?: string | null;
   last_observed_at?: string | null;
   row_limit: number;
@@ -4785,6 +4785,13 @@ export interface ScreenActivitySyncResponse {
   frame_requests?: Array<FrameRequestDelivery> | null;
   last_id: number;
   synced: number;
+}
+
+export interface ScreenDeviceCoverage {
+  device_id: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  synced_through?: string | null;
 }
 
 export interface ScreenFrameAdjudicationRequest {
@@ -7075,6 +7082,7 @@ export interface OmiApiSchemas {
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
   "ScreenActivitySyncResponse": ScreenActivitySyncResponse;
+  "ScreenDeviceCoverage": ScreenDeviceCoverage;
   "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
   "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
   "ScreenFrameCandidateIn": ScreenFrameCandidateIn;

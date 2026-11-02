@@ -179,7 +179,10 @@ class TestGetConversationsByIds:
         omitted = {f"c{i}" for i in range(6)} - returned
         assert omitted == set(result["omitted_ids"])
         assert result["next_cursor"]
-        assert all(len(item["conversation"]["transcript_segments"][0]["text"]) > 1 for item in result["conversations"])
+        assert all(
+            len(item["conversation"]["transcript_segments"][0]["text"]) == 24_000 for item in result["conversations"]
+        )
+        assert all(item["truncated"] is True for item in result["conversations"])
         serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str)
         assert len(serialized) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
 
@@ -1175,7 +1178,8 @@ class TestBatchResponseBudgetOverHttp:
         omitted = set(rows) - returned
         assert omitted == set(payload["omitted_ids"])
         assert payload["next_cursor"]
-        assert all(len(item["conversation"]["transcript_segments"][0]["text"]) > 1 for item in payload["conversations"])
+        assert all(item["conversation"]["transcript_segments"][0]["text"] == text for item in payload["conversations"])
+        assert all(item["truncated"] is False for item in payload["conversations"])
         assert not (omitted & set(payload["not_found"]))
 
 

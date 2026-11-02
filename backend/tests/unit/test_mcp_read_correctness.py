@@ -632,8 +632,20 @@ def test_screen_device_bounds_do_not_claim_sync_watermarks(monkeypatch):
     coverage = other.get_screen_activity(OWNER, {'group_by': 'hour'})['coverage']
     assert coverage['query_complete'] is True
     assert coverage['complete_window'] is False
-    assert coverage['devices'][0]['last_observed_at'] == rows[-1]['timestamp']
-    assert all(device['synced_through'] is None for device in coverage['devices'])
+    assert coverage['devices'] == [
+        {
+            'device_id': 'device-a',
+            'first_observed_at': rows[0]['timestamp'],
+            'last_observed_at': rows[2]['timestamp'],
+            'synced_through': None,
+        },
+        {
+            'device_id': 'device-b',
+            'first_observed_at': rows[1]['timestamp'],
+            'last_observed_at': rows[1]['timestamp'],
+            'synced_through': None,
+        },
+    ]
 
 
 def test_summary_snapshot_exposes_cutoff_and_unknown_visible_total():
@@ -677,3 +689,13 @@ def test_device_observation_bounds_compare_instants_across_dst_offsets():
     assert coverage['first_observed_at'] == rows[0]['timestamp']
     assert coverage['last_observed_at'] == rows[1]['timestamp']
     assert coverage['synced_through'] is None
+
+
+def test_non_generated_summary_has_no_generation_coverage_claim():
+    for status in ('failed', 'no_recordings', 'pending'):
+        result = summary_read_payload({'status': status, 'created_at': NOW})
+        assert result['generated_at'] is None
+        assert result['covers_until'] is None
+        assert result['coverage_basis'] == 'unavailable; no generated summary'
+    stored = summary_read_payload({'status': 'failed', 'coverage_basis': 'explicit producer basis'})
+    assert stored['coverage_basis'] == 'explicit producer basis'

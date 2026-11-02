@@ -623,7 +623,8 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids "
             "that resolve to nothing are listed in not_found. When the response budget is hit, later items "
             "are listed in omitted_ids/next_ids with next_cursor. Per-item limits are never reduced to fit a batch. "
-            "Each item has id and one nested conversation. The serialized response cap is 120000 characters; use include_participants=false for lean reads."
+            "Each successful item has id and one nested conversation; locked items return id and an error. "
+            "The serialized response cap is 120000 characters; use include_participants=false for lean reads."
         ),
         annotations=_read_annotations("Get conversations by IDs"),
         input_schema={
@@ -668,8 +669,17 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "type": "array",
                     "items": {
                         "type": "object",
+                        "required": ["id"],
                         "properties": {
+                            "id": {"type": "string"},
                             "conversation": {"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
+                            "truncated": {"type": "boolean"},
+                            "truncated_fields": {"type": "array", "items": {"type": "string"}},
+                            "error": {
+                                "type": "object",
+                                "required": ["code", "message"],
+                                "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
+                            },
                         },
                     },
                 },
