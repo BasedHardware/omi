@@ -258,6 +258,7 @@ def transcribe(
                     if delay is None:
                         raise
                     sleep(delay)
+            raise SonioxBatchError()
 
         try:
             file_id = resource_id(request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')})['id'])
@@ -356,6 +357,7 @@ async def transcribe_async(
                 if delay is None:
                     raise
                 await sleep(delay)
+        raise SonioxBatchError()
 
     try:
         file_id = resource_id(
