@@ -16,7 +16,7 @@ final class HiddenSettingsSurfacesTests: XCTestCase {
   /// door that got the last hide reverted.
   func testSearchIndexOffersNoHiddenFloatingBarRows() {
     let ids = Set(SettingsSearchItem.allSearchableItems.map(\.settingId))
-    for hidden in ["floatingbar.notificationpreviews", "floatingbar.background", "floatingbar.draggable"] {
+    for hidden in ["floatingbar.notificationpreviews", "floatingbar.background"] {
       XCTAssertFalse(ids.contains(hidden), "\(hidden) is hidden from Settings; its search entry must stay out")
     }
   }
@@ -30,10 +30,15 @@ final class HiddenSettingsSurfacesTests: XCTestCase {
   }
 
   /// Surfaces that are NOT hidden must keep their search entries — this suite
-  /// guards the six hidden ids, not the pane wholesale.
+  /// guards the hidden ids, not the pane wholesale.
   func testRemainingFloatingBarRowsKeepTheirSearchEntries() {
     let ids = Set(SettingsSearchItem.allSearchableItems.map(\.settingId))
-    for kept in ["floatingbar.show", "floatingbar.typedvoiceanswers", "floatingbar.screenshare"] {
+    for kept in [
+      "floatingbar.show",
+      "floatingbar.draggable",
+      "floatingbar.typedvoiceanswers",
+      "floatingbar.screenshare",
+    ] {
       XCTAssertTrue(ids.contains(kept), "\(kept) is still rendered and must stay searchable")
     }
   }

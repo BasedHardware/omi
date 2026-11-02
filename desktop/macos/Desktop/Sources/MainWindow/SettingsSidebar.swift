@@ -293,11 +293,12 @@ struct SettingsSearchItem: Identifiable {
     // name: "Background Style", subtitle: "Toggle between solid and transparent background",
     // keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
     // icon: "sparkles", settingId: "floatingbar.background"),
-    // SettingsSearchItem(
-    // name: "Draggable Floating Bar",
-    // subtitle: "Allow repositioning the floating bar by dragging it",
-    // keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
-    // icon: "sparkles", settingId: "floatingbar.draggable"),
+    SettingsSearchItem(
+      name: "Draggable Floating Bar",
+      subtitle: "Allow repositioning the floating bar by dragging it",
+      keywords: ["drag", "move", "reposition", "draggable", "position", "reset position"],
+      section: .floatingBar,
+      icon: "sparkles", settingId: "floatingbar.draggable"),
     SettingsSearchItem(
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
