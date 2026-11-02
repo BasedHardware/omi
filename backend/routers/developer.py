@@ -88,6 +88,7 @@ from utils.observability.external_lists import (
 )
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
+from utils import external_polling_cache as polling_cache
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
@@ -1284,7 +1285,15 @@ def get_developer_daily_summary(
     status = 500
     returned_count = 0
     try:
+        negative_key = polling_cache.negative_key(request, auth.uid, auth, summary_id)
+        if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+            status = 404
+            raise HTTPException(
+                404, detail='Daily summary not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'}
+            )
         summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if summary is None and negative_key:
+            polling_cache.remember_missing(external_lists._redis(), negative_key)
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -1730,7 +1739,16 @@ def get_conversation_endpoint(
         if include_transcript:
             check_conversation_transcript_read_limit(auth, request=request)
 
+        negative_key = polling_cache.negative_key(request, uid, auth, conversation_id)
+        if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+            raise HTTPException(
+                404,
+                detail='Conversation ID not found or unknown conversation sub-route',
+                headers={'X-Omi-List-Cache': 'negative; max-age=10'},
+            )
         conversation = conversations_db.get_conversation(uid, conversation_id)
+        if conversation is None and negative_key:
+            polling_cache.remember_missing(external_lists._redis(), negative_key)
         if not conversation or conversation.get('deleted', False):
             status = 404
             returned_count = 0
@@ -2708,14 +2726,21 @@ def get_goals(
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
 ):
     """
     Get a single goal by ID.
 
     - **goal_id**: The ID of the goal to retrieve
     """
+    negative_key = polling_cache.negative_key(request, uid, auth, goal_id)
+    if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+        raise HTTPException(404, detail='Goal not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'})
     goals = goals_db.get_all_goals(uid, include_inactive=True)
     goal = next((g for g in goals if g.get('id') == goal_id), None)
+    if not goal and negative_key:
+        polling_cache.remember_missing(external_lists._redis(), negative_key)
 
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
