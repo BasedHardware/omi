@@ -24,6 +24,14 @@ def is_text_line(panel):
 
 
 class WallV2Contract(unittest.TestCase):
+    def test_funnel_row_sits_below_the_tv_wall(self):
+        from build_wall_dashboard import WALL_H
+        row = [p for p in load("omi-tv-v2")["panels"] if p["gridPos"]["y"] >= WALL_H]
+        self.assertEqual({p["gridPos"]["y"] for p in row}, {WALL_H})
+        self.assertEqual(sum(p["gridPos"]["w"] for p in row), 24)
+        self.assertEqual({p["targets"][0]["root_selector"] for p in row},
+                         {"frames.funnel", "frames.funnelWeekly", "frames.funnelPlatforms"})
+
     def test_checked_in_wall_matches_builder(self):
         from build_wall_dashboard import build_wall_board
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
@@ -51,7 +59,8 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         for name in COLUMNS:
             x, w = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             self.assertEqual(column[0]["type"], "stat")
             self.assertTrue(column[0]["title"].startswith(name), column[0]["title"])
             self.assertEqual(column[0]["gridPos"]["y"], 0)
@@ -90,7 +99,7 @@ class WallV2Contract(unittest.TestCase):
 
     def test_each_stat_has_an_api_delta_strip_in_field_order(self):
         import re
-        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H
+        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H, WALL_H
         board = load("omi-tv-v2")
         source = (HERE.parent / "lib/wall-series.ts").read_text()
         block = re.search(r"DELTA_STRIPS[^=]*= \{(.*?)\};", source, re.S).group(1)
@@ -99,7 +108,8 @@ class WallV2Contract(unittest.TestCase):
         self.assertIn('BAD_MARK = "\\u2060"', source)
         for name in COLUMNS:
             x, _ = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             head, strip = column[0], column[1]
             self.assertTrue(is_strip(strip))
             self.assertFalse(head["options"]["showPercentChange"])  # native change is relative only

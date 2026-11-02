@@ -14677,9 +14677,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeOnThisPhone => 'Tässä puhelimessa';
 
   @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Lopullinen litterointi noin $duration jäljessä';
   }
@@ -14695,7 +14692,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Tallentaa turvallisesti';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live tässä puhelimessa';
+  String get livePreviewOnPhoneDivider => 'Juuri nyt, tässä puhelimessa';
 
   @override
   String get livePreviewTurnOnLiveText => 'Ota live-teksti käyttöön';
@@ -14939,21 +14936,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count osaa',
-      many: '$count osaa',
-      few: '$count osaa',
-      two: '$count osaa',
-      one: '$count osa',
-      zero: '$count osaa',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Lähetä viesti $app-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.';
   }
@@ -14962,4 +14944,28 @@ class AppLocalizationsFi extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Hae uusi koodi ja lähetä se $app-sovelluksesta.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Kirjoitetaan muistiinpanoja…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Kattaa klo $time asti · täydet muistiinpanot lopuksi';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Litteroitu klo $time asti';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration tallennettu';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
 }

@@ -185,6 +185,16 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
 app.add_middleware(ExternalListMetricsMiddleware)
+
+# Compress buffered JSON responses for clients that send Accept-Encoding: gzip
+# (browsers, web admin, OkHttp); streaming endpoints are exempt so token/audio
+# chunk boundaries and first-byte latency survive. Registered before the
+# DesktopProxyDeadlineMiddleware so that one stays outermost (pinned by
+# test_desktop_proxy_lifetime.py).
+from utils.other.response_gzip import GatedGZipMiddleware
+
+app.add_middleware(GatedGZipMiddleware)
+
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 

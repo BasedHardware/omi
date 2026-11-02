@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Ghi chú bắt đầu khi bản ghi chép cuối cùng đến.",
     "episodeOnDeviceNotesFootnote": "Được soạn trên điện thoại của bạn khi bạn nói. Ghi chú đầy đủ sẽ đến cùng bản ghi chép cuối cùng.",
     "episodeOnThisPhone": "Trên điện thoại này",
-    "liveCardTitle": "Trực tiếp",
     "livePreviewBehind": "Bản ghi chép cuối cùng chậm khoảng {duration}",
     "livePreviewCatchingUp": "Bản ghi chép cuối cùng đang cập nhật",
     "livePreviewNoEngineBody": "Lời nói của bạn sẽ xuất hiện ở đây sau một đến hai phút.",
     "livePreviewNoEngineTitle": "Đang ghi âm an toàn",
-    "livePreviewOnPhoneDivider": "Trực tiếp trên điện thoại này",
+    "livePreviewOnPhoneDivider": "Vừa xong, trên điện thoại này",
     "livePreviewTurnOnLiveText": "Bật văn bản trực tiếp",
     "deviceCatchUpOnItsWay": "đang trên đường gửi lên",
     "deviceCatchUpWhenOnline": "khi có mạng",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Hiện chưa thể trả theo năm cho gói của bạn.",
     "yearlySwitchDoneTitle": "Bạn đã chuyển sang trả theo năm",
     "yearlySwitchDoneBody": "Đã thu {amount} hôm nay. Gia hạn vào {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} phần} one{{count} phần} two{{count} phần} few{{count} phần} many{{count} phần} other{{count} phần}}",
     "chatAppsWaitingMessageIn": "Gửi tin nhắn trong {app}. Màn hình này sẽ cập nhật ngay khi Omi nhận được.",
-    "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}."
+    "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}.",
+    "episodeWritingNotes": "Đang viết ghi chú…",
+    "episodeWritingNotesDetail": "Đang hoàn tất bản chép trước. Bạn có thể rời trang này.",
+    "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
+    "liveTranscribedUpTo": "Đã chép đến {time}",
+    "liveAudioSaved": "Đã lưu {duration}",
+    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên."
 }

@@ -680,3 +680,44 @@ def test_a_moment_ends_on_the_last_speech_of_a_merged_turn():
     data = {'chapters': [{'title': 'Plans', 'start': '12:00:00', 'points': ['Point']}]}
     moment = composer.to_updates(data, [row], tz)['moments'][0]
     assert moment['end_offset'] >= 40
+
+
+def test_a_section_seconds_long_ends_on_the_last_line_it_owns():
+    row = {'id': 'c1', **_turn_row(*[(i * 60, i * 60 + 60, 'SPEAKER_00', f'w{i}') for i in range(30)])}
+    data = {
+        'chapters': [
+            {'title': 'Second', 'start': '12:10:00', 'end': '12:10:08', 'points': ['Point']},
+            {'title': 'First', 'start': '12:00:00', 'end': '12:00:22', 'points': ['Point']},
+        ]
+    }
+    first, second = composer.to_updates(data, [row], ZoneInfo('UTC'))['moments']
+    assert (first['heading'], second['heading']) == ('First', 'Second')
+    assert (first['ended_at'] - first['started_at']).total_seconds() == 9 * 60
+    assert (second['ended_at'] - second['started_at']).total_seconds() >= 19 * 60
+
+
+def test_the_wire_reads_moments_in_time_order_and_drops_placeholder_headings():
+    from utils.episodes import service as svc
+
+    moment = lambda mid, minutes, heading, **extra: {  # noqa: E731
+        'id': mid,
+        'conversation_id': 'c1',
+        'started_at': T0 + timedelta(minutes=minutes),
+        'ended_at': T0 + timedelta(minutes=minutes, seconds=8),
+        'heading': heading,
+        **extra,
+    }
+    points = [{'text': 'Point', 'details': []}]
+    wire = svc.to_wire(
+        {
+            'id': 'e',
+            'status': 'closed',
+            'started_at': T0,
+            'last_activity_at': T0,
+            'moments': [moment('b', 34, 'New moment', points=points), moment('a', 0, 'Checklist', points=points)],
+        }
+    )
+    assert [m['id'] for m in wire['moments']] == ['a', 'b']
+    assert wire['moments'][1]['heading'] == ''
+    assert wire['moments'][0]['ended_at'] == T0 + timedelta(minutes=34)
+    assert wire['moments'][1]['ended_at'] == T0 + timedelta(minutes=34, seconds=8)

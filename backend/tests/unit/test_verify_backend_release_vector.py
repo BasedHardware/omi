@@ -437,7 +437,9 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'ref: ${{ github.workflow_sha }}' in text
         assert 'path: .github/firestore-workflow' in text
         assert 'project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in text
-        assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
+        assert 'service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com' in text
+        assert 'workloadIdentityPools/omi-gha-deploy-' in text
+        assert 'GCP_FIRESTORE_READONLY_CREDENTIALS' not in text
         assert 'needs: firestore_readiness' in text
 
 
@@ -459,30 +461,6 @@ def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_
     assert composite.index('Verify read-only Firestore credentials target the runtime project') < composite.index(
         'Verify serving Firestore indexes'
     )
-
-
-def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_only_credentials_are_missing() -> None:
-    workflows = (
-        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
-        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
-    )
-
-    for workflow in workflows:
-        text = workflow.read_text(encoding='utf-8')
-        readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
-        checkout_marker = 'Checkout admitted Firestore source'
-
-        assert 'Require read-only Firestore credentials' in readiness
-        assert 'GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in readiness
-        assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
-        assert readiness.index('Require read-only Firestore credentials') < readiness.index(checkout_marker)
-        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
-            'Verify serving Firestore indexes'
-        )
-        if workflow.name == 'gcp_backend_auto_dev.yml':
-            assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
-                'Require read-only Firestore credentials'
-            )
 
 
 def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:

@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "Белешке почињу када стигне коначни транскрипт.",
     "episodeOnDeviceNotesFootnote": "Настају на твом телефону док причаш. Потпуне белешке стижу са коначним транскриптом.",
     "episodeOnThisPhone": "На овом телефону",
-    "liveCardTitle": "Уживо",
     "livePreviewBehind": "Коначни транскрипт касни око {duration}",
     "livePreviewCatchingUp": "Коначни транскрипт сустиже",
     "livePreviewNoEngineBody": "Твоје речи се овде појављују минут или два након што их изговориш.",
     "livePreviewNoEngineTitle": "Безбедно снима",
-    "livePreviewOnPhoneDivider": "Уживо на овом телефону",
+    "livePreviewOnPhoneDivider": "Управо сада, на овом телефону",
     "livePreviewTurnOnLiveText": "Укључи текст уживо",
     "deviceCatchUpOnItsWay": "на путу",
     "deviceCatchUpWhenOnline": "када будете онлајн",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "Годишње плаћање тренутно није доступно за ваш план.",
     "yearlySwitchDoneTitle": "Сада плаћате годишње",
     "yearlySwitchDoneBody": "Данас наплаћено {amount}. Обнавља се {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} делова} one{{count} део} two{{count} делова} few{{count} дела} many{{count} делова} other{{count} делова}}",
     "chatAppsWaitingMessageIn": "Пошаљите поруку у апликацији {app}. Овај екран се ажурира чим је Omi прими.",
-    "chatAppsCodeExpiredMessageIn": "Затражите нови код и пошаљите га из апликације {app}."
+    "chatAppsCodeExpiredMessageIn": "Затражите нови код и пошаљите га из апликације {app}.",
+    "episodeWritingNotes": "Пишемо белешке…",
+    "episodeWritingNotesDetail": "Прво завршавамо транскрипт. Можете напустити ову страницу.",
+    "episodeCoversUpTo": "Покрива до {time} · потпуне белешке по завршетку",
+    "liveTranscribedUpTo": "Транскрибовано до {time}",
+    "liveAudioSaved": "Сачувано {duration}",
+    "liveAudioSavedDetail": "Говорници и коначни транскрипт појавиће се овде током отпремања."
 }

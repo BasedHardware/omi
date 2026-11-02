@@ -230,6 +230,40 @@ async def test_sweep_publishes_one_fleet_snapshot_and_clears_an_empty_backlog(mo
     assert held_metrics.BACKLOG._value.get() == 0
 
 
+async def test_sweep_finishes_batch_hand_offs_on_their_own_page(monkeypatch):
+    handed_off = SimpleNamespace(reference=SimpleNamespace(path='users/synthetic/stt_cap_holds/hold-1'))
+    pages = []
+
+    def discover(kind, **kwargs):
+        pages.append((kind, kwargs.get('limit')))
+        return [handed_off] if kind == 'handoff' else []
+
+    finished = []
+
+    async def finish_handoff(uid, snapshot):
+        finished.append((uid, snapshot))
+        return True
+
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', discover)
+    monkeypatch.setattr(cap_hold_redrive, 'account_deletion_blocks_user_work', lambda uid: False)
+    monkeypatch.setattr(cap_hold_redrive.cap_hold_recovery, 'finish_handoff', finish_handoff)
+    counts = await cap_hold_redrive.sweep()
+    assert ('handoff', cap_hold_redrive.store.HANDOFF_PAGE) in pages
+    assert finished == [('synthetic', handed_off)]
+    assert counts['handoffs_erased'] == 1
+
+
+async def test_sweep_never_finishes_a_hand_off_for_a_deleting_account(monkeypatch):
+    handed_off = SimpleNamespace(reference=SimpleNamespace(path='users/synthetic/stt_cap_holds/hold-1'))
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind, **_: [handed_off] if kind == 'handoff' else [])
+    monkeypatch.setattr(cap_hold_redrive, 'account_deletion_blocks_user_work', lambda uid: True)
+    monkeypatch.setattr(
+        cap_hold_redrive.cap_hold_recovery, 'finish_handoff', AsyncMock(side_effect=AssertionError('finished'))
+    )
+    counts = await cap_hold_redrive.sweep()
+    assert 'handoffs_erased' not in counts
+
+
 @pytest.mark.parametrize('provider', ['modulate', 'parakeet'])
 def test_held_provider_disables_nested_billable_retry(monkeypatch, provider):
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic')
@@ -613,7 +647,7 @@ async def test_sweep_excludes_unenrolled_owner_but_preserves_custody_maintenance
     worker = AsyncMock(side_effect=AssertionError('unenrolled owner dispatched'))
     monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', worker)
     assert await cap_hold_redrive.sweep() == {'sealed': 0, 'visited': 0}
-    assert [call.args[0] for call in discover.call_args_list] == ['staging', 'cleanup', 'choices']
+    assert [call.args[0] for call in discover.call_args_list] == ['staging', 'cleanup', 'handoff', 'choices']
     worker.assert_not_called()
 
 

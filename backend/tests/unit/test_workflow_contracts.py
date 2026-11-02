@@ -1147,7 +1147,8 @@ _SYNTHETIC_GATE = """      - uses: actions/checkout@v7
         with:
           source_sha: ${{ github.sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 """
 
 
@@ -2089,7 +2090,6 @@ def _run_composite(
     live_indexes,
     source_sha='e' * 40,
     head_sha=None,
-    credentials='{}',
     verify_credential_project='false',
     run_validate_step=False,
 ):
@@ -2119,7 +2119,7 @@ def _run_composite(
     runner_temp.mkdir(exist_ok=True)
     _stub_bin(tmp_path)
     credentials_path = tmp_path / 'credentials.json'
-    credentials_path.write_text(credentials or '', encoding='utf-8')
+    credentials_path.write_text('{}', encoding='utf-8')
     indexes_file = tmp_path / 'live-indexes.json'
     indexes_file.write_text(json.dumps(live_indexes), encoding='utf-8')
 
@@ -2127,7 +2127,6 @@ def _run_composite(
         'inputs.source_sha': source_sha,
         'inputs.project_id': 'dev-project',
         'inputs.database': '(default)',
-        'inputs.credentials_json': credentials,
         'inputs.verify_credential_project': verify_credential_project,
         'inputs.artifact_suffix': '',
         'runner.temp': str(runner_temp),
@@ -2206,10 +2205,6 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     check, _ = _run_composite(tmp_path / 'bad-sha', live_indexes=ready_live, source_sha='not-a-sha')
     assert check.returncode == 1
     assert 'Invalid Firestore source SHA' in check.stdout
-
-    check, _ = _run_composite(tmp_path / 'no-creds', live_indexes=ready_live, credentials='')
-    assert check.returncode == 1
-    assert 'Missing Firestore read-only credentials' in check.stdout
 
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1

@@ -4489,12 +4489,11 @@
     "episodeNotesStartWithTranscript": "Les notes commencent à l’arrivée de la transcription finale.",
     "episodeOnDeviceNotesFootnote": "Rédigées sur votre téléphone pendant que vous parlez. Les notes complètes arrivent avec la transcription finale.",
     "episodeOnThisPhone": "Sur ce téléphone",
-    "liveCardTitle": "En direct",
     "livePreviewBehind": "Transcription finale en retard d’environ {duration}",
     "livePreviewCatchingUp": "La transcription finale rattrape son retard",
     "livePreviewNoEngineBody": "Vos paroles apparaissent ici une à deux minutes après que vous les avez dites.",
     "livePreviewNoEngineTitle": "Enregistrement en toute sécurité",
-    "livePreviewOnPhoneDivider": "En direct sur ce téléphone",
+    "livePreviewOnPhoneDivider": "À l'instant, sur ce téléphone",
     "livePreviewTurnOnLiveText": "Activer le texte en direct",
     "deviceCatchUpOnItsWay": "en cours d'envoi",
     "deviceCatchUpWhenOnline": "une fois en ligne",
@@ -4551,7 +4550,12 @@
     "yearlySwitchUnavailable": "La facturation annuelle n'est pas disponible pour votre forfait pour le moment.",
     "yearlySwitchDoneTitle": "Vous êtes passé à l'annuel",
     "yearlySwitchDoneBody": "{amount} débités aujourd'hui. Renouvellement le {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} parties} one{{count} partie} two{{count} parties} few{{count} parties} many{{count} parties} other{{count} parties}}",
     "chatAppsWaitingMessageIn": "Envoyez le message dans {app}. Cet écran se met à jour dès qu'Omi le reçoit.",
-    "chatAppsCodeExpiredMessageIn": "Obtenez un nouveau code et envoyez-le depuis {app}."
+    "chatAppsCodeExpiredMessageIn": "Obtenez un nouveau code et envoyez-le depuis {app}.",
+    "episodeWritingNotes": "Rédaction des notes…",
+    "episodeWritingNotesDetail": "On termine d'abord la transcription. Vous pouvez quitter cette page.",
+    "episodeCoversUpTo": "Jusqu'à {time} · notes complètes à la fin",
+    "liveTranscribedUpTo": "Transcrit jusqu'à {time}",
+    "liveAudioSaved": "{duration} enregistrés",
+    "liveAudioSavedDetail": "Les intervenants et la transcription finale apparaîtront ici au fil de l'envoi."
 }

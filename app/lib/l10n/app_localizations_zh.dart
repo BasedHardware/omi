@@ -14447,9 +14447,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get episodeOnThisPhone => '在本机';
 
   @override
-  String get liveCardTitle => '实时';
-
-  @override
   String livePreviewBehind(Object duration) {
     return '最终转写滞后约$duration';
   }
@@ -14464,7 +14461,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get livePreviewNoEngineTitle => '正在安全录制';
 
   @override
-  String get livePreviewOnPhoneDivider => '在本机实时显示';
+  String get livePreviewOnPhoneDivider => '刚刚，在此手机上';
 
   @override
   String get livePreviewTurnOnLiveText => '打开实况文本';
@@ -14703,21 +14700,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 个部分',
-      many: '$count 个部分',
-      few: '$count 个部分',
-      two: '$count 个部分',
-      one: '$count 个部分',
-      zero: '$count 个部分',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '在“$app”中发送这条消息。Omi 一收到，此屏幕就会更新。';
   }
@@ -14726,4 +14708,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return '获取新验证码，并从“$app”中发送。';
   }
+
+  @override
+  String get episodeWritingNotes => '正在撰写笔记…';
+
+  @override
+  String get episodeWritingNotesDetail => '正在先完成转录。你可以离开此页面。';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '涵盖至 $time · 结束后提供完整笔记';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '已转录至 $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '已保存 $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
 }

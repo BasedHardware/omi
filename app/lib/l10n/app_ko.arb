@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "최종 스크립트가 도착하면 노트가 시작됩니다.",
     "episodeOnDeviceNotesFootnote": "말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.",
     "episodeOnThisPhone": "이 휴대전화에서",
-    "liveCardTitle": "라이브",
     "livePreviewBehind": "최종 스크립트가 약 {duration} 뒤처져 있습니다",
     "livePreviewCatchingUp": "최종 스크립트가 곧 도착합니다",
     "livePreviewNoEngineBody": "말한 내용은 1~2분 후 이곳에 나타납니다.",
     "livePreviewNoEngineTitle": "안전하게 기록 중입니다",
-    "livePreviewOnPhoneDivider": "이 휴대전화에서 실시간",
+    "livePreviewOnPhoneDivider": "방금, 이 휴대전화에서",
     "livePreviewTurnOnLiveText": "실시간 텍스트 켜기",
     "deviceCatchUpOnItsWay": "전송 중",
     "deviceCatchUpWhenOnline": "온라인 시",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "지금은 사용 중인 플랜에서 연간 결제를 이용할 수 없습니다.",
     "yearlySwitchDoneTitle": "연간 결제로 전환되었습니다",
     "yearlySwitchDoneBody": "오늘 {amount}이 결제되었습니다. 갱신일은 {date}입니다.",
-    "episodePartsCount": "{count, plural, zero{{count}개 부분} one{{count}개 부분} two{{count}개 부분} few{{count}개 부분} many{{count}개 부분} other{{count}개 부분}}",
     "chatAppsWaitingMessageIn": "{app}에서 메시지를 보내세요. Omi가 받는 즉시 이 화면이 업데이트됩니다.",
-    "chatAppsCodeExpiredMessageIn": "새 코드를 받아 {app} 앱에서 보내세요."
+    "chatAppsCodeExpiredMessageIn": "새 코드를 받아 {app} 앱에서 보내세요.",
+    "episodeWritingNotes": "메모 작성 중…",
+    "episodeWritingNotesDetail": "먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.",
+    "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",
+    "liveTranscribedUpTo": "{time}까지 변환됨",
+    "liveAudioSaved": "{duration} 저장됨",
+    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다."
 }

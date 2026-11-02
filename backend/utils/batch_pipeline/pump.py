@@ -24,7 +24,8 @@ from utils.batch_pipeline.contracts import (
 )
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
-from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
+from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
+from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -40,6 +41,22 @@ SEGMENT_OWNER_MEMO = 4096
 # Bound on one lease-renewal round trip; a timeout marks the lease lost but the
 # blocking DB leaf may still land later, fenced by its token.
 HEARTBEAT_TIMEOUT_SECONDS = 8
+# Spend admission checks leases serially under the server deadline, so one call
+# carries at most this many leases; leases a call cannot reach come back
+# unevaluated and wait out the admission backoff (32% of leases at 25%,
+# 2026-11-02). Each call gets its own wait, above the client HTTP timeout.
+ADMISSION_LEASES_PER_CALL = 4
+ADMISSION_CALL_TIMEOUT_SECONDS = 10
+
+
+async def _drain_task(task):
+    """Repeated caller cancellation cannot orphan a non-preemptible IO leaf."""
+    while True:
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
 
 
 class Pump:
@@ -264,6 +281,31 @@ class Pump:
             await self.sample_metrics()
             self._last_metrics = sampled_at
 
+    def _authorize_in_calls(self, leases: list[LeasedWork]) -> dict:
+        """One merged spend receipt from serial admission calls of at most ADMISSION_LEASES_PER_CALL leases.
+
+        A failed or malformed call contributes nothing, so its leases stay
+        unevaluated (never allowed) while the other calls' decisions stand.
+        """
+        allowed, retry_after, held_reason = [], {}, {}
+        authorize = self.authorize_compute
+        if authorize is None:
+            return {'allowed': allowed, 'retry_after': retry_after, 'held_reason': held_reason}
+        for start in range(0, len(leases), ADMISSION_LEASES_PER_CALL):
+            try:
+                part = authorize(leases[start : start + ADMISSION_LEASES_PER_CALL]) or {}
+                part_allowed = list(part.get('allowed') or [])
+                part_retry = dict(part.get('retry_after') or {})
+                part_held = dict(part.get('held_reason') or {})
+            except Exception as error:
+                worker_metrics.admission(failure_outcome(error))
+                continue
+            worker_metrics.admission('received')
+            allowed += part_allowed
+            retry_after.update(part_retry)
+            held_reason.update(part_held)
+        return {'allowed': allowed, 'retry_after': retry_after, 'held_reason': held_reason}
+
     @staticmethod
     def _log_held_retry(scope: str, error: Exception) -> None:
         logger.warning(
@@ -301,6 +343,8 @@ class Pump:
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
+        prepared = None
+        watching = None
         try:
             if self.shadow is not None:
                 try:
@@ -318,13 +362,17 @@ class Pump:
                 except Exception:
                     pass  # Missing configuration is a policy denial, never GPU permission.
                 if self.authorize_compute:
+                    calls = -(-len(required) // ADMISSION_LEASES_PER_CALL)
                     try:
                         receipt = await asyncio.wait_for(
-                            self._run_blocking('admission', db_executor, self.authorize_compute, required),
-                            timeout=10,
+                            self._run_blocking('admission', db_executor, self._authorize_in_calls, required),
+                            timeout=ADMISSION_CALL_TIMEOUT_SECONDS * calls,
                         )
-                    except Exception:
+                    except Exception as error:
+                        worker_metrics.admission(failure_outcome(error))
                         receipt = {}
+                else:
+                    worker_metrics.admission('unconfigured')
                 permitted = set(receipt.get('allowed') or [])
                 retries = receipt.get('retry_after') or {}
                 held_reason = receipt.get('held_reason') or {}
@@ -359,10 +407,9 @@ class Pump:
                     selected = [v for v in leases if v.item.segment_id in segments]
                     receipt = {}
                     if self.authorize_compute is not None:
-                        try:
-                            receipt = self.authorize_compute(selected) or {}
-                        except Exception:
-                            receipt = {}
+                        receipt = self._authorize_in_calls(selected)
+                    else:
+                        worker_metrics.admission('unconfigured')
                     permitted = set(receipt.get('allowed') or [])
                     held = receipt.get('held_reason') or {}
                     retries = receipt.get('retry_after') or {}
@@ -372,8 +419,35 @@ class Pump:
                     return {segment: (None if segment in permitted else held.get(segment, '')) for segment in segments}
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
+            prepare = getattr(self.worker, 'prepare_first', None)
+            if prepare is not None and not (stop_event is not None and stop_event.is_set()):
+                prepared = prepare([v.item for v in leases if v.item.segment_id not in lost])
+            if prepared is not None:
+
+                async def discard_invalid_preparation(handle):
+                    while handle.item.segment_id not in lost and not (stop_event is not None and stop_event.is_set()):
+                        await asyncio.sleep(0.1)
+                    # Cancellation is immediate for queued work. Running SDK
+                    # calls retain their reservation until the lane's final
+                    # drain, and cannot be reused by a replacement attempt.
+                    handle.cancel()
+
+                watching = asyncio.create_task(discard_invalid_preparation(prepared))
+            skipped: set[str] = set()
             try:
                 async with self._gpu:
+                    # Preparation belongs to the waiting lane. Once dispatch
+                    # starts, the current bounded chain drains on stop/loss;
+                    # cancelling a queued first fetch here would fake a failure.
+                    if watching is not None:
+                        watching.cancel()
+                        watched = asyncio.gather(watching, return_exceptions=True)
+                        try:
+                            await asyncio.shield(watched)
+                        except asyncio.CancelledError:
+                            await _drain_task(watched)
+                            raise
+                        watching = None
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
                         # Claimed behind a sibling's chain when SIGTERM or a
                         # fatal GPU error arrived: refund without an attempt
@@ -398,12 +472,25 @@ class Pump:
                                     type(error).__name__,
                                 )
                         return 0
+                    skipped = set(lost)
+                    if prepared is not None:
+                        # A queued decode may have been cancelled on stop/lease
+                        # loss. Never let it become this or a replacement attempt.
+                        if prepared.cancelled or prepared.item.segment_id in skipped:
+                            skipped.add(prepared.item.segment_id)
+                            # The fetch may already be running and cannot be
+                            # cancelled. Final cleanup drains it after GPU unlock,
+                            # with its reservation and lease renewal still held.
+                            prepared.cancel()
+                        else:
+                            dispatch_kwargs['prepared'] = prepared
+                    process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
                     compute = asyncio.create_task(
                         self._run_blocking(
                             'worker_flight',
                             sync_executor,
-                            self.worker.process_batch,
-                            [v.item for v in leases],
+                            process,
+                            [v.item for v in leases if v.item.segment_id not in skipped],
                             **dispatch_kwargs,
                         )
                     )
@@ -412,7 +499,20 @@ class Pump:
                     try:
                         results = await asyncio.shield(compute)
                     except asyncio.CancelledError:
-                        results = await compute
+                        results = await _drain_task(compute)
+                        if callable(getattr(results, 'close', None)):
+                            await _drain_task(
+                                asyncio.shield(asyncio.create_task(run_blocking(sync_executor, results.close)))
+                            )
+                        raise
+                # CUDA is quiescent and the next lane may compute. Leases stay
+                # renewed until every write and fenced publication has settled.
+                if callable(getattr(results, 'settle', None)):
+                    settling = asyncio.create_task(self._run_blocking('persist_settle', sync_executor, results.settle))
+                    try:
+                        results = await asyncio.shield(settling)
+                    except asyncio.CancelledError:
+                        await _drain_task(settling)
                         raise
             except FatalGpuError:
                 # The whole GPU flight is uncertain. Return every owned lease
@@ -443,8 +543,27 @@ class Pump:
                     result_map[segment] = replace(result, retry_after=dispatch_retries[segment])
             if len(result_map) != len(results) or not set(result_map).issubset(v.item.segment_id for v in leases):
                 raise ValueError('worker returned duplicate or foreign results')
-            await self._publish_flight(leases, result_map, lost)
-            return len(leases)
+            # A renewal may recover after a waiting attempt was cancelled.
+            # Never interpret its intentionally absent result as a GPU failure.
+            for lease in leases:
+                if lease.item.segment_id in skipped:
+                    try:
+                        await self._run_blocking(
+                            'publication',
+                            db_executor,
+                            self.scheduler.defer,
+                            lease.item.segment_id,
+                            lease.token,
+                            time.time(),
+                            1,
+                        )
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_flight outcome=lease_recovery exception_type=%s', type(error).__name__
+                        )
+            active = [v for v in leases if v.item.segment_id not in skipped]
+            await self._publish_flight(active, result_map, lost)
+            return len(active)
         except FatalGpuError:
             raise  # Its handler already refunded every lease without an attempt charge.
         except Exception:
@@ -453,9 +572,21 @@ class Pump:
             await self._release(claimed)
             raise
         finally:
-            self._normal_flights -= 1
-            done.set()
-            await renew
+            try:
+                if watching is not None:
+                    watching.cancel()
+                    await _drain_task(asyncio.gather(watching, return_exceptions=True))
+                if prepared is not None:
+                    cleanup = asyncio.create_task(run_blocking(sync_executor, prepared.close))
+                    try:
+                        await asyncio.shield(cleanup)
+                    except asyncio.CancelledError:
+                        await _drain_task(cleanup)
+                        raise
+            finally:
+                self._normal_flights -= 1
+                done.set()
+                await _drain_task(asyncio.shield(renew))
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:

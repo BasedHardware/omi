@@ -304,7 +304,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "GCP_LOCATION",
             "GEMINI_API_KEY",
             "HOSTED_PUSHER_API_URL",
-            "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
@@ -369,6 +368,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
+            # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).
+            "AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT",
             "REDIS_DB_HOST",
             "TYPESENSE_HOST",
             # Process-local final-pass shadow is admitted only on the prod pusher.

@@ -198,6 +198,7 @@ from config.recorded_time_tolerances import (
 # closes it (reason ``idle``). In between, Jev decides whether the user moved on.
 # Hard cap on one episode's recorded span (David, 2026-10-29).
 MAX_MOMENTS = 48
+COMPOSER_MIN_SECTION_SECONDS = 60
 
 # Jev answers P(same occasion); below this the user moved on. Deliberately low:
 # the question is uncalibrated, so only a confident "moved on" closes, and no

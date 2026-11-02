@@ -66,3 +66,17 @@ def test_write_budget_counts_one_fence_token_per_patched_owner():
     # 447 writes + 2 patches + 2 tokens (two owners) = 451: over budget.
     with pytest.raises(RuntimeError, match='write budget'):
         _store(447, ['u1', 'u2']).flush()
+
+
+def test_write_budget_counts_deferred_outbox_and_fence_writes_together():
+    for writes, allowed in ((446, True), (447, False)):
+        store = _store(writes, ['u1'])
+        for index in range(2):
+            store.defer_set(SimpleNamespace(path=f'provider_stt_outbox/row{index}'), {'state': 'pending'})
+        # Ordinary writes + one conversation patch + one fence token + two
+        # outbox rows: 450 fits, 451 must fail before writing anything.
+        if allowed:
+            store.flush()
+        else:
+            with pytest.raises(RuntimeError, match='write budget'):
+                store.flush()

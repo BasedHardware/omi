@@ -387,12 +387,19 @@ class SonioxIdleMetrics(NamedTuple):
     cohort_failures: Counter
     cohort_avoided: Counter
     cohort_closes_by_trigger: Counter
+    drains: Counter
+    close_refusals: Counter
+    silence_gaps: Histogram
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
 _soniox_idle_lock = threading.Lock()
 
 SONIOX_IDLE_COHORT_ARMS = ('control', 'treatment')
+# Silence-gap buckets bracket the speech-gate close thresholds (hangover + 1 s
+# up to today's 45 s), so the connected time any threshold would save reads
+# straight off the histogram before a cohort runs.
+SONIOX_SILENCE_GAP_BUCKETS = (2, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 120, 300, 900)
 
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
@@ -419,7 +426,7 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                 ),
                 Counter(
                     'omi_soniox_idle_closes_by_trigger_total',
-                    'Planned paid transport closes by trigger (vad silence or no client frames)',
+                    'Planned paid transport closes by trigger (vad silence, pre_speech silence or no client frames)',
                     ['trigger'],
                 ),
                 Counter(
@@ -453,8 +460,27 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'Planned paid transport closes by trigger and treatment arm',
                     ['arm', 'trigger'],
                 ),
+                Counter(
+                    'omi_soniox_idle_drains_total',
+                    'Planned-close drains by outcome (drained within the cap, or timeout and abort)',
+                    ['outcome'],
+                ),
+                Counter(
+                    'omi_soniox_idle_close_refusals_total',
+                    'Idle episodes whose planned close was refused (rearm floor or hourly cap), once per episode',
+                    ['reason'],
+                ),
+                Histogram(
+                    'omi_soniox_idle_silence_gap_seconds',
+                    'Active-VAD silence on a Soniox leg, first silent frame to the next speech, open or idle-closed',
+                    buckets=SONIOX_SILENCE_GAP_BUCKETS,
+                ),
             )
-            for _trigger in ('vad', 'no_frames'):
+            _soniox_idle_metrics.drains.labels(outcome='drained')
+            _soniox_idle_metrics.drains.labels(outcome='timeout')
+            _soniox_idle_metrics.close_refusals.labels(reason='rearm')
+            _soniox_idle_metrics.close_refusals.labels(reason='cap')
+            for _trigger in ('vad', 'pre_speech', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
                 for _arm in SONIOX_IDLE_COHORT_ARMS:
                     _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)

@@ -20,13 +20,18 @@ from typing import Any
 from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_projection import assignment_held_without_recovery
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
+from config.batch_pipeline import projection_hold_recovery_enabled
+from utils.conversations.fragment_visibility import is_automatic_discard
 
 logger = logging.getLogger(__name__)
 
 # Held rows examined per maintenance pass; the scan wraps at its own pace.
-RELEASE_PAGE = 32
+RELEASE_PAGE = 128
+RELEASE_TICK_SECONDS = 5.0
+MAX_RELEASE_ATTEMPTS = 3
 
 
 class ProjectionReleaseStore:
@@ -40,7 +45,7 @@ class ProjectionReleaseStore:
         has not actually been restored, and releasing into it would only
         re-hold the unit on the next assignment."""
         target = binding.target_conversation_id
-        if not target or not binding.record_origin:
+        if not target or (not binding.record_origin and not projection_hold_recovery_enabled()):
             return False
         conversation = (
             self.store.client.collection('users')
@@ -53,9 +58,12 @@ class ProjectionReleaseStore:
         )
         return bool(
             conversation
-            and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+            and (
+                not binding.record_origin or conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+            )
             and not conversation.get('deleted')
-            and not conversation.get('discarded')
+            # A record's batch text supersedes the pipeline's own discard (replace_record).
+            and (not conversation.get('discarded') or (binding.record_origin and is_automatic_discard(conversation)))
             and conversation.get('status') == 'completed'
             and not conversation.get('uses_custom_stt')
             and conversation.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
@@ -71,6 +79,7 @@ class ProjectionReleaseStore:
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
+            attempts = entry.get('projection_release_attempts', int(entry.get('projection_redriven_at') is not None))
             if (
                 binding is None
                 or segment_id not in binding.segment_ids
@@ -80,7 +89,15 @@ class ProjectionReleaseStore:
                 or entry.get('projection_state') != 'quarantine_held'
                 or receipt.get('state') != 'quarantined'
                 or receipt.get('disposition') != 'ambiguous_generation'
-                or entry.get('projection_redriven_at') is not None
+                or (not projection_hold_recovery_enabled() and entry.get('projection_redriven_at') is not None)
+                or type(attempts) is not int
+                or not 0 <= attempts < MAX_RELEASE_ATTEMPTS
+                or entry.get('projection_privacy_refusal')
+                or not assignment_held_without_recovery(job, entry)
+                or (
+                    entry.get('projection_parts')
+                    and not any(part.get('state') == 'quarantined' for part in entry['projection_parts'].values())
+                )
             ):
                 return False
             if not self._target_restorable(transaction, binding):
@@ -88,6 +105,7 @@ class ProjectionReleaseStore:
             reset: dict[str, Any] = {
                 'projection_state': 'pending',
                 'projection_redriven_at': now,
+                'projection_release_attempts': attempts + 1,
                 'projection': {},
                 'projection_blocked_since': None,
                 'projection_block_type': None,
@@ -96,9 +114,18 @@ class ProjectionReleaseStore:
                 # Old-binaries fence for the held receipt; the receipt is gone.
                 reset['protocol_version'] = 1
                 reset['lineage_quarantine_version'] = 0
+            if projection_hold_recovery_enabled():
+                # Old binaries cannot rebuild a summary around preserved
+                # multipart suffixes or enforce the new lifecycle fence.
+                reset.update(protocol_version=2, projection_release_version=1)
             if entry.get('projection_parts'):
-                reset['projection_parts'] = {}
-                reset['projection_part_count'] = 0
+                # Keep proven assignments and their outstanding follow-ups;
+                # only held parts may re-enter assignment, in ordinary order.
+                reset['projection_parts'] = {
+                    index: part
+                    for index, part in entry['projection_parts'].items()
+                    if part.get('state') != 'quarantined'
+                }
             transaction.update(self.store.ref('results', segment_id), reset)
             transaction.update(self.store.ref('jobs', segment_id), {'recovery_state': None})
             released_owner.append(binding.owner_id)
@@ -132,10 +159,45 @@ def held_page_ids(client: Any, namespace: str, limit: int, after_id: str | None)
     return [document.id for document in query.stream()]
 
 
-def release_page(store, *, limit: int, after_id: str | None, now: float | None = None):
+# Instances restart far more often than one scan wraps. Persist the cursor so a
+# new instance resumes where the last pass stopped instead of at page one. The
+# doc carries no scheduler field, so control-shard queries never select it.
+RELEASE_CURSOR_KEY = 'projection_release_cursor'
+
+
+def load_release_cursor(store) -> str | None:
+    try:
+        row = store.ref('control', RELEASE_CURSOR_KEY).get().to_dict() or {}
+    except Exception as error:
+        logger.warning(
+            'event=batch_projection action=release_held action=cursor_load outcome=retry exception_type=%s',
+            type(error).__name__,
+        )
+        return None
+    after = row.get('after_id')
+    return after if isinstance(after, str) and after else None
+
+
+def save_release_cursor(store, after_id: str | None, now: float) -> None:
+    @firestore.transactional
+    def put(transaction):
+        transaction.set(store.ref('control', RELEASE_CURSOR_KEY), {'after_id': after_id, 'updated_at': now})
+
+    try:
+        store.run(put)
+    except Exception as error:
+        # Advisory: a lost write only repeats rows the next instance re-checks.
+        logger.warning(
+            'event=batch_projection action=release_held action=cursor_save outcome=retry exception_type=%s',
+            type(error).__name__,
+        )
+
+
+def release_page(store, *, limit: int, after_id: str | None, now: float | None = None, deadline: float | None = None):
     """One bounded page of held rows; returns (counts, next_after)."""
     moment = now if now is not None else time.time()
     counts = {'released': 0, 'waiting': 0, 'error': 0, 'examined': 0}
+    limit = max(1, min(limit, RELEASE_PAGE))
     try:
         page = held_page_ids(store.client, store.store.namespace, limit, after_id)
     except Exception as error:
@@ -155,5 +217,17 @@ def release_page(store, *, limit: int, after_id: str | None, now: float | None =
             logger.warning(
                 'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
             )
-    next_after = page[-1] if len(page) >= limit else None
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+    processed = counts['examined']
+    next_after = page[processed - 1] if processed and (processed < len(page) or len(page) >= limit) else None
+    return counts, next_after
+
+
+def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None):
+    """``release_page`` that resumes from, and records, the durable cursor."""
+    start = after_id if after_id is not None else load_release_cursor(store)
+    counts, next_after = release_page(store, limit=limit, after_id=start, now=now, deadline=deadline)
+    if counts['examined'] or next_after != start:
+        save_release_cursor(store, next_after, now)
     return counts, next_after

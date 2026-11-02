@@ -37,7 +37,7 @@ from diarizer.batch_pipeline import (
     validate_words,
 )
 from diarizer.batch_pipeline_context import capture_stream
-from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
+from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload, install_shared_trunk
 from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
 from utils.batch_pipeline import leaf_timings
 
@@ -175,8 +175,10 @@ class StagedAudio:
     def __init__(self, fetch_audio, *, timings_of: Callable[[], Any] | None = None):
         self.fetch_audio = fetch_audio
         self.timings_of = timings_of or (lambda: None)
-        self._streams: OrderedDict[str, str | None] = OrderedDict()
-        self._languages: OrderedDict[str, str | None] = OrderedDict()
+        # Keep the actual item alive with its context: object ids cannot be
+        # reused, and a re-leased attempt cannot overwrite a draining attempt.
+        self._streams: OrderedDict[int, tuple[Any, str | None]] = OrderedDict()
+        self._languages: OrderedDict[int, tuple[Any, str | None]] = OrderedDict()
 
     def decode(self, item):
         with leaf_timings.active(self.timings_of()):
@@ -188,12 +190,15 @@ class StagedAudio:
             context = read_context(body)
         except Exception:
             context = None
-        self._streams[item.segment_id] = capture_stream(item, context)
-        self._languages[item.segment_id] = stt_language(
-            context,
-            duration_seconds=item.duration_seconds,
-            expected_owner_id=item.owner_id,
-            expected_segment_id=item.segment_id,
+        self._streams[id(item)] = (item, capture_stream(item, context))
+        self._languages[id(item)] = (
+            item,
+            stt_language(
+                context,
+                duration_seconds=item.duration_seconds,
+                expected_owner_id=item.owner_id,
+                expected_segment_id=item.segment_id,
+            ),
         )
         for pending in (self._streams, self._languages):
             while len(pending) > self.MAX_PENDING:
@@ -201,12 +206,12 @@ class StagedAudio:
         return leaf_timings.call('decode', decode_pcm16_wav, body)
 
     def stream(self, item):
-        stream = self._streams.pop(item.segment_id, None)
+        stream = self._streams.pop(id(item), (None, None))[1]
         return ('shadow:' + stream) if item.shadow and stream else stream
 
     def language(self, item):
         """Intake's resolved STT language ('' unknown); None when intake did not record one."""
-        return self._languages.pop(item.segment_id, None)
+        return self._languages.pop(id(item), (None, None))[1]
 
 
 MAX_SELF_LID_PROBE_SECONDS = 30.0
@@ -355,6 +360,8 @@ def create_local_worker(
         if config.flight_batching
         else None
     )
+    if flight is None and config.shared_embedding_trunk:
+        install_shared_trunk(pyannote_model)
     # Resolve dynamically: run_process binds its private registry after loading.
     staged = StagedAudio(fetch_audio, timings_of=lambda: worker.timings)
 

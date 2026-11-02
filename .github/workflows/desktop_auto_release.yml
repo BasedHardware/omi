@@ -35,7 +35,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          app-id: ${{ vars.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
       - name: Plan desktop release
