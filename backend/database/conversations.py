@@ -31,6 +31,7 @@ from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
+from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
@@ -882,6 +883,7 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         if (
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
+            or is_settling_fragment(conversation)
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -1954,6 +1956,7 @@ def get_conversations_without_photos(
                 'sync_relevance_user_kept',
                 'has_photos',
                 'folder_user_set',
+                *SETTLING_FIELDS,
             }
         )
         conversations_ref = conversations_ref.select(sorted(fields))

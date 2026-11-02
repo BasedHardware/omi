@@ -292,6 +292,14 @@ def _episode(*ids):
     }
 
 
+def test_a_stored_floor_decision_without_a_blocked_reason_leaves_the_list(monkeypatch):
+    monkeypatch.delenv('HOME_HIDE_BELOW_FLOOR_ROWS', raising=False)
+    row = _short_row(
+        summary_blocked_reason=None, relevance_decision={'verdict': 'keep', 'reason': 'content_below_floor'}
+    )
+    assert home_read.project_episode('u', _episode('c'), members={'c': row}, list_row=True) is None
+
+
 def test_short_capture_under_the_floor_leaves_the_list_but_not_a_direct_read(monkeypatch):
     monkeypatch.delenv('HOME_HIDE_BELOW_FLOOR_ROWS', raising=False)
     members = {'c': _short_row()}
