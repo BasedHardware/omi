@@ -75,6 +75,26 @@ class CheckoutTests(unittest.TestCase):
   result=entry.source_check(self.root/'shallow',base);self.assertEqual(result['state'],'failed');self.assertIn('unshallow',result['reason'])
   git(self.root,'clone','-q','file://'+str(origin),'full')
   self.assertEqual(entry.source_check(self.root/'full',base)['state'],'passed')
+ def test_real_sdk_tree_states(self):
+  sdk=self.root/'sdk';project=sdk/'nrf';project.mkdir(parents=True)
+  def git(*args):return subprocess.run(['git','-c','user.name=t','-c','user.email=t@example.com','-C',str(project)]+list(args),check=True,capture_output=True,text=True).stdout.strip()
+  git('init','-q');(project/'.gitignore').write_text('*.o\n*.pyc\n');(project/'a.c').write_text('1');git('add','.');git('commit','-qm','1')
+  lock={'sdk_projects':[{'name':'nrf','path':'nrf','commit':git('rev-parse','HEAD')}],'not_cloned_in_reference':[]}
+  state=lambda:entry.sdk_check(sdk,lock)['state']
+  self.assertEqual(state(),'passed')
+  (project/'__pycache__').mkdir();(project/'__pycache__'/'a.cpython-312.pyc').write_text('x');self.assertEqual(state(),'passed')
+  (project/'b.o').write_text('x');self.assertEqual(state(),'failed');(project/'b.o').unlink()
+  (project/'new.c').write_text('x');self.assertEqual(state(),'failed');(project/'new.c').unlink()
+  (project/'a.c').write_text('2');self.assertEqual(state(),'failed')
+ def test_real_toolchain_executables_launch(self):
+  toolchain={'toolchain_environment_sha256':'e'*64,'toolchain_files':[{'public_path':'environment.json','sha256':'e'*64}],'toolchain_id':'synthetic'}
+  (self.root/'bin').mkdir()
+  def tool(name,code):
+   path=self.root/'bin'/name;path.write_text('#!/bin/sh\nexit '+str(code)+'\n');path.chmod(0o755)
+  with patch.object(entry,'digest',return_value='e'*64):
+   tool('cmake',0);self.assertEqual(entry.toolchain_check(self.root,toolchain)['state'],'failed')
+   tool('ninja',1);self.assertEqual(entry.toolchain_check(self.root,toolchain)['state'],'failed')
+   tool('ninja',0);self.assertEqual(entry.toolchain_check(self.root,toolchain)['state'],'passed')
  def lock(self):
   return {'sdk_projects':[{'name':'nrf','path':'nrf','commit':'c'*40}],'not_cloned_in_reference':[]}
  def test_sdk_untracked_files_rejected(self):

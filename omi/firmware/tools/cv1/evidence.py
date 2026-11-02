@@ -42,7 +42,7 @@ def validate_capture(path):
  if json.loads((path.parent/'metadata.json').read_text())!=record['metadata']:raise ValueError('capture metadata changed')
  if record['evidence_type']=='uart_capture' and any(source['snapshot']=='raw.bin' for source in record['sources']):
   declared=record['metadata'].get('bytes') if type(record['metadata']) is dict else None
-  if (path.parent/'raw.bin').stat().st_size!=declared:raise ValueError('UART raw/metadata byte count mismatch')
+  if type(declared) is not int or (path.parent/'raw.bin').stat().st_size!=declared:raise ValueError('UART raw/metadata byte count mismatch')
  return record
 
 

@@ -61,4 +61,12 @@ class EvidenceTests(unittest.TestCase):
  def test_replay_ble_rejects_inconsistent_match_count(self):
   p=self.root/'receipt.json';p.write_text(json.dumps({'state':'completed','error':None,'results':[{'peripheral_id':'aa'},{'peripheral_id':'cc'}],'match_count':1}));index=bench.corpus(self.root/'corpus',[p])
   with self.assertRaises(ValueError):evidence.replay_ble(index)
+ def test_uart_byte_count_must_be_an_integer(self):
+  for declared in (True,1.0,'1'):
+   with self.subTest(declared=declared):
+    root=self.root/('uart-'+str(declared));root.mkdir();(root/'raw.bin').write_bytes(b'x');metadata={'bytes':declared}
+    (root/'metadata.json').write_text(json.dumps(metadata))
+    sources=[{'snapshot':name,'sha256':evidence.bench.digest(root/name),'size_bytes':(root/name).stat().st_size} for name in ('metadata.json','raw.bin')]
+    (root/'capture.json').write_text(json.dumps({'schema_version':1,'provenance':'operator_supplied','evidence_type':'uart_capture','sources':sources,'metadata':metadata}))
+    with self.assertRaisesRegex(ValueError,'byte count'):evidence.validate_capture(root/'capture.json')
 if __name__=='__main__':unittest.main()
