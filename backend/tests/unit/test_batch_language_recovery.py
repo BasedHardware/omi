@@ -480,6 +480,8 @@ def test_guarded_zero_vad_requires_both_empty_recognizers_before_silence(setup, 
     modulate.assert_called_once()
     soniox.assert_called_once()
     assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'empty'
+    assert row(client)['recovery']['recognizers']['modulate']['outcome'] == 'empty'
+    assert 'no_vendor_call' not in row(client)['recovery']
 
 
 @pytest.mark.parametrize(

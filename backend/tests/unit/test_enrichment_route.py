@@ -103,6 +103,28 @@ def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
     assert (result.outcome, result.reason) == ('deferred', 'not_due')
     assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.LIVE_DEFER_SECONDS, abs=5)
     assert state_rows[KEY]['task_token'] != token and tasks[-1]['task_token'] == state_rows[KEY]['task_token']
+    # The row records the custody cause (as the sync handler's rows do), not the consumer's not_due.
+    assert state_rows[KEY]['deferred_reason'] == 'open_live_target'
+
+
+def test_long_stuck_live_target_polls_hourly_through_the_consumer(rows, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    state_rows, _ = rows
+    old = time.time() - reprocess.STUCK_DEFER_GRACE_SECONDS - 60
+    state_rows[KEY].update(deferred_reason='open_live_target', deferred_since=old, first_pending_at=old)
+
+    def live(*_):
+        from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+        context = PROCESS_CONTEXT.get()
+        if context is not None:
+            context['defer_reason'] = 'open_live_target'
+
+    result = _deliver(rows, live, now=time.time())  # the episode clock is the settle clock
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    assert state_rows[KEY]['deferred_since'] == old
+    assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.STUCK_DEFER_POLL_SECONDS, abs=5)
 
 
 def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch):

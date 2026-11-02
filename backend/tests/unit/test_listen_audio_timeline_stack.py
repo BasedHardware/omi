@@ -39,6 +39,7 @@ from google.api_core.exceptions import PreconditionFailed
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+from utils import pusher_audio_projection
 import routers.listen.receiver as receiver_module
 import utils.other.storage as storage_module
 import utils.conversations.speaker_resolution as stage_module
@@ -333,6 +334,8 @@ def gcs(monkeypatch):
 
 @pytest.fixture
 def pusher_env(monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     # Shared by the historical mixed-version/reconnect probes as well.
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     audio_files_by_conversation = {}
@@ -353,7 +356,7 @@ def pusher_env(monkeypatch):
             row['audio_files'] = data['audio_files']
         return True
 
-    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update_conversation)
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update_conversation)
     return audio_files_by_conversation
 
 

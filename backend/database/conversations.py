@@ -21,7 +21,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 import utils.other.hume as hume
-from models.audio_file import AudioFile, ChunkSpan
+from models.audio_file import AudioFile
+from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
@@ -92,7 +93,7 @@ from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
-from utils.other.playback_identity import source_fingerprint, retain_aliases
+from utils.other.playback_identity import retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
 from config.translation import resolve_ondemand_config
@@ -2088,9 +2089,22 @@ def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
     return True
 
 
+class AudioFilesChanged(RuntimeError):
+    """A concurrent projection writer invalidated the pusher's cached inventory."""
+
+
+def audio_files_revision(files: list[dict]) -> list[tuple]:
+    return [(af.get('id'), af.get('source_fingerprint')) for af in files]
+
+
 @after_write('conversations')
 def update_conversation(
-    uid: str, conversation_id: str, update_data: dict, *, record_owner_out: dict | None = None
+    uid: str,
+    conversation_id: str,
+    update_data: dict,
+    *,
+    record_owner_out: dict | None = None,
+    expected_audio_files: list[dict] | None = None,
 ) -> bool:
     """Apply ``update_data`` to a conversation.
 
@@ -2109,6 +2123,11 @@ def update_conversation(
     if not doc_snapshot.exists:
         return False
 
+    if expected_audio_files is not None and audio_files_revision(
+        doc_snapshot.to_dict().get('audio_files') or []
+    ) != audio_files_revision(expected_audio_files):
+        raise AudioFilesChanged('audio projection changed')
+
     if record_owner_out is not None:
         owner = doc_snapshot.to_dict().get('record_lane_owner')
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
@@ -2122,7 +2141,17 @@ def update_conversation(
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
-        doc_ref.update(prepared_data)
+        if expected_audio_files is None:
+            doc_ref.update(prepared_data)
+        else:
+            # Also fence a writer arriving after the read, including label edits.
+            doc_ref.update(
+                prepared_data, option=get_firestore_client().write_option(last_update_time=doc_snapshot.update_time)
+            )
+    except FailedPrecondition as exc:
+        if expected_audio_files is not None:
+            raise AudioFilesChanged('audio projection changed during update') from exc
+        raise
     except NotFound:
         # The conversation was deleted between the existence read above and
         # this commit. The contract of this function is to report a gone owner
@@ -2209,6 +2238,8 @@ def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, fire
 def create_audio_files_from_chunks(
     uid: str,
     conversation_id: str,
+    *,
+    listed_chunks: Optional[List[dict]] = None,
 ) -> List[AudioFile]:
     """
     Create audio file records by merging chunks from a conversation.
@@ -2222,7 +2253,7 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks = list_audio_chunks(uid, conversation_id, source_identity=True)
+    chunks = list_audio_chunks(uid, conversation_id, source_identity=True) if listed_chunks is None else listed_chunks
     if not chunks:
         return []
 
@@ -2235,100 +2266,6 @@ def create_audio_files_from_chunks(
             audio_files.append(audio_file)
 
     return audio_files
-
-
-def _finalize_audio_file_group(
-    uid: str, conversation_id: str, chunk_group: List[dict], existing_files: List[AudioFile]
-) -> Optional[AudioFile]:
-    """
-    Create an AudioFile record that references chunks (no merging).
-
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-        chunk_group: List of chunk dicts to reference
-        existing_files: List of existing audio files
-
-    Returns:
-        AudioFile object or None if failed
-    """
-    if not chunk_group:
-        return None
-
-    # Generate file ID
-    source_hash = source_fingerprint(chunk_group)
-    file_id = (
-        str(uuid.uuid5(uuid.NAMESPACE_OID, f'{uid}/{conversation_id}/{source_hash}'))
-        if source_hash
-        else str(uuid.uuid4())
-    )
-
-    # Extract timestamps
-    timestamps = [chunk['timestamp'] for chunk in chunk_group]
-
-    # v2 groups carry validated contiguous coverage spans from blob metadata;
-    # duration is the authoritative span extent, never an encoded-size guess.
-    spans: List[Tuple[float, float]] = []
-    playback_starts: List[float] = []
-    for chunk in chunk_group:
-        span = chunk.get('span')
-        if not isinstance(span, dict):
-            spans = []
-            break
-        try:
-            start = float(span['start'])
-            samples = float(span['samples'])
-            rate = float(span['sample_rate'])
-        except (KeyError, TypeError, ValueError):
-            spans = []
-            break
-        if samples <= 0 or rate <= 0:
-            spans = []
-            break
-        spans.append((start, start + samples / rate))
-        playback_start = span.get('playback_start')
-        if isinstance(playback_start, (int, float)):
-            playback_starts.append(float(playback_start))
-
-    if spans:
-        started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
-        duration = spans[-1][1] - spans[0][0]
-        return AudioFile(
-            id=file_id,
-            source_fingerprint=source_hash,
-            uid=uid,
-            conversation_id=conversation_id,
-            chunk_timestamps=timestamps,
-            provider='gcp',
-            started_at=started_at,
-            duration=duration,
-            chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
-            # The normalized wall basis holds only when every chunk in the
-            # group carries its persisted playback start; one legacy chunk
-            # leaves the part on the raw capture clock.
-            playback_start=(min(playback_starts) if len(playback_starts) == len(spans) else None),
-        )
-
-    # Calculate started_at and duration from timestamps and blob sizes
-    started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
-    last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
-    # Estimate last chunk duration from blob size (PCM16 mono at 16kHz = 32000 bytes/sec).
-    # Approximate for opus-encoded blobs; conversation_audio.captured_duration (from
-    # decoded PCM) is the display source of truth.
-    last_chunk_size = chunk_group[-1].get('size') or 0
-    last_chunk_duration = last_chunk_size / 32000.0 if last_chunk_size > 0 else 5.0
-    duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
-
-    return AudioFile(
-        id=file_id,
-        source_fingerprint=source_hash,
-        uid=uid,
-        conversation_id=conversation_id,
-        chunk_timestamps=timestamps,
-        provider='gcp',
-        started_at=started_at,
-        duration=duration,
-    )
 
 
 @after_write('conversations')

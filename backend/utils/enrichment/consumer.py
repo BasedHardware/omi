@@ -200,6 +200,7 @@ class EnrichmentConsumer:
                 Outcome.DEFERRED,
                 ConsumerReason.NOT_DUE,
                 available_at=context.get('defer_until', now + rows.LIVE_DEFER_SECONDS),
+                defer_cause=str(context['defer_reason']),
             )
         if superseded:
             if retry_revision is not None:
