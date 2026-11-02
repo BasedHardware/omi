@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from utils.other import audio_raw_read_metrics as metrics, raw_audio_read as reader
+from utils.other import storage
 
 
 @pytest.fixture
@@ -82,8 +83,6 @@ def test_unknown_labels_and_codec_are_closed(caplog):
 
 
 def test_chunk_decode_failure_does_not_log_object_or_exception(monkeypatch, caplog):
-    from utils.other import storage
-
     bucket = SimpleNamespace(blob=lambda path: SimpleNamespace(download_as_bytes=lambda **kw: b'encoded'))
     monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *args: False)
 
