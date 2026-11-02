@@ -54,7 +54,7 @@ const POOLS = [
 const LABELS: Record<string, string> = {
   basic: "Free",
   unlimited: "Omi Unlimited + Neo",
-  unlimited_v2: "Omi Unlimited v2",
+  unlimited_v2: "Omi Pro",
   plus: "Omi Plus",
   operator: "Operator",
   architect: "Omi Architect",
