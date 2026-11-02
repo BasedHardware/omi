@@ -88,18 +88,25 @@ def policy_failure(
         lifecycle = {}
     if not isinstance(lifecycle, dict) or not isinstance(lifecycle.get('rule', []), list):
         return 'invalid_metadata'
-    governed = contract is not None and bucket in contract.get('buckets', {})
+    governed = _governed(contract, bucket)
     for rule in lifecycle.get('rule', []):
         if not isinstance(rule, dict) or not isinstance(rule.get('action'), dict):
             return 'invalid_metadata'
         action = rule['action'].get('type')
-        if action == 'Delete' and not governed:
+        if action == 'Delete' and governed is None:
             return 'lifecycle_delete'
         if action not in {'Delete', 'SetStorageClass', 'AbortIncompleteMultipartUpload'}:
             return 'unsupported_lifecycle_action'
-    if governed and retention_contract.floor_violations(contract, bucket, lifecycle):
+    if governed is not None and retention_contract.floor_violations(governed[0], governed[1], lifecycle):
         return 'lifecycle_delete'
     return None
+
+
+def _governed(contract: dict[str, Any] | None, bucket: str | None) -> tuple[dict[str, Any], str] | None:
+    """(contract, bucket) when the contract names the bucket, else None (strict any-Delete rule)."""
+    if contract is None or bucket is None or bucket not in contract.get('buckets', {}):
+        return None
+    return contract, bucket
 
 
 def audit(
@@ -112,15 +119,15 @@ def audit(
         try:
             metadata = reader(name)
             reason = policy_failure(metadata, name, contract)
-            governed = contract is not None and name in contract.get('buckets', {})
+            governed = _governed(contract, name)
             receipt = {
                 'target': index,
                 'metageneration': _metageneration(metadata),
                 'policy_sha256': hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest(),
                 'reason': reason,
-                'contract': governed,
+                'contract': governed is not None,
                 # Report-only: ceilings never change PASS/FAIL here.
-                'ceilings': retention_contract.ceiling_findings(contract, name, metadata) if governed else [],
+                'ceilings': retention_contract.ceiling_findings(*governed, metadata) if governed is not None else [],
             }
         except Exception:
             # Provider errors can contain URLs or identifiers; never echo them.
