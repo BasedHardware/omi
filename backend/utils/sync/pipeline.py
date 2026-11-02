@@ -14,6 +14,7 @@ from utils.enrichment.admission import run_created_webhook as _run_conversation_
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
@@ -2573,6 +2574,7 @@ async def _resolve_safety_wal_target(
 
 @sync_attempt
 @sync_snapshot_resolve_job
+@with_batch_privacy_attempt
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,

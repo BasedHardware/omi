@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-01 -->
+<!-- feature-flag-registry as-of: 2026-11-02 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,11 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-01.
+These rollout/experiment entries passed `review_by`. The checker warns
+during the seven-day grace, then fails unless a dated `review_overdue`
+exception is recorded for David.
+
+- `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` — review_by 2026-11-01 (dazheng)
 
 ## Flags
 
@@ -284,6 +288,8 @@ and an explicit empty literal renders as `''`.
 | `NOTES_PACKET_V2_MODE_SERVE_PERCENT` | Serve cohort percentage; default 0 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | dazheng |
 | `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` | Serve cohort SHA256 digests; default empty, never raw identifiers | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | dazheng |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-08 | dazheng |
+| `OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED` | Default false; opt into per-key/query adaptive developer list TTL and ten-second item-absence caching | backend | env | closed | — | — | — | — | pending | on | 2026-11-09 | infracost |
+| `OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT` | Default zero; deterministic API-key share admitted to developer polling read cuts | backend | env | closed | — | — | — | — | pending | on | 2026-11-09 | infracost |
 | `OMI_FLAGS_SOURCE` | Default posthog; dual serves PostHog and counts Omi-store agreement, omi serves server flags (proactivity_v2) from the Omi flag store | backend, llm-gateway | env | closed | — | — | dual (backend-listen (chart), pusher (chart)); omi (llm-gateway (chart)); {value: dual, category: rollout} (cloud_run/backend, cloud_run/backend-sync, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | on | 2026-11-12 | dazheng |
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
@@ -762,10 +768,10 @@ and an explicit empty literal renders as `''`.
 | `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` | synthetic acceptance → 1% → 10% → 100% | omi_calls_refactor_shadow_total outcome=error stays zero; no false calls, premature scheduled recaps, missing provenance or STT config rejection; recap/STT latency and vendor spend stay within baseline | dazheng | 2026-10-26 |
 | `ACTION_ITEM_VALIDITY_MODE` | synthetic and authorized fixture qualification by Oct 29 12Z; full 24h shadow where available → 5% Oct 30 12Z → 25% after six clean hours → 100% Oct 31 12Z | Protected tasks including context-resolved pronouns, manual text, multilingual speech, owner commitments, accepted requests and counterpart offers survive; no reviewed false suppression; consumer parity green; action_item_validity reason/error counts understood; insufficient samples block expansion | two-lane rollout lead | 2026-10-31 |
 | `AUDIO_ARCHIVE_LIVE_ENABLED` | all private-cloud-sync-consented sessions at deploy (David ruling 2026-10-22: store BLE Opus as captured) | omi_audio_archive_objects_total/bytes_total grow with live intake; omi_fallback_total{component=pusher,reason=upload_failed} stays near zero; PCM chunk writes unchanged | two-lane lead | 2026-10-23 |
-| `AUDIO_ARCHIVE_READ_ENABLED` | all conversations at deploy (packs exist only where LIVE wrote them) | batch STT success and WER parity on raw-decoded audio; playback/audio-merge build errors flat; omi_fallback_total{reason=decode_failed} near zero | two-lane lead | 2026-10-23 |
+| `AUDIO_ARCHIVE_READ_ENABLED` | all conversations at deploy (packs exist only where LIVE wrote them) | batch STT success and WER parity on raw-decoded audio; playback/audio-merge build errors flat; omi_audio_raw_read_total{result!=ok} near zero | two-lane lead | 2026-10-23 |
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` | 0 until the derived bucket exists and IAM is verified → 5% for >=12h → 100% | derived-bucket object growth matches cohort share; dual-list calls stay flat for non-admitted owners; replication and Class A on omi-private-cloud-sync+syncing-local fall by cohort share | two-lane lead | 2026-11-22 |
 | `AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT` | 0 until the derived bucket has no Delete lifecycle, soft delete 7d, and batch-worker read IAM + BUCKET_AUDIO_DERIVED → 5% for >=12h → 100% | zero 403/404 on derived-bucket reads; WriteObject on the derived bucket matches cohort share; omi_fallback_total and pusher upload failures flat; replication on omi-private-cloud-sync falls by cohort share | two-lane lead | 2026-11-30 |
-| `AUDIO_ARCHIVE_STOP_PCM_ENABLED` | 0 until LIVE+READ soak is clean → 5% via AUDIO_ARCHIVE_STOP_PCM_PERCENT for >=12h → 100% | omi_audio_archive_pcm_writes_avoided_total rises to cohort share; batch STT success and shadow WER parity flat; speech redrive success flat; playback/audio-merge build errors flat; omi_fallback_total{reason=decode_failed} near zero | two-lane lead | 2026-11-14 |
+| `AUDIO_ARCHIVE_STOP_PCM_ENABLED` | 0 until LIVE+READ soak is clean → 5% via AUDIO_ARCHIVE_STOP_PCM_PERCENT for >=12h → 100% | omi_audio_archive_pcm_writes_avoided_total rises to cohort share; batch STT success and shadow WER parity flat; speech redrive success flat; playback/audio-merge build errors flat; omi_audio_raw_read_total{result!=ok} near zero | two-lane lead | 2026-11-14 |
 | `AUDIO_ARCHIVE_STOP_PCM_PERCENT` | 0 until LIVE+READ soak is clean → 5% for >=12h → 100% | same gate as AUDIO_ARCHIVE_STOP_PCM_ENABLED; percent tracks pcm_writes_avoided against cohort share | two-lane lead | 2026-11-14 |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | regional bucket provisioned → owner account verified packing for 24 h → all new captures | every pack verifies and round-trips with no capture loss or torn index | dazheng (two-lane lead) | 2026-11-14 |
 | `BATCH_LIVE_STT_RETIRE_PERCENT` | 5% (clamped to batch%) → 25% → 100% of batch-admitted users | live first-text latency and window-preview fallbacks unchanged against the non-retired arm | dazheng (two-lane lead) | 2026-11-16 |
@@ -840,6 +846,8 @@ and an explicit empty literal renders as `''`.
 | `NOTES_PACKET_V2_MODE` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE_SERVE_PERCENT` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
+| `OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED` | 5% of API keys → 100% after two consecutive verify ticks PASS | Absolute developer-API reads/day below its own fresh pre-ramp baseline; 5xx and latency guards clean | infracost | 2026-11-05 |
+| `OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT` | 5% of API keys → 100% after two consecutive verify ticks PASS | Absolute developer-API reads/day below its own fresh pre-ramp baseline; 5xx and latency guards clean | infracost | 2026-11-05 |
 | `OMI_FLAGS_SOURCE` | flag store omi-flags provisioned and proactivity_v2 imported (OMI_FLAGS_FIRESTORE_PROJECT set) → dual on every backend host → omi on llm-gateway, the only proactivity_v2 evaluator, dropping its PROACTIVITY_V2_POSTHOG_TOKEN (David 2026-10-31 skipped the dual comparison: the lane had ~0 traffic) → omi on the remaining hosts on their next roll | omi_flag_dual_read_total{outcome=mismatch\|omi_absent\|omi_error} stays 0 for proactivity_v2 while dual; omi_fallback_total{component=feature_flags} flat | dazheng via the rollout coordinator | 2026-11-12 |
 | `OMI_LIST_PROJECTION_WRITER_ENABLED` | writer true on every writer service and revision (backend, sync, backfill, integration, listen, pusher, workers) → then the OMI_LIST_VERSION_EPOCH reader ramp (5% -> 100%) | omi_firestore_billed_writes_total{collection="users/list_serving_versions"} present on every writer service; net Firestore reads minus added writes still decrease; 5xx and p95 no worse than baseline | two-lane rollout lead | 2026-11-15 |
 | `OMI_LIST_VERSION_EPOCH` | complete writer fleet and staging synthetic canary → 5% backend traffic → 100% backend traffic | staging source-body parity mismatches zero; 5xx and p95 no worse than baseline; origin-attributed net Firestore reads including marker reads and added writes decrease | two-lane rollout lead | 2026-10-24 |
@@ -1136,6 +1144,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED` — Default on unless false; reuse historical metadata prefixes and status checks within one Developer memory list read (fail: open)
 - `OMI_EXTERNAL_LIST_CACHE_ENABLED` — Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query (fail: open)
 - `OMI_EXTERNAL_LIST_METRICS_ENABLED` — Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors (fail: open)
+- `OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED` — Default false; opt into per-key/query adaptive developer list TTL and ten-second item-absence caching (fail: closed)
+- `OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT` — Default zero; deterministic API-key share admitted to developer polling read cuts (fail: closed)
 - `OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED` — Default on; coalesce simultaneous identical external-list cache misses after each request passes authorization (fail: open)
 - `OMI_FIRESTORE_WRITE_PROBE_ENABLED` — Default on; count committed Firestore writes by collection, op, caller and origin at the GAPIC Commit/BatchWrite boundary (fail: open)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)

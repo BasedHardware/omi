@@ -5,15 +5,14 @@ hashed generation survives recursive account wipes and contains no content.
 """
 
 from collections.abc import Iterable
-from datetime import datetime
 import hashlib
 from enum import Enum
 from typing import Any
-import re
 
 from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-from database.batch_privacy_attempt import current_attempt, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
+from database.batch_privacy_attempt import current_attempt, token_version
+from database import privacy_check_metrics as metrics
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 
@@ -81,7 +80,9 @@ class BatchPrivacyMemo:
 
     def get(self, reference):
         if reference.path not in self.snapshots:
-            self.snapshots[reference.path] = reference.get(transaction=self.transaction)
+            self.snapshots[reference.path] = metrics.read_snapshot(
+                'batch', reference, transaction=self.transaction, memo_read=True
+            )
         return self.snapshots[reference.path]
 
 
@@ -95,11 +96,67 @@ def assert_batch_write_allowed(
     snapshots: dict | None = None,
     memo: BatchPrivacyMemo | None = None,
 ) -> int:
+    """Measure the authorizing decision; shadow always runs after live authority.
+
+    The nontransactional provider-STT preflight and full-row exports stay live.
+    Shadow never publishes snapshots, raises its failure or changes a decision.
+    """
+    metrics.called('batch')
+    shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None
+    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow
+    # Materialize once when comparing, including one-shot source generators.
+    ids = tuple(conversation_ids) if shadow else conversation_ids
+    kwargs: dict[str, Any] = dict(
+        conversation_ids=ids, expected_generation=expected_generation, snapshots=snapshots, memo=memo
+    )
+    function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
+
+    def shadow_after(reason):
+        if not shadow or transaction is None or snapshots is not None or enforce:
+            return
+        try:
+            with metrics.mode_scope('shadow'):
+                metrics.called('batch')
+                try:
+                    _assert_batch_write_allowed_memo(client, transaction, uid, **kwargs)
+                    candidate = 'allow'
+                except BatchPrivacyBlocked as error:
+                    candidate = error.reason.value
+                metrics.decision('batch', candidate)
+            metrics.compare('batch', reason, candidate)
+        except Exception:
+            metrics.shadow_error('batch')
+
+    try:
+        result = function(client, transaction, uid, **kwargs)
+    except BatchPrivacyBlocked as error:
+        metrics.decision('batch', error.reason.value)
+        shadow_after(error.reason.value)
+        raise
+    except Exception:
+        metrics.decision('batch', 'authority_unavailable')
+        raise
+    metrics.decision('batch')
+    shadow_after('allow')
+    return result
+
+
+def _assert_batch_write_allowed_memo(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    *,
+    conversation_ids: Iterable[str] = (),
+    expected_generation: int | None = None,
+    snapshots: dict | None = None,
+    memo: BatchPrivacyMemo | None = None,
+) -> int:
     # Keep the disabled path's read order, counts and WQ12 behavior unchanged.
     # Full-row exports always stay live: the token certifies authorization, not
     # arbitrary metadata returned to a snapshots= consumer.
     attempt = current_attempt()
-    if attempt is None or transaction is None or snapshots is not None or not lever_enabled('bpp_generation_memo', uid):
+    if attempt is None or transaction is None or snapshots is not None:
+        metrics.memo_result('batch', 'ineligible')
         return _assert_batch_write_allowed_live(
             client,
             transaction,
@@ -119,34 +176,18 @@ def assert_batch_write_allowed(
     try:
         # Never use the transaction-scoped WQ12 snapshot memo for this read.
         # Every authorizing transaction enrolls the token in its conflict set.
-        snapshot = reference.get(transaction=transaction)
-        privacy = snapshot.to_dict() or {}
-        token = privacy.get(TOKEN_FIELD)
-        revision = getattr(snapshot, 'update_time', None)
-        eligible = (
-            isinstance(revision, datetime)
-            and revision.tzinfo is not None
-            and snapshot.exists
-            and type(privacy.get(SCHEMA_FIELD)) is int
-            and privacy[SCHEMA_FIELD] == TOKEN_SCHEMA
-            and isinstance(token, str)
-            and re.fullmatch('[0-9a-f]{32}', token) is not None
-            and not privacy.get('blocked')
-            and not privacy.get('purging')
-            and not privacy.get('memo_blocked')
-        )
+        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction)
         # GAPIC transport retries may replay an already-prepared random token
         # after another writer. The server revision prevents that ABA: replay
         # commits get a new update_time, including deletion/recreation. Keep
         # nanoseconds too rather than relying on datetime's microsecond equality.
-        version = (
-            (token, revision.isoformat(), getattr(revision, 'nanosecond', 0))
-            if eligible and revision is not None
-            else None
-        )
+        version = token_version(snapshot)
+        eligible = version is not None
         generation = attempt.get(key, version) if eligible else None
         if generation is not None and (expected_generation is None or generation == expected_generation):
+            metrics.memo_result('batch', 'hit')
             return generation
+        metrics.memo_result('batch', 'miss' if eligible else 'ineligible')
         attempt.forget(key)
         generation = _assert_batch_write_allowed_live(
             client,
@@ -190,7 +231,11 @@ def _assert_batch_write_allowed_live(
         raise ValueError('privacy memo belongs to another transaction attempt')
 
     def read(reference):
-        return memo.get(reference) if memo is not None else reference.get(transaction=transaction)
+        return (
+            memo.get(reference)
+            if memo is not None
+            else metrics.read_snapshot('batch', reference, transaction=transaction)
+        )
 
     marker = read(client.collection('account_deletions').document(uid))
     status = normalize_account_deletion_status(
@@ -241,6 +286,7 @@ def _assert_batch_write_allowed_live(
                 raise BatchPrivacyBlocked('conversation_fence_budget')
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
+            metrics.walked()
             if read(user.collection('deleted_conversations').document(conversation_id)).exists:
                 raise BatchPrivacyBlocked('conversation_deleted', conversation_id=conversation_id)
             conversation = read(user.collection('conversations').document(conversation_id))

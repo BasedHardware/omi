@@ -20,8 +20,8 @@ class LoopTests(unittest.TestCase):
    (self.root/(role+'-job.json')).write_text(json.dumps(self.job(role)))
  def job(self,role):return dict(schema=1,operation='reviewed_swd_app_only',probe_serial='synthetic-probe',external_target_identity_sha256=IDENTITY,deadline_seconds=60,on_failure='stop_preserve_receipts',retries=0,power_cycle=False,reset_after_verify=False,lease_scope='whole_cv1_bench',evidence_policy='local_unique_no_truncate',artifact_manifest=role+'-manifest.json')
  def sim(self,fail=(),identity=IDENTITY,protected=PROTECTED,app=None):return SimulatedBench(identity,protected,hex_bytes(self.restore) if app is None else app,fail)
- def go(self,adapter):
-  self.n+=1;return run(adapter,{'candidate':self.root/'candidate-job.json','restore':self.root/'restore-job.json'},self.root/'profile.json',self.root/'contract.json',self.pins,self.root/'bench',self.root/f'out{self.n}')
+ def go(self,adapter,checks=()):
+  self.n+=1;return run(adapter,{'candidate':self.root/'candidate-job.json','restore':self.root/'restore-job.json'},self.root/'profile.json',self.root/'contract.json',self.pins,self.root/'bench',self.root/f'out{self.n}',checks=checks)
  def lease(self):return json.loads((self.root/'bench/lease.json').read_text())['state']
  def stages(self,summary):return [s['stage'] for s in summary['stages']]
  def restored(self,sim):self.assertEqual(sim.memory,hex_bytes(self.restore))
@@ -96,6 +96,46 @@ class LoopTests(unittest.TestCase):
    real(selected)
   def record(data):seen.append(data);program(data)
   sim.erase=swap;sim.program=record;self.assertEqual(self.go(sim)['result'],'candidate_passed_restored');self.assertEqual(seen[0],self.candidate)
+ def test_checks_pass_in_order_before_restore(self):
+  sim=self.sim();seen=[]
+  def check():
+   self.assertEqual(sim.programs,1);seen.append('checked');return dict(result='passed')
+  r=self.go(sim,[('gatt',check),('audio',check)])
+  self.assertEqual(r['result'],'candidate_passed_restored');self.assertEqual(r['checks_ran'],['gatt','audio']);self.assertEqual(seen,['checked','checked']);self.restored(sim)
+  self.assertEqual(self.stages(r)[6:9],['gatt','audio','restore_write'])
+ def test_check_failures_and_exceptions_always_restore(self):
+  for action in (lambda:dict(result='failed',reason='gatt_failed'),lambda:(_ for _ in ()).throw(OSError('oops')),lambda:(_ for _ in ()).throw(SystemExit()),lambda:(_ for _ in ()).throw(KeyboardInterrupt()),lambda:dict(result='skipped'),lambda:None):
+   with self.subTest(action=action):
+    # A failed candidate quarantines this lease; use an independent bench fixture.
+    self.setUp();sim=self.sim();r=self.go(sim,[('gatt',action),('audio',lambda:dict(result='passed'))])
+    self.assertEqual(r['result'],'candidate_failed_restored');self.restored(sim);self.assertEqual(sim.programs,2)
+    self.assertEqual(r['checks_ran'],['gatt']);self.assertEqual(r['checks'][1]['result'],'not_run');self.assertIn('restore_boot_check',self.stages(r))
+ def test_skipped_check_is_incomplete_and_restores(self):
+  sim=self.sim();r=self.go(sim,[('ble',lambda:dict(result='skipped',reason='no_advertisement'))])
+  self.assertEqual(r['result'],'candidate_incomplete_restored');self.assertEqual(r['checks'][0]['reason'],'no_advertisement');self.assertEqual(r['stages'][6]['result'],'skipped');self.assertTrue(r['lease_clean']);self.restored(sim)
+ def test_unreachable_ble_central_skips_and_restores_with_clean_lease(self):
+  from ble_check import BLECheck
+  serial='synthetic-private-serial'
+  runner=mock.Mock(side_effect=subprocess.CalledProcessError(1,['ssh',serial],output=serial,stderr=serial))
+  check=BLECheck(dict(ssh_host='synthetic-receiver',app='/tmp/Helper.app',receipt_dir='/tmp',expected_serial=serial),self.root/'ble.json',runner)
+  sim=self.sim();r=self.go(sim,[('ble',check)])
+  self.assertEqual(r['result'],'candidate_incomplete_restored');self.assertTrue(r['lease_clean']);self.assertEqual(self.lease(),'idle');self.restored(sim)
+  self.assertEqual(r['checks_ran'],['ble']);self.assertEqual(r['checks'][0]['result'],'skipped');self.assertEqual(r['checks'][0]['reason'],'central_unreachable: BLE was not tested')
+  self.assertEqual(self.stages(r)[-3:],['restore_write','restore_verify','restore_boot_check']);self.assertNotIn(serial,json.dumps(r))
+ def test_boot_failure_never_runs_checks_and_still_restores(self):
+  sim=self.sim();original=sim.tick;count=0
+  def tick():
+   nonlocal count
+   count+=1
+   if count==1:raise OSError('candidate boot failed')
+   return original()
+  sim.tick=tick;check=mock.Mock();r=self.go(sim,[('ble',check)])
+  check.assert_not_called();self.assertEqual(r['checks_ran'],[]);self.assertEqual(r['result'],'candidate_failed_restored');self.restored(sim)
+ def test_bad_check_names_rejected_before_device_access(self):
+  for checks in ([('boot_check',lambda:None)],[('ble',lambda:None),('ble',lambda:None)]):
+   sim=self.sim()
+   with self.assertRaises(ValueError):self.go(sim,checks)
+   self.assertEqual(sim.calls,[])
  def test_cli_dry_run(self):
   (self.root/'pins.json').write_text(json.dumps(self.pins))
   q=subprocess.run([sys.executable,str(Path(__file__).parent/'bench_loop.py'),'dry-run','--candidate-job',str(self.root/'candidate-job.json'),'--restore-job',str(self.root/'restore-job.json'),'--profile',str(self.root/'profile.json'),'--contract',str(self.root/'contract.json'),'--pins',str(self.root/'pins.json'),'--bench-dir',str(self.root/'bench'),'--output',str(self.root/'cli')],capture_output=True,text=True,timeout=30)

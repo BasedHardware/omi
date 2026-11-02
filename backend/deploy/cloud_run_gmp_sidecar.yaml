@@ -1,3 +1,4 @@
+# People scan eligibility/reuse remains covered by the shared omi_.* keep-list.
 apiVersion: monitoring.googleapis.com/v1beta
 kind: RunMonitoring
 metadata:
