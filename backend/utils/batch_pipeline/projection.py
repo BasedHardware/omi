@@ -836,11 +836,11 @@ class Projector:
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
         """One bounded page of held units whose record target may be restored."""
-        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_page
+        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_page_counted
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
-        counts, self.release_after = release_page(
+        counts, self.release_after = release_page_counted(
             self.store,
             limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
             after_id=self.release_after,

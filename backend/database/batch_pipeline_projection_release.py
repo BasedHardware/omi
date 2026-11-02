@@ -200,7 +200,13 @@ def release_page(store, *, limit: int, after_id: str | None, now: float | None =
             )
         if deadline is not None and time.monotonic() >= deadline:
             break
-    record_release_rows(counts)
     processed = counts['examined']
     next_after = page[processed - 1] if processed and (processed < len(page) or len(page) >= limit) else None
+    return counts, next_after
+
+
+def release_page_counted(store, **kwargs):
+    """``release_page`` plus the examined-row counter by outcome."""
+    counts, next_after = release_page(store, **kwargs)
+    record_release_rows(counts)
     return counts, next_after

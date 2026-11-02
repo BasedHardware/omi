@@ -270,6 +270,6 @@ def test_release_scan_counts_rows_by_outcome(monkeypatch):
     monkeypatch.setattr(release, 'held_page_ids', lambda *args: ['restored', 'waiting', 'broken'])
     monkeypatch.setattr(release.ProjectionReleaseStore, 'release', outcome)
     before = {o: correctness_metrics.RELEASE_ROWS.labels(o)._value.get() for o in ('released', 'waiting', 'error')}
-    release_page(Mock(), limit=3, after_id=None, now=100)
+    release.release_page_counted(Mock(), limit=3, after_id=None, now=100)
     after = {o: correctness_metrics.RELEASE_ROWS.labels(o)._value.get() for o in ('released', 'waiting', 'error')}
     assert {o: after[o] - before[o] for o in after} == {'released': 1, 'waiting': 1, 'error': 1}

@@ -339,4 +339,11 @@ def entries():
             expect_observed=False,
             body_digest='51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_page_counted',
+            covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
+            reason='counts release_page outcomes; its only query is release_page -> held_page_ids',
+            expect_observed=False,
+            body_digest='fa7b472c0d769ad34d4b5a941975b76e2fbffb68d354a32a1119cabc8724631e',
+        ),
     )
