@@ -20,6 +20,7 @@ import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 class ApiClient {
   static const Duration requestTimeoutRead = Duration(seconds: 30);
@@ -291,7 +292,7 @@ bool shouldAttachOmiCredentials(String url) {
   if (uri == null || uri.host.isEmpty) return false;
   if (Env.debugTrustedFixtureAuthority(uri)) return true;
   if (!{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
-  return {'api.omi.me', 'api.omiapi.com'}.contains(uri.host.toLowerCase());
+  return omiApiHosts.contains(uri.host.toLowerCase());
 }
 
 /// Central guard for callers that historically requested auth unconditionally.

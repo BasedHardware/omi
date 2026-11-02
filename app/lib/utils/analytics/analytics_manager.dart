@@ -281,6 +281,10 @@ class AnalyticsManager {
         // Optional package metadata must not strand an initialized SDK queue.
         _analyticsReady = true;
         if (!_trackingEnabled) adapter.disable();
+        if (_trackingEnabled && (consent.getBool(_suspendedKey) ?? false)) {
+          adapter.enable();
+          unawaited(consent.remove(_suspendedKey));
+        }
         await _loadGlobalEventProperties(timeout: timeout ~/ 2);
         await _loadPersonPropertyCache();
         if (!identical(_adapter, adapter)) return;
@@ -516,6 +520,23 @@ class AnalyticsManager {
       unawaited(_settleIdentity());
     });
   }
+
+  /// Stops sending for the rest of the session without recording a consent choice: the backend
+  /// changed to one that is not Omi's (see OutboundPolicy).
+  static void suspendForSession() {
+    _consentRevision++;
+    _trackingEnabled = false;
+    _queuedEvents.clear();
+    _pendingTimedEvents.clear();
+    _notifyIdentity(null, false);
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: false, retire: false));
+    // The SDK's disable persists natively; init undoes it at the next launch back on Omi.
+    if (_adapter != null) unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_suspendedKey, true)));
+    _adapter?.disable();
+    _adapter = null;
+  }
+
+  static const _suspendedKey = 'analytics_suspended_for_backend';
 
   void optOutTracking() {
     _consentRevision++;
