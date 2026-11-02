@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "scope": "sanitized nRF radio RAM snapshot, not over-the-air capture",
+  "pcnf0": 1048840,
+  "source_sha256": "57da11dd217c80dafbf14549e43594bab390bc8484defc86297ba56c8343f33c",
+  "sanitization": "zero own advertiser address; strip bytes beyond declared PDU; preserve S1 padding",
+  "sanitized_ram_hex": "602000000000000000020106110714128a7604d16c4f7e53f2e80000b11904094f6d69"
+}
