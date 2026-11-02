@@ -16,6 +16,8 @@ import {
 import {
   allInCost,
   OPENROUTER_DAILY_USD,
+  PINECONE_AS_OF,
+  PINECONE_DAILY_USD,
   estimateStatus,
   INFRA_AS_OF,
   INFRA_MONTHLY_USD,
@@ -1104,6 +1106,7 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     STT_MONTHLY_USD / (365.25 / 12) +
     20 +
     OPENROUTER_DAILY_USD +
+    PINECONE_DAILY_USD +
     STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
   const run = (vendor = {}, coverage = {}, feesCash?: Record<string, number>) =>
     variableMarginSeries(
@@ -1129,6 +1132,7 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
         toMonth(STT_MONTHLY_USD) +
         monthly(20) +
         monthly(OPENROUTER_DAILY_USD) +
+        monthly(PINECONE_DAILY_USD) +
         toMonth(STRIPE_FEES_MONTHLY_USD),
       0
     );
@@ -1146,6 +1150,16 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
       4
     );
     expect(last.goalCost).toBeCloseTo(60_000 * (1 - VARIABLE_MARGIN_TARGET), 6);
+  });
+
+  it("counts Pinecone at its dated configured constant and names it as an estimate", () => {
+    const last = run({ sttCash: cash }).at(-1)!;
+    expect(last.pineconePerMonth).toBeCloseTo(monthly(PINECONE_DAILY_USD), 1);
+    const line = variableMarginLineStatus(last, {
+      now: new Date(`${d(21)}T12:00:00Z`),
+    }).find((l) => l.startsWith("Pinecone:"));
+    expect(line).toContain("est.");
+    expect(line).toContain(PINECONE_AS_OF);
   });
 
   it("never borrows a neighbour's book: a day without MRR keeps its cost point", () => {

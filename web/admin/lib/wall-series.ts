@@ -252,7 +252,8 @@ export interface Legs {
     prepayUsd: number;
   }[];
 }
-type LegName = keyof Legs;
+/** The live document is read directly for health, not as a lazily filled leg. */
+type LegName = Exclude<keyof Legs, "live">;
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
   // The headline's Cost / user is the health series' cost-per-user point, so it
   // reads the same vendor and plan legs the health chart does (David 2026-11-02).
@@ -974,22 +975,20 @@ export function healthFrames(
     });
   }
   const marginByPlan = marginFrames(legs, days, now);
-  // Variable-margin points off the same all-in days (see the return note).
-  const variable = variableMarginSeries(
-    days,
-    (d) => finopsMrr(legs.finops, new Date(ts(d))),
-    { feesCash: vendor.infraStripeFeesCash }
-  );
-  // Live margin (est.): the same scope over the spliced days. A day with no
-  // book snapshot (today's) takes the latest book on or before it, labelled.
+  // Variable margin over the spliced days: settled through D−2, live (est.)
+  // for D−1 and today. A live day with no book snapshot takes the latest book
+  // on or before now, labelled est.; a settled day never borrows a book.
   let latestBook: number | null = null;
   for (let k = 0; k < 7 && latestBook == null; k++)
     latestBook = finopsMrr(legs.finops, shiftDay(utcDay(now), -k));
-  const liveSeries = variableMarginSeries(
+  const variable = variableMarginSeries(
     spliced,
-    (d) => finopsMrr(legs.finops, new Date(ts(d))) ?? latestBook,
+    (d) =>
+      finopsMrr(legs.finops, new Date(ts(d))) ??
+      (d > cutoff ? latestBook : null),
     { feesCash: vendor.infraStripeFeesCash }
   );
+  const liveSeries = variable;
   const liveHead = liveSeries.at(-1);
   const recon = reconcileLive(
     days,
@@ -1002,16 +1001,16 @@ export function healthFrames(
   const pct = (v: number | null) => (v == null ? "—" : `${v.toFixed(1)}%`);
   const pp = (v: number | null) =>
     v == null ? "n/a" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`;
+  // The headline margin is the live estimate (marked est.); the settled D−2
+  // figure and its variance from the stored live days sit under it.
   const marginLiveStatus =
     liveDayCount === 0
       ? "Live estimate unavailable: no fresh metered day"
-      : `Live est. ${pct(liveHead?.marginPct ?? null)} through ${
-          liveHead?.date ?? "—"
-        }${
+      : `Live est. through ${liveHead?.date ?? "—"}${
           liveHead && liveHead.date > cutoff ? "" : " (settled only)"
-        } · settled ${cutoff}: ${pct(recon.settledPct)}, variance ${pp(
+        } · settled D-2: ${pct(recon.settledPct)}, variance ${pp(
           recon.variancePp
-        )} (live − settled, 7-day window)`;
+        )}`;
   return {
     cost,
     costPerMau,
@@ -1036,12 +1035,15 @@ export function healthFrames(
     // nulls the margin, never borrowing a neighbour's book.
     variableMargin: variable.map((p) => ({
       date: ts(p.date),
+      // 1 for a live (metered, estimated) day; settled days are 0.
+      live: p.date > cutoff ? 1 : 0,
       marginPct: round(p.marginPct, 1),
       costPerMonth: round(p.costPerMonth, 0),
       mrr: p.mrr == null ? null : round(p.mrr, 0),
       goalCost: round(p.goalCost, 0),
       gcpPerMonth: round(p.gcpPerMonth, 0),
       vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
+      pineconePerMonth: round(p.pineconePerMonth, 0),
       openaiPerMonth: round(p.openaiPerMonth, 0),
       sonioxPerMonth: round(p.sonioxPerMonth, 0),
       modulatePerMonth: round(p.modulatePerMonth, 0),
@@ -1063,15 +1065,18 @@ export function healthFrames(
     marginLiveStatus: [{ text: marginLiveStatus }],
     variableMarginStatus: [
       {
-        text: variableMarginLineStatus(variable.at(-1), {
-          now,
-          soniox: vendor.sonioxBalance,
-          sonioxRate7d: vendor.sonioxRate7d,
-          feesUnavailable,
-          nonUsdPaying: variable.at(-1)
-            ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
-            : null,
-        }).join(" · "),
+        text: [
+          marginLiveStatus,
+          ...variableMarginLineStatus(variable.at(-1), {
+            now,
+            soniox: vendor.sonioxBalance,
+            sonioxRate7d: vendor.sonioxRate7d,
+            feesUnavailable,
+            nonUsdPaying: variable.at(-1)
+              ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
+              : null,
+          }),
+        ].join(" · "),
       },
     ],
   };

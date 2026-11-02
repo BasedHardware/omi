@@ -32,6 +32,7 @@ import {
   INFRA_MONTHLY_USD,
   MARGIN_DAYS_PER_MONTH,
   OPENROUTER_DAILY_USD,
+  PINECONE_DAILY_USD,
   STRIPE_FEES_MONTHLY_USD,
   STT_MONTHLY_USD,
   VARIABLE_MARGIN_TARGET,
@@ -1700,11 +1701,13 @@ describe("variable margin frames (David 2026-10-23)", () => {
     // The monthly constants convert at the calendar month; the run rate then
     // scales by the contract's exact 30.44 (Luna r3 P3).
     // OpenRouter counted at its configured $23/day (David 2026-11-02).
+    // Pinecone counted at its configured $80/day (David 2026-11-02).
     const perDay =
       60 +
       106 +
       10 +
       OPENROUTER_DAILY_USD +
+      PINECONE_DAILY_USD +
       STT_MONTHLY_USD / (365.25 / 12) +
       STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
     const cost = perDay * MARGIN_DAYS_PER_MONTH;

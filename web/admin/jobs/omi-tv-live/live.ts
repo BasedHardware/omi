@@ -102,7 +102,7 @@ async function monitoringSeries(
     }
     pageToken = body.nextPageToken;
   } while (pageToken);
-  return [...byKey.values()];
+  return Array.from(byKey.values());
 }
 
 /** Managed-Prometheus instant query at `at` (ms). */

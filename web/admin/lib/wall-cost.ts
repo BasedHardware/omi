@@ -69,6 +69,14 @@ export const SONIOX_RATE_WINDOW_DAYS = 7;
 export const OPENROUTER_DAILY_USD = 23;
 export const OPENROUTER_AS_OF = "2026-11-02";
 export const OPENROUTER_SOURCE = `configured $${OPENROUTER_DAILY_USD}/day, read ${OPENROUTER_AS_OF}, not read today`;
+/** Pinecone counted in the variable margin at actual usage (David 2026-11-02:
+ * "about $80/day recently"). Card charges lag usage by a month, so the card is
+ * not the run rate. No job can read the Pinecone usage export: a configured,
+ * dated constant. Evidence: omi-knowledge-base/projects/admin-omi-tv-dashboard/
+ * evidence/2026-11-02-pinecone-cost.md. */
+export const PINECONE_DAILY_USD = 80;
+export const PINECONE_AS_OF = "2026-11-02";
+export const PINECONE_SOURCE = `configured $${PINECONE_DAILY_USD}/day, usage read ${PINECONE_AS_OF}, not read today`;
 /** A manual estimate older than its line's threshold is flagged stale on the
  * cost frames. STT: 14 days (David 2026-10-22) — a daily measured feed exists,
  * so a console constant must not outlive two weeks. SaaS: a monthly constant. */
@@ -660,6 +668,8 @@ export interface VariableCostDay {
   gcpDev: number;
   /** OpenRouter (configured est., counted). */
   openrouter: number;
+  /** Pinecone at actual usage (configured dated constant, counted). */
+  pinecone: number;
   /** null = the OpenAI invoice leg is off; counted as 0 and missing. */
   openai: number | null;
   soniox: number;
@@ -706,12 +716,14 @@ export function variableCostDay(
   const gcp =
     day.gcp + day.vertexLlm + day.oneTime - day.vertexReserved - day.gcpDev;
   const openrouter = OPENROUTER_DAILY_USD;
+  const pinecone = PINECONE_DAILY_USD;
   const usd =
     gcp +
     (openai ?? 0) +
     day.sttSonioxUsd +
     (modulate ?? 0) +
     openrouter +
+    pinecone +
     fees;
   return {
     date: day.date,
@@ -720,6 +732,7 @@ export function variableCostDay(
     vertexReserved: day.vertexReserved,
     gcpDev: day.gcpDev,
     openrouter,
+    pinecone,
     openai,
     soniox: day.sttSonioxUsd,
     sonioxMeasured: day.sttSonioxMeasured,
@@ -756,6 +769,8 @@ export interface VariableMarginPoint {
   devPerMonth: number;
   /** OpenRouter counted in `costPerMonth` (configured est.). */
   openrouterPerMonth: number;
+  /** Pinecone counted in `costPerMonth` (configured dated constant). */
+  pineconePerMonth: number;
   /** In-scope lines unsourced on any window day (counted as 0, disclosed). */
   missing: string[];
   /** True only when EVERY window day priced Soniox by a measured row with no
@@ -833,6 +848,7 @@ export function variableMarginSeries(
       feesPerMonth: sum((c) => c.fees) * scale,
       devPerMonth: sum((c) => c.gcpDev) * scale,
       openrouterPerMonth: sum((c) => c.openrouter) * scale,
+      pineconePerMonth: sum((c) => c.pinecone) * scale,
       missing: Array.from(new Set(window.flatMap((c) => c.missing))),
       sonioxMeasured: sonioxEstimateDays === 0 && sonioxGapSpreadDays === 0,
       sonioxEstimateDays,
@@ -946,6 +962,9 @@ export function variableMarginLineStatus(
     age(STRIPE_FEES_AS_OF) > STRIPE_FEES_STALE_DAYS ? ", STALE" : "";
   lines.push(
     `OpenRouter: est. ${money(point.openrouterPerMonth)} (${OPENROUTER_SOURCE})`
+  );
+  lines.push(
+    `Pinecone: est. ${money(point.pineconePerMonth)} (${PINECONE_SOURCE})`
   );
   lines.push(
     `Dev project GCP ${money(
