@@ -256,11 +256,12 @@ async def process_entry(lease: dict) -> None:
     try:
         status = await run(lease)
         # Normal isolated-child exit bypasses main's lifespan and Python atexit.
-        # Settle live vector tickets before other cleanup consumes its grace.
+        # A controlled os._exit has no later grace: await settlement itself,
+        # bounded by the parent's existing work deadline, not a lifespan wait.
         from database.pinecone_partition_state import drain_mutations
-        from database.pinecone_mutation_lifecycle import drain_on_shutdown
+        from utils.executors import get_pinecone_shutdown_executor, run_blocking
 
-        await drain_on_shutdown(drain_mutations)
+        await run_blocking(get_pinecone_shutdown_executor(), drain_mutations)
         # This process deliberately never imports main's lifespan. Flush its
         # own buffered holds and tracked work before a normal child exit.
         # Lease loss/cancellation bypasses this path: the parent must first

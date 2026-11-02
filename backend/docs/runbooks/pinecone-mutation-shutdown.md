@@ -24,8 +24,10 @@ provider acknowledgement cannot clear a ticket already marked uncertain.
 * Pusher uses `pusher.main:app` and drains from its lifespan shutdown.
 * Cloud Tasks jobs running on those services share the same process hook.
 * The dedicated `utils.sync.worker_runtime` parent does not mutate Pinecone;
-  its isolated `utils.sync.worker_job` child runs the pipeline and drains before
-  normal `os._exit`. Lease loss, work deadline and forced process-group SIGKILL
+  its isolated `utils.sync.worker_job` child runs the pipeline and awaits actual
+  settlement before normal `os._exit`, within the parent's existing work deadline.
+  It does not use the five-second lifespan wait, because no grace remains after
+  `os._exit`. Lease loss, work deadline and forced process-group SIGKILL
   retain the existing fencing protocol and cannot run a shutdown hook.
 * Standalone Python jobs (including `modal/x_connector_sync_job.py` and
   `modal/job.py`) and operator scripts do not use those lifespans and have no

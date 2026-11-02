@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+from threading import Event
 import sys
 import time
 from types import SimpleNamespace
@@ -232,6 +233,7 @@ class Client:
 @pytest.mark.parametrize('status', [0, 1])
 async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatch, status):
     from database import pinecone_partition_state as state
+    from database import pinecone_mutation_lifecycle as lifecycle
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from utils.executors import start_background_task
     from utils.sync import cap_hold_lifecycle
@@ -242,6 +244,22 @@ async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatc
     db = StrictFirestore()
     key = state.PartitionKey('synthetic-index', 'ns1', 'synthetic-owner')
     state.begin_mutation(key, affected_ids=['synthetic-vector'], firestore_client=db)
+    entered, release, settled = Event(), Event(), Event()
+    drain = state.drain_mutations
+    lifespan_drain = lifecycle.drain_on_shutdown
+
+    def delayed_settlement():
+        entered.set()
+        assert release.wait(5)
+        result = drain()
+        settled.set()
+        return result
+
+    async def lifespan_wait(callback):
+        await lifespan_drain(callback, timeout=0.5)
+
+    monkeypatch.setattr(state, 'drain_mutations', delayed_settlement)
+    monkeypatch.setattr(lifecycle, 'drain_on_shutdown', lifespan_wait)
     closed = asyncio.Event()
     drained = asyncio.Event()
 
@@ -262,6 +280,7 @@ async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatc
         assert code == status
         assert closed.is_set()
         assert drained.is_set()
+        assert settled.is_set()
         route = state.get_route(key, firestore_client=db)
         assert route.pending_count == 0
         assert route.uncertain_count == 1
@@ -273,10 +292,19 @@ async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatc
     monkeypatch.setattr(worker_job.os, '_exit', exit_process)
     task = start_background_task(tail(), name='test:worker-exit-tail')
     await asyncio.sleep(0)
+    entry = asyncio.create_task(worker_job.process_entry(LEASE))
     try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        # Simulate settlement outliving the bounded lifespan wait. A normal
+        # child must remain alive until the actual metadata write completes.
+        await asyncio.sleep(0.75)
+        assert not entry.done()
+        release.set()
         with pytest.raises(Exited):
-            await worker_job.process_entry(LEASE)
+            await asyncio.wait_for(entry, 5)
     finally:
+        release.set()
+        await asyncio.gather(entry, return_exceptions=True)
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
