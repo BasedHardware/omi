@@ -132,8 +132,16 @@ void main() {
   final omi = _device('omi-1');
   final glass = _device('glass-1', type: DeviceType.openglass, name: 'OmiGlass');
 
+  /// A device reaches the connect path only after it was paired, so its saved record exists
+  /// (the pendant in the primary slot, the glasses as the companion).
+  Future<void> savePair() async {
+    await SharedPreferencesUtil().btDeviceSet(omi);
+    SharedPreferencesUtil().companionBtDevice = glass;
+  }
+
   test('queued role reconciliation cannot publish into a replacement account session', () async {
     final (device, capture) = await providers();
+    await savePair();
     final retired = device.registerConnectedDevice(omi);
     device.clearUserData();
     await retired;
@@ -147,6 +155,7 @@ void main() {
 
   test('pendant carries audio, glasses join as the photo companion', () async {
     final (device, capture) = await providers();
+    await savePair();
 
     await device.registerConnectedDevice(omi);
     expect(device.connectedDevice?.id, 'omi-1');
@@ -167,6 +176,7 @@ void main() {
 
   test('glasses connected first are demoted to the photo role when the pendant arrives', () async {
     final (device, capture) = await providers();
+    await savePair();
 
     await device.registerConnectedDevice(glass);
     expect(device.connectedDevice?.id, 'glass-1', reason: 'alone, OmiGlass records audio and photos');
@@ -183,6 +193,7 @@ void main() {
 
   test('when the pendant drops, the glasses take over audio and keep photos', () async {
     final (device, capture) = await providers();
+    await savePair();
     await device.registerConnectedDevice(omi);
     await device.registerConnectedDevice(glass);
 
@@ -199,6 +210,7 @@ void main() {
 
   test('when the glasses drop, the pendant keeps recording without a photo device', () async {
     final (device, capture) = await providers();
+    await savePair();
     await device.registerConnectedDevice(omi);
     await device.registerConnectedDevice(glass);
 
@@ -214,6 +226,7 @@ void main() {
 
   test('a stray disconnect for an unknown device changes nothing', () async {
     final (device, _) = await providers();
+    await savePair();
     await device.registerConnectedDevice(omi);
 
     device.onDeviceConnectionStateChanged('someone-elses-device', DeviceConnectionState.disconnected);

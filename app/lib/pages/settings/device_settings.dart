@@ -906,12 +906,14 @@ class _SecondDeviceGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final (canPairSecond, companionId, isCompanionConnected, companionBattery) =
         context.select<DeviceProvider, (bool, String?, bool, int)>((provider) {
-      final primary = provider.connectedDevice ?? provider.pairedDevice;
+      // A second device pairs next to a remembered first one. A live link that was never
+      // paired (pairedDevice empty) has nothing to add a companion to.
+      final paired = provider.pairedDevice;
       final companion = provider.pairedCompanionDevice;
       return (
-        primary != null &&
-            primary.id.isNotEmpty &&
-            (primary.type == DeviceType.omi || primary.type == DeviceType.openglass),
+        paired != null &&
+            paired.id.isNotEmpty &&
+            (paired.type == DeviceType.omi || paired.type == DeviceType.openglass),
         companion?.id,
         companion != null && provider.companionDevice?.id == companion.id,
         companion == null ? -1 : provider.companionBatteryLevel,
