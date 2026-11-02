@@ -99,6 +99,10 @@ def refused_candidate(job, *, prepared, after, cutoff, max_seconds, window):
         )
     failure = marker.get('failure') or {}
     scope.require(
+        'attempt_history' not in marker and 'original_token' not in marker,
+        'attestation_attempt_history_forbidden',
+    )
+    scope.require(
         bool(marker.get('token'))
         and marker.get('paid_state') != 'spent'
         and ((marker.get('recognizers') or {}).get('soniox') or {}).get('outcome') in {None, 'error', 'refused'}

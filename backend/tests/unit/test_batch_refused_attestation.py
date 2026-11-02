@@ -179,3 +179,23 @@ def test_marker_refusal_attests_soniox_only_and_preserves_prior_modulate(setup, 
     job['speech_redrive']['recognizers']['soniox']['outcome'] = 'empty'
     with pytest.raises(scope.ScopeRefused, match='attestation_has_paid_evidence'):
         refused_candidate(job, prepared=False, after=50, cutoff=200, max_seconds=60, window=(90, 200))
+
+
+@pytest.mark.parametrize('renewal', ['attempt_history', 'empty_history', 'original_token'])
+def test_attestation_cannot_ignore_a_renewed_intents_earlier_window(setup, monkeypatch, legacy_dependencies, renewal):
+    client, *_ = prepared_setup(setup, monkeypatch, legacy_dependencies)
+    job = row(client)
+    job['recovery_state'] = 'failed_held'
+    marker = job['recovery']
+    marker.update(provider='modulate', prepared_at=100, recognizers={'soniox': {'outcome': 'error'}})
+    marker.pop('started_at', None)
+    if renewal == 'attempt_history':
+        marker['attempt_history'] = [{'started_at': 10, 'recognizers': {'soniox': {'outcome': 'error'}}}]
+    elif renewal == 'empty_history':
+        marker['attempt_history'] = []
+    else:
+        marker['original_token'] = 'e' * 32
+    # The current preparation fits the zero-file window, but the retained
+    # earlier attempt does not. Its spend cannot be attested away.
+    with pytest.raises(scope.ScopeRefused, match='attestation_attempt_history_forbidden'):
+        refused_candidate(job, prepared=True, after=50, cutoff=200, max_seconds=190, window=(90, 200))

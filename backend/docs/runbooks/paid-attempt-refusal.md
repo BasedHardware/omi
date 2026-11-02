@@ -49,6 +49,8 @@ The plan seals the proof hash and full current job/intent fingerprint in a
 create-only 0600 cohort file. A changed job or proof refuses replay. Output is
 counts/digests only. Validated words/empty receipts, explicit spent markers,
 active jobs, results or terminal dispositions refuse even if the proof says zero.
+Renewed intents also refuse, including an empty history field or an original-token
+field: a proof covering only the current window cannot classify earlier spend.
 The flag cannot reopen any unit. A separate reviewed apply implementation and
 the lead's authorization are required before historical mutation or spend.
 
