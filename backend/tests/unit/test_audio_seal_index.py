@@ -1,8 +1,6 @@
 """Seal CAS behavior with versioning off and per-part receipt independence."""
 
 from contextlib import nullcontext
-import json
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -62,6 +60,21 @@ def test_two_writers_cannot_close_each_others_uncommitted_tail(remote):
     assert audio_outbox.read_pcm('owner', receipt)
 
 
+def test_old_close_cannot_seal_newly_accepted_uncommitted_frames(remote):
+    index = writer(remote)
+    index.begin('conversation')
+    index.accept('conversation', 320)
+    receipt, frames = part(remote)
+    index.add(receipt.to_dict(), frames)
+    index.seal('conversation')
+    with pytest.raises(ValueError):
+        seals.sealed_entries(remote, 'owner', 'conversation')
+    later, frames = part(remote, 1, 1003)
+    index.add(later.to_dict(), frames)
+    index.seal('conversation')
+    assert len(seals.sealed_entries(remote, 'owner', 'conversation')) == 2
+
+
 def test_part_cap_seals_deterministically_without_releasing_or_holding_receipts(remote, monkeypatch):
     monkeypatch.setattr(seals, 'PART_BYTES', 640)
     index = writer(remote)
@@ -80,14 +93,22 @@ def test_part_cap_seals_deterministically_without_releasing_or_holding_receipts(
 @pytest.mark.asyncio
 async def test_listen_emits_part_ack_before_index_failure_and_leaves_prefix_fallback(remote, monkeypatch):
     monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '100')
+    monkeypatch.setattr(seals, 'PART_BYTES', 320)
     h = host()
     archive = LiveAudioArchive(h)
     await archive.append(b'\x01\x02' * 160, 'conversation', 1000, 160)
+    coverage_acks = []
+
+    async def publish():
+        coverage_acks.append(True)
+
+    await archive.defer_ack('conversation', publish)
     real_put = archive.seal_index._put
 
     def fail_seal(path, value, generation):
         if '/seals/' in path:
             assert h.events, 'part ACK must already exist before index write'
+            assert coverage_acks, 'coverage WAL release must also precede index write'
             raise OSError('injected seal write failure')
         return real_put(path, value, generation)
 

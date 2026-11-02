@@ -86,6 +86,7 @@ class LiveAudioArchive:
                 )
             if conversation_id not in self.seal_index.active:
                 await run_blocking(storage_executor, self.seal_index.begin, conversation_id)
+            self.seal_index.accept(conversation_id, samples)
         pack = self.packs.get(channel)
         if pack is not None and (
             pack.boundary(conversation_id, timestamp, len(raw))
@@ -208,19 +209,12 @@ class LiveAudioArchive:
         self.failed = False
 
     async def _commit(self, pack: CapturePack, channel: int):
+        frames = list(self.frames.get(id(pack), []))
+        result = None
         try:
-            await self._write(pack, channel)
+            result = await self._write(pack, channel)
             self.uncommitted.pop(id(pack), None)
             self.frames.pop(id(pack), None)
-            if (
-                self.seal_index
-                and pack.conversation_id in self.closing_conversations
-                and not any(
-                    pending.conversation_id == pack.conversation_id
-                    for pending in [*self.packs.values(), *(item[0] for item in self.uncommitted.values())]
-                )
-            ):
-                await run_blocking(storage_executor, self.seal_index.try_seal, pack.conversation_id)
         except Exception:
             self._disable('upload_failed')
             if self.durable:
@@ -228,6 +222,18 @@ class LiveAudioArchive:
         finally:
             self.running.discard(id(pack))
         await self._publish_ready_acks()
+        # Both audio-only and coverage-based WAL release precede index I/O.
+        if self.seal_index and pack.conversation_id and result:
+            receipt, framed = result
+            if framed:
+                await run_blocking(storage_executor, self.seal_index.try_add, receipt.to_dict(), frames)
+            else:
+                self.seal_index.failed.add(pack.conversation_id)
+            if pack.conversation_id in self.closing_conversations and not any(
+                pending.conversation_id == pack.conversation_id
+                for pending in [*self.packs.values(), *(item[0] for item in self.uncommitted.values())]
+            ):
+                await run_blocking(storage_executor, self.seal_index.try_seal, pack.conversation_id)
 
     def _checkpoint_pending(self, checkpoint: dict[int, int]) -> bool:
         for pack, channel in [*((pack, channel) for channel, pack in self.packs.items()), *self.uncommitted.values()]:
@@ -346,12 +352,7 @@ class LiveAudioArchive:
                         frames=frames,
                     )
                 )
-            if self.seal_index and pack.conversation_id:
-                if metadata.get('frame_schema') == FRAME_SCHEMA:
-                    await run_blocking(storage_executor, self.seal_index.try_add, receipt.to_dict(), frames)
-                else:
-                    self.seal_index.failed.add(pack.conversation_id)
-            return
+            return receipt, metadata.get('frame_schema') == FRAME_SCHEMA
         await run_blocking(
             storage_executor,
             archive_capture_bytes,

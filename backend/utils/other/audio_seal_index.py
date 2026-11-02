@@ -6,6 +6,7 @@ leaves that marker open and readers list prefixes. Part ACKs never await seal.
 
 import hashlib
 import json
+from typing import Any
 
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
@@ -31,7 +32,7 @@ def _encode(value: dict) -> bytes:
     return raw
 
 
-def _read(bucket, uid: str, path: str):
+def _read(bucket, uid: str, path: str) -> tuple[dict[str, Any], int]:
     blob = bucket.blob(path)
     # SDK's single-shot GET stamps blob.generation from X-goog-generation.
     # No range retry may splice generations while versioning is disabled.
@@ -45,7 +46,10 @@ def _read(bucket, uid: str, path: str):
         payload = encryption.decrypt_audio_file(payload, uid)
     if hashlib.sha256(payload).digest() != digest:
         raise ValueError('seal GET checksum mismatch')
-    return json.loads(payload), int(blob.generation)
+    value = json.loads(payload)
+    if not isinstance(value, dict):
+        raise ValueError('seal GET root must be an object')
+    return value, int(blob.generation)
 
 
 class ConversationSealIndex:
@@ -53,6 +57,7 @@ class ConversationSealIndex:
         self.bucket, self.uid, self.source = bucket, uid, source
         self.protection, self.write_gate, self.baseline = protection, write_gate, baseline
         self.active: dict[str, dict] = {}
+        self.pending_samples: dict[str, int] = {}
         self.failed: set[str] = set()
         self.versioning_checked = False
         self.allowed = allowed
@@ -76,6 +81,7 @@ class ConversationSealIndex:
 
     def _update(self, conversation_id, mutate):
         path = index_path(self.uid, conversation_id)
+        current: dict[str, Any]
         with self.write_gate(self.uid, self.bucket):
             for attempt in range(3):
                 try:
@@ -125,6 +131,12 @@ class ConversationSealIndex:
 
         self._update(conversation_id, begin)
         self.active[conversation_id] = {'part': next_part, 'bytes': 0, 'receipts': []}
+        self.pending_samples[conversation_id] = 0
+
+    def accept(self, conversation_id: str, samples: int):
+        if conversation_id not in self.active:
+            raise ValueError('seal writer was not opened before acceptance')
+        self.pending_samples[conversation_id] += samples
 
     def add(self, receipt: dict, frames: list[dict]):
         conversation_id = receipt['conversation_id']
@@ -136,6 +148,7 @@ class ConversationSealIndex:
             self.seal(conversation_id, close=False)
             part = self.active[conversation_id]
         part['receipts'].append({'receipt': receipt, 'frames': frames, 'projections': []})
+        self.pending_samples[conversation_id] = max(0, self.pending_samples[conversation_id] - receipt['samples'])
         part['bytes'] += receipt['samples'] * 2
         if part['bytes'] >= PART_BYTES:
             self.seal(conversation_id, close=False)
@@ -149,6 +162,8 @@ class ConversationSealIndex:
 
     def seal(self, conversation_id: str, *, close: bool = True):
         if conversation_id in self.failed:
+            return
+        if close and self.pending_samples.get(conversation_id, 0):
             return
         part = self.active.get(conversation_id)
         if part is None:
@@ -175,6 +190,7 @@ class ConversationSealIndex:
         self._update(conversation_id, publish)
         if close:
             self.active.pop(conversation_id)
+            self.pending_samples.pop(conversation_id, None)
         else:
             self.active[conversation_id] = {'part': part['part'] + 1, 'bytes': 0, 'receipts': []}
 

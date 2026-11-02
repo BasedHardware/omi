@@ -1611,6 +1611,8 @@ async def _run_websocket_util_trigger(
                 if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
                     if seal_index and current_conversation_id and current_conversation_id not in seal_index.active:
                         await run_blocking(storage_executor, seal_index.begin, current_conversation_id)
+                    if seal_index and current_conversation_id:
+                        seal_index.accept(current_conversation_id, len(audio_data) // 2)
                     if (
                         framed_audio
                         and private_cloud_sync_buffer
