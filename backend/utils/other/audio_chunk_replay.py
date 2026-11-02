@@ -11,7 +11,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from database.audio_timeline import get_extension_for_path
 from utils import encryption
-from utils.other.raw_audio_read import read_pack
+from utils.other.raw_audio_read import read_pack, select_raw_pcm
+from utils.other.audio_frame_table import resampled_samples
 
 RECONCILE_MAX_OBJECTS = 64
 RECONCILE_MAX_BYTES = 64 * 1024 * 1024
@@ -86,12 +87,22 @@ def _raw_chunk_object_pcm(
     return pcm, size
 
 
+def _chunk_samples(chunk, sample_rate):
+    if 'raw_capture_rate' not in chunk:
+        return chunk['span']['samples']
+    offset = chunk['raw_capture_offset_samples']
+    rate = chunk['raw_capture_rate']
+    return resampled_samples(offset + chunk['raw_capture_samples'], rate, sample_rate) - resampled_samples(
+        offset, rate, sample_rate
+    )
+
+
 def _chunk_pcm(pcm, chunk, sample_rate):
     """Select a span only after caching and charging its entire immutable object."""
     if 'raw_capture_rate' in chunk:
-        if chunk['raw_capture_rate'] != sample_rate:
+        if chunk['raw_capture_rate'] != sample_rate and not chunk['path'].startswith('raw-live/'):
             raise ValueError('framed replay rate cannot be verified')
-        offset, count = chunk['raw_capture_offset_samples'], chunk['raw_capture_samples']
+        return select_raw_pcm(pcm, chunk, sample_rate)
     else:
         if 'raw_offset_samples' not in chunk:
             return pcm
@@ -139,11 +150,14 @@ def verify_frame_overlaps(
                 continue  # Spanless sources provide no replay inference, as on the legacy path.
             old_start = span['start']
             capture_rate = chunk.get('raw_capture_rate', span['sample_rate'])
-            old_end = old_start + chunk.get('raw_capture_samples', span['samples']) / capture_rate
+            samples = _chunk_samples(chunk, sample_rate)
+            old_end = old_start + samples / (sample_rate if 'raw_capture_rate' in chunk else capture_rate)
             lo, hi = max(start, old_start), min(end, old_end)
             if hi <= lo:
                 continue
-            if capture_rate != sample_rate:
+            if capture_rate != sample_rate and not (
+                'raw_capture_rate' in chunk and chunk['path'].startswith(f'raw-live/{uid}/')
+            ):
                 raise ValueError('framed replay rate cannot be verified')
             key = (chunk.get('bucket'), chunk['path'], chunk.get('generation'))
             if key not in decoded:
@@ -162,7 +176,7 @@ def verify_frame_overlaps(
                     raise ValueError('framed replay source cannot be verified')
                 decoded[key] = data
             data = _chunk_pcm(decoded[key], chunk, sample_rate)
-            if len(data) != chunk.get('raw_capture_samples', span['samples']) * 2:
+            if len(data) != samples * 2:
                 raise ValueError('framed replay source cannot be verified')
             left = round((lo - old_start) * sample_rate) * 2
             right = offset + round((lo - start) * sample_rate) * 2

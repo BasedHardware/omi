@@ -272,3 +272,59 @@ def test_replay_counts_objects_once_for_many_disjoint_spans(remote, monkeypatch)
         bucket_for=lambda name: remote,
     )
     assert download.call_count == 1
+
+
+@pytest.mark.parametrize('conflict', [False, True])
+@pytest.mark.parametrize('gap', [False, True])
+@pytest.mark.parametrize('rate', [8000, 22050, 44100, 48000])
+def test_replay_compares_native_rate_raw_capture_in_requested_rendition(remote, conflict, gap, rate):
+    captured = b'\x01\x02' * 1024 + b'\x03\x04' * 1024
+    second_start = 1000 + 1024 / rate + (3 if gap else 0)
+    old = audio_outbox.commit_pcm_window(
+        'owner',
+        captured,
+        'conversation',
+        1000,
+        rate,
+        'native',
+        0,
+        [frame(captured[:2048], 1000), frame(captured[2048:], second_start, 1, 2048, gap)],
+        framed=True,
+    )
+    rendition = raw_audio_read.read_pack(remote, old.path, 'owner', sample_rate=16000)
+    replay = ((b'\xff\x00' + rendition[2:]) if conflict else rendition) + b'\x07\x08' * 160
+    # Obtain the boundary from the real decoder, independently of frame-table arithmetic.
+    first_size = len(decode_capture(captured[:2048], remote.blob(old.path).metadata, 16000))
+    frames = (
+        [frame(replay[:first_size], 1000), frame(replay[first_size:], second_start, 1, first_size, True)]
+        if gap
+        else [frame(replay, 1000)]
+    )
+    receipt = audio_outbox.commit_pcm_window(
+        'owner',
+        replay,
+        'conversation',
+        1000,
+        16000,
+        'replay',
+        0,
+        frames,
+        framed=True,
+    )
+
+    def upload():
+        return storage.upload_audio_chunks_batch(
+            [{'data': replay, 'timestamp': 1000, 'custody_receipt': receipt.to_dict()}],
+            'owner',
+            'conversation',
+            'standard',
+            sample_rate=16000,
+        )
+
+    if conflict:
+        with pytest.raises(storage.AudioChunkContentConflict):
+            upload()
+        assert not remote.list_blobs('chunks/')
+    else:
+        assert remote.blob(upload()[0]).data == replay
+    assert audio_outbox.read_pcm('owner', old) == captured
