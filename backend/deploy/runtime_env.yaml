@@ -2392,7 +2392,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           STT_GPU_FLEET_OFF:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
@@ -2606,7 +2606,7 @@ environments:
             category: ops_kill
             value: '100'
           STT_GPU_FLEET_OFF:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           OMI_FLAGS_FIRESTORE_PROJECT:
             value: based-hardware
@@ -3151,7 +3151,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -3556,7 +3556,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -3955,7 +3955,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -4285,7 +4285,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:

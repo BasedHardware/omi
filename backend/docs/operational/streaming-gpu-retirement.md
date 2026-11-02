@@ -1,7 +1,8 @@
 # Streaming GPU retirement
 
-Production sets `STT_GPU_FLEET_OFF=true` on listen, pusher and all four Cloud Run
-roles. This selects Soniox for managed live sessions, Modulate for prerecorded
+Production ships `STT_GPU_FLEET_OFF=false` and the Parakeet guard unsuspended.
+The lead explicitly activates the switch on listen, pusher and all four Cloud Run
+roles after the cost and readiness gates below. The switch selects Soniox for managed live sessions, Modulate for prerecorded
 and PTT work, local ONNX for file VAD, and the existing vendor language probe.
 It denies Parakeet in static selection, the cost router, default fallback,
 idle failback and direct prerecorded calls. Existing sessions drain during the
@@ -24,8 +25,25 @@ Require batch admission and `SERVER_BATCH_ONLY_MOBILE_PERCENT=100` to be
 serving first, then measure residual vendor demand and confirm credits and
 concurrency before enabling the retirement route. A later batch rollback
 retains vendor routing and must be budgeted for the full streaming fallback.
+The lead owns qualification and activation for all traffic, with a review by
+2026-11-03 12:00Z. If the economic or vendor-readiness gates have not passed by
+then, report the blocker instead of silently leaving a dormant rollout.
+This temporary default-off stage protects against increased vendor spend:
+if batch trips to zero and full pre-flip streaming volume returns, retiring
+the GPUs increases the modeled bill. That is the fallback stress case. In the
+expected post-flip case, eligible live traffic goes to dedicated batch and
+only excluded residual managed streaming uses Soniox; qualify that residual
+instead of pricing all former Parakeet live traffic as Soniox.
+The minimum economic test is that avoided allocated GPU cost plus removed
+Modulate live spend exceeds added Soniox and legacy Modulate spend, including
+idle nodes retained by pool minimums. A smaller warm floor also needs measured
+peak throughput and latency qualification; average audio-hours do not prove it.
 
-1. Deploy the reviewed image/config to Cloud Run, listen and pusher with the
+1. After lead approval, change `STT_GPU_FLEET_OFF` to true in the production
+   runtime overlay and the listen/pusher production chart values, regenerate
+   `backend/deploy/runtime_env.yaml`, and review that single activation change.
+   Rollback before it serves: retain false. Do not suspend the guard yet.
+   Deploy the reviewed image/config to Cloud Run, listen and pusher with the
    canonical rollout train, first using its dry-run. Verify the actual serving
    Cloud Run revisions and every ready GKE pod receive `STT_GPU_FLEET_OFF=true`
    and the Soniox/Modulate key *bindings* exist; never print key values. Update

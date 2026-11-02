@@ -116,7 +116,7 @@ runtimeConfigMapName: prod-omi-backend-config
 env:
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
-    value: "true"
+    value: "false"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED

@@ -156,8 +156,10 @@ def test_maintenance_zero_preserves_every_object_and_model(chart):
     assert hpa['spec']['minReplicas'] > 0
 
 
-def test_parakeet_guard_is_suspended_and_batch_release_keeps_own_replicas():
-    guards = resources('incluster-guards')
+def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replicas():
+    baseline = resources('incluster-guards')
+    assert next(o for o in baseline if o['kind'] == 'CronJob')['spec']['suspend'] is False
+    guards = resources('incluster-guards', '--set', 'parakeetSuspended=true')
     cron = next(o for o in guards if o['kind'] == 'CronJob' and o['metadata']['name'] == 'prod-omi-incluster-guards')
     assert cron['spec']['suspend'] is True
     assert any(o['kind'] == 'ConfigMap' and o['metadata']['name'].endswith('-state') for o in guards)
@@ -193,7 +195,7 @@ def test_retirement_is_declared_on_every_prod_routing_runtime_only():
         )
         for env in envs:
             if environment == 'prod':
-                assert env['STT_GPU_FLEET_OFF']['value'] == 'true'
+                assert env['STT_GPU_FLEET_OFF']['value'] == 'false'
             else:
                 assert 'STT_GPU_FLEET_OFF' not in env
 
@@ -208,4 +210,5 @@ def test_cloud_run_retirement_configuration_can_pass_real_startup(service, strea
     assert config['secrets']['SONIOX_API_KEY'] == {'secret': 'SONIOX_API_KEY', 'version': 'latest'}
     environment = {name: binding['value'] for name, binding in config['env'].items() if 'value' in binding}
     environment.update({name: 'configured-binding' for name in config['secrets']})
+    environment['STT_GPU_FLEET_OFF'] = 'true'
     streaming_module.validate_streaming_stt_env(environment)
