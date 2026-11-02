@@ -759,8 +759,12 @@ class _PlansSheetState extends State<PlansSheet> {
     return Consumer<UsageProvider>(
       builder: (context, provider, child) {
         // Pop on build if the server-driven visibility flag is off, in case any
-        // caller bypassed the call-site check.
-        if (!provider.showSubscriptionUI || (_storefrontEnabled && _storefront?.showSubscriptionUi == false)) {
+        // caller bypassed the call-site check. Paid subscribers (managing plan/portal)
+        // and actively loading storefronts must never be prematurely dismissed.
+        final isPaidSubscriber = provider.subscription?.subscription.plan.isPaid ?? false;
+        if (!isPaidSubscriber &&
+            (!provider.showSubscriptionUI ||
+                (_storefrontEnabled && !_storefrontLoading && _storefront?.showSubscriptionUi == false))) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           });

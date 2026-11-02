@@ -93,4 +93,58 @@ void main() {
     }
     expect(opened, isTrue);
   });
+
+  testWidgets('PlansSheet does not dismiss when reader is an active paid subscriber', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(plan: PlanType.unlimitedV2, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 100,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      ),
+    );
+
+    bool? opened;
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UsageProvider>.value(value: usage),
+          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async =>
+                    opened = await openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'),
+                child: const Text('Manage Plan'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Manage Plan'));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byType(PlansSheet), findsOneWidget);
+    Navigator.of(tester.element(find.byType(PlansSheet))).pop();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(opened, isTrue);
+  });
 }

@@ -37,6 +37,10 @@ Future<void> chooseHeldAudioOnPhone(BuildContext context, OnDeviceTranscriptionC
 }
 
 void openHeldAudioPlans(BuildContext context) {
+  final provider = context.read<UsageProvider?>();
+  if (provider?.subscription?.subscription.plan.isPaid == true) {
+    unawaited(provider?.fetchSubscription());
+  }
   unawaited(openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'));
 }
 
@@ -101,7 +105,9 @@ class HeldAudioCardView extends StatelessWidget {
             const SizedBox(height: OmiSpacing.sm),
             OmiButton(
               key: const Key('held_audio_upgrade'),
-              label: l10n.upgrade,
+              label: (context.select<UsageProvider?, bool?>((p) => p?.subscription?.subscription.plan.isPaid) == true)
+                  ? l10n.managePlan
+                  : l10n.upgrade,
               size: OmiButtonSize.compact,
               expand: true,
               onPressed: onUpgrade,

@@ -181,7 +181,9 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
             const SizedBox(height: OmiSpacing.xs),
             OmiButton.secondary(
               key: Key('processing_backlog_upgrade_${widget.surface}'),
-              label: widget.surface == 'c' ? l10n.paywallComparePlans : l10n.upgrade,
+              label: (context.select<UsageProvider?, bool?>((p) => p?.subscription?.subscription.plan.isPaid) == true)
+                  ? l10n.managePlan
+                  : (widget.surface == 'c' ? l10n.paywallComparePlans : l10n.upgrade),
               expand: true,
               onPressed: widget.onUpgrade,
             ),
