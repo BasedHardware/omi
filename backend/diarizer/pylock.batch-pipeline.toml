@@ -180,13 +180,13 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/5f/4b/6157f24ca425b89
 
 [[packages]]
 name = "cryptography"
-version = "46.0.3"
-sdist = { url = "https://files.pythonhosted.org/packages/9f/33/c00162f49c0e2fe8064a62cb92b93e50c74a72bc370ab92f86112b33ff62/cryptography-46.0.3.tar.gz", upload-time = 2025-10-15T23:18:31Z, size = 749258, hashes = { sha256 = "a8b17438104fed022ce745b362294d9ce35b4c2e45c1d958ad4a4b019285f4a1" } }
+version = "50.0.2"
+sdist = { url = "https://files.pythonhosted.org/packages/9d/af/182eb91b0df3fe75c4d9f26fe70684569566745f6ba7e5c9c73a862c5252/cryptography-50.0.2.tar.gz", upload-time = 2026-09-30T15:30:04Z, size = 880623, hashes = { sha256 = "7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5" } }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/49/498c86566a1d80e978b42f0d702795f69887005548c041636df6ae1ca64c/cryptography-46.0.3-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2025-10-15T23:16:56Z, size = 4450807, hashes = { sha256 = "01ca9ff2885f3acc98c29f1860552e37f6d7c7d013d7334ff2a9de43a449315d" } },
-    { url = "https://files.pythonhosted.org/packages/c9/56/e7e69b427c3878352c2fb9b450bd0e19ed552753491d39d7d0a2f5226d41/cryptography-46.0.3-cp311-abi3-manylinux_2_28_x86_64.whl", upload-time = 2025-10-15T23:17:04Z, size = 4482541, hashes = { sha256 = "a2c0cd47381a3229c403062f764160d57d4d175e022c1df84e168c6251a22eec" } },
-    { url = "https://files.pythonhosted.org/packages/26/42/fa8389d4478368743e24e61eea78846a0006caffaf72ea24a15159215a14/cryptography-46.0.3-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2025-10-15T23:17:49Z, size = 4440029, hashes = { sha256 = "15ab9b093e8f09daab0f2159bb7e47532596075139dd74365da52ecc9cb46c5d" } },
-    { url = "https://files.pythonhosted.org/packages/d1/a0/5fa77988289c34bdb9f913f5606ecc9ada1adb5ae870bd0d1054a7021cc4/cryptography-46.0.3-cp38-abi3-manylinux_2_28_x86_64.whl", upload-time = 2025-10-15T23:17:56Z, size = 4473714, hashes = { sha256 = "1000713389b75c449a6e979ffc7dcc8ac90b437048766cef052d4d30b8220971" } },
+    { url = "https://files.pythonhosted.org/packages/21/69/64cef1f702bf6657e0cc186ed1a2891d50d29fb41586b254e1c07adea261/cryptography-50.0.2-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2026-09-30T14:43:49Z, size = 4719841, hashes = { sha256 = "630ebfea3bf689d075f82316324ff7433dc447fe6bc1bfc76524b74b4a9567d2" } },
+    { url = "https://files.pythonhosted.org/packages/1a/f1/b474e930c4d910328780e3940da76f5aa5cbc48ce1fc14e44d239d9ea9db/cryptography-50.0.2-cp311-abi3-manylinux_2_28_x86_64.whl", upload-time = 2026-09-30T14:43:55Z, size = 4753050, hashes = { sha256 = "4061c0079120205fb760c58acab6443e217307dcf05e3702cf970e0689972856" } },
+    { url = "https://files.pythonhosted.org/packages/bf/f1/1c1f6874e8550cfddd4b688ceb38cefb6ed15ceed224d56f133f3d88c214/cryptography-50.0.2-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2026-09-30T15:29:26Z, size = 4749145, hashes = { sha256 = "ee247f5c245c9a2fe7c8e2214e295918838e44e00a45a6718451e4004219e767" } },
+    { url = "https://files.pythonhosted.org/packages/4f/87/ef344a9e616871f2519c22d6afcda79ddd5d35e9592d95eb6e677608d055/cryptography-50.0.2-cp39-abi3-manylinux_2_28_x86_64.whl", upload-time = 2026-09-30T15:29:32Z, size = 4781387, hashes = { sha256 = "f21e8a22c8605750c7af886bab299a363721264061b4ac0a30efb73cfd58efc5" } },
 ]
 
 [[packages]]
@@ -1276,9 +1276,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a79
 
 [[packages]]
 name = "python-dotenv"
-version = "1.1.1"
-sdist = { url = "https://files.pythonhosted.org/packages/f6/b0/4bc07ccd3572a2f9df7e6782f52b0c6c90dcbb803ac4a167702d7d0dfe1e/python_dotenv-1.1.1.tar.gz", upload-time = 2025-06-24T04:21:07Z, size = 41978, hashes = { sha256 = "a8a6399716257f45be6a007360200409fce5cda2661e3dec71d23dc15f6189ab" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/5f/ed/539768cf28c661b5b068d66d96a2f155c4971a5d55684a514c1a0e0dec2f/python_dotenv-1.1.1-py3-none-any.whl", upload-time = 2025-06-24T04:21:06Z, size = 20556, hashes = { sha256 = "31f23644fe2602f88ff55e1f5c79ba497e01224ee7737937930c448e4d0e24dc" } }]
+version = "1.2.2"
+sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz", upload-time = 2026-03-01T16:00:26Z, size = 50135, hashes = { sha256 = "2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", upload-time = 2026-03-01T16:00:25Z, size = 22101, hashes = { sha256 = "1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a" } }]
 
 [[packages]]
 name = "pytorch-lightning"

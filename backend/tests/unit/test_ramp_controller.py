@@ -576,6 +576,23 @@ def test_leaving_on_requires_every_draining_precondition():
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), {**on, 'legacy_sync': 'draining'})[0]
 
 
+def test_legacy_percent_and_mode_are_atomic_and_widening_rechecks_holds():
+    parse = ramp_set.build_parser().parse_args
+    before = {'percents': {'legacy-sync': 25}, 'locked_by': None, 'legacy_sync': 'draining'}
+    args = ['--env', 'prod', '--legacy-sync', 'dark', '--legacy-percent', '50']
+    assert ramp_set.plan_change(parse(args), before).startswith('draining_precondition_unmet:')
+    confirmed = [arg for pid in sorted(rc.DRAINING_PRECONDITIONS) for arg in ('--precondition-met', pid)]
+    assert ramp_set.plan_change(parse(args + confirmed), before)[0] == {
+        'legacy_sync': 'dark',
+        'percents': {'legacy-sync': 50},
+    }
+    assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'on']), before)[0] == {'legacy_sync': 'on'}
+    assert (
+        ramp_set.plan_change(parse(['--env', 'prod', '--percent', 'legacy-sync=50']), before)
+        == 'legacy_percent_requires_mode'
+    )
+
+
 class _TimeoutRecordingClient:
     """Records the timeout of each `_ramp` point read; the document is absent."""
 

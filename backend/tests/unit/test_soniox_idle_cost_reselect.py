@@ -125,6 +125,9 @@ async def test_idle_reopen_rechecks_cost_stage_language_and_kill_switch(
     actual, _, raws, legs, observations, old, idle, _ = await idle_receiver(
         monkeypatch, language=language, enabled=enabled, benched=benched, modulate=modulate
     )
+    if not enabled:
+        # Both switches off: the one-time English failback (test_idle_parakeet_failback) is its own path.
+        monkeypatch.setenv('STT_IDLE_PARAKEET_FAILBACK_ENABLED', 'false')
     data = b'\x31\x01' * 1600
     try:
         # A former session failure cannot keep a now recovered target excluded.

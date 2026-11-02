@@ -51,11 +51,24 @@ def test_deepgram_is_retired_on_every_surface():
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.HELD_RECOVERY)
 
 
-def test_soniox_async_is_limited_to_held_recovery():
+def test_soniox_async_is_limited_to_held_recovery_and_batch_failover():
+    from config.prerecorded_stt import (
+        DEFAULT_STT_PRERECORDED_MODELS,
+        provider_for_model_token as prerecorded_provider_for_model_token,
+        providers_for_model_config,
+    )
+
     assert HELD_RECOVERY_SECOND_PROVIDER == 'soniox'
     assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
-    assert not provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    # Admitted on prerecorded only so the batch route table may name it as failover capacity.
+    assert provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
     assert not provider_is_enabled('soniox', STTServingSurface.PTT)
+    # General prerecorded selection can still never reach it, even when a deployment lists it.
+    assert 'soniox' not in DEFAULT_STT_PRERECORDED_MODELS
+    assert 'soniox' not in providers_for_model_config('soniox,parakeet,modulate-velma-2')
+    # Deployment validation maps no prerecorded token to Soniox; get_prerecorded_service
+    # matches only the parakeet and modulate-velma-2 tokens.
+    assert prerecorded_provider_for_model_token('soniox') is None
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():

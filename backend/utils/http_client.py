@@ -401,6 +401,16 @@ def get_stt_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt', 8)
 
 
+# Batch provider-STT vendor calls (Velma batch POST, Soniox async submit+poll). Above the
+# backend-integration request concurrency (40) so the socket pool, not this bound, never
+# serializes awaited calls; Cloud Tasks queue concurrency is the real throttle.
+BATCH_VENDOR_CONCURRENCY = 64
+
+
+def get_batch_vendor_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('batch_vendor', BATCH_VENDOR_CONCURRENCY)
+
+
 def get_stt_proxy_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt_proxy', 4)
 
@@ -554,6 +564,21 @@ def get_stt_client() -> httpx.AsyncClient:
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=5.0),
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+        ),
+    )
+
+
+def get_batch_vendor_client() -> httpx.AsyncClient:
+    """Shared async client for batch provider-STT vendor calls, isolated from listen's STT pool.
+
+    A Velma batch POST holds its socket for the whole transcription (the API is synchronous),
+    so it must never borrow the 8-connection pool latency-sensitive listen callers share.
+    """
+    return _get_client(
+        'batch_vendor',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=10.0),
+            limits=httpx.Limits(max_connections=BATCH_VENDOR_CONCURRENCY, max_keepalive_connections=16),
         ),
     )
 

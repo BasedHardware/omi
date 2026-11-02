@@ -1345,8 +1345,16 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
     for index in range(12):
         lane.projector.store.ref('jobs', f'held-{index:02d}').set(
-            {'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other', 'recovery_state': 'prepared'}
+            {
+                'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other',
+                'state': 'quarantined',
+                'recovery_state': 'prepared',
+            }
         )
+    # A committed job marked held by a quarantine-held projection is never a candidate.
+    lane.projector.store.ref('jobs', 'held-05a').set(
+        {'owner_id': 'synthetic-first', 'state': 'committed', 'recovery_state': 'held'}
+    )
     recovery = QuarantineRecovery(lane.store, Mock())
     recovery.recover = Mock(return_value='held')
     original = module.recovery_candidates

@@ -115,12 +115,23 @@ SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXX
 SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
 RELEASE_GUARD_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-release-guard-tests.XXXXXX")
-trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS" "$RELEASE_GUARD_TESTS"' EXIT
+TYPECHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-typecheck.XXXXXX")
+TYPECHECK_PID=""
+cleanup_pre_push() {
+  if [ -n "$TYPECHECK_PID" ]; then
+    kill "$TYPECHECK_PID" 2>/dev/null || true
+  fi
+  rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS" "$RELEASE_GUARD_TESTS" "$TYPECHECK_LOG"
+}
+trap cleanup_pre_push EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
 declare -a CI_PREDICTION_VERIFIED=()
 declare -a CI_PREDICTION_DEFERRED=()
 declare -a CI_PREDICTION_SKIPPED=()
 CI_PREDICTION_SELECTION=""
+# Set once the shared PR preflight (the full manifest) has run, so steps that duplicate a
+# manifest check can rely on it instead of running the same command a second time.
+SHARED_PREFLIGHT_RAN=0
 
 ci_prediction_note_verified() {
   CI_PREDICTION_VERIFIED+=("$1")
@@ -253,6 +264,7 @@ check_pr_preflight() {
   #   scripts/pr-preflight --pr-body-file /tmp/pr-body.md
   # or: OMI_PR_BODY_FILE=/tmp/pr-body.md git push
   scripts/pr-preflight --lane local --base "$BASE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
+  SHARED_PREFLIGHT_RAN=1
   if [ "$has_supplied_pr_body" -eq 1 ]; then
     ci_prediction_note_verified "shared PR contract, hygiene, and supplied PR body"
   else
@@ -546,10 +558,37 @@ check_backend_typecheck_if_needed() {
   fi
 
   require_backend_python
+  if [ -n "$TYPECHECK_PID" ]; then
+    local status=0
+    wait "$TYPECHECK_PID" || status=$?
+    TYPECHECK_PID=""
+    cat "$TYPECHECK_LOG"
+    return "$status"
+  fi
   (
     cd backend
     PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh
   )
+}
+
+# Pyright (40-125 s) only reads the tree, so it starts before the shared preflight
+# and check_backend_typecheck_if_needed collects it in its usual place with the
+# same output and verdict. The EXIT trap stops it if an earlier gate fails.
+start_backend_typecheck_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_TYPECHECK:-}" = "1" ]; then
+    return
+  fi
+  if ! printf '%s\n' "${CHANGED_FILES[@]}" | backend/scripts/needs-typecheck.sh >/dev/null; then
+    return
+  fi
+  if [[ -z "$BACKEND_PYTHON" || ! -x "$BACKEND_PYTHON" ]]; then
+    return  # the collecting step reports the missing interpreter
+  fi
+  (
+    cd backend
+    PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh
+  ) > "$TYPECHECK_LOG" 2>&1 &
+  TYPECHECK_PID=$!
 }
 
 check_backend_unit_tests_if_needed() {
@@ -652,6 +691,14 @@ check_backend_unit_tests_if_needed() {
 check_runtime_image_source_closure_if_needed() {
   if [ "${PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE:-}" = "1" ]; then
     echo "Skipping runtime-image contract check because PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE=1."
+    return
+  fi
+
+  # The shared preflight runs this exact command as manifest check
+  # backend-runtime-image-source-closure, whose triggers cover every backend and
+  # plugin path below. Running it twice cost ~140 s per backend push.
+  if [ "$SHARED_PREFLIGHT_RAN" = "1" ]; then
+    echo "Runtime-image contract check already ran in the shared PR preflight (backend-runtime-image-source-closure)."
     return
   fi
 
@@ -850,6 +897,7 @@ check_gauntlet_evidence_if_needed() {
 }
 
 run_step check_worktree_env
+start_backend_typecheck_if_needed
 run_step check_pr_preflight
 run_step "$PYTHON_BIN" .github/scripts/check-desktop-prod-promotion-policy.py
 run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py --self-test

@@ -7,10 +7,10 @@ numpy==2.3.5
 prometheus-client==0.22.1
 google-cloud-firestore==2.21.0
 google-cloud-storage==3.4.1
-cryptography==46.0.3
+cryptography==50.0.2
 # Stage-qualified Firestore reference helper imports the backend HTTP/env types.
 fastapi==0.121.0
-python-dotenv==1.1.1
+python-dotenv==1.2.2
 
 # Decode generation-pinned retained Opus captures; native libopus comes from ffmpeg.
 opuslib==3.0.1

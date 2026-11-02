@@ -49,6 +49,18 @@ def entries():
             body_digest='975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
         ),
         DriverEntry(
+            'database.batch_pipeline_store.oldest_admissible_ready',
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'now': (1.0, 'admissibility cutoff applied in memory only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready',
+            covered_by=('database.batch_pipeline_store.oldest_admissible_ready',),
+            reason='thin adapter forwards the client, namespace, priority and admissibility cutoff',
+            expect_observed=False,
+            body_digest='293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
+        ),
+        DriverEntry(
             'utils.batch_pipeline.redrive_scope.owner_jobs',
             base={'collection': ref_collection('batch_pipeline_prod_jobs'), 'uid': 'synthetic-owner'},
             neutrals={
@@ -83,9 +95,10 @@ def entries():
         CoveredByEntry(
             'database.batch_ramp.ramp_admission_policy',
             covered_by=('database.batch_ramp.read_owner_load',),
-            reason='admission wrapper delegates both metadata queries to the owner-load reader',
+            reason='admission wrapper delegates both metadata queries to the owner-load reader; '
+            'the intake-outcome evidence kwarg adds no query',
             expect_observed=False,
-            body_digest='af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
+            body_digest='2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
         ),
         DriverEntry(
             'database.batch_ramp.read_owner_load',
@@ -317,13 +330,13 @@ def entries():
         DriverEntry(
             'database.batch_pipeline_projection_release.held_page_ids',
             domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
-            neutrals={'limit': (32, 'bounded page size only; equality is served by the automatic single-field index')},
+            neutrals={'limit': (128, 'bounded page size only; equality is served by the automatic single-field index')},
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_page',
             covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
             reason='bounded release scan delegates its only query to held_page_ids; resets are document transactions',
             expect_observed=False,
-            body_digest='9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
+            body_digest='51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
         ),
     )

@@ -115,6 +115,65 @@ def test_model_doubles_disable_packing_instead_of_failing_startup():
     assert flight.FlightPyannote.create(fake, fake, budget_seconds=1800) is None
 
 
+def test_shared_trunk_kill_switch_ships_on(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED', raising=False)
+    assert ProviderConfig().shared_embedding_trunk is True
+    for value in ('', 'true', 'True', 'on', 'yes'):
+        monkeypatch.setenv('BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED', value)
+        assert provider_config().shared_embedding_trunk is True
+    for value in ('false', 'FALSE', ' false '):
+        monkeypatch.setenv('BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED', value)
+        assert provider_config().shared_embedding_trunk is False
+
+
+def serial_embedding_double(calls):
+    def get_embeddings(file, segmentation, exclude_overlap=False, hook=None):
+        calls.append((file, exclude_overlap))
+        return 'per-pair'
+
+    return SimpleNamespace(get_embeddings=get_embeddings)
+
+
+@pytest.mark.parametrize('version', [None, '3.4.0', '4.1.0'])
+def test_shared_trunk_keeps_the_per_pair_forward_outside_the_pinned_pyannote(monkeypatch, version):
+    monkeypatch.setattr(flight, '_pyannote_version', lambda: version)
+    diarizer = serial_embedding_double([])
+    original = diarizer.get_embeddings
+    assert flight.install_shared_trunk(diarizer) is False
+    assert diarizer.get_embeddings is original
+
+
+def test_shared_trunk_falls_back_per_call_and_keeps_fatal_cuda_quarantine(monkeypatch):
+    calls, outcomes = [], []
+    diarizer = serial_embedding_double(calls)
+    monkeypatch.setattr(flight, '_shared_trunk_supported', lambda model: True)
+    monkeypatch.setattr(flight, 'torch', SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False)))
+
+    def shared(model, files, binarized_list, *, exclude_overlap=None):
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return [outcome]
+
+    monkeypatch.setattr(flight, 'shared_trunk_embeddings', shared)
+    assert flight.install_shared_trunk(diarizer) is True
+
+    class OutOfMemoryError(RuntimeError):
+        pass
+
+    outcomes[:] = ['shared', OutOfMemoryError('CUDA out of memory'), ValueError('bad shape')]
+    assert diarizer.get_embeddings({'waveform': 1}, 'seg', exclude_overlap=True) == 'shared'
+    assert diarizer.get_embeddings({'waveform': 2}, 'seg', exclude_overlap=True) == 'per-pair'
+    assert diarizer.get_embeddings({'waveform': 3}, 'seg') == 'per-pair'
+    assert calls == [({'waveform': 2}, True), ({'waveform': 3}, False)]
+    # Path-like files keep pyannote's own audio loading.
+    assert diarizer.get_embeddings('unit.wav', 'seg') == 'per-pair'
+    outcomes[:] = [RuntimeError('CUDA error: an illegal memory access was encountered')]
+    with pytest.raises(RuntimeError, match='illegal memory access'):
+        diarizer.get_embeddings({'waveform': 4}, 'seg')
+    assert len(calls) == 3
+
+
 # ---- worker contract ----------------------------------------------------------
 
 
@@ -486,6 +545,37 @@ def test_packed_segmentation_vad_and_diarization_match_serial_pyannote(pyannote_
     tight = flight.FlightPyannote(diarizer, vad, budget_seconds=5)
     assert tight.segment(clips)[1:] == [None] * 3
     assert tight.diarize_many([(c, None) for c in clips]) == serial_diarization
+
+
+def test_serial_shared_trunk_matches_per_pair_pyannote(pyannote_pair):
+    torch, diarizer, vad = pyannote_pair
+    from diarizer.batch_pipeline_models import PyannoteDiarizer
+
+    clips = [synthetic_audio(s, i) for i, s in enumerate((3.5, 10.0, 12.25, 21.5, 26.0))]
+    files = [{'waveform': torch.from_numpy(c).unsqueeze(0), 'sample_rate': RATE} for c in clips]
+    serial_diarization = [PyannoteDiarizer(diarizer)(c) for c in clips]
+    # Powerset segmentation is already binary multilabel, as apply() uses it.
+    binarized = [diarizer._segmentation(f) for f in files]
+    serial_embeddings = [
+        diarizer.get_embeddings(f, b, exclude_overlap=overlap)
+        for f, b in zip(files, binarized)
+        for overlap in (True, False)
+    ]
+    original = diarizer.get_embeddings
+
+    assert flight.install_shared_trunk(diarizer) is True
+    assert diarizer.get_embeddings is not original
+    shared_embeddings = [
+        diarizer.get_embeddings(f, b, exclude_overlap=overlap)
+        for f, b in zip(files, binarized)
+        for overlap in (True, False)
+    ]
+    for value, reference in zip(shared_embeddings, serial_embeddings):
+        assert value.shape == reference.shape
+        np.testing.assert_array_equal(np.isnan(value), np.isnan(reference))
+        np.testing.assert_allclose(value, reference, rtol=0, atol=1e-4, equal_nan=True)
+    assert sum(len(d['turns']) for d in serial_diarization) > 20
+    assert [PyannoteDiarizer(diarizer)(c) for c in clips] == serial_diarization
 
 
 def test_packed_out_of_memory_falls_back_to_serial_pyannote(pyannote_pair, monkeypatch):

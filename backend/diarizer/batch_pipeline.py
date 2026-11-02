@@ -28,6 +28,7 @@ from config.batch_pipeline import (
     long_speech_handoff_enabled,
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
+    strict_vad_shadow_sampled,
     worker_io_concurrency,
     worker_silence_disposition_enabled,
     worker_validation_disposition_enabled,
@@ -38,6 +39,7 @@ from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline import leaf_timings
+from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.contracts import (
     WorkItem,
     WorkResult,
@@ -444,7 +446,7 @@ class PipelineWorker:
         except Exception:
             stream = None
         strict_silent = None
-        if not item.shadow:
+        if not item.shadow and strict_vad_shadow_sampled(item.segment_id):
             try:
                 started = time.thread_time()
             except Exception:
@@ -625,7 +627,7 @@ class PipelineWorker:
     def process_batch_deferred(self, items, *, authorize_dispatch=None, prepared=None) -> PendingResults:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
-        if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
+        if not all(within_unit_ceiling(item.duration_seconds, self.config.max_unit_seconds) for item in items):
             raise ValueError('conversation requires a dedicated batch GPU or a smaller admitted unit')
         if self.config.pool_kind == 'shared_live' and sum(i.duration_seconds for i in items) > 120:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
@@ -892,7 +894,10 @@ class PipelineWorker:
                                 raise
                             spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
-                    if not item.shadow:
+                    # The sampling predicate is deterministic by segment hash, so
+                    # this re-evaluation agrees with the decode-time decision;
+                    # unsampled units emit no shadow counters at all.
+                    if not item.shadow and strict_vad_shadow_sampled(item.segment_id):
                         try:
                             worker_metrics.strict_vad(
                                 strict_shadow.get(item.segment_id) if pyannote_observed else None, bool(spans)

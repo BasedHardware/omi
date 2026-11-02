@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import importlib.util
 from collections import Counter
@@ -21,13 +22,18 @@ from unittest.mock import patch
 
 from git_bash import bash_executable, bash_path, native_path_from_bash
 from run_checks import (
+    MAX_CHECK_JOBS,
     VALID_PLATFORMS,
+    _stop,
     Check,
     Manifest,
+    check_jobs,
     command_for_check,
     command_for_host,
     detect_platform,
     execute_checks,
+    execute_parallel_checks,
+    load_durations,
     load_manifest,
     resolve_check_selections,
     resolve_checks,
@@ -474,9 +480,13 @@ class RunnerBehaviorTests(unittest.TestCase):
         )
         return manifest, changed
 
-    def _run_cli(self, root: Path, manifest: Path, changed: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    def _run_cli(
+        self, root: Path, manifest: Path, changed: Path, *extra: str, jobs: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         runner = REPO_ROOT / ".github/scripts/run_checks.py"
         env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        if jobs is not None:
+            env["OMI_CHECKS_JOBS"] = jobs
         return subprocess.run(
             [
                 sys.executable,
@@ -541,7 +551,8 @@ class RunnerBehaviorTests(unittest.TestCase):
             runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
 
         self.assertEqual(result.returncode, 1)
-        self.assertEqual(runs, ["body-first", "body-second"])
+        # Python checks may run in parallel, so only the set of runs is fixed; the summary stays in manifest order.
+        self.assertEqual(sorted(runs), ["body-first", "body-second"])
         self.assertIn("<== FAIL body-first", result.stdout)
         self.assertIn("<== FAIL body-second", result.stdout)
         self.assertIn("Manifest checks failed: body-first, body-second", result.stderr)
@@ -574,7 +585,9 @@ class RunnerBehaviorTests(unittest.TestCase):
                     {"id": "source-after-failure", "exit_code": 8},
                 ],
             )
-            result = self._run_cli(root, manifest, changed)
+            # Serial mode: nothing after the first failure starts. The parallel pool's fail-fast
+            # (cancel running, schedule nothing new) is covered by ParallelRunnerTests.
+            result = self._run_cli(root, manifest, changed, jobs="1")
             runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
 
         self.assertEqual(result.returncode, 1)
@@ -1439,13 +1452,16 @@ class DeferredMarkerTests(unittest.TestCase):
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
         marker = "TO" + "DO"
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT, prefix=".manifest-marker-") as tmp:
-            root = Path(tmp)
-            candidate = root / "fixture.txt"
-            changed = root / "changed.txt"
-            relative = candidate.relative_to(REPO_ROOT).as_posix()
-            changed.write_text(f"{relative}\n", encoding="utf-8")
-
+        # The fixture must sit in the repository (the guard diffs repo-relative paths), but as single files, never
+        # a temporary directory: manifest checks now run in parallel, and a directory that vanishes mid-walk
+        # crashes another check's rglob (agents-md-lean FileNotFoundError, 2026-11-01). A vanished file does not,
+        # wherever TMPDIR points.
+        with tempfile.NamedTemporaryFile(dir=REPO_ROOT, prefix=".manifest-marker-", suffix=".txt", delete=False) as handle:
+            candidate = Path(handle.name)
+        with tempfile.NamedTemporaryFile(prefix="manifest-marker-changed-", suffix=".txt", delete=False) as handle:
+            changed = Path(handle.name)
+        try:
+            changed.write_text(f"{candidate.relative_to(REPO_ROOT).as_posix()}\n", encoding="utf-8")
             candidate.write_text(f"// {marker}: missing owner\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 1)
@@ -1453,6 +1469,9 @@ class DeferredMarkerTests(unittest.TestCase):
             candidate.write_text(f"// {marker}(#9448): owned follow-up\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 0)
+        finally:
+            candidate.unlink(missing_ok=True)
+            changed.unlink(missing_ok=True)
 
     def test_marker_guard_ignores_product_text_and_reformatted_existing_comments(self) -> None:
         module = load_deferred_marker_module()
@@ -1465,6 +1484,225 @@ class DeferredMarkerTests(unittest.TestCase):
             module.new_marker_violations([(88, reformatted)], Counter({signature: 1})),
             [],
         )
+
+
+class ParallelRunnerTests(unittest.TestCase):
+    """shipspeed 2026-11-01: a one-line backend push spent 514 s running 54 python checks one at a time."""
+
+    def run_checks_in(self, root: Path, checks: list[Check], *, jobs: str = "4", keep_going: bool = False):
+        changed = root / "changed.txt"
+        changed.write_text("example.txt\n", encoding="utf-8")
+        body = root / "body.txt"
+        body.write_text("", encoding="utf-8")
+        stdout, stderr = StringIO(), StringIO()
+        with patch.dict(os.environ, {"OMI_CHECKS_JOBS": jobs}), redirect_stdout(stdout), redirect_stderr(stderr):
+            result = execute_checks(
+                root,
+                checks,
+                changed_files_path=changed,
+                base="base",
+                head="HEAD",
+                pr_body_file=body,
+                keep_going=keep_going,
+            )
+        # Child output is relayed byte for byte; Windows children end lines with \r\n.
+        return result, stdout.getvalue().replace("\r\n", "\n"), stderr.getvalue()
+
+    @staticmethod
+    def script(root: Path, name: str, body: str) -> Check:
+        (root / f"{name}.py").write_text(body, encoding="utf-8")
+        return Check(name, ("python3", f"{name}.py"), ("all",), ("ci",), "fixture")
+
+    @staticmethod
+    def rendezvous(name: str, other: str) -> str:
+        # Passes only when the other check is running at the same time.
+        return (
+            "import pathlib, sys, time\n"
+            f"pathlib.Path('{name}.started').touch()\n"
+            "deadline = time.monotonic() + 20\n"
+            f"while not pathlib.Path('{other}.started').exists():\n"
+            "    if time.monotonic() > deadline:\n"
+            "        sys.exit(9)\n"
+            "    time.sleep(0.02)\n"
+            f"print('{name} done')\n"
+        )
+
+    def test_python_checks_run_concurrently_and_print_whole_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                self.script(root, "left", self.rendezvous("left", "right")),
+                self.script(root, "right", self.rendezvous("right", "left")),
+            ]
+            result, stdout, _ = self.run_checks_in(root, checks)
+            self.assertEqual(result, 0)
+            for name in ("left", "right"):
+                self.assertRegex(stdout, rf"==> {name}\n{name} done\n<== PASS {name} \(")
+            self.assertIn("Manifest checks passed: 2 check(s).", stdout)
+
+    def test_first_failure_cancels_running_checks_and_is_printed_last(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                self.script(root, "slow", "import time\ntime.sleep(60)\n"),
+                self.script(root, "bad", "print('broken contract')\nraise SystemExit(3)\n"),
+                self.script(root, "later", "print('ran')\n"),
+            ]
+            started = time.monotonic()
+            result, stdout, stderr = self.run_checks_in(root, checks, jobs="2")
+            self.assertLess(time.monotonic() - started, 30)
+            self.assertEqual(result, 1)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("==> later", stdout)
+            # The preflight runner names the failing phase from the last `==> ` line.
+            self.assertEqual([line for line in stdout.splitlines() if line.startswith("==> ")][-1], "==> bad")
+            self.assertIn("Manifest checks failed: bad", stderr)
+
+    def test_checks_finished_by_the_first_failure_keep_their_real_result(self) -> None:
+        """Luna r1 on #24232: a pass or a second failure that finished alongside the first must not read CANCELLED."""
+        real_sleep = time.sleep
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
+            checks = [
+                self.script(root, name, f"import pathlib\npathlib.Path('{name}.done').touch()\n{body}\n")
+                for name, body in quick.items()
+            ]
+            checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
+
+            def wait_for_quick_checks(_seconds: float) -> None:
+                # Hold the poll until all three quick checks have exited, so one scan sees them together.
+                deadline = time.monotonic() + 120  # interpreter startup alone took >30 s at load 140 on m5
+                while not all((root / f"{name}.done").exists() for name in quick) and time.monotonic() < deadline:
+                    real_sleep(0.02)
+                real_sleep(0.5)
+
+            with patch("run_checks.time.sleep", wait_for_quick_checks):
+                result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS fine", stdout)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("CANCELLED fine", stdout)
+            self.assertNotIn("CANCELLED also-bad", stdout)
+            self.assertIn("Manifest checks failed: bad, also-bad", stderr)
+
+    @unittest.skipIf(os.name == "nt", "exit-status attribution is POSIX-only")
+    def test_stop_keeps_the_status_of_a_check_that_exited_before_the_signal(self) -> None:
+        """Luna r2 on #24232: a check that exits between poll() and the stop keeps its own result."""
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "exited"
+            process = subprocess.Popen(
+                [sys.executable, "-c", f"import pathlib; pathlib.Path({str(marker)!r}).touch(); raise SystemExit(5)"],
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + 120
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            time.sleep(0.5)  # exited but not yet reaped: Popen.returncode is still None
+            with patch.object(process, "poll", side_effect=[None, None]):
+                stopped = _stop(process)
+            self.assertFalse(stopped)
+            self.assertEqual(process.returncode, 5)
+
+            live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+            self.assertTrue(_stop(live))
+
+    def test_jobs_override_is_clamped(self) -> None:
+        for raw, expected in (("54", MAX_CHECK_JOBS), ("0", 1), ("3", 3)):
+            with self.subTest(raw=raw), patch.dict(os.environ, {"OMI_CHECKS_JOBS": raw}):
+                self.assertEqual(check_jobs(), expected)
+
+    def test_keep_going_reports_every_failure_in_manifest_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                self.script(root, "first", "raise SystemExit(1)\n"),
+                self.script(root, "second", "print('fine')\n"),
+                self.script(root, "third", "raise SystemExit(1)\n"),
+            ]
+            shell = Check("shell", ("bash", "-c", "exit 1"), ("all",), ("ci",), "fixture")
+            result, stdout, stderr = self.run_checks_in(root, [*checks, shell], keep_going=True)
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS second", stdout)
+            self.assertIn("Manifest checks failed: first, third, shell", stderr)
+
+    def test_non_python_checks_run_serially_after_the_pool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                Check("shell-first", ("bash", "-c", "echo shell"), ("all",), ("ci",), "fixture"),
+                self.script(root, "py-a", "print('a')\n"),
+                self.script(root, "py-b", "print('b')\n"),
+            ]
+            result, stdout, _ = self.run_checks_in(root, checks)
+            self.assertEqual(result, 0)
+            starts = [line[4:] for line in stdout.splitlines() if line.startswith("==> ")]
+            self.assertEqual(starts[-1], "shell-first")
+            self.assertEqual(sorted(starts[:2]), ["py-a", "py-b"])
+            self.assertIn("Manifest checks passed: 3 check(s).", stdout)
+
+    def test_jobs_one_keeps_the_serial_manifest_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                Check("shell-first", ("bash", "-c", "echo shell"), ("all",), ("ci",), "fixture"),
+                self.script(root, "py-a", "print('a')\n"),
+                self.script(root, "py-b", "print('b')\n"),
+            ]
+            result, stdout, _ = self.run_checks_in(root, checks, jobs="1")
+            self.assertEqual(result, 0)
+            starts = [line[4:] for line in stdout.splitlines() if line.startswith("==> ")]
+            self.assertEqual(starts, ["shell-first", "py-a", "py-b"])
+            self.assertNotIn("python check(s) with", stdout)
+
+    def test_parallel_check_that_writes_a_tracked_file_fails_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "generated.txt").write_text("v1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "generated.txt"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "seed"],
+                cwd=root,
+                check=True,
+            )
+            checks = [
+                self.script(root, "writer", "open('generated.txt', 'w').write('v2\\n')\n"),
+                self.script(root, "reader", "print('ok')\n"),
+            ]
+            result, _, stderr = self.run_checks_in(root, checks)
+            self.assertEqual(result, 1)
+            self.assertIn("parallel checks modified tracked files: generated.txt", stderr)
+
+    def test_slowest_known_check_starts_first_and_durations_are_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            cache = root / ".git" / "omi-preflight" / "check-durations.json"
+            cache.parent.mkdir(parents=True)
+            cache.write_text(json.dumps({"quick": 0.1, "heavy": 90.0}), encoding="utf-8")
+            log_line = "import pathlib\nwith open('starts.log', 'a') as f:\n    f.write('{}\\n')\n"
+            checks = [
+                self.script(root, "quick", log_line.format("quick")),
+                self.script(root, "heavy", log_line.format("heavy")),
+            ]
+            # One worker serializes the pool, so start order is exactly the scheduling order.
+            durations = load_durations(cache)
+            with redirect_stdout(StringIO()):
+                failures = execute_parallel_checks(
+                    root,
+                    checks,
+                    {check.id: [sys.executable, f"{check.id}.py"] for check in checks},
+                    jobs=1,
+                    keep_going=False,
+                    durations=durations,
+                )
+            self.assertEqual(failures, [])
+            self.assertEqual((root / "starts.log").read_text(encoding="utf-8").split(), ["heavy", "quick"])
+            self.assertLess(durations["heavy"], 90.0)
+            result, _, _ = self.run_checks_in(root, checks)
+            self.assertEqual(result, 0)
+            self.assertEqual(set(json.loads(cache.read_text(encoding="utf-8"))), {"quick", "heavy"})
 
 
 if __name__ == "__main__":

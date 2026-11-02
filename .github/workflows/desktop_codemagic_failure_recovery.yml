@@ -34,6 +34,9 @@ jobs:
         github.event.check_run.conclusion == 'failure' &&
         github.event.check_run.app.slug == 'codemagic-ci-cd' &&
         startsWith(github.event.check_run.details_url, 'https://codemagic.io/app/66c95e6ec76853c447b8bcbb/build/')))
+    # check_run and dispatch both execute the main copy, so the release
+    # environment (main-only branch policy) always resolves.
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
