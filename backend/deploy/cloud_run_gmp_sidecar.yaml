@@ -1,4 +1,5 @@
-# Delivery and People scan counters remain in the shared omi_.* keep-list.
+# Delivery outcomes also remain in the shared omi_.* keep-list.
+# People scan eligibility/reuse remains covered by the shared omi_.* keep-list.
 apiVersion: monitoring.googleapis.com/v1beta
 kind: RunMonitoring
 metadata:
