@@ -3,12 +3,12 @@ import { Metadata } from 'next';
 import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 
 export const metadata: Metadata = {
-  title: 'Omi Unlimited | Omi',
+  title: 'Omi Pro | Omi',
   description:
-    'Unlock the full potential with Unlimited. Get advanced AI capabilities, longer memory retention, and more.',
+    'Unlock the full potential with Omi Pro. Get advanced AI capabilities, longer memory retention, and more.',
   openGraph: {
-    title: 'Omi Unlimited | Omi',
-    description: 'Unlock the full potential with Unlimited.',
+    title: 'Omi Pro | Omi',
+    description: 'Unlock the full potential with Omi Pro.',
     type: 'website',
   },
   other: {
@@ -36,9 +36,9 @@ export default async function UnlimitedPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0B0F17] px-4 text-center">
-      <h1 className="mb-4 text-4xl font-bold text-white">Omi Unlimited</h1>
+      <h1 className="mb-4 text-4xl font-bold text-white">Omi Pro</h1>
       <p className="mb-8 max-w-md text-lg text-gray-400">
-        Unlock the full potential with Omi Unlimited.
+        Unlock the full potential with Omi Pro.
       </p>
 
       {isMobile ? (

@@ -1,3 +1,13 @@
+from database.people_generation import bump_people_generation, write_person
+from database.person_speech_samples import add_sample_transaction
+from config.refactor_modes import serving_for
+from utils.speakers.person_pool import (
+    pool_profile,
+    retract_profile,
+    remove_sample,
+    PersonVoiceQualityError,
+    shadow_profile,
+)
 from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
@@ -14,7 +24,12 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
-from database.account_deletion_policy import deletion_billing_error_is_already_gone
+import database.account_deletion_grace as account_deletion_grace_db
+from database.account_deletion_policy import (
+    ACCOUNT_DELETION_GRACE_STATUS,
+    deletion_billing_error_is_already_gone,
+    deletion_wipe_retry_delay,
+)
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
@@ -32,6 +47,7 @@ from database.person_aliases import (
 from database.read_boundary import parse_payload_strict, parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
+from database import speaker_auto_enroll as auto_enroll_db
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -52,12 +68,6 @@ import logging
 logger = logging.getLogger(__name__)
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
-# A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
-# re-selected by every reconciler tick on every pod. Without a delay that is one claim
-# transaction per pod per tick, forever, against a record that cannot make progress. The
-# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
-DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
-DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
@@ -269,8 +279,7 @@ def get_user_private_cloud_sync_enabled(uid: str) -> bool:
 
 def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     """Enable or disable private cloud sync for a user."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.update({'private_cloud_sync_enabled': value})
+    auto_enroll_db.update_privacy(uid, {'private_cloud_sync_enabled': value}, firestore_client=db)
 
 
 def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
@@ -689,20 +698,6 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
-def deletion_wipe_retry_delay(attempts: int) -> timedelta:
-    """How long a ``failed`` wipe waits before it is selected again.
-
-    Doubles per recorded attempt and saturates at ``DELETION_WIPE_RETRY_MAX_DELAY``. The first
-    failure still retries on the next tick, so a transient error costs nothing.
-    """
-    if attempts <= 1:
-        return timedelta(0)
-    # Clamp the exponent before applying it: ``timedelta * 2 ** large`` overflows, and any
-    # exponent past the cap is the same answer anyway.
-    doublings = min(attempts - 2, 20)
-    return min(DELETION_WIPE_RETRY_BASE_DELAY * (2**doublings), DELETION_WIPE_RETRY_MAX_DELAY)
-
-
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
@@ -710,7 +705,9 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records whose per-attempt backoff has elapsed,
+    Returns incomplete grace records whose immediate actions need retry and
+    due grace records whose window has elapsed, plus ``failed`` records whose
+    per-attempt backoff has elapsed,
     ``billing_failed`` records with historical already-gone billing errors,
     stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
@@ -758,6 +755,10 @@ def get_pending_deletion_wipes(
             data = doc.to_dict()
             if deletion_billing_error_is_already_gone(data.get('billing_error')):
                 result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        grace_docs = account_deletion_collection().where('wipe_status', '==', ACCOUNT_DELETION_GRACE_STATUS).stream()
+        result.extend(account_deletion_grace_db.pending_grace_wipes(grace_docs, limit - len(result), now))
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -848,6 +849,8 @@ def _claim_deletion_wipe_txn(
             return None
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
+    if status == ACCOUNT_DELETION_GRACE_STATUS:
+        return account_deletion_grace_db.claim_due_grace_txn(transaction, doc_ref, snapshot.id, data, now)
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -934,6 +937,9 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         return 'completed'
     if status in ('cancelled', 'deleting_auth'):
         return 'not_actionable'
+    if status == ACCOUNT_DELETION_GRACE_STATUS:
+        if not account_deletion_grace_db.grace_wipe_is_due(data, now):
+            return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')
         if running_at and running_at >= now - running_stale_after:
@@ -941,7 +947,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 
     # A queued task retries transient pre-Auth billing failures. The reconciler
     # only recovers historical already-gone billing errors, never an outage.
-    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed'):
+    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed', ACCOUNT_DELETION_GRACE_STATUS):
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 
@@ -963,7 +969,7 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
 
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
-    people_ref.document(data['id']).set({**data, 'is_user_created': True})
+    write_person(db, people_ref.document(data['id']), 'set', {**data, 'is_user_created': True})
     return data
 
 
@@ -1046,44 +1052,9 @@ def dismiss_person(uid: str, person_id: str) -> bool:
 
 
 def delete_person(uid: str, person_id: str):
+    auto_enroll_db.revoke_person(uid, person_id, firestore_client=db)
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_ref.delete()
-
-
-@transactional
-def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
-    """Transaction to atomically add sample and transcript."""
-    snapshot = person_ref.get(transaction=transaction)
-    if not snapshot.exists:
-        return False
-
-    person_data = snapshot.to_dict()
-    samples = person_data.get('speech_samples', [])
-
-    if len(samples) >= max_samples:
-        return False
-
-    samples.append(sample_path)
-    update_data = {
-        'speech_samples': samples,
-        'updated_at': datetime.now(timezone.utc),
-    }
-
-    if transcript is not None:
-        transcripts = person_data.get('speech_sample_transcripts', [])
-        # Ensure transcript array alignment with samples:
-        # If we're adding a transcript but existing samples don't have transcripts,
-        # pad with empty strings for the existing samples first (Dart expects non-null)
-        existing_sample_count = len(samples) - 1  # samples already has new one appended
-        if len(transcripts) < existing_sample_count:
-            # Pad with empty strings for each existing sample without a transcript
-            transcripts.extend([''] * (existing_sample_count - len(transcripts)))
-        transcripts.append(transcript)
-        update_data['speech_sample_transcripts'] = transcripts
-        update_data['speech_samples_version'] = 3
-
-    transaction.update(person_ref, update_data)
-    return True
+    write_person(db, person_ref, 'delete')
 
 
 def add_person_speech_sample(
@@ -1092,7 +1063,7 @@ def add_person_speech_sample(
     """Atomically append a sample; return False for a missing person or a full sample list."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
-    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
+    return add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
@@ -1109,22 +1080,48 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 @transactional
 def _replace_speech_profile_transaction(
-    transaction, person_ref, expected_updated_at, profile, user_ref=None, source=None
+    transaction, person_ref, expected_updated_at, profile, user_ref=None, source=None, enrollment_privacy_version=None
 ):
     if source and not person_teaching_authorized(transaction, user_ref, person_ref.id, *source):
         return None
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
-    if user_ref is not None and not (user_ref.get(transaction=transaction).to_dict() or {}).get(
-        'save_other_voice_profiles', True
+    user_doc = (user_ref.get(transaction=transaction).to_dict() or {}) if user_ref is not None else {}
+    if user_ref is not None and not user_doc.get('save_other_voice_profiles', True):
+        return None
+    if enrollment_privacy_version is not None and (
+        not source
+        or not auto_enroll_db.authorize_audio(
+            transaction,
+            user_ref,
+            user_doc,
+            person_ref.id,
+            source,
+            profile.get('speaker_embedding'),
+            enrollment_privacy_version,
+            firestore_client=db,
+        )
     ):
         return None
     person = snapshot.to_dict()
+    if person.get('speaker_auto_enroll_revoked'):
+        return None
     if person.get('updated_at') != expected_updated_at:
         return None  # Deleted, corrected or replaced while audio work was in flight.
     old_samples = person.get('speech_samples', [])
+    if source:
+        shadow_profile(source[0], person, profile)
+    # refactor: superseded by utils.speakers.person_pool when SPEAKER_EVIDENCE_MODE=serve
+    if source and serving_for('SPEAKER_EVIDENCE_MODE', source[0]):
+        try:
+            profile, old_samples = pool_profile(person, profile)
+        except PersonVoiceQualityError:
+            return None  # Caller retires the unpublished blob; existing enrollment is untouched.
+    elif person.get('person_voice_confirmations') is not None:
+        profile = {**profile, 'person_voice_confirmations': None, 'person_voice_base': None}
     transaction.update(person_ref, {**profile, 'updated_at': datetime.now(timezone.utc)})
+    bump_people_generation(transaction, person_ref)
     return old_samples
 
 
@@ -1140,6 +1137,7 @@ def replace_person_speech_profile(
     *,
     speech_seconds: Optional[float] = None,
     expected_receipt_generation: Optional[int] = None,
+    enrollment_privacy_version: Optional[int] = None,
 ) -> Optional[list[str]]:
     """Publish verified teaching atomically; None means its source/version fence failed."""
     user_ref = db.collection('users').document(uid)
@@ -1159,6 +1157,7 @@ def replace_person_speech_profile(
         profile,
         user_ref=user_ref,
         source=(uid, conversation_id, segment_ids, expected_receipt_generation),
+        enrollment_privacy_version=enrollment_privacy_version,
     )
 
 
@@ -1171,13 +1170,16 @@ def _invalidate_speech_profile_transaction(transaction, person_ref, conversation
     source = person.get('speech_sample_source') or {}
     # Always fence in-flight teaching, even when it has not published provenance yet.
     update = {'updated_at': datetime.now(timezone.utc)}
-    removed = []
-    if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(segment_ids):
+    pooled, removed = retract_profile(person, [conversation_id], segment_ids)
+    if person.get('person_voice_confirmations') is not None:
+        update.update(pooled)
+    elif source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(segment_ids):
         removed = person.get('speech_samples', [])
         update.update(
             speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
         )
     transaction.update(person_ref, update)
+    bump_people_generation(transaction, person_ref)
     return removed
 
 
@@ -1219,24 +1221,15 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
             'speaker_embedding': None,
             'speech_sample_source': None,
             'updated_at': datetime.now(timezone.utc),
+            **remove_sample(person_data, sample_path),
         },
     )
+    bump_people_generation(transaction, person_ref)
     return True
 
 
 def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
-    """
-    Remove a speech sample path from person's speech_samples list.
-    Also removes the corresponding transcript at the same index to keep arrays in sync.
-
-    Args:
-        uid: User ID
-        person_id: Person ID
-        sample_path: GCS path to remove
-
-    Returns:
-        True if removed, False if person or sample not found
-    """
+    """Remove sample, transcript and pooled vector; False if already absent."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
     return _remove_sample_transaction(transaction, person_ref, sample_path)
@@ -1330,11 +1323,14 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
 
     transcripts[sample_index] = transcript
 
-    person_ref.update(
+    write_person(
+        db,
+        person_ref,
+        'update',
         {
             'speech_sample_transcripts': transcripts,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1381,7 +1377,7 @@ def update_person_speech_samples_after_migration(
     else:
         update_data['speaker_embedding'] = firestore.DELETE_FIELD
 
-    person_ref.update(update_data)
+    write_person(db, person_ref, 'update', update_data)
     return True
 
 
@@ -1403,11 +1399,14 @@ def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
     if not person_doc.exists:
         return False
 
-    person_ref.update(
+    write_person(
+        db,
+        person_ref,
+        'update',
         {
             'speaker_embedding': firestore.DELETE_FIELD,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1430,11 +1429,14 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     if not person_doc.exists:
         return False
 
-    person_ref.update(
+    write_person(
+        db,
+        person_ref,
+        'update',
         {
             'speech_samples_version': version,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 

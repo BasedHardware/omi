@@ -157,7 +157,7 @@ def test_capture_constraints_survive_deterministic_filter_without_topic_overlap(
 
 def test_high_effort_guard_counts_utf8_and_images_without_tokenizer():
     from types import SimpleNamespace
-    from utils.llm.episode_writer import episode_budget_exceeded, episode_input_bytes
+    from testing.episode_notes.writer_runtime import episode_budget_exceeded, episode_input_bytes
     from utils.llm.notes_observability import NotesRun
 
     messages = [SimpleNamespace(content=[{'type': 'text', 'text': 'é' * 100}])]
@@ -220,7 +220,7 @@ def test_budget_route_reuses_baseline_generation_and_both_judges(tmp_path):
 
 def test_effort_preserves_known_byok_models_outside_the_supported_family(monkeypatch):
     from types import SimpleNamespace
-    from utils.llm.episode_writer import bind_episode_effort
+    from utils.llm.notes_effort import bind_notes_effort as bind_episode_effort
     from utils.observability import fallback
 
     monkeypatch.setattr(fallback, 'record_fallback', lambda **kwargs: None)
@@ -237,7 +237,7 @@ def test_effort_preserves_known_byok_models_outside_the_supported_family(monkeyp
 def test_capture_finish_matches_start_convention_for_naive_utc():
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
-    from utils.llm.episode_writer import episode_finish_local_iso
+    from testing.episode_notes.writer_runtime import episode_finish_local_iso
 
     captured = datetime(2026, 1, 1, 10)
     local = ZoneInfo('Asia/Ho_Chi_Minh')

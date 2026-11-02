@@ -1,4 +1,4 @@
-from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 import asyncio
 import time
 import uuid
@@ -248,7 +248,7 @@ class OnboardingHandler:
 
     async def _ai_check_answer(self, question: str, transcript: str) -> bool:
         """Use AI to determine if answer is valid"""
-        if generated_compute_enabled() and not await run_blocking(
+        if generated_compute_configured() and not await run_blocking(
             db_executor, generated_compute_allowed, self.uid, 'onboarding'
         ):
             return False

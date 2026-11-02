@@ -7,3 +7,4 @@ backend/charts
 **/.venv
 omi/
 .hermes/
+backend/edge/target

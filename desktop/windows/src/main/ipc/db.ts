@@ -2091,6 +2091,20 @@ export function recentMemories(limit = 20): { content: string; category: string 
   ).all(limit) as { content: string; category: string }[]
 }
 
+// Memories created within [from, to), newest first, capped. Unlike recentMemories
+// above (an unwindowed dedup list), the daily recap asks for a specific day — this
+// keeps today's memories out of a "Yesterday" or "Past N days" recap.
+export function recentMemoriesInWindow(
+  from: number,
+  to: number,
+  limit = 10
+): { content: string; category: string }[] {
+  return cachedStmt(
+    get(),
+    'SELECT content, category FROM memories WHERE created_at >= ? AND created_at < ? ORDER BY created_at DESC, id DESC LIMIT ?'
+  ).all(from, to, limit) as { content: string; category: string }[]
+}
+
 // --- Track 3: Local task storage (action_items + staged_tasks) ---
 // Thin wrappers over the driver-agnostic CRUD in taskStore.ts (extracted so the
 // DDL + SQL are unit-testable under plain-node vitest with node:sqlite). get()

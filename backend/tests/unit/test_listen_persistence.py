@@ -1,5 +1,7 @@
 """Tests for the executor-backed listen persistence boundary."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from models.users import PlanType

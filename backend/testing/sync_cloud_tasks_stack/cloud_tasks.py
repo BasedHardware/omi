@@ -20,7 +20,8 @@ from utils.cloud_tasks import DISPATCH_DEADLINE_SECONDS, sync_job_payload_keys_v
 from .events import write_event
 
 RECOVERY_ROUTE = '/v2/batch-pipeline/recover-quarantine'
-_RECOVERY_TASK_ID = re.compile(r'bpr-(prod|dev)-[0-9a-f]{64}-[0-9a-f]{32}-[0-9]{1,12}')
+# Legacy time-bucketed wake suffix, or the leased wake sequence (`w<seq>`).
+_RECOVERY_TASK_ID = re.compile(r'bpr-(prod|dev)-[0-9a-f]{64}-[0-9a-f]{32}-([0-9]{1,12}|w[0-9]{1,9})')
 _REPROCESS_TASK_ID = re.compile(r'sr-[0-9a-f]{64}-[0-9a-f]{32}(-repair-[0-9]{1,12})?')
 _REPROCESS_KEY = re.compile(r'[0-9a-f]{64}')
 _REPROCESS_TOKEN = re.compile(r'[0-9a-f]{32}')

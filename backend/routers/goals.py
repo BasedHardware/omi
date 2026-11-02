@@ -226,16 +226,13 @@ def list_goal_progress_events(
 def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
-
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
-
     try:
         updated_goal = goals_db.update_goal(uid, goal_id, update_data)
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
-
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
@@ -302,10 +299,13 @@ def get_current_goal_advice(
 ) -> dict:
     """Get AI-generated advice for the current active goal."""
     goal = goals_db.get_user_goal(uid)
-    if not goal:
+    if not goal or not goal.get('id'):
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal_id=goal['id'], uid=uid)
+    try:
+        return get_goal_advice(goal_id=goal['id'], uid=uid)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Goal not found")
 
 
 class ProgressExtractRequest(BaseModel):
@@ -355,7 +355,7 @@ def extract_and_update_progress(
                     'goal_title': u.get('goal_title'),
                     'previous_value': u.get('old_value'),
                     'new_value': u.get('new_value'),
-                    'reasoning': u.get('reasoning', ''),
+                    'reasoning': str(u.get('reasoning') or ''),
                 }
                 for u in updates
             ],

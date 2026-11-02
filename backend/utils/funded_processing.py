@@ -12,16 +12,21 @@ import os
 import logging
 from typing import Any, Mapping
 
-from config.stt_cap_dispatch import execution_admission_enabled as enabled
+from config.stt_cap_dispatch import execution_admission_enabled, any_execution_admission_enabled
 from config.stt_cap_dispatch import enabled as legacy_enabled
 
 _UNSET = object()
 _backlog_grant: ContextVar[tuple[str, str] | None] = ContextVar('funded_backlog_grant', default=None)
 
 
+def enabled(uid: str, lane: str | None = None) -> bool:
+    """Owner surfaces use any lane; processing dispatches supply batch explicitly."""
+    return any_execution_admission_enabled(uid) if lane is None else execution_admission_enabled(uid, lane)
+
+
 def consent_allows(uid: str) -> bool:
     """A chosen backlog grant cannot authorize later dispatches after reset."""
-    if not enabled():
+    if not enabled(uid):
         return True
     grant = _backlog_grant.get()
     return grant is None or grant == (uid, period_id())
@@ -29,7 +34,7 @@ def consent_allows(uid: str) -> bool:
 
 @contextmanager
 def backlog_consent(uid: str, period: str):
-    if not enabled():
+    if not enabled(uid):
         yield
         return
     token = _backlog_grant.set((uid, period))
@@ -118,7 +123,7 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
 
 def monthly_usage(uid: str) -> dict:
     """Subscription reporting shares closed-hour totals instead of rescanning every poll."""
-    if not enabled():
+    if not enabled(uid):
         from utils.subscription import get_monthly_usage_for_subscription
 
         return get_monthly_usage_for_subscription(uid)
@@ -138,7 +143,7 @@ def monthly_usage(uid: str) -> dict:
 
 def processing_allowed(uid: str, *, firestore_client: Any = None) -> bool:
     kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
-    return not enabled() or consent_allows(uid) and allowance(uid, **kwargs).managed
+    return not enabled(uid, 'batch') or consent_allows(uid) and allowance(uid, **kwargs).managed
 
 
 def capacity(value: Any) -> tuple[float | None, float | None]:
@@ -160,11 +165,11 @@ def period_id() -> str:
 def scoped(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
-        if not enabled():
+        uid = args[0] if args else kwargs['uid']
+        if not enabled(uid, 'batch'):
             return fn(*args, **kwargs)
         from utils.llm.usage_tracker import track_usage
 
-        uid = args[0] if args else kwargs['uid']
         with track_usage(uid, 'conversation_processing'):
             return fn(*args, **kwargs)
 

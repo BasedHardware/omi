@@ -15,12 +15,16 @@ ZONES = ("us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f")
 
 FAKE_KUBECTL = r'''#!/usr/bin/env python3
 import json
+import os
+declared = ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]
+if os.environ.get("FAKE_STATUS_OMITS_F"):
+    declared = declared[:3]
 print(json.dumps({
     "metadata": {
         "annotations": {
             "cloud.google.com/neg-status": json.dumps({
                 "network_endpoint_groups": {"8080": "prod-backend-listen-neg"},
-                "zones": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
+                "zones": declared,
             })
         }
     }
@@ -38,11 +42,13 @@ with open(os.environ["FAKE_GCLOUD_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(args) + "\n")
 
 if args[:3] == ["compute", "network-endpoint-groups", "list"]:
+    owner = json.dumps({"cluster-uid": "uid-1", "namespace": "prod-omi-backend", "service-name": "prod-omi-backend-listen", "port": "8080"})
+    foreign_owner = json.dumps({"cluster-uid": "uid-2", "namespace": "prod-omi-backend", "service-name": "prod-omi-backend-listen", "port": "8080"})
     listed = [
-        {"name": "prod-backend-listen-neg", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-a"},
-        {"name": "prod-backend-listen-neg", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-b"},
-        {"name": "prod-backend-listen-neg", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-c"},
-        {"name": "prod-backend-listen-neg", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-f"},
+        {"name": "prod-backend-listen-neg", "description": owner, "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-a"},
+        {"name": "prod-backend-listen-neg", "description": owner, "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-b"},
+        {"name": "prod-backend-listen-neg", "description": owner, "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-c"},
+        {"name": "prod-backend-listen-neg", "description": foreign_owner if os.environ.get("FAKE_F_FOREIGN_OWNER") else owner, "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-f"},
         {"name": "prod-backend-listen-neg-shadow", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-x"},
     ]
     if os.environ.get("FAKE_FOREIGN_ZONE_NEG"):
@@ -114,6 +120,8 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
         disagree_traffic=False,
         foreign_zone_neg=False,
         global_neg=False,
+        status_omits_f=False,
+        f_foreign_owner=False,
     ):
         env = os.environ.copy()
         env["PATH"] = f"{self.bin_dir}{os.pathsep}{env.get('PATH', '')}"
@@ -130,6 +138,10 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
             env["FAKE_FOREIGN_ZONE_NEG"] = "1"
         if global_neg:
             env["FAKE_GLOBAL_NEG"] = "1"
+        if status_omits_f:
+            env["FAKE_STATUS_OMITS_F"] = "1"
+        if f_foreign_owner:
+            env["FAKE_F_FOREIGN_OWNER"] = "1"
         return subprocess.run(
             [
                 sys.executable,
@@ -226,6 +238,26 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("outside the listen Service's declared zones: europe-west1-b", result.stderr)
+        self.assertFalse(any("add-backend" in call for call in self._gcloud_calls()))
+
+    def test_attaches_owned_neg_in_zone_missing_from_stale_service_status(self):
+        # 2026-10-18: neg-status listed a/b/c while GKE had created the f NEG for
+        # the same Service; owner metadata, not the stale zone list, decides scope.
+        result = self._run(status_omits_f=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("accepted by matching GKE owner metadata: us-central1-f", result.stdout)
+        add_calls = [call for call in self._gcloud_calls() if "add-backend" in call]
+        self.assertEqual(
+            [next(a for a in call if a.startswith("--network-endpoint-group-zone=")) for call in add_calls],
+            ["--network-endpoint-group-zone=us-central1-c", "--network-endpoint-group-zone=us-central1-f"],
+        )
+
+    def test_rejects_undeclared_zone_neg_owned_by_another_cluster(self):
+        result = self._run(status_omits_f=True, f_foreign_owner=True)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("outside the listen Service's declared zones: us-central1-f", result.stderr)
         self.assertFalse(any("add-backend" in call for call in self._gcloud_calls()))
 
     def test_rejects_exact_name_neg_without_a_zone_scope(self):

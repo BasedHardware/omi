@@ -299,6 +299,11 @@ def baseline_module(monkeypatch):
         capture_output=True,
         text=True,
     ).stdout
+    # The retired rollout reader is gone; compare the historical ON path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType('owner_retry_funnel_baseline')
     monkeypatch.setitem(sys.modules, module.__name__, module)
     exec(compile(source, 'baseline_speaker_resolution.py', 'exec'), module.__dict__)
@@ -307,6 +312,9 @@ def baseline_module(monkeypatch):
 
 @pytest.mark.parametrize('case', ['resolved', 'zero', 'spanless', 'partial', 'disabled', 'failed_embedding'])
 def test_literal_baseline_and_instrumented_outputs_and_cache_bytes_identical(env, monkeypatch, baseline_module, case):
+    # This historical telemetry baseline predates optional V1 energy metadata.
+    # Isolate its byte-parity contract from the separately tested shadow cache extension.
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
     _span_flags(monkeypatch)
     audio = _install_audio(monkeypatch, [0, 0], offset=180.0)
     original = _capture_shifted_conversation([0, 0])
@@ -421,6 +429,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             self.chunks = chunks
             self.limit_hit = False
             self.reason = fetch_reason
+            self.cache = {}
 
         def in_budget(self):
             return failure != 'budget'
@@ -429,6 +438,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             reads.append(path)
             if failure == 'download_cap':
                 self.limit_hit = True
+            self.cache[path] = (pcm, fetch_reason)
             return pcm
 
     monkeypatch.setattr(stage, 'AudioChunkReadSession', Session)
@@ -442,6 +452,11 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
         result = stage._verified_read_session('u1', conv, files, conv.transcript_segments, placements, float('inf'))
         assert telemetry.resolver_trace().reason == reason
     assert result is None and baseline is None
+    if failure == 'window':
+        # A window with no trusted coordinates now refuses before downloading
+        # unrelated PCM; the closed primary reason remains unchanged.
+        assert reads == [] and baseline_reads == ['fixture']
+        return
     assert reads == baseline_reads
 
 

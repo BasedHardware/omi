@@ -1,6 +1,14 @@
 name: Public Build Configuration Preflight
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     branches: ["main"]
     paths:
@@ -34,6 +42,12 @@ permissions:
   actions: read
   contents: read
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   preflight:
     name: ${{ matrix.environment }} configuration
@@ -45,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Verify reviewed public build configuration
         env:
@@ -52,4 +68,5 @@ jobs:
         run: |
           python3 .github/scripts/preflight_public_build_config.py \
             --all \
-            --environment "${{ matrix.environment }}"
+            --environment "${{ matrix.environment }}" \
+            --ref "${{ inputs.nightly_main_sha || github.sha }}"

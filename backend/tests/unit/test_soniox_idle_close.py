@@ -45,12 +45,12 @@ class Peer:
         self.frames.put_nowait(None)
 
 
-def build(monkeypatch, seconds=2, fail=False):
+def build(monkeypatch, seconds=2, fail=False, peer=None, budget=None):
     tick = [100.0]
     monkeypatch.setattr(soniox_idle.time, 'monotonic', lambda: tick[0])
     monkeypatch.setattr(vad_gate, '_get_ort_session', lambda: None)
     monkeypatch.setattr(VADStreamingGate, '_run_vad', lambda self, data: data[0] == 1)
-    peers = [Peer()]
+    peers = [peer or Peer()]
     seen = []
     raw = SafeSonioxSocket(peers[0], seen.extend, asyncio.get_running_loop())
 
@@ -61,7 +61,7 @@ def build(monkeypatch, seconds=2, fail=False):
         peers.append(peer)
         return SafeSonioxSocket(peer, callback, asyncio.get_running_loop())
 
-    idle = IdleSonioxSocket(raw, connect, seen.extend, 16000, seconds)
+    idle = IdleSonioxSocket(raw, connect, seen.extend, 16000, seconds, idle_budget=budget)
     gate = VADStreamingGate(sample_rate=16000, mode='active', hangover_ms=0)
     return GatedSTTSocket(idle, gate), idle, gate, peers, seen, tick
 
@@ -72,14 +72,11 @@ async def settle():
         await asyncio.sleep(0)
 
 
-@pytest.mark.parametrize('value', [None, '0'])
+@pytest.mark.parametrize('value', ['0', 'off'])
 @pytest.mark.parametrize('warm', [False, True])
 def test_off_returns_original_adapter_and_no_idle_series(monkeypatch, value, warm):
     monkeypatch.setenv('SONIOX_API_KEY', 'fake')
-    if value is None:
-        monkeypatch.delenv('SONIOX_IDLE_CLOSE_SECONDS', raising=False)
-    else:
-        monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', value)
+    monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', value)
     if warm:
         live_metrics.soniox_idle_metrics()
 
@@ -210,10 +207,20 @@ def test_end_while_idle_closed_never_reopens(monkeypatch):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('value', ['', '0', '-1', 'nan', 'inf', 'invalid'])
+@pytest.mark.parametrize('value', ['0', '-1', 'inf', 'off', 'OFF', 'false'])
 def test_off_values_are_inert(monkeypatch, value):
     monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', value)
     assert idle_close_seconds() == 0
+
+
+@pytest.mark.parametrize('value', [None, '', ' ', 'nan', 'invalid'])
+def test_unset_or_unreadable_threshold_keeps_the_default_on(monkeypatch, value):
+    # Kill switch semantics: only an explicit off value disables the close.
+    if value is None:
+        monkeypatch.delenv('SONIOX_IDLE_CLOSE_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', value)
+    assert idle_close_seconds() == idle_config.DEFAULT_IDLE_CLOSE_SECONDS == 45
 
 
 def test_threshold_floor_logs_once_and_reads_current_env(monkeypatch, caplog):
@@ -231,16 +238,27 @@ def test_threshold_floor_logs_once_and_reads_current_env(monkeypatch, caplog):
 
 
 @pytest.mark.parametrize(
-    'value,expected', [('1', 60), ('0', 60), ('-1', 60), ('120', 120), ('nan', 60), ('inf', 60), ('bad', 60)]
+    'value,expected',
+    [(None, 60), ('1', 5), ('0', 5), ('-1', 5), ('7', 7), ('120', 120), ('nan', 60), ('inf', 60), ('bad', 60)],
 )
 def test_rearm_config_has_a_safe_floor(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv('SONIOX_IDLE_REARM_SECONDS', raising=False)
+        assert idle_rearm_seconds() == expected
+        return
     monkeypatch.setenv('SONIOX_IDLE_REARM_SECONDS', value)
     assert idle_rearm_seconds() == expected
 
 
-@pytest.mark.parametrize('value,expected', [('3', 3), ('0', 12), ('-1', 12), ('1.5', 12), ('nan', 12), ('bad', 12)])
+@pytest.mark.parametrize(
+    'value,expected',
+    [(None, 12), ('3', 3), ('240', 240), ('0', 12), ('-1', 12), ('1.5', 12), ('nan', 12), ('bad', 12)],
+)
 def test_hourly_close_cap_config(monkeypatch, value, expected):
-    monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', value)
+    if value is None:
+        monkeypatch.delenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', raising=False)
+    else:
+        monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', value)
     assert idle_max_closes_per_hour() == expected
 
 
@@ -255,6 +273,8 @@ def test_threshold_flapping_bounds_paid_dials(monkeypatch, recovery, cap):
     else:
         monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', str(cap))
     limit = cap or 12
+    rearm = idle_rearm_seconds()
+    assert rearm == 60
 
     async def run():
         socket, idle, _, peers, _, tick = build(monkeypatch, seconds=idle_close_seconds())
@@ -266,9 +286,9 @@ def test_threshold_flapping_bounds_paid_dials(monkeypatch, recovery, cap):
         def send(data):
             assert socket.send(data, wall_time=tick[0], start_sample=round((tick[0] - 100) * 16000))
 
-        # 120 opportunities over 40 minutes, with onset immediately after each
-        # threshold. The original implementation dials on every iteration.
-        for _ in range(120):
+        # More opportunities than the cap inside one rolling hour, with onset
+        # immediately after each threshold. Uncapped code dials every iteration.
+        for _ in range(limit + 30):
             send(silence)
             tick[0] += 20
             send(silence)
@@ -287,7 +307,7 @@ def test_threshold_flapping_bounds_paid_dials(monkeypatch, recovery, cap):
 
         assert len(peers) == limit + 1  # initial dial plus capped idle reopens
         assert len(closed_at) == len(reopened_at) == limit
-        assert all(close - reopen >= 60 for close, reopen in zip(closed_at[1:], reopened_at))
+        assert all(close - reopen >= rearm for close, reopen in zip(closed_at[1:], reopened_at))
         assert not peers[-1].closed
         assert not socket.is_connection_dead
         await idle.drain_and_close()
@@ -749,5 +769,731 @@ def test_tail_rejects_onset_without_capture_spans():
         assert not tail.send_admitted_audio(b'onset!', ())
         assert tail._tail_bytes == 0
         assert not tail.tail
+
+    asyncio.run(run())
+
+
+# --- Aggressive idle close (2026-10-19): defaults, no-frames close, cap, re-arm, resume, meter ---
+
+
+def test_code_defaults_are_on_and_aggressive(monkeypatch):
+    for name in (
+        'SONIOX_IDLE_CLOSE_SECONDS',
+        'SONIOX_IDLE_NO_FRAMES_SECONDS',
+        'SONIOX_IDLE_REARM_SECONDS',
+        'SONIOX_IDLE_MAX_CLOSES_PER_HOUR',
+    ):
+        monkeypatch.delenv(name, raising=False)
+    # VAD policy stays at the prod values; only the no-frames trigger is new.
+    assert idle_close_seconds() == 45
+    assert idle_config.idle_no_frames_seconds() == 20
+    assert idle_rearm_seconds() == 60
+    assert idle_max_closes_per_hour() == 12
+
+
+def test_hangover_mirror_matches_the_gate():
+    assert idle_config.VAD_HANGOVER_SECONDS * 1000 == vad_gate.VAD_GATE_HANGOVER_MS
+
+
+@pytest.mark.parametrize(
+    'value,expected',
+    [(None, 20), ('', 20), ('bad', 20), ('0', 0), ('off', 0), ('-5', 0), ('3', 10), ('60', 60)],
+)
+def test_no_frames_config(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv('SONIOX_IDLE_NO_FRAMES_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', value)
+    assert idle_config.idle_no_frames_seconds() == expected
+
+
+def test_default_on_wraps_the_serving_adapter(monkeypatch):
+    monkeypatch.setenv('SONIOX_API_KEY', 'fake')
+    monkeypatch.delenv('SONIOX_IDLE_CLOSE_SECONDS', raising=False)
+
+    async def dial(*args, **kwargs):
+        return Peer()
+
+    monkeypatch.setattr(soniox.websockets, 'connect', dial)
+
+    async def run():
+        socket = await soniox.process_audio_soniox(lambda _: None, 16000, 'en')
+        assert type(socket) is IdleSonioxSocket
+        assert socket._seconds == 45
+        assert socket._watchdog is not None and not socket._watchdog.done()
+        await socket.drain_and_close()
+        assert socket._watchdog.done()
+
+    asyncio.run(run())
+
+
+def _bytes(peer):
+    return b''.join(data for data in peer.sent if isinstance(data, bytes))
+
+
+def test_no_frames_close_then_resume_delivers_every_byte_once(monkeypatch):
+    """Client stops sending mid-session: close on wall time, reopen on the next frame."""
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        socket, idle, gate, peers, seen, tick = build(monkeypatch, seconds=20)
+        speech = b'\x01\x00' * 1600
+        assert socket.send(speech, wall_time=100, start_sample=0)
+        await settle()
+        idle._transport._handle_tokens([{'text': 'before ', 'is_final': True, 'start_ms': 0, 'end_ms': 100}])
+        # Frames stop. VAD sees nothing, so only the wall-clock watchdog can act.
+        # The last frame was speech, so the VAD hangover elapses first.
+        before = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'no_frames'}) or 0
+        tick[0] += 20
+        assert idle.check_no_frames() == pytest.approx(4)
+        tick[0] += 3.999
+        assert idle.check_no_frames() == pytest.approx(0.001)
+        assert idle._close_task is None
+        tick[0] += 0.001
+        assert idle.check_no_frames() is None
+        assert idle._idle_since == tick[0]
+        await idle._close_task
+        after = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'no_frames'})
+        assert after == before + 1
+        assert peers[0].closed
+        assert peers[0].sent[-2:] == ['{"type": "finalize"}', '']
+        assert not socket.is_connection_dead and socket.death_reason is None
+        assert idle.check_no_frames() is None  # already closed: nothing left to guard
+        # The client comes back speaking. VAD hands over pre-roll + onset once.
+        pre_roll = b''.join(data for data, _ in gate._pre_roll)
+        tick[0] += 300
+        assert socket.send(speech, wall_time=tick[0], start_sample=1600)
+        assert len(peers) == 1
+        assert await socket.complete_send()
+        socket.commit_send()
+        await settle()
+        assert len(peers) == 2
+        assert _bytes(peers[0]) == speech
+        assert _bytes(peers[1]) == pre_roll + speech
+        idle._transport._handle_tokens([{'text': 'after ', 'is_final': True, 'start_ms': 0, 'end_ms': 100}])
+        gate.remap_segments(seen)
+        assert [segment['text'] for segment in seen] == ['before', 'after']
+        assert seen[1]['start'] >= seen[0]['end']
+        # The reopened socket is guarded again.
+        assert idle._watchdog is not None and not idle._watchdog.done()
+        await idle.drain_and_close()
+        assert not socket.is_connection_dead
+
+    asyncio.run(run())
+
+
+def test_no_frames_watchdog_runs_without_any_caller(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+    sleeps = []
+
+    async def run():
+        tick_ref = []
+
+        async def fake_sleep(delay):
+            sleeps.append(delay)
+            tick_ref[0][0] += delay
+            await asyncio.sleep(0)
+
+        monkeypatch.setattr(soniox_idle, '_sleep', fake_sleep)
+        # The watchdog's first wake reads the clock that build() installs.
+        socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)
+        tick_ref.append(tick)
+        await settle()
+        assert idle._close_task is not None
+        await idle._close_task
+        assert peers[0].closed
+        assert idle._watchdog.done()
+        assert sleeps == [20]
+        assert not socket.is_connection_dead
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_frames_without_speech_do_not_trigger_the_no_frames_close(monkeypatch):
+    """Silent frames are VAD's job; the wall-clock close only covers absent frames."""
+    monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', '45')
+
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        silence = b'\x00\x00' * 1600
+        idle._last_speech_at = tick[0] - 100  # heard speech long ago: the 45 s VAD wait applies
+        for _ in range(40):
+            tick[0] += 1
+            socket.send(silence, wall_time=tick[0])
+            assert idle.check_no_frames() == pytest.approx(20)
+        assert idle._close_task is None
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_no_frames_disabled_leaves_vad_close_and_no_watchdog(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '0')
+
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch)
+        assert idle._watchdog is None
+        tick[0] += 10_000
+        assert idle.check_no_frames() is None
+        assert idle._close_task is None
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        tick[0] += 3
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        await idle._close_task  # the VAD trigger still works
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_no_frames_close_shares_the_hourly_cap_and_rearm(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', '1')
+    monkeypatch.setenv('SONIOX_IDLE_REARM_SECONDS', '30')
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)
+        silence = SimpleNamespace(is_speech=False, audio_to_send=b'')
+        idle.observe_vad(silence, 'active')
+        first_close = tick[0] + 20
+        tick[0] = first_close
+        idle.observe_vad(silence, 'active')
+        await idle._close_task  # spends the only hourly slot
+        assert socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
+        assert await socket.complete_send()
+        reopened = tick[0]
+        idle._close_task = None
+        # Frames stop well past the no-frames interval, but the slot is spent:
+        # the watchdog waits for the rolling hour instead of churning a scope.
+        idle._last_frame_at = reopened
+        idle._last_speech_at = reopened - 10  # hangover already settled
+        tick[0] = reopened + 20
+        assert idle.check_no_frames() == pytest.approx(first_close + 3600 - tick[0])  # cap binds
+        # With the slot free again, only the re-arm floor can hold a close.
+        idle._idle_budget.close_times.clear()
+        assert idle.check_no_frames() == pytest.approx(10)
+        idle._idle_budget.close_times.append(first_close)
+        assert idle._close_task is None
+        tick[0] = first_close + 3600
+        assert idle.check_no_frames() is None
+        await idle._close_task
+        assert len(idle._idle_budget.close_times) == 1
+        assert len(peers) == 2 and peers[1].closed
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_no_frames_close_waits_out_the_hangover_after_speech(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        _, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        # The gate is mid-hangover (audio still flowing) when the client stalls.
+        idle.observe_vad(SimpleNamespace(is_speech=False, audio_to_send=b'\x00\x00' * 160), 'active')
+        tick[0] += 20
+        assert idle.check_no_frames() == pytest.approx(4)
+        assert idle._close_task is None
+        tick[0] += 4
+        assert idle.check_no_frames() is None
+        await idle._close_task
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_no_frames_close_in_passthrough_mode_resumes_exact_bytes(monkeypatch):
+    """Without an active gate every frame goes through send(); nothing is lost or repeated."""
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        _, idle, _, peers, _, tick = build(monkeypatch)
+        first, second, third = b'\x01\x00' * 800, b'\x02\x00' * 800, b'\x03\x00' * 800
+        assert idle.send(first)
+        await settle()
+        tick[0] += 20
+        assert idle.check_no_frames() == pytest.approx(4)  # ungated audio waits out the hangover
+        tick[0] += 4
+        assert idle.check_no_frames() is None
+        await idle._close_task
+        assert idle.send(second)
+        assert await idle.complete_send()
+        idle.commit_send()
+        assert idle.send(third)
+        await settle()
+        assert _bytes(peers[0]) == first
+        assert _bytes(peers[1]) == second + third
+        # Provider time on the new socket is rebased onto admitted audio.
+        assert idle._socket_epoch == 1
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_dead_transport_is_left_to_failover_not_idle(monkeypatch):
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch)
+        idle._transport._mark_dead('ws recv error: reset', typed_reason='connection_lost')
+        tick[0] += 100
+        assert idle.check_no_frames() is None
+        assert idle._close_task is None
+        assert socket.typed_death_reason == 'connection_lost'
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_vad_close_waits_for_hangover_audio_to_drain(monkeypatch):
+    """A long silence run never closes while the gate is still releasing hangover audio."""
+
+    async def run():
+        _, idle, _, _, _, tick = build(monkeypatch, seconds=20)
+        hangover = SimpleNamespace(is_speech=False, audio_to_send=b'\x00\x00' * 160)
+        idle.observe_vad(hangover, 'active')
+        tick[0] += 60
+        idle.observe_vad(hangover, 'active')
+        assert idle._close_task is None
+        idle.observe_vad(SimpleNamespace(is_speech=False, audio_to_send=b''), 'active')
+        assert idle._close_task is not None
+        await idle._close_task
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_default_rearm_holds_a_reopened_socket_for_sixty_seconds(monkeypatch):
+    monkeypatch.delenv('SONIOX_IDLE_REARM_SECONDS', raising=False)
+
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch, seconds=20)
+        silence = SimpleNamespace(is_speech=False, audio_to_send=b'')
+        idle.observe_vad(silence, 'active')
+        tick[0] += 20
+        # No speech yet on this leg: the silent start closes under the pre_speech trigger.
+        before = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'pre_speech'}) or 0
+        idle.observe_vad(silence, 'active')
+        await idle._close_task
+        assert (
+            REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'pre_speech'})
+            == before + 1
+        )
+        assert socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
+        assert await socket.complete_send()
+        reopened = tick[0]
+        idle._close_task = None
+        # Silence began before the reopen; only the re-arm floor holds the close.
+        idle._silent_since = reopened - 30
+        tick[0] = reopened + 59.999
+        idle.observe_vad(silence, 'active')
+        assert idle._close_task is None
+        tick[0] = reopened + 60
+        idle.observe_vad(silence, 'active')
+        assert idle._close_task is not None
+        await idle._close_task
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_connected_seconds_counts_open_wall_time_once(monkeypatch):
+    from utils.observability import demand_cohort
+
+    def value():
+        return (
+            REGISTRY.get_sample_value(
+                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': 'initial'}
+            )
+            or 0.0
+        )
+
+    clock = [1000.0]
+    monkeypatch.setattr(demand_cohort, 'monotonic', lambda: clock[0])
+
+    async def run():
+        before = value()
+        peer = Peer()
+        raw = SafeSonioxSocket(peer, lambda _: None, asyncio.get_running_loop())
+        await settle()
+        clock[0] += 3  # below the flush step: nothing recorded yet
+        raw._connected_meter.flush()
+        assert value() == before
+        clock[0] += 4
+        raw._connected_meter.flush()
+        assert value() == pytest.approx(before + 7)
+        clock[0] += 5
+        assert raw.send(b'\x01\x00' * 160)
+        await raw.drain_and_close()
+        assert value() == pytest.approx(before + 12)
+        clock[0] += 100  # closed: later flushes add nothing
+        raw._connected_meter.flush(close=True)
+        raw._connected_meter.flush()
+        assert value() == pytest.approx(before + 12)
+
+    asyncio.run(run())
+
+
+def test_connected_seconds_stop_while_idle_closed(monkeypatch):
+    from utils.observability import demand_cohort
+
+    def value():
+        return sum(
+            REGISTRY.get_sample_value(
+                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': origin}
+            )
+            or 0.0
+            for origin in demand_cohort.TRANSPORT_ORIGINS
+        )
+
+    async def run():
+        socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)
+        monkeypatch.setattr(demand_cohort, 'monotonic', lambda: tick[0])
+        idle._transport._connected_meter.accounted_at = tick[0]
+        before = value()
+        silence = b'\x00\x00' * 1600
+        socket.send(silence, wall_time=tick[0])
+        tick[0] += 20
+        socket.send(silence, wall_time=tick[0])
+        await idle._close_task
+        assert value() == pytest.approx(before + 20)
+        tick[0] += 600  # closed: Soniox bills nothing and neither does the meter
+        assert socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
+        assert await socket.complete_send()
+        tick[0] += 6
+        await idle.drain_and_close()
+        assert value() == pytest.approx(before + 26)
+        assert len(peers) == 2
+
+    asyncio.run(run())
+
+
+def test_failed_reopen_latches_a_typed_death_reason(monkeypatch):
+    """P59: an unclassifiable reopen failure must never latch the `other`
+    metric bucket — this reason rides the leg into every later failover hop
+    (2026-10-22: from=soniox to=soniox reason=other became the largest
+    Soniox death family on the live-tail catch-up train)."""
+
+    async def run():
+        from utils.stt.live_reason import LIVE_STT_REASONS
+
+        socket, idle, _, peers, _, tick = build(monkeypatch, fail=True)
+        silence = b'\x00\x00' * 1600
+        socket.send(silence, wall_time=100)
+        tick[0] += 3
+        socket.send(silence, wall_time=103)
+        await idle._close_task
+        assert socket.send(b'\x01\x00' * 1600, wall_time=104)
+        assert not await socket.complete_send()
+
+        assert idle.is_connection_dead
+        assert idle.typed_death_reason in LIVE_STT_REASONS
+        assert idle.typed_death_reason != 'other'
+        assert idle.idle_reopen_failed
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+# --- Idle-close drain cap and refusal accounting (2026-11-01) ---
+
+
+class SlowFinishPeer(Peer):
+    """Soniox answers finalize and end-of-audio after a real delay, as in prod."""
+
+    def __init__(self, delay):
+        super().__init__()
+        self.delay = delay
+
+    async def send(self, data):
+        self.sent.append(data)
+        loop = asyncio.get_running_loop()
+        if data == '{"type": "finalize"}':
+            final = {'tokens': [{'text': 'late ', 'is_final': True, 'start_ms': 0, 'end_ms': 100}]}
+            loop.call_later(self.delay, self.frames.put_nowait, final)
+        elif data == '':
+            loop.call_later(self.delay * 1.5, self.frames.put_nowait, {'finished': True})
+
+
+def _drains(outcome):
+    return REGISTRY.get_sample_value('omi_soniox_idle_drains_total', {'outcome': outcome}) or 0
+
+
+def test_drain_cap_is_longer_than_two_seconds_and_inside_the_onset_buffer():
+    # 20 s covers 99.5% of measured session-end finalizes; resuming speech must still fit the buffer.
+    assert 20.0 <= soniox_idle.IDLE_DRAIN_SECONDS < soniox_idle.ONSET_BUFFER_SECONDS
+
+
+@pytest.mark.parametrize('cap,outcome,kept', [(0.01, 'timeout', False), (1.0, 'drained', True)])
+def test_idle_close_keeps_finals_that_arrive_inside_the_drain_cap(monkeypatch, cap, outcome, kept):
+    """The last utterance's finals arrive after finalize; the cap decides whether they are kept.
+
+    Real loop time on purpose: ``build`` freezes ``time.monotonic``, which would
+    also freeze the drain timeout and the peer's delayed replies.
+    """
+    monkeypatch.setattr(soniox_idle, 'IDLE_DRAIN_SECONDS', cap)
+
+    async def run():
+        peer = SlowFinishPeer(0.05)
+        seen = []
+        raw = SafeSonioxSocket(peer, seen.extend, asyncio.get_running_loop())
+
+        async def connect(callback):
+            raise AssertionError('no reopen in this test')
+
+        idle = IdleSonioxSocket(raw, connect, seen.extend, 16000, 20)
+        before = _drains(outcome)
+        assert idle.send(b'\x01\x00' * 1600)
+        await settle()
+        idle._begin_idle_close(soniox_idle.time.monotonic(), 'vad')
+        await idle._close_task
+        await asyncio.sleep(0.1)  # any late final has arrived by now
+        assert _drains(outcome) == before + 1
+        assert '{"type": "finalize"}' in peer.sent  # a timed-out drain may abort before end-of-audio
+        assert any('late' in segment['text'] for segment in seen) is kept
+        assert not idle.is_connection_dead
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def _refusals(reason):
+    return REGISTRY.get_sample_value('omi_soniox_idle_close_refusals_total', {'reason': reason}) or 0
+
+
+def test_refused_close_is_counted_once_per_idle_episode(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_REARM_SECONDS', '30')
+    monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', '2')
+
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch, seconds=20)
+        silence = SimpleNamespace(is_speech=False, audio_to_send=b'')
+        speech = SimpleNamespace(is_speech=True, audio_to_send=b'\x01\x00')
+        idle._idle_budget.rearm_at = tick[0] + 200  # a reopen just happened
+        rearm, cap = _refusals('rearm'), _refusals('cap')
+        idle.observe_vad(silence, 'active')
+        for _ in range(5):  # silence past the threshold, frame after frame
+            tick[0] += 21
+            idle.observe_vad(silence, 'active')
+        assert idle._close_task is None
+        assert (_refusals('rearm'), _refusals('cap')) == (rearm + 1, cap)
+        # Speech ends the episode; the next refused episode counts again.
+        idle.observe_vad(speech, 'active')
+        idle._idle_budget.rearm_at = 0.0
+        idle._idle_budget.close_times.extend([tick[0], tick[0]])  # hourly cap spent
+        idle.observe_vad(silence, 'active')
+        tick[0] += 21
+        idle.observe_vad(silence, 'active')
+        tick[0] += 21
+        idle.observe_vad(silence, 'active')
+        assert (_refusals('rearm'), _refusals('cap')) == (rearm + 1, cap + 1)
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_no_frames_refusal_is_counted_once_across_watchdog_retries(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        _, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        idle._idle_budget.rearm_at = tick[0] + 100
+        before = _refusals('rearm')
+        tick[0] += 25
+        assert idle.check_no_frames() == pytest.approx(75)
+        tick[0] += 10
+        assert idle.check_no_frames() == pytest.approx(65)
+        assert _refusals('rearm') == before + 1
+        tick[0] += 65
+        assert idle.check_no_frames() is None
+        await idle._close_task
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def _closes(trigger):
+    return REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': trigger}) or 0
+
+
+def test_silent_session_start_closes_at_the_floor_and_reopens_on_first_speech(monkeypatch):
+    async def run():
+        socket, idle, gate, peers, _, tick = build(monkeypatch, seconds=45)
+        silence = b'\x00\x00' * 1600
+        before = _closes('pre_speech')
+        socket.send(silence, wall_time=tick[0])
+        tick[0] += 19.9
+        socket.send(silence, wall_time=tick[0])
+        assert idle._close_task is None
+        tick[0] += 0.1
+        socket.send(silence, wall_time=tick[0])
+        await idle._close_task
+        assert _closes('pre_speech') == before + 1
+        assert peers[0].closed and not socket.is_connection_dead
+        assert _bytes(peers[0]) == b''  # nothing was paid for but silence
+        speech = b'\x01\x00' * 1600
+        tick[0] += 5
+        assert socket.send(speech, wall_time=tick[0])
+        assert len(peers) == 1
+        assert await socket.complete_send()
+        socket.commit_send()
+        await settle()
+        assert len(peers) == 2
+        assert _bytes(peers[1]).endswith(speech)  # the onset (pre-roll + speech) reaches the reopened socket
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_after_speech_the_full_vad_wait_applies(monkeypatch):
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        before = _closes('vad')
+        socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        tick[0] += 44
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        assert idle._close_task is None
+        tick[0] += 1
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        await idle._close_task
+        assert _closes('vad') == before + 1
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_speech_outside_active_vad_ends_a_refused_episode(monkeypatch):
+    """Shadow-mode speech still ends the episode, so the next refused no-frames close counts."""
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        _, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        idle._idle_budget.rearm_at = tick[0] + 1000
+        before = _refusals('rearm')
+        tick[0] += 25
+        assert idle.check_no_frames() is not None  # refused by the re-arm floor
+        assert _refusals('rearm') == before + 1
+        idle.observe_vad(SimpleNamespace(is_speech=True, audio_to_send=b''), 'shadow')
+        tick[0] += 30
+        assert idle.check_no_frames() is not None  # a new episode, refused again
+        assert _refusals('rearm') == before + 2
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def _gap(stat):
+    return REGISTRY.get_sample_value(f'omi_soniox_idle_silence_gap_seconds_{stat}') or 0
+
+
+@pytest.fixture
+def speech_gate(monkeypatch):
+    for name in ('SONIOX_IDLE_CLOSE_SECONDS', 'SONIOX_IDLE_REARM_SECONDS', 'SONIOX_IDLE_MAX_CLOSES_PER_HOUR'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '10')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_REARM_SECONDS', '2')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR', '120')
+    budget = SonioxIdleBudget(uid='user-1')
+    assert budget.arm == 'treatment'
+    return budget
+
+
+def test_speech_gate_closes_between_utterances_and_delivers_every_byte_once(monkeypatch, speech_gate):
+    """The treatment arm closes 10 s into each pause and reopens on the next onset.
+
+    Under the global policy (20 s floor, 60 s re-arm) the second pause below
+    could not close at all. Every admitted speech byte reaches exactly one
+    socket, each reopen leads with the VAD pre-roll, and no recovery or death
+    is recorded.
+    """
+
+    async def run():
+        socket, idle, gate, peers, _, tick = build(monkeypatch, seconds=speech_gate.close_seconds, budget=speech_gate)
+        speech = [bytes([1, 0]) * 1600, bytes([1, 1]) * 1600, bytes([1, 2]) * 1600]
+        silence = b'\x00\x00' * 1600
+        closes = _closes('vad')
+        sent_onsets = []
+        for index, utterance in enumerate(speech):
+            if index:
+                # Closed: the onset (pre-roll + speech) is held, then dialled.
+                pre_roll = b''.join(data for data, _ in gate._pre_roll)
+                assert socket.send(utterance, wall_time=tick[0])
+                assert await socket.complete_send()
+                socket.commit_send()
+                await settle()
+                sent_onsets.append(pre_roll + utterance)
+            else:
+                assert socket.send(utterance, wall_time=tick[0])
+            tick[0] += 0.1
+            socket.send(silence, wall_time=tick[0])
+            tick[0] += 9.9
+            socket.send(silence, wall_time=tick[0])
+            assert idle._close_task is None  # 9.9 s of silence: still open
+            tick[0] += 0.1
+            socket.send(silence, wall_time=tick[0])
+            assert idle._close_task is not None
+            await idle._close_task
+            idle._close_task = None
+            assert peers[-1].closed and not socket.is_connection_dead
+            tick[0] += 3
+        assert _closes('vad') == closes + 3
+        assert len(peers) == 3
+        streams = [_bytes(peer) for peer in peers]
+        # Each socket carries its onset first, then only the gate's silent tail.
+        for stream, onset in zip(streams, [speech[0]] + sent_onsets):
+            assert stream.startswith(onset)
+            assert stream[len(onset) :].strip(b'\x00') == b''
+        for utterance in speech:
+            assert sum(stream.count(utterance) for stream in streams) == 1
+        assert socket.death_reason is None and socket.typed_death_reason is None
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_control_arm_keeps_the_global_policy_under_the_same_pauses(monkeypatch):
+    for name in ('SONIOX_IDLE_COHORT_PERCENT', 'SONIOX_IDLE_REARM_SECONDS', 'SONIOX_IDLE_MAX_CLOSES_PER_HOUR'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '10')  # override set, cohort off
+    budget = SonioxIdleBudget(uid='user-1')
+    assert budget.arm == 'control' and budget.close_seconds == idle_config.DEFAULT_IDLE_CLOSE_SECONDS
+
+    async def run():
+        socket, idle, _, peers, _, tick = build(monkeypatch, seconds=budget.close_seconds, budget=budget)
+        socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        tick[0] += 30
+        socket.send(b'\x00\x00' * 1600, wall_time=tick[0])
+        assert idle._close_task is None and len(peers) == 1 and not peers[0].closed
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_silence_gaps_are_observed_on_the_close_clock_whether_open_or_closed(monkeypatch, speech_gate):
+    async def run():
+        socket, idle, _, _, _, tick = build(monkeypatch, seconds=speech_gate.close_seconds, budget=speech_gate)
+        count, total = _gap('count'), _gap('sum')
+        speech, silence = b'\x01\x00' * 1600, b'\x00\x00' * 1600
+        socket.send(speech, wall_time=tick[0])
+        socket.send(silence, wall_time=tick[0])  # the gap clock starts on the first silent frame
+        tick[0] += 3
+        socket.send(speech, wall_time=tick[0])  # a 3 s pause the socket stayed open through
+        assert idle._close_task is None
+        assert (_gap('count'), _gap('sum')) == (count + 1, pytest.approx(total + 3))
+        socket.send(silence, wall_time=tick[0])
+        tick[0] += 10
+        socket.send(silence, wall_time=tick[0])
+        await idle._close_task
+        idle._close_task = None
+        tick[0] += 15
+        assert socket.send(speech, wall_time=tick[0])  # a 25 s pause that idle-closed
+        assert await socket.complete_send()
+        socket.commit_send()
+        assert (_gap('count'), _gap('sum')) == (count + 2, pytest.approx(total + 28))
+        # A pause the session ends in is never observed: no next speech, no gap.
+        socket.send(silence, wall_time=tick[0])
+        await idle.drain_and_close()
+        assert _gap('count') == count + 2
 
     asyncio.run(run())

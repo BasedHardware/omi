@@ -449,6 +449,24 @@ describe('NextStepsList', () => {
     expect(open.className).not.toContain('line-through');
   });
 
+  it('repairs citation debris in legacy action items on both surfaces', () => {
+    const items = [
+      {
+        description: 'Send the recap [s1]',
+        completed: false,
+        context: 'Speaker_00 asked (s1)',
+      },
+    ];
+    const { unmount } = render(<NextStepsList items={items} transcriptIDs={['s1']} />);
+    expect(screen.getByText('Send the recap')).toBeTruthy();
+    expect(screen.getByText('asked')).toBeTruthy();
+    expect(screen.queryByText(/s1/)).toBeNull();
+    unmount();
+    render(<ActionItemsTab items={items} transcriptIDs={['s1']} />);
+    expect(screen.getByText('Send the recap')).toBeTruthy();
+    expect(screen.queryByText(/\[s1\]/)).toBeNull();
+  });
+
   it('renders nothing when the action item list is empty', () => {
     const { container } = render(<NextStepsList items={[]} />);
     expect(container.firstChild).toBeNull();

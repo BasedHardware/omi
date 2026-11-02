@@ -1,0 +1,30 @@
+---
+title: "Chat"
+icon: "comments"
+description: "How Omi answers questions about your life using your conversations, memories, and connected data."
+---
+
+Omi chat answers questions using what Omi knows about you. It is one assistant shared across the phone app, the Mac app, and the notch.
+
+## How a question is answered
+
+1. **Decide whether context is needed.** Greetings and general questions get a direct answer. Questions about you, your past, or your connected services go to the agent.
+2. **Gather context with tools.** The agent decides which tools to call: search conversations by meaning or date, look up memories and action items, or read connected sources such as your calendar. It can call several tools before answering.
+3. **Answer with citations.** The reply streams back as it is written, with citations that link to the conversations it used.
+
+Relative dates like "last Tuesday" are resolved in your time zone before any search runs.
+
+## Apps in chat
+
+Apps can extend chat in two ways:
+
+- **Chat tools** let the agent call your service while answering. See [Chat tools](/doc/developer/apps/ChatTools).
+- **Persona apps** answer in a character's voice with their own prompt and a limited set of tools. See [Prompt-based apps](/doc/developer/apps/PromptBased).
+
+## Limits that protect you
+
+The agent caps how many tools it calls for one question and how long it waits on external services, so a single question cannot run away. It reads only your account's data and the sources you connected.
+
+<Note>
+Routing code, the full tool list, prompts, and model choices live next to the code in [`backend/docs/chat-system.md`](https://github.com/BasedHardware/omi/blob/main/backend/docs/chat-system.md).
+</Note>

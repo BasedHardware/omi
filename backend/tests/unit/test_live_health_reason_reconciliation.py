@@ -1,5 +1,6 @@
 """Exercise bounded attribution through the serving leg, not only the classifier."""
 
+import asyncio
 import math
 import threading
 from types import SimpleNamespace
@@ -12,7 +13,13 @@ from config.live_stt_registry import DEFAULT_TARGETS
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.fallback import ALLOWED_REASONS
 from utils.stt import live_chain, live_cost_health, live_failure, live_session, streaming as st
-from utils.stt.live_metrics import COST_OBSERVATIONS, COST_SETTLEMENTS, COST_EMISSION_ACK_ERRORS
+from utils.stt.live_metrics import (
+    COST_EMISSION_ACK_ERRORS,
+    COST_OBSERVATIONS,
+    COST_SETTLEMENTS,
+    WINDOW_SESSION_OUTCOME,
+)
+from utils.stt import parakeet_window
 from utils.stt.parakeet_window import WindowedParakeetSocket
 from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
@@ -78,6 +85,11 @@ CASES = [
     ('soniox', 'no_text_rescue_complete', 'vendor diagnostic', 'no_text_rescue_complete', 'censored'),
     ('modulate', 'client_disconnect', None, 'client_disconnect', 'censored'),
     ('modulate', 'normal_close', None, 'normal_close', 'censored'),
+    # Listen-cancelled Parakeet window: censored, never connection_lost.
+    ('parakeet', None, 'cancelled', 'cancelled', 'censored'),
+    # Unknown free-text deaths still default to the conservative provider failure.
+    ('parakeet', None, 'parakeet pump crashed: x', 'connection_lost', 'provider_failure'),
+    ('parakeet', None, 'connection_lost', 'connection_lost', 'provider_failure'),
 ]
 
 
@@ -141,7 +153,7 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(
         assert not live_chain.health._cost_local
 
 
-@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full'])
+@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'])
 def test_window_bounded_raw_reason_wins_even_without_typed_proxy(cause):
     leg = serving_leg(family='parakeet')
     before = observed(leg.routing_target, 'censored', cause)
@@ -181,6 +193,7 @@ def test_false_send_while_raw_socket_is_alive_is_send_failed():
         ('connection_lost', 'connection_lost'),
         ('first_text_deadline', 'first_text_deadline'),
         ('capacity_full', 'capacity_full'),
+        ('replay_ring_overflow', 'replay_ring_overflow'),
     ],
 )
 def test_pending_failover_emits_stable_fallback_reason_labels(monkeypatch, source_reason, metric_reason):
@@ -251,8 +264,15 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
 
 def test_vocabulary_is_closed_and_classifier_cannot_accept_free_text():
     assert LIVE_STT_REASONS <= ALLOWED_REASONS
-    assert len(LIVE_STT_REASONS) == 31
+    # 33 + the three local delivery deaths split out of capacity_full (P34).
+    assert len(LIVE_STT_REASONS) == 36
     assert provider_observation('failover', 'no_text_rescue_complete') is None
+    assert provider_observation('failover', 'cancelled') is None
+    assert provider_observation('failover', 'replay_ring_overflow') is None  # session-local, never provider failure
+    for local_bound in ('send_queue_full', 'replay_send_stalled', 'delivery_expired'):
+        assert provider_observation('failover', local_bound) is None  # our send path, never provider failure
+    assert normalize_live_stt_reason('cancelled') == 'cancelled'
+    assert normalize_live_stt_reason(None, 'unknown free text') == 'connection_lost'
     assert normalize_live_stt_reason('send ConnectionError: private') == 'connection_lost'
     assert normalize_live_stt_reason('first_text_deadline', 'send_failed') == 'first_text_deadline'
     with pytest.raises(ValueError, match='bounded'):
@@ -283,7 +303,9 @@ async def test_never_refreshed_snapshot_is_distinct_from_stale_and_idle_refreshe
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full'])
+@pytest.mark.parametrize(
+    'cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow', 'replay_send_stalled']
+)
 async def test_real_window_publishes_cause_before_latch_and_next_send_is_censored(cause):
     class ObservedWindow(WindowedParakeetSocket):
         def __setattr__(self, name, value):
@@ -364,3 +386,114 @@ async def test_vad_failure_never_opens_a_provider_circuit(monkeypatch):
     assert opened == []
     assert provider_observation('failover', 'vad_failed') is None
     client.close.assert_awaited_once_with(code=1011, reason='transcription_service_unavailable')
+
+
+def _real_window_leg():
+    raw = WindowedParakeetSocket(lambda _: None, 'http://unused.invalid', 16000, lambda: None)
+    raw.start()
+    return raw, serving_leg(raw, family='parakeet')
+
+
+async def _settle_failover(leg):
+    hop = live_failure.PendingLiveFailover.from_socket(leg, 'parakeet', 'soniox')
+    hop.note_failure(None, continuing=True)
+    return hop
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cancel', ['task_cancel', 'transport_finish'])
+async def test_listen_cancelled_real_window_is_censored_not_connection_lost(monkeypatch, cancel):
+    started = asyncio.Event()
+
+    async def blocked(*args, **kwargs):
+        started.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(parakeet_window, 'get_stt_client', lambda: SimpleNamespace(post=blocked))
+    raw, leg = _real_window_leg()
+    raw.mark_speech()
+    assert leg.send(PCM)
+    raw.finalize()
+    await asyncio.wait_for(started.wait(), 5)  # A POST is in flight.
+    target = leg.routing_target
+    censored = observed(target, 'censored', 'cancelled')
+    lost = observed(target, 'provider_failure', 'connection_lost')
+    settled = COST_SETTLEMENTS.labels(target=target, outcome='censored', reason='cancelled', path='failover')
+    settled_before = settled._value.get()
+    outcome = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='cancelled')
+    outcome_before = outcome._value.get()
+    # Listen cancels the leg (recovery switch / teardown); the provider did nothing.
+    if cancel == 'task_cancel':
+        raw._pump_task.cancel()
+    else:
+        raw.finish()
+    await asyncio.gather(raw._pump_task, return_exceptions=True)
+    assert raw.is_connection_dead and raw.death_reason == 'cancelled'
+    assert outcome._value.get() == outcome_before + 1
+    assert leg.is_connection_dead
+    assert leg.normalized_death_reason == 'cancelled'
+    hop = await _settle_failover(leg)
+    assert hop.reason == 'cancelled'
+    leg.finish()
+    assert observed(target, 'censored', 'cancelled') == censored + 1
+    assert observed(target, 'provider_failure', 'connection_lost') == lost
+    assert settled._value.get() == settled_before + 1
+    # Censored: neither the gate numerator nor its denominator moves.
+    assert not live_chain.health._cost_local
+
+
+@pytest.mark.asyncio
+async def test_window_pump_ending_on_its_own_is_still_connection_lost():
+    raw, leg = _real_window_leg()
+    target = leg.routing_target
+    lost = observed(target, 'provider_failure', 'connection_lost')
+    # The pump ended without listen closing or cancelling it.
+    raw._on_pump_done(SimpleNamespace(cancelled=lambda: False))
+    assert raw.death_reason == 'connection_lost'
+    assert leg.normalized_death_reason == 'connection_lost'
+    await _settle_failover(leg)
+    leg.finish()
+    await asyncio.gather(raw._pump_task, return_exceptions=True)
+    assert observed(target, 'provider_failure', 'connection_lost') == lost + 1
+    state = live_chain.health._cost_local[(target, 'all')]
+    assert state.n == state.failures == 1
+
+
+def test_cancelled_failovers_cannot_trip_the_disruption_gate():
+    pod = live_chain.health
+    target = 'parakeet-window'
+    for i in range(400):
+        uid = f'synthetic-cancel-{i}'
+        if i % 2:
+            assert pod.record_session(target, 'en', 'failover', None, uid, 'cancelled')
+        else:
+            assert pod.record_session(target, 'en', 'text', None, uid, 'text')
+    state = pod._cost_local[(target, 'all')]
+    # 50% cancelled is far above the 0.08 gate, yet only text sessions count.
+    assert state.threshold == 0.08
+    assert state.n == 200 and state.failures == 0
+    assert state.stage == 100
+
+
+def test_connection_lost_failovers_still_trip_the_disruption_gate():
+    pod = live_chain.health
+    target = 'parakeet-window'
+    for i in range(400):
+        uid = f'synthetic-lost-{i}'
+        if i % 2:
+            pod.record_session(target, 'en', 'failover', None, uid, 'connection_lost')
+        else:
+            pod.record_session(target, 'en', 'text', None, uid, 'text')
+        if pod._cost_local[(target, 'all')].stage == 0:
+            break
+    assert pod._cost_local[(target, 'all')].stage == 0
+
+
+@pytest.mark.parametrize('reason', [None, 'unknown free text'])
+def test_unknown_failover_reason_still_counts_against_the_provider(reason):
+    pod = live_chain.health
+    target = 'parakeet-window'
+    before = observed(target, 'provider_failure', 'connection_lost')
+    assert pod.record_session(target, 'en', 'failover', None, 'synthetic-unknown', reason)
+    assert observed(target, 'provider_failure', 'connection_lost') == before + 1
+    assert pod._cost_local[(target, 'all')].failures == 1

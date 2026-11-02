@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from config.stt_provider_policy import DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
@@ -108,15 +109,23 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertIsNone(lang)
         self.assertIsNone(model)
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_deepgram_config_uses_non_deepgram_default(self):
+    def test_disabled_deepgram_config_uses_non_deepgram_default(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
-    def test_retired_deepgram_token_is_ignored_before_modulate(self):
+    def test_disabled_deepgram_token_is_ignored_before_modulate(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
@@ -132,6 +141,24 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'af')
         self.assertEqual(model, 'velma-2')
+
+
+@pytest.mark.parametrize('models', [['dg-nova-3'], ['dg-nova-3', 'modulate-velma-2']])
+@pytest.mark.parametrize('language', ['en', 'fr'])
+@pytest.mark.parametrize('multi_language', [False, True])
+def test_retired_deepgram_never_serves_streaming_languages(models, language, multi_language):
+    # Deepgram retired 2026-08-27: even a chain that still lists dg-nova-3 with
+    # a resolvable client never selects it; Velma takes the session.
+    with (
+        patch('utils.stt.streaming.stt_service_models', models),
+        patch('utils.stt.streaming.is_dg_self_hosted', False),
+        patch('utils.stt.streaming._deepgram_is_available', return_value=True),
+    ):
+        assert get_stt_service_for_language(language, multi_lang_enabled=multi_language) == (
+            STTService.modulate,
+            'multi' if multi_language else language,
+            'velma-2',
+        )
 
 
 class TestWAVHeader(unittest.TestCase):
@@ -333,6 +360,19 @@ class TestUtteranceHandling(unittest.TestCase):
 
         return self.loop.run_until_complete(create())
 
+    def test_pending_provider_output_tracks_partials_until_a_text_final(self):
+        sock = self._make_socket()
+        self.assertFalse(sock.has_pending_provider_output())
+        sock._handle_partial_utterance({'text': 'hel', 'start_ms': 100})
+        self.assertTrue(sock.has_pending_provider_output())
+        # An empty final leaves the partial buffered for drain: still owed.
+        sock._handle_utterance({'text': '', 'start_ms': 100, 'duration_ms': 300})
+        self.assertTrue(sock.has_pending_provider_output())
+        sock._handle_partial_utterance({'text': 'hello', 'start_ms': 900})
+        sock._handle_utterance({'text': 'hello', 'start_ms': 900, 'duration_ms': 400})
+        self.assertFalse(sock.has_pending_provider_output())
+        self.assertEqual([seg['text'] for seg in self.segments], ['hello'])
+
     def test_utterance_parsing(self):
         sock = self._make_socket()
         msg = {'type': 'utterance', 'text': 'hello world', 'start_ms': 1000, 'duration_ms': 500, 'speaker': 1}
@@ -480,7 +520,7 @@ class TestModulatePrerecorded(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -515,6 +555,75 @@ class TestModulatePrerecorded(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+    def _budget_refusal_client(self, status_code: int, body: str):
+        """httpx.Client whose POST answers a non-2xx status with the given body."""
+        import httpx
+
+        request = httpx.Request('POST', 'https://modulate-developer-apis.com/api/velma-2-stt-batch')
+        response = httpx.Response(status_code, content=body.encode(), request=request)
+        mock_response = MagicMock()
+        mock_response.status_code = status_code
+        mock_response.text = body
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError('error', request=request, response=response)
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        return mock_client
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_http_402_is_a_typed_budget_failure(self, mock_client_cls):
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_client_cls.return_value = self._budget_refusal_client(402, '{"error": "Payment required"}')
+
+        with self.assertRaises(TranscriptionFailure) as exc_info:
+            modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        failure = exc_info.exception
+        self.assertEqual(failure.outcome, TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED)
+        self.assertEqual(failure.provider, 'modulate')
+        self.assertFalse(failure.retryable)
+        self.assertEqual(failure.error_code, 'stt_provider_budget_exhausted')
+        # Out-of-credits is terminal: the retry ladder must not re-dial it.
+        self.assertEqual(mock_client_cls.return_value.post.call_count, 1)
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_429_with_insufficient_credits_body_is_a_budget_failure(self, mock_client_cls):
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_client_cls.return_value = self._budget_refusal_client(429, '{"error": "Insufficient Credits."}')
+
+        with self.assertRaises(TranscriptionFailure) as exc_info:
+            modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        self.assertEqual(exc_info.exception.outcome, TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED)
+        self.assertEqual(exc_info.exception.provider, 'modulate')
+        self.assertEqual(mock_client_cls.return_value.post.call_count, 1)
+
+    # Pins the legacy 3-attempt ladder under the fail-fast kill switch; the default
+    # (2 POSTs) is asserted in test_prerecorded_vendor_fail_fast.py.
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key', 'STT_PRERECORDED_VENDOR_FAIL_FAST': 'false'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_plain_429_stays_a_retryable_upstream_error(self, mock_client_cls):
+        from utils.stt.outcomes import TranscriptionFailure
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_client_cls.return_value = self._budget_refusal_client(429, '{"error": "Too many requests"}')
+
+        with self.assertRaises(RuntimeError) as exc_info:
+            modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        # Not budget: the plain 429 keeps the generic retry-ladder handling
+        # (3 attempts, then the plain RuntimeError wrap).
+        self.assertNotIsInstance(exc_info.exception, TranscriptionFailure)
+        self.assertNotIn('budget', str(exc_info.exception))
+        self.assertEqual(mock_client_cls.return_value.post.call_count, 3)
 
 
 class TestRecvLoop(unittest.TestCase):
@@ -556,6 +665,7 @@ class TestRecvLoop(unittest.TestCase):
         self.assertEqual(self.segments, [])
         self.assertTrue(sock.is_connection_dead)
         self.assertIn('closed cleanly', sock.death_reason)
+        self.assertEqual(sock.connection_cause, 'clean_eof')
 
     def test_error_message_marks_dead(self):
         msg = json.dumps({'type': 'error', 'error': 'rate limit'})
@@ -921,7 +1031,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -972,7 +1082,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -1329,17 +1439,25 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
 
 
 class TestLanguageRoutingExtended(unittest.TestCase):
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_single_language_provider(self):
+    def test_disabled_config_falls_back_to_the_capable_single_language_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'fr')
         self.assertEqual(model, 'velma-2')
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_multilingual_provider(self):
+    def test_disabled_config_falls_back_to_the_capable_multilingual_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'multi')
@@ -1419,11 +1537,11 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_multi_language_falls_through_to_parakeet_capability(self):
+    def test_multi_language_without_audio_proof_uses_safe_multilingual_selection(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('multi')
-        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
         self.assertEqual(lang, 'multi')
 
 

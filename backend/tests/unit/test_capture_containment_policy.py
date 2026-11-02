@@ -20,6 +20,7 @@ import pytest
 import yaml
 
 from database import capture_groups as groups_db
+from database import capture_speech as speech_db
 from database import conversations as conversations_db
 from models.conversation import Conversation
 from tests.unit.fixtures import containment_long_pair as long_pair
@@ -75,6 +76,9 @@ def row(id, source, start=0, end=600, segments=None, **extra):
         'discarded': False,
         'started_at': T0 + timedelta(seconds=start),
         'finished_at': T0 + timedelta(seconds=end),
+        # The capture receipt proves the full recording, including silent tails.
+        'recorded_start': T0 + timedelta(seconds=start),
+        'recorded_end': T0 + timedelta(seconds=end),
         'created_at': T0,
         'structured': {},
         'transcript_segments': segments if segments is not None else [],
@@ -107,6 +111,8 @@ def seam(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    # Keep the new coverage observer in default shadow against the same store.
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
 
     def query(uid, *, status, finished_after, limit):
         rows = [
@@ -607,6 +613,8 @@ def _run_capture_flow(module, rows, last_id, monkeypatch, caplog):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    # Keep the new coverage observer in default shadow against the same store.
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
 
     def query(uid, *, status, finished_after, limit):
         found = [
@@ -623,7 +631,12 @@ def _run_capture_flow(module, rows, last_id, monkeypatch, caplog):
     caplog.clear()
     with caplog.at_level(logging.INFO):
         module.link_duplicate_captures(UID, Conversation(**deepcopy(rows[last_id])))
-    return store, events, [record.message for record in caplog.records]
+    # Refactor shadow observations are additive telemetry, not serving output.
+    return (
+        store,
+        events,
+        [record.message for record in caplog.records if not record.message.startswith('event=refactor_shadow ')],
+    )
 
 
 def _snapshot(store):

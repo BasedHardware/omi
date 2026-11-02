@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -107,6 +108,34 @@ class _HomePageProduct extends StatefulWidget {
 
 class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
+  bool _homeTrialSheetArmed = SharedPreferencesUtil().homeTrialSheetPending;
+  bool _homeTrialSheetChecking = false;
+
+  /// Pocket's placement: the trial paywall once more, on the first tap in Home, for a reader who
+  /// declined both sign-up offers. Fires at most once per device; a paid or ineligible reader
+  /// never sees it.
+  Future<void> _showHomeTrialSheetOnce() async {
+    if (!_homeTrialSheetArmed || _homeTrialSheetChecking) return;
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) {
+      // Eligibility is unknown until the subscription loads: wait for it rather than spend the offer.
+      _homeTrialSheetChecking = true;
+      await usage.fetchSubscription().timeout(const Duration(seconds: 6), onTimeout: () {});
+      _homeTrialSheetChecking = false;
+      if (!mounted) return;
+      // Still unknown (the request failed or is slow): stay armed so the next tap tries again.
+      if (usage.subscription == null) return;
+    }
+    setState(() => _homeTrialSheetArmed = false);
+    SharedPreferencesUtil().homeTrialSheetPending = false;
+    if (!usage.showSubscriptionUI) return;
+    if (usage.subscription?.subscription.plan.isPaid == true) return;
+    if (usage.subscription?.trialEligible != true) return;
+    PlatformManager.instance.analytics.track('Home Trial Sheet Shown', properties: {'source': 'home_first_tap'});
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    await routeToPage(context, const TrialPaywallPage(source: 'home_first_tap'));
+  }
 
   @override
   void initState() {
@@ -130,7 +159,13 @@ class _HomePageProductState extends State<_HomePageProduct> {
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    final home = HomePage(navigateToRoute: _navigateToRoute);
+    if (!_homeTrialSheetArmed) return home;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _showHomeTrialSheetOnce(),
+      child: home,
+    );
   }
 }
 
@@ -387,6 +422,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
+        if (context.read<HomeProvider>().selectedIndex == HomeProvider.tasksTab) {
+          unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+        }
       }
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
@@ -737,7 +775,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               context.read<ConversationProvider>().upsertConversation(row);
               unawaited(context.read<LocalRecordingsProvider>().refresh());
             },
-            recordings: () => context.read<LocalRecordingsProvider>().recordings,
           );
           unawaited(_onDeviceRunner!.start());
         }
@@ -831,6 +868,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           HomeTabSwitcher(
                             trailing: onHome ? null : _buildTasksActions(context),
                             onTabTap: (index, isRepeat) {
+                              if (index == HomeProvider.tasksTab) {
+                                unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+                              }
                               if (isRepeat) {
                                 _scrollToTop(index);
                               } else {
@@ -925,63 +965,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   Widget _buildChatBar(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: context.l10n.askOmi,
-      onTap: _openChat,
-      child: GestureDetector(
-        key: const ValueKey('home_ask_omi_bar'),
-        behavior: HitTestBehavior.opaque,
-        onTap: _openChat,
-        child: Container(
-          height: kHomeChatBarHeight,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Text(
-                    context.l10n.askOmi,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                // The mic sits inside the chat bar's own tap target, so a near miss
-                // does not do nothing: it opens text chat instead of voice. Own the
-                // bar's full height and its rounded end, not just the 42pt circle.
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openChat(voice: true),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: context.l10n.voiceMode,
-                  child: Container(
-                    height: kHomeChatBarHeight,
-                    padding: const EdgeInsets.only(left: 8, right: 6),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return HomeAskAnythingButton(onTap: _openChat);
   }
 
   /// Export and the completed toggle, beside the switcher while Tasks is showing.
@@ -993,7 +977,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           mainAxisSize: MainAxisSize.min,
           children: [
             HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
+              semanticLabel: context.l10n.taskIntegrations,
               icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
               onTap: () {
                 OmiHaptics.selection();

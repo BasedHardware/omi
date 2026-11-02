@@ -21,7 +21,9 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import JEV_DISCARD_THRESHOLD, RelevanceDecision, decide_relevance
 from utils.llm.jev_client import JevAnswers
 
-AMBIGUOUS = ('Coming over there in a second.',)
+# Meets the short-clip floor (the quiet minimum owns anything shorter) while the
+# deterministic tier still cannot settle it, so Jev decides.
+AMBIGUOUS = ('Coming over there in a second, and I will bring the blue folder with the signed form.',)
 TRIGGER = ProcessingTrigger.CAPTURE_END
 
 
@@ -46,7 +48,7 @@ def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=F
     decision = decide_relevance(
         trigger=TRIGGER,
         texts=list(texts),
-        speech_seconds=2.0,
+        speech_seconds=60.0,
         has_photos=False,
         user_kept=user_kept,
         exempt=False,
@@ -209,7 +211,7 @@ def test_state_is_the_shipped_transcript_and_word_count_without_the_duration_cla
     transcript = relevance_jev.relevance_transcript(_segments())
     state = relevance_jev.relevance_state(transcript)
 
-    assert transcript == 'User: Remind me to call the plumber\n\nSpeaker 1: Tomorrow at nine.'
+    assert transcript == 'You: Remind me to call the plumber\n\nSpeaker A: Tomorrow at nine.'
     assert state == f'Transcript:\n```\n{transcript}\n```\nWord count: 12 words.'
     assert 'duration' not in state.lower() and '2 minutes' not in state
 
@@ -274,8 +276,13 @@ def test_oct14_shape_benchmark(oct14_shape):
         decision, _, _ = _decide(jev=lambda: None, model=_failed_model, texts=texts)
         assert decision.verdict == expected, texts
         assert decision.decided_by == ('rule' if len(texts) == 120 else 'deterministic')
-        if len(texts) == 7 or expected == 'keep':
+        if len(texts) == 7:
             assert decision.reason in {'jev_fallback_deterministic', 'circuit_open'}
+        elif expected == 'keep':
+            # The sparse short keeps sit below the short-clip floor, so Jev is
+            # never asked about them; the failed model falls straight through
+            # (or the latched circuit answers for it).
+            assert decision.reason in {'model_fallback_deterministic', 'circuit_open'}
 
 
 @pytest.mark.parametrize('with_jev', [False, True])

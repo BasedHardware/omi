@@ -1,4 +1,7 @@
 import json
+from testing.episode_notes.legacy_prompts import (
+    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
+)
 import importlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,9 +21,8 @@ from utils.conversations.episode_evidence import (
 )
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
-    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
 )
-from utils.llm.episode_notes_prompts import EPISODE_CONTRACT, episode_static_instructions
+from testing.episode_notes.contract import EPISODE_CONTRACT, episode_static_instructions
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
 
 START = datetime(2026, 1, 12, 10, tzinfo=timezone.utc)
@@ -58,7 +60,7 @@ def processing():
 
 
 def test_flag_off_prompt_bytes_pinned_to_base(processing):
-    from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
+    from testing.episode_notes.legacy_prompts import rich_volatile_instructions
 
     fixture = json.loads((Path(__file__).parent / 'fixtures/episode_notes/flag_off_prompts.json').read_text())
     static, volatile = (
@@ -204,7 +206,7 @@ def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     conv = SimpleNamespace(
         id='synthetic', source='desktop', external_data={'conversation_role': 'meeting'}, started_at=START
     )
-    roster, _, _, images = wiring.rich_notes_inputs(
+    roster, _, _, images, _frame_count = wiring.rich_notes_inputs(
         'synthetic',
         conv,
         None,
@@ -275,7 +277,7 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
 
 def test_episode_person_provenance_and_relevance_rules_are_shared():
     from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT
-    from utils.llm.episode_policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
+    from testing.episode_notes.policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
     from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
 
     for rule in [EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:

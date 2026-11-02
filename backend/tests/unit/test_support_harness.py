@@ -468,7 +468,9 @@ def test_private_get_only_router_and_main_registration(harness):
     assert export_openapi.app_client_contract_routes(harness.app) == []
     assert export_openapi.integration_public_contract_routes(harness.app) == []
     assert harness.app.openapi()['paths'] == {}
-    assert 'app.include_router(support.router)' in (Path(__file__).resolve().parents[2] / 'main.py').read_text()
+    backend = Path(__file__).resolve().parents[2]
+    assert 'Mount(support)' in (backend / 'app_roles.py').read_text()  # static: app_roles imports every router
+    assert 'mount_routers(app, OMI_APP_ROLE' in (Path(__file__).resolve().parents[2] / 'main.py').read_text()
 
 
 @pytest.mark.parametrize('model', [SupportLookupResponse, SupportTraceRow, SupportTraceResponse])

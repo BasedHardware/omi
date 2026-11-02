@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# Build and publish the exact dSYM for the final universal desktop executable.
+# Build and verify the exact dSYM for the final universal desktop executable.
+#
+# The verified dSYM is retained as a GitHub release artifact so crash reports
+# can be symbolicated offline. There is no symbol-upload destination anymore:
+# the previous Sentry dSYM upload path was removed together with Sentry itself.
 set -euo pipefail
-
-SENTRY_CLI_VERSION="2.52.0"
-SENTRY_ORG="${SENTRY_ORG:-omi-nk3}"
-SENTRY_PROJECT="${SENTRY_PROJECT:-omi-desktop}"
 
 usage() {
   cat >&2 <<'EOF'
 Usage:
   publish-desktop-debug-symbols.sh generate --binary <Mach-O> --dsym <output.dSYM> --archive <output.zip>
-  publish-desktop-debug-symbols.sh upload --binary <Mach-O> --dsym <bundle.dSYM>
-  publish-desktop-debug-symbols.sh upload-best-effort --binary <Mach-O> --dsym <bundle.dSYM>
 EOF
   exit 2
 }
@@ -72,30 +70,6 @@ case "$mode" in
     ditto -c -k --keepParent "$dsym" "$archive"
     [[ -s "$archive" ]] || { echo "ERROR: dSYM archive was not created" >&2; exit 1; }
     echo "Created desktop debug-symbol archive: $archive"
-    ;;
-  upload|upload-best-effort)
-    verify_symbols
-    if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
-      if [[ "$mode" == "upload" ]]; then
-        echo "ERROR: SENTRY_AUTH_TOKEN is required to publish desktop debug symbols" >&2
-        exit 1
-      fi
-      echo "::warning::Skipping Sentry dSYM upload because SENTRY_AUTH_TOKEN is unavailable; the verified dSYM remains attached to the GitHub release." >&2
-      exit 0
-    fi
-    if ! npx --yes "@sentry/cli@${SENTRY_CLI_VERSION}" debug-files upload \
-        --org "$SENTRY_ORG" \
-        --project "$SENTRY_PROJECT" \
-        --wait \
-        "$dsym"
-    then
-      if [[ "$mode" == "upload" ]]; then
-        exit 1
-      fi
-      echo "::warning::Sentry rejected the dSYM upload; continuing because the UUID-verified dSYM remains attached to the GitHub release for repair." >&2
-      exit 0
-    fi
-    echo "Published desktop debug symbols to Sentry project $SENTRY_ORG/$SENTRY_PROJECT"
     ;;
   *)
     usage

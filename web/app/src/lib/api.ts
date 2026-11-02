@@ -37,6 +37,7 @@ import type {
   ActionItemsResponse,
   FairUseStatusResponse,
   StoreRecordingPermissionResponse,
+  ClientFlagsResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -173,6 +174,12 @@ export interface GetConversationsParams {
   startDate?: Date;
   endDate?: Date;
   folderId?: string;
+  starred?: boolean;
+}
+
+/** Flags owned by Omi's flag store for this account; unlisted keys keep reading PostHog. */
+export async function getClientFlags(): Promise<ClientFlagsResponse> {
+  return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }
 
 export async function getConversations(
@@ -186,6 +193,7 @@ export async function getConversations(
     startDate,
     endDate,
     folderId,
+    starred,
   } = params;
 
   const queryParams = new URLSearchParams({
@@ -205,6 +213,10 @@ export async function getConversations(
 
   if (folderId) {
     queryParams.set('folder_id', folderId);
+  }
+
+  if (starred !== undefined) {
+    queryParams.set('starred', starred.toString());
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);
@@ -1999,6 +2011,14 @@ export async function createCheckoutSession(
   }
 }
 
+/** Apply a promotion code to the current subscription, including during a free trial. */
+export async function redeemCode(code: string): Promise<RedeemCodeResponse> {
+  return fetchWithAuth<RedeemCodeResponse>('/v1/payments/redeem-code', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
 /**
  * Upgrade subscription to a different plan
  */
@@ -2134,7 +2154,7 @@ export async function assignBulkTranscriptSegments(
  * (backend returns HTTP 402 for `/segments/text` on gated accounts).
  */
 export class SegmentEditPlanRequiredError extends Error {
-  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+  constructor(message = 'Editing the transcript requires Omi Pro.') {
     super(message);
     this.name = 'SegmentEditPlanRequiredError';
   }
@@ -2212,6 +2232,7 @@ import type {
   UpgradeSubscriptionResponse,
   CancelSubscriptionResponse,
   CustomerPortalResponse,
+  RedeemCodeResponse,
 } from '@/types/user';
 
 /** Get user's developer API keys; opt into errors for settings. */

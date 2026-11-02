@@ -90,6 +90,24 @@ def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
     emit.assert_not_called()
 
 
+def test_empty_model_result_without_open_obligation_commits(writer, monkeypatch):
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    for marker in ('summary_title_provenance', 'summary_first_pending_at', 'summary_due_at'):
+        writer.document.pop(marker, None)
+    assert db.persist_processing_result_with_lifecycle('u', payload(''))
+    emit.assert_called_once_with(None)
+
+
+def test_empty_model_result_after_exhausted_empty_budget_commits(writer, monkeypatch):
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    writer.document['summary_blocked_reason'] = 'empty_output_exhausted'
+    writer.document['summary_due_at'] = None
+    assert db.persist_processing_result_with_lifecycle('u', payload(''))
+    emit.assert_called_once_with(None)
+
+
 def test_stale_generation_and_failed_commit_emit_nothing(writer, monkeypatch):
     emit = Mock()
     monkeypatch.setattr(delivery, 'emit', emit)
@@ -116,7 +134,7 @@ def test_same_owners_lease_expires_during_long_process_conversation_but_summary_
     from models.structured import Structured
 
     # This lease test exercises funded processing, independently of cap admission.
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     _spy_managed_effects(monkeypatch, pc)
     conversation = _existing_desktop('c')
     conversation.sync_content_revision = 3

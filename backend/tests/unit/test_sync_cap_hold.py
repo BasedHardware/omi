@@ -1,5 +1,7 @@
 """Both sync versions execute process_segment; prove the last pre-STT gate."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -35,7 +37,6 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
     url, stt = Mock(return_value='synthetic-url'), Mock(return_value=([], 'en'))
     monkeypatch.setattr(cap_hold, 'hold_segment', hold)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', url)
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _: ('modulate', None, 'velma-2'))
     monkeypatch.setattr(pipeline, 'prerecorded', stt)
@@ -69,7 +70,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
 def test_hold_failure_cannot_acknowledge_audio_or_dispatch_provider(tmp_path, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: False)
     monkeypatch.setattr(cap_hold, 'hold_segment', Mock(side_effect=RuntimeError('synthetic upload failed')))
     stt = Mock()
     monkeypatch.setattr(pipeline, 'prerecorded', stt)
@@ -87,10 +88,9 @@ def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, mon
         output.writeframes(b'\0' * 32000)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: True)
-    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_: SimpleNamespace(reason='available'))
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: True)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_, **kwargs: SimpleNamespace(reason='available'))
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     selection = Mock(return_value=('modulate', None, 'velma-2'))
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', selection)
@@ -99,17 +99,27 @@ def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, mon
     monkeypatch.setattr(pipeline, '_record_empty_segment_as_silence', Mock())
     errors = []
     service = ('parakeet', 'multi', 'parakeet')
+    checkpoint = Mock(return_value=True)
+    monkeypatch.setattr(pipeline.cap_recovery_provider.sync_cap_recovery, 'provider_checkpoint', checkpoint)
     assert not pipeline.process_segment(
-        str(path), 'synthetic', {}, threading.Lock(), errors, cap_recovery=True, cap_recovery_service=service
+        str(path),
+        'synthetic',
+        {},
+        threading.Lock(),
+        errors,
+        cap_recovery=True,
+        cap_recovery_service=service,
+        cap_recovery_checkpoint={'hold_id': 'h', 'piece': 'p', 'lease_token': 'l', 'attempt': 1, 'receipt': {}},
     )
     assert not errors
-    assert stt.call_count == 2
+    assert stt.call_count == (1 if enforce else 0)
+    assert checkpoint.call_count == (2 if enforce else 0)
     for call in stt.call_args_list:
         if enforce:
             assert call.kwargs['selected_service'] == service
         else:
             assert 'selected_service' not in call.kwargs
-    assert selection.call_count == (0 if enforce else 1)
+    selection.assert_not_called()
 
 
 @pytest.mark.parametrize('enforce', [False, True])
@@ -131,6 +141,7 @@ async def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_pat
         assert hold.call_args.args[2] == {
             'timestamp': 1792152000,
             'source': 'omi',
+            'origin': 'sync',
             'full_capture': True,
             'file_name': '1792152000.wav',
             'source_frame_map': None,
@@ -161,6 +172,21 @@ def test_hold_manifest_fences_concurrent_recovery_and_stale_release(monkeypatch)
     assert client.rows[path]['lease_token'] == next_claim['lease_token']
     cap_hold.release('synthetic', ref, next_claim['lease_token'])
     assert client.rows[path]['lease_until'] == 0
+
+
+@pytest.mark.parametrize('state', ['completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'])
+def test_claim_leaves_terminal_and_unsealed_rows_alone(monkeypatch, state):
+    from contextlib import nullcontext
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.sync import cap_hold
+
+    path = ('users', 'synthetic', 'stt_cap_holds', 'hold')
+    client = StrictFirestore({path: {'state': state, 'lease_until': 0}})
+    ref = client.document('/'.join(path))
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
+    assert cap_hold.claim('synthetic', ref, 100) is None
+    assert client.rows[path] == {'state': state, 'lease_until': 0}
 
 
 def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_path, monkeypatch):
@@ -216,14 +242,16 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
     bucket.blob.return_value = blob
     monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
     monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *_: nullcontext())
-    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda _, **kw: SimpleNamespace(reason='plan_allowance_exhausted')
+    )
     meta = {'timestamp': 1792152000, 'source': 'omi', 'full_capture': True}
     assert cap_hold.hold_segment('synthetic', str(path), meta) == 1
     assert order == ['upload', 'manifest', 'summary']
     assert decrypt_audio_file(uploaded[0], 'synthetic') == path.read_bytes()
     manifest = ref.create.call_args.args[0]
     assert manifest['audio_path'].startswith('chunks/synthetic/cap-held/')
-    assert json.loads(decrypt(manifest['metadata'], 'synthetic')) == meta
+    assert json.loads(decrypt(manifest['metadata'], 'synthetic')) == {**meta, 'origin': 'sync'}
     assert 'expires_at' not in manifest
     ref.create.reset_mock()
     blob.upload_from_file.side_effect = RuntimeError('synthetic unavailable')
@@ -278,7 +306,9 @@ def test_large_hold_streams_bounded_authenticated_chunks(tmp_path, monkeypatch, 
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
     monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
     monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *_: nullcontext())
-    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda _, **kw: SimpleNamespace(reason='plan_allowance_exhausted')
+    )
     monkeypatch.setattr(Path, 'read_bytes', Mock(side_effect=AssertionError('whole-file buffer')))
     encrypt_chunk = Mock(wraps=cap_hold.encrypt_audio_chunk)
     monkeypatch.setattr(cap_hold, 'encrypt_audio_chunk', encrypt_chunk)
@@ -333,3 +363,211 @@ async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
     ]
     assert admission == {'reason': 'allowance_unavailable'}
     assert receipts['held']['reason'] == 'allowance_unavailable'
+
+
+@pytest.mark.parametrize('payload_bytes', [20, 100 * 1024, 900 * 1024])
+def test_production_pipeline_result_crash_restart_and_cache_capacity_never_force_charge(
+    tmp_path, monkeypatch, payload_bytes
+):
+    from utils.conversations import lifecycle
+
+    path = tmp_path / '1792152000.wav'
+    with wave.open(str(path), 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * 32000)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: True)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_, **kwargs: SimpleNamespace(reason='available'))
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
+    monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
+    monkeypatch.setattr(pipeline, 'get_closest_conversation_to_timestamps', Mock(return_value=None))
+    monkeypatch.setattr(pipeline, 'sync_enabled_for', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', Mock())
+    monkeypatch.setattr(pipeline, 'apply_capture_evidence_dark_write', Mock())
+    monkeypatch.setattr(pipeline, 'record_capture_evidence_metric', Mock())
+    completed = Mock()
+    monkeypatch.setattr(pipeline, 'complete_sync_intake', completed)
+    ingest = Mock(side_effect=lambda uid, incoming, **kw: (incoming, True, incoming['transcript_segments']))
+    monkeypatch.setattr(lifecycle, 'ingest_sync_conversation', ingest)
+    words = [{'text': 'x' * payload_bytes, 'timestamp': [0, 1]}]
+    provider_post = Mock(return_value=(words, 'en'))
+    monkeypatch.setattr(pipeline, 'prerecorded', provider_post)
+    persisted = {'state': 'dispatched', 'attempt': 1, 'provider': 'modulate', 'model': 'velma-2'}
+    previous = {'provider_result': 'old-ciphertext' * 50000} if payload_bytes == 100 * 1024 else {}
+
+    def checkpoint(uid, ctx, updates):
+        row = {'piece_receipts': {'p': persisted, 'previous': previous}}
+        persisted.update(pipeline.cap_recovery_provider.sync_cap_recovery.bounded_provider_updates(row, 'p', updates))
+        ctx['receipt'].update(persisted)
+        return True
+
+    monkeypatch.setattr(pipeline.cap_recovery_provider.sync_cap_recovery, 'provider_checkpoint', checkpoint)
+    parser = Mock(side_effect=RuntimeError('crash after provider checkpoint'))
+    monkeypatch.setattr(pipeline, 'postprocess_words', parser)
+
+    def process():
+        errors = []
+        ok = pipeline.process_segment(
+            str(path),
+            'synthetic',
+            {},
+            threading.Lock(),
+            errors,
+            cap_recovery=True,
+            cap_recovery_service=('modulate', None, 'velma-2'),
+            cap_recovery_checkpoint={
+                'hold_id': 'h',
+                'piece': 'p',
+                'lease_token': 'l',
+                'attempt': 1,
+                'receipt': dict(persisted),
+            },
+        )
+        assert parser.call_args.args[0] == words
+        return ok, errors
+
+    if payload_bytes == 20:
+        # Crash at the next production boundary after a durable checkpoint.
+        assert process()[1] and persisted['provider_result']
+        ingest.assert_not_called()
+    parser.side_effect = None
+    parser.return_value = [
+        pipeline.TranscriptSegment(text='usable response', start=0, end=1, speaker='SPEAKER_00', is_user=False)
+    ]
+    ok, errors = process()
+    assert ok and not errors
+    ingest.assert_called_once()
+    completed.assert_called_once()
+    provider_post.assert_called_once()
+    if payload_bytes > 20:
+        assert persisted['provider_cache_omitted'] and 'provider_result' not in persisted
+        if previous:
+            assert previous['provider_result'] == 'old-ciphertext' * 50000
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize(
+    'origin,lanes,checked',
+    [('live', 'live', True), ('sync', 'live', False), ('batch', 'live', False), ('live', 'sync,batch', False)],
+)
+def test_recovered_segment_rechecks_original_lane_without_reholding(
+    tmp_path, monkeypatch, ladder, origin, lanes, checked
+):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    allowance = Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(cap, 'funded_allowance', allowance)
+    provider = Mock(side_effect=AssertionError('denied recovery reached provider'))
+    monkeypatch.setattr(pipeline, 'prerecorded', provider)
+    hold = Mock(side_effect=AssertionError('recovery must not overwrite original hold'))
+    monkeypatch.setattr(cap_hold, 'hold_segment', hold)
+    errors = []
+    result = pipeline.process_segment(
+        str(tmp_path / '1792152000.wav'),
+        'synthetic',
+        {},
+        threading.Lock(),
+        errors,
+        cap_recovery=True,
+        cap_dispatch_lane=origin,
+    )
+    assert result is False and not errors
+    assert allowance.call_count == int(checked)
+    if checked:
+        allowance.assert_called_with('synthetic', lane=origin)
+    provider.assert_not_called()
+    hold.assert_not_called()
+
+
+@pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])
+@pytest.mark.parametrize('kill', [False, True])
+def test_default_offline_gate_holds_outside_all_legacy_scopes(tmp_path, monkeypatch, queued, kill):
+    # Existing helper drives the real process_segment and spies on both URL/STT.
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if kill else 'true')
+    from config import stt_cap_dispatch as policy
+
+    monkeypatch.setattr(policy, '_cohort_resolver', lambda: '')
+    test_exhaustion_holds_before_url_or_provider_dispatch(
+        tmp_path, monkeypatch, enforce=not kill, queued=queued, ladder=False
+    )
+
+
+@pytest.mark.parametrize('boundary', ['probe', 'retry', 'multilingual'])
+def test_late_denial_holds_without_spending_next_provider_call(tmp_path, monkeypatch, boundary):
+    from pathlib import Path
+    from utils.stt import batch_language
+    from utils.observability.stt_cap_dispatch import DispatchPath
+
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    path = tmp_path / '1792152000.wav'
+    with wave.open(str(path), 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * 32000)
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _: 'synthetic-url')
+    monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
+    hold = Mock()
+    monkeypatch.setattr(cap_hold, 'defer_segment', hold)
+    denied = {
+        'probe': DispatchPath.LANGUAGE_PROBE,
+        'retry': DispatchPath.EMPTY_RETRY,
+        'multilingual': DispatchPath.MULTILINGUAL,
+    }[boundary]
+    seen = []
+
+    def allowed(*args, **kwargs):
+        seen.append(kwargs.get('path'))
+        return kwargs.get('path') != denied
+
+    monkeypatch.setattr(pipeline, 'sync_allowed', allowed)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *a, **k: SimpleNamespace(reason='available'))
+
+    probe_client = Mock(side_effect=AssertionError('denied LID must not reach the provider'))
+    monkeypatch.setattr(batch_language.httpx, 'Client', probe_client)
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-key')
+
+    def select(language, path, *, selector, before_probe, **kwargs):
+        if boundary == 'probe':
+            batch_language.detect(Path(path).read_bytes(), before_probe=before_probe)
+        else:
+            before_probe()
+        return 'parakeet', 'en', 'parakeet'
+
+    monkeypatch.setattr(batch_language, 'resolve_file', select)
+    stt = Mock(return_value=([], 'en'))
+    alternate = Mock(side_effect=AssertionError('denied fallback must not run'))
+    monkeypatch.setattr(pipeline, 'prerecorded', stt)
+    monkeypatch.setattr(pipeline, 'modulate_prerecorded_from_bytes', alternate)
+    monkeypatch.setattr(pipeline, 'sync_safety_wal_enabled', lambda: False)
+    monkeypatch.setattr(pipeline.minimal_redrive, 'paid_recovery_enabled', lambda _: True)
+
+    def recover(path, *, transcribe, authorize, observe):
+        authorize()
+        return transcribe(b'synthetic')
+
+    monkeypatch.setattr(pipeline.empty_recovery, 'recover', recover)
+    # A probe denial must also deny the following STT boundary, as a real
+    # exhausted snapshot would. The probe itself must never spend.
+    if boundary == 'probe':
+        original = allowed
+
+        def allowed(*args, **kwargs):
+            if denied in seen:
+                return False
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(pipeline, 'sync_allowed', allowed)
+    errors = []
+    outcome = {}
+    assert not pipeline.process_segment(str(path), 'synthetic', {}, threading.Lock(), errors, deferred_outcome=outcome)
+    assert not errors
+    assert denied in seen
+    hold.assert_called_once()
+    assert outcome['cap_held'] is True
+    assert stt.call_count == {'probe': 0, 'retry': 1, 'multilingual': 2}[boundary]
+    alternate.assert_not_called()
+    probe_client.assert_not_called()

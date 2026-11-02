@@ -175,3 +175,30 @@ describe('ConversationDetail — error copy (PR-D)', () => {
     expect(queryByText('Couldn’t load this conversation.')).toBeNull()
   })
 })
+
+describe('ConversationDetail — note citation contract', () => {
+  it('repairs citation debris in the title, overview and action items without changing the rename value', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        ...CONVERSATION,
+        structured: {
+          title: 'Planning sync [s01234]',
+          overview: 'Speaker_00: Discussed the roadmap. [s01234]',
+          action_items: [{ description: 'Send recap (s01234)', completed: false }]
+        },
+        transcript_segments: [{ id: 's01234', text: 'Roadmap.', start: 0, end: 1 }]
+      }
+    })
+    const { findByRole, findByText, queryByText, getByTitle, getByDisplayValue } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    expect(await findByText('Send recap')).toBeTruthy()
+    expect(await findByText('Discussed the roadmap.')).toBeTruthy()
+    expect((await findByRole('heading', { level: 1 })).textContent).toBe('Planning sync')
+    expect(queryByText(/s01234|Speaker_00/)).toBeNull()
+    fireEvent.click(getByTitle('Edit title'))
+    expect(getByDisplayValue('Planning sync [s01234]')).toBeTruthy()
+  })
+})

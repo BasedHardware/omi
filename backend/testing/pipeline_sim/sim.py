@@ -10,6 +10,7 @@ REAL product code exercised on the ``batch`` path (unmodified, imported):
   - ``utils.batch_pipeline.quarantine_recovery.QuarantineRecovery`` (sweep, dispatch, recover)
   - ``database.batch_pipeline_quarantine_recovery.RecoveryStore`` (prepare/start/settle fences)
   - ``database.batch_pipeline_privacy.assert_batch_write_allowed`` (privacy fence)
+  - ``utils.batch_pipeline.provider_stt`` (C8: route, admission ``enqueue`` hook, ProviderSttStage)
 
 Module attributes patched for the duration of a run (restored afterwards):
   ``pump.time``/``serving.time`` -> virtual clock; ``pump.run_blocking`` -> inline
@@ -31,13 +32,20 @@ import contextlib
 import hashlib
 import logging
 import math
-import os
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from unittest.mock import patch
+
+from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
+from config.policy.listen import ListenSessionPolicy
+from config.policy.stages import STAGE_TYPES
+from database.batch_pipeline_shadow_hook import mirror_refresh
+from database import batch_pipeline_policy as policy_store
+from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
 from typing import Any
 
-from config.batch_pipeline import priority_for
+from config.batch_pipeline import priority_for, recovery_dispatch_interval_seconds
 from database import batch_pipeline_intake
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from diarizer.batch_pipeline import PipelineWorker, padded_retry_fits, padded_retry_seconds
@@ -46,9 +54,17 @@ from utils.batch_pipeline import pump as pump_module
 from utils.batch_pipeline import quarantine_recovery as recovery_module
 from utils.batch_pipeline import serving as serving_module
 from utils.batch_pipeline.contracts import PoolCapacity, ProjectionBinding, WorkItem
+from utils.batch_pipeline.provider_stt import (
+    ProviderSttStage,
+    VendorCallFailure,
+    provider_enqueue,
+    resolve_route,
+)
 from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.recovery_disposition import MultilingualEmpty, RecoveryFailure
 from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
 from utils.batch_pipeline.scheduler import Scheduler, owns_lease
+from utils.observability.reasons import VendorAttemptOutcome, VendorHealthReason
 from utils.batch_pipeline.serving import Serving
 from utils.sync.capture import chunk_identity
 
@@ -67,6 +83,7 @@ from testing.pipeline_sim.stt import (
     FakeSTT,
     ModulateProfile,
     PlannedWords,
+    ProviderUnavailable,
     SimSamples,
     STTProfile,
     vad_spans,
@@ -88,6 +105,8 @@ logger = logging.getLogger(__name__)
 # state disagrees across dates, so these are explicit simulation inputs.
 DEFAULT_FLAGS = {
     'OMI_ENV_STAGE': 'dev',
+    'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
+    'FIRST_SUMMARY_DEADLINE_PERCENT': '100',
     'BATCH_PIPELINE_ENABLED': 'true',
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',
@@ -111,9 +130,23 @@ DEFAULT_FLAGS = {
     'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED': 'true',
     'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED': 'false',
     'STT_CAP_DISPATCH_ENFORCEMENT': 'false',
+    # Synthetic owners have no subscription ledger; never consult real funding.
+    'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
 }
 
 BACKFILL_SPEECH_SECONDS_PER_UID_DAY = 4 * 3600  # backend/AGENTS.md: four processed speech hours per UID/day
+
+
+class _SimVendorHealth:
+    """VendorHealth for drills: a vendor inside an outage window is refused (breaker open)."""
+
+    def __init__(self, sim: 'Simulation'):
+        self.sim = sim
+
+    def allows(self, service: str) -> tuple[bool, VendorHealthReason]:
+        if self.sim.config.vendor_health_aware and self.sim.vendor_down(service):
+            return False, VendorHealthReason.BREAKER_OPEN
+        return True, VendorHealthReason.HEALTHY
 
 
 @dataclass
@@ -158,12 +191,38 @@ class SimConfig:
     pump_restart_seconds: float = 60.0
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
+    policy: BatchUnitPolicy | None = None
+    listen_policy: ListenSessionPolicy | None = None
+    role_environments: dict[str, dict[str, str]] = field(default_factory=dict)
+    stage_roles: dict[str, str] = field(default_factory=dict)
+    trace_policy: bool = False
+    policy_parts: dict[str, dict] = field(default_factory=dict)  # Persisted owner parts for replay.
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
+    # C8 admission route (intake.accept_upload): stored language, BYOK, legacy_sync mode.
+    language: str = 'en'
+    worker_language: str | None = None  # frozen intake metadata, when different from the declared language
+    byok: bool = False
+    legacy_sync: str = 'on'  # on | draining | dark
+    # Slice D vendor drills. Each (service, start, end) window fails every call to that vendor;
+    # with vendor_health_aware the vendor's health also refuses it (breaker open) so no call is
+    # spent. vendor_failover_routes is the route table's vendor list after the admitted one.
+    vendor_outages: tuple[tuple[str, float, float], ...] = ()
+    vendor_failover_routes: tuple[str, ...] = ()
+    vendor_health_aware: bool = True
+    vendor_routing_armed: bool = False  # a configured route table is served (failover and holds arm)
+
+    def __post_init__(self):
+        if isinstance(self.policy, dict):
+            self.policy = BatchUnitPolicy.from_dict(self.policy)
+        if isinstance(self.listen_policy, dict):
+            self.listen_policy = ListenSessionPolicy.from_dict(self.listen_policy)
 
 
 @dataclass
 class UploadRecord:
     spec: UploadSpec
+    policy: BatchUnitPolicy | None = None
+    first_summary_policy: FirstSummaryPolicy | None = None
     status: str = 'pending'  # admitted | rejected_privacy | deduplicated | rejected_other
     accepted_at: float | None = None
     job_id: str | None = None
@@ -244,6 +303,7 @@ class SimWorker:
             config=self.config,
             recover_words=self.planned.recover_words,
             gpu_lock=contextlib.nullcontext(),
+            language_of=lambda item: self.sim.config.worker_language or self.sim.config.language,
         )
         self.index = index
 
@@ -270,6 +330,13 @@ class SimWorker:
         await asyncio.sleep(self.sim.config.gpu_seconds_per_item * len(items))
         await asyncio.gather(*(self._plan(item) for item in items))
         return self.worker.process_batch(items, **kwargs)
+
+
+class _ProviderOutbox:
+    """Outbox stand-in for the admission ``enqueue`` hook: every new row asks for one wake."""
+
+    def enqueue(self, row_id, owner_id, payload, available_at, *, tx=None, now=None):
+        return SimpleNamespace(row_id=row_id, wake_token=f'wake-{row_id}')
 
 
 class Simulation:
@@ -301,11 +368,28 @@ class Simulation:
         self.backfill_used: dict[tuple[str, int], float] = {}
         self.backfill_reserved: dict[tuple[str, str], bool] = {}
         self._task_names: set[str] = set()
+        self._live_tasks: set[str] = set()  # created and not yet answered
         self._pumps: list[tuple[Pump, asyncio.Event, asyncio.Task]] = []
         self._supervisor: Any = None
         self.serving: Serving | None = None
         self.recovery: QuarantineRecovery | None = None
         self.polls: list[tuple[float, str, int]] = []
+        self.vendor_calls: collections.Counter = collections.Counter()  # (segment, service) -> calls
+        self.provider_stage = (
+            None
+            if self.store is None
+            else ProviderSttStage(
+                self.store,
+                self.artifacts,
+                stt=self._provider_call,
+                allowed=lambda *_: True,
+                inspect=self._provider_inspect,
+                clock=self.clock.time,
+                health=_SimVendorHealth(self),
+                failover_routes=lambda language: ('modulate', *self.config.vendor_failover_routes),
+                armed=lambda: self.config.vendor_routing_armed,
+            )
+        )
         self._seed_customers()
 
     # ------------------------------------------------------------------ setup
@@ -333,32 +417,56 @@ class Simulation:
         source = upload.duplicate_of or upload.upload_id
         return 'sim-conv-' + hashlib.sha256(source.encode()).hexdigest()[:24]
 
+    def _policy_flags(self, stage):
+        role = self.config.stage_roles.get(stage, stage)
+        return {**DEFAULT_FLAGS, **self.config.flags, **self.config.role_environments.get(role, {})}
+
+    def _stage_policy(self, uid, stage):
+        raw = self.config.policy_parts.get(stage)
+        return (
+            STAGE_TYPES[stage].from_dict(raw)
+            if raw is not None
+            else resolve_stage_policy(uid, stage, flags=self._policy_flags(stage))
+        )
+
     # --------------------------------------------------------------- patching
     @contextlib.contextmanager
     def _patched(self):
-        saved_env = {key: os.environ.get(key) for key in {**DEFAULT_FLAGS, **self.config.flags}}
+        flags = {**DEFAULT_FLAGS, **self.config.flags}
+        # Only E1b worker dispositions and process/provider config use env.
+        # Per-unit E1 inputs are supplied exclusively through the resolver.
+        outside_scope = {
+            key: value
+            for key, value in flags.items()
+            if key not in SNAPSHOT_ENV_KEYS and not key.startswith(('FIRST_SUMMARY_', 'TRANSCRIPTION_FINAL_PASS_'))
+        }
+        env_patch = patch.dict('os.environ', outside_scope)
         patches = [
+            (policy_store, 'resolve_stage_policy', self._stage_policy),
             (pump_module, 'time', self.clock.module()),
             (pump_module, 'run_blocking', self._run_blocking),
             (serving_module, 'time', self.clock.module()),
             (recovery_module, 'recovery_candidates', self._recovery_candidates),
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
+            (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
+            # Synthetic artifacts are not WAV bytes; use the same explicit
+            # strict-VAD double as the provider stage at this external leaf.
+            (recovery_module, 'inspect_audio', self._provider_inspect),
+            # Only Modulate is modeled here. Refuse the unmodeled Soniox leg
+            # before touching its real client, even if the host has a key.
+            (recovery_module, 'independent_ready', lambda: False),
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
         try:
-            os.environ.update({**DEFAULT_FLAGS, **self.config.flags})
+            env_patch.start()
             for module, name, value in patches:
                 setattr(module, name, value)
             yield
         finally:
             for module, name, value in originals:
                 setattr(module, name, value)
-            for key, value in saved_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            env_patch.stop()
 
     async def _run_blocking(self, executor, fn, *args, **kwargs):
         owner = getattr(fn, '__self__', None)
@@ -379,17 +487,21 @@ class Simulation:
 
     # ---- models replacing Firestore-query / Cloud Tasks / Redis leaves ----
     def _recovery_candidates(self, client, namespace, owner_id, limit=10, *, after_id=None):
-        """Model of recovery_candidates(): recovery_state in held/prepared/running, ordered by doc id."""
+        """Model of recovery_candidates(): quarantined, recovery_state in held/prepared/running, ordered by doc id."""
         rows = []
         for (table, key), row in sorted(self.store.rows.items()):
-            if table != 'jobs' or row.get('recovery_state') not in {'held', 'prepared', 'running'}:
+            if (
+                table != 'jobs'
+                or row.get('state') != 'quarantined'
+                or row.get('recovery_state') not in {'held', 'prepared', 'running'}
+            ):
                 continue
             if owner_id is not None and row.get('owner_id') != owner_id:
                 continue
             if owner_id is None and after_id is not None and key <= after_id:
                 continue
             rows.append((key, row['owner_id']))
-            if len(rows) >= max(1, min(limit, 10)):
+            if len(rows) >= max(1, min(limit, 64)):
                 break
         return rows
 
@@ -398,6 +510,7 @@ class Simulation:
         if task_id in self._task_names:
             return None
         self._task_names.add(task_id)
+        self._live_tasks.add(task_id)
         self.counters['recovery_tasks_enqueued'] += 1
         deliveries = 2 if self.rng['misc'].random() < self.config.recovery_duplicate_delivery_rate else 1
         loop = asyncio.get_running_loop()
@@ -406,13 +519,17 @@ class Simulation:
                 self.counters['recovery_duplicate_deliveries'] += 1
             loop.call_later(
                 self.config.task_hop_seconds * (1 + n),
-                lambda sid=payload['segment_id']: loop.create_task(
-                    self.revision.request('recover-quarantine', self._recover_handler(sid))
+                lambda sid=payload['segment_id'], tid=task_id: loop.create_task(
+                    self.revision.request('recover-quarantine', self._recover_handler(sid, tid))
                 ),
             )
         return None
 
-    async def _recover_handler(self, segment_id: str) -> str:
+    def _named_task_exists(self, queue, task_id):
+        """Cloud Tasks custody model: a named task exists until a delivery answers it."""
+        return task_id in self._live_tasks
+
+    async def _recover_handler(self, segment_id: str, task_id: str | None = None) -> str:
         """Mirrors routers/batch_pipeline.recover_quarantine (request-scoped paid STT)."""
         job = self.store.get('jobs', segment_id)
         if not job:
@@ -421,9 +538,52 @@ class Simulation:
             await self.modulate.occupy(job['duration_seconds'])
         outcome = self.recovery.recover(segment_id, job['owner_id'])
         self.counters[f'recovery_{outcome}'] += 1
+        if outcome == 'held':
+            try:  # Mirrors the handler's held re-arm, including its swallowed fence errors.
+                self.recovery.delivered(segment_id, outcome, task_id)
+            except Exception:
+                pass
         if outcome in {'recovered', 'reconciled'}:
             self.serving.reconcile()
+        self._live_tasks.discard(task_id)
         return outcome
+
+    async def _provider_delivery(self, segment_id: str) -> None:
+        """Mirrors ProviderSttConsumer.process: one REAL ProviderSttStage.run per delivery."""
+        job = self.store.get('jobs', segment_id)
+        if job.get('state') == 'provider_pending':
+            await self.modulate.occupy(job['duration_seconds'])
+        unit = self.provider_stage.run(segment_id)
+        self.counters[f'provider_stt_{unit.outcome}'] += 1
+        if unit.outcome in {'deferred', 'retry'}:
+            delay = max(self.config.task_hop_seconds, (unit.available_at or 0.0) - self.clock.now)
+            loop = asyncio.get_running_loop()
+            loop.call_later(delay, lambda: loop.create_task(self._provider_delivery(segment_id)))
+        elif self.serving is not None:
+            self.serving.reconcile()
+
+    def _provider_inspect(self, item, audio):
+        """Strict-VAD stand-in: the segment's synthetic speech spans (inspect_audio's shape)."""
+        samples = SimSamples.for_seconds(item.segment_id, self.truth[item.segment_id]['kind'], item.duration_seconds)
+        spans = [{'start': start, 'end': end} for start, end in vad_spans(samples)]
+        return b'', item.duration_seconds, spans
+
+    def vendor_down(self, service: str) -> bool:
+        now = self.clock.elapsed()  # windows are seconds after the simulation start
+        return any(name == service and start <= now < end for name, start, end in self.config.vendor_outages)
+
+    def _provider_call(self, item, language, inspected, *, service):
+        """The stage's vendor seam on the paid-provider model; errors map as ``transcribe`` maps them."""
+        self.vendor_calls[(item.segment_id, service)] += 1
+        if self.vendor_down(service):
+            raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.ERROR_5XX)
+        try:
+            payload = self.modulate(item, None, b'')
+        except ProviderUnavailable:
+            raise RecoveryFailure('provider', 'provider_failed')
+        except MultilingualEmpty:
+            raise RecoveryFailure('response_validation', 'empty_asr')
+        return {**payload, 'words_provider': service, 'language': language}
 
     def _cancel_fenced_recovery(self, store, segment_id):
         """Model of cancel_fenced_recovery(): revocation-only write after the fence rejects."""
@@ -462,7 +622,8 @@ class Simulation:
         Same lease-ownership and privacy checks and the same lease-bound
         ``compute_admission_token`` seal that the real ``Scheduler.complete``
         enforces. Fair-use restriction and the daily audio ceiling always allow;
-        backfill priorities reserve against a per-UID daily speech budget. Not
+        backfill-lane uploads (by recorded lane, else priority) reserve against a
+        per-UID daily speech budget. Not
         imported for real: its fair-use dependency chain costs ~5 s of imports.
         """
         now = self.clock.now
@@ -489,7 +650,8 @@ class Simulation:
                 retries[segment] = 30
                 continue
             job, intake = snapshot
-            if int(job['priority']) != 0:
+            fresh_lane = intake['lane'] == 'fresh' if intake.get('lane') else int(job['priority']) == 0
+            if not fresh_lane:
                 reservation = self._reserve_backfill_speech(
                     job['owner_id'],
                     job['projection_binding']['content_id'],
@@ -518,7 +680,7 @@ class Simulation:
         return {'allowed': allowed, 'retry_after': retries}
 
     # ------------------------------------------------------------- batch path
-    def _items_for(self, upload: UploadSpec, generation: int) -> list[WorkItem]:
+    def _items_for(self, upload: UploadSpec, generation: int, *, compute: bool = True) -> list[WorkItem]:
         base = self.clock.start + upload.at - upload.recording_age
         priority = priority_for(upload.lane, upload.recording_age)
         items, offset = [], 0.0
@@ -537,7 +699,7 @@ class Simulation:
                     unit_kind='conversation' if target else 'capture_span',
                     conversation_id=target or chunk_identity(upload.owner, 'omi', None, False, capture_at),
                     privacy_generation=generation,
-                    requires_compute_admission=True,
+                    requires_compute_admission=compute,
                 )
             )
         return items
@@ -545,10 +707,26 @@ class Simulation:
     def _accept_batch(self, record: UploadRecord) -> None:
         """Mirrors utils/batch_pipeline/intake.accept_upload around the REAL admit() transaction."""
         upload = record.spec
+        record.policy = self.config.policy or resolve_batch_policy(upload.owner, flags=self._policy_flags('admission'))
+        if not record.policy.batch_enabled:
+            record.status = 'rejected_other'
+            return
+        # C8, as intake: a language Parakeet cannot serve takes the provider stage once legacy is
+        # draining or dark; the admission policy records the route actually taken.
+        route = resolve_route(self.config.language, byok=self.config.byok)
+        provider = self.config.legacy_sync != 'on' and route.stt_route == 'provider'
+        stamp = {
+            'stt_route': 'provider' if provider else 'parakeet',
+            'provider_reason': route.provider_reason if provider else ('byok' if self.config.byok else 'none'),
+            'provider_service': route.provider_service if provider else 'none',
+        }
+        if any(getattr(record.policy, key) != value for key, value in stamp.items()):
+            record.policy = replace(record.policy, **stamp)  # an explicit replay policy is kept as given
+        wakes: dict[str, str] = {}
         target = self._target_id(upload) if upload.target else None
         try:
             generation = self.customer.check(upload.owner, (target,) if target else ())
-            items = self._items_for(upload, generation)
+            items = self._items_for(upload, generation, compute=not provider)
             binding = ProjectionBinding(
                 owner_id=upload.owner,
                 job_id='bp_' + (upload.duplicate_of or upload.upload_id),
@@ -556,7 +734,7 @@ class Simulation:
                 segment_ids=tuple(item.segment_id for item in items),
                 target_conversation_id=target,
                 privacy_generation=generation,
-                language='en',
+                language=self.config.language,
             )
             outcome = batch_pipeline_intake.admit(
                 self.store,
@@ -564,6 +742,7 @@ class Simulation:
                 binding,
                 self.clock.now,
                 namespace=self.store.namespace,
+                policy=record.policy,
                 intake={
                     'owner_id': upload.owner,
                     'content_id': upload.content_id,
@@ -571,6 +750,7 @@ class Simulation:
                     'total_audio_seconds': sum(item.duration_seconds for item in items),
                     'lane': upload.lane,
                 },
+                enqueue=provider_enqueue(route, _ProviderOutbox(), wakes) if provider else None,
             )
         except BatchPrivacyBlocked:
             record.status = 'rejected_privacy'  # accept_upload -> 409 sync_batch_privacy_blocked
@@ -582,6 +762,11 @@ class Simulation:
             record.status = 'deduplicated'
             self.counters['duplicate_uploads_deduplicated'] += 1
             return
+        loop = asyncio.get_running_loop()
+        for row_id in wakes:  # Cloud Tasks model: one hop after the admission transaction commits
+            loop.call_later(
+                self.config.task_hop_seconds, lambda sid=row_id: loop.create_task(self._provider_delivery(sid))
+            )
         record.status = 'admitted'
         record.accepted_at = self.clock.now
         record.job_id = binding.job_id
@@ -647,6 +832,7 @@ class Simulation:
                     break  # partially committed binding holds the cursor
 
     async def _project(self, record: UploadRecord) -> None:
+        policy_store.load_stage_policy(self.store, record.segment_ids[0], 'projection')
         try:
             audio = sum(self.truth[sid]['duration'] for sid in record.segment_ids)
             await self.sync_exec.run('projection', self.config.projection_seconds + 0.001 * audio)
@@ -668,10 +854,15 @@ class Simulation:
                     ),
                 )
                 self.store.mutate('jobs', sid, lambda row: row.update(client_status='completed'))
+                self._advance_projection_watermark(sid)
             self.store.mutate(
                 'content',
                 f'{record.spec.owner}/{record.spec.content_id}',
                 lambda row: row.update(status='completed', updated_at=now),
+            )
+            # Production ProjectionStore re-copies its siblings to the A2 shadow after commit (no-op otherwise).
+            mirror_refresh(
+                getattr(self.store, 'namespace', ''), [(t, s) for s in record.segment_ids for t in ('jobs', 'results')]
             )
             record.projected_at = now
             if record.has_words:
@@ -679,10 +870,32 @@ class Simulation:
         finally:
             record.projecting = False
 
+    def _advance_projection_watermark(self, segment_id: str) -> None:
+        """MODEL of ProjectionSession.persist: the owner's projection watermark is its furthest projected log row."""
+        entry = self.store.rows[('results', segment_id)]
+        owner = self.store.rows.get(('owners', entry['owner_key']), {})
+        current = self.store.rows.get(('results', owner.get('projection_watermark') or ''), {})
+        if entry['log_sequence'] > current.get('log_sequence', 0):
+            self.store.mutate('owners', entry['owner_key'], lambda row: row.update(projection_watermark=segment_id))
+
     # ---------------------------------------------------------- first summary
     async def _start_summary(self, record: UploadRecord) -> None:
+        if record.first_summary_policy is None:
+            record.first_summary_policy = self._stage_policy(record.spec.owner, 'first_summary')
         if record.summary_pending_at is None:
             record.summary_pending_at = self.clock.now
+            for sid in record.segment_ids:
+                self.store.mutate(
+                    'jobs',
+                    sid,
+                    lambda row: row.update(
+                        policy_parts={
+                            **row.get('policy_parts', {}),
+                            'first_summary': record.first_summary_policy.to_dict(),
+                        }
+                    ),
+                )
+            mirror_refresh(getattr(self.store, 'namespace', ''), [('jobs', s) for s in record.segment_ids])
         record.summary_dispatches += 1
         record.summary_inflight = True
         mode = self.config.summary_dispatch
@@ -729,7 +942,7 @@ class Simulation:
         for index in range(self.config.gpu_pumps):
             worker = SimWorker(self, index)
             pump = Pump(
-                Scheduler(self.store, pool='batch'),
+                Scheduler(self.store, pool='batch', worker_id=f'worker-{index}'),
                 worker,
                 batch_size=self.config.pump_batch_size,
                 capacity=lambda: PoolCapacity(
@@ -749,7 +962,21 @@ class Simulation:
                     self.counters[f'serving_error_{type(error).__name__}'] += 1
                 await asyncio.sleep(self.config.serving_interval_seconds)
 
-        self._supervisor = self.revision.spawn('batch_pipeline_serving', supervise())
+        async def dispatch_recovery():
+            # Mirrors start_serving_from_env's recovery dispatch loop.
+            while True:
+                interval = recovery_dispatch_interval_seconds()
+                if interval > 0:
+                    try:
+                        self.serving.dispatch_recovery()
+                    except Exception as error:
+                        self.counters[f'recovery_dispatch_error_{type(error).__name__}'] += 1
+                await asyncio.sleep(interval if interval > 0 else self.config.serving_interval_seconds)
+
+        async def run():
+            await asyncio.gather(supervise(), dispatch_recovery())
+
+        self._supervisor = self.revision.spawn('batch_pipeline_serving', run())
 
     async def _replace_revision(self) -> None:
         await asyncio.sleep(self.config.revision_replacement_at)

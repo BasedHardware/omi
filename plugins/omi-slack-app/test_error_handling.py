@@ -6,6 +6,7 @@ Uses Python stdlib only.
 """
 import asyncio
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import types
@@ -122,7 +123,15 @@ class SlackErrorHandlingTests(unittest.TestCase):
         self.patcher_client.start()
         self.addCleanup(self.patcher_client.stop)
 
+        os.environ.setdefault("SLACK_SETTINGS_SECRET", "test-slack-settings-secret")
+        self.auth_mod = load_module("slack_settings_auth", "slack_settings_auth.py")
+        self.patcher_auth = patch.dict(sys.modules, {"slack_settings_auth": self.auth_mod})
+        self.patcher_auth.start()
+        self.addCleanup(self.patcher_auth.stop)
         self.main_mod = load_module("slack_handler", "main.py")
+
+    def _authed_request(self, uid="test-uid"):
+        return types.SimpleNamespace(cookies={self.auth_mod.COOKIE_NAME: self.auth_mod.session_value(uid)})
 
     def test_auth_start_hides_raw_exception(self):
         with patch.object(self.main_mod.slack_client, "get_authorization_url", side_effect=RuntimeError("internal /private/key.pem leak")):
@@ -135,19 +144,19 @@ class SlackErrorHandlingTests(unittest.TestCase):
 
     def test_update_channel_hides_raw_exception(self):
         with patch.object(self.main_mod.SimpleUserStorage, "update_channel_selection", side_effect=RuntimeError("disk error /var/secrets")):
-            res = asyncio.run(self.main_mod.update_channel(uid="test-uid", channel="C999"))
+            res = asyncio.run(self.main_mod.update_channel(self._authed_request("test-uid"), uid="test-uid", channel="C999"))
             self.assertEqual(res, {"success": False, "error": "Failed to update default channel"})
             self.assertNotIn("secrets", str(res))
 
     def test_refresh_channels_hides_raw_exception(self):
         with patch.object(self.main_mod.slack_client, "list_channels", side_effect=RuntimeError("auth token leak xoxb-secret")):
-            res = asyncio.run(self.main_mod.refresh_channels(uid="test-uid"))
+            res = asyncio.run(self.main_mod.refresh_channels(self._authed_request("test-uid"), uid="test-uid"))
             self.assertEqual(res, {"success": False, "error": "Failed to refresh channels"})
             self.assertNotIn("xoxb-secret", str(res))
 
     def test_logout_hides_raw_exception(self):
         self.storage_mod.save_users.side_effect = RuntimeError("corrupted database file /etc/shadow")
-        res = asyncio.run(self.main_mod.logout(uid="test-uid"))
+        res = asyncio.run(self.main_mod.logout(self._authed_request("test-uid"), uid="test-uid"))
         self.assertEqual(res, {"success": False, "error": "Failed to log out"})
         self.assertNotIn("shadow", str(res))
 

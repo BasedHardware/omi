@@ -1,4 +1,7 @@
-"""``python -m testing.pipeline_sim run <scenario> [--seed N] [--json] [--param key=value ...]``."""
+"""``python -m testing.pipeline_sim run <scenario> [--seed N] [--json] [--param key=value ...]``.
+
+``python -m testing.pipeline_sim projection-drain [--mode M ...] [--rows N] [--owners N]``.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +11,7 @@ import logging
 import sys
 
 from testing.hermetic_network import block_outbound_network
+from testing.pipeline_sim import projection_drain
 from testing.pipeline_sim.scenarios import SCENARIOS, run
 
 
@@ -27,10 +31,25 @@ def main(argv: list[str] | None = None) -> int:
     runner.add_argument('--seed', type=int, default=1)
     runner.add_argument('--json', action='store_true', help='print the full sample as JSON')
     runner.add_argument('--param', action='append', default=[], help='scenario parameter key=value (JSON value)')
+    drain = commands.add_parser('projection-drain', help='owner-chain projection rows/min per mode')
+    drain.add_argument('--mode', action='append', choices=sorted(projection_drain.MODES))
+    drain.add_argument('--rows', type=int, default=1200)
+    drain.add_argument('--owners', type=int, default=1)
     args = parser.parse_args(argv)
     if args.command == 'list':
         for name, factory in sorted(SCENARIOS.items()):
             print(f'{name}: {(factory.__doc__ or "").strip().splitlines()[0]}')
+        return 0
+    if args.command == 'projection-drain':
+        with block_outbound_network():
+            for mode in args.mode or list(projection_drain.MODES):
+                result = projection_drain.run(mode, rows=args.rows, owners=args.owners)
+                print(
+                    f"{mode}: rows/owner={result['rows_per_owner']} owners={result['owners']} "
+                    f"rows_per_min min={result['rows_per_min_min']} max={result['rows_per_min_max']} "
+                    f"all_persisted={result['all_persisted']} chain_order={result['chain_order']} "
+                    f"check_transactions={result['check_transactions']} result_loads={result['result_loads']}"
+                )
         return 0
     params = dict(item.split('=', 1) for item in args.param)
     logging.disable(logging.CRITICAL)  # product code logs every transition; the sample is the output

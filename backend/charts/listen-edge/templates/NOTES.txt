@@ -1,0 +1,5 @@
+listen-edge {{ .Chart.AppVersion }} deployed as {{ include "listen-edge.fullname" . }}.
+
+Shadow ingest: ws://{{ include "listen-edge.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/v1/shadow
+Set EDGE_SHADOW_URL to that on backend-listen; the mirror stays off until the
+lead ramps EDGE_SHADOW_PERCENT above 0 (see backend/docs/runbooks/edge-shadow-rollout.md).

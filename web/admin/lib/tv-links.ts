@@ -1,9 +1,18 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { DEV_BYPASS_ENABLED } from "@/lib/dev-auth";
 import { getDb } from "@/lib/firebase/admin";
+import { accessFor, hasScope } from "@/lib/admin-access";
 
 export const TV_LINKS_COLLECTION = "admin_tv_links";
 export const DEFAULT_TV_LINK_TTL_DAYS = 90;
+/**
+ * TV links open the `omi-tv-v2` Business board (revenue, MRR, cost panels),
+ * so they carry the issuer's finance:read: issuing requires it, and the
+ * kiosk re-checks the issuer still holds it on every view.
+ */
+export const TV_LINK_BOARD_SCOPE = "finance:read" as const;
+// The issuer's access lives here (same collection as lib/team/roster's).
+const ADMIN_COLLECTION = "adminData";
 
 export type TvLinkRecord = {
   tokenHash: string;
@@ -74,9 +83,13 @@ export function safeEqualHex(a: string, b: string): boolean {
   }
 }
 
-function toPublic(id: string, data: TvLinkRecord): TvLinkPublic {
+function toPublic(
+  id: string,
+  data: TvLinkRecord,
+  revealToken = true
+): TvLinkPublic {
   const token =
-    typeof data.token === "string" && data.token.length >= 16
+    revealToken && typeof data.token === "string" && data.token.length >= 16
       ? data.token
       : null;
   return {
@@ -97,8 +110,12 @@ function toPublic(id: string, data: TvLinkRecord): TvLinkPublic {
 /**
  * List TV links newest-first. Pages through Firestore so older active links
  * remain revocable (a hard limit would hide leaked long-lived URLs).
+ * `revealTokens: false` strips the share tokens (the capability itself) for
+ * callers without finance:read; metadata and revocation stay available.
  */
-export async function listTvLinks(): Promise<TvLinkPublic[]> {
+export async function listTvLinks(
+  options: { revealTokens?: boolean } = {}
+): Promise<TvLinkPublic[]> {
   const pageSize = 200;
   const maxPages = 25; // hard cap 5_000 rows
   const out: TvLinkPublic[] = [];
@@ -113,7 +130,11 @@ export async function listTvLinks(): Promise<TvLinkPublic[]> {
     const snap = await q.get();
     if (snap.empty) break;
     for (const d of snap.docs) {
-      const pub = toPublic(d.id, d.data() as TvLinkRecord);
+      const pub = toPublic(
+        d.id,
+        d.data() as TvLinkRecord,
+        options.revealTokens ?? true
+      );
       if (pub.status === "revoked") continue;
       out.push(pub);
     }
@@ -169,7 +190,10 @@ export async function createTvLink(input: {
   };
 }
 
-export async function revokeTvLink(id: string): Promise<TvLinkPublic | null> {
+export async function revokeTvLink(
+  id: string,
+  options: { revealToken?: boolean } = {}
+): Promise<TvLinkPublic | null> {
   const ref = getDb().collection(TV_LINKS_COLLECTION).doc(id);
   const snap = await ref.get();
   if (!snap.exists) return null;
@@ -179,13 +203,35 @@ export async function revokeTvLink(id: string): Promise<TvLinkPublic | null> {
     await ref.update({ revokedAt });
     data.revokedAt = revokedAt;
   }
-  return toPublic(id, data);
+  return toPublic(id, data, options.revealToken ?? true);
 }
 
 export type ResolvedTvLink = {
   id: string;
   label: string;
 };
+
+/**
+ * The link's authority is its issuer's finance:read, not the token alone:
+ * the issuer must still be an admin and still hold it. A revoked or demoted
+ * issuer's links stop opening the Business board immediately.
+ */
+export async function issuerHoldsBoardScope(
+  createdBy: string
+): Promise<boolean> {
+  if (!createdBy) return false;
+  try {
+    const snap = await getDb()
+      .collection(ADMIN_COLLECTION)
+      .doc(createdBy)
+      .get();
+    if (!snap.exists) return false;
+    return hasScope(accessFor(snap.data()), TV_LINK_BOARD_SCOPE);
+  } catch (error) {
+    console.error("resolve TV issuer:", error);
+    return false;
+  }
+}
 
 /**
  * Resolve a raw TV path token to an active link.
@@ -208,6 +254,9 @@ export async function resolveActiveTvToken(
     const data = snap.data() as TvLinkRecord;
     if (!safeEqualHex(data.tokenHash || tokenHash, tokenHash)) return null;
     if (!isTvLinkActive(data)) return null;
+    // Re-validate the issuer before the link can refresh anything: a link
+    // outlives its issuer's access only if the issuer still holds finance:read.
+    if (!(await issuerHoldsBoardScope(data.createdBy))) return null;
 
     const now = Date.now();
     if (!data.lastUsedAt || now - data.lastUsedAt > 60_000) {

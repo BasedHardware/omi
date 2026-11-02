@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from config import stt_cap_dispatch as flag
@@ -98,6 +100,51 @@ async def test_held_constructor_resumes_after_reset_without_reopening_capture(mo
     raw.finish.assert_called_once()
 
 
+async def test_cap_held_idle_reopen_keeps_origin_when_later_admitted(monkeypatch):
+    from utils.observability import demand_cohort as telemetry
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    state = cap.LiveAdmission('synthetic')
+    factory = AsyncMock(side_effect=lambda rate: SimpleNamespace(meter=telemetry.create_wire_meter('soniox', rate)))
+    connect = cap.live_provider('soniox', 0)(factory)
+    admission_token = cap.current_live_admission.set(state)
+    origin_token = telemetry.current_transport_origin.set('idle_reopened')
+    try:
+        socket = await connect(16000)
+        assert socket.raw is None
+        factory.assert_not_called()
+    finally:
+        cap.current_live_admission.reset(admission_token)
+        telemetry.current_transport_origin.reset(origin_token)
+    state.managed, state.remaining = True, 10
+    await socket.resume()
+    assert socket.raw.meter.origin == 'idle_reopened'
+    assert telemetry.current_transport_origin.get() == 'initial'
+
+
+@pytest.mark.parametrize('flag', [None, 'true', 'false', '0', 'off'])
+def test_cap_proxy_preserves_provider_finalize_arguments(monkeypatch, flag):
+    if flag is None:
+        monkeypatch.delenv('STT_CAP_FINALIZE_FORWARD_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('STT_CAP_FINALIZE_FORWARD_ENABLED', flag)
+    raw = Mock(finalize=Mock(return_value='finalized'))
+    state = cap.LiveAdmission('synthetic')
+    socket = cap.CapSocket(state, 'parakeet', 16000, AsyncMock(), raw)
+    assert socket.finalize(vad_pause=True) == 'finalized'
+    if flag in {'false', '0', 'off'}:
+        raw.finalize.assert_called_once_with()
+    else:
+        raw.finalize.assert_called_once_with(vad_pause=True)
+
+
+def test_cap_finalize_while_held_never_opens_provider():
+    factory = AsyncMock()
+    socket = cap.CapSocket(cap.LiveAdmission('synthetic'), 'parakeet', 16000, factory)
+    assert socket.finalize(vad_pause=True) is None
+    factory.assert_not_called()
+
+
 async def test_resumed_registry_leg_unwraps_nested_provider_and_debits_once(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     state = cap.LiveAdmission('synthetic')
@@ -124,6 +171,34 @@ def test_queued_sync_always_resolves_omi_funding(managed, monkeypatch):
     monkeypatch.setattr('utils.subscription.resolve_transcription_allowance', resolver)
     assert cap.sync_allowed('synthetic', 60, 'parakeet') is managed
     resolver.assert_called_once_with('synthetic', source=None, byok_active=False, omi_funded=True)
+
+
+@pytest.mark.parametrize(
+    'allowance_reason, expected',
+    [
+        ('plan_allowance_exhausted', 'allowance_exhausted'),
+        ('usage_budget_exhausted', 'budget_exhausted'),
+        ('allowance_unavailable', 'allowance_unavailable'),
+        ('usage_invalid', 'allowance_unavailable'),
+        ('something_new', 'access_denied'),
+    ],
+)
+def test_sync_admission_surfaces_the_bounded_hold_reason(allowance_reason, expected, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    resolver = Mock(return_value=SimpleNamespace(managed=False, reason=allowance_reason))
+    monkeypatch.setattr('utils.subscription.resolve_transcription_allowance', resolver)
+    allowed, reason = cap.sync_admission('synthetic', 60, 'parakeet', lane='batch', path=cap.DispatchPath.BATCH_GPU)
+    assert (allowed, reason) == (False, expected)
+
+
+def test_sync_admission_reports_entitled_allows_for_managed_owners(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    resolver = Mock(return_value=SimpleNamespace(managed=True, reason='plan_allowance_available'))
+    monkeypatch.setattr('utils.subscription.resolve_transcription_allowance', resolver)
+    assert cap.sync_admission('synthetic', 60, 'parakeet', lane='batch', path=cap.DispatchPath.BATCH_GPU) == (
+        True,
+        'entitled',
+    )
 
 
 @pytest.mark.parametrize('kind', ['recording', 'gated', 'managed', 'replay', 'idle-replay'])
@@ -416,3 +491,131 @@ def test_vad_preroll_observer_uses_actual_spans_not_current_input(monkeypatch):
         (b'\1\0' * 100, 16000, 100, True),
         (b'\2\0' * 200, 16000, 900, True),
     ]
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize(
+    'cohort,lanes,admitted',
+    [
+        (None, 'live', False),
+        ('', 'live', False),
+        ('uid:synthetic', 'live', True),
+        ('uid:other', 'live', False),
+        ('all', 'sync,batch', False),
+    ],
+)
+def test_actual_receiver_passes_authenticated_uid_and_live_lane(monkeypatch, ladder, cohort, lanes, admitted):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.delenv('STT_CAP_DISPATCH_COHORT', raising=False)
+    if cohort is not None:
+        monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', source='omi'),
+        state=SimpleNamespace(),
+        use_custom_stt=False,
+        is_multi_channel=True,
+    )
+    value = receiver.ListenReceiver(host, [], {})
+    assert (value.cap_admission is not None) is admitted
+    assert (value.live_hold is not None) is admitted
+    if admitted:
+        assert value.cap_admission.uid == 'synthetic'
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('cohort,lanes', [('', 'live,sync,batch'), ('uid:other', 'sync'), ('all', 'live')])
+def test_downstream_sync_boundary_has_no_allowance_reads_outside_scope(monkeypatch, ladder, cohort, lanes):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    allowance = Mock(side_effect=AssertionError('out-of-scope allowance read'))
+    monkeypatch.setattr(cap, 'funded_allowance', allowance)
+    assert cap.sync_allowed('synthetic')
+    allowance.assert_not_called()
+
+
+def test_unknown_downstream_lane_cannot_authorize_spend(monkeypatch):
+    with pytest.raises(ValueError, match='unknown cap dispatch lane'):
+        cap.sync_allowed('synthetic', lane='typo')
+
+
+def _identity_trap_host(shape, custom):
+    class RequestTrap(SimpleNamespace):
+        @property
+        def request(self):
+            raise AssertionError('cap bypass touched request')
+
+    class UIDTrap:
+        @property
+        def uid(self):
+            raise AssertionError('cap bypass touched uid')
+
+    if shape == 'request_raises':
+        return RequestTrap(is_multi_channel=True, use_custom_stt=custom, state=SimpleNamespace())
+    host = SimpleNamespace(is_multi_channel=True, use_custom_stt=custom, state=SimpleNamespace())
+    if shape == 'uid_missing':
+        host.request = SimpleNamespace(source='omi')
+    elif shape == 'uid_raises':
+        host.request = UIDTrap()
+    return host
+
+
+@pytest.mark.parametrize('shape', ['request_missing', 'request_raises', 'uid_missing', 'uid_raises'])
+def test_actual_receiver_flags_off_short_circuits_before_identity(monkeypatch, shape):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    scoped = Mock(side_effect=AssertionError('flag-off consulted scoped admission'))
+    monkeypatch.setattr(receiver, 'stt_cap_dispatch_enabled', scoped)
+    value = receiver.ListenReceiver(_identity_trap_host(shape, False), [], {})
+    assert value.cap_admission is None and value.live_hold is None
+    scoped.assert_not_called()
+
+
+@pytest.mark.parametrize('legacy,ladder', [(True, False), (False, True), (True, True)])
+@pytest.mark.parametrize('shape', ['request_missing', 'request_raises', 'uid_missing', 'uid_raises'])
+def test_actual_receiver_custom_stt_short_circuits_before_identity(monkeypatch, legacy, ladder, shape):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(legacy).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    scoped = Mock(side_effect=AssertionError('custom STT consulted scoped admission'))
+    monkeypatch.setattr(receiver, 'stt_cap_dispatch_enabled', scoped)
+    value = receiver.ListenReceiver(_identity_trap_host(shape, True), [], {})
+    assert value.cap_admission is None and value.live_hold is None
+    scoped.assert_not_called()
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('shape,error', [('uid_missing', AttributeError), ('uid_raises', AssertionError)])
+def test_actual_receiver_active_admission_requires_identity_without_fallback(monkeypatch, ladder, shape, error):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    with pytest.raises(error):
+        receiver.ListenReceiver(_identity_trap_host(shape, False), [], {})
+
+
+def test_actual_receiver_idle_cohort_armed_still_never_touches_identity(monkeypatch):
+    """The Soniox idle cohort resolves its uid lazily; even with the cohort
+    armed, receiver construction must not consult the listen request's identity
+    on a cap-bypass path (identity traps raise on touch)."""
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '30')
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    value = receiver.ListenReceiver(_identity_trap_host('request_raises', False), [], {})
+    assert value.soniox_idle_budget is not None

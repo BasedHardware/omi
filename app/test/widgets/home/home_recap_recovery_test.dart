@@ -9,7 +9,6 @@ import 'package:omi/pages/conversations/widgets/daily_recap_recovery_action.dart
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
-import '../../helpers/proactivity_fakes.dart';
 
 final recap = DailySummary(
     id: 'recovered',
@@ -21,9 +20,6 @@ final recap = DailySummary(
 typedef Page = ({List<DailySummary> items, bool ok});
 
 Future<void> pump(WidgetTester tester, RecentRecapsLoader load, {bool recover = false}) async {
-  final h = OutcomeHarness();
-  addTearDown(h.outbox.dispose);
-  await h.bind();
   await tester.pumpWidget(MaterialApp(
     theme: buildOmiTheme(),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -37,7 +33,7 @@ Future<void> pump(WidgetTester tester, RecentRecapsLoader load, {bool recover = 
           create: (_) async => ApiSuccess(recap),
           onCreated: (_) async {},
         ),
-      HomeDailyRecaps(load: load, outbox: h.outbox, loadFeed: (_) async => ApiSuccess(feedResponse(enabled: false))),
+      HomeDailyRecaps(load: load),
     ]))),
   ));
   await tester.pump();
@@ -77,15 +73,15 @@ void main() {
     expect(find.text(recap.headline), findsOneWidget);
   });
 
-  testWidgets('a Home recap read failure offers retry instead of disappearing', (tester) async {
+  testWidgets('a Home recap read failure shows nothing and the next refresh recovers', (tester) async {
     var reads = 0;
-    await pump(tester, () async => reads++ == 0 ? (items: <DailySummary>[], ok: false) : (items: [recap], ok: true));
+    await pump(tester, () async => reads++ == 0 ? (items: <DailySummary>[], ok: false) : (items: [recap], ok: true),
+        recover: true);
     await tester.pumpAndSettle();
-    expect(find.byType(OmiErrorState), findsOneWidget);
-    await tester.tap(find.text('Try Again'));
-    await tester.pumpAndSettle();
-    expect(find.text(recap.headline), findsOneWidget);
     expect(find.byType(OmiErrorState), findsNothing);
+    expect(find.text('Daily Recaps'), findsNothing);
+    await recover(tester);
+    expect(find.text(recap.headline), findsOneWidget);
   });
 
   testWidgets('shared arrivals refresh Home while a late read cannot resurrect a deleted recap', (tester) async {

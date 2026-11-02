@@ -528,9 +528,8 @@ void _printScreenMetrics(String screenName, List<FrameTiming> timings) {
   final p99Build = buildTimes[(buildTimes.length * 0.99).toInt()];
 
   // Janky frames (>16ms total frame time)
-  final jankyFrames = timings
-      .where((t) => t.buildDuration.inMilliseconds + t.rasterDuration.inMilliseconds > 16)
-      .length;
+  final jankyFrames =
+      timings.where((t) => t.buildDuration.inMilliseconds + t.rasterDuration.inMilliseconds > 16).length;
   final jankyPercent = (jankyFrames / timings.length * 100);
 
   debugPrint('      ┌─────────────────────────────────────');

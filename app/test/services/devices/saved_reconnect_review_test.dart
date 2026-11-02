@@ -22,6 +22,7 @@ void main() {
   final channels = <String>[];
   final calls = <String>[];
   final live = <String>{};
+  final nativeSavedIntent = <String>{};
   final owners = <DeviceService>[];
   void handle(String method, Object? Function(List<Object?>) body) {
     final name = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
@@ -49,12 +50,14 @@ void main() {
   setUp(() async {
     calls.clear();
     live.clear();
+    nativeSavedIntent.clear();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     handle('getBluetoothState', (_) => 'on');
     handle('stopScan', (_) => null);
     handle('configureSavedReconnect', (args) {
       calls.add('config:${args[0]}:${args[1]}');
+      args[1] == true ? nativeSavedIntent.add(args[0] as String) : nativeSavedIntent.remove(args[0]);
       return null;
     });
     handle('manageDevice', (args) {
@@ -92,13 +95,16 @@ void main() {
     final first = service();
     await first.reconnectSavedDevice('launch');
     first.reconnectPaused = true;
+    calls.clear();
     await first.disconnectDevice(a);
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(nativeSavedIntent, isEmpty);
     expect(SharedPreferencesUtil().getStringList('manualBleDisconnects'), isEmpty);
     await first.stop();
     final relaunched = service();
     await relaunched.reconnectSavedDevice('launch');
     expect(relaunched.connectionFor(a)?.status, DeviceConnectionState.connected);
-    expect(calls.where((value) => value == 'manage:$a'), hasLength(2));
+    expect(calls.where((value) => value == 'manage:$a'), hasLength(1), reason: 'calls were reset before DFU teardown');
     relaunched.savedReconnect.stop();
   });
 
@@ -107,13 +113,85 @@ void main() {
       await SharedPreferencesUtil().btDeviceSet(pendant(a));
       final owner = service();
       await owner.reconnectSavedDevice('launch');
+      calls.clear();
       await owner.recoverConnection(a, shouldRetry: () => continueEpisode);
+      expect(nativeSavedIntent, contains(a), reason: 'native owns reconnect even without a Dart follow-up');
+      expect(calls, isNot(contains('config:$a:false')));
       expect(SharedPreferencesUtil().getStringList('manualBleDisconnects'), isEmpty);
       if (!continueEpisode) await owner.reconnectSavedDevice('resume');
       expect(owner.connectionFor(a)?.status, DeviceConnectionState.connected);
       owner.savedReconnect.stop();
     });
   }
+
+  test('stop retires a native recovery owner after its Dart transport was released', () async {
+    await SharedPreferencesUtil().btDeviceSet(pendant(a));
+    final owner = service();
+    await owner.reconnectSavedDevice('launch');
+    await owner.recoverConnection(a, shouldRetry: () => false);
+    expect(owner.connectionFor(a), isNull);
+    expect(nativeSavedIntent, contains(a));
+    calls.clear();
+    await owner.stop();
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(nativeSavedIntent, isEmpty);
+  });
+
+  test('manual disconnect disarms native intent before transport teardown', () async {
+    await SharedPreferencesUtil().btDeviceSet(pendant(a));
+    final owner = service();
+    await owner.reconnectSavedDevice('launch');
+    calls.clear();
+    await owner.disconnectDevice(a, userInitiated: true);
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(nativeSavedIntent, isNot(contains(a)));
+    await owner.reconnectSavedDevice('resume');
+    expect(calls, isNot(contains('manage:$a')));
+  });
+
+  for (final hasTransport in [true, false]) {
+    test('manual disconnect still tears down when native disarm fails; transport=$hasTransport', () async {
+      await SharedPreferencesUtil().btDeviceSet(pendant(a));
+      final owner = service();
+      await owner.reconnectSavedDevice('launch');
+      if (!hasTransport) await owner.recoverConnection(a, shouldRetry: () => false);
+      calls.clear();
+      handle('configureSavedReconnect', (args) {
+        calls.add('config:${args[0]}:${args[1]}');
+        throw PlatformException(code: 'temporarily_unavailable');
+      });
+      await owner.disconnectDevice(a, userInitiated: true);
+      expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+      expect(owner.connectionFor(a), isNull);
+      expect(live, isNot(contains(a)));
+      expect(SharedPreferencesUtil().getStringList('manualBleDisconnects'), contains(a));
+      await owner.reconnectSavedDevice('resume');
+      expect(calls, isNot(contains('manage:$a')));
+      // Failed disarm stays tracked so service shutdown can retry it.
+      handle('configureSavedReconnect', (args) {
+        calls.add('retry:${args[0]}:${args[1]}');
+        return null;
+      });
+      await owner.stop();
+      expect(calls, contains('retry:$a:false'));
+    });
+  }
+
+  test('forget and service stop retire native ownership before teardown', () async {
+    await SharedPreferencesUtil().btDeviceSet(pendant(a));
+    final owner = service();
+    await owner.reconnectSavedDevice('launch');
+    calls.clear();
+    await owner.forgetDevice(a);
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(nativeSavedIntent, isEmpty);
+    await owner.ensureConnection(a, force: true);
+    await owner.reconnectSavedDevice('resume');
+    calls.clear();
+    await owner.stop();
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(nativeSavedIntent, isEmpty);
+  });
 
   test('kill mode ignores new manual flag and never writes new suppression', () {
     fakeAsync((async) {

@@ -108,7 +108,7 @@ def search_conversations(
     except ToolExecutionError as exc:
         raise HTTPException(status_code=exc.http_status or 503, detail=exc.message) from exc
     return {
-        'conversations': [conversation_card(row) for row in rows],
+        'conversations': [conversation_card(row, include_display=False) for row in rows],
         'search_coverage': 'summary_vectors_with_keyword_recovery',
         'message': 'Unindexed content may still match; browse a date window.' if not rows else None,
     }

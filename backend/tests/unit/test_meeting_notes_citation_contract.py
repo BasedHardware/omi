@@ -98,6 +98,7 @@ def test_recovery_is_scoped_to_the_owning_object():
                 'organization': 'Org [s01236]',
                 'role': 'Role []',
                 'source': 'transcript',
+                'evidence': 'Zoom tile [s01234]',
             }
         ],
         insights=[{'text': 'Insight [s01236]', 'kind': 'memory'}],
@@ -120,6 +121,7 @@ def test_recovery_is_scoped_to_the_owning_object():
         'role': 'Role',
         'source': 'transcript',
         'is_ai_agent': False,
+        'evidence': 'Zoom tile',
     }
     assert note.insights[0].text == 'Insight'
     assert note.events[0].title == 'Event'

@@ -84,8 +84,16 @@ class FakeVectorIndex:
     def __init__(self, embeddings: DeterministicEmbeddings):
         self.embeddings = embeddings
         self._vectors: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+        self._lsns: dict[str, int] = defaultdict(int)
+        self._indexed_lsns: dict[str, int] = defaultdict(int)
 
-    def upsert(self, vectors: list[dict[str, Any]], namespace: str = "") -> dict[str, int]:
+    def _ack(self, body: dict, namespace: str, data_only: bool, *, changed: bool):
+        self._lsns[namespace] += 1
+        if changed:
+            self._indexed_lsns[namespace] = self._lsns[namespace]
+        return body if data_only else (body, 200, {"x-pinecone-request-lsn": str(self._lsns[namespace])})
+
+    def upsert(self, vectors: list[dict[str, Any]], namespace: str = "", _return_http_data_only: bool = True):
         for item in vectors:
             vector_id = item["id"]
             values = item.get("values", [])
@@ -96,20 +104,22 @@ class FakeVectorIndex:
                 "metadata": dict(item.get("metadata") or {}),
                 "text": getattr(values, "text", "") or self.embeddings.text_for_id(vector_id) or "",
             }
-        return {"upserted_count": len(vectors)}
+        return self._ack({"upserted_count": len(vectors)}, namespace, _return_http_data_only, changed=bool(vectors))
 
-    def update(self, id: str, set_metadata: dict[str, Any], namespace: str = "") -> dict[str, int]:
+    def update(self, id: str, set_metadata: dict[str, Any], namespace: str = "", _return_http_data_only: bool = True):
+        updated = 0
         if id in self._vectors[namespace]:
             self._vectors[namespace][id]["metadata"].update(set_metadata)
-            return {"updated_count": 1}
-        return {"updated_count": 0}
+            updated = 1
+        return self._ack({"updated_count": updated}, namespace, _return_http_data_only, changed=bool(updated))
 
     def delete(
         self,
         ids: list[str] | None = None,
         namespace: str = "",
         filter: dict[str, Any] | None = None,
-    ) -> dict[str, int]:
+        _return_http_data_only: bool = True,
+    ):
         if ids is not None and filter is not None:
             raise ValueError("delete accepts ids or filter, not both")
         vector_ids = list(ids or [])
@@ -124,7 +134,21 @@ class FakeVectorIndex:
             if self._vectors[namespace].pop(vector_id, None) is not None:
                 deleted += 1
             self.embeddings.forget_vector_text(vector_id)
-        return {"deleted_count": deleted}
+        return self._ack({"deleted_count": deleted}, namespace, _return_http_data_only, changed=bool(deleted))
+
+    def fetch(self, ids: list[str], namespace: str = ""):
+        return {"vectors": {key: dict(self._vectors[namespace][key]) for key in ids if key in self._vectors[namespace]}}
+
+    def describe_index_stats(self):
+        return {"dimension": 16}
+
+    def _query(self, *, namespace: str = "", _return_http_data_only: bool = True, **kwargs):
+        body = self.query(namespace=namespace, **kwargs)
+        return (
+            body
+            if _return_http_data_only
+            else (body, 200, {"x-pinecone-max-indexed-lsn": str(self._indexed_lsns[namespace])})
+        )
 
     def list(self, prefix: str = "", namespace: str = ""):
         ids = [vector_id for vector_id in self._vectors[namespace] if vector_id.startswith(prefix)]
@@ -147,8 +171,12 @@ class FakeVectorIndex:
             metadata = item.get("metadata") or {}
             if not self._matches_filter(metadata, filter or {}):
                 continue
-            score = _score(query_text, item.get("text", ""))
-            if score <= 0.0:
+            score = (
+                _score(query_text, item.get("text", ""))
+                if query_text
+                else sum(a * b for a, b in zip(vector, item["values"]))
+            )
+            if query_text and score <= 0.0:
                 continue
             match = {"id": vector_id, "score": score}
             if include_metadata:
@@ -167,22 +195,40 @@ class FakeVectorIndex:
             return True
         for key, expected in filter_data.items():
             if key == "$and":
-                return all(self._matches_filter(metadata, clause) for clause in expected)
+                if not all(self._matches_filter(metadata, clause) for clause in expected):
+                    return False
+                continue
             if key == "$or":
-                return any(self._matches_filter(metadata, clause) for clause in expected)
+                if not any(self._matches_filter(metadata, clause) for clause in expected):
+                    return False
+                continue
 
             actual = metadata.get(key)
             if isinstance(expected, dict):
                 for op, value in expected.items():
+                    if op not in {"$eq", "$ne", "$in", "$nin", "$exists", "$gte", "$lte", "$gt", "$lt"}:
+                        raise ValueError(f"Unsupported fake Pinecone filter operator: {op}")
                     if op == "$eq" and actual != value:
+                        return False
+                    if op == "$ne" and actual == value:
+                        return False
+                    if op == "$exists" and (key in metadata) != bool(value):
                         return False
                     if op == "$in":
                         actual_values = actual if isinstance(actual, list) else [actual]
                         if not any(item in value for item in actual_values):
                             return False
+                    if op == "$nin":
+                        actual_values = actual if isinstance(actual, list) else [actual]
+                        if any(item in value for item in actual_values):
+                            return False
                     if op == "$gte" and (actual is None or actual < value):
                         return False
                     if op == "$lte" and (actual is None or actual > value):
+                        return False
+                    if op == "$gt" and (actual is None or actual <= value):
+                        return False
+                    if op == "$lt" and (actual is None or actual >= value):
                         return False
             elif actual != expected:
                 return False
@@ -195,4 +241,5 @@ def install_vector_search_fakes(monkeypatch, vector_db_module):
     index = FakeVectorIndex(embeddings)
     monkeypatch.setattr(vector_db_module, "embeddings", embeddings)
     monkeypatch.setattr(vector_db_module, "index", index)
+    monkeypatch.setattr(vector_db_module, "_pinecone_index_name", "hermetic-e2e-index")
     return index, embeddings

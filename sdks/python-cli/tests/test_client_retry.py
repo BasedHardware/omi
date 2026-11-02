@@ -619,6 +619,32 @@ def test_oauth_profile_sends_dev_key_on_dev_user_paths(config_path, respx_mock) 
     ), "the keys-mint route authenticates with the ID token, not a dev key"
 
 
+def test_oauth_profile_sends_dev_key_to_key_introspection(config_path, respx_mock) -> None:
+    """``GET /v1/dev/key`` is the dev key describing itself (``get_api_key_auth``
+    again, no Firebase fallback), and it is the first call ``auth login
+    --browser`` makes after minting the key. Sending the ID token there 401s,
+    which the login flow reads as a bad key and rolls the whole session back."""
+    from omi_cli.key_info import verify_key
+
+    store_oauth_tokens(
+        "default",
+        id_token="fresh_id_token",
+        refresh_token="refr_x",
+        expires_at=time.time() + 1800,
+        api_base="https://api.test.omi.local",
+        api_key="omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    key_route = respx_mock.get("/v1/dev/key").respond(json={"id": "k", "name": "omi-cli", "scopes": ["memories:read"]})
+
+    profile = cfg.load().get_profile("default")
+    with OmiClient(profile) as client:
+        assert verify_key(client) == (["memories:read"], None)
+
+    assert (
+        key_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ), "key introspection must carry the dev key it describes, not the JWT"
+
+
 def test_api_key_profile_sends_same_key_everywhere(config_path, respx_mock) -> None:
     """The api_key path is unchanged — one credential serves every family."""
     from omi_cli.auth.store import store_api_key

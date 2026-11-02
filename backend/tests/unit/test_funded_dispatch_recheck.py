@@ -1,5 +1,7 @@
 """Recheck paid dispatches after current-ledger writes, before factories or claims."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import ast
 from datetime import datetime, timezone
 from hashlib import sha256

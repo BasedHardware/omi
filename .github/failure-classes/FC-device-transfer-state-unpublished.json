@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-device-transfer-state-unpublished",
+  "violated_contract": "A device transfer must publish its running state on the recording the sync UI reads. Leaving isSyncing false keeps the page on Transfer to Phone with no progress or Cancel while bytes are being read.",
+  "canonical_prevention": "syncWal marks the listed recording as syncing before reading and clears the markers in finally. The regression test starts a transfer from a stale instance and asserts the listed one is syncing during the read and idle after it.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/ring_storage_sync_no_advance_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/ring_storage_sync.dart"
+  ],
+  "status": "open"
+}

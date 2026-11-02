@@ -53,6 +53,7 @@ async def ensure_plan(
         context = {
             'target_conversation_id': targets.get(path, meta.get('target_conversation_id')),
             'source_position_map': source_maps.get(path),
+            **({'recording_session_id': meta['recording_session_id']} if meta.get('recording_session_id') else {}),
             'lineage_binding': bindings.get(path, meta.get('lineage_binding')),
         }
         if row.get('live_custody_version') == 4:
@@ -70,6 +71,7 @@ async def ensure_plan(
                 'audio_codec': row['audio_codec'],
                 'sample_rate': rate,
                 'source_frames': row['source_frames'],
+                **({'opus_fragments': row['opus_fragments']} if row.get('opus_fragments') else {}),
                 'metadata': encoded_context,
                 'seconds': frames / rate,
                 'source_slice': {'start': position[1], 'frames': frames, 'sha256': digest},

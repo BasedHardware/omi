@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketState
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.observability.listen_close import note_ws_close
 from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -26,10 +27,16 @@ from utils.observability.fallback import (
     first_text_fallback_kwargs,
     record_fallback,
 )
-from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, normalize_live_stt_reason
+from utils.stt.live_reason import (
+    LIVE_STT_FAILURE_REASONS,
+    LOCAL_DELIVERY_DEATH_REASONS,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+    normalize_live_stt_reason,
+)
 from config.live_stt_recovery import recovery_enabled, session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.live_outcome import LiveLegOutcome
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -112,8 +119,19 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 _SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
 
 
+# Why a selection origin never served when it was not dialed. These are chain
+# decisions, not provider evidence, so they stay out of the live reason
+# vocabulary; normalizing them there would relabel a skipped route as an
+# untyped connection_lost death.
+SELECTION_SKIP_REASONS = frozenset(
+    {'circuit_open', 'last_resort', 'session_excluded', 'recovery_budget', 'policy', 'unconfigured'}
+)
+
+
 def fallback_metric_reason(reason: str | None) -> str:
     """Keep established account labels while sharing bounded source causes."""
+    if reason in SELECTION_SKIP_REASONS:
+        return reason
     if reason == PROVIDER_BUDGET_EXHAUSTED:
         return 'quota'
     if reason == PROVIDER_AUTH_REJECTED:
@@ -148,7 +166,12 @@ class PendingLiveFailover:
         capacity_subtype: str | None = None,
         source_outcome: LiveLegOutcome | None = None,
     ) -> None:
-        self.component, self.reason = component, normalize_live_stt_reason(reason)
+        self.component = component
+        self.reason = (
+            reason
+            if component == 'stt_selection' and reason in SELECTION_SKIP_REASONS
+            else normalize_live_stt_reason(reason)
+        )
         self.capacity_subtype = capacity_subtype
         self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
         self.first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None
@@ -157,6 +180,7 @@ class PendingLiveFailover:
         self._settled = False
         self._settlement_timer: asyncio.TimerHandle | None = None
         self.source_outcome = source_outcome
+        self.connection_cause: str | None = None
         pinned = getattr(source_outcome, 'recovery_enabled', None)
         self.recovery_enabled = pinned if type(pinned) is bool else recovery_enabled()
         if source_outcome is not None:
@@ -187,14 +211,20 @@ class PendingLiveFailover:
     @classmethod
     def from_socket(cls, source: object, from_mode: str, to_mode: str) -> 'PendingLiveFailover':
         """Capture the source cause before a successor can change the hop."""
-        return cls(
+        hop = cls(
             from_mode=from_mode,
             to_mode=to_mode,
             reason=live_stt_terminal_reason(source, 'connection_lost'),
             source_outcome=getattr(source, 'leg_outcome', None),
         )
+        hop.connection_cause = socket_connection_cause(source)
+        return hop
 
     def _emit(self, **kwargs: Any) -> None:
+        if kwargs.get('reason') == 'connection_lost':
+            cause = self.connection_cause or getattr(self.source_outcome, 'connection_cause', None)
+            if cause is not None:
+                kwargs['connection_cause'] = cause
         if self.source_outcome is None:
             record_fallback(**kwargs)
         else:
@@ -284,6 +314,7 @@ def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str, *
         reason=live_stt_terminal_reason(stt_socket, reason),
         source_outcome=outcome,
     )
+    hop.connection_cause = socket_connection_cause(stt_socket)
     hop.note_failure(None, continuing=departing)
 
 
@@ -329,6 +360,7 @@ async def terminate_live_stt_backoff(
         logger.warning('Unable to deliver terminal live STT status error_type=%s', type(error).__name__)
     try:
         await websocket.close(code=LIVE_STT_FAILURE_CLOSE_CODE, reason=LIVE_STT_FAILURE_CLOSE_REASON)
+        note_ws_close(session, 'server', LIVE_STT_FAILURE_CLOSE_CODE)
     except Exception as error:
         logger.info('Unable to close client after terminal live STT backoff error_type=%s', type(error).__name__)
     return sent
@@ -365,6 +397,15 @@ def live_stt_socket_is_dead(stt_socket: Any) -> bool:
         return True
 
 
+def socket_connection_cause(stt_socket: Any) -> str | None:
+    """Read a socket's bounded transport cause; observers never fail on it."""
+    try:
+        cause = getattr(stt_socket, 'connection_cause', None)
+    except Exception:
+        return None
+    return cause if isinstance(cause, str) else None
+
+
 def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:
     """Prefer a socket's typed provider rejection over the observing path's fallback.
 
@@ -388,6 +429,24 @@ def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:
     return normalize_live_stt_reason(typed, raw, fallback)
 
 
+def local_tail_terminal_reason(stt_socket: Any) -> str:
+    """The bounded local cause for a live tail that refused audio.
+
+    The owner's exhausted-recovery terminate has never voted on the provider
+    circuit (it reported a fixed local token before the P34 split), so it may
+    forward only a local-delivery token: a tail that died without latching one
+    — a residence-deadline write stall with the vendor socket still open — must
+    not surface as the default ``connection_lost`` and bench the provider from
+    this site. Provider deaths keep their attribution through the death monitor.
+    """
+
+    try:
+        typed = getattr(stt_socket, 'typed_death_reason', None)
+    except Exception:
+        typed = None
+    return typed if typed in LOCAL_DELIVERY_DEATH_REASONS else LOCAL_DELIVERY_SEND_QUEUE_FULL
+
+
 def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
     """Open the selection circuit when a socket died by provider-level rejection.
 
@@ -408,6 +467,16 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         typed = getattr(stt_socket, 'typed_death_reason', None)
     except Exception:
         return False
+    # Direct window POSTs already settled the contacted GPU's circuit. Never
+    # reclassify a pod failure as evidence against every sibling in the fleet.
+    # Credential/account evidence must still follow the hard family bench.
+    if provider == 'parakeet' and typed in {'provider_5xx', 'timeout', 'connection_lost', 'capacity_full'}:
+        try:
+            raw = getattr(stt_socket, 'raw', stt_socket)
+            if getattr(raw, 'replica_scoped', False) is True:
+                return True
+        except Exception:
+            pass  # observation must not prevent the normal terminal path
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
     endpoint: str | None = None
@@ -539,6 +608,7 @@ async def terminate_live_stt_session(
             code=LIVE_STT_FAILURE_CLOSE_CODE,
             reason=LIVE_STT_FAILURE_CLOSE_REASON,
         )
+        note_ws_close(session, 'server', LIVE_STT_FAILURE_CLOSE_CODE)
     except Exception as error:
         logger.info(
             'Unable to close client after terminal live STT failure error_type=%s',
@@ -646,10 +716,12 @@ async def send_live_stt_audio(
         # A socket that predates the capture-position seam: send without it.
         try:
             accepted = stt_socket.send(audio)
-        except Exception:
+        except Exception as error:
+            record_local_send_failure(provider, 'send_call', stt_socket, error)
             await _recoverable_failure('send_failed')
             return False
-    except Exception:
+    except Exception as error:
+        record_local_send_failure(provider, 'send_call', stt_socket, error)
         await _recoverable_failure('send_failed')
         return False
 

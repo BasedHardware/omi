@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 from database import durable_queue_age as ages
 from utils.other import fsr_leader_lease as leases
 
@@ -493,7 +494,13 @@ def _main_loop_functions():
         ],
         type_ignores=[],
     )
-    namespace = {'os': os, 'asyncio': asyncio, 'db_executor': None, 'logger': logging.getLogger('fsr_s2')}
+    namespace = {
+        'os': os,
+        'asyncio': asyncio,
+        'db_executor': None,
+        'logger': logging.getLogger('fsr_s2'),
+        'quiet_finalization_enabled': quiet_finalization_enabled,
+    }
     exec(compile(module, 'main_loop_functions', 'exec'), namespace)
     return namespace
 
@@ -558,17 +565,21 @@ def test_real_startup_and_periodic_bodies_are_leased_and_attributed(fleet, monke
 
 
 def test_cadence_defaults_overrides_and_ttl_floor(monkeypatch):
+    monkeypatch.delenv('LISTEN_QUIET_FINALIZATION_ENABLED', raising=False)
     namespace = _main_loop_functions()
     for key, function in [
         ('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '_listen_finalization_reconcile_interval_seconds'),
         ('DELETION_WIPE_RECONCILE_INTERVAL_SECONDS', '_deletion_wipe_reconcile_interval_seconds'),
     ]:
         monkeypatch.delenv(key, raising=False)
-        assert namespace[function]() == 300
+        expected = 60 if key == 'LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS' else 300
+        assert namespace[function]() == expected
         monkeypatch.setenv(key, '17')
         assert namespace[function]() == 17
         monkeypatch.setenv(key, 'bad')
-        assert namespace[function]() == 300
+        assert namespace[function]() == expected
+    monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'false')
+    assert namespace['_listen_finalization_reconcile_interval_seconds']() == 300
     monkeypatch.setenv('FSR_LEADER_LEASE_TTL_SECONDS', '2')
     assert leases._ttl_ms(300) > 300000
 

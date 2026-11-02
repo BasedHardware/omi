@@ -18,6 +18,7 @@ from database import recording_sessions
 from routers.listen.conversations import LiveConversationController
 from routers.listen.receiver import ListenReceiver
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 
 
 def _stored_conversation(segments: list[dict[str, Any]], *, level: str = 'standard') -> dict[str, Any]:
@@ -141,6 +142,23 @@ def test_session_open_atomically_marks_the_conversation_before_a_recovery_sweep(
         'recording_session_id': 'session',
     }
     assert ('users', 'uid', 'recording_sessions', 'session') in recording_store.documents
+
+
+def test_a_second_recording_joining_a_conversation_restamps_its_session_marker(recording_store):
+    """Occasion conversations (Episodes M3): a reconnect's new recording id continues the open
+    conversation, and sync lineage then finds it by that newest id, so the marker must move."""
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    recording_store.documents[conversation_path] = {'id': 'conversation', 'status': 'in_progress'}
+    recording_sessions.create_or_get_recording_session('uid', 'rec-a', 'conversation', firestore_client=recording_store)
+    joined = recording_sessions.create_or_get_recording_session(
+        'uid', 'rec-b', 'conversation', firestore_client=recording_store
+    )
+
+    assert joined['conversation_id'] == 'conversation'
+    assert recording_store.documents[conversation_path]['external_data'] == {'recording_session_id': 'rec-b'}
+    for recording in ('rec-a', 'rec-b'):
+        session = recording_store.documents[('users', 'uid', 'recording_sessions', recording)]
+        assert session['conversation_id'] == 'conversation'
 
 
 class _MinuteFramesWebSocket:
@@ -595,6 +613,8 @@ class _ResumeSessionController(LiveConversationController):
 
 async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
+    arms = []
+    monkeypatch.setattr(quiet_finalization, 'arm', lambda *a, **kw: arms.append((a, kw)))
 
     get_conversation_calls: list[str] = []
     conversation = {
@@ -626,6 +646,7 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
         get_conversation_calls == []
     ), f'transactional snapshot should avoid a second read, got {get_conversation_calls}'
     assert host.state.current_conversation_id == 'conversation-old'
+    assert arms == [(('uid', 'conversation-old', 120), {'requires_byok': False})]
 
 
 def _stored_conversation_with_audio(audio_files: list[dict[str, Any]]) -> dict[str, Any]:

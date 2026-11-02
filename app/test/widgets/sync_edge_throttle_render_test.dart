@@ -18,6 +18,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 class _ThrottledSync extends ChangeNotifier implements SyncProvider {
   @override
@@ -94,6 +95,13 @@ void main() {
           for (final font in entry['fonts'] as List<dynamic>) {
             loader.addFont(rootBundle.load(font['asset'] as String));
           }
+          await loader.load();
+        }
+
+        for (final family in ['SF Pro Display']) {
+          final loader = FontLoader(family);
+          loader.addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
+          loader.addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'));
           await loader.load();
         }
       });

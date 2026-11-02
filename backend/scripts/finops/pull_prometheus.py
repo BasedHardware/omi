@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """VAD-gated audio hours actually forwarded to the cloud STT vendors, per usage day.
 
-`omi_vad_gate_audio_seconds_total{outcome="sent"}` is the only measured quantity of vendor
-STT volume we have: there is no Modulate/Soniox invoice feed. Multiplying it by a rate gives
-the `stt_vendor_*` MODELLED component -- it is never presented as measured.
+`omi_vad_gate_audio_seconds_total{outcome="sent"}` is the measured quantity of vendor
+STT volume behind the `stt_vendor_*` MODELLED component -- it is never presented as
+measured. `omi_live_stt_audio_seconds_total{provider}` adds the per-provider VAD
+speech seconds (the modulate series feeds pull_modulate_modelled.py); Soniox exact
+daily dollars come from the org-balance snapshots instead (pull_vendor_balance.py).
 
 Read through the Grafana datasource proxy on monitor.omi.me (kubectl port-forward is denied
 to the read-only identity). Token from ~/.hermes/skills/devops/omi-prometheus/references/.env;
@@ -19,14 +21,22 @@ import datetime as dt
 import json
 import os
 import pathlib
-import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import auth_http  # noqa: E402
 
 ENV = pathlib.Path.home() / ".hermes/skills/devops/omi-prometheus/references/.env"
 
 DAILY = {
     "d_vad_gate_audio_seconds": 'sum by (outcome, mode) (increase(omi_vad_gate_audio_seconds_total[1d]))',
     "d_live_stt_accepted": "sum by (provider) (increase(omi_live_stt_accepted_total[1d]))",
+    # VAD speech seconds flushed per backend provider (speech sent, not wall-clock);
+    # the modulate series feeds the modelled vendor line (pull_modulate_modelled.py).
+    "d_live_stt_audio_seconds": "sum by (provider) (increase(omi_live_stt_audio_seconds_total[1d]))",
     "d_parakeet_audio_duration_sum": "sum (increase(parakeet_audio_duration_seconds_sum[1d]))",
 }
 
@@ -48,16 +58,17 @@ def load_env() -> tuple[str, str]:
 
 
 def call(base: str, tok: str, api: str, params) -> dict:
-    cmd = ["curl", "-fsS", "-H", "Authorization: Bearer " + tok, "--get", f"{base}/{api}"]
-    for k, v in params:
-        cmd += ["--data-urlencode", f"{k}={v}"]
-    p = subprocess.run(cmd, text=True, capture_output=True, timeout=300)
-    if p.returncode:
-        return {"status": "error", "error": p.stderr[:300]}
+    url = f"{base}/{api}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={"Authorization": "Bearer " + tok})
     try:
-        return json.loads(p.stdout)
-    except Exception as e:  # noqa: BLE001
-        return {"status": "error", "error": str(e)}
+        with auth_http.open_authenticated(request, timeout=300) as response:
+            return json.loads(response.read().decode())
+    except auth_http.RedirectRefused:
+        raise RuntimeError("prometheus redirect refused") from None
+    except urllib.error.HTTPError as error:
+        return {"status": "error", "error": "prometheus HTTP %d" % error.code}
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        return {"status": "error", "error": "prometheus transport/JSON failure"}
 
 
 def main() -> None:

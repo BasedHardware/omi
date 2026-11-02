@@ -39,7 +39,7 @@ def schedule(uid, name, now=1000, **kwargs):
         ),
         'task-' + name,
         now=now,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -114,6 +114,40 @@ def test_ready_priority_and_ceiling_escape(runtime):
     schedule('new-active', 'new-high', now=4540)
     # Reserving 60 seconds prevents perpetual tier-0 traffic starving old work.
     assert demand.admit('starved', now=4540)
+
+
+def test_blocked_wait_backs_off_and_still_wakes_at_the_ceiling_escape(runtime):
+    _, wake = runtime
+    report('active')
+    schedule('dormant', 'low', now=1000)
+    schedule('active', 'high', now=1000)
+    wake.reset_mock()
+    # One named task per blocked wait, BLOCKED_WAIT_SECONDS apart, not every 5 s.
+    assert not demand.admit('low', now=1240)
+    assert wake.call_count == 1
+    assert wake.call_args.kwargs['schedule_at'] == 1240 + config.BLOCKED_WAIT_SECONDS
+    # Close to the escape, the wait lands exactly on it rather than past it.
+    escape = 1000 + config.CEILING_HEADROOM_SECONDS
+    assert not demand.admit('low', now=escape - 10)
+    assert wake.call_args.kwargs['schedule_at'] == escape
+    # Under 5 s from the escape the minimum delay wins, still inside the headroom.
+    assert not demand.admit('low', now=escape - 3)
+    assert wake.call_args.kwargs['schedule_at'] == escape + 2 < 1000 + config.CEILING_SECONDS
+    assert demand.admit('low', now=escape)
+
+
+def test_surface_open_wakes_only_the_newest_bounded_debt(runtime):
+    redis, wake = runtime
+    for i in range(config.OPEN_PROMOTE_LIMIT + 5):
+        schedule('owner', f'debt-{i:02d}', now=1000 + i)
+    wake.reset_mock()
+    report('owner', now=1100)
+    woken = [c.args[2] for c in wake.call_args_list if '-open-' in c.args[2]]
+    assert len(woken) == config.OPEN_PROMOTE_LIMIT
+    newest = {f'task-debt-{i:02d}' for i in range(5, config.OPEN_PROMOTE_LIMIT + 5)}
+    assert {name.split('-open-')[0] for name in woken} == newest
+    # Older debt keeps its tier (and its ceiling) instead of joining tier 0.
+    assert json.loads(redis.get(demand.prefix() + 'debt-00'))['tier'] == 2
 
 
 def test_ceiling_not_reset_by_revision_or_redis_repair(runtime):

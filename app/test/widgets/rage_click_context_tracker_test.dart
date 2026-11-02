@@ -52,4 +52,41 @@ void main() {
     expect(captured, isNotNull);
     expect(captured!.target, anyOf('tap_target', 'unlabeled_surface'));
   });
+
+  testWidgets('resolves context with semantics off, as production iOS runs', (tester) async {
+    RageClickContext? captured;
+
+    await tester.pumpWidget(
+      RageClickContextTracker(
+        onContext: ({screenName, required target}) {
+          captured = RageClickContext(screenName: screenName, target: target);
+        },
+        child: MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(title: const Text('Settings')),
+            body: Column(children: [
+              ElevatedButton(onPressed: () {}, child: const Text('Retry sync')),
+              IconButton(onPressed: () {}, tooltip: 'More', icon: const Icon(Icons.more_horiz)),
+              Semantics(identifier: 'home_search', child: GestureDetector(onTap: () {}, child: const Text('Search'))),
+              GestureDetector(onTap: () {}, child: const Text('Private conversation title')),
+            ]),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.binding.semanticsEnabled, isFalse);
+
+    await tester.tap(find.text('Retry sync'));
+    expect(captured?.screenName, 'Settings');
+    expect(captured?.target, 'Retry sync');
+    await tester.tap(find.byType(IconButton));
+    expect(captured?.target, 'More');
+    await tester.tap(find.text('Search'));
+    expect(captured?.target, 'home_search');
+    // A plain tap target never sends its content.
+    await tester.tap(find.text('Private conversation title'));
+    expect(captured?.target, 'tap_target');
+    expect(tester.binding.semanticsEnabled, isFalse);
+  }, semanticsEnabled: false);
 }

@@ -18,6 +18,10 @@ from google.auth.transport.requests import AuthorizedSession
 ROOT = Path(__file__).resolve().parents[1] / 'deploy' / 'messaging'
 PROJECT = 'based-hardware'
 CONTEXT_RATE_POLICY = 'Messaging: shaped context degraded above 5%'
+# The job runs `python -m utils.messaging.maintenance`, which only the fat backend
+# image ships today and the backend-workers role image ships after the plan B B3
+# cutover (runtime_images.json: messaging-maintenance -> workers/backend-workers).
+MAINTENANCE_JOB_IMAGES = ('backend', 'backend-workers')
 
 
 def contains(actual, expected):
@@ -46,10 +50,12 @@ def request(session, method, url, **kwargs):
 
 
 def desired_job(image):
-    if not re.fullmatch(
-        r'(?:gcr.io|[a-z0-9-]+-docker.pkg.dev)/based-hardware/[a-zA-Z0-9_./-]+@sha256:[a-f0-9]{64}', image
-    ):
-        raise ValueError('An admitted production image pinned by sha256 is required')
+    admitted = '|'.join(re.escape(name) for name in MAINTENANCE_JOB_IMAGES)
+    if not re.fullmatch(rf'gcr\.io/{PROJECT}/(?:{admitted})@sha256:[a-f0-9]{{64}}', image):
+        raise ValueError(
+            'An admitted production image pinned by sha256 is required: '
+            + ' or '.join(f'gcr.io/{PROJECT}/{name}@sha256:<digest>' for name in MAINTENANCE_JOB_IMAGES)
+        )
     job = json.loads((ROOT / 'maintenance-job.json').read_text())
     job['template']['template']['containers'][0]['image'] = image
     return job
