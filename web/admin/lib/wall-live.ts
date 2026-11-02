@@ -74,11 +74,13 @@ export interface LiveDoc {
 const hasSpec = (svc: string) =>
   Object.prototype.hasOwnProperty.call(RATES.crSpecs, svc);
 
-/** Cloud Run services with no calibrated size: priced at the default size and
- * flagged as estimated (never silently). */
+/** Cloud Run services with no calibrated size, and request-billed services
+ * (`crRequestBilled`, whose request metrics are not metered): priced at an
+ * estimate and flagged, never silently. */
 export function estimatedServices(q: LiveQuantities): string[] {
+  const requestBilled = new Set<string>(RATES.crRequestBilled);
   return Object.keys(q.crInstanceSeconds)
-    .filter((svc) => !hasSpec(svc))
+    .filter((svc) => !hasSpec(svc) || requestBilled.has(svc))
     .sort();
 }
 

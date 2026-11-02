@@ -1,17 +1,28 @@
-/** Web read of the live metered document the `omi-tv-live` job writes to
- * `admin_stats_payload_cache/${LIVE_DOC_ID}` (same `{payload, freshAt}` shape as
- * the series store). Read-only here; any failure is "no live days", never a
- * guess: the margin then shows the settled days alone and says so. */
-import { LiveDoc, LIVE_DOC_ID, parseLiveDoc } from "./wall-live";
+/** Web read of the live metered rows the `omi-tv-live` job writes to
+ * `based-hardware.omi_tv.live_day` (see `wall-live-bq.ts`). Read-only here, with
+ * the admin runtime's own ADC (dataViewer on omi_tv). Any failure is "no live
+ * days", never a guess: the margin then shows the settled days alone and says so. */
+import { BigQuery } from "@google-cloud/bigquery";
+import { LiveDoc } from "./wall-live";
+import { buildLiveRead, liveDocFromRows, LiveRow } from "./wall-live-bq";
 
-const COLLECTION = "admin_stats_payload_cache";
+let client: BigQuery | null = null;
+const LIVE_WINDOW_DAYS = 14;
 
-export async function readLiveDoc(): Promise<LiveDoc | null> {
+export async function readLiveDoc(now = Date.now()): Promise<LiveDoc | null> {
   try {
-    const { getDb } = await import("@/lib/firebase/admin");
-    const snap = await getDb().collection(COLLECTION).doc(LIVE_DOC_ID).get();
-    const data = snap.exists ? (snap.data() as { payload?: string }) : null;
-    return parseLiveDoc(data?.payload ? JSON.parse(data.payload) : null);
+    client ??= new BigQuery({ projectId: "based-hardware" });
+    const lower = new Date(now - LIVE_WINDOW_DAYS * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const { query, params } = buildLiveRead(lower);
+    const [rows] = await client.query({
+      query,
+      params,
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+    return liveDocFromRows(rows as LiveRow[]);
   } catch {
     return null;
   }

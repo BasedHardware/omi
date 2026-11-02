@@ -3,25 +3,23 @@
  * Read-only against Monitoring; the only write is that one document, in a
  * transaction. Query set ported from the marginmeter prototype (margin.py).
  * Needs roles/monitoring.viewer on based-hardware and datastore.user there. */
-import * as admin from "firebase-admin";
+import { BigQuery } from "@google-cloud/bigquery";
 import { GoogleAuth } from "google-auth-library";
 import {
   LiveDay,
   LiveQuantities,
-  LIVE_DOC_ID,
+  DAY_MS,
   liveDates,
   liveWindow,
-  mergeLiveDoc,
   estimatedServices,
   meteredUsd,
-  parseLiveDoc,
 } from "../../lib/wall-live";
+import { buildLiveWrite } from "../../lib/wall-live-bq";
 import RATES from "../../lib/omi-tv-live-rates.json";
 
 const PROJECT = "based-hardware";
 const GMP_QUERY = `https://monitoring.googleapis.com/v1/projects/${PROJECT}/location/global/prometheus/api/v1/query`;
 const MON_SERIES = `https://monitoring.googleapis.com/v3/projects/${PROJECT}/timeSeries`;
-const COLLECTION = "admin_stats_payload_cache";
 const auth = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/monitoring.read"],
 });
@@ -213,19 +211,24 @@ export async function quantitiesFor(
   };
 }
 
-async function writeDoc(produced: LiveDay[], now: number) {
-  if (!admin.apps.length) admin.initializeApp({ projectId: PROJECT });
-  const db = admin.firestore();
-  const ref = db.collection(COLLECTION).doc(LIVE_DOC_ID);
-  await db.runTransaction(async (t) => {
-    const snap = await t.get(ref);
-    const stored = snap.exists
-      ? parseLiveDoc(JSON.parse(String(snap.data()?.payload ?? "null")))
-      : null;
-    t.set(ref, {
-      payload: JSON.stringify(mergeLiveDoc(stored, produced, now)),
-      freshAt: now,
-    });
+/** One transaction into `based-hardware.omi_tv.live_day` (finops-writer holds
+ * dataEditor on omi_tv). Only the produced days are written, so a day that was
+ * unavailable keeps its previous row, and a run that produced nothing never
+ * reaches here: its run time stays old and every live day reads stale. */
+async function writeRows(produced: LiveDay[], now: number) {
+  const bq = new BigQuery({ projectId: PROJECT });
+  const pruneBefore = new Date(now - 14 * DAY_MS).toISOString().slice(0, 10);
+  const { query, params } = buildLiveWrite(
+    produced,
+    new Date(now),
+    pruneBefore
+  );
+  await bq.query({
+    query,
+    params,
+    location: "US",
+    maximumBytesBilled: String(10 * 1024 * 1024),
+    jobTimeoutMs: 60_000,
   });
 }
 
@@ -268,7 +271,7 @@ export async function main(now = Date.now()) {
     );
     return;
   }
-  await writeDoc(produced, now);
+  await writeRows(produced, now);
   // Totals and dates only: no account, query or response detail.
   console.info(
     JSON.stringify({

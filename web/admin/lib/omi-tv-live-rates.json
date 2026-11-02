@@ -163,5 +163,9 @@
     "weekend": 467.28
   },
   "vertexReservedDay": 290.32,
-  "vertexPaygoDay": 21.16
+  "vertexPaygoDay": 21.16,
+  "crRequestBilled": [
+    "backend-sync-backfill"
+  ],
+  "_crBillingNote": "crRequestBilled: services the backend runbook (sync-cloudrun-rightsizing.md) names as request-based CPU billing. Their request metrics are not metered here, so they are priced at the instance-rate estimate and flagged estimated. Services not in crSpecs are estimated too."
 }

@@ -1140,7 +1140,9 @@ export function healthFrames(
         )}`) +
     (liveFlags.length ? ` · producer ${liveFlags.join(", ")}` : "") +
     (liveEstimated.length
-      ? ` · Cloud Run default size (est.): ${liveEstimated.join(", ")}`
+      ? ` · Cloud Run estimated (default size or request-billed, no request metrics): ${liveEstimated.join(
+          ", "
+        )}`
       : "");
   return {
     cost,

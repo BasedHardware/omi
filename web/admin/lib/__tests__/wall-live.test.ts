@@ -29,6 +29,7 @@ import {
   trailingMean,
 } from "../wall-live-margin";
 import RATES from "../omi-tv-live-rates.json";
+import { buildLiveWrite, liveDocFromRows } from "../wall-live-bq";
 
 const at = (day: string, hour = 12) =>
   Date.parse(`${day}T${String(hour).padStart(2, "0")}:00:00Z`);
@@ -475,5 +476,71 @@ describe("liveDayStates: the status names stale and missing live days", () => {
     const states = liveDayStates(doc, now);
     expect(states.find((s) => s.date === "2026-10-31")!.state).toBe("missing");
     expect(states.find((s) => s.date === "2026-11-01")!.state).toBe("stale");
+  });
+});
+
+describe("BigQuery live rows (item 9): write and read map one to one", () => {
+  it("builds one parameterised transaction per produced day plus a prune, with no interpolated values", () => {
+    const now = at("2026-11-02", 6);
+    const day = liveDay("2026-11-01", 1, now, 10);
+    const { query, params } = buildLiveWrite(
+      [{ ...day, estimated: ["x-svc"] }],
+      new Date(now),
+      "2026-10-19"
+    );
+    expect(query).toContain("BEGIN TRANSACTION");
+    expect(query).toContain("COMMIT TRANSACTION");
+    expect(query).toContain("based-hardware.omi_tv.live_day");
+    expect(query).not.toContain("2026-11-01"); // values travel as parameters
+    expect(params.d0).toBeDefined();
+    expect(params.e0).toBe("x-svc");
+  });
+
+  it("rebuilds the document from rows: runAt is the latest run, malformed rows are dropped", () => {
+    const now = at("2026-11-02", 6);
+    const rows = [
+      {
+        day: "2026-11-01",
+        produced_at: { value: new Date(now - 60_000).toISOString() },
+        run_at: { value: new Date(now - 60_000).toISOString() },
+        query_end: { value: new Date(at("2026-11-02", 0)).toISOString() },
+        fraction: 1,
+        cloud_run_usd: 10,
+        firestore_usd: 1,
+        gcs_usd: 1,
+        logging_usd: 1,
+        estimated_services: "a,b",
+      },
+      {
+        day: "2026-11-02",
+        produced_at: "x",
+        run_at: "x",
+        query_end: "x",
+        fraction: 1,
+        cloud_run_usd: NaN,
+        firestore_usd: 1,
+        gcs_usd: 1,
+        logging_usd: 1,
+        estimated_services: "",
+      },
+    ];
+    const doc = liveDocFromRows(rows);
+    expect(Object.keys(doc.days)).toEqual(["2026-11-01"]);
+    expect(doc.days["2026-11-01"].estimated).toEqual(["a", "b"]);
+    expect(doc.runAt).toBe(new Date(now - 60_000).toISOString());
+  });
+
+  it("request-billed backfill is estimated on the tile even though it has a size", () => {
+    expect(
+      estimatedServices({
+        crInstanceSeconds: { "backend-sync-backfill": 1, backend: 1 },
+        fsReads: 0,
+        fsWrites: 0,
+        gcsA: 0,
+        gcsB: 0,
+        logBytes: 0,
+        seen: { cloudRun: true, firestore: true, gcs: true, logging: true },
+      })
+    ).toEqual(["backend-sync-backfill"]);
   });
 });
