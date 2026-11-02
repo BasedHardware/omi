@@ -182,6 +182,30 @@ class ArtifactStore:
             raise ValueError('artifact must be an owner/segment-bound generation-pinned staging reference')
         return name, int(parsed.fragment)
 
+    def missing_audio_evidence(self, item: WorkItem, *, now: float) -> dict | None:
+        """Metadata GET only, pinned to the admitted immutable generation.
+
+        Permission/timeouts/generation mismatch propagate as unknown. Never
+        downloads, decrypts, lists, deletes, or registers an object.
+        """
+        context = self.authorize(item)
+        if item.privacy_generation is None or context.generation != item.privacy_generation:
+            raise PermissionError('batch artifacts require the admitted privacy generation')
+        name, generation = self._reference(item, item.audio_uri, 'audio')
+        blob = self.bucket.blob(name, generation=generation)
+        try:
+            blob.reload(if_generation_match=generation, timeout=30, retry=None)
+        except NotFound:
+            self._unchanged(item, context)
+            return {
+                'status': 404,
+                'generation': generation,
+                'uri_sha256': hashlib.sha256(item.audio_uri.encode()).hexdigest(),
+                'verified_at': now,
+            }
+        self._unchanged(item, context)
+        return None
+
     def _read(self, item: WorkItem, uri: str, kind: str, limit: int) -> bytes:
         context = self.authorize(item)
         if item.privacy_generation is None or context.generation != item.privacy_generation:

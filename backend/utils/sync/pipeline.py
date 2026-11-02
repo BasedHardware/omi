@@ -291,6 +291,7 @@ _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 _SYNC_FAILURE_REASON_CODES = {
+    'batch_artifact_missing',
     'backfill_capacity',
     'backfill_paced',
     'destructive_operation_in_progress',
