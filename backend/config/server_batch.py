@@ -12,11 +12,41 @@ from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, no
 MARKER = 'server_batch_only'
 AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
 SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
+AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
+
+
+def undeclared(host) -> bool:
+    params = getattr(getattr(host.request, 'websocket', None), 'query_params', None)
+    return isinstance(params, Mapping) and 'language' not in params
+
+
+def request_language(host) -> str:
+    # FastAPI's English default is a live compatibility choice, not a user
+    # declaration and never permission to label retained audio English.
+    return '' if undeclared(host) else normalized_stt_language(getattr(host.request, 'language', None))
+
+
+def capture_language(host):
+    return 'multi' if request_language(host) in AUTO_LANGUAGES else host.language
+
+
+def continuation_language(host, capture: Mapping | None = None):
+    if request_language(host) in AUTO_LANGUAGES:
+        if capture is None:
+            return None  # Find the prior pointer before validating its owner/language.
+        if owned(capture) and language_compatible(capture, request_language(host)):
+            return capture.get('language')
+    return getattr(host, 'language', None)
 
 
 def auto_selected(owner_id: str, platform: str | None) -> bool:
     percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0'))
-    return bool(platform in {'ios', 'android'} and owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent)
+    return bool(
+        platform in {'ios', 'android'}
+        and owner_id
+        and percent > 0
+        and cohort_bucket(owner_id, AUTO_COHORT_SALT) < percent
+    )
 
 
 def enabled() -> bool:
@@ -87,7 +117,7 @@ def language_compatible(capture: Mapping, language: str | None) -> bool:
 
 def capture_compatible(host, capture: Mapping) -> bool:
     return not owned(capture) or bool(
-        language_compatible(capture, host.request.language) and request_eligible(host, existing_capture=True)
+        language_compatible(capture, request_language(host)) and request_eligible(host, existing_capture=True)
     )
 
 
@@ -100,7 +130,7 @@ def suppress_live(host) -> bool:
     reason = request_reason(host, existing_capture=owned(capture))
     if not owned(capture) and not enabled():
         reason = 'not_enabled'
-    if reason is None and not language_compatible(capture, host.request.language):
+    if reason is None and not language_compatible(capture, request_language(host)):
         reason = 'profile_mismatch'
     if reason is None and not owned(capture):
         reason = 'capture_not_owned' if enabled() else 'not_enabled'
@@ -124,7 +154,7 @@ def request_eligible(host, *, existing_capture: bool = False) -> bool:
 
 def request_reason(host, *, existing_capture: bool = False) -> str | None:
     """A learned profile selects the cohort, never the recognizer language proof."""
-    language = normalized_stt_language(getattr(host.request, 'language', None))
+    language = request_language(host)
     profile = getattr(host, 'language_profile', None)
     primary = getattr(profile, 'primary', None)
     expected = getattr(profile, 'expected', ())
@@ -154,7 +184,11 @@ def request_reason(host, *, existing_capture: bool = False) -> str | None:
     if not existing_capture and not selected(host.request.uid, platform, host.request.source):
         return 'platform_unselected'
     resolved = normalized_stt_language(host.language)
-    if language != resolved and not (language in AUTO_LANGUAGES and resolved in AUTO_LANGUAGES):
+    if (
+        not undeclared(host)
+        and language != resolved
+        and not (language in AUTO_LANGUAGES and resolved in AUTO_LANGUAGES)
+    ):
         return 'profile_mismatch'
     auto = language in AUTO_LANGUAGES
     if auto:

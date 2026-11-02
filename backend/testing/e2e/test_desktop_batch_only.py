@@ -115,8 +115,9 @@ def test_native_desktop_custody_or_exact_live_rollback(
         else:
             sockets = install_streaming_stt_fake(monkeypatch)
         data = b'\x80' * 480 + b'\x90' * 480 + b'\x70' * 480
+        language_query = '' if language is None else f'language={language}&'
         with client.websocket_connect(
-            f'/v4/listen?language={language}&sample_rate=8000&codec=pcm8&source={source}&vad_gate=disabled',
+            f'/v4/listen?{language_query}sample_rate=8000&codec=pcm8&source={source}&vad_gate=disabled',
             headers={'Authorization': 'Bearer dev-token', 'X-App-Platform': platform},
         ) as websocket:
             session = receive_until(websocket, is_conversation_session_event)
@@ -139,6 +140,8 @@ def test_native_desktop_custody_or_exact_live_rollback(
             and (platform in {'macos', 'windows'} or mobile_percent == '100')
         ):
             assert owned(row) and not decoded.get('transcript_segments')
+            if language is None:
+                assert decoded['language'] == 'multi'  # No declared-English manifest bypass.
             assert row['has_content']
             assert not sockets
             expected = b'\x00\x00' * 480 + b'\x00\x10' * 480 + b'\x00\xf0' * 480
@@ -161,11 +164,12 @@ def test_native_desktop_custody_or_exact_live_rollback(
 
 
 @pytest.mark.parametrize('platform', ['ios', 'android'])
+@pytest.mark.parametrize('language', ['auto', None])
 @pytest.mark.parametrize(
     'auto_percent,learned', [('0', {'en': 100}), ('100', {'en': 100}), ('100', {'en': 50, 'ja': 50})]
 )
 def test_auto_mobile_preserves_original_custody_and_exclusions(
-    client, test_uid, monkeypatch, remote, platform, auto_percent, learned
+    client, test_uid, monkeypatch, remote, platform, auto_percent, learned, language
 ):
     test_native_desktop_custody_or_exact_live_rollback(
         client,
@@ -178,7 +182,7 @@ def test_auto_mobile_preserves_original_custody_and_exclusions(
         'omi',
         '100',
         False,
-        language='auto',
+        language=language,
         auto_percent=auto_percent,
         learned=learned,
     )

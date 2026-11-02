@@ -373,7 +373,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     current['language'] = language
     proofs = []
 
-    def prove(store, artifacts, item, manifest):
+    async def prove(store, artifacts, item, manifest):
         proofs.append(manifest)
         return {
             **manifest,

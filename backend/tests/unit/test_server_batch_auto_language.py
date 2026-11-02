@@ -3,6 +3,9 @@
 from types import SimpleNamespace
 import hashlib
 from unittest.mock import Mock
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
+import threading
 
 import pytest
 
@@ -121,6 +124,43 @@ def test_continuation_lookup_can_find_prior_owner_after_both_percentages_roll_ba
     assert server_batch.suppress_live(h)
 
 
+def test_missing_query_language_is_not_a_declared_english_route(monkeypatch):
+    h, row = mobile()
+    h.request.language = h.language = 'en'  # Real endpoint's compatibility default.
+    h.request.websocket = SimpleNamespace(query_params={})
+    h.language_profile.primary = 'en'
+    h.batch_record_capture = None
+    assert server_batch.request_language(h) == ''
+    assert not server_batch.request_eligible(h)
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '100')
+    assert server_batch.request_eligible(h)
+    assert server_batch.capture_language(h) == 'multi'
+    assert h.language == 'en'  # Legacy live provider choice is unchanged.
+    assert server_batch.continuation_language(h) is None
+    h.batch_record_capture = row
+    assert server_batch.suppress_live(h)
+    assert server_batch.continuation_language(h, row) == 'multi'
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0')
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0')
+    assert server_batch.request_eligible(h, existing_capture=True)
+    assert server_batch.suppress_live(h)
+
+
+def test_auto_percentage_samples_inside_mobile_instead_of_reusing_its_hash(monkeypatch):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '5')
+    monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '1')
+    mobile_count = joint = auto_outside_mobile = 0
+    for index in range(10000):
+        owner = f'synthetic-cohort-{index}'
+        selected = server_batch.selected(owner, 'ios', 'omi')
+        automatic = server_batch.auto_selected(owner, 'ios')
+        mobile_count += selected
+        joint += selected and automatic
+        auto_outside_mobile += automatic and not selected
+    assert auto_outside_mobile > 0
+    assert 0 < joint < mobile_count * 0.05  # Shared hashing admits 20%, not ~1%.
+
+
 @pytest.mark.parametrize(
     'change,reason',
     [
@@ -180,9 +220,9 @@ def classifiers(monkeypatch, *, seconds=65):
     return work, wav, vendor, own
 
 
-def test_every_window_has_two_proofs_and_worker_accepts_frozen_result(monkeypatch):
+async def test_every_window_has_two_proofs_and_worker_accepts_frozen_result(monkeypatch):
     work, wav, vendor, own = classifiers(monkeypatch)
-    proof = record_language.classify_wav(work, wav, Allowed())
+    proof = await record_language.classify_wav(work, wav, Allowed())
     assert proof['stt_language_windows'] == 3
     assert vendor.call_count == own.call_count == 3
     assert stt_language(proof, duration_seconds=65) == 'en'
@@ -194,7 +234,7 @@ def test_every_window_has_two_proofs_and_worker_accepts_frozen_result(monkeypatc
 @pytest.mark.parametrize(
     'failure', ['japanese_tail', 'vendor_unavailable', 'self_unsupported', 'low_confidence', 'self_duration']
 )
-def test_wrong_or_uncertain_language_never_reaches_parakeet(monkeypatch, failure):
+async def test_wrong_or_uncertain_language_never_reaches_parakeet(monkeypatch, failure):
     work, wav, vendor, own = classifiers(monkeypatch)
     if failure == 'japanese_tail':
         vendor.side_effect = [
@@ -209,31 +249,31 @@ def test_wrong_or_uncertain_language_never_reaches_parakeet(monkeypatch, failure
         own.return_value = SelfVerdict('en', 0.99, 0.999, 5)
     else:
         vendor.return_value = LanguageDecision('en', 0.79, 'audio_lid', 30)
-    proof = record_language.classify_wav(work, wav, Allowed())
+    proof = await record_language.classify_wav(work, wav, Allowed())
     assert stt_language(proof, duration_seconds=65) == 'und'
     worker, recognizer, saved, *_ = setup_worker(language_of=lambda _: stt_language(proof, duration_seconds=65))
     assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'vad_windows', 'unsupported_language')]
     assert not recognizer.calls and not saved
 
 
-def test_privacy_denial_cannot_be_downgraded_to_held_success(monkeypatch):
+async def test_privacy_denial_cannot_be_downgraded_to_held_success(monkeypatch):
     work, wav, vendor, own = classifiers(monkeypatch)
     denied = Mock(return_value=False)
     denied.raise_if_denied.side_effect = PermissionError('synthetic denial')
     with pytest.raises(PermissionError):
-        record_language.classify_wav(work, wav, denied)
+        await record_language.classify_wav(work, wav, denied)
     own.assert_not_called()
 
 
-def test_existing_declared_manifest_needs_no_new_io():
+async def test_existing_declared_manifest_needs_no_new_io():
     manifest = {'context': {'stt_language': 'en'}}
     artifacts = Mock()
-    assert record_language.prove_manifest(None, artifacts, None, manifest) is manifest
+    assert await record_language.prove_manifest(None, artifacts, None, manifest) is manifest
     artifacts.authorize.assert_not_called()
 
 
 @pytest.mark.parametrize('revoke', [False, True])
-def test_manifest_proof_binds_original_bytes_and_rechecks_privacy(monkeypatch, revoke):
+async def test_manifest_proof_binds_original_bytes_and_rechecks_privacy(monkeypatch, revoke):
     work, _, _, _ = classifiers(monkeypatch, seconds=2)
     pcm = b'\x01\x00' * 32000
     manifest = {
@@ -258,20 +298,44 @@ def test_manifest_proof_binds_original_bytes_and_rechecks_privacy(monkeypatch, r
     if revoke:
         artifacts.authorize.side_effect = [None, PermissionError('synthetic revocation')]
         with pytest.raises(PermissionError):
-            record_language.prove_manifest(None, artifacts, work, manifest)
+            await record_language.prove_manifest(None, artifacts, work, manifest)
     else:
-        result = record_language.prove_manifest(None, artifacts, work, manifest)
+        result = await record_language.prove_manifest(None, artifacts, work, manifest)
         assert result['context']['stt_language'] == 'en'
         assert result['references'] == manifest['references']
         assert artifacts.authorize.call_count == 2
     assert manifest['context'] == {'stt_language': 'multi'}  # No mutation of the original receipt.
 
 
-def test_vad_gaps_are_classified_instead_of_inheriting_first_speech_language(monkeypatch):
+async def test_vad_gaps_are_classified_instead_of_inheriting_first_speech_language(monkeypatch):
     work, wav, vendor, _ = classifiers(monkeypatch, seconds=65)
     monkeypatch.setattr(
         record_language, 'inspect_audio', lambda *_: (b'\x01\x00' * (16000 * 65), 65, [{'start': 0, 'end': 2}])
     )
     vendor.side_effect = [LanguageDecision('en', 0.99, 'audio_lid', 30), LanguageDecision('ja', 0.99, 'audio_lid', 30)]
-    assert record_language.classify_wav(work, wav, Allowed())['stt_language'] == 'und'
+    assert (await record_language.classify_wav(work, wav, Allowed()))['stt_language'] == 'und'
     assert vendor.call_count == 2
+
+
+async def test_slow_network_proof_never_occupies_shared_sync_worker(monkeypatch):
+    work, wav, vendor, _ = classifiers(monkeypatch, seconds=2)
+    started, release = threading.Event(), threading.Event()
+
+    def slow_probe(*args, **kwargs):
+        started.set()
+        assert release.wait(3)
+        return LanguageDecision('en', 0.99, 'audio_lid', 2)
+
+    vendor.side_effect = slow_probe
+    with ThreadPoolExecutor(1) as sync, ThreadPoolExecutor(1) as network:
+        monkeypatch.setattr(record_language, 'sync_executor', sync)
+        monkeypatch.setattr(record_language, 'record_language_executor', network)
+        task = asyncio.create_task(record_language.classify_wav(work, wav, Allowed()))
+        try:
+            assert await asyncio.to_thread(started.wait, 2)
+            assert await asyncio.wait_for(record_language.run_blocking(sync, lambda: True), 1)
+            assert not task.done()
+        finally:
+            release.set()
+            proof = await task
+        assert proof['stt_language'] == 'en'

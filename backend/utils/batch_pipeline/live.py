@@ -346,7 +346,7 @@ async def admit_recording(store, pending, *, now=None):
             'context': context,
         }
         if row.get('server_batch_only') is True:
-            manifest = await run_blocking(sync_executor, prove_manifest, store, artifacts, item, manifest)
+            manifest = await prove_manifest(store, artifacts, item, manifest)
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )

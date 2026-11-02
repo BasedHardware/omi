@@ -100,8 +100,10 @@ vendor replay or production-quality measurement.
 ## Mobile auto-language batch capture
 
 `SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT` defaults to **0**, independently of
-`SERVER_BATCH_ONLY_MOBILE_PERCENT`. Both owner-hash percentages and actual batch
-admission must select a new capture. This path admits only iOS/Android requests
+`SERVER_BATCH_ONLY_MOBILE_PERCENT`. The auto percentage uses its own stable
+`server_batch_auto_language_v1` hash salt, so 1% samples within the eligible
+mobile/batch cohort rather than taking 1% of all owners. Both percentages and
+actual batch admission must select a new capture. This path admits only iOS/Android requests
 whose language is auto, multi or undeclared, with an existing **learned** profile
 whose expected languages are all supported. A learned English-primary profile
 is cohort evidence, never permission to label a unit English. Missing learning,
@@ -109,6 +111,11 @@ an unsupported expected language (including Japanese), private sync off, BYOK,
 custom STT, phone calls, multichannel and onboarding all retain live behavior.
 Existing durable ownership survives percentage rollback; uncommitted audio
 never falls through into a second owner.
+The raw WebSocket query determines whether language was declared: the endpoint's
+English default remains a live compatibility choice, never a batch language
+declaration. An admitted omitted-language capture persists `multi`, so both
+partial and complete manifests require audio proof. Existing owned auto
+captures can resume across percentage rollback without inheriting English.
 
 On the CPU admission host, both partial and complete server-only record
 manifests materialize their immutable, generation-pinned references before
@@ -120,6 +127,9 @@ is no first-window language inheritance. Consent, privacy generation and funding
 are checked before each classifier call; staging rechecks privacy afterwards.
 No vendor key moves to a GPU worker. Source references and original audio stay
 unchanged.
+Network proof is dispatched one window at a time on a bounded, isolated
+four-worker pool, registered with normal executor shutdown. The shared sync
+pool handles only local audio inspection, not a record's serial network calls.
 
 The encrypted manifest freezes audio-LID evidence only when every window passes
 both classifiers. A Japanese, unsupported, unavailable or uncertain result

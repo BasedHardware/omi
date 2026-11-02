@@ -7,7 +7,7 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 import wave
 
 import pytest
@@ -786,7 +786,7 @@ async def test_auto_partial_freezes_audio_proof_without_changing_custody(source,
         'stt_language_evidence': 'audio_lid' if language == 'en' else 'unavailable',
         'stt_language_confidence': 0.99 if language == 'en' else 0.0,
     }
-    classify = Mock(return_value=proof)
+    classify = AsyncMock(return_value=proof)
     monkeypatch.setattr(record_language, 'classify_wav', classify)
     monkeypatch.setattr(
         record_language, 'ServingLanguageProbeGuard', lambda *a, **k: SimpleNamespace(raise_if_denied=lambda: None)
