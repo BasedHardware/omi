@@ -35,7 +35,10 @@ void main() {
     final selected = ConversationSummarySelection.select(conversation);
     expect(selected.kind, ConversationSummaryKind.sections);
     expect(selected.content, '## Decision\n\nApproved.');
+    // The recovered inline citation becomes the section's source, as on macOS and web.
+    expect(selected.sections.single.sourceSegmentIds, ['s01234']);
     expect(conversation.structured.sections.single.bodyMarkdown, 'Approved. [s01234] []');
+    expect(conversation.structured.sections.single.sourceSegmentIds ?? [], isEmpty);
     conversation.appResults.add(AppResponse('App result [] [s01234]', appId: 'custom'));
     final app = ConversationSummarySelection.select(conversation);
     expect(app.kind, ConversationSummaryKind.app);

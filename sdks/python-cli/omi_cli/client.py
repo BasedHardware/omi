@@ -304,12 +304,14 @@ class OmiClient:
         A browser-login profile carries BOTH a Firebase ID token and the
         minted dev key: ``/v1/dev/user/*`` routes authenticate through the
         backend's ``get_api_key_auth`` which only accepts an ``omi_dev_…``
-        key — a JWT there 401s. ``/v2/*`` (and ``POST /v1/dev/keys``) need
-        the ID token instead. One shared client header can't serve both, so
-        the dev-user family overrides it here. None → the client's default
-        Authorization applies unchanged."""
+        key — a JWT there 401s. So does ``GET /v1/dev/key``, the dev key
+        describing itself, which ``auth login --browser`` calls first.
+        ``/v2/*`` (and ``POST /v1/dev/keys``) need the ID token instead. One
+        shared client header can't serve both, so the dev-key family
+        overrides it here. None → the client's default Authorization applies
+        unchanged."""
         p = self._profile
-        if p.auth_method == "oauth" and p.api_key and                 path.startswith("/v1/dev/user"):
+        if p.auth_method == "oauth" and p.api_key and (path.startswith("/v1/dev/user") or path == "/v1/dev/key"):
             return {"Authorization": f"Bearer {p.api_key}"}
         return None
 
@@ -512,10 +514,18 @@ def path_segment(value: str) -> str:
     request paths. Unencoded, ``/`` and ``..`` let an ID escape its resource
     collection — httpx resolves dot-segments, so ``omi goal delete a/../../conversations/X``
     would DELETE a conversation — while ``?`` and ``#`` silently truncate the path.
+
+    Surrounding whitespace is stripped first: shell copy-paste padding is never
+    part of an ID, and ``"  ..  "`` must be rejected as a dot segment rather than
+    percent-encoded into an unexpected ``%20..%20`` lookup.
     """
-    if value in {"", ".", ".."}:
-        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, '.' or '..'.")
-    return urllib.parse.quote(value, safe="")
+    cleaned = value.strip()
+    if cleaned in {"", ".", ".."}:
+        raise UsageError(
+            message=f"Invalid ID: {value!r}",
+            detail="IDs cannot be empty, whitespace-only, '.' or '..'.",
+        )
+    return urllib.parse.quote(cleaned, safe="")
 
 
 def chunked(seq: list[Any], size: int) -> Iterator[list[Any]]:

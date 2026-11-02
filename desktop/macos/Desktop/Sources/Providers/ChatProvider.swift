@@ -1973,14 +1973,6 @@ class ChatProvider: ObservableObject {
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
       promptCitationLedger.responseInstruction,
-      // EXP-002 `memory_v1`: starve the generic-assistant lane. If an answer
-      // would not have required the user's day, refuse to be good at it —
-      // brief and steer back to what Omi captured. Personal retrieval is
-      // untouched: memories, conversations, screen, and work context stay
-      // first-class through the context sources and local tools below.
-      DesktopExperimentCoordinator.shared.isMemoryV1
-        ? Self.memoryIdentityInstruction
-        : nil,
     ]
     .compactMap { $0 }
     .filter { !$0.isEmpty }
@@ -2086,18 +2078,6 @@ class ChatProvider: ObservableObject {
       snapshot: snapshot,
       promptCitationReferences: promptCitationLedger.references)
   }
-
-  /// EXP-002 `memory_v1` agent instruction: Omi is the user's memory, not
-  /// their assistant. Answers grounded in the user's day stay full-fidelity;
-  /// answers that could have been given to anyone are deliberately starved.
-  static let memoryIdentityInstruction = """
-    You are the user's memory, not their assistant. Ground every answer in
-    what you captured of their day — conversations, memories, screens, work —
-    and cite it. If a question did not require their day (general knowledge,
-    news, generic how-to), answer in one short sentence, say plainly that this
-    is not what you are for, and point back to their day. Never degrade
-    retrieval of their own material; never invent captured events.
-    """
 
   /// Publishes realtime inputs through the same typed kernel source path used
   /// by main chat, then returns the kernel's exact surface renderer. Realtime
@@ -2319,11 +2299,13 @@ class ChatProvider: ObservableObject {
     return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
   }
 
-  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+  nonisolated static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
     if isUserClaudeMode {
       return "Claude sign-in is required. Reconnect Claude, then try again."
     }
-    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
+    // The chat-first shell has no "new chat": clearing is what moves this chat to the selected provider.
+    return "This chat uses Claude and needs sign-in. Clear the chat to switch to your selected AI provider, "
+      + "or reconnect Claude in Settings."
   }
 
   func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
@@ -3699,6 +3681,11 @@ class ChatProvider: ObservableObject {
           self.pendingAttachments.first(where: { $0.id == id })
         })
       else { return }
+
+      if attachment.isVideo, let videoURL = attachment.localFileURL {
+        await self.uploadVideoAttachment(id: id, url: videoURL, fileName: attachment.fileName, appId: appId)
+        return
+      }
 
       // For non-image files we still need bytes — load them lazily here
       // (we skipped this at add-time to keep the UI responsive).
@@ -5563,7 +5550,7 @@ class ChatProvider: ObservableObject {
       }
 
       // Preserve only a bounded error class in analytics. Raw details stay
-      // in the local log and Sentry error above.
+      // in the local error log above.
       if isOnboarding {
         let onboardingRole: String
         if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
@@ -6603,9 +6590,73 @@ class ChatProvider: ObservableObject {
       return
     }
     log("Cleared default chat messages")
+    await moveClearedMainChatToSelectedProvider(surface: surface)
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
+  }
+
+  /// The main chat is one long-lived session pinned to the provider it was created on, and the
+  /// chat-first shell has no "new chat", so choosing another AI Provider in Settings never reached
+  /// it. Clearing is the explicit, idle point where that choice can apply: the emptied chat adopts
+  /// the selected provider. A refused migration (a revoked turn still finishing) keeps the old one.
+  private func moveClearedMainChatToSelectedProvider(surface: AgentSurfaceReference) async {
+    let harness = bridgeHarnessOverride?.rawValue ?? activeBridgeHarness
+    guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness),
+      await ensureBridgeStarted()
+    else { return }
+    let session: AgentSurfaceSession
+    do {
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("ChatProvider: cleared main chat could not resolve its session", error: error)
+      return
+    }
+    let client = resolvedAgentClient()
+    let modelProfile =
+      modelOverride ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode)
+    let workingDirectory = effectiveAgentWorkingDirectory()
+    let outcome = await Self.moveSessionToSelectedProvider(
+      pinnedAdapterId: session.profile.adapterId,
+      selectedAdapterId: adapterId
+    ) {
+      try await client.migrateSessionExecutionProfile(
+        sessionId: session.sessionId,
+        expectedProfileGeneration: session.profile.profileGeneration,
+        adapterId: adapterId,
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory
+      ).profile.adapterId
+    }
+    switch outcome {
+    case .unchanged:
+      break
+    case .moved(let from, let to):
+      log("ChatProvider: cleared main chat moved from \(from) to \(to)")
+    case .refused(let error):
+      logError("ChatProvider: cleared main chat kept its pinned provider", error: error)
+    }
+  }
+
+  enum ClearedChatProviderMove {
+    case unchanged
+    case moved(from: String, to: String)
+    case refused(Error)
+  }
+
+  /// The decision behind Clear Chat's provider move: no call when the chat is already on the
+  /// selected adapter; otherwise migrate, and a refused migration leaves the pinned provider.
+  static func moveSessionToSelectedProvider(
+    pinnedAdapterId: String,
+    selectedAdapterId: String,
+    migrate: () async throws -> String
+  ) async -> ClearedChatProviderMove {
+    guard pinnedAdapterId != selectedAdapterId else { return .unchanged }
+    do {
+      return .moved(from: pinnedAdapterId, to: try await migrate())
+    } catch {
+      return .refused(error)
+    }
   }
 
   // MARK: - App Selection

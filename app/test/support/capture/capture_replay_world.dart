@@ -203,6 +203,10 @@ class ScriptedUploads {
   /// keep WALs retryable across phases that would otherwise auto-upload.
   bool failAll = false;
 
+  /// Sees each upload's files while they still exist (a completed upload may
+  /// delete them), e.g. to follow audio custody into the server.
+  void Function(List<File> files)? onUploadFiles;
+
   ScriptedUploads(this.clock);
 
   void enqueueOutcome(Object Function() outcome) => script.add(outcome);
@@ -228,6 +232,7 @@ class ScriptedUploads {
         claimLiveCapture = false,
         geolocation,
       }) async {
+        onUploadFiles?.call(files);
         attempts.add(
           UploadAttempt(
             at: clock.now(),
@@ -273,9 +278,13 @@ class CaptureReplayWorld {
   late NativeMicRecorderService mic;
   late WalService wal;
   late StreamController<bool> connectivityStream;
+  late StreamController<void> networkChangeStream;
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
+
+  /// The local_preview declaration of each socket the controller opened.
+  final List<bool> localPreviewRequests = [];
 
   /// Every transcription socket the controller opened, in order, with the source it declared.
   final List<({String? source, ScriptedPureSocket transport})> sockets = [];
@@ -398,6 +407,7 @@ class CaptureReplayWorld {
     wal.start();
     await wal.syncs.phone.walReady;
     connectivityStream = StreamController<bool>.broadcast();
+    networkChangeStream = StreamController<void>.broadcast();
     _controller = _ReplayCaptureController(
       world: this,
       calendarGapMonitor: calendarGapMonitor,
@@ -408,6 +418,7 @@ class CaptureReplayWorld {
       connectivity: CaptureConnectivityBoundary(
         initiallyConnected: connected,
         changes: connectivityStream.stream,
+        networkChanges: networkChangeStream.stream,
         isConnected: () => connected,
       ),
       authBoundary: CaptureAuthBoundary(
@@ -456,6 +467,7 @@ class CaptureReplayWorld {
       },
       autoUploadEnabled: () => true,
       connectivityChanges: connectivityStream.stream,
+      networkChanges: networkChangeStream.stream,
       initiallyConnected: connected,
       clock: clock.now,
       scheduleCooldown: (delay, callback) => scheduler.once(delay, callback),
@@ -515,6 +527,12 @@ class CaptureReplayWorld {
     connectivityStream.add(value);
   }
 
+  /// The active interface changed (wifi -> cellular) without ever going offline.
+  void emitNetworkChange() {
+    timeline.add('network=changed');
+    networkChangeStream.add(null);
+  }
+
   /// Drain work started by timer callbacks and injections: WAL file writes
   /// returned as Futures from async periodic callbacks, coordinator recovery
   /// passes (including unawaited cooldown wakes), and event-queue microtasks.
@@ -548,6 +566,7 @@ class CaptureReplayWorld {
     _controller = null;
     socket = null;
     connectivityStream.close();
+    networkChangeStream.close();
   }
 
   /// Rebuilds the entire production graph from the same temp directory: a new
@@ -576,6 +595,7 @@ class CaptureReplayWorld {
     if (!_controllerDisposed) _controller?.dispose();
     coordinator.dispose();
     await connectivityStream.close();
+    await networkChangeStream.close();
     await wal.stop();
     SttModeResolver.debugResetInstance();
     SyncRateLimiter.instance.clear();
@@ -635,8 +655,10 @@ class _ReplayCaptureController extends CaptureController {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     final transport = ScriptedPureSocket();
+    world.localPreviewRequests.add(localPreview);
     transport.connectAllowed = () => world.connected;
     if (world.nextConnectFailsOnce) {
       transport.nextConnectFails = true;
@@ -652,6 +674,7 @@ class _ReplayCaptureController extends CaptureController {
       transport,
       source: source,
       clientConversationId: clientConversationId,
+      localPreview: localPreview,
     );
     await service.start();
     if (service.state != SocketServiceState.connected) {

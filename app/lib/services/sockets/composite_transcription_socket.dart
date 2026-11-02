@@ -1,5 +1,6 @@
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:omi/services/custom_stt_log_service.dart';
@@ -16,11 +17,47 @@ class CompositeTranscriptionSocket implements IPureSocket {
   final String? sttProvider;
   final bool forwardRawAudioToSecondary;
 
+  /// When true, a secondary (Omi backend) socket that fails to connect, closes
+  /// or errors no longer tears down the primary (custom STT) socket. The
+  /// composite stays connected on the primary, retries the secondary in the
+  /// background with backoff, and reports [secondaryDegraded] meanwhile.
+  ///
+  /// While degraded, nothing reaches Omi: raw audio and suggested transcripts
+  /// for that window are not sent. Callers that mark audio as synced on send
+  /// must check [secondaryDegraded] so the durable copy is kept for later sync.
+  final bool keepPrimaryWhenSecondaryFails;
+  final Duration secondaryRetryInitialDelay;
+  final Duration secondaryRetryMaxDelay;
+
   PureSocketStatus _status = PureSocketStatus.notConnected;
   IPureSocketListener? _listener;
 
   late final _PrimarySocketListener _primaryListener;
   late final _SecondarySocketListener _secondaryListener;
+
+  bool _secondaryDegraded = false;
+  Timer? _secondaryRetryTimer;
+  late Duration _nextSecondaryRetryDelay;
+  int _secondaryRetryAttempts = 0;
+  bool _secondaryRetryInFlight = false;
+
+  /// Suggested transcript messages held while Omi reconnects when the user
+  /// opted out of sending raw audio to Omi.
+  final Queue<String> _pendingSuggestedTranscripts = Queue<String>();
+  int _pendingSuggestedTranscriptCharacters = 0;
+
+  /// Bound transcript-only buffering during a long backend outage (about
+  /// 8 MiB in UTF-16); raw audio is never stored in this queue.
+  static const int _maxPendingSuggestedTranscriptCharacters = 4 * 1024 * 1024;
+
+  /// Bumped whenever degraded state is cleared (connect, stop, disconnect,
+  /// primary teardown, restore). A background retry that started in an older
+  /// epoch must not act on the current one when its connect finally returns.
+  int _degradedEpoch = 0;
+
+  /// True while the composite is connected on the primary only (see
+  /// [keepPrimaryWhenSecondaryFails]).
+  bool get secondaryDegraded => _secondaryDegraded;
 
   CompositeTranscriptionSocket({
     required this.primarySocket,
@@ -28,7 +65,11 @@ class CompositeTranscriptionSocket implements IPureSocket {
     this.suggestedTranscriptType = 'suggested_transcript',
     this.sttProvider,
     this.forwardRawAudioToSecondary = true,
+    this.keepPrimaryWhenSecondaryFails = false,
+    this.secondaryRetryInitialDelay = const Duration(seconds: 5),
+    this.secondaryRetryMaxDelay = const Duration(seconds: 60),
   }) {
+    _nextSecondaryRetryDelay = secondaryRetryInitialDelay;
     _primaryListener = _PrimarySocketListener(this);
     _secondaryListener = _SecondarySocketListener(this);
 
@@ -52,14 +93,47 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
     CustomSttLogService.instance.info('Composite', 'Connecting both sockets...');
     _status = PureSocketStatus.connecting;
+    _clearPendingSuggestedTranscripts();
+    // A reused composite must not carry degraded state (or a stale retry
+    // timer) from a previous session.
+    _clearDegraded();
 
-    final results = await Future.wait([primarySocket.connect(), secondarySocket.connect()]);
+    final List<bool> results;
+    try {
+      results = await Future.wait([primarySocket.connect(), secondarySocket.connect()]);
+    } catch (error, trace) {
+      final primaryOk = primarySocket.status == PureSocketStatus.connected;
+      final secondaryOk = secondarySocket.status == PureSocketStatus.connected;
+
+      if (primaryOk && secondaryOk) {
+        _status = PureSocketStatus.connected;
+        _clearDegraded();
+        onConnected();
+        _flushPendingSuggestedTranscripts();
+        return true;
+      }
+
+      if (primaryOk && !secondaryOk && keepPrimaryWhenSecondaryFails) {
+        _continueWithPrimary('connect_error');
+        return true;
+      }
+
+      try {
+        await _disconnectBothQuietly();
+      } catch (disconnectError) {
+        CustomSttLogService.instance.warning('Composite', 'Error cleaning up after connect failure: $disconnectError');
+      }
+      _status = PureSocketStatus.notConnected;
+      _clearDegraded();
+      Error.throwWithStackTrace(error, trace);
+    }
 
     final primaryOk = results[0] && primarySocket.status == PureSocketStatus.connected;
     final secondaryOk = results[1] && secondarySocket.status == PureSocketStatus.connected;
 
     if (primaryOk && secondaryOk) {
       _status = PureSocketStatus.connected;
+      _clearDegraded();
       CustomSttLogService.instance.info('Composite', 'Both sockets connected');
       DebugLogManager.logEvent('composite_socket_connected', {
         'primary_status': primarySocket.status.toString(),
@@ -67,6 +141,12 @@ class CompositeTranscriptionSocket implements IPureSocket {
         'forward_raw_audio_to_secondary': forwardRawAudioToSecondary,
       });
       onConnected();
+      _flushPendingSuggestedTranscripts();
+      return true;
+    }
+
+    if (primaryOk && !secondaryOk && keepPrimaryWhenSecondaryFails) {
+      _continueWithPrimary('connect_failed');
       return true;
     }
 
@@ -85,7 +165,25 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   /// Disconnect both sockets without triggering composite callbacks
   Future<void> _disconnectBothQuietly() async {
+    _clearPendingSuggestedTranscripts();
     await Future.wait([primarySocket.disconnect(), secondarySocket.disconnect()]);
+  }
+
+  void _clearPendingSuggestedTranscripts() {
+    _pendingSuggestedTranscripts.clear();
+    _pendingSuggestedTranscriptCharacters = 0;
+  }
+
+  void _continueWithPrimary(String reason) {
+    _status = PureSocketStatus.connected;
+    CustomSttLogService.instance.warning('Composite', 'Primary connected, Omi socket failed - continuing on primary');
+    DebugLogManager.logWarning('composite_socket_connected_primary_only', {
+      'primary_status': primarySocket.status.toString(),
+      'secondary_status': secondarySocket.status.toString(),
+      'reason': reason,
+    });
+    _enterDegraded(reason);
+    onConnected();
   }
 
   @override
@@ -98,6 +196,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     // composite still looks connected and trigger a spurious
     // "socket closed unexpectedly" teardown on top of this intentional one.
     _status = PureSocketStatus.disconnected;
+    _clearDegraded();
     await _disconnectBothQuietly();
 
     onClosed();
@@ -110,13 +209,86 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
     // Same ordering requirement as disconnect().
     _status = PureSocketStatus.disconnected;
+    _clearDegraded();
+    _clearPendingSuggestedTranscripts();
     await Future.wait([primarySocket.stop(), secondarySocket.stop()]);
+  }
+
+  void _enterDegraded(String reason) {
+    if (_secondaryDegraded) return;
+    _secondaryDegraded = true;
+    _secondaryRetryAttempts = 0;
+    _nextSecondaryRetryDelay = secondaryRetryInitialDelay;
+    CustomSttLogService.instance.warning(
+      'Composite',
+      'Omi socket unavailable ($reason) - keeping custom STT live, retrying Omi in ${_nextSecondaryRetryDelay.inSeconds}s',
+    );
+    DebugLogManager.logWarning('composite_secondary_degraded', {'reason': reason});
+    _scheduleSecondaryRetry();
+  }
+
+  void _clearDegraded() {
+    _degradedEpoch++;
+    _secondaryRetryInFlight = false;
+    _secondaryRetryTimer?.cancel();
+    _secondaryRetryTimer = null;
+    _secondaryDegraded = false;
+    _secondaryRetryAttempts = 0;
+    _nextSecondaryRetryDelay = secondaryRetryInitialDelay;
+  }
+
+  void _scheduleSecondaryRetry() {
+    _secondaryRetryTimer?.cancel();
+    final delay = _nextSecondaryRetryDelay;
+    final doubled = delay * 2;
+    _nextSecondaryRetryDelay = doubled > secondaryRetryMaxDelay ? secondaryRetryMaxDelay : doubled;
+    _secondaryRetryTimer = Timer(delay, () => unawaited(_retrySecondary()));
+  }
+
+  Future<void> _retrySecondary() async {
+    if (_status != PureSocketStatus.connected || !_secondaryDegraded || _secondaryRetryInFlight) return;
+    final epoch = _degradedEpoch;
+    _secondaryRetryInFlight = true;
+    _secondaryRetryAttempts++;
+    bool ok = false;
+    try {
+      ok = await secondarySocket.connect();
+    } catch (e) {
+      CustomSttLogService.instance.warning('Composite', 'Omi socket retry error: $e');
+    } finally {
+      if (epoch == _degradedEpoch) _secondaryRetryInFlight = false;
+    }
+
+    if (epoch != _degradedEpoch) {
+      // The composite was stopped, restarted or torn down while this retry was
+      // pending. A newer session owns the secondary now; only clean up a
+      // connection nobody will use.
+      final idle = _status != PureSocketStatus.connected && _status != PureSocketStatus.connecting;
+      if (ok && idle) await secondarySocket.disconnect();
+      return;
+    }
+
+    // A connect that raced with another attempt can report false while the
+    // socket is in fact connected; trust the socket's own status.
+    if (secondarySocket.status == PureSocketStatus.connected) {
+      CustomSttLogService.instance.info('Composite', 'Omi socket restored after $_secondaryRetryAttempts attempt(s)');
+      DebugLogManager.logEvent('composite_secondary_restored', {'attempts': _secondaryRetryAttempts});
+      _clearDegraded();
+      _flushPendingSuggestedTranscripts();
+      return;
+    }
+    _scheduleSecondaryRetry();
   }
 
   /// Called when either socket closes unexpectedly
   void _onSocketClosed(String name, int? closeCode) {
     if (_status != PureSocketStatus.connected) {
       return; // Already handling disconnection
+    }
+
+    if (name == 'Secondary' && keepPrimaryWhenSecondaryFails) {
+      _enterDegraded('closed:${closeCode ?? -1}');
+      return;
     }
 
     CustomSttLogService.instance.warning(
@@ -126,6 +298,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     DebugLogManager.logEvent('composite_socket_child_closed', {'child_socket': name, 'close_code': closeCode ?? -1});
 
     _status = PureSocketStatus.disconnected;
+    _clearDegraded();
     _disconnectBothQuietly();
     onClosed(closeCode);
   }
@@ -140,10 +313,17 @@ class CompositeTranscriptionSocket implements IPureSocket {
       onError(err, trace); // Keep both sockets and capture custody alive for setup recovery.
       return;
     }
+    if (name == 'Secondary' && keepPrimaryWhenSecondaryFails) {
+      CustomSttLogService.instance.warning('Composite', 'Secondary socket error: $err');
+      _enterDegraded('error');
+      return;
+    }
+
     CustomSttLogService.instance.error('Composite', '$name socket error: $err');
     DebugLogManager.logError(err, trace, 'composite_socket_child_error', {'child_socket': name});
 
     _status = PureSocketStatus.disconnected;
+    _clearDegraded();
     _disconnectBothQuietly();
     onError(err, trace);
   }
@@ -154,6 +334,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
       return;
     }
     primarySocket.send(message);
+    if (_secondaryDegraded) {
+      return;
+    }
     if (forwardRawAudioToSecondary || message is! List<int>) {
       secondarySocket.send(message);
     }
@@ -164,7 +347,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   }
 
   void _forwardAsSuggestedTranscript(dynamic message) {
-    if (_status != PureSocketStatus.connected) {
+    if (_status != PureSocketStatus.connected || (_secondaryDegraded && forwardRawAudioToSecondary)) {
       return;
     }
 
@@ -194,9 +377,52 @@ class CompositeTranscriptionSocket implements IPureSocket {
         payload['stt_provider'] = sttProvider;
       }
 
-      secondarySocket.send(jsonEncode(payload));
+      final encoded = jsonEncode(payload);
+      if (_secondaryDegraded) {
+        _queueSuggestedTranscript(encoded);
+      } else {
+        secondarySocket.send(encoded);
+      }
     } catch (e) {
       CustomSttLogService.instance.error('Composite', 'Error forwarding transcript: $e');
+    }
+  }
+
+  void _queueSuggestedTranscript(String message) {
+    final length = message.length;
+    if (length > _maxPendingSuggestedTranscriptCharacters) {
+      CustomSttLogService.instance.warning('Composite', 'Omi transcript buffer skipped an oversized message');
+      return;
+    }
+
+    var dropped = 0;
+    while (_pendingSuggestedTranscripts.isNotEmpty &&
+        _pendingSuggestedTranscriptCharacters + length > _maxPendingSuggestedTranscriptCharacters) {
+      _pendingSuggestedTranscriptCharacters -= _pendingSuggestedTranscripts.removeFirst().length;
+      dropped++;
+    }
+    _pendingSuggestedTranscripts.addLast(message);
+    _pendingSuggestedTranscriptCharacters += length;
+    if (dropped > 0) {
+      CustomSttLogService.instance
+          .warning('Composite', 'Omi transcript buffer limit reached; dropped $dropped old message(s)');
+    }
+  }
+
+  void _flushPendingSuggestedTranscripts() {
+    while (_status == PureSocketStatus.connected &&
+        !_secondaryDegraded &&
+        secondarySocket.status == PureSocketStatus.connected &&
+        _pendingSuggestedTranscripts.isNotEmpty) {
+      final message = _pendingSuggestedTranscripts.first;
+      try {
+        secondarySocket.send(message);
+      } catch (error, trace) {
+        _onSocketError('Secondary', error, trace);
+        return;
+      }
+      _pendingSuggestedTranscripts.removeFirst();
+      _pendingSuggestedTranscriptCharacters -= message.length;
     }
   }
 

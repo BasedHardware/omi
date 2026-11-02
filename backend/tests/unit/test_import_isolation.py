@@ -10,6 +10,7 @@ import pytest
 
 from testing.import_isolation import (
     AutoMockModule,
+    install_package_submodule_stubs,
     load_module_fresh,
     package_submodule_stubs,
     stub_modules,
@@ -286,6 +287,51 @@ def test_stub_modules_preserves_allowlisted_jiter_extension_with_existing_origin
     assert fake_package.jiter is fake_extension
 
 
+def test_stub_modules_keeps_zoneinfo_first_imported_inside_the_block(monkeypatch: pytest.MonkeyPatch):
+    zoneinfo_names = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: importlib.import_module(name) for name in zoneinfo_names}
+    for name in zoneinfo_names:
+        monkeypatch.delitem(sys.modules, name)
+
+    with stub_modules({}):
+        for name in zoneinfo_names:
+            sys.modules[name] = originals[name]
+
+    # Evicting _zoneinfo lets a later collection null the globals of the surviving
+    # ZoneInfo type, so the whole family stays loaded.
+    for name in zoneinfo_names:
+        assert sys.modules[name] is originals[name]
+    assert originals["_zoneinfo"].ZoneInfo("UTC").key == "UTC"
+
+
+def test_stub_modules_keeps_a_fresh_zoneinfo_reimported_inside_the_block(monkeypatch: pytest.MonkeyPatch):
+    # Re-import the pure-Python members only: a second _zoneinfo object would itself null
+    # the shared C globals once monkeypatch restores the original and drops it.
+    python_names = ("zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: importlib.import_module(name) for name in python_names}
+    for name in python_names:
+        monkeypatch.delitem(sys.modules, name)
+
+    with stub_modules({}):
+        fresh = importlib.import_module("zoneinfo")
+
+    assert fresh is not originals["zoneinfo"]
+    assert sys.modules["zoneinfo"] is fresh
+    for name in python_names:
+        assert sys.modules[name] is not originals[name]
+    assert fresh.ZoneInfo("UTC").key == "UTC"
+
+
+def test_stub_modules_still_evicts_a_fake_installed_under_a_zoneinfo_name(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delitem(sys.modules, "_zoneinfo")
+    fake = ModuleType("_zoneinfo")
+
+    with stub_modules({}):
+        sys.modules["_zoneinfo"] = fake
+
+    assert "_zoneinfo" not in sys.modules
+
+
 @pytest.fixture
 def atom_keyword_index_with_top_level_typesense_only():
     module_path = Path(__file__).resolve().parents[2] / "utils" / "memory" / "atom_keyword_index.py"
@@ -412,3 +458,56 @@ def test_package_submodule_stubs_can_omit_the_package_key(tmp_path: Path):
     stubs = package_submodule_stubs("synthetic.pkg", include_package=False, directory=pkg)
     assert "synthetic.pkg" not in stubs
     assert list(stubs) == ["synthetic.pkg.child"]
+
+
+def test_install_package_submodule_stubs_fills_an_empty_path_package(tmp_path: Path):
+    """A new on-disk sibling resolves; a spy override and a retained real module stay."""
+
+    pkg = tmp_path / "pkg"
+    _write_pkg(pkg, "spy.py", "VALUE = 'disk'\n")
+    _write_pkg(pkg, "unlisted.py", "VALUE = 'disk'\n")
+    _write_pkg(pkg, "retained.py", "VALUE = 'real'\n")
+
+    retained_name = "synthetic_obs.retained"
+    spec = importlib.util.spec_from_file_location(retained_name, pkg / "retained.py")
+    assert spec is not None and spec.loader is not None
+    retained = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(retained)
+
+    parent = ModuleType("synthetic_obs")
+    parent.__path__ = []  # type: ignore[attr-defined]
+    spy = ModuleType("synthetic_obs.spy")
+    spy.record = "spy"  # type: ignore[attr-defined]
+
+    names = (
+        "synthetic_obs",
+        "synthetic_obs.spy",
+        "synthetic_obs.unlisted",
+        retained_name,
+    )
+    prior = {name: sys.modules.get(name) for name in names}
+    saved: dict = {}
+    try:
+        sys.modules["synthetic_obs"] = parent
+        sys.modules[retained_name] = retained
+        install_package_submodule_stubs(
+            "synthetic_obs",
+            saved,
+            overrides={"synthetic_obs.spy": spy},
+            directory=pkg,
+        )
+        assert sys.modules["synthetic_obs.unlisted"].__name__ == "synthetic_obs.unlisted"
+        assert sys.modules["synthetic_obs.spy"] is spy
+        assert sys.modules[retained_name] is retained
+        assert parent.unlisted is sys.modules["synthetic_obs.unlisted"]
+        assert parent.spy is spy
+        assert parent.retained is retained
+        assert saved["synthetic_obs.unlisted"] is None
+        assert saved["synthetic_obs.spy"] is None
+        assert retained_name not in saved
+    finally:
+        for name, module in prior.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module

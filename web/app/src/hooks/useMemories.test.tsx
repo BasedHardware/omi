@@ -191,4 +191,22 @@ describe('useMemories standard list and cache scope', () => {
     });
     expect(result.current.hasMore).toBe(true);
   });
+
+  it('clears an earlier fetch error when a cached category is shown', async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(page('All memories'));
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.memories[0]?.content).toBe('All memories');
+
+    // The next category's first page fails, which shows the error banner.
+    mocks.getMemoriesPage.mockRejectedValueOnce(new Error('Network error'));
+    act(() => result.current.setCategories(['manual']));
+    await waitFor(() => expect(result.current.error).toBe('Network error'));
+
+    // The full list is still cached and fresh, so it comes back without a request.
+    act(() => result.current.setCategories([]));
+    expect(result.current.memories[0]?.content).toBe('All memories');
+    expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+  });
 });

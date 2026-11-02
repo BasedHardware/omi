@@ -51,16 +51,14 @@ def _set_batch_size(model, attribute, batch_size, label):
         raise RuntimeError(f'worker failed to pin {label} batch size')
 
 
-def load_worker(artifacts):
-    model_batch_size = _model_batch_size_override()
-    if torch is None or nemo_asr is None or Pipeline is None or VoiceActivityDetection is None:
-        raise RuntimeError('batch worker requires the joint GPU image')
-    if hf_hub_download is None or not torch.cuda.is_available() or torch.cuda.device_count() != 1:
-        raise RuntimeError('batch worker requires exactly one visible dedicated CUDA GPU')
-    if not torch.cuda.is_bf16_supported():
-        raise RuntimeError('batch worker requires BF16 ASR support')
-    checkpoint = hf_hub_download('nvidia/parakeet-tdt-0.6b-v3', 'parakeet-tdt-0.6b-v3.nemo', revision=ASR_REVISION)
-    asr = nemo_asr.models.ASRModel.restore_from(checkpoint, map_location='cuda:0').to(torch.bfloat16).eval()
+def load_pyannote_pair(model_batch_size):
+    """The worker's exact community-1 diarizer + shared-segmentation VAD on cuda:0.
+
+    Also used by the flight-packing L4 qualification so both runs construct
+    identical models.
+    """
+    if torch is None or Pipeline is None or VoiceActivityDetection is None:
+        raise RuntimeError('pyannote pair requires the GPU image')
     diarizer = Pipeline.from_pretrained(
         'pyannote/speaker-diarization-community-1',
         revision=DIARIZER_REVISION,
@@ -81,6 +79,20 @@ def load_worker(artifacts):
         if vad_inference is None:
             raise RuntimeError('worker VAD no longer exposes segmentation inference')
         _set_batch_size(vad_inference, 'batch_size', model_batch_size, 'VAD')
+    return diarizer, vad
+
+
+def load_worker(artifacts):
+    model_batch_size = _model_batch_size_override()
+    if torch is None or nemo_asr is None or Pipeline is None or VoiceActivityDetection is None:
+        raise RuntimeError('batch worker requires the joint GPU image')
+    if hf_hub_download is None or not torch.cuda.is_available() or torch.cuda.device_count() != 1:
+        raise RuntimeError('batch worker requires exactly one visible dedicated CUDA GPU')
+    if not torch.cuda.is_bf16_supported():
+        raise RuntimeError('batch worker requires BF16 ASR support')
+    checkpoint = hf_hub_download('nvidia/parakeet-tdt-0.6b-v3', 'parakeet-tdt-0.6b-v3.nemo', revision=ASR_REVISION)
+    asr = nemo_asr.models.ASRModel.restore_from(checkpoint, map_location='cuda:0').to(torch.bfloat16).eval()
+    diarizer, vad = load_pyannote_pair(model_batch_size)
     return create_local_worker(
         fetch_audio=artifacts.fetch_audio,
         persist_result=artifacts.persist_result,

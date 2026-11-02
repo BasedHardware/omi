@@ -760,6 +760,12 @@ def get_user_preferred_app(uid: str) -> Optional[str]:
     return app_id.decode() if app_id else None
 
 
+def clear_user_preferred_app(uid: str) -> None:
+    """Removes the user's preferred app, so automatic processing runs Omi's own summary."""
+    key = f'user:{uid}:preferred_app'
+    r.delete(key)
+
+
 @try_catch_decorator
 def set_user_data_protection_level(uid: str, level: str) -> None:
     """Caches the user's data protection level."""

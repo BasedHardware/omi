@@ -25,6 +25,7 @@ from llm_gateway.gateway.providers import ProviderResponse
 from llm_gateway.gateway.resolver import resolve_chat_completion_route, resolve_systemone_route
 from tests.unit.test_proactivity_v2_budget import NOW, Redis, claim, store
 from utils import proactivity
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 
 
 @pytest.mark.asyncio

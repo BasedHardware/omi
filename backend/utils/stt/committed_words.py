@@ -13,8 +13,6 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Tuple, cast
 
-from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
-
 PROVIDER_WORD_RANGES_KEY = '_provider_word_ranges'
 PROVIDER_WORDS_ABSTAIN_KEY = '_provider_words_abstain'
 CAPTURE_WORD_RANGES_KEY = '_capture_word_ranges'
@@ -46,14 +44,11 @@ def _seconds_pair(value: Any) -> Tuple[float, float] | None:
 def remember_provider_word(segment: Dict[str, Any], start: Any, end: Any, text: Any) -> None:
     """Record one recognized provider word interval on its segment dict.
 
-    Inert unless both the dark-write admission and the committed-coverage flag
-    are on: with either off the segment stays byte-identical. Empty text is not
-    evidence and is ignored. An invalid interval or a bounds overflow abstains
+    Provider word intervals are always retained for committed capture coverage.
+    Empty text is not evidence and is ignored. An invalid interval or a bounds overflow abstains
     the whole segment: its collected ranges are dropped and a private marker
     blocks any later additions.
     """
-    if not (capture_evidence_dark_write_enabled() and listen_committed_capture_coverage_enabled()):
-        return
     if segment.get(PROVIDER_WORDS_ABSTAIN_KEY):
         return
     if not isinstance(text, str) or not text.strip():

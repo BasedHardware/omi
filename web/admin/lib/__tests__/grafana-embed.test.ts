@@ -2,6 +2,7 @@
 import { generateKeyPairSync, createPublicKey, verify } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { testIdentity } from "./support/test-identity";
 vi.mock("google-auth-library", () => ({
   GoogleAuth: class {
     async getAccessToken() {
@@ -9,7 +10,10 @@ vi.mock("google-auth-library", () => ({
     }
   },
 }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const signing = {
   kid: "test-key",
@@ -127,8 +131,8 @@ it("fails before enrollment when a service account targets the monitoring org", 
   );
 });
 it("checks admin membership before any token or secret access", async () => {
-  const { verifyAdmin } = await import("@/lib/auth");
-  vi.mocked(verifyAdmin).mockResolvedValue(
+  const { requireScope } = await import("@/lib/auth");
+  vi.mocked(requireScope).mockResolvedValue(
     NextResponse.json({ error: "Forbidden" }, { status: 403 })
   );
   const { GET } = await import("@/app/api/grafana/embed/route");
@@ -140,8 +144,8 @@ it("checks admin membership before any token or secret access", async () => {
 });
 it("leaves the existing board available while prerequisites are disabled", async () => {
   vi.stubEnv("GRAFANA_EMBED_ENABLED", "");
-  const { verifyAdmin } = await import("@/lib/auth");
-  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "admin" });
+  const { requireScope } = await import("@/lib/auth");
+  vi.mocked(requireScope).mockResolvedValue(testIdentity(undefined, "admin"));
   const { GET } = await import("@/app/api/grafana/embed/route");
   const response = await GET(
     new NextRequest("https://admin.omi.me/api/grafana/embed")

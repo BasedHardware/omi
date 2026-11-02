@@ -30,6 +30,22 @@ void main() {
   });
   test('disabled or changed-period response fails without fabricating a choice', () async {
     final api = BudgetChoiceApi(baseUrl: 'http://localhost/', send: (_) async => http.Response('{}', 409));
-    expect(await api.save('old', 'upgrade', false), isA<ApiFailure<GeneratedBudgetChoiceWriteResponse>>());
+    final saved = await api.save('old', 'upgrade', false);
+    expect(saved, isA<ApiFailure<GeneratedBudgetChoiceWriteResponse>>());
+    expect(budgetPeriodChanged(saved), isFalse);
+  });
+
+  test('budget_period_changed is a bounded detail the dialog can reload', () async {
+    final api = BudgetChoiceApi(
+      baseUrl: 'http://localhost/',
+      send: (_) async => http.Response(jsonEncode({'detail': 'budget_period_changed'}), 409),
+    );
+    final saved = await api.save('2026-10', 'on_device', false);
+    expect(budgetPeriodChanged(saved), isTrue);
+    final noisy = BudgetChoiceApi(
+      baseUrl: 'http://localhost/',
+      send: (_) async => http.Response(jsonEncode({'detail': 'user private text'}), 409),
+    );
+    expect(budgetPeriodChanged(await noisy.save('2026-10', 'on_device', false)), isFalse);
   });
 }

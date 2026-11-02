@@ -314,8 +314,15 @@ export function clearAllCache(): void {
 
 // Cache key generators for consistency
 export const cacheKeys = {
-  conversations: (folderId?: string, startDate?: string, endDate?: string) =>
-    `conversations:${folderId || 'all'}:${startDate || ''}:${endDate || ''}`,
+  conversations: (
+    folderId?: string,
+    startDate?: string,
+    endDate?: string,
+    starred?: boolean,
+  ) =>
+    `conversations:${folderId || 'all'}:${startDate || ''}:${endDate || ''}:${
+      starred ?? ''
+    }`,
 
   conversation: (id: string) => `conversation:${id}`,
 

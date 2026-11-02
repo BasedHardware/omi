@@ -35,7 +35,7 @@ it('opens a cited transcript group, focuses it and clears its temporary highligh
     );
   }
   render(<Panel />);
-  fireEvent.click(screen.getByRole('button', { name: 'Jump to 0 seconds' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Show Decision in transcript' }));
   const row = screen.getByText('The decision.').closest('[tabindex]')!;
   expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
   expect(row).toHaveFocus();

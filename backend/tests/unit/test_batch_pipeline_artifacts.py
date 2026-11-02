@@ -27,6 +27,13 @@ class ObjectClient:
         self.after_upload = lambda: None
         self.after_download = lambda: None
         self.reported_size = None
+        self.soft_delete_policy = SimpleNamespace(retention_duration_seconds=0)
+        self.default_event_based_hold = False
+        self.retention_period = None
+
+    def reload(self, **kwargs):
+        """Synthetic bucket metadata; blob metadata reload is separate below."""
+        pass
 
     def bucket(self, name):
         return self

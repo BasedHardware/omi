@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/sign_out.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +50,20 @@ void main() {
       expect(SharedPreferencesUtil().appearanceMode, mode);
     });
   }
+
+  test('deleted-account uids loaded untyped from disk survive sign out and still read back', () async {
+    // After a cold start the store hands lists back as List<Object?>, not List<String>.
+    SharedPreferences.setMockInitialValues({
+      'uid': 'user-123',
+      deletedAccountUidsKey: <Object?>['dead-a', 'dead-b']
+    });
+    await SharedPreferencesUtil.init();
+
+    await clearPreferencesForSignOut();
+
+    expect(await readDeletedAccountUids(), ['dead-a', 'dead-b']);
+    expect((await SharedPreferences.getInstance()).getString('uid'), isNull);
+  });
 
   test('the keep-list holds no credentials', () {
     for (final key in kPreferencesKeptOnSignOut) {

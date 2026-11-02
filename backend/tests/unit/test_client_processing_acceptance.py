@@ -198,7 +198,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
-        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
@@ -386,7 +385,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: True)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
@@ -478,6 +477,17 @@ def _projection_dict(digest: str | None = None, *, title: str = PROJECTION_TITLE
 
 def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, default=str)
+
+
+def test_canonical_ingest_binding_also_refuses_mixed_unnamed_scopes(monkeypatch, stack):
+    pc, dev = stack
+    _enable_flag(monkeypatch, pc)
+    segments = [
+        TranscriptSegment(text='approved', speaker_id=0, speaker_id_scope='first', is_user=False, start=0, end=1),
+        TranscriptSegment(text='declined', speaker_id=0, speaker_id_scope='second', is_user=False, start=1, end=2),
+    ]
+    projection = _projection(transcript_sha256(segments))
+    assert dev._bind_projection_to_segments(projection, segments, projection, stored=False) is None
 
 
 def _stored_minimum(conversation_id: str) -> dict[str, Any]:
@@ -612,7 +622,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = True
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))

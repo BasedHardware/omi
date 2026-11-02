@@ -1,8 +1,12 @@
 ---
 title: "Omi DevKit 1"
 icon: "circuit-board"
-description: "DevKit 1 is a necklace form factor device that can be worn around the neck. It runs on Xiao nRF52840, is powered by a rechargeable battery, and connects to your phone to stream the audio data."
+description: "A necklace-style device with a rechargeable battery that streams audio to your phone over Bluetooth. It runs on a Xiao nRF52840."
 ---
+
+<Warning>
+**Legacy device.** DevKit 1 is the original Kickstarter-era kit. It is no longer manufactured, and current development happens on the consumer Omi (CV1). Community support only. Ask in [Discord](https://discord.omi.me).
+</Warning>
 
 ## Overview
 
@@ -12,89 +16,79 @@ DevKit 1 is the original Omi wearable device in a necklace form factor. It conne
   <Card title="Xiao nRF52840" icon="microchip">
     Low-power Bluetooth SoC
   </Card>
-  <Card title="Rechargeable Battery" icon="battery-full">
+  <Card title="Rechargeable battery" icon="battery-full">
     Built-in LiPo battery
   </Card>
-  <Card title="Necklace Form Factor" icon="circle-dot">
+  <Card title="Necklace form factor" icon="circle-dot">
     Wearable pendant design
   </Card>
 </CardGroup>
 
----
-
-## How to Get It
+## How to get it
 
 <Tabs>
-  <Tab title="Buy Assembled" icon="cart-shopping">
-    If you didn't get the original Omi DevKit from the Kickstarter campaign, you can purchase it from the Based Hardware website.
+  <Tab title="Buy current hardware" icon="cart-shopping">
+    DevKit 1 and DevKit 2 are no longer sold. For new hardware, use the consumer Omi device.
 
-    <Card title="Omi DevKit 2" icon="shopping-bag" href="https://www.omi.me/products/omi-dev-kit-2">
-      Purchase the latest DevKit from the official store
+    <Card title="Omi (CV1)" icon="circle-dot" href="/doc/hardware/OmiConsumer">
+      The current consumer hardware
     </Card>
-
-    <Note>
-    DevKit 1 is no longer available for purchase. DevKit 2 is the recommended option for new users.
-    </Note>
   </Tab>
-  <Tab title="Build Your Own" icon="screwdriver-wrench">
+  <Tab title="Build your own" icon="screwdriver-wrench">
     If you prefer to assemble the device yourself, follow our comprehensive build guide.
 
-    <Card title="Build Guide" icon="hammer" href="/doc/assembly/Build_the_device">
+    <Card title="Build guide" icon="hammer" href="/doc/assembly/Build_the_device">
       Step-by-step instructions for assembling your own device
     </Card>
   </Tab>
 </Tabs>
 
----
-
 ## Firmware
 
-The recommended way to update your device is through the Omi app's built-in OTA (Over-The-Air) update feature.
+The recommended way to update your device is through the Omi app's built-in OTA (over-the-air) update feature.
 
 <Steps>
-  <Step title="Install the Omi App">
+  <Step title="Install the Omi app">
     Download from the [Apple App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) or [Google Play Store](https://play.google.com/store/apps/details?id=com.friend.ios)
   </Step>
-  <Step title="Connect Your Device">
+  <Step title="Connect your device">
     Pair your DevKit 1 via Bluetooth
   </Step>
-  <Step title="Check for Updates">
+  <Step title="Check for updates">
     The app will notify you when firmware updates are available
   </Step>
 </Steps>
 
-### Manual Firmware Update
+### Manual firmware update
 
 <AccordionGroup>
-  <Accordion title="Download Pre-built Firmware" icon="download">
+  <Accordion title="Download pre-built firmware" icon="download">
     Download a pre-built firmware version from the [Omi GitHub Releases](https://github.com/BasedHardware/omi/releases?q=release_firmware+DK1).
 
     Look for releases tagged with `DK1` for DevKit 1 compatibility.
   </Accordion>
-  <Accordion title="Compile Firmware Yourself" icon="code">
+  <Accordion title="Compile firmware yourself" icon="code">
     For advanced users who want to customize the firmware:
 
-    <Card title="Firmware Compilation Guide" icon="terminal" href="/doc/developer/firmware/Compile_firmware">
+    <Card title="Firmware compilation guide" icon="terminal" href="/doc/developer/firmware/Compile_firmware">
       Learn how to build firmware from source
     </Card>
   </Accordion>
 </AccordionGroup>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
   <Card title="DevKit 2" icon="microchip" href="/doc/hardware/DevKit2">
     Upgraded version with more storage and speaker
   </Card>
-  <Card title="Build Guide" icon="screwdriver-wrench" href="/doc/assembly/Build_the_device">
+  <Card title="Build guide" icon="screwdriver-wrench" href="/doc/assembly/Build_the_device">
     Assemble your own Omi device
   </Card>
-  <Card title="Buying Guide" icon="cart-shopping" href="/doc/assembly/Buying_Guide">
+  <Card title="Buying guide" icon="cart-shopping" href="/doc/assembly/Buying_Guide">
     Parts list and sourcing information
   </Card>
-  <Card title="App Setup" icon="mobile" href="/doc/get_started/introduction">
+  <Card title="App setup" icon="mobile" href="/doc/get_started/what-is-omi">
     Get started with the Omi app
   </Card>
 </CardGroup>

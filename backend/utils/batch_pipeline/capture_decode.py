@@ -45,18 +45,29 @@ def _canonical(path: str) -> bytes:
     return pcm
 
 
-def decode_units(paths: list[str], *, max_seconds: float = 3600) -> Generator[AudioUnit, None, None]:
+# Server-held WAV (the cap-hold adapter) takes the same canonicalization as uploads.
+canonical_pcm = _canonical
+
+
+def decode_units(
+    paths: list[str], *, max_seconds: float = 3600, coverage_context: dict | None = None
+) -> Generator[AudioUnit, None, None]:
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
     if unit_frames < 1 or max_seconds > 7200:
         raise ValueError('invalid dedicated capture-unit ceiling')
     expected = {path.replace('.bin', '.wav'): _frame_count(path) for path in paths}
     frames: dict[str, list[int]] = {}
     wavs = []
+    generated = set()
     try:
         wavs = decode_files_to_wav(paths, frames)
         if set(wavs) != set(expected) or any(len(frames.get(path, [])) != count for path, count in expected.items()):
             raise ValueError('sync decode did not preserve every uploaded frame')
+        from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
+
+        wavs, source_maps, generated = prepare((coverage_context or {}).get('uid'), wavs, frames, coverage_context)
         pending = bytearray()
+        pending_runs = []
         start = 0.0
         for path in sorted(wavs, key=lambda value: (get_timestamp_from_path(value), value)):
             capture = float(get_timestamp_from_path(path))
@@ -66,8 +77,9 @@ def decode_units(paths: list[str], *, max_seconds: float = 3600) -> Generator[Au
             end = start + len(pending) / (2 * RATE)
             gap = round((capture - end) * RATE)
             if pending and (gap < 0 or gap > MAX_JOIN_GAP_FRAMES or len(pending) + gap * 2 >= unit_frames * 2):
-                yield audio_unit(start, bytes(pending))
+                yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
                 pending.clear()
+                pending_runs = []
             if not pending:
                 start = capture
             elif gap > 0:
@@ -75,15 +87,19 @@ def decode_units(paths: list[str], *, max_seconds: float = 3600) -> Generator[Au
             offset = 0
             while offset < len(pcm):
                 take = min(unit_frames * 2 - len(pending), len(pcm) - offset)
+                pending_runs.extend(
+                    piece_runs(source_maps.get(path), offset // 2, take // 2, len(pending) // 2, coverage_context or {})
+                )
                 pending.extend(pcm[offset : offset + take])
                 offset += take
                 if len(pending) == unit_frames * 2:
-                    yield audio_unit(start, bytes(pending))
+                    yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
                     pending.clear()
+                    pending_runs = []
                     start = capture + offset / (2 * RATE)
         if pending:
-            yield audio_unit(start, bytes(pending))
+            yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
     finally:
-        for path in set(wavs) | set(expected):
+        for path in set(wavs) | set(expected) | generated:
             if os.path.exists(path):
                 os.remove(path)

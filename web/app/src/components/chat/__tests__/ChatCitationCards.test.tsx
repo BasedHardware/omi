@@ -16,6 +16,16 @@ beforeEach(() => {
 });
 
 describe('normalizeChatCitations', () => {
+  it('repairs legacy citation debris in card titles and keeps ordinary brackets', () => {
+    expect(
+      normalizeChatCitations([
+        { id: 'a', structured: { title: 'Speaker_00 kickoff [s01234]', emoji: '📝' } },
+        { id: 'b', structured: { title: 'Project [Q3]', emoji: '📝' } },
+        { id: 'c', structured: { title: '[s01234]', emoji: '📝' } },
+      ]).map((source) => source.title),
+    ).toEqual(['kickoff', 'Project [Q3]', 'Untitled conversation']);
+  });
+
   it('preserves server first-mention order, deduplicates ids, and fills defaults', () => {
     expect(
       normalizeChatCitations([

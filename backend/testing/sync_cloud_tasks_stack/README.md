@@ -49,21 +49,30 @@ Scenarios cover:
 
 1. fresh admission, rejected unauthenticated worker delivery, durable
    completion/readback, once-only fair-use meter, and terminal duplicate ACK;
-2. failure after terminalization keeps staged material until a retry performs
-   exact-job cleanup without reprocessing;
+2. failure after terminalization keeps staged material; retry does not
+   reprocess it or release unarchived source audio;
 3. a pre-ledger failure returns the job to queue, then skips its durable
    processed-segment checkpoint without another STT call or fair-use charge;
 4. a post-ledger failure returns the job to queue, then a later delivery
    converges the completed ledger without reprocessing;
 5. a first pipeline success on the final Cloud Tasks delivery converges its
    completed ledger rather than publishing a false terminal failure;
-6. retry-budget exhaustion becomes a truthful durable failure;
-7. concurrent worker deliveries are fenced by the real Redis run lock;
+6. retry-budget exhaustion becomes a truthful durable failure and retains its source;
+7. concurrent worker deliveries are fenced by the real Redis run lock while
+   the paid STT leaf is held, and release produces exactly one STT invocation;
+   with `SYNC_PROCESSING_HOLD_ENABLED=true`, upload completion retains the
+   pending conversation hold and durable deferred enrichment obligation without
+   entering the full note processor. A separate hold-off scenario proves eager
+   full processing still persists once. Terminal duplicate delivery repeats
+   neither STT nor full processing in either scenario;
 8. a lost create-task acknowledgement converges through named-task
    `AlreadyExists`, never falls back inline, and later completes; and
 9. a missing staged blob follows the real expired-input failure path without
    invoking STT; and
-10. a lifecycle-fenced processor result is terminally acknowledged, releases
+10. an archived all-success completion stores the byte-bound custody receipt
+    beside the completed ledger result, removes redundant staging and keeps
+    the original archive across duplicate delivery; and
+11. a lifecycle-fenced processor result is terminally acknowledged, releases
     its exact backfill slot, and keeps duplicate delivery from re-running the
     provider pipeline.
 
@@ -101,12 +110,28 @@ the reconcile scheduler by calling the real `/reconcile` route while it polls
 status at 1s (the production poll limiter rejects faster polling).
 
 Scenarios: happy path with exactly-once metering; empty ASR → quarantine →
-one paid recovery despite duplicate/late deliveries; worker SIGTERM drain;
+one paid recovery despite duplicate/late deliveries (the status route reports
+`processing` with a nonzero `poll_after_ms` while recovery is held, prepared or
+running, with zero projected completion and no result/error even after a killed
+paid call whose outcome is unknown, then `completed`); a failing paid recovery settles `failed_held` and
+polls `processing/batch_unit_held` with `poll_after_ms: 300000` without re-paying
+or acknowledging phone custody; worker SIGTERM drain;
 worker SIGTERM + SIGKILL after grace → lease expiry → replacement completes;
 serving SIGTERM during the paid call → graceful settle → replacement never
 re-pays; serving SIGKILL during the paid call → intent stays `running`, never
-re-paid; privacy fence during compute and before paid recovery; and a
-three-capture single-owner burst. Provider behavior per owner comes from
+re-paid; privacy fence during compute and before paid recovery; a
+three-capture single-owner burst; and two concurrent worker replicas (the prod
+replica count) draining a split burst, independent owners and one empty-ASR
+capture with once-only compute, capture-order commits and one paid recovery. Provider behavior per owner comes from
 `batch-control/*.json` in the state directory; defaults come from
 `OMI_BATCH_STACK_WORDS_{LATENCY_MS,EMPTY_RATE,FAILURE_RATE}`,
 `OMI_BATCH_STACK_PAID_LATENCY_MS`, and `OMI_BATCH_STACK_CAPACITY`.
+
+Batch admission receives a serialized `BatchUnitPolicy` from the coordinator's
+`batch-control/policy.json`; the admission seam supplies it to the real upload
+route, which records it on each job outside the unchanged strict binding. Scheduler, projection and recovery owners
+then stamp their parts at first handling, using their own role environment. Later
+handling consumes the recorded part across revision or env changes. The gauntlet
+checks actual job parts as well as the admission stamp. Excluded worker, provider,
+process and authentication settings remain process inputs. No cloud
+credentials or live endpoints participate in this replay.

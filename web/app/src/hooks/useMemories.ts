@@ -391,6 +391,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       // If not stale, we're done
       if (!isCacheStale(key)) {
+        // No fetch runs here, so clear the error left by the previous categories
+        setError(null);
         prevQueryRef.current = currentQuery;
         return;
       }

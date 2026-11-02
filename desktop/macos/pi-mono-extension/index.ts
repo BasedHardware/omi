@@ -682,6 +682,30 @@ export function applyOmiProviderHeaders(
   if (reasoningEffort) headers["x-omi-reasoning-effort"] = reasoningEffort;
 }
 
+export function withOmiProviderHeadersFetch(options: {
+  baseUrl: string;
+  fetch: typeof fetch;
+  relayContextRaw?: () => Promise<string | undefined>;
+}): typeof fetch {
+  const base = new URL(options.baseUrl);
+  const completionsPath = `${base.pathname.replace(/\/$/, "")}/chat/completions`;
+  const readRelayContextRaw = options.relayContextRaw ?? omiRelayContextRaw;
+  return async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.origin !== base.origin || url.pathname !== completionsPath) {
+      return options.fetch(input, init);
+    }
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+    const relayHeaders: Record<string, string> = {};
+    applyOmiProviderHeaders(relayHeaders, await readRelayContextRaw());
+    for (const [key, value] of Object.entries(relayHeaders)) {
+      if (!headers.has(key)) headers.set(key, value);
+    }
+    return options.fetch(input, { ...init, headers });
+  };
+}
+
 export { isSafeSkillName };
 
 // ---------------------------------------------------------------------------
@@ -1386,6 +1410,14 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
     fetch: globalThis.fetch.bind(globalThis),
     headers: requestModelHeaders,
     report: status => process.stdout.write(JSON.stringify(status) + "\n"),
+  });
+  // Ensure every /chat/completions request in a turn carries the active relay
+  // context headers (x-omi-request-id, x-omi-local-capability, effort)
+  // even when pi-ai streams directly without firing before_provider_headers.
+  globalThis.fetch = withOmiProviderHeadersFetch({
+    baseUrl,
+    fetch: globalThis.fetch.bind(globalThis),
+    relayContextRaw: omiRelayContextRaw,
   });
   pi.registerProvider("omi", {
     api: "openai-completions",

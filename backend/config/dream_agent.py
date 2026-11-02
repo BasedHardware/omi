@@ -1,9 +1,13 @@
 """Live global kill switch, eligibility and hard all-user Dream ceilings."""
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import math
 import os
 
-from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
+from config.policy.batch import cohort_bucket
+
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members, RolloutCohortUnavailable
 from dataclasses import dataclass
 from datetime import timedelta
 from config.plan_catalog import PAID_PLAN_IDS
@@ -23,7 +27,10 @@ FINISH_MARGIN_SECONDS = 30
 def enabled():
     from config.dream_control import allowed
 
-    return os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true' and allowed()
+    return (
+        rollout_default_off('DREAM_AGENT_ENABLED', os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true')
+        and allowed()
+    )
 
 
 def mode():
@@ -45,7 +52,46 @@ def _allowlisted(uid):
 
 def allowlist_uids():
     """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
-    return list(rollout_cohort_members('dream-agent'))
+    try:
+        return list(rollout_cohort_members('dream-agent'))
+    except RolloutCohortUnavailable:
+        if eligibility() == 'allowlist':
+            raise
+        # A membership outage cannot veto declared all/paid eligibility. It
+        # also cannot manufacture an allowlist exception to a paid percentage.
+        return []
+
+
+def paid_percent():
+    """Share of paid owners in the Dream ramp; unset admits every paid owner, malformed admits none."""
+    raw = os.getenv('DREAM_AGENT_PAID_PERCENT', '100').strip()
+    if not raw.isascii() or not raw.isdigit() or int(raw) > 100:
+        return 0
+    return int(raw)
+
+
+def in_paid_ramp(uid):
+    """Stable per-owner bucket, so widening the percent only ever adds owners."""
+    bucket = cohort_bucket(uid, 'dream-agent-paid', formula='modulo')
+    return bucket < paid_percent()
+
+
+def _paid_cohort(uid):
+    # Listed owners stay in at any percent; the member list is cached, not read per owner.
+    return in_paid_ramp(uid) or uid in allowlist_uids()
+
+
+# A dry hunt (nothing applied) doubles the owner's next hunt interval, up to 8x.
+HUNT_BACKOFF_MAX_DOUBLINGS = 3
+
+
+def backed_off_hunt_interval(size_bucket, dry_hunts):
+    """Hunt interval after consecutive dry hunts; a hunt that applies anything resets the streak."""
+    try:
+        streak = max(0, min(HUNT_BACKOFF_MAX_DOUBLINGS, int(dry_hunts or 0)))
+    except (TypeError, ValueError):
+        streak = 0
+    return hunt_interval(size_bucket) * (2**streak)
 
 
 def hunt_interval(size_bucket):
@@ -62,7 +108,9 @@ def hunt_interval(size_bucket):
 
 
 def on_demand_enabled():
-    return os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}
+    return rollout_default_off(
+        'DREAM_ON_DEMAND_ENABLED', os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}
+    )
 
 
 def admission_for(uid):
@@ -72,7 +120,10 @@ def admission_for(uid):
     is true. Every other owner, and allowlisted owners with the flag off, use
     reserved capacity.
     """
-    listed = allowlisted(uid)
+    try:
+        listed = allowlisted(uid)
+    except RolloutCohortUnavailable:
+        listed = False  # Reserved capacity only; never invent spending authority.
     if listed and on_demand_enabled():
         return 'on_demand', True
     return 'reserved', False
@@ -88,6 +139,7 @@ def may_be_eligible(uid):
         and not uid.startswith('dream-canary-')
         and eligibility() != 'invalid'
         and (eligibility() != 'allowlist' or _allowlisted(uid))
+        and (eligibility() != 'paid' or _paid_cohort(uid))
     )
 
 
@@ -98,7 +150,16 @@ def eligible(uid, user):
     return (
         policy == 'all'
         or (policy == 'allowlist' and _allowlisted(uid))
-        or (policy == 'paid' and (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS)
+        or (
+            policy == 'paid'
+            and (
+                uid in allowlist_uids()
+                or (
+                    in_paid_ramp(uid)
+                    and (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS
+                )
+            )
+        )
     )
 
 
@@ -143,6 +204,10 @@ class Caps:
     tokens_per_minute: int = 2000000
     undo_rate: float = 0.2
     undo_min_samples: int = 10
+    # A low-volume owner never reaches undo_min_samples; this many undos of one kind
+    # among changes applied in the last undo_recent_days pause that kind for them.
+    undo_recent_count: int = 3
+    undo_recent_days: int = 7
     anonymous_k: int = 20
     manual_runs: int = 3
     # Main-lane reply ceiling. Gemini 3.x counts thinking inside it, so 4096 truncated medium-effort turns.
@@ -160,6 +225,8 @@ class Caps:
             tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
+            undo_recent_count=max(1, int(number('DREAM_AGENT_UNDO_RECENT_COUNT', 3))),
+            undo_recent_days=max(1, int(number('DREAM_AGENT_UNDO_RECENT_DAYS', 7))),
             anonymous_k=max(2, int(number('DREAM_AGENT_FEEDBACK_K', 20))),
             manual_runs=int(number('DREAM_AGENT_MANUAL_RUNS_PER_DAY', 3)),
         )

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-push-tap-router-drops-sent-push-type",
+  "violated_contract": "A notification-tap router that gates on the push's type field must keep a route for every type the backend sends. 618efeee6d (#18858) made NotificationUtil.routeFromFcmData treat any non-empty push_type other than capture_recovery as unknown and return null, so a spoofed navigate_to could not steer the device-repair push. The backend had sent Omi's chat answers with push_type=chat_answer and navigate_to=/chat/omi since #13173, so from that change on every iOS tap on an answer opened nothing, silently undoing the #5126 deep link. Android kept working only because its local BigText notification rebuilds the tap payload without push_type, so neither the existing tests nor Android users saw the drop.",
+  "canonical_prevention": "The typed branch of the tap router names every push_type a backend sender sets, each with its own route rule (a fixed route, or navigate_to limited to that type's route prefix); only a type no sender uses falls through to null. A unit test drives routeFromFcmData and handleFcmDataTap with each sender's payload and asserts the destination that opens.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/notification_fcm_navigate_to_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/notifications.dart",
+    "app/lib/services/notifications/",
+    "backend/utils/notifications.py"
+  ],
+  "status": "open"
+}

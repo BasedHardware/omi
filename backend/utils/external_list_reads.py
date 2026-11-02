@@ -1,5 +1,6 @@
 """Authorized external list caching, normalized queries, and bounded read seams."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -7,7 +8,8 @@ import os
 import time
 from concurrent.futures import Future
 from dataclasses import dataclass
-from threading import BoundedSemaphore
+from datetime import datetime, timezone
+from threading import BoundedSemaphore, Lock
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -20,7 +22,7 @@ from utils.encryption import derive_key
 from utils.executors import db_executor, submit_with_context
 from utils.mcp_server.cursors import decode_cursor
 from utils.mcp_server.errors import ToolExecutionError
-from utils.observability.external_lists import EXTERNAL_LIST_CACHE_TOTAL
+from utils.observability.external_lists import EXTERNAL_LIST_CACHE_TOTAL, observe_action_items_rows
 from utils.other.list_budget import ListReadBudget, list_read_budget_for_request
 from utils.observability.fallback import record_fallback
 
@@ -30,8 +32,12 @@ VERSIONED_TTL_SECONDS = 900
 MAX_BODY_BYTES = 256 * 1024
 MAX_ENTRY_BYTES = MAX_BODY_BYTES + 8192
 MAX_CACHE_POPULATIONS = 32
+MAX_CACHE_WAITERS = 8
 _population_slots = BoundedSemaphore(MAX_CACHE_POPULATIONS)
+_waiter_slots = BoundedSemaphore(MAX_CACHE_WAITERS)
 _client: Any = None
+_flights: dict[str, tuple[float, Future]] = {}
+_flight_lock = Lock()
 _HEADERS = frozenset(
     {
         'x-omi-effective-limit',
@@ -72,25 +78,36 @@ class _Entry:
     started: float
     ttl: int = TTL_SECONDS
     version: str | None = None
+    flight: Future | None = None
+
+    def event(self, outcome: str) -> None:
+        EXTERNAL_LIST_CACHE_TOTAL.labels(route=self.route, outcome=outcome).inc()
 
     def eligible(self, response: Response) -> bool:
-        return (
-            response.status_code == 200
-            and not any(
-                response.headers.get(header, '').lower() == 'true'
-                for header in ('x-omi-list-truncated', 'x-scan-truncated')
-            )
-            and len(response.body) <= MAX_BODY_BYTES
-            and time.monotonic() - self.started < self.ttl
-            and time.time() < self.expires_at
-            and lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED')
-        )
+        reason = None
+        if response.status_code != 200:
+            reason = 'skip_status'
+        elif any(
+            response.headers.get(header, '').lower() == 'true'
+            for header in ('x-omi-list-truncated', 'x-scan-truncated')
+        ):
+            reason = 'skip_truncated'
+        elif len(response.body) > MAX_BODY_BYTES:
+            reason = 'skip_body_size'
+        elif time.monotonic() - self.started >= self.ttl or time.time() >= self.expires_at:
+            reason = 'skip_expired'
+        elif not lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED'):
+            reason = 'skip_disabled'
+        if reason:
+            self.event(reason)
+        return reason is None
 
     def store(self, response: Response) -> None:
         # Recheck after queue delay; the deadline still belongs to query start.
         if not self.eligible(response):
             return
         if self.version is not None and action_item_versions.version(self.uid) != self.version:
+            self.event('skip_version_changed')
             return
         body = bytes(response.body)
         try:
@@ -116,6 +133,79 @@ class _Entry:
             EXTERNAL_LIST_CACHE_TOTAL.labels(route=self.route, outcome='stored').inc()
         except Exception:
             _fail_open('cache_write')
+
+    def join(self, request: Request, response: Response | None) -> Response | None:
+        """Batch simultaneous identical misses after every caller's auth gates.
+
+        Only sync route workers wait. A busy/unavailable leader falls back to
+        each request's original read within one second, without queueing more
+        populations or extending the original cache freshness interval.
+        """
+        if not lever_enabled('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED'):
+            return None
+        try:
+            asyncio.get_running_loop()
+            return None
+        except RuntimeError:
+            pass
+        now = time.monotonic()
+        with _flight_lock:
+            for key, (deadline, pending) in list(_flights.items()):
+                if deadline <= now:
+                    del _flights[key]
+                    if not pending.done():
+                        pending.set_result(None)
+            existing = _flights.get(self.key)
+            if existing is None:
+                if len(_flights) < MAX_CACHE_POPULATIONS:
+                    self.flight = Future()
+                    _flights[self.key] = (self.started + min(self.ttl, TTL_SECONDS), self.flight)
+                return None
+            pending = existing[1]
+        slots = _waiter_slots
+        if not slots.acquire(blocking=False):
+            self.event('coalesce_saturated')
+            return None
+        try:
+            result = pending.result(timeout=min(1.0, max(0.0, existing[0] - now)))
+        except TimeoutError:
+            self.event('coalesce_timeout')
+            return None
+        finally:
+            slots.release()
+        if result is None:
+            return None
+        body, headers, expires_at = result
+        if (
+            time.time() >= expires_at
+            or not lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED')
+            or not lever_enabled('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED')
+            or (self.version is not None and action_item_versions.version(self.uid) != self.version)
+        ):
+            return None
+        request.state.external_list_cache_entry = None
+        self.event('coalesced')
+        return Response(
+            content=body, media_type='application/json', headers={**headers, **(response.headers if response else {})}
+        )
+
+    def complete(self, response: Response | None) -> None:
+        if self.flight is None:
+            return
+        result = None
+        # The sync follower rechecks its captured writer version before use.
+        # Completion runs on the event loop and must never perform Redis I/O.
+        if response is not None and self.eligible(response):
+            result = (
+                bytes(response.body),
+                {k: v for k, v in response.headers.items() if k.lower() in _HEADERS},
+                self.expires_at,
+            )
+        with _flight_lock:
+            if not self.flight.done():
+                self.flight.set_result(result)
+            if _flights.get(self.key, (None, None))[1] is self.flight:
+                del _flights[self.key]
 
 
 def cached_list_response(
@@ -178,7 +268,7 @@ def cached_list_response(
     except Exception:
         _fail_open('cache_read')
     EXTERNAL_LIST_CACHE_TOTAL.labels(route=route, outcome='miss').inc()
-    return None
+    return entry.join(request, response)
 
 
 def _queue_population(entry: _Entry, response: Response) -> None:
@@ -212,11 +302,16 @@ class ExternalListCacheRoute(APIRoute):
         original = super().get_route_handler()
 
         async def handler(request: Request):
-            response = await original(request)
-            entry = getattr(request.state, 'external_list_cache_entry', None)
-            if entry is not None:
-                _queue_population(entry, response)
-            return response
+            response = None
+            try:
+                response = await original(request)
+                return response
+            finally:
+                entry = getattr(request.state, 'external_list_cache_entry', None)
+                if entry is not None:
+                    entry.complete(response)
+                    if response is not None:
+                        _queue_population(entry, response)
 
         return handler
 
@@ -262,6 +357,14 @@ def cached_external_list(
     if fields is None:
         return None
     query = {key: parameters[key] for key in fields}
+    if request.url.path == '/v1/dev/user/action-items' and lever_enabled(
+        'OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED'
+    ):
+        for key in ('start_date', 'end_date'):
+            value = query[key]
+            if isinstance(value, datetime):
+                # Firestore treats naive datetimes as UTC. Only the key changes.
+                query[key] = value.replace(tzinfo=value.tzinfo or timezone.utc).astimezone(timezone.utc)
     if 'categories' in query:
         query['categories'] = sorted(category.value for category in parameters['category_list'])
     if 'parsed_updated_after' in parameters:
@@ -319,13 +422,16 @@ def validate_developer_action_items(action_items: list[Any], response_model: Any
     valid_action_items = []
     for item in action_items:
         if not isinstance(item, dict) or not item.get('id'):
+            observe_action_items_rows('invalid')
             log.warning('Skipping malformed action item in Developer API action-item list')
             continue
         if item.get('is_locked', False):
+            observe_action_items_rows('locked')
             continue
         try:
             valid_action_items.append(response_model.model_validate(item))
         except ValidationError as e:
+            observe_action_items_rows('invalid')
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             log.warning(
                 f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "

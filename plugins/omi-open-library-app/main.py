@@ -12,7 +12,7 @@ from typing import Any, Optional
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -65,7 +65,7 @@ class ChatToolResponse(BaseModel):
 
 
 def _safe_limit(limit: Any, default: int = 5) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return default
     try:
         limit = int(limit)
@@ -90,6 +90,24 @@ def _join_values(values: Any, limit: int = 5) -> str:
         values = [values]
     cleaned = [_clean_text(value) for value in values if _clean_text(value)]
     return ", ".join(cleaned[:limit])
+
+
+def _extract_names(items: Any, limit: int = 5) -> str:
+    if not items:
+        return ""
+    if not isinstance(items, list):
+        items = [items]
+    names = []
+    for item in items:
+        if isinstance(item, dict):
+            name = _clean_text(item.get("name"))
+        elif isinstance(item, str):
+            name = _clean_text(item)
+        else:
+            name = ""
+        if name:
+            names.append(name)
+    return ", ".join(names[:limit])
 
 
 def _description_text(description: Any) -> str:
@@ -128,7 +146,9 @@ def _subject_slug(subject: Any) -> Optional[str]:
     return slug[:80] or None
 
 
-def _format_book(doc: dict[str, Any], index: int) -> str:
+def _format_book(doc: Any, index: int) -> str:
+    if not isinstance(doc, dict):
+        return f"{index}. Untitled\n   Author: unknown author\n   First published: unknown year | Open Library work: unknown"
     title = _clean_text(doc.get("title")) or "Untitled"
     authors = _join_values(doc.get("author_name")) or "unknown author"
     year = doc.get("first_publish_year") or "unknown year"
@@ -146,16 +166,13 @@ def _format_book(doc: dict[str, Any], index: int) -> str:
     return "\n".join(lines)
 
 
-def _format_subject_work(work: dict[str, Any], index: int) -> str:
+def _format_subject_work(work: Any, index: int) -> str:
+    if not isinstance(work, dict):
+        return f"{index}. Untitled\n   Author: unknown author | First published: unknown year | Editions: 0 | Work: unknown"
     title = _clean_text(work.get("title")) or "Untitled"
-    authors = ", ".join(
-        _clean_text(author.get("name"))
-        for author in work.get("authors", [])
-        if isinstance(author, dict) and _clean_text(author.get("name"))
-    )
-    authors = authors or "unknown author"
+    authors = _extract_names(work.get("authors")) or "unknown author"
     year = work.get("first_publish_year") or "unknown year"
-    key = _clean_text(work.get("key")).removeprefix("/works/")
+    key = _clean_text(work.get("key")).removeprefix("/works/") or "unknown"
     edition_count = work.get("edition_count") or 0
     return f"{index}. {title}\n   Author: {authors} | First published: {year} | Editions: {edition_count} | Work: {key}"
 
@@ -278,7 +295,9 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_books", response_model=ChatToolResponse)
-async def search_books(payload: dict[str, Any]):
+async def search_books(payload: Optional[dict[str, Any]] = Body(default=None)):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Request body must be a JSON object.")
     query = _clean_text(payload.get("query"))
     author = _clean_text(payload.get("author"))
     subject = _clean_text(payload.get("subject"))
@@ -315,7 +334,9 @@ async def search_books(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_book_details", response_model=ChatToolResponse)
-async def get_book_details(payload: dict[str, Any]):
+async def get_book_details(payload: Optional[dict[str, Any]] = Body(default=None)):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Request body must be a JSON object.")
     work_id = _work_id(payload.get("work_id"))
     isbn = _safe_isbn(payload.get("isbn"))
 
@@ -326,26 +347,14 @@ async def get_book_details(payload: dict[str, Any]):
                 params={"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"},
             )
             book = data.get(f"ISBN:{isbn}")
-            if not book:
+            if not book or not isinstance(book, dict):
                 return ChatToolResponse(result=f"No Open Library details found for ISBN {isbn}.")
 
             title = _clean_text(book.get("title")) or "Untitled"
-            authors = ", ".join(
-                _clean_text(author.get("name"))
-                for author in book.get("authors", [])
-                if isinstance(author, dict) and _clean_text(author.get("name"))
-            ) or "unknown author"
-            publishers = ", ".join(
-                _clean_text(publisher.get("name"))
-                for publisher in book.get("publishers", [])
-                if isinstance(publisher, dict) and _clean_text(publisher.get("name"))
-            )
+            authors = _extract_names(book.get("authors")) or "unknown author"
+            publishers = _extract_names(book.get("publishers"))
             publish_date = _clean_text(book.get("publish_date")) or "unknown date"
-            subjects = ", ".join(
-                _clean_text(subject.get("name"))
-                for subject in book.get("subjects", [])[:6]
-                if isinstance(subject, dict) and _clean_text(subject.get("name"))
-            )
+            subjects = _extract_names(book.get("subjects"), limit=6)
             details = [
                 f"{title}",
                 f"Author: {authors}",
@@ -365,8 +374,13 @@ async def get_book_details(payload: dict[str, Any]):
         title = _clean_text(data.get("title")) or "Untitled"
         description = _description_text(data.get("description"))
         subjects = _join_values(data.get("subjects"), limit=8)
-        created = data.get("created", {})
-        created_date = _clean_text(created.get("value")) if isinstance(created, dict) else ""
+        created = data.get("created")
+        if isinstance(created, dict):
+            created_date = _clean_text(created.get("value"))
+        elif isinstance(created, str):
+            created_date = _clean_text(created)
+        else:
+            created_date = ""
 
         lines = [
             title,
@@ -390,7 +404,9 @@ async def get_book_details(payload: dict[str, Any]):
 
 
 @app.post("/tools/search_subject", response_model=ChatToolResponse)
-async def search_subject(payload: dict[str, Any]):
+async def search_subject(payload: Optional[dict[str, Any]] = Body(default=None)):
+    if not isinstance(payload, dict):
+        return ChatToolResponse(error="Request body must be a JSON object.")
     subject = _clean_text(payload.get("subject"))
     slug = _subject_slug(subject)
     limit = _safe_limit(payload.get("limit"))

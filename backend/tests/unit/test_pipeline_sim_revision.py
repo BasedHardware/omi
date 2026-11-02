@@ -9,8 +9,19 @@ from testing.pipeline_sim.scenarios import run
 def samples() -> dict[str, dict]:
     # Simulate once in setup; the fast-unit CPU guard measures only the assertions below.
     return {
-        'background': run('revision_replacement_mid_run', 1),
-        'task': run('revision_replacement_mid_run', 1, summary_dispatch='task'),
+        # Isolate revision/summary ownership from intentionally retained ASR debt.
+        # The default-on safety behavior is covered by scenario/golden suites.
+        'background': run(
+            'revision_replacement_mid_run',
+            1,
+            overrides={'flags': {'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false'}},
+        ),
+        'task': run(
+            'revision_replacement_mid_run',
+            1,
+            summary_dispatch='task',
+            overrides={'flags': {'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false'}},
+        ),
     }
 
 

@@ -35,9 +35,10 @@ The test deliberately exercises the production listen runtime (`main:app`),
 real pusher router, binary frames 101/102/103/104/201, Firestore finalization
 jobs, leases, fanout admission/idempotency, recording-session binding,
 reconnect code, and the real Cloud Tasks finalization handler.
-It seeds private-cloud mode only to make the real 103 + 101 audio frames flow;
-the provider/storage leaves are disabled because this harness has no cloud
-credentials.
+It seeds private-cloud mode to exercise 103 + 101 and the default durable
+archive barrier. Media and manifests use the owned filesystem adapter with
+create-only writes, persisted metadata and generation pins. Derived audio
+projection remains instrumented. No cloud credentials are available.
 
 The Cloud Tasks entrypoint replaces only provider-side leaves below the real
 processing persistence and memory safety fence:
@@ -71,7 +72,9 @@ header remain in the request path.
 It does not prove LLM/vector output quality, GCS delivery, downstream
 integration delivery, Cloud Tasks IAM provisioning, or Google OIDC signature
 verification. Trace files record durable IDs, frame metadata, and byte counts,
-never audio or transcript text.
+never audio or transcript text. Local test audio objects are confined to each
+scenario's `audio-storage/` directory and are removed with the owned run state.
+Their existence is harness evidence, not production pod-loss durability.
 
 Scenarios:
 

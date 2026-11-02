@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-optional-client-metadata-fails-closed",
+  "violated_contract": "Ingestion endpoints that receive the only copy of user data must degrade broken OPTIONAL client metadata to absent, never reject the request. A hard 422 on an optional field strands the payload forever: retrying clients resend identical bytes, so the recording never reaches the account. On 2026-10-06 the stable rollout of desktop v0.12.447 scaled a long-standing failure to ~16-18k 422s/day on POST /v1/conversations/from-segments (BasedHardware/omi#15500): sessions persisted a blank client_session_id, the wire model raised 'client_session_id cannot be empty', and ~670 stranded sessions retried hourly for weeks. The same endpoint already held the correct principle for client_processing: 'Invalid means drop, never 422.'",
+  "canonical_prevention": "Optional metadata fields on only-copy ingestion paths are normalized at the wire model: a value that carries no usable content (blank, whitespace) becomes None and the request proceeds down the no-metadata path every caller already supports. The regression test posts blank values under every accepted alias through the real route and asserts the create path runs instead of a 422.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_developer_from_segments_idempotency.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/developer_segments_models.py",
+    "backend/routers/developer.py",
+    "desktop/macos/Desktop/Sources/ConversationFinalizationService.swift"
+  ],
+  "status": "open"
+}

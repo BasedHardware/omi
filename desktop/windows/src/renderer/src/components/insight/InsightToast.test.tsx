@@ -1,38 +1,20 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { InsightPayload, MeetingToastPayload } from '../../../../shared/types'
+import type { MeetingToastPayload } from '../../../../shared/types'
 import { InsightToast } from './InsightToast'
 
 let onMeetingToast: ((payload: MeetingToastPayload) => void) | null = null
 const meetingAction = vi.fn()
 const insightDismiss = vi.fn()
-const proactivityNotificationOpen = vi.fn()
-const proactivityNotificationRendered = vi.fn()
-const proactivityNotificationFeedback = vi.fn()
-let frame: FrameRequestCallback | null = null
-let onInsightShow: ((payload: InsightPayload) => void) | null = null
 
 beforeEach(() => {
-  frame = null
-  proactivityNotificationRendered.mockReset()
-  proactivityNotificationFeedback.mockReset()
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frame = callback; return 1 })
-  vi.stubGlobal('cancelAnimationFrame', () => { frame = null })
   onMeetingToast = null
-  onInsightShow = null
-  proactivityNotificationOpen.mockReset()
   meetingAction.mockReset()
   insightDismiss.mockReset()
   vi.stubGlobal('window', {
     omi: {
-      onInsightShow: (cb: (payload: InsightPayload) => void) => {
-        onInsightShow = cb
-        return () => {}
-      },
-      proactivityNotificationOpen,
-      proactivityNotificationRendered,
-      proactivityNotificationFeedback,
+      onInsightShow: () => () => {},
       onMeetingToast: (cb: (payload: MeetingToastPayload) => void) => {
         onMeetingToast = cb
         return () => {}
@@ -98,29 +80,4 @@ describe('meeting capture status toast', () => {
     fireEvent.click(screen.getByText('Dismiss', { selector: '.meeting-btn' }))
     expect(meetingAction).toHaveBeenCalledWith('meeting-1', 'dismiss')
   })
-})
-
-it('opens a v2 card by opaque ID without accepting a renderer-supplied destination', () => {
-  render(<InsightToast />)
-  act(() => onInsightShow?.({ headline: 'Follow up', advice: 'Synthetic long body '.repeat(40),
-    reasoning: '', category: 'other', sourceApp: 'Omi', confidence: 1, proactivityItemID: 'item-1' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Open' }))
-  expect(proactivityNotificationOpen).toHaveBeenCalledWith('item-1')
-  expect(meetingAction).not.toHaveBeenCalled()
-})
-
-it('acknowledges a mounted frame, reports feedback, and sends explicit dismiss separately', () => {
-  render(<InsightToast />)
-  expect(proactivityNotificationRendered).not.toHaveBeenCalled()
-  act(() => onInsightShow?.({ headline: 'Follow up', advice: 'Synthetic', reasoning: '',
-    category: 'other', sourceApp: 'Omi', confidence: 1, proactivityItemID: 'item-2' }))
-  expect(proactivityNotificationRendered).not.toHaveBeenCalled()
-  act(() => frame?.(0))
-  expect(proactivityNotificationRendered).toHaveBeenCalledWith('item-2')
-  fireEvent.click(screen.getByRole('button', { name: 'Helpful' }))
-  expect(proactivityNotificationFeedback).toHaveBeenCalledWith('item-2', 'thumbs_up')
-  fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }))
-  expect(proactivityNotificationFeedback).toHaveBeenCalledWith('item-2', 'thumbs_down')
-  fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-  expect(insightDismiss).toHaveBeenCalledOnce()
 })

@@ -19,4 +19,10 @@ def mark_sync_bridge_cleaned(uid, source_id, revision, audio_target, *, firestor
         transaction.update(ref, {'sync_bridge_cleaned_revision': revision, 'sync_bridge_audio_target': audio_target})
         return True
 
-    return run_transactional(client, mark)
+    # The body re-reads and refuses a moved revision, so it meets the
+    # ``transient=True`` idempotency contract. The default path only restarts an
+    # expired transaction id; a contended commit exhausts the SDK's same-id
+    # replay and surfaces as a bare ValueError, failing finalize after intake
+    # already persisted. A fresh transaction with bounded backoff re-reads and
+    # converges instead.
+    return run_transactional(client, mark, transient=True)

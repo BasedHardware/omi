@@ -153,8 +153,8 @@ def _circuit():
         deferred_result_callbacks=lambda: (lambda: None, lambda: None),
         account_cooldown_elapsed=lambda: True,
         account_cooldown_seconds_remaining=0.0,
-        record_failure=lambda: None,
-        record_account_failure=lambda _seconds: None,
+        record_failure=lambda **_kwargs: None,
+        record_account_failure=lambda *_args, **_kwargs: None,
     )
 
 

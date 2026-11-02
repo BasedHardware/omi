@@ -1,10 +1,11 @@
 """Metadata-only backlog totals, intent and transaction hooks. No transcript scans."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 import time
 import hashlib
+import math
 
 from google.cloud import firestore
 
@@ -19,10 +20,10 @@ def get_firestore_client():
     return client_factory()
 
 
-def external_write_fence(uid: str, *, firestore_client):
+def external_write_fence(uid: str, *, firestore_client, transaction=None):
     from database.legal_holds import external_write_fence as open_fence
 
-    return open_fence(uid, firestore_client=firestore_client)
+    return open_fence(uid, firestore_client=firestore_client, transaction=transaction)
 
 
 def summary_ref(uid: str, *, firestore_client=None):
@@ -150,6 +151,7 @@ def start(
             'automatic': automatic,
             'pending_upgrade': {},
             'reserved': {},
+            'scope_skipped': False,
             'cursor_audio': None,
             'cursor_text': None,
         }
@@ -201,6 +203,115 @@ def checkpoint(uid: str, token: str, lease: str, updates: dict) -> bool:
     return result
 
 
+def release_undispatched_reservation(
+    uid: str, token: str, lease: str, period: str, reserved: dict, *, audio_manifest: dict | None = None
+) -> dict | None:
+    """Refund only a never-started excluded estimate, under choice/source fences.
+
+    Audio provenance was decrypted by the caller; compare its entire manifest
+    inside this transaction so a changed origin, lease or intent invalidates it.
+    Text claim history (even expired) is ambiguous and cannot be refunded.
+    Missing/legacy source shapes retain their reservation. This changes neither
+    usage-ledger spend nor the source, which remains discoverable for widening.
+    """
+    kind, identity, units = reserved.get('kind'), reserved.get('id'), reserved.get('units')
+    if (
+        not uid
+        or '/' in uid
+        or not token
+        or not lease
+        or kind not in {'audio', 'text'}
+        or not isinstance(identity, str)
+        or not identity
+        or '/' in identity
+        or not isinstance(units, (int, float))
+        or isinstance(units, bool)
+        or not math.isfinite(units)
+        or units < 0
+    ):
+        return None
+    client = get_firestore_client()
+    ref = summary_ref(uid, firestore_client=client)
+    source = (
+        client.collection('users')
+        .document(uid)
+        .collection('stt_cap_holds' if kind == 'audio' else COLLECTION)
+        .document(identity)
+    )
+
+    @firestore.transactional
+    def commit(tx):
+        with external_write_fence(uid, firestore_client=client, transaction=tx):
+            row = ref.get(transaction=tx).to_dict() or {}
+            now = time.time()
+            if (
+                row.get('state') != 'processing'
+                or row.get('token') != token
+                or row.get('lease') != lease
+                or row.get('lease_until', 0) <= now
+                or row.get('period') != period
+                or period != datetime.fromtimestamp(now, timezone.utc).strftime('%Y-%m')
+                or row.get('reserved') != reserved
+                or 'remaining' not in row
+            ):
+                return None
+            held = source.get(transaction=tx).to_dict()
+            if not held:
+                return None
+            if kind == 'audio':
+                if (
+                    held != audio_manifest
+                    or held.get('state') != 'held'
+                    or held.get('lease_until') != 0
+                    or 'lease_token' in held
+                    or 'piece_plan' in held
+                    or held.get('next_attempt_at') != 0
+                    or any(
+                        held.get(key)
+                        for key in (
+                            'piece_receipts',
+                            'piece_ingests',
+                            'processed_paths',
+                            'finalized_paths',
+                            'finalized',
+                            'settled',
+                            'failed_reconciliation',
+                            'retain_audio',
+                        )
+                    )
+                ):
+                    return None
+            elif (
+                held.get('run_lease')
+                or held.get('run_lease_until', 0) != 0
+                or any(
+                    type(held.get(key)) not in (int, float) or not math.isfinite(held[key]) or held[key] < 0
+                    for key in ('started_at', 'queued_at', 'units')
+                )
+            ):
+                return None
+            remaining = row.get('remaining')
+            if remaining is not None and (
+                type(remaining) not in (int, float)
+                or not math.isfinite(remaining)
+                or remaining < 0
+                or not math.isfinite(remaining + units)
+            ):
+                return None
+            updates = {
+                'reserved': {},
+                'remaining': None if remaining is None else remaining + units,
+                'scope_skipped': True,
+            }
+            tx.update(ref, updates)
+            return updates
+
+    result = commit(client.transaction())
+    if result is not None:
+        _request_memo().forget_request_reads(uid)
+    return result
+
+
 def finish(uid: str, token: str, lease: str, period: str) -> bool:
     """Finish one choice and consume an already-authorized same-month upgrade.
 
@@ -221,7 +332,9 @@ def finish(uid: str, token: str, lease: str, period: str) -> bool:
         if row.get('reserved'):
             return False
         pending = row.get('pending_upgrade') or {}
-        if pending.get('period') == period == row.get('period'):
+        if pending.get('period') == period == row.get('period') and period == datetime.fromtimestamp(
+            time.time(), timezone.utc
+        ).strftime('%Y-%m'):
             tx.update(
                 ref,
                 {
@@ -232,12 +345,18 @@ def finish(uid: str, token: str, lease: str, period: str) -> bool:
                     'automatic': True,
                     'pending_upgrade': {},
                     'reserved': {},
+                    'scope_skipped': False,
                     'cursor_audio': None,
                     'cursor_text': None,
                     'lease_until': 0,
                 },
             )
             return True
+        if row.get('scope_skipped'):
+            # Exclusion retains consent, but cannot withhold an already accepted
+            # same-month upgrade above. Only the transaction owns this rewind.
+            tx.update(ref, {'cursor_audio': None, 'cursor_text': None, 'scope_skipped': False, 'lease_until': 0})
+            return False
         tx.update(ref, {'state': 'waiting_choice', 'pending_upgrade': {}, 'lease_until': 0})
         return False
 

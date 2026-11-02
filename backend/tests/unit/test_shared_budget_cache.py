@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient

@@ -5,6 +5,16 @@ Date: 2026-10-03. Branch: `lane/proactivity-v2-spine`.
 Integration destination: `lane/proactivity-v2`; no PR to main from this lane.
 Source baseline: `159df547f4dc4657af0c92675e99a0202949711a` (fetched main).
 
+> **Retirement update (2026-10-26):** the real-time mentor
+> (`conversation_mentor_v2`) and commitment follow-up (`commitment_followup`)
+> producers were deleted; the producer registry is empty. `GET /v1/proactivity/feed`
+> and `POST /v1/proactivity/items/{id}/outcomes` remain as compatibility stubs
+> (feed reports `enabled=false`, outcomes are a recorded no-op) for one release
+> so shipped clients keep decoding responses. The sections below are the
+> historical G1 design record: the item ledger, Budget Authority, redis, flags
+> and gateway enforcement they describe still exist pending the follow-up
+> retirement PR; the producer trigger, queue and client surfaces do not.
+
 ## 1. Scope and binding decisions
 
 One backend-owned item ledger, feed, outcome API and Budget Authority serve all

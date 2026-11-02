@@ -8,6 +8,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/ui/ui.dart';
 import '../../../integration_test/support/dream_changes_fixture.dart';
+import '../../helpers/sfpro_font_fixtures.dart';
 import '../../widgets/guided_voice_render_test.dart' show loadFonts;
 
 void main() {
@@ -17,7 +18,7 @@ void main() {
     for (final family in ['CupertinoSystemText', 'CupertinoSystemDisplay']) {
       final loader = FontLoader(family);
       for (final weight in ['REGULAR', 'MEDIUM', 'BOLD']) {
-        loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$weight.OTF'));
+        loader.addFont(sfProFont('SFPRODISPLAY$weight.OTF'));
       }
       await loader.load();
     }

@@ -20,6 +20,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+from diarizer.batch_pipeline import padded_retry_fits, padded_retry_seconds
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty
 
 SAMPLE_RATE = 16000
@@ -280,12 +281,18 @@ class PlannedWords:
             for s, outcome in zip(samples_list, outcomes)
         ]
 
-    def recover_words(self, samples, max_padded_seconds):
+    def recover_words(self, samples, max_padded_seconds, *, before_dispatch=None, after_dispatch=None):
         outcome = self.plan[samples.segment_id].get('retry')
-        if outcome is None:
+        if outcome is None or not padded_retry_fits(samples, max_padded_seconds):
             return None  # Oversize for the padded retry: the worker records skipped_oversize.
+        # Match ParakeetWords.recover_empty: refusal retains custody, and only
+        # an accepted provider result reports the padded audio quantum.
+        if before_dispatch is not None and not before_dispatch():
+            return None
         if outcome in {ERROR, TIMEOUT}:
             raise ProviderUnavailable('synthetic padded retry failure')
+        if after_dispatch is not None:
+            after_dispatch(padded_retry_seconds(samples))
         return synthetic_words(len(samples) / SAMPLE_RATE) if outcome == WORDS else []
 
 

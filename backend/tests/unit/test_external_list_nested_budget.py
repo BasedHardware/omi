@@ -14,6 +14,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory import read_resilience
 from utils.mcp_server.cursors import encode_cursor
 from utils.mcp_server.handlers import memories as handlers
+from utils.mcp_server.errors import ToolExecutionError
 from utils.other.list_budget import ListReadBudget
 
 
@@ -222,41 +223,51 @@ def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkey
 
     def read(*args, **kwargs):
         calls.append(kwargs)
-        return service.read(*args, **kwargs)
+        return service.read_mcp_filtered(*args, **kwargs)
 
-    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
+    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read_mcp_filtered=read))
 
     def run(allowance):
         store.physical = store.streams = store.batch_gets = 0
         store.windows.clear()
         calls.clear()
-        result = handlers.memories_page_core(
-            'owner', limit=20, sort='created_desc', max_scan=20, cursor_kind='test', budget=allowance
+        return handlers.memories_page_core(
+            'owner',
+            limit=20,
+            sort='created_desc',
+            reviewed=False,
+            max_scan=100,
+            cursor_kind='test',
+            budget=allowance,
         )
-        return result, store.physical
 
-    unbounded, prior_reads = run(None)
+    unbounded = run(None)
     clean = budget(1000)
-    same, clean_reads = run(clean)
+    same = run(clean)
     assert same['memories'] == unbounded['memories']
     assert [row['id'] for row in same['memories']] == ['canonical', *[f'h-{i}' for i in range(12, 24)]]
     assert not same['scan_truncated'] and not same['has_more'] and not clean.truncated
-    assert clean_reads == clean.docs_scanned == 84
-    assert len(calls) == 1
-    assert store.batch_gets > 0
+    assert store.physical == clean.docs_scanned
+    assert len(calls) == 1 and store.batch_gets > 0
     historical = [window for window in store.windows if window[0].endswith('/memories')]
+    assert len(historical) == 2
     assert {window[1][0][0] for window in historical} == {'updated_at', 'created_at'}
-    assert len(historical) > 2  # Hidden rows grow via suffix RPCs, not a prefix reread.
-    # updated_at excludes h-12; created_at supplies it. Neither index invents a field.
     assert sum(window[3] for window in historical if window[1][0][0] == 'updated_at') == 23
     assert sum(window[3] for window in historical if window[1][0][0] == 'created_at') == 24
-    bounded = budget(25)
-    truncated, bounded_reads = run(bounded)
-    assert bounded.truncated and truncated['scan_truncated'] and truncated['has_more']
-    assert bounded_reads == bounded.docs_scanned
-    assert bounded_reads <= 25 + max(window[2] for window in store.windows)
-    assert len(calls) == 1
-    print(f'mixed nested MCP exhausted={bounded_reads}; clean={clean_reads}; prior-path={prior_reads}')
+    exhausted = budget(25)
+    with pytest.raises(ToolExecutionError, match='budget exhausted'):
+        run(exhausted)
+    assert exhausted.truncated
+    # A cap below the complete candidate set cannot be mistaken for exhaustion.
+    with pytest.raises(ToolExecutionError, match='20 candidates'):
+        handlers.memories_page_core(
+            'owner',
+            limit=20,
+            sort='created_desc',
+            reviewed=False,
+            max_scan=20,
+            cursor_kind='test',
+        )
 
 
 def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatch):
@@ -271,7 +282,7 @@ def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatc
             'data_protection_level': 'standard',
             'reviewed': False,
         }
-        for i in range(600)
+        for i in range(6854)
     }
     # Advance admission time between synthetic requests; offline queries run
     # faster than the process-wide eight-operation burst would allow in a loop.
@@ -289,45 +300,30 @@ def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatc
         return service.read(*args, **kwargs)
 
     monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
-    bounded = budget(1500)
-    result = handlers.memories_page_core(
-        'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=bounded
-    )
-    assert bounded.truncated and result['scan_truncated'] and result['has_more']
-    assert len(calls) == 1
-    assert store.batch_gets > 0 and store.streams == 2
-    assert store.physical == bounded.docs_scanned
-    # Existing materialized RPC accounting may overshoot by one bounded window.
-    assert store.physical <= 1500 + 600
-    assert result['scanned_count'] < 600
-    # The full, old path traverses all rows and preserves legacy ordering.
-    calls.clear()
+    # Main's unbudgeted global collector reads a 100-row prefix, then 200.
+    service.read('owner', limit=100, offset=0)
+    service.read('owner', limit=100, offset=100)
+    main_reads = store.physical
     store.physical = store.streams = store.batch_gets = 0
-    unbounded = handlers.memories_page_core('owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test')
-    assert not unbounded['scan_truncated']
-    assert len(calls) > 1
+    unbounded = handlers.memories_page_core('owner', limit=25, sort='created_desc', cursor_kind='test')
     assert [row['id'] for row in unbounded['memories']] == [f'h-{i}' for i in range(25)]
-    assert store.physical > 10000
-    prior_reads = store.physical
+    unbounded_reads = store.physical
     calls.clear()
     store.physical = store.streams = store.batch_gets = 0
     clean = budget(25000)
-    same = handlers.memories_page_core(
-        'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=clean
-    )
+    same = handlers.memories_page_core('owner', limit=25, sort='created_desc', cursor_kind='test', budget=clean)
     assert same['memories'] == unbounded['memories']
-    assert len(calls) == 1
-    assert not same['scan_truncated'] and not clean.truncated
-    assert store.physical == clean.docs_scanned == 3000
-    assert store.physical < prior_reads
-    print(
-        f'legacy performance MCP exhausted={bounded.docs_scanned}; clean={clean.docs_scanned}; prior-path={prior_reads}'
-    )
+    assert len(calls) == 1 and not clean.truncated and same['scan_truncated']
+    assert store.physical == clean.docs_scanned == unbounded_reads
+    assert store.physical <= main_reads
+    assert calls[0]["limit"] == 100
+    assert same["source_window_limit"] == 100 and "bounded" in same["coverage"]
 
 
 @pytest.mark.parametrize('use_cursor', [False, True])
 @pytest.mark.parametrize('activity_count', [0, 4, 100])
 def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_cursor, activity_count):
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'synthetic-mcp-list-test-secret')
     now = datetime(2026, 10, 18, tzinfo=timezone.utc)
     rows = {
         f'users/owner/memories/m-{i}': {
@@ -348,12 +344,11 @@ def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_c
     monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance(clock=lambda: next(ticks)))
     calls = []
 
-    def read(uid, *, limit, offset, budget=None):
-        calls.append((limit, offset, budget))
-        return service.read(uid, limit=limit, offset=offset, budget=budget)
+    def read(uid, **kwargs):
+        calls.append(kwargs)
+        return service.read_page(uid, **kwargs)
 
-    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
-    position = {'offset': 1}
+    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read_page=read))
     filters = {
         'categories': [],
         'sort': 'scoring_desc',
@@ -364,30 +359,38 @@ def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_c
         'include_sensitive': True,
     }
     pagination = (
-        {'cursor_token': encode_cursor(kind='test', uid='owner', position=position, filters=filters)}
+        {'cursor_token': encode_cursor(kind='test', uid='owner', position={'offset': 1}, filters=filters)}
         if use_cursor
         else {'offset': 1}
     )
     kwargs = dict(limit=25, sort='scoring_desc', max_scan=5000, cursor_kind='test', **pagination)
     old = handlers.memories_page_core('owner', **kwargs)
-    prior_calls, prior_reads = list(calls), store.physical
-    assert prior_reads == (1100 if activity_count == 100 else 500)
     calls.clear()
     store.physical = 0
-    allowance = budget(1000)
+    allowance = budget(10000)
+    if activity_count == 100:
+        # The shared resilience allowance admits two backing-store operations.
+        # A sparse compatibility page needing more must fail explicitly rather
+        # than reset that allowance or return a misleading empty success.
+        with pytest.raises(ToolExecutionError, match='Memory read admission exhausted') as exc:
+            handlers.memories_page_core('owner', budget=allowance, **kwargs)
+        assert exc.value.http_status == 503
+        assert len(calls) == 3 and store.physical < 5000
+        assert all(call.get('request_budget') is allowance for call in calls)
+        return
     new = handlers.memories_page_core('owner', budget=allowance, **kwargs)
-    assert (
-        [row['id'] for row in new['memories']]
-        == [row['id'] for row in old['memories']]
-        == [f'm-{i}' for i in range(activity_count + 1, activity_count + 26)]
-    )
-    assert new['has_more'] == old['has_more'] is True
-    assert not new['scan_truncated'] and not old['scan_truncated']
-    assert calls == prior_calls
-    assert all(call[2] is None for call in calls)
-    assert store.physical == prior_reads
-    assert allowance.docs_scanned == 0 and not allowance.truncated
-    print(f'scoring activity={activity_count} cursor={use_cursor} prior/on physical reads={prior_reads}')
+    ids = [row['id'] for row in new['memories']]
+    assert ids == [row['id'] for row in old['memories']]
+    assert ids == [f'm-{i}' for i in range(activity_count + 1, activity_count + 1 + len(ids))]
+    assert new['has_more'] and old['has_more']
+    assert not allowance.truncated and len(calls) <= 4
+    assert all(call['limit'] <= 26 for call in calls)
+    assert all(call.get('request_budget') is allowance for call in calls)
+    assert store.physical < 5000
+    if len(ids) < 25:
+        assert new['scan_truncated'] and old['scan_truncated']
+    else:
+        assert not new['scan_truncated'] and not old['scan_truncated']
 
 
 def test_card_offsets_stop_before_rpc_and_small_pages_charge_skips():

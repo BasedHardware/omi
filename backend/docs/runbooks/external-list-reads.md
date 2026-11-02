@@ -1,5 +1,7 @@
 # Developer API and MCP list reads
 
+Remaining action-item reads: [filtered compatibility scans and telemetry](dev-action-items-read-cost.md).
+
 Round 2 changes and the current savings model: [Developer API / promote read cuts](devapi-reads-r2.md).
 
 The three Developer API GET lists (`/v1/dev/user/conversations`, `/v1/dev/user/memories`,

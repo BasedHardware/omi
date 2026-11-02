@@ -63,6 +63,8 @@ struct ConversationActionItemsSection: View {
     let linkedTaskID = item.targetTaskID
     return ConversationActionItemRow(
       item: item,
+      displayDescription: ConversationSummarySelection.presentableText(
+        item.description, segments: conversation.transcriptSegments),
       taskState: taskState(index: index, linkedTaskID: linkedTaskID),
       transcriptTitle: sourceIDs.isEmpty ? "Transcript" : "Source",
       onTaskAction: { taskAction(index) },

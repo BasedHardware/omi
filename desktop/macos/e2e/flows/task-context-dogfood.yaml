@@ -29,7 +29,7 @@ steps:
     do: "In a named non-production bundle with a synthetic dogfood account, visit two documents with distinct numbered identifiers. Create a screen-visible task in each and revisit them. Verify subject bindings and resurfaced tasks remain attached to the correct document and owner."
   - id: S2
     name: Keep task extraction and deduplication
-    do: "With screen_task_jev_gate enabled, revisit a concrete task using a harmless paraphrase. Verify observations reconcile to one suggested task; a different task identifier remains distinct. Confirm Focus and Memory still receive app context switches."
+    do: "With the default-on screen_task_jev_gate (or with its flag explicitly true), revisit a concrete task using a harmless paraphrase. Verify observations reconcile to one suggested task; a different task identifier remains distinct. Confirm Focus and Memory still receive app context switches."
   - id: S3
     name: Keep excluded-app privacy
     do: "Exclude the synthetic source app, wait for purge, then query its screen content through chat/Rewind. Confirm excluded OCR, images and video are unavailable. Restore the fixture exclusion afterward."

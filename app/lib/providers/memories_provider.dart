@@ -259,7 +259,11 @@ class MemoriesProvider extends ChangeNotifier {
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
-      if (_showOnlyManual) {
+      if (_searchQuery.isNotEmpty) {
+        // A search looks in every category, as Global Search does when it opens this list filtered
+        // by its query. A category filter saved on an earlier visit must not hide the tapped memory.
+        categoryMatch = true;
+      } else if (_showOnlyManual) {
         // Show only manual memories (exclude system and interesting)
         categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
@@ -318,21 +322,38 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.toLowerCase();
+    // Kept as typed so the Memories search field can show it again; filteredMemories ignores case.
+    _searchQuery = query;
     notifyListeners();
   }
 
-  void toggleCategoryFilter(MemoryCategory category) async {
+  Future<void> toggleCategoryFilter(MemoryCategory category) async {
     if (_selectedCategories.contains(category)) {
       _selectedCategories.remove(category);
     } else {
       _selectedCategories.add(category);
     }
     _showOnlyManual = false; // Reset manual-only filter when setting a category filter
+    _selectedCategories = normalizeCategorySelection(_selectedCategories);
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+    if (_selectedCategories.isEmpty) {
+      // Selecting every category is All; persist that as no filter so the
+      // sheet keeps showing All checked on the next open.
+      await prefs.remove('memories_filter_categories');
+    } else {
+      await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+    }
+  }
+
+  /// An empty set means All. Selecting every category is the same "show
+  /// everything" state, so it collapses to empty instead of leaving All
+  /// unchecked with a category row ticked.
+  @visibleForTesting
+  static Set<MemoryCategory> normalizeCategorySelection(Iterable<MemoryCategory> selection) {
+    final normalized = selection.toSet();
+    return normalized.length == MemoryCategory.values.length ? <MemoryCategory>{} : normalized;
   }
 
   void clearCategoryFilter() async {
@@ -518,16 +539,15 @@ class MemoriesProvider extends ChangeNotifier {
     final filterList = prefs.getStringList('memories_filter_categories');
 
     if (filterList == null) {
-      _selectedCategories = {
-        MemoryCategory.system,
-        MemoryCategory.interesting,
-        MemoryCategory.manual,
-        MemoryCategory.workflow,
-      };
+      // Nothing saved is the All view. Seeding every category here left All
+      // unchecked and every category row ticked, so tapping a category removed
+      // it from the view instead of filtering to it.
+      _selectedCategories = {};
     } else {
-      _selectedCategories = filterList
-          .map((e) => MemoryCategory.values.firstWhere((c) => c.name == e, orElse: () => MemoryCategory.system))
-          .toSet();
+      // Drop names this build no longer knows instead of silently checking System.
+      _selectedCategories = normalizeCategorySelection(
+        filterList.map((e) => MemoryCategory.values.where((c) => c.name == e).firstOrNull).whereType<MemoryCategory>(),
+      );
     }
     notifyListeners();
   }

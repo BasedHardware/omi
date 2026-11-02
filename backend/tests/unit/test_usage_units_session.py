@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from unittest.mock import Mock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 from database import usage_units as units
 from database.usage_units_session import UsageUnitsSession

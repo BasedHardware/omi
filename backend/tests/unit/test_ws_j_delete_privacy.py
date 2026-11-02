@@ -980,6 +980,13 @@ def _tombstoned_evidence_paths(db: "_FakeDb", uid: str) -> list[str]:
 
 
 def _stub_delete_side_effects(monkeypatch) -> None:
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    def defer_normalization(*args, **kwargs):
+        # These fixtures test deletion/evidence identity, with no model service.
+        raise PromotionFlexDeferred('synthetic model unavailable')
+
+    monkeypatch.setattr('utils.memory.required_intake.normalize', defer_normalization)
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),

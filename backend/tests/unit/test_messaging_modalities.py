@@ -697,7 +697,7 @@ def test_ten_requested_photos_reach_file_model_in_sync_and_stream(monkeypatch):
     tool = object.__new__(chat_file.FileChatTool)
     tool.uid = 'u'
 
-    def ask(question, files):
+    def ask(question, files, video_window=None):
         assert {f.id for f in files} == set(ids)
         return 'all ten'
 

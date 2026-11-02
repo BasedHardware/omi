@@ -102,13 +102,16 @@ ConversationDetailProvider summaryProvider(
   ConversationReprocessCall? reprocess,
   SummaryTemplateFetches? fetches,
   List<App> catalog = const [],
+  PreferredSummaryAppWrite? writePreferredSummaryApp,
 }) {
   final fakes = fetches ?? SummaryTemplateFetches();
   final provider = ConversationDetailProvider(
-    reprocess: reprocess ?? (id, {appId, requireSpeakerReceipt = false}) async => const ReprocessFailed(),
+    reprocess:
+        reprocess ?? (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessFailed(),
     fetchConversation: (_) async => conversation,
     fetchEnabledSummaryApps: fakes.fetchEnabled,
     fetchSuggestedSummaryApps: fakes.fetchSuggested,
+    writePreferredSummaryApp: writePreferredSummaryApp ?? (_) async => true,
   )
     ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
     ..titleController = TextEditingController(text: conversation.structured.title)

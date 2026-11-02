@@ -7,7 +7,9 @@ from prometheus_client import Counter, Histogram
 
 from utils.observability.firestore_request_reads import (
     RequestReadTrace,
+    ReadComponent,
     bind_request_read_trace,
+    read_component,
     reset_request_read_trace,
 )
 
@@ -26,6 +28,54 @@ EXTERNAL_LIST_READS = Histogram(
     ['route'],
     buckets=(0, 1, 5, 10, 25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 25000),
 )
+
+ACTION_ITEMS_READ_COMPONENTS = Histogram(
+    'omi_dev_action_items_firestore_reads_by_component',
+    'SDK billed-equivalent reads per Developer action-item request; components partition the request total',
+    ['component'],
+    buckets=(0, 1, 5, 10, 25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 25000),
+)
+ACTION_ITEMS_PAGE_PARAMETERS = Histogram(
+    'omi_dev_action_items_page_parameter',
+    'Effective Developer action-item pagination; offsets above 25000 recorded as 25001, including cache hits',
+    ['parameter'],
+    buckets=(0, 1, 10, 25, 50, 100, 250, 500, 1000, 2000, 5000, 25000),
+)
+ACTION_ITEMS_PAGE_ROWS = Counter(
+    'omi_dev_action_items_page_rows_total',
+    'Developer action-item rows filtered or discarded at fixed list stages; not additional billed reads',
+    ['stage'],
+)
+ACTION_ITEMS_REQUEST_SHAPES = Counter(
+    'omi_dev_action_items_request_shapes_total',
+    'Fixed filter/completion shapes and response cache outcomes for Developer action-item requests',
+    ['filters', 'completion', 'cache'],
+)
+
+
+def action_items_details_enabled() -> bool:
+    return os.getenv('OMI_DEV_ACTION_ITEMS_READ_DETAILS_ENABLED', '').strip().lower() != 'false'
+
+
+def observe_action_items_page(limit: int, offset: int) -> None:
+    if action_items_details_enabled():
+        ACTION_ITEMS_PAGE_PARAMETERS.labels(parameter='limit').observe(limit)
+        # HTTP accepts arbitrary Python ints. Cap only telemetry above its last
+        # finite bucket, so float conversion cannot turn a valid offset into 500.
+        ACTION_ITEMS_PAGE_PARAMETERS.labels(parameter='offset').observe(min(offset, 25001))
+
+
+def observe_action_items_rows(stage: str, amount: int = 1) -> None:
+    if stage in {'deleted', 'locked', 'invalid', 'slack', 'offset', 'returned'} and action_items_details_enabled():
+        ACTION_ITEMS_PAGE_ROWS.labels(stage=stage).inc(amount)
+
+
+def observe_action_items_shape(conversation: bool, dated: bool, completed: bool | None, hit: bool) -> None:
+    if action_items_details_enabled():
+        filters = ('conversation_date' if dated else 'conversation') if conversation else ('date' if dated else 'none')
+        completion = 'default' if completed is None else ('completed' if completed else 'incomplete')
+        ACTION_ITEMS_REQUEST_SHAPES.labels(filters=filters, completion=completion, cache='hit' if hit else 'miss').inc()
+
 
 ROUTES = frozenset(
     {'/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/action-items', '/v1/mcp/memories'}
@@ -68,6 +118,7 @@ class ExternalListMetricsMiddleware:
         trace = RequestReadTrace()
         token = bind_request_read_trace(trace)
         observed = False
+        details = scope['path'] == '/v1/dev/user/action-items' and action_items_details_enabled()
 
         def finish_trace() -> None:
             nonlocal observed
@@ -75,8 +126,14 @@ class ExternalListMetricsMiddleware:
                 with trace.lock:
                     trace.closed = True
                     reads = trace.reads
+                    components = dict(trace.components)
                 observed = True
                 EXTERNAL_LIST_READS.labels(route=scope['path']).observe(reads)
+                if details:
+                    for component in ReadComponent:
+                        ACTION_ITEMS_READ_COMPONENTS.labels(component=component.value).observe(
+                            components.get(component.value, 0)
+                        )
 
         async def observe_send(message: Any) -> None:
             nonlocal status, truncated
@@ -91,7 +148,9 @@ class ExternalListMetricsMiddleware:
             await send(message)
 
         try:
-            await self.app(scope, receive, observe_send)
+            # Dependencies run before the sync handler, which switches to OTHER.
+            with read_component(ReadComponent.AUTH):
+                await self.app(scope, receive, observe_send)
         finally:
             finish_trace()
             reset_request_read_trace(token)

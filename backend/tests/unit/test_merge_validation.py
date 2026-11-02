@@ -55,6 +55,7 @@ def merge():
 
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
+    vector_db_stub.delete_action_item_vectors_batch = MagicMock()
 
     redis_db_stub = ModuleType("database.redis_db")
     users_stub = ModuleType("database.users")
@@ -249,6 +250,20 @@ class TestValidateGateChecks:
         ok, err, warn = merge.validate_merge_compatibility([])
         assert ok is False
         assert "At least 2" in err
+
+    def test_rejects_duplicate_conversations(self, merge):
+        convs = [_conv("c1"), _conv("c1")]
+        ok, err, warn = merge.validate_merge_compatibility(convs)
+        assert ok is False
+        assert "duplicate" in err.lower()
+        assert warn is None
+
+    def test_rejects_duplicate_conversations_mixed(self, merge):
+        convs = [_conv("c1"), _conv("c2"), _conv("c1")]
+        ok, err, warn = merge.validate_merge_compatibility(convs)
+        assert ok is False
+        assert "duplicate" in err.lower()
+        assert warn is None
 
     def test_rejects_locked_conversation(self, merge):
         convs = [_conv("c1", locked=True), _conv("c2")]

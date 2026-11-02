@@ -186,7 +186,7 @@ def test_bad_text_cannot_use_cached_identity_or_change_verified_windows(env, mon
 
 def test_legacy_flag_off_still_abstains_invalid_cached_text(env, monkeypatch):
     conversation, bad = _fixture(monkeypatch, (-1.0, 10.0))
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     for s in conversation.transcript_segments:
         s.speaker_id_scope = 'sync:one'
         s.audio_capture_start = s.audio_capture_end = None

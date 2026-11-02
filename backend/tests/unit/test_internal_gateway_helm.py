@@ -125,7 +125,12 @@ def test_batch_has_an_isolated_route_and_preserves_900_second_timeout(environmen
     assert object_for(objects, 'GCPBackendPolicy')['spec']['default'] == {'timeoutSec': 900}
     pod = object_for(objects, 'Deployment')['spec']['template']['spec']
     assert pod['nodeSelector']['env'] == environment
-    assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
+    if environment == 'prod':
+        # Spot-ready prod: no pool pin, so the Spot sibling (same service/env
+        # labels and omi.ai taints) shares placement with the on-demand pool.
+        assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
+    else:
+        assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
     assert 'affinity' not in pod
     assert (
         object_for(objects, 'HealthCheckPolicy')['spec']['default']['config']['httpHealthCheck']['requestPath']

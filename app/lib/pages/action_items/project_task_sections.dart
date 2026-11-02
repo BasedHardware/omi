@@ -33,20 +33,46 @@ List<Widget> projectTaskSections({
       final bySize = groups[b]!.length.compareTo(groups[a]!.length);
       return bySize != 0 ? bySize : projects[a]!.name.toLowerCase().compareTo(projects[b]!.name.toLowerCase());
     });
+  // One delegate across projects: one sliver per project would still lay out
+  // the first row of every off-screen project to estimate its scroll extent.
+  final entries = <({String? projectId, int? row})>[
+    for (final id in [...ordered, if (groups.containsKey(null)) null]) ...[
+      (projectId: id, row: null),
+      for (var i = 0; i < groups[id]!.length; i++) (projectId: id, row: i),
+    ],
+  ];
+  final keys = [
+    for (final entry in entries)
+      entry.row == null
+          ? ValueKey(('project', entry.projectId))
+          : ValueKey(('task', groups[entry.projectId]![entry.row!].id)),
+  ];
+  final indices = {for (var i = 0; i < keys.length; i++) keys[i]: i};
   return [
-    for (final id in [...ordered, if (groups.containsKey(null)) null])
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.sm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ProjectHeader(project: id == null ? null : projects[id], count: groups[id]!.length),
-              for (final item in groups[id]!) buildRow(item, groups[id]!),
-            ],
-          ),
-        ),
+    SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final entry = entries[index];
+          final group = groups[entry.projectId]!;
+          final row = entry.row;
+          return Padding(
+            key: keys[index],
+            padding: EdgeInsets.only(
+              left: OmiSpacing.md,
+              right: OmiSpacing.md,
+              top: row == null ? OmiSpacing.xs : 0,
+              bottom: row == group.length - 1 ? OmiSpacing.sm : 0,
+            ),
+            child: row == null
+                ? _ProjectHeader(
+                    project: entry.projectId == null ? null : projects[entry.projectId], count: group.length)
+                : buildRow(group[row], group),
+          );
+        },
+        childCount: entries.length,
+        findChildIndexCallback: (key) => indices[key],
       ),
+    ),
   ];
 }
 

@@ -334,6 +334,11 @@ class AssistantSettings {
     return transcriptionLanguage
   }
 
+  /// Effective + selected language together; on-device model routing needs both (`STTLanguageCapability`).
+  var transcriptionLanguageSelection: STTLanguageCapability.Selection {
+    STTLanguageCapability.Selection(effective: effectiveTranscriptionLanguage, primary: transcriptionLanguage)
+  }
+
   /// Custom vocabulary for improved transcription accuracy
   /// Array of words/terms that DeepGram should recognize (Nova-3 limit: 500 tokens total)
   var transcriptionVocabulary: [String] {

@@ -13,10 +13,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from config.batch_pipeline import projection_followup_page_enabled
+from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
+from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
-from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.projection import projection_phase
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
@@ -26,6 +29,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 MAX_FOLLOWUPS = 4
+# Walk-owed rows held between discovery passes. Dropped rows stay durable and
+# are rediscovered; the bound only caps memory.
+MAX_OWED = 256
 FOLLOWUP_TIMEOUT_SECONDS = 120.0
 CLAIM_RELEASE_TIMEOUT_SECONDS = 2.0
 
@@ -36,31 +42,103 @@ class ProjectionFollowups:
         self.tasks: dict[str, asyncio.Task] = {}
         self.after: str | None = None
         self.pending: deque[str] = deque()
+        self.prioritized: set[str] = set()
+        self.owed: dict[str, None] = {}
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
+        self.page = 0
+        self.pages: dict[str, int] = {}
+        self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
 
     def candidates(self):
+        if projection_followup_page_enabled():
+            # The query is already the durable receipt hint. Do not refetch
+            # each result twice just to choose work. Filter pinned sync policy
+            # before queueing so it cannot delay async recovery/owed rows.
+            # Keep retrying unchanged receipts: a sibling or destination can
+            # unblock them without changing this result's version.
+            self.discovery.states = PROJECTION_FINISH_STATES
+            candidates = []
+            for sid in self.discovery.next(limit=100):
+                job = self.projector.store.ref('jobs', sid).get().to_dict() or {}
+                raw = (job.get('policy_parts') or {}).get('projection')
+                if raw is None:
+                    # Legacy unpinned policy follows the same privacy-aware
+                    # resolution as before. The common pinned path is one read.
+                    raw = self.projector.store.read(sid)[0]['policy_parts']['projection']
+                if ProjectionPolicy.from_dict(raw).async_projection:
+                    candidates.append(sid)
+            return candidates
+        self.discovery.states = None
         store = self.projector.store
         # Assignment failures/partial multipart output must not consume the
         # follow-up slots ahead of rows that have actually persisted.
-        return [
-            sid
-            for sid in self.discovery.next(limit=100)
-            if (store.ref('results', sid).get().to_dict() or {}).get('projection')
-        ]
+        candidates = []
+        for sid in self.discovery.next(limit=100):
+            if not (store.ref('results', sid).get().to_dict() or {}).get('projection'):
+                continue
+            policy = ProjectionPolicy.from_dict(store.read(sid)[0]['policy_parts']['projection'])
+            if policy.async_projection:
+                candidates.append(sid)
+        return candidates
 
-    async def schedule(self):
+    async def schedule(self, priority=(), *, tail=()):
+        # Rows a sweep's chain walk persisted, possibly behind the discovery
+        # cursor. They wait for the next discovery pass and join behind its page,
+        # so they never jump discovered work and never keep discovery from running.
+        for segment in tail:
+            self.forget_page(segment)  # Owed recovery work always probes completion.
+            if segment in self.owed:
+                continue
+            if len(self.owed) < MAX_OWED:
+                self.owed[segment] = None
+            else:
+                # Over the bound: restart discovery at the head once so the next
+                # page rediscovers the durable rows we could not hold.
+                self.discovery.after = None
+        if priority:
+            # A targeted owner-chain wake goes ahead of discovered rows. Slots,
+            # segment claims and receipt fences are unchanged; discovery resumes
+            # once the queue drains.
+            first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
+            for segment in first:
+                self.forget_page(segment)  # Targeted recovery wakes always probe completion.
+            self.prioritized.update(first)
+            self.pending = deque(first + [segment for segment in self.pending if segment not in first])
+            self.launch()
+            if self.pending or not self.owed:
+                return
         # Finish launching this bounded page before advancing discovery. Slow
         # tasks must not cause the next serving pass to discard queued rows.
-        if self.pending:
+        # Owed rows fall through to discovery once the queue has launched.
+        elif self.pending:
             self.launch()
-            return
+            if self.pending or not self.owed:
+                return
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:
             offset = segments.index(self.after) + 1
             segments = segments[offset:] + segments[:offset]
-        self.pending = deque(segment for segment in segments if segment not in self.tasks)
+        # A wake may have queued rows while this read was suspended; keep them
+        # ahead of the discovered page instead of replacing the queue.
+        queued = list(self.pending)
+        discovered = [segment for segment in segments if segment not in self.tasks and segment not in queued]
+        # Each discovered page gets fresh probes. Keep older page markers
+        # until its queued/running tasks finish; they never suppress a new page.
+        self.page += 1
+        for segment in discovered:
+            if segment not in self.owed:
+                self.pages[segment] = self.page
+        owed = [
+            segment
+            for segment in self.owed
+            if segment not in self.tasks and segment not in queued and segment not in discovered
+        ]
+        self.owed.clear()
+        # Owed rows are out of discovery order: they must not move the rotation.
+        self.prioritized.update(owed)
+        self.pending = deque(queued + discovered + owed)
         self.launch()
 
     def launch(self):
@@ -68,16 +146,29 @@ class ProjectionFollowups:
             segment = self.pending.popleft()
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
-            self.after = segment
+            if segment in self.prioritized:
+                # Out-of-order wake rows must not move the discovery rotation.
+                self.prioritized.discard(segment)
+            else:
+                self.after = segment
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done))
+
+    def forget_page(self, segment):
+        page = self.pages.pop(segment, None)
+        if page is not None and page not in self.pages.values():
+            self.completion_attempts = {key for key in self.completion_attempts if key[0] != page}
 
     def finished(self, segment, task):
         self.tasks.pop(segment, None)
+        self.forget_page(segment)
         if task.cancelled():
             # Global background-task shutdown must not replenish a cancelled
             # worker with another task after the shutdown snapshot was taken.
             self.closed = True
             self.pending.clear()
+            self.owed.clear()
+            self.pages.clear()
+            self.completion_attempts.clear()
         self.launch()  # Refill immediately, without another 20s serving sleep.
 
     def read_persisted(self, segment):
@@ -116,6 +207,13 @@ class ProjectionFollowups:
             if not acquired:
                 return
             job, entry, binding = await run_blocking(db_executor, self.read_persisted, segment)
+            if projection_followup_page_enabled():
+                policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                if not policy.async_projection:
+                    return  # The synchronous sweep owns these receipts.
+            was_ready = entry['projection']['state'] == 'ready' and all(
+                part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
+            )
             item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
             parts = entry.get('projection_parts')
             for index, receipt in (
@@ -124,11 +222,29 @@ class ProjectionFollowups:
                 await self.finish_part(item, binding, receipt, int(index) if index is not None else None)
             # Usage is resolved only when every sibling has ready receipts;
             # complete() atomically fences ledger/usage/client status as before.
-            await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+            page = self.pages.get(segment, 0)
+            key = (page, binding)
+            coalesce = projection_followup_page_enabled() and was_ready and page != 0
+            if coalesce:
+                if key in self.completion_attempts:
+                    return
+                self.completion_attempts.add(key)
+            try:
+                await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+            except BaseException:
+                # Failure/cancellation is not a readiness result. Another
+                # sibling in this page may immediately retry the probe.
+                if coalesce:
+                    self.completion_attempts.discard(key)
+                raise
         except (ProjectionBlocked, BatchPrivacyBlocked):
             logger.info('event=batch_projection_followup outcome=blocked')
         except Exception as error:
-            logger.error('event=batch_projection_followup outcome=retry exception_type=%s', type(error).__name__)
+            logger.error(
+                'event=batch_projection_followup outcome=retry exception_type=%s%s',
+                error_type(error),
+                error_site_field(error),
+            )
         finally:
             if entered:
                 # Cleanup must not hold a follow-up slot if Redis/the DB pool
@@ -139,48 +255,66 @@ class ProjectionFollowups:
                 except TimeoutError:
                     logger.warning('event=batch_projection_followup action=release outcome=timeout')
 
-    async def step(self, phase, executor, function, *args, **kwargs):
-        with projection_phase(phase):
+    async def step(self, policy, phase, executor, function, *args, **kwargs):
+        with projection_phase(phase, policy):
             return await run_blocking(executor, function, *args, **kwargs)
 
     async def finish_part(self, item, binding, receipt, index):
-        if receipt['state'] == 'ready':
+        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
+        if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 
-            canonical = receipt['conversation_id']
-            if not binding.record_origin:
-                canonical = await self.step(
-                    'bridge', postprocess_executor, finish_sync_bridges, binding.owner_id, canonical
-                )
-            if receipt.get('audio_required') and not binding.native_record:
-                if self.projector.playback is not None:
-                    await self.step('playback', postprocess_executor, self.projector.playback, item, canonical)
-                else:
-                    await self.step(
-                        'playback',
-                        postprocess_executor,
-                        self.projector.persist_playback,
-                        item,
-                        binding,
-                        canonical,
-                        receipt,
-                    )
+            outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': receipt['conversation_id']}]
+            canonicals = []
+            for output in outputs:
+                canonical = output['conversation_id']
                 if not binding.record_origin:
-                    # A later assignment can bridge this target while audio is
-                    # being stored. Follow its redirect and recopy late donor
-                    # audio even if an earlier bridge already checkpointed it.
                     canonical = await self.step(
+                        policy,
                         'bridge',
                         postprocess_executor,
                         finish_sync_bridges,
                         binding.owner_id,
                         canonical,
-                        audio_source_id=canonical,
+                        **({'silent': True} if receipt.get('silent_redrive') else {}),
                     )
+                if receipt.get('audio_required') and not binding.native_record:
+                    if self.projector.playback is not None:
+                        await self.step(
+                            policy, 'playback', postprocess_executor, self.projector.playback, item, canonical
+                        )
+                    else:
+                        await self.step(
+                            policy,
+                            'playback',
+                            postprocess_executor,
+                            self.projector.persist_playback,
+                            item,
+                            binding,
+                            canonical,
+                            receipt,
+                        )
+                    if not binding.record_origin:
+                        # A later assignment can bridge this target while audio is
+                        # being stored. Follow its redirect and recopy late donor
+                        # audio even if an earlier bridge already checkpointed it.
+                        canonical = await self.step(
+                            policy,
+                            'bridge',
+                            postprocess_executor,
+                            finish_sync_bridges,
+                            binding.owner_id,
+                            canonical,
+                            audio_source_id=canonical,
+                            **({'silent': True} if receipt.get('silent_redrive') else {}),
+                        )
+                canonicals.append(canonical)
+            canonical = canonicals[0]
             if receipt['enrichment_required']:
                 await self.step(
+                    policy,
                     'enrichment',
                     db_executor,
                     self.projector.store.mark_enrichment,

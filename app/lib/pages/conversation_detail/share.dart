@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:share_plus/share_plus.dart';
 
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -11,7 +12,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// (reported on iOS and Android 5.1+); [ShareResultStatus.unavailable] means the platform could
 /// not tell.
 Future<ShareResult> shareConversationLink(ServerConversation conversation, {Rect? sharePositionOrigin}) async {
-  final subject = conversation.structured.title;
+  // The share subject is a display surface: legacy titles lose citation debris (`[s01234]`).
+  final subject = presentableConversationTitle(conversation);
   final sid = newShareId();
   final outcome = await SharePlus.instance.share(
     ShareParams(

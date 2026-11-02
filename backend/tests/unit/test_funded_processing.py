@@ -51,7 +51,7 @@ def test_legacy_warm_checks_read_only_current_and_once_closing_hour(monkeypatch)
 
 
 def test_each_call_rechecks_admission_within_one_operation(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'legacy_enabled', lambda: False)
     monkeypatch.setattr(users_db, 'get_user_valid_subscription', lambda uid, *, provision=False: None)
     gate = Mock(return_value=SimpleNamespace(managed=False))
@@ -87,7 +87,7 @@ def test_unlimited_legacy_plan_does_not_read_finite_usage(monkeypatch):
 def test_subscription_reporting_uses_all_counters_without_another_month_scan(monkeypatch):
     from contextlib import contextmanager
 
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', '2026-01-01')
     counters = {
         'transcription_seconds': 30,

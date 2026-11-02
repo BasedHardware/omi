@@ -57,6 +57,7 @@ for _name in [
     "models",
     "models.calendar_mutation",
     "utils",
+    "utils.conversations",
     "utils.executors",
     "utils.http_client",
     "utils.integration_telemetry",
@@ -82,6 +83,10 @@ def _load_module_from_file(module_name, file_path):
 
 model_text = _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
 _load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
+_load_module_from_file(
+    "utils.conversations.datetime_utils",
+    BACKEND_DIR / "utils" / "conversations" / "datetime_utils.py",
+)
 _load_module_from_file(
     "utils.retrieval.tools.calendar_render",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py",

@@ -23,7 +23,8 @@ def decide(*, jev=None, model=None, texts=NOISE, calendar=False):
     return relevance.decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,
         texts=texts,
-        speech_seconds=0.1,
+        # Above the short-clip floor: the chain's paid arms must be reachable.
+        speech_seconds=60.0,
         has_photos=False,
         user_kept=False,
         exempt=False,

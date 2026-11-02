@@ -127,6 +127,10 @@ enum DefaultsKey: String {
   /// (contract §3/§9). Absent key means enabled (default on) — see
   /// `MeetingNoteScreenshotsFeature.isEnabled`.
   case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
+  /// Explicit local opt-in for read-only pre-meeting context in Conversations.
+  case meetingMemoryBriefsEnabled = "meetingMemoryBriefsEnabled"
+  /// Last meeting brief dismissed on this Mac; includes owner identity to prevent cross-account carryover.
+  case meetingMemoryBriefDismissedKey = "meetingMemoryBriefDismissedKey"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
@@ -255,14 +259,6 @@ struct ScopedDefaultsKey {
   /// most once per summary, and per account on a shared Mac.
   static func dailySummaryLastSeenID(ownerID: String) -> Self {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
-  }
-
-  /// Owner-scoped id of the newest daily summary the memory_v1 postcard-first
-  /// landing has already opened on. Separate from the notch-announcement latch
-  /// so neither consumes the other; the arm lands on the postcard exactly once
-  /// per summary.
-  static func dailySummaryPostcardLandedID(ownerID: String) -> Self {
-    Self(rawValue: "dailySummary.postcardLandedID.v1.\(ownerID)")
   }
 
   /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.

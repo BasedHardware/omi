@@ -5,7 +5,6 @@ import CryptoKit
 import FirebaseCore
 import Foundation
 import OmiSupport
-import Sentry
 
 extension Notification.Name {
   /// Posted by AuthService.signOut() so views can reset @AppStorage-backed properties directly.
@@ -823,12 +822,6 @@ class AuthService {
     // bar read it); without this it stays nil/old until the next app launch.
     Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
-    if !AnalyticsManager.isDevBuild {
-      // Keep Sentry correlation opaque; PII remains in the application/backend,
-      // not crash and error reports.
-      SentrySDK.setUser(User(userId: nativeSignIn.tokens.localId))
-    }
-
     NSLog("OMI AUTH: Apple Sign in complete!")
     fetchConversations()
   }
@@ -1081,7 +1074,6 @@ class AuthService {
       }
 
       // Save auth state immediately
-      let userId = firebaseTokens.localId
       guard
         try await commitSignedInSession(
           tokens: firebaseTokens,
@@ -1122,11 +1114,6 @@ class AuthService {
       // Refresh the chat usage limiter for the new account (PTT gate +
       // floating bar read it); without this it stays nil/old until launch.
       Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
-
-      // Set opaque Sentry user context for error correlation (skip in dev builds).
-      if !AnalyticsManager.isDevBuild {
-        SentrySDK.setUser(User(userId: userId))
-      }
 
       NSLog("OMI AUTH: Sign in complete!")
 
@@ -2545,9 +2532,6 @@ class AuthService {
     // a storage failure cannot leave a partially signed-out prior-owner session.
     AnalyticsManager.shared.signedOut()
     AnalyticsManager.shared.reset()
-    if !AnalyticsManager.isDevBuild {
-      SentrySDK.setUser(nil)
-    }
     sessionCoordinator.resetAfterNuclearSignOut()
     CredentialHealthManager.shared.reset()
     APIKeyService.shared.clear()

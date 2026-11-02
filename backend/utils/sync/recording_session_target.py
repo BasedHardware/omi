@@ -22,7 +22,8 @@ _CANDIDATE_LIMIT = 5
 # differ slightly). finished_at is the last recognized word, while the WAL can
 # contain trailing silence. A 60-second tail is less than the 120-second
 # silence-rollover gap; larger spans remain unbound.
-START_SKEW_SECONDS = 5
+from config.recorded_time_tolerances import RECORDING_START_SKEW_SECONDS as START_SKEW_SECONDS
+
 TRAILING_AUDIO_SECONDS = 60
 
 
