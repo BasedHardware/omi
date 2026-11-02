@@ -203,3 +203,49 @@ def test_held_page_query_is_bounded_and_keyset():
     client, _, query = fresh_client()
     assert held_page_ids(client, 'ns', 5, 'after') == []
     query.start_after.assert_called_once_with({'__name__': 'cursor-doc'})
+
+
+def _scanner(store):
+    from types import SimpleNamespace
+
+    from utils.batch_pipeline.projection import Projector
+
+    scanner = SimpleNamespace(store=store, clock=lambda: 500.0, release_after=None)
+    return lambda limit: Projector.release_held_scan(scanner, limit=limit)
+
+
+def test_release_scan_resumes_from_the_durable_cursor_after_an_instance_restart(monkeypatch):
+    # Prod 11-02: an in-memory cursor restarted at page one on every instance
+    # start, so 8 of 10 deciles of 16,932 held rows were never examined.
+    import database.batch_pipeline_projection_release as release
+
+    order = [f'held-{n:02d}' for n in range(6)]
+    seen = []
+
+    def page(_client, _namespace, limit, after_id):
+        start = order.index(after_id) + 1 if after_id else 0
+        seen.append(after_id)
+        return order[start : start + limit]
+
+    monkeypatch.setattr(release, 'held_page_ids', page)
+    monkeypatch.setattr(release.ProjectionReleaseStore, 'release', lambda *a: False)
+    _, store = store_for(rows())
+    _scanner(store)(2)
+    _scanner(store)(2)  # a fresh instance
+    _scanner(store)(2)
+    assert seen == [None, 'held-01', 'held-03']
+    # The empty page past the end wraps: the next instance starts from the top.
+    _scanner(store)(2)
+    _scanner(store)(2)
+    assert seen[-2:] == ['held-05', None]
+
+
+def test_release_scan_cursor_failures_never_stop_the_scan(monkeypatch):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['held'])
+    monkeypatch.setattr(release.ProjectionReleaseStore, 'release', lambda *a: False)
+    broken = Mock()
+    broken.ref.side_effect = RuntimeError('synthetic')
+    broken.run.side_effect = RuntimeError('synthetic')
+    assert _scanner(broken)(1)['examined'] == 1

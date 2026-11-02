@@ -326,7 +326,7 @@ def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
         'backend_listen_requests_per_pod': 16,
         'backend_listen_active_ws_connections_per_pod': 35,
     }
-    # 2026-10-24 right-sizing: the night fleet needs only ~31 pods at the 55%
-    # target, so the floor returns to its pre-#22623 value of 30; the peak
-    # path (max 60, requests, guards) is unchanged.
-    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (30, 60)
+    # 2026-10-29 retire100: batch at 100% takes consented mobile off the live
+    # leg; the floor drops to the residual (opt-outs + desktop) size. The 10-24
+    # note's peak path (max 60, requests, guards) is unchanged. Rollback: 30.
+    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (20, 60)

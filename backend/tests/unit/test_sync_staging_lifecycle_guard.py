@@ -28,7 +28,7 @@ def test_metadata_transport_only_gets_whitelisted_bucket_fields_and_preserves_un
     )
     session.get.assert_called_once_with(
         'https://storage.googleapis.com/storage/v1/b/synthetic-bucket',
-        params={'fields': 'metageneration,lifecycle,defaultEventBasedHold,retentionPolicy'},
+        params={'fields': 'metageneration,lifecycle,defaultEventBasedHold,retentionPolicy,softDeletePolicy,versioning'},
         timeout=20,
     )
     session.post.assert_not_called()
@@ -118,3 +118,59 @@ def test_main_rejects_object_urls_and_missing_targets_without_io(monkeypatch):
     monkeypatch.delenv('BUCKET_BATCH_PIPELINE', raising=False)
     assert guard.main([], reader=lambda _: pytest.fail('must not read')) == 2
     assert guard.main(['--bucket', 'gs://synthetic-bucket/object'], reader=lambda _: pytest.fail('must not read')) == 2
+
+
+CONTRACT = {
+    'margin_days': 7,
+    'holds': {'retry': {'days': 1}, 'redrive': {'days': 21}, 'custody': {'days': None}},
+    'ceiling_sources': {},
+    'buckets': {
+        'synthetic-batch': {
+            'protected_prefixes': [''],
+            'holds': ['retry', 'redrive'],
+            'ceiling': {'soft_delete_seconds_max': 0},
+        },
+        'synthetic-temporal': {
+            'protected_prefixes': [''],
+            'holds': ['custody'],
+            'ceiling': {'soft_delete_seconds_max': 0, 'noncurrent_cleanup': True},
+        },
+    },
+}
+
+
+@pytest.mark.parametrize(
+    'bucket,rules,reason',
+    [
+        ('synthetic-batch', [{'action': {'type': 'Delete'}, 'condition': {'age': 30}}], None),
+        ('synthetic-batch', [{'action': {'type': 'Delete'}, 'condition': {'age': 7}}], 'lifecycle_delete'),
+        ('synthetic-temporal', [{'action': {'type': 'Delete'}, 'condition': {'age': 365}}], 'lifecycle_delete'),
+        ('synthetic-temporal', [{'action': {'type': 'Delete'}, 'condition': {'isLive': False}}], None),
+        ('synthetic-temporal', [{'action': {'type': 'FutureUnknown'}}], 'unsupported_lifecycle_action'),
+        ('synthetic-other', [{'action': {'type': 'Delete'}, 'condition': {'age': 365}}], 'lifecycle_delete'),
+    ],
+)
+def test_contract_buckets_are_judged_by_their_floor_others_stay_strict(bucket, rules, reason):
+    metadata = {'metageneration': 3, 'lifecycle': {'rule': rules}}
+    assert guard.policy_failure(metadata, bucket, CONTRACT) == reason
+
+
+def test_ceilings_are_reported_without_changing_pass_or_naming_buckets():
+    metadata = {'metageneration': 3, 'lifecycle': {}, 'soft_delete_seconds': '604800', 'versioning': True}
+    result = guard.audit(['synthetic-temporal', 'synthetic-other'], lambda _: dict(metadata), CONTRACT)
+    assert result['status'] == 'PASS'
+    first, second = result['targets']
+    assert first['contract'] is True and first['ceilings'] == ['ceiling_soft_delete', 'ceiling_noncurrent_unbounded']
+    assert second['contract'] is False and second['ceilings'] == []
+    assert 'synthetic' not in json.dumps(result)
+
+
+def test_main_reads_the_checked_in_contract(monkeypatch, capsys):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    for key in ('BUCKET_TEMPORAL_SYNC_LOCAL', 'BUCKET_AUDIO_DERIVED', 'BUCKET_BATCH_PIPELINE'):
+        monkeypatch.delenv(key, raising=False)
+    staging = {'metageneration': 15, 'lifecycle': {}, 'soft_delete_seconds': '604800', 'versioning': True}
+    assert guard.main(['--bucket', 'syncing-local'], reader=lambda _: staging) == 0
+    target = json.loads(capsys.readouterr().out)['targets'][0]
+    assert target['contract'] is True
+    assert target['ceilings'] == ['ceiling_soft_delete:pending', 'ceiling_noncurrent_unbounded:pending']

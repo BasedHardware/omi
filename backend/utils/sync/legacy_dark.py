@@ -472,7 +472,6 @@ CENSUS_FIELDS = (
     'sync_backfill_pending',
     'sequencer_active_owners',
     'redrive_required',
-    'cap_holds_awaiting_legacy',
     'queue_depth_sync_jobs',
     'queue_depth_sync_jobs_fresh',
     'queue_depth_sync_backfill',
@@ -485,21 +484,27 @@ CENSUS_FIELDS = (
 class DrainCensus:
     """Aggregate counts only. ``None`` means the read was unavailable (fails closed).
 
-    ``cap_holds_awaiting_legacy`` is an upper bound (every ``stt_cap_holds``
-    row); the ledger status counts need a collection-group index prod does not
-    have, so they are informational and never gate.
+    ``cap_holds_awaiting_legacy`` counts pending ``stt_cap_holds`` rows and is
+    informational: it never gates ``dark``. Held rows are retained audio waiting
+    on the owner's credits (5.3M in prod on 2026-11-01), so they never drain to
+    zero, and ``dark`` does not strand them: ``cap_hold_recovery`` admits every
+    eligible hold to batch once legacy is draining/dark, and a hold whose legacy
+    spend already started finishes on the shared segment core, not on legacy
+    jobs, queues or the sequencer. Soak gate 4c (cap-hold redrives served by
+    batch) carries that assurance. The ledger status counts need a
+    collection-group index prod does not have, so they are informational too.
     """
 
     observed_at: float
     sync_backfill_pending: Optional[int]
     sequencer_active_owners: Optional[int]
     redrive_required: Optional[int]
-    cap_holds_awaiting_legacy: Optional[int]
     queue_depth_sync_jobs: Optional[int]
     queue_depth_sync_jobs_fresh: Optional[int]
     queue_depth_sync_backfill: Optional[int]
     queue_depth_sync_backfill_fresh: Optional[int]
     legacy_admissions_window: Optional[int]
+    cap_holds_awaiting_legacy: Optional[int] = None
     ledger_processing_legacy: Optional[int] = None
     ledger_retryable_legacy: Optional[int] = None
 

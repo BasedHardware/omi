@@ -43,7 +43,7 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
-from utils.conversations.fragment_visibility import superseded_intake_discard, is_user_curated
+from utils.conversations.fragment_visibility import is_automatic_discard, superseded_intake_discard, is_user_curated
 from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.conversations.recorded_time import recorded_span, sync_recorded_end, write_span
 from utils.conversations.relevance import sync_intake_decision
@@ -331,7 +331,7 @@ def assign_in_transaction(
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         if target.get('deleted'):
             raise SyncAssignmentSuperseded('sync target was deleted')
-        if target.get('discarded'):
+        if target.get('discarded') and (record_span is None or not is_automatic_discard(target)):
             raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
         if target.get('status') != 'completed':
             raise SyncAssignmentConflict('record finalize still pending', subtype=Reason.RECORD_FINALIZE_PENDING)
@@ -344,11 +344,19 @@ def assign_in_transaction(
     if record_span is not None:
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
-        result, survivors = replace_record(decode(target), incoming, record_span)
+        current = decode(target)
+        result, survivors = replace_record(current, incoming, record_span)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
         remember_size_payload(target_id, result)
+        if not survivors and is_automatic_discard(target):
+            if target_id in full_ids or estimated > SYNC_CONVERSATION_BYTE_BUDGET:
+                # Rollover would replan an empty set beside the hidden row; keep the hold.
+                raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+            if len(result.get('transcript_segments') or []) == len(current.get('transcript_segments') or []):
+                # No text landed or left, so the automatic verdict stands: skip the relevance rerun.
+                result['_sync_lineage_repeat_only'] = True
         if target_id not in full_ids and estimated <= SYNC_CONVERSATION_BYTE_BUDGET:
             transaction.update(collection.document(target_id), encoded)
             result['_sync_projected_size_bucket'] = projected_size_bucket(estimated)
@@ -1312,7 +1320,9 @@ def assign_in_transaction(
         chosen.survivors,
     )
     if redrive_target and any(
-        (accepted.matched.get(accepted.canonical) or {}).get('discarded') for accepted in [chosen, *extra_plans]
+        (row := accepted.matched.get(accepted.canonical) or {}).get('discarded')
+        and (record_span is None or not is_automatic_discard(row))
+        for accepted in [chosen, *extra_plans]
     ):
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     remember_size_payload(canonical, result)

@@ -4,7 +4,9 @@
 ``admit_held`` under its row claim once legacy sync is draining or dark. The held source is decoded
 to one WAV and admitted like an upload under a content id derived from the hold, so a retried sweep
 finds its own batch ledger and never creates a second unit. Batch projection then owns the
-conversation and usage; the hold row is handed off, never settled as legacy-transcribed.
+conversation and usage; the hold row is handed off, never settled as legacy-transcribed. The hold
+keeps its audio until ``handoff_projected`` reads the batch content as completed; only then is it
+erased (``cap_hold_recovery.finish_handoff``, driven by the same sweep).
 
 Paid exactly once: a hold that legacy recovery already started spending on (any piece receipt or
 processed path) is not eligible; it finishes on the legacy path during ``draining``.
@@ -40,6 +42,29 @@ class HeldAdmission:
 def held_content_id(uid: str, hold_id: str) -> str:
     """Derived content id; never the legacy ledger row the hold already owns."""
     return hashlib.sha256(f'cap_hold_v1\0{uid}\0{hold_id}'.encode()).hexdigest()
+
+
+def handoff_projected(uid: str, batch_job_id: str, *, store: Any = None) -> bool:
+    """True once the hand-off's batch content is durably completed (every unit projected).
+
+    Until then the hold keeps its audio: before projection the staged batch object is the only
+    other copy, and the batch bucket may expire objects by age. A partial ledger (held units)
+    is not completion. Read-only: never redrives, unlike ``intake.durable_status``.
+    """
+    from database.batch_pipeline_store import FirestoreStore
+    from database.sync_ledger import is_valid_completed_sync_content_result
+    from utils.sync.stage import current_stage
+
+    store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
+
+    def read(tx) -> bool:
+        intake = tx.get('intakes', batch_job_id)
+        if not intake or intake.get('owner_id') != uid:
+            return False
+        ledger = tx.get('content', f"{uid}/{intake['content_id']}") or {}
+        return ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(ledger.get('result'))
+
+    return bool(store.run(read))
 
 
 def eligible(row: Mapping[str, Any]) -> bool:

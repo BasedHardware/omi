@@ -257,6 +257,21 @@ def test_informational_ledger_counts_never_gate():
     assert dark_entry_verdict(census(0, ledger_processing_legacy=None), census(600, ledger_retryable_legacy=5)).ready
 
 
+def test_retained_cap_holds_never_gate_dark():
+    # Held audio waiting on credits never drains to zero (5.3M rows in prod); dark does not strand it.
+    assert 'cap_holds_awaiting_legacy' not in legacy_dark.CENSUS_FIELDS
+    first, second = census(0, cap_holds_awaiting_legacy=5_304_010), census(600, cap_holds_awaiting_legacy=None)
+    assert dark_entry_verdict(first, second).ready
+    assert first.nonzero() == {}
+
+
+def test_census_counts_the_cap_hold_redrive_pending_states():
+    from database.cap_hold_redrive import PENDING_STATES
+    from scripts.legacy_dark import drain_census
+
+    assert drain_census.CAP_HOLD_PENDING_STATES == PENDING_STATES
+
+
 def test_queue_spec_round_trips_to_gcloud_flags():
     from scripts.legacy_dark import legacy_queues
 

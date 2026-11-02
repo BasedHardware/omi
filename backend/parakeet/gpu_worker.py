@@ -587,7 +587,12 @@ class GPUWorker:
                                 ek: (
                                     round(ev, 4)
                                     if isinstance(ev, float)
-                                    else str(ev) if not isinstance(ev, (int, str)) else ev
+                                    # Token text arrives as a list of strings (char offsets).
+                                    else (
+                                        ''.join(cast(List[str], ev))
+                                        if isinstance(ev, list) and all(isinstance(x, str) for x in cast(List[Any], ev))
+                                        else str(ev) if not isinstance(ev, (int, str)) else ev
+                                    )
                                 )
                                 for ek, ev in e.items()
                             }

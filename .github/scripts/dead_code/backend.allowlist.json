@@ -47,6 +47,10 @@
     {
       "path": "backend/utils/conversations/episode_tiers.py",
       "reason": "The L3 retired evidence writer is archived under backend/testing/episode_notes/writer_runtime.py, which still imports this helper for writer tier/deadline fixtures. This conversations module is outside L3 file ownership; the integrator can archive it with its owner. It has no production serving caller."
+    },
+    {
+      "path": "backend/utils/batch_pipeline/vendor_health.py",
+      "reason": "All-vendor batch routing slice C ships the cross-pod vendor health service dormant (no behavior change by design). Slice B (route selection) calls allows() and slice D (provider-stage failover) calls reserve() and record_attempt(); remove this entry when the first of them merges. Tests: backend/tests/unit/test_batch_vendor_health.py."
     }
   ]
 }

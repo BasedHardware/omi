@@ -93,10 +93,11 @@ def deployment_env() -> str:
 
 
 def clamp_nesting(percents: Mapping[str, float]) -> dict[str, float]:
-    """Live STT and legacy retirement never exceed batch admission at read time."""
+    """Batch-nested names and legacy retirement never exceed batch admission at read time."""
     clamped = dict(percents)
-    if 'batch-live-stt-retire' in clamped:
-        clamped['batch-live-stt-retire'] = min(clamped['batch-live-stt-retire'], clamped.get('batch-pipeline', 0.0))
+    for name in store.BATCH_NESTED_RAMP_NAMES:
+        if name in clamped:
+            clamped[name] = min(clamped[name], clamped.get('batch-pipeline', 0.0))
     if 'legacy-sync' in clamped:
         clamped['legacy-sync'] = min(clamped['legacy-sync'], clamped.get('batch-pipeline', 0.0))
     return clamped

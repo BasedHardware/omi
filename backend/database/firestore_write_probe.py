@@ -144,6 +144,21 @@ _WRITE_PLUMBING_MODULES = frozenset(
         'database.list_projection',
         'database.memory_change_head',
         'database.action_item_write_fence',
+        # The transactional callback has returned before the SDK commits, so the
+        # retry helper would otherwise be the first frame for every caller of it
+        # (~50% of Cloud Run writes on 2026-11-01).
+        'database.firestore_transaction_retry',
+    }
+)
+# Generic write helpers inside product modules: name the function that called them.
+# The enrichment outbox CAS loop alone was ~3.1M writes/day on 2026-11-01.
+_WRITE_PLUMBING_FUNCTIONS = frozenset(
+    {
+        ('utils.enrichment.outbox', '_cas'),
+        ('utils.enrichment.outbox', '_mutate'),
+        ('utils.enrichment.outbox', 'mutate_row'),
+        # FirestoreEnrichmentOutbox's adapter in front of mutate_row.
+        ('database.outbox_firestore', '_mutate'),
     }
 )
 _CALLER_RE = re.compile(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*){0,6}:[A-Za-z_][A-Za-z0-9_]{0,60}$')
@@ -180,7 +195,13 @@ def _call_site() -> str:
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
-            if module in _WRITE_PLUMBING_MODULES or is_plumbing_module(module) or not name or name.startswith('<'):
+            if (
+                module in _WRITE_PLUMBING_MODULES
+                or (module, name) in _WRITE_PLUMBING_FUNCTIONS
+                or is_plumbing_module(module)
+                or not name
+                or name.startswith('<')
+            ):
                 frame = frame.f_back
                 continue
             return _bound_caller(f'{module}:{name}')

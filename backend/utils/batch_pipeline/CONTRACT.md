@@ -63,12 +63,30 @@ record. Live transcription is a preview; the batch result is the record.
   `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy pulls (Helm:
   `worker.shardSpreadEnabled=false`). Retry logs include only static
   `operation=batch_claim|batch_pull shard=scheduler_NN`, never worker/user IDs.
+  One claimed shard transaction leases up to the pull's remaining batch,
+  continuing the same DRR walk (each new head re-checks privacy, policy and
+  pool; `MAX_VISITS` still bounds the whole walk, which also stops at 300
+  buffered writes and commits its rotations for the next pull without a shard
+  backoff; one token per lease).
+  `BATCH_PULL_MULTI_LEASE_ENABLED=false` restores one lease per transaction
+  (Helm: `worker.pullMultiLeaseEnabled=false`).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller
   concurrency regression after its process-level batch scenarios.
 - **Receipts**: durable upload status via `intake.py:durable_status`
   (`failed` + `failed_segments` + `batch_worker_quarantined` only for terminal
   quarantine); VAD/silence evidence in the result payload (`contracts.py:projection_speech_spans`);
   `omi_batch_pipeline_events_total` counts are best effort, the job records are the census.
+
+Held partial uploads return nonterminal `processing/batch_unit_held`, with a
+five-minute poll hint. Projected conversations stay visible independently of
+upload completion, including after 30 minutes. Only all-unit completion can
+acknowledge the phone's custody WAL; a partial ledger never authorizes that
+acknowledgement or phone-local age eviction. Polling does not retry audio or
+consume the client's failure budget. Pending phone bytes remain until recovery
+or explicit user deletion; storage pressure cannot evict them.
+`tests/unit/test_batch_pipeline_custody_property.py` checks this over every unit
+state and ledger shape and pins each answer in `tests/fixtures/custody_status_shapes.json`,
+which the phone replays through its terminal policy (`app/test/unit/custody_status_shapes_test.dart`).
 
 ## Trips: which invariant each enforces
 
