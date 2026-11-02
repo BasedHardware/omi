@@ -223,7 +223,8 @@ def payoff_order(rows, now, *, firestore_client=None):
     Reads one dream_users doc per ranked owner (at most PAYOFF_RANKED, in
     DISCOVERY_TRANSACTION_ROWS bulk gets). Keep the oldest PAYOFF_AGING_FLOOR
     rows, then sample evenly through the rest, including the newest due row.
-    Unsampled owners keep due order after the ranked window.
+    Unsampled owners keep due order after the ranked window, except that
+    the aging guard always precedes payoff-ranked owners across the whole queue.
     """
     database = firestore_client if firestore_client is not None else get_firestore_client()
     if len(rows) <= PAYOFF_RANKED:
@@ -258,7 +259,17 @@ def payoff_order(rows, now, *, firestore_client=None):
         )
         return (1, -float(payoff), due)
 
-    return [uid for uid, _ in sorted(head, key=key)] + [uid for uid, _ in tail]
+    ranked = [uid for uid, _ in sorted(head, key=key)] + [uid for uid, _ in tail]
+    # The old contiguous head + FIFO tail kept every aged owner ahead of
+    # younger owners. Sampling must retain that guard even for skipped rows;
+    # classifying their due timestamp needs no additional state reads.
+    aged = [
+        uid
+        for uid, due_at in rows
+        if isinstance(due_at, datetime) and due_at.tzinfo is not None and EPOCH <= due_at <= now - PAYOFF_AGING
+    ]
+    aged_set = set(aged)
+    return aged + [uid for uid in ranked if uid not in aged_set]
 
 
 def remove_due(uid, *, firestore_client=None):

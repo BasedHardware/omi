@@ -747,6 +747,17 @@ def test_payoff_window_just_over_cap_keeps_every_owner_and_samples_newest(queue)
     assert rows[-1][0] in ranked[:1000]
 
 
+def test_payoff_aging_guard_includes_unsampled_rows_beyond_oldest_floor(queue):
+    aged = [(f'aged-{index}', NOW - timedelta(days=31) + timedelta(seconds=index)) for index in range(302)]
+    younger = [(f'young-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(4046)]
+    queue.rows[('dream_users', younger[-1][0])] = {'last_yield': 10}
+    ranked = dream_scheduler.payoff_order(aged + younger, NOW, firestore_client=queue)
+    assert ranked[:302] == [uid for uid, _ in aged]
+    assert ranked[302] == younger[-1][0]
+    assert sorted(ranked) == sorted(uid for uid, _ in aged + younger)
+    assert sum(path[0] == 'dream_users' for path in queue.reads) == 1000
+
+
 def test_payoff_clamps_existing_pre_epoch_due_without_aging_priority(queue):
     rows = [
         ('sentinel', dream_scheduler.EPOCH - timedelta(minutes=6)),
