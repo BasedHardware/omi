@@ -387,6 +387,32 @@ def test_every_terminal_hold_reuses_intent_vad(world, monkeypatch, terminal, inc
     assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
 
 
+@pytest.mark.parametrize('next_measurement,expected', [(None, 0.5), (0.0, 0.5), (1.0, 1.0)])
+def test_failover_intent_keeps_prior_vad_if_next_inspection_is_missing_or_lower(
+    world, monkeypatch, next_measurement, expected
+):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    protocol = provider_stt.ProviderSttStore(store)
+    protocol.start('p1', 'first', 200.0, 'modulate', measured_vad_speech_seconds=0.5)
+    failure = {'stage': 'provider', 'reason': 'abandoned_running'}
+    assert (
+        protocol.settle(
+            'p1',
+            'first',
+            1101.0,
+            failure=failure,
+            attempt_outcome=provider_stt.VendorAttemptOutcome.ABANDONED,
+            failover_to=('soniox',),
+        )
+        == 'failover'
+    )
+    started = protocol.start('p1', 'alternate', 1102.0, 'soniox', measured_vad_speech_seconds=next_measurement)
+    assert started['provider_intent']['measured_vad_speech_seconds'] == expected
+    assert protocol.settle('p1', 'alternate', 2003.0, failure=failure) == 'settled'
+    assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
+
+
 @pytest.mark.parametrize(
     'error,expected',
     [

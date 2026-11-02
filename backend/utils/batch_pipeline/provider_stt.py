@@ -374,6 +374,14 @@ class ProviderSttStore:
             attempts = bounding_attempts(attempts_of(job))
             number = check_new_attempt(attempts, service)
             attempt = VendorAttempt(number, service, token, binding.privacy_generation, now, table_version)
+            # A failover still owns the same immutable audio. Keep earlier
+            # evidence if its next inspection is unavailable or lower.
+            prior = (job.get('provider_intent') or {}).get('measured_vad_speech_seconds')
+            measurements = [
+                validate_measured_vad(value, job['duration_seconds'])
+                for value in (prior, measured_vad_speech_seconds)
+                if value is not None
+            ]
             job['state'] = RUNNING
             job[ATTEMPTS_FIELD] = [entry.to_dict() for entry in attempts] + [attempt.to_dict()]
             # Mirror the current attempt; pre-D workers ignore the additive VAD evidence.
@@ -383,9 +391,8 @@ class ProviderSttStore:
                 'privacy_generation': binding.privacy_generation,
                 'started_at': now,
             }
-            measured = validate_measured_vad(measured_vad_speech_seconds, job['duration_seconds'])
-            if measured is not None:
-                job['provider_intent']['measured_vad_speech_seconds'] = measured
+            if measurements:
+                job['provider_intent']['measured_vad_speech_seconds'] = max(measurements)
             tx.put('jobs', segment_id, job)
             return job
 
