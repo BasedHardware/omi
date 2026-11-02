@@ -306,6 +306,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final target = conversationOrNull;
     if (target == null ||
         loadingReprocessConversation ||
+        loadingReprocessTranscription ||
         segmentIds.isEmpty ||
         (expectedConversationId != null && target.id != expectedConversationId)) {
       return null;
@@ -667,10 +668,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool isLoading = false;
   bool loadingReprocessConversation = false;
+  bool loadingReprocessTranscription = false;
   String reprocessConversationId = '';
 
   /// The last [refreshConversation] that the page asked to track ([trackLoad]).
   ConversationDetailLoad detailLoad = ConversationDetailLoad.idle;
+
+  /// Whether a summary or transcription reprocess is running; either one rewrites the summary.
+  bool get anyReprocessInFlight => loadingReprocessConversation || loadingReprocessTranscription;
 
   /// Whether the open conversation is being reprocessed right now.
   bool get isReprocessingOpenConversation =>
@@ -906,6 +911,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  void updateReprocessTranscriptionLoadingState(bool loading) {
+    loadingReprocessTranscription = loading;
+    notifyListeners();
+  }
+
   void setSelectedAppForReprocessing(App app) {
     selectedAppForReprocessing = app;
     notifyListeners();
@@ -1048,20 +1058,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// [forceOmi] (with a null [appId]) asks for Omi's own notes only: the server runs neither the
   /// preferred template nor a suggestion. Without it a null [appId] keeps the legacy meaning.
   Future<bool> reprocessConversation({String? appId, bool forceOmi = false}) async {
-    if (conversation.id.startsWith('ondevice-') || loadingReprocessConversation || _savingSpeaker) return false;
-    _speakerSummaryRefreshTimer?.cancel();
-    _speakerSummaryRefreshTimer = null;
+    if (conversation.id.startsWith('ondevice-') || anyReprocessInFlight || _savingSpeaker) return false;
     final target = conversation;
-    _automaticSpeakerSummaryRefreshIds.remove(target.id);
-    _confirmedSpeakerLabelingSessionIds.remove(target.id);
-    // Any regeneration rewrites the summary from every saved label, so it also ends a labeling pass.
-    if (_labelingSessionId == target.id) _endLabelingSession();
+    _beginSummaryRewrite(target);
     final generation = _speakerEditGeneration;
     final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
     Logger.debug('_reProcessConversation with appId: $appId');
-    lastFailedReprocessConversationId = null;
-    lastFailedReprocessAppId = null;
-    recordSummaryFailure(null);
     reprocessingAppId = appId;
     loadingReprocessConversation = true;
     reprocessConversationId = target.id;
@@ -1090,18 +1092,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         return false;
       }
 
-      conversationProvider?.updateConversation(updatedConversation);
-      SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
-
-      // Update the cached conversation to ensure we have the latest data. Reads already in
-      // flight predate this result; drop them.
-      if (conversationOrNull?.id == target.id) {
-        _cachedConversation = updatedConversation;
-        _refreshGeneration++;
-      }
-      if (generation == _speakerEditGeneration && _speakerSummaryConversationId == target.id) {
-        _speakerSummaryConversationId = null;
-      }
+      _landReprocess(target, updatedConversation, generation);
       _finishReprocessLoading();
       // Show what the reader asked for, even when the server kept other templates' results first.
       showRequestedSummarySource(target.id, appId);
@@ -1136,7 +1127,84 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  /// Crash-reporting seam for [reprocessConversation]; tests override it.
+  /// Re-runs speech-to-text on the open conversation's stored audio; the server then regenerates its
+  /// summary. Same guards as [reprocessConversation]; a failure is announced only while its
+  /// conversation is still the open one.
+  Future<bool> reprocessTranscription({
+    Future<TranscriptionReprocessResult> Function(String id)? client,
+  }) async {
+    if (conversation.id.startsWith('ondevice-') || anyReprocessInFlight || _savingSpeaker) return false;
+    final target = conversation;
+    _beginSummaryRewrite(target);
+    final generation = _speakerEditGeneration;
+    reprocessConversationId = target.id;
+    updateReprocessTranscriptionLoadingState(true);
+    try {
+      final result = await (client ?? reProcessTranscriptionServer)(target.id);
+      if (_isDisposed) return false;
+      // Same event as summary reprocess: both replays are re-process actions
+      // from the user's perspective (analytics parity per review).
+      PlatformManager.instance.analytics.reProcessConversation(target);
+      final updatedConversation = result.conversation;
+      if (updatedConversation == null) {
+        _failReprocessTranscription(target, noAudio: result.errorCode == 'no_audio');
+        return false;
+      }
+      _landReprocess(target, updatedConversation, generation);
+      reprocessConversationId = '';
+      loadingReprocessTranscription = false;
+      notifyInfo('REPROCESS_TRANSCRIPTION_SUCCESS');
+      return true;
+    } catch (err, stacktrace) {
+      Logger.debug('reprocessTranscription failed: ${err.runtimeType}');
+      // Settle the page first: crash reporting is best effort and must never leave it loading.
+      if (!_isDisposed && loadingReprocessTranscription) _failReprocessTranscription(target);
+      try {
+        await reportReprocessCrash(err, stacktrace, target);
+      } catch (reportError) {
+        Logger.debug('reprocess crash report failed: ${reportError.runtimeType}');
+      }
+      return false;
+    }
+  }
+
+  void _failReprocessTranscription(ServerConversation target, {bool noAudio = false}) {
+    reprocessConversationId = '';
+    loadingReprocessTranscription = false;
+    // The provider is shared: a page now showing another conversation must not report this one.
+    if (conversationOrNull?.id == target.id) {
+      notifyError(noAudio ? 'REPROCESS_TRANSCRIPTION_NO_AUDIO' : 'REPROCESS_TRANSCRIPTION_FAILED');
+    }
+    notifyListeners();
+  }
+
+  /// A reprocess rewrites [target]'s summary from every saved label: it supersedes a pending
+  /// automatic refresh, ends a labeling pass and replaces the last failed summary request.
+  void _beginSummaryRewrite(ServerConversation target) {
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    _automaticSpeakerSummaryRefreshIds.remove(target.id);
+    _confirmedSpeakerLabelingSessionIds.remove(target.id);
+    if (_labelingSessionId == target.id) _endLabelingSession();
+    lastFailedReprocessConversationId = null;
+    lastFailedReprocessAppId = null;
+    recordSummaryFailure(null);
+  }
+
+  /// Stores a reprocess result. Reads already in flight predate it, so they are dropped.
+  void _landReprocess(ServerConversation target, ServerConversation updated, int speakerGeneration) {
+    conversationProvider?.updateConversation(updated);
+    SharedPreferencesUtil().modifiedConversationDetails = updated;
+    if (conversationOrNull?.id == target.id) {
+      _cachedConversation = updated;
+      _refreshGeneration++;
+    }
+    if (speakerGeneration == _speakerEditGeneration && _speakerSummaryConversationId == target.id) {
+      _speakerSummaryConversationId = null;
+    }
+  }
+
+  /// Crash-reporting seam for both reprocess flows; tests override it.
   @visibleForTesting
   Future<void> reportReprocessCrash(Object error, StackTrace stackTrace, ServerConversation target) async {
     final conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(target);

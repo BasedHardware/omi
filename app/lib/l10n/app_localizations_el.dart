@@ -78,6 +78,20 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reprocessConversation => 'Επανεπεξεργασία Συνομιλίας';
 
   @override
+  String get reprocessTranscription => 'Επανεπεξεργασία απομαγνητοφώνησης';
+
+  @override
+  String get retranscribingConversation =>
+      'Επανάληψη μεταγραφής συνομιλίας...\nΑυτό μπορεί να πάρει λίγο χρόνο για μεγαλύτερες συνομιλίες';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Σφάλμα κατά την επανεπεξεργασία της απομαγνητοφώνησης. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get errorNoStoredAudio => 'Δεν υπάρχει αποθηκευμένος ήχος για αυτή τη συνομιλία.';
+
+  @override
   String get deleteConversation => 'Διαγραφή συνομιλίας';
 
   @override

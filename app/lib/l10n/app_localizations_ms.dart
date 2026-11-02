@@ -78,6 +78,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reprocessConversation => 'Proses Semula Perbualan';
 
   @override
+  String get reprocessTranscription => 'Proses Semula Transkripsi';
+
+  @override
+  String get retranscribingConversation =>
+      'Menyalin semula perbualan...\nIni mungkin mengambil masa untuk perbualan yang lebih panjang';
+
+  @override
+  String get errorReprocessingTranscription => 'Ralat semasa memproses semula transkripsi. Cuba lagi kemudian.';
+
+  @override
+  String get errorNoStoredAudio => 'Tiada audio disimpan untuk perbualan ini.';
+
+  @override
   String get deleteConversation => 'Padam Perbualan';
 
   @override
