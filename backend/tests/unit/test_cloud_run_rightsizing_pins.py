@@ -8,8 +8,8 @@ costcut values, so the next train can no longer silently revert them.
 
 Live reference (ro-prod, 2026-10-24 22:50Z): backend 8Gi/cpu 2/concurrency 20/
 min 3/max 100; backend-sync 6Gi/cpu 2/min 5/max 30 (11-01 G1 source cap; was 40); backend-sync-backfill
-2Gi/cpu 2/concurrency 6/min 0 (cap redis_guard-bounded, live 16; 11-02 memcut: was 4Gi, 1-min per-instance
-max <= 1.0 GiB over 2026-10-25..11-02); backend-integration 2Gi/cpu 2/concurrency 40/min 3/max 50.
+3Gi/cpu 2/concurrency 6/min 0 (cap redis_guard-bounded, live 16; 11-02 memcut: was 4Gi, 1-min per-instance
+max 1.52 GiB over 2026-10-19..11-02); backend-integration 2Gi/cpu 2/concurrency 40/min 3/max 50.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def test_prod_deploy_flags_match_the_live_right_sizing():
 
     backfill = model['backend-sync-backfill'].scale
     assert (backfill['memory'], backfill['cpu'], backfill['concurrency'], backfill['revision_min']) == (
-        '2Gi',
+        '3Gi',
         '2',
         6,
         0,
