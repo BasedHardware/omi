@@ -45,26 +45,6 @@ def erase_list(candidate, restore):
     return selected
 
 
-def ranges(memory):
-    """Group a HEX address map into (start, end_exclusive) spans of explicit bytes."""
-    spans = []
-    for address in sorted(memory):
-        if spans and address == spans[-1][1]:
-            spans[-1][1] = address + 1
-        else:
-            spans.append([address, address + 1])
-    return [tuple(span) for span in spans]
-
-
-def matches(adapter, memory):
-    """Compare a device readback with an image, byte for byte over its explicit ranges."""
-    for start, end in ranges(memory):
-        data = adapter.read(start, end)
-        if len(data) != end - start or any(memory[start + i] != data[i] for i in range(end - start)):
-            return False
-    return True
-
-
 def pages_match(adapter, memory, selected):
     """Compare whole pages, so a page that failed to erase can't pass as restored."""
     for page in selected:
@@ -114,9 +94,14 @@ class Run:
                  f"{role}: {result['errors']} {[error['code'] for error in artifact_errors]}")
             need(result['artifact_preflight']['validated_operation'] == 'reviewed_swd_app_only',
                  'loop_is_app_only', role)
-            job_value = strict_json(Path(job).read_bytes())
-            manifest_path = Path(job).parent / job_value['artifact_manifest']
-            image = strict_json(manifest_path.read_bytes())['images'][0]
+            # Reread only what plan() approved, so a replaced job or manifest is refused.
+            job_bytes = Path(job).read_bytes()
+            need(digest_bytes(job_bytes) == result['job_sha256'], 'job_changed', role)
+            manifest_path = Path(job).parent / strict_json(job_bytes)['artifact_manifest']
+            manifest_bytes = manifest_path.read_bytes()
+            need(digest_bytes(manifest_bytes) == result['artifact_preflight']['manifest_sha256'],
+                 'manifest_changed', role)
+            image = strict_json(manifest_bytes)['images'][0]
             # Later stages use these bytes, so a swapped file cannot reach the device.
             data = (manifest_path.parent / image['file']).read_bytes()
             need(digest_bytes(data) == image['sha256'], 'image_hash_mismatch', role)
@@ -141,13 +126,15 @@ class Run:
 
     def baseline(self):
         protected = self.check_protected()
-        need(matches(self.adapter, self.images['restore']['memory']), 'app_not_at_baseline')
+        # Whole pages, because restore leaves every byte the image doesn't define erased.
+        need(pages_match(self.adapter, self.images['restore']['memory'], self.erase), 'app_not_at_baseline')
         return protected
 
     def write(self, role):
         image = self.images[role]
         self.identity()
         self.adapter.erase(self.erase)
+        self.identity()
         self.adapter.program(image['data'])
         return {'image_sha256': image['sha256'], 'erased_pages': len(self.erase)}
 

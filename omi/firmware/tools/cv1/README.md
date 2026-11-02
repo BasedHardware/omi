@@ -34,7 +34,13 @@ Startup fixtures are sanitized derivatives; radio fixtures omit unrelated device
 
 ## Unattended bench cycle
 
-`bench_loop.py dry-run` drives the app-only cycle against a simulated device: admit, identity, baseline check, flash, verify, boot check, restore. It can't reach hardware. The driver holds the safety rules in code: only pages in `[0x10000,0xF6000)` can be erased, identity is read fresh before any write, nothing is retried, restore runs after any write, and the lease goes idle only with restoration proof or an untouched device. A quarantined or crashed run blocks the next one until someone reviews it. A live adapter stays in the private bench profile, outside this repository, and passing here says nothing about hardware or release.
+```sh
+python3 bench_loop.py dry-run --candidate-job CANDIDATE.json --restore-job RESTORE.json --profile PROFILE.json --contract CONTRACT.json --pins PINS.json --bench-dir NEW_DIR --output NEW_DIR/run
+```
+
+This drives the app-only cycle against a simulated device: admit, identity, baseline check, flash, verify, boot check, restore. It can't reach hardware. Jobs, profile and contract follow `job_dry_run.py`, and the pins file holds `protected_sha256` and `restore_image_sha256`.
+
+The driver holds the safety rules in code: only pages in `[0x10000,0xF6000)` can be erased, identity is read fresh before every erase and program, nothing is retried, restore runs after any write that fails or finishes, and the lease goes idle only with restoration proof or an untouched device. A crash gets no restore. The bench stays blocked until someone reconciles it by hand, as it does after any quarantine. A live adapter stays in the private bench profile, outside this repository, and passing here says nothing about hardware or release.
 
 ## Radio tests on an opened board
 

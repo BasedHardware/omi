@@ -4,6 +4,7 @@ import test_artifact_preflight as fixtures
 from artifact_preflight import hex_bytes
 from bench import Busy,Lease
 from unittest import mock
+import bench_loop
 from bench_loop import SimulatedBench,StageFailed,erase_list,run
 PROTECTED=dict(mcuboot_sha256='a'*64,network_sha256='b'*64)
 IDENTITY='1'*64
@@ -50,7 +51,21 @@ class LoopTests(unittest.TestCase):
   sim=self.sim();real=sim.identity
   def identity():
    return dict(external_target_identity_sha256='2'*64) if sim.programs else real()
-  sim.identity=identity;r=self.go(sim);self.assertEqual(r['result'],'restore_failed_needs_owner');self.assertEqual(sim.programs,1);self.assertEqual(self.lease(),'quarantined')
+  sim.identity=identity;r=self.go(sim);self.assertEqual(r['result'],'restore_failed_needs_owner');self.assertEqual(sim.programs,1);self.assertEqual(sim.calls.count('erase'),1);self.assertEqual(self.lease(),'quarantined')
+ def test_target_swapped_after_erase_is_not_programmed(self):
+  sim=self.sim();real=sim.identity
+  def identity():
+   return dict(external_target_identity_sha256='2'*64) if 'erase' in sim.calls else real()
+  sim.identity=identity;r=self.go(sim);self.assertEqual(r['result'],'restore_failed_needs_owner');self.assertEqual(sim.programs,0);self.assertEqual(sim.calls.count('erase'),1)
+ def test_stale_bytes_on_a_candidate_page_quarantine_before_writing(self):
+  app=hex_bytes(self.restore);app[0x11800]=0;sim=self.sim(app=app);self.assertEqual(self.go(sim)['result'],'unexpected_device_state');self.assertNotIn('erase',sim.calls)
+ def test_manifest_replaced_after_plan_is_refused(self):
+  real=bench_loop.plan
+  def replacing(job,profile,contract):
+   result=real(job,profile,contract);m=json.loads((self.root/'candidate-manifest.json').read_text());m['images'][0]['file']='other.hex';(self.root/'candidate-manifest.json').write_text(json.dumps(m));return result
+  sim=self.sim()
+  with mock.patch('bench_loop.plan',replacing):r=self.go(sim)
+  self.assertEqual(r['stages'][0]['code'],'manifest_changed');self.assertEqual(sim.calls,[])
  def test_unsaved_proof_leaves_lease_quarantined(self):
   with mock.patch('bench_loop.save',side_effect=OSError('disk full')):
    with self.assertRaises(OSError):self.go(self.sim())
