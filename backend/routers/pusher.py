@@ -1,3 +1,4 @@
+from utils import pusher_projection_errors
 import hashlib
 import os
 import struct
@@ -5,7 +6,6 @@ import asyncio
 import time
 import uuid
 from contextlib import ExitStack
-from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from utils.pusher_audio_window import append_window_run, v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
@@ -20,7 +20,6 @@ from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProject
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
-from starlette.websockets import WebSocketState
 from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
@@ -121,28 +120,6 @@ PROJECTION_RETRY_BUDGET = 2
 # same range fail closed and are never overwritten.
 
 
-def _projection_raising_frame(exc: BaseException) -> str:
-    """Innermost raising frame name, for RCA attribution of projection failures.
-
-    Only the code object's name is ever returned — the exception message and
-    args can carry user-identifying object paths and must not reach logs.
-    """
-    frame_name = 'unknown'
-    tb = exc.__traceback__
-    while tb is not None:
-        frame_name = tb.tb_frame.f_code.co_name
-        tb = tb.tb_next
-    return frame_name
-
-
-def _projection_grpc_code(exc: BaseException) -> str:
-    """Only the SDK's closed gRPC status enum; never message/metadata/reason text."""
-    code = cast(object, getattr(exc, 'grpc_status_code', None))
-    if isinstance(code, StatusCode):
-        return code.name
-    return 'UNKNOWN'
-
-
 # Queue size limits
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 
@@ -176,16 +153,6 @@ RECORD_INLINE_FINISH_TIMEOUT = 20.0  # projection wait and metadata combined
 def _projection_wait_bound_enabled() -> bool:
     """Emergency rollback of the capacity deadline only; custody ownership stays."""
     return os.getenv('PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED', 'true').strip().lower() != 'false'
-
-
-def _ack_peer_departed(exc: Exception, websocket: Any) -> bool:
-    if isinstance(exc, (WebSocketDisconnect, OSError)):
-        return True
-    return isinstance(exc, RuntimeError) and (
-        getattr(websocket, 'application_state', None) == WebSocketState.DISCONNECTED
-        or getattr(websocket, 'client_state', None) == WebSocketState.DISCONNECTED
-        or str(exc) == 'Cannot call "send" once a close message has been sent.'
-    )
 
 
 async def _dispatch_transcript_item(
@@ -296,7 +263,7 @@ async def _commit_durable_audio_window(
             except Exception as exc:
                 # Slot ownership precedes the ACK: peer departure cannot bypass
                 # projection delivery. The ordinary close worker promotes it.
-                if _ack_peer_departed(exc, websocket):
+                if pusher_projection_errors.ack_peer_departed(exc, websocket):
                     raise WebSocketDisconnect(code=1006) from None
                 raise
         if receipt.conversation_id and receipt.samples:
@@ -550,8 +517,8 @@ async def _run_websocket_util_trigger(
                 logger.warning(
                     'Durable audio projection failure class: %s raised by %s grpc_code=%s',
                     type(exc).__name__,
-                    _projection_raising_frame(exc),
-                    _projection_grpc_code(exc),
+                    pusher_projection_errors.raising_frame(exc),
+                    pusher_projection_errors.grpc_code(exc),
                 )
                 logger.info('Durable audio projection rejected; archive receipt retained')
             except NotFound as exc:
@@ -598,8 +565,8 @@ async def _run_websocket_util_trigger(
             logger.warning(
                 'Durable audio projection failure class: %s raised by %s grpc_code=%s',
                 type(exc).__name__,
-                _projection_raising_frame(exc),
-                _projection_grpc_code(exc),
+                pusher_projection_errors.raising_frame(exc),
+                pusher_projection_errors.grpc_code(exc),
             )
             if (
                 websocket_active
@@ -1835,7 +1802,7 @@ async def _run_websocket_util_trigger(
 
         journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 
-        if websocket.client_state == WebSocketState.CONNECTED:
+        if pusher_projection_errors.peer_connected(websocket):
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:

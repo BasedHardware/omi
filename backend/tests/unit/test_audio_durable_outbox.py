@@ -1,6 +1,6 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
-from utils import pusher_audio_projection
+from utils import pusher_audio_projection, pusher_projection_errors
 import asyncio
 from concurrent.futures import Future
 from collections import deque
@@ -1333,10 +1333,10 @@ async def test_invalid_argument_projection_keeps_custody_and_allows_seal(inline_
 
 def test_projection_grpc_code_never_serializes_untrusted_reason_or_code():
     rejection = InvalidArgument('secret message', error_info=ErrorInfo(reason='A' * 28))
-    assert pusher._projection_grpc_code(rejection) == 'INVALID_ARGUMENT'
+    assert pusher_projection_errors.grpc_code(rejection) == 'INVALID_ARGUMENT'
     rejection.grpc_status_code = 'person@example.test/private-job'
-    assert pusher._projection_grpc_code(rejection) == 'UNKNOWN'
-    assert pusher._projection_grpc_code(ValueError('private/path')) == 'UNKNOWN'
+    assert pusher_projection_errors.grpc_code(rejection) == 'UNKNOWN'
+    assert pusher_projection_errors.grpc_code(ValueError('private/path')) == 'UNKNOWN'
 
 
 @pytest.mark.asyncio
