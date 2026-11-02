@@ -643,6 +643,24 @@ def test_shared_embedding_trunk_ships_on_with_helm_kill_switch(arguments, expect
     assert env['BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED'] == expected
 
 
+@pytest.mark.parametrize(
+    'value,env_name',
+    [
+        ('vadSegmentationReuseEnabled', 'BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED'),
+        ('prepareFlightEnabled', 'BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED'),
+        ('asrCudaGraphsEnabled', 'BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED'),
+    ],
+)
+@pytest.mark.parametrize('kill', [False, True])
+def test_gpu_efficiency_levers_ship_on_with_helm_kill_switches(value, env_name, kill):
+    arguments = ('--set', f'worker.{value}=false') if kill else ()
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env[env_name] == ('false' if kill else 'true')
+
+
 @pytest.mark.parametrize('arguments,expected', [((), 'true'), (('--set', 'worker.shardSpreadEnabled=false'), 'false')])
 def test_shard_spread_ships_on_with_helm_kill_switch(arguments, expected):
     result = render(*enabled_arguments(), *arguments)
