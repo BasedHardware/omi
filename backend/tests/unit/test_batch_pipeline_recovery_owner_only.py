@@ -69,6 +69,8 @@ async def test_recovery_scope_skips_all_global_work_and_kill_switch_restores_it(
 async def test_owner_wake_leaves_process_wide_drain_queue_for_periodic_owner():
     projector = projector_for(ResultLog())
     projector.drain_requests = {'unrelated-owner': None}
+    projector.index.defer(BURST, 'synthetic-conversation', [])
+    projector.schedule_index_flush = Mock()
 
     def project(owner_id, *, recovered):
         projector.request_drain(owner_id)
@@ -83,6 +85,7 @@ async def test_owner_wake_leaves_process_wide_drain_queue_for_periodic_owner():
     assert projector.drains is None
     assert projector.drain_requests == {'unrelated-owner': None, BURST: None}
     projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
+    projector.schedule_index_flush.assert_called_once_with(BURST)
 
 
 def test_owner_scope_commits_recovered_unit_before_projection_without_global_work():
@@ -195,6 +198,7 @@ async def test_owner_followups_never_discover_global_rows_even_with_other_owed_w
     projector = projector_for(ResultLog())
     runner = projection_followup.ProjectionFollowups(projector)
     projector.followups = runner
+    runner.pending.extend(['unrelated-pending-unit'])
     runner.owed['other-owner-unit'] = None
     projector.owe_followups(['other-walk-unit'])
     runner.candidates = Mock(side_effect=AssertionError('request scanned global follow-ups'))
@@ -209,6 +213,7 @@ async def test_owner_followups_never_discover_global_rows_even_with_other_owed_w
         while runner.tasks:
             await asyncio.gather(*list(runner.tasks.values()))
         assert started == ['recovered']
+        assert list(runner.pending) == ['unrelated-pending-unit']
         assert list(runner.owed) == ['other-owner-unit']
         assert projector.chain_followups == ['other-walk-unit']
         runner.candidates.assert_not_called()
@@ -217,6 +222,30 @@ async def test_owner_followups_never_discover_global_rows_even_with_other_owed_w
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def test_owner_chain_kill_switch_defers_generic_sweep_to_periodic_owner(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setattr(serving, 'owner_chain_projection_enabled', lambda: False)
+    receipt = {'state': 'persisted'}
+    projector = Mock()
+    projector.project_owner = Mock(side_effect=AssertionError('disabled owner-chain walk ran'))
+
+    def periodic_sweep():
+        assert receipt['state'] == 'persisted'
+        receipt['state'] = 'ready'
+
+    projector.sweep.side_effect = periodic_sweep
+    service = Serving(MemoryStore(), projector=projector)
+
+    service.reconcile(owner_id=BURST, recovered='recovered', owner_only=True)
+    assert receipt['state'] == 'persisted'
+    projector.sweep.assert_not_called()
+
+    service.reconcile(periodic=True)
+    assert receipt['state'] == 'ready'
+    projector.sweep.assert_called_once_with()
 
 
 @pytest.mark.asyncio

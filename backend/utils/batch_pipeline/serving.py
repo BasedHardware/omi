@@ -135,7 +135,7 @@ class Serving:
             self.projector.start_drains()
         # Deferred search/people-stats work left by walks converges off the chain.
         if self.projector and getattr(self.projector, 'owes_index', False) is True:
-            self.projector.schedule_index_flush()
+            self.projector.schedule_index_flush(owner_id if owner_only else None)
 
     def _leads(self, periodic: bool) -> bool:
         # Explicit global RPC callers (POST /reconcile) always

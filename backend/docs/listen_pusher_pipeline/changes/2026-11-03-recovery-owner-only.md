@@ -2,7 +2,10 @@
 
 Successful quarantine recovery now requests an explicit owner-only drain. It
 commits the recovered owner's ready results, walks the owner's projection
-chain, and schedules that walk's durable follow-ups without global discovery.
+chain, and schedules that walk's durable follow-ups without global discovery
+or launching unrelated queued follow-ups. Deferred index work is scoped to the
+recovered owner. If owner-chain projection is disabled, its durable receipt
+waits for the periodic generic sweep instead of triggering a request-time scan.
 Global cleanup, enrichment, lease/retry recovery, projection scans and queue
 sampling remain on periodic serving reconciliation. The independent supervisor
 waits 20 seconds after each pass; the maintenance lease TTL is 60 seconds.
