@@ -14493,6 +14493,18 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processingPaused => 'Naka-pause ang pagproseso. Naabot mo na ang limitasyon ngayong buwan.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'Ligtas ang $duration ng iyong mga recording pero hindi pa naproseso.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Mag-upgrade para maproseso na ngayon.';
+
+  @override
+  String get processingFreeStored =>
+      'Ligtas ang iyong mga recording pero hindi pa naproseso. Mag-upgrade para maproseso na ngayon.';
+
+  @override
   String get processingStored =>
       'Naka-save ang iyong mga recording at transcript. Mananatiling naghihintay ang mga recording hanggang piliin mong iproseso ang mga ito.';
 

@@ -4964,6 +4964,111 @@
         "wal-upload-refusals"
       ],
       "correlation": null
+    },
+    {
+      "id": "heldAudioCardSeen",
+      "wire_name": "Held Audio Card Seen",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "live",
+            "settings"
+          ]
+        },
+        "variant": {
+          "type": "enum",
+          "wire_name": "variant",
+          "values": [
+            "personal",
+            "holdout",
+            "paid"
+          ]
+        },
+        "state": {
+          "type": "enum",
+          "wire_name": "state",
+          "values": [
+            "capped",
+            "waiting_choice",
+            "processing"
+          ]
+        }
+      },
+      "consumers": [
+        "held-audio-card"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "heldAudioUpgradeTapped",
+      "wire_name": "Held Audio Upgrade Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "live",
+            "settings"
+          ]
+        },
+        "variant": {
+          "type": "enum",
+          "wire_name": "variant",
+          "values": [
+            "personal",
+            "holdout",
+            "paid"
+          ]
+        }
+      },
+      "consumers": [
+        "held-audio-card"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "heldAudioProcessTapped",
+      "wire_name": "Held Audio Process Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "live",
+            "settings"
+          ]
+        },
+        "variant": {
+          "type": "enum",
+          "wire_name": "variant",
+          "values": [
+            "personal",
+            "holdout",
+            "paid"
+          ]
+        }
+      },
+      "consumers": [
+        "held-audio-card"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

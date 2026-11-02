@@ -14423,6 +14423,18 @@ class AppLocalizationsPl extends AppLocalizations {
   String get processingPaused => 'Przetwarzanie wstrzymane. Osiągnięto limit na ten miesiąc.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration Twoich nagrań jest bezpieczne, ale jeszcze nieprzetworzone.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Ulepsz plan, aby przetworzyć je teraz.';
+
+  @override
+  String get processingFreeStored =>
+      'Twoje nagrania są bezpieczne, ale jeszcze nieprzetworzone. Ulepsz plan, aby przetworzyć je teraz.';
+
+  @override
   String get processingStored =>
       'Twoje nagrania i transkrypcje są zapisane. Oczekujące nagrania pozostaną w kolejce, aż wybierzesz ich przetworzenie.';
 

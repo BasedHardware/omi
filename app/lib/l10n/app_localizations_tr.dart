@@ -14392,6 +14392,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingPaused => 'İşleme duraklatıldı. Bu ayın sınırına ulaştınız.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'Kayıtlarınızın $duration kadarı güvende ama henüz işlenmedi.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Şimdi işlemek için yükseltin.';
+
+  @override
+  String get processingFreeStored => 'Kayıtlarınız güvende ama henüz işlenmedi. Şimdi işlemek için yükseltin.';
+
+  @override
   String get processingStored =>
       'Kayıtlarınız ve dökümleriniz kaydedildi. Bekleyen kayıtlar, işlemeyi seçene kadar beklemeye devam eder.';
 

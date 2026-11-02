@@ -210,6 +210,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | livePreviewVerdict | Live Preview Verdict | verdict, platform, verdict_latency_ms, hold_duration_ms, held_frames, hold_timeout_replayed | active | live-preview |
 | livePreviewNotes | Live Preview Notes | engine, outcome, latency_ms, bullet_count | active | live-preview |
 | walUploadRefused | WAL Upload Refused | reason, status_code | active | wal-upload-refusals |
+| heldAudioCardSeen | Held Audio Card Seen | surface, variant, state | active | held-audio-card |
+| heldAudioUpgradeTapped | Held Audio Upgrade Tapped | surface, variant | active | held-audio-card |
+| heldAudioProcessTapped | Held Audio Process Tapped | surface, variant | active | held-audio-card |
 
 ## App Review Opportunity decisions
 

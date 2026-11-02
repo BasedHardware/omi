@@ -14426,6 +14426,18 @@ class AppLocalizationsKn extends AppLocalizations {
   String get processingPaused => 'ಪ್ರಕ್ರಿಯೆ ವಿರಾಮಗೊಂಡಿದೆ. ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'ನಿಮ್ಮ $duration ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ, ಆದರೆ ಇನ್ನೂ ಸಂಸ್ಕರಿಸಲಾಗಿಲ್ಲ.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'ಈಗಲೇ ಸಂಸ್ಕರಿಸಲು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
+
+  @override
+  String get processingFreeStored =>
+      'ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ, ಆದರೆ ಇನ್ನೂ ಸಂಸ್ಕರಿಸಲಾಗಿಲ್ಲ. ಈಗಲೇ ಸಂಸ್ಕರಿಸಲು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
+
+  @override
   String get processingStored =>
       'ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಪ್ರತಿಲಿಪಿಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ನೀವು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತವೆ.';
 

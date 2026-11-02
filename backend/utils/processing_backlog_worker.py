@@ -14,13 +14,15 @@ from database import processing_backlog as store, conversations as conversations
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.conversation import Conversation
 from utils import funded_processing
-from utils.processing_backlog import choose, is_active
+from utils.processing_backlog import choose, is_active, rolls
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
 from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
 from config.rate_card import recording_units_per_hour
-from config.stt_cap_dispatch import hold_lane, recovery_cohort_admits
+from config.stt_cap_dispatch import hold_lane, recovery_admission_enabled, recovery_cohort_admits
+from utils.observability.held_content import record_recovery_skipped
+from utils.observability.reasons import HeldRecoverySkipOutcome
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -135,14 +137,19 @@ def _process_text(uid, identity) -> AttemptOutcome:
 
 
 async def _selected(uid, item) -> bool | None:
+    """Skips are counted here: they never reach a recovery attempt, so recovery_total cannot see them."""
     if item['kind'] == 'text':
-        return funded_processing.enabled(uid, 'batch')
-    try:
-        snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
-        return not snap.exists or await cap_hold_recovery.selected_for_recovery(uid, snap.to_dict() or {})
-    except Exception as error:
-        logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
-        return None
+        skip = None if funded_processing.enabled(uid, 'batch') else HeldRecoverySkipOutcome.TEXT_OUT_OF_SCOPE
+    else:
+        try:
+            snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+            skip = await cap_hold_recovery.recovery_skip(uid, snap.to_dict() or {}) if snap.exists else None
+        except Exception as error:
+            logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
+            return None
+    if skip is not None:
+        record_recovery_skipped(skip)
+    return skip is None
 
 
 async def _release_excluded(uid, token, lease, period, item):
@@ -154,7 +161,7 @@ async def _release_excluded(uid, token, lease, period, item):
         manifest = snap.to_dict() or {}
         meta = await run_blocking(storage_executor, cap_hold.metadata, uid, manifest)
         lane = hold_lane(meta)
-        if lane is None or funded_processing.enabled(uid, lane):
+        if lane is None or recovery_admission_enabled(uid, lane):
             return None
     elif item['kind'] != 'text' or funded_processing.enabled(uid, 'batch'):
         return None
@@ -175,6 +182,17 @@ async def _process(uid, item) -> AttemptOutcome:
     return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
 
+async def _roll(uid: str, job: dict) -> dict:
+    """An Unlimited owner's earlier-month tap continues on its own; anything else stays parked."""
+    current = await run_blocking(db_executor, funded_processing.allowance, uid)
+    if not current.managed or not rolls(job, funded_processing.capacity(current)[0]):
+        return job
+    rolled = await run_blocking(
+        db_executor, partial(store.roll, uid, period=funded_processing.period_id(), cutoff=time.time())
+    )
+    return rolled or job
+
+
 async def run(
     uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
 ) -> bool | None:
@@ -183,10 +201,15 @@ async def run(
         return
     if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         return
+    # A lapsed or downgraded owner parks here with the choice and holds intact.
+    if not await run_blocking(db_executor, funded_processing.paid_owner, uid):
+        return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
         return
     job = await run_blocking(db_executor, store.read, uid)
+    if not is_active(job) and job.get('state') == 'processing':
+        job = await _roll(uid, job)
     if not is_active(job):
         return
     token = job['token']
@@ -363,13 +386,25 @@ async def run(
     return continuation
 
 
-def upgrade(uid: str, request_key: str, *, intent_at):
-    """Only payment intent calls this; monthly renewal/reset never creates intent."""
-    choose(uid, request_key=request_key, automatic=True, intent_at=intent_at)
+async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
+    """The only automatic recovery: once per Stripe trial, from its start (David, 2026-11-01).
 
-
-async def upgrade_async(uid: str, request_key: str, *, intent_at):
-    await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
+    Keyed to the subscription, so a redelivery, restart or later month finds the
+    receipt and starts nothing. The trial's own start dates the intent: a late
+    first delivery in a later month is stale, not consent. Purchases, renewals
+    and the first real charge never call this; they wait for a tap.
+    """
+    started = stripe_subscription.get('trial_start')
+    if stripe_subscription.get('status') != 'trialing' or not stripe_subscription.get('id') or not started:
+        return
+    await run_blocking(
+        db_executor,
+        choose,
+        uid,
+        request_key=f'trial-grant:{stripe_subscription["id"]}',
+        automatic=True,
+        intent_at=started,
+    )
 
 
 cap_hold_recovery.register_backlog_runner(run)

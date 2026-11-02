@@ -14383,6 +14383,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingPaused => 'Käsittely keskeytetty. Olet saavuttanut tämän kuun rajan.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration tallenteistasi on tallessa, mutta niitä ei ole käsitelty.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Päivitä, niin ne käsitellään nyt.';
+
+  @override
+  String get processingFreeStored =>
+      'Tallenteesi ovat tallessa, mutta niitä ei ole käsitelty. Päivitä, niin ne käsitellään nyt.';
+
+  @override
   String get processingStored =>
       'Tallenteesi ja litterointisi on tallennettu. Odottavat tallenteet pysyvät odottamassa, kunnes valitset niiden käsittelyn.';
 

@@ -14277,6 +14277,17 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingPaused => 'העיבוד הושהה. הגעת למגבלה של החודש.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration מההקלטות שלך שמורות בבטחה אך טרם עובדו.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'שדרגו כדי לעבד אותן עכשיו.';
+
+  @override
+  String get processingFreeStored => 'ההקלטות שלך שמורות בבטחה אך טרם עובדו. שדרגו כדי לעבד אותן עכשיו.';
+
+  @override
   String get processingStored => 'ההקלטות והתמלילים שלך נשמרו. ההקלטות הממתינות יישארו בהמתנה עד לבחירתך לעבד אותן.';
 
   @override

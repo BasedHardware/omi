@@ -17497,6 +17497,23 @@
     },
     "heldAudioRecovering": "Transcribing your waiting recordings",
     "processingPaused": "Processing paused. You've reached this month's limit.",
+    "processingFreeHeld": "{duration} of your recordings are safe but unprocessed.",
+    "@processingFreeHeld": {
+        "description": "Free plan held-recordings card headline. duration is the owner held total, e.g. 6 h 20 min.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "processingFreeUpgrade": "Upgrade to process now.",
+    "@processingFreeUpgrade": {
+        "description": "Free plan held-recordings card line under the held total."
+    },
+    "processingFreeStored": "Your recordings are safe but unprocessed. Upgrade to process now.",
+    "@processingFreeStored": {
+        "description": "Free plan held-recordings text where no held total is shown."
+    },
     "processingStored": "Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.",
     "processingWaiting": "{duration} waiting · Process now uses about {percent}% of this month",
     "@processingWaiting": {

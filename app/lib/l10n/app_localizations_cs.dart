@@ -14378,6 +14378,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingPaused => 'Zpracování pozastaveno. Dosáhli jste limitu pro tento měsíc.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration vašich nahrávek je v bezpečí, ale zatím nezpracováno.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Upgradujte a zpracujte je hned.';
+
+  @override
+  String get processingFreeStored =>
+      'Vaše nahrávky jsou v bezpečí, ale zatím nezpracované. Upgradujte a zpracujte je hned.';
+
+  @override
   String get processingStored =>
       'Vaše nahrávky a přepisy jsou uložené. Čekající nahrávky zůstanou čekat, dokud se nerozhodnete je zpracovat.';
 

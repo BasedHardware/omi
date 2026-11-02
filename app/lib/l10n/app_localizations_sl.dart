@@ -14407,6 +14407,18 @@ class AppLocalizationsSl extends AppLocalizations {
   String get processingPaused => 'Obdelava je začasno ustavljena. Dosegli ste omejitev za ta mesec.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration vaših posnetkov je na varnem, vendar še niso obdelani.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Nadgradite, da jih obdelate zdaj.';
+
+  @override
+  String get processingFreeStored =>
+      'Vaši posnetki so na varnem, vendar še niso obdelani. Nadgradite, da jih obdelate zdaj.';
+
+  @override
   String get processingStored =>
       'Vaši posnetki in prepisi so shranjeni. Čakajoči posnetki bodo čakali, dokler ne izberete obdelave.';
 

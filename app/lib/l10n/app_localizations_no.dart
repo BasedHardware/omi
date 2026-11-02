@@ -14383,6 +14383,17 @@ class AppLocalizationsNo extends AppLocalizations {
   String get processingPaused => 'Behandlingen er satt på pause. Du har nådd denne månedens grense.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration av opptakene dine er trygge, men ikke behandlet.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Oppgrader for å behandle dem nå.';
+
+  @override
+  String get processingFreeStored => 'Opptakene dine er trygge, men ikke behandlet. Oppgrader for å behandle dem nå.';
+
+  @override
   String get processingStored =>
       'Opptakene og transkripsjonene dine er lagret. Ventende opptak venter til du velger å behandle dem.';
 

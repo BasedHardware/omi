@@ -14380,6 +14380,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingPaused => 'Đã tạm dừng xử lý. Bạn đã đạt giới hạn tháng này.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration bản ghi của bạn vẫn an toàn nhưng chưa được xử lý.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Nâng cấp để xử lý ngay.';
+
+  @override
+  String get processingFreeStored => 'Bản ghi của bạn vẫn an toàn nhưng chưa được xử lý. Nâng cấp để xử lý ngay.';
+
+  @override
   String get processingStored =>
       'Bản ghi âm và bản chép lời của bạn đã được lưu. Các bản ghi đang chờ sẽ tiếp tục chờ cho đến khi bạn chọn xử lý.';
 

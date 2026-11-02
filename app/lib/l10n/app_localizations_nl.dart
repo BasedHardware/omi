@@ -14418,6 +14418,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String get processingPaused => 'Verwerking gepauzeerd. Je hebt de limiet van deze maand bereikt.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration van je opnames is veilig, maar nog niet verwerkt.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Upgrade om ze nu te verwerken.';
+
+  @override
+  String get processingFreeStored => 'Je opnames zijn veilig, maar nog niet verwerkt. Upgrade om ze nu te verwerken.';
+
+  @override
   String get processingStored =>
       'Je opnamen en transcripties zijn opgeslagen. Wachtende opnamen blijven wachten totdat je kiest om ze te verwerken.';
 

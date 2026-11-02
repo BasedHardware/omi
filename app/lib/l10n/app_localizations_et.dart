@@ -14372,6 +14372,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingPaused => 'Töötlus on peatatud. Oled jõudnud selle kuu piiranguni.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration sinu salvestistest on turvaliselt alles, kuid töötlemata.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Uuenda paketti, et need kohe töödelda.';
+
+  @override
+  String get processingFreeStored =>
+      'Sinu salvestised on turvaliselt alles, kuid töötlemata. Uuenda paketti, et need kohe töödelda.';
+
+  @override
   String get processingStored =>
       'Sinu salvestised ja transkriptsioonid on salvestatud. Ootel salvestised jäävad ootele, kuni valid nende töötlemise.';
 

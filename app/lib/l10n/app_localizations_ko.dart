@@ -14181,6 +14181,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingPaused => '처리가 일시 중지되었습니다. 이번 달 한도에 도달했습니다.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '녹음 $duration 분량이 안전하게 보관되어 있지만 아직 처리되지 않았습니다.';
+  }
+
+  @override
+  String get processingFreeUpgrade => '지금 처리하려면 업그레이드하세요.';
+
+  @override
+  String get processingFreeStored => '녹음이 안전하게 보관되어 있지만 아직 처리되지 않았습니다. 지금 처리하려면 업그레이드하세요.';
+
+  @override
   String get processingStored => '녹음과 전사 내용이 저장되었습니다. 대기 중인 녹음은 처리를 선택할 때까지 대기합니다.';
 
   @override

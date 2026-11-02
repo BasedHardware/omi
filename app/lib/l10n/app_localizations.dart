@@ -25461,6 +25461,24 @@ abstract class AppLocalizations {
   /// **'Processing paused. You\'ve reached this month\'s limit.'**
   String get processingPaused;
 
+  /// Free plan held-recordings card headline. duration is the owner held total, e.g. 6 h 20 min.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} of your recordings are safe but unprocessed.'**
+  String processingFreeHeld(String duration);
+
+  /// Free plan held-recordings card line under the held total.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to process now.'**
+  String get processingFreeUpgrade;
+
+  /// Free plan held-recordings text where no held total is shown.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recordings are safe but unprocessed. Upgrade to process now.'**
+  String get processingFreeStored;
+
   /// No description provided for @processingStored.
   ///
   /// In en, this message translates to:

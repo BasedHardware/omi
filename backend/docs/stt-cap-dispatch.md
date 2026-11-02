@@ -28,8 +28,42 @@ an allowance check must not create a default subscription or restore a missing
 user root. Existing usage-publication erasure fences remain authoritative.
 
 This audio-only predicate does **not** widen live listen, generic LLM/generated
-processing, held-backlog consent, or recovery rollout membership. Existing holds
-outside the recovery cohort stay in custody until their recovery scope is enabled.
+processing or held-backlog consent. Existing holds outside the recovery cohort stay
+in custody until their recovery scope is enabled.
+
+Sync-origin (and pre-origin) holds created by this boundary recover under the same
+boundary: while `STT_CAP_OFFLINE_ENFORCEMENT` is on, `recovery_admission_enabled`
+admits lane `sync` for a cap-cohort owner even when `STT_CAP_DISPATCH_LANES` omits
+`sync`. Before this, the live-only lane list stranded every sync hold, including
+after the owner bought credits. Only recovery widens: intake, consent and
+`execution_admission_enabled` still read the lane list, and recovery still needs
+explicit owner consent, current allowance on the original lane and shared pacing.
+A malformed lane list still denies this recovery, as it denies every lane; `sync`
+itself need not be listed.
+
+Held audio recovers only for an owner on an active paid plan (David, 2026-11-01).
+`funded_processing.paid_owner` reads `get_user_valid_subscription(provision=False)`
+on every decision and applies `is_paid_plan`; an unreadable entitlement fails
+closed. It gates the recovery predicate (`cap_hold_recovery._scope`, so
+`_selected_lane`, `recover_selected` and the worker's per-item scope check on every
+lane), `processing_backlog.choose`, the worker `run` and the redrive sweep (which
+visits only paid owners). A Free owner's holds stay held, untouched, on every lane;
+a lapsed or downgraded owner parks at the next decision with choice and holds
+intact. `snapshot` reports `capped` for a Free owner with waiting work, so
+`POST /v1/users/processing-backlog/process` returns its existing 402 and clients
+show Upgrade, while `budget_exhausted` still says whether the monthly limit was
+actually reached. A Free skip counts as
+`omi_held_content_recovery_skipped_total{outcome="not_paid"}` and a Free tap as
+`omi_processing_backlog_choice_total{outcome="not_paid"}`; the recovery gate
+excludes `not_paid`, which is intended.
+
+Rollback for this recovery is `STT_CAP_RECOVERY_COHORT=pct:0` on every API/sync
+recovery executor: it stops every recovery path (consent, worker, redrive,
+selected manifests, provider dispatch) and leaves holds and consent in custody,
+while the offline allowance cap keeps holding new sync audio. Do **not** use
+`STT_CAP_OFFLINE_ENFORCEMENT=false` to roll this back: it also removes the
+allowance cap on new sync audio from this boundary (sync admission selected by the
+legacy lane list stays governed by that list).
 PTT voice-message allowance enforcement is a separate follow-up.
 
 Release owner: subscription session merges; deployment lead deploys. Offline
@@ -140,8 +174,8 @@ the reservation. Such ambiguous reservations conservatively block that choice
 until their lane is restored and normal recovery resolves them. A lost refund
 response leaves the choice active for a fresh read, never a second refund.
 At page completion the store refuses any actual reservation first, then consumes
-an already-authorized current-month pending upgrade into a fresh token, allowance
-and cutoff. Excluded rows do not block that upgrade. Without an eligible upgrade,
+an already-authorized current-month pending trial grant into a fresh token, allowance
+and cutoff. Excluded rows do not block that grant. Without an eligible grant,
 skipped scope keeps the choice processing and atomically rewinds its cursors;
 it never finishes to waiting-choice solely because excluded rows remain.
 Custody sealing/cleanup stays active during rollback because it is
@@ -425,9 +459,30 @@ reads resume only an already chosen, current-month run. The authenticated
 `POST /v1/users/processing-backlog/process` endpoint requires `Idempotency-Key`;
 a durable receipt prevents duplicate consent even after the original job finishes.
 A choice captures its month, cutoff and estimated remaining allowance. Renewable
-job and hold leases fence concurrent workers. Payment checkout/plan-change intent
-starts recovery only if the whole estimate fits; otherwise the same waiting-choice
-surface is shown. New recordings after reset process normally; older held audio
+job and hold leases fence concurrent workers. Purchases, plan changes, renewals
+and the first real charge never start recovery: a paid owner's held audio waits,
+with the process action, until the owner taps. The only automatic recovery is a
+Stripe trial's start (`customer.subscription.created` in status `trialing`; a later
+update, such as a plan change while trialing, never grants):
+`processing_backlog_worker.trial_started_async` chooses newest first with a budget
+of `TRIAL_RECOVERY_GRANT_HOURS` (25, `config/stt_cap_dispatch.py`) of held audio,
+or less when a finite allowance has less. The job's `remaining` is that budget.
+The request key is `trial-grant:<subscription id>`, so its durable receipt makes a
+retry, restart or later month a no-op, and the trial's own `trial_start` dates the
+intent: a first delivery in a later month is recorded as `stale_intent` and
+declined. Recordings made during the trial are not held (Unlimited) and never
+debit the grant; anything held after the grant's cutoff is outside it. Beyond the
+grant, the owner taps the same process action as anyone else.
+
+A paid owner's tap expires at the monthly rollover only when recovery spends a
+finite allowance (Plus keeps the monthly tap, so prior consent never spends a new
+month). When the owner's current capacity is unlimited, the worker rolls an
+earlier month's unleased manual choice (`processing_backlog.rolls`,
+`database.processing_backlog.roll`) into the current month with a new token,
+period and cutoff, carrying any reservation to finish under its source's claim and
+receipts. This resumes choices parked by an earlier rollover without a new tap. A
+trial grant or legacy upgrade intent (`automatic`) never rolls, and nothing creates
+a choice for an owner who did not make one. New recordings after reset process normally; older held audio
 and deferred text stay waiting. For every explicitly chosen provider request, current
 funded allowance and the existing hard abuse restrictions must pass again before
 every new recovered provider request. Already persisted receipts can settle at
@@ -572,7 +627,7 @@ suppression and sync hold/recovery paths. Ladder allowance comes from units;
 legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds
 the decoded capture before VAD; v2 archives/queues it and holds in the coordinator.
-Explicit-choice or fitting-upgrade recovery rechecks the current ladder budget before dispatch.
+Explicit-choice or trial-grant recovery rechecks the current ladder budget before dispatch.
 
 Live sessions carry numeric remaining units, debited from accepted provider PCM
 at the pinned provider speech rate (silence is conservatively included). Shared
@@ -680,7 +735,7 @@ no extra restriction; empty, whitespace or malformed values deny all recovery,
 with one process-local warning that contains neither tokens nor owner identity.
 Listen-side hold admission and backlog display stay unchanged.
 
-The intersection gates manual/upgrade consent creation, the backlog process API,
+The intersection gates manual/trial-grant consent creation, the backlog process API,
 redrive owner visits, worker entry, direct recovery wakes, selected manifests and
 each new provider dispatch (including sync pipeline retries). Excluded owners'
 persisted consent and holds are preserved. Staging seal/cleanup and fleet metrics

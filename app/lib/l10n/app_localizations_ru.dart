@@ -14427,6 +14427,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get processingPaused => 'Обработка приостановлена. Вы достигли лимита на этот месяц.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration ваших записей в безопасности, но ещё не обработаны.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Улучшите план, чтобы обработать их сейчас.';
+
+  @override
+  String get processingFreeStored =>
+      'Ваши записи в безопасности, но ещё не обработаны. Улучшите план, чтобы обработать их сейчас.';
+
+  @override
   String get processingStored =>
       'Ваши записи и расшифровки сохранены. Ожидающие записи останутся в ожидании, пока вы не выберете обработку.';
 

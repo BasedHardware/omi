@@ -9,6 +9,7 @@ import wave
 
 import pytest
 
+from utils import funded_processing
 from utils.observability import held_content as held_metrics
 from utils.sync import cap_hold, cap_hold_lifecycle, cap_hold_redrive, live_cap_hold as live, live_cap_staging
 from utils.sync.live_cap_publication import Publication
@@ -24,13 +25,16 @@ _EMPTY_FLEET = {
 }
 
 
+_REAL_PAID_OWNER = funded_processing.paid_owner
+
+
 @pytest.fixture(autouse=True)
 def _fleet_snapshot_stays_local(monkeypatch):
     # Reset the process-local snapshot gate so every test schedules one snapshot.
     cap_hold_redrive._snapshot_gate.update(inflight=False, attempt_at=None)
     monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', lambda firestore_client=None: dict(_EMPTY_FLEET))
-    # Subscription priority is part of the sweep; keep the unit lane hermetic.
-    monkeypatch.setattr(cap_hold_redrive.users_db, 'get_user_valid_subscription', lambda uid, **_: None)
+    # The paid-only filter is part of the sweep; these owners are paid. Its own test reads subscriptions.
+    monkeypatch.setattr(cap_hold_redrive.funded_processing, 'paid_owner', lambda uid: True)
 
 
 @pytest.fixture
@@ -780,28 +784,38 @@ async def test_parallel_drain_bounds_reach_discovery_and_the_worker(monkeypatch)
     assert items == [3] * 8
 
 
-async def test_paid_owners_are_visited_first_within_a_bounded_page(monkeypatch):
+async def test_sweep_visits_only_paid_owners_and_fails_closed(monkeypatch):
     from config.plan_catalog import PAID_PLAN_TYPES, PlanType
+    from database import users as users_db
 
-    free = SimpleNamespace(reference=SimpleNamespace(path='users/free/processing_backlog/current'))
-    paid = SimpleNamespace(reference=SimpleNamespace(path='users/paid/processing_backlog/current'))
+    snaps = {
+        uid: SimpleNamespace(reference=SimpleNamespace(path=f'users/{uid}/processing_backlog/current'))
+        for uid in ('free', 'paid', 'unreadable', 'lapsed')
+    }
     calls = []
 
     def subscription(uid, *, provision):
         calls.append((uid, provision))
-        plan = next(iter(PAID_PLAN_TYPES)) if uid == 'paid' else PlanType.basic
-        return SimpleNamespace(plan=plan)
+        if uid == 'unreadable':
+            raise RuntimeError('synthetic outage')
+        # A lapsed paid period reads back as Basic from get_user_valid_subscription.
+        return SimpleNamespace(plan=next(iter(PAID_PLAN_TYPES)) if uid == 'paid' else PlanType.basic)
 
     async def run_blocking(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
+    # Restore the real predicate over the autouse stub; it reads the synthetic subscriptions.
+    monkeypatch.setattr(funded_processing, 'paid_owner', _REAL_PAID_OWNER)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
-    monkeypatch.setattr(cap_hold_redrive.users_db, 'get_user_valid_subscription', subscription)
+    monkeypatch.setattr(users_db, 'get_user_valid_subscription', subscription)
+    monkeypatch.setattr(cap_hold_redrive, 'account_deletion_blocks_user_work', lambda uid: False)
     monkeypatch.setattr(cap_hold_redrive, 'run_blocking', run_blocking)
-    assert await cap_hold_redrive._paid_first([free, paid]) == [paid, free]
-    assert calls == [('free', False), ('paid', False)]
+    assert funded_processing.paid_owner('paid')
+    calls.clear()
+    assert await cap_hold_redrive._paid_only(list(snaps.values())) == [snaps['paid']]
+    assert calls == [(uid, False) for uid in snaps]
 
 
 async def test_parallel_drain_kill_switch_restores_the_legacy_shape(monkeypatch):

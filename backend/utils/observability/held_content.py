@@ -15,7 +15,14 @@ import time
 
 from prometheus_client import Counter, Gauge, Histogram
 
-from utils.observability.reasons import ReasonFamily, StagingRetryOutcome, TransitionTailOutcome, reason_label
+from utils.observability.reasons import (
+    BacklogChoiceOutcome,
+    HeldRecoverySkipOutcome,
+    ReasonFamily,
+    StagingRetryOutcome,
+    TransitionTailOutcome,
+    reason_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +95,21 @@ UNDATED_PENDING = Gauge(
     'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 RECOVERY = Counter('omi_held_content_recovery', 'Held recovery attempts and completions', ['result'])
+RECOVERY_SKIPPED = Counter(
+    'omi_held_content_recovery_skipped',
+    'Backlog items a processing choice skipped with no recovery attempt, so recovery_total never sees them: '
+    'out_of_scope owner or lane, unknown_origin hold metadata, text_out_of_scope, '
+    'or not_paid (a Free owner, by design)',
+    ['outcome'],
+)
+BACKLOG_CHOICE_SOURCES = ('manual', 'trial')
+BACKLOG_CHOICE = Counter(
+    'omi_processing_backlog_choice',
+    'Processing-backlog choices by source: manual is POST /v1/users/processing-backlog/process, trial is a '
+    'Stripe trial start (the one automatic grant). A retried idempotency key counts again. '
+    'Labels never identify a person',
+    ['source', 'outcome'],
+)
 PACING_OUTCOMES = ('granted', 'deferred', 'refused')
 PACING = Counter('omi_held_recovery_pacing_intents', 'Recovery intent budget decisions', ['outcome'])
 PACING_AUDIO = Counter('omi_held_recovery_pacing_audio_seconds', 'Audio tokens requested by decision', ['outcome'])
@@ -137,6 +159,13 @@ for _method in CHOICE_METHODS:
     CHOICE_LATENCY.labels(method=_method)
 for _result in RECOVERY_RESULTS:
     RECOVERY.labels(result=_result)
+for _source in BACKLOG_CHOICE_SOURCES:
+    for _outcome in BacklogChoiceOutcome:
+        BACKLOG_CHOICE.labels(
+            source=_source, outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, BacklogChoiceOutcome)
+        )
+for _outcome in HeldRecoverySkipOutcome:
+    RECOVERY_SKIPPED.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, HeldRecoverySkipOutcome))
 for _outcome in PACING_OUTCOMES:
     PACING.labels(outcome=_outcome)
     PACING_AUDIO.labels(outcome=_outcome)
@@ -190,6 +219,19 @@ def finish_choice(method: str, started: float, outcome: str | None) -> None:
 def record_recovery(result: str) -> None:
     if result in RECOVERY_RESULTS:
         _inc(RECOVERY, result=result)
+
+
+def record_recovery_skipped(outcome: str) -> None:
+    _inc(RECOVERY_SKIPPED, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, HeldRecoverySkipOutcome))
+
+
+def record_backlog_choice(source: str, outcome: str) -> None:
+    if source in BACKLOG_CHOICE_SOURCES:
+        _inc(
+            BACKLOG_CHOICE,
+            source=source,
+            outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, BacklogChoiceOutcome),
+        )
 
 
 def record_pacing(outcome: str, seconds: float, deferred_age: float = 0) -> None:

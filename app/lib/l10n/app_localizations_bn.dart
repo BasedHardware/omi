@@ -14375,6 +14375,18 @@ class AppLocalizationsBn extends AppLocalizations {
   String get processingPaused => 'প্রক্রিয়াকরণ থামানো হয়েছে। আপনি এই মাসের সীমায় পৌঁছেছেন।';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'আপনার $duration রেকর্ডিং নিরাপদ আছে, কিন্তু এখনও প্রক্রিয়া করা হয়নি।';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'এখনই প্রক্রিয়া করতে আপগ্রেড করুন।';
+
+  @override
+  String get processingFreeStored =>
+      'আপনার রেকর্ডিংগুলি নিরাপদ আছে, কিন্তু এখনও প্রক্রিয়া করা হয়নি। এখনই প্রক্রিয়া করতে আপগ্রেড করুন।';
+
+  @override
   String get processingStored =>
       'আপনার রেকর্ডিং ও প্রতিলিপি সংরক্ষিত আছে। আপনি প্রক্রিয়া করার সিদ্ধান্ত না নেওয়া পর্যন্ত অপেক্ষমাণ রেকর্ডিং অপেক্ষায় থাকবে।';
 

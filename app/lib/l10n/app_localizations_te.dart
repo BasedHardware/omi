@@ -14440,6 +14440,18 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processingPaused => 'ప్రాసెసింగ్ నిలిపివేయబడింది. మీరు ఈ నెల పరిమితిని చేరుకున్నారు.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return 'మీ $duration రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, కానీ ఇంకా ప్రాసెస్ కాలేదు.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'ఇప్పుడే ప్రాసెస్ చేయడానికి అప్‌గ్రేడ్ చేయండి.';
+
+  @override
+  String get processingFreeStored =>
+      'మీ రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, కానీ ఇంకా ప్రాసెస్ కాలేదు. ఇప్పుడే ప్రాసెస్ చేయడానికి అప్‌గ్రేడ్ చేయండి.';
+
+  @override
   String get processingStored =>
       'మీ రికార్డింగ్‌లు మరియు లిప్యంతరీకరణలు సేవ్ చేయబడ్డాయి. మీరు ప్రాసెస్ చేయాలని ఎంచుకునే వరకు వేచి ఉన్న రికార్డింగ్‌లు అలాగే ఉంటాయి.';
 

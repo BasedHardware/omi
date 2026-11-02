@@ -14412,6 +14412,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processingPaused => 'Apstrāde apturēta. Sasniegts šī mēneša limits.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration jūsu ierakstu ir drošībā, bet vēl nav apstrādāti.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Jauniniet plānu, lai tos apstrādātu tagad.';
+
+  @override
+  String get processingFreeStored =>
+      'Jūsu ieraksti ir drošībā, bet vēl nav apstrādāti. Jauniniet plānu, lai tos apstrādātu tagad.';
+
+  @override
   String get processingStored =>
       'Jūsu ieraksti un atšifrējumi ir saglabāti. Gaidošie ieraksti gaidīs, līdz izvēlēsieties tos apstrādāt.';
 

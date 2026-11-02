@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-held-audio-free-card.png",
+      "platform": "mobile-ios",
+      "description": "Free owner with 6h 20m held (not in the 10% holdout): personal 'safe but unprocessed' headline, 'Upgrade to process now.', Upgrade first and Transcribe on this phone second, no process action",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-held-audio-plus-paused.png",
+      "platform": "mobile-ios",
+      "description": "Plus owner at the monthly limit: unchanged paused copy, no Upgrade button (PR 23831), no process action until the monthly reset tap",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-held-audio-unlimited-process.png",
+      "platform": "mobile-ios",
+      "description": "Unlimited owner with held recordings waiting: Process waiting recordings and Not now, no Upgrade button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

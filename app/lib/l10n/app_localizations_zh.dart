@@ -14156,6 +14156,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingPaused => '处理已暂停。你已达到本月上限。';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '你有 $duration 的录音已安全保存，但尚未处理。';
+  }
+
+  @override
+  String get processingFreeUpgrade => '升级即可立即处理。';
+
+  @override
+  String get processingFreeStored => '你的录音已安全保存，但尚未处理。升级即可立即处理。';
+
+  @override
   String get processingStored => '你的录音和转录文本已保存。等待中的录音会继续等待，直到你选择处理。';
 
   @override

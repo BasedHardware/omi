@@ -14374,6 +14374,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processingPaused => 'Spracovanie pozastavené. Dosiahli ste limit na tento mesiac.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration vašich nahrávok je v bezpečí, ale zatiaľ nespracovaných.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Prejdite na vyšší plán a spracujte ich hneď.';
+
+  @override
+  String get processingFreeStored =>
+      'Vaše nahrávky sú v bezpečí, ale zatiaľ nespracované. Prejdite na vyšší plán a spracujte ich hneď.';
+
+  @override
   String get processingStored =>
       'Vaše nahrávky a prepisy sú uložené. Čakajúce nahrávky zostanú čakať, kým si nevyberiete ich spracovanie.';
 

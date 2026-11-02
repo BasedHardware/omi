@@ -155,6 +155,30 @@ class TransitionTailOutcome(StrEnum):
     SEALED = 'sealed'
 
 
+class HeldRecoverySkipOutcome(StrEnum):
+    """Why a processing choice skipped a backlog item without any recovery attempt."""
+
+    UNKNOWN = 'unknown'
+    OUT_OF_SCOPE = 'out_of_scope'
+    UNKNOWN_ORIGIN = 'unknown_origin'
+    TEXT_OUT_OF_SCOPE = 'text_out_of_scope'
+    # Intended: Free owners never recover (David, 2026-11-01). Kept out of the recovery gate.
+    NOT_PAID = 'not_paid'
+
+
+class BacklogChoiceOutcome(StrEnum):
+    """Result of a "Process waiting recordings" tap or a Stripe trial's one-time grant."""
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    OUT_OF_SCOPE = 'out_of_scope'
+    NOT_PAID = 'not_paid'
+    CAPPED = 'capped'
+    NOTHING_WAITING = 'nothing_waiting'
+    STALE_INTENT = 'stale_intent'
+    ERROR = 'error'
+
+
 class StagingRetryOutcome(StrEnum):
     """Disposition of a held-audio staging attempt, including volatile custody."""
 

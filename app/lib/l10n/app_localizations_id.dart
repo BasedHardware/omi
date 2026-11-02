@@ -14392,6 +14392,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get processingPaused => 'Pemrosesan dijeda. Anda telah mencapai batas bulan ini.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration rekaman Anda aman, tetapi belum diproses.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Tingkatkan paket untuk memprosesnya sekarang.';
+
+  @override
+  String get processingFreeStored =>
+      'Rekaman Anda aman, tetapi belum diproses. Tingkatkan paket untuk memprosesnya sekarang.';
+
+  @override
   String get processingStored =>
       'Rekaman dan transkrip Anda disimpan. Rekaman yang menunggu akan tetap menunggu hingga Anda memilih untuk memprosesnya.';
 

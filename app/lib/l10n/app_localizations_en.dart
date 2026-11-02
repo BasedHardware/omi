@@ -14364,6 +14364,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get processingPaused => 'Processing paused. You\'ve reached this month\'s limit.';
 
   @override
+  String processingFreeHeld(String duration) {
+    return '$duration of your recordings are safe but unprocessed.';
+  }
+
+  @override
+  String get processingFreeUpgrade => 'Upgrade to process now.';
+
+  @override
+  String get processingFreeStored => 'Your recordings are safe but unprocessed. Upgrade to process now.';
+
+  @override
   String get processingStored =>
       'Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.';
 
