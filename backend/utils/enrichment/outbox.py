@@ -968,21 +968,27 @@ def sweep(
     return counts
 
 
-def due_rows(*, now: float, limit: int, client: Any = None) -> list[tuple[str, Row]]:
-    """Pull mode: up to ``limit`` due, unleased, awake rows as ``(document_id, row)`` (single-field index)."""
+def due_rows(*, now: float, limit: int = 100, client: Any = None) -> Iterator[tuple[str, Row]]:
+    """Pull mode: due, unleased, awake rows as ``(document_id, row)``, paged by ``(due_at, __name__)``."""
+    page_size = max(1, min(100, limit))
     query = (
         (client or get_firestore_client())
         .collection(COLLECTION)
         .where('due_at', '<=', now)
         .order_by('due_at')
-        .limit(max(1, min(100, limit)))
+        .order_by('__name__')
+        .limit(page_size)
     )
-    rows = []
-    for snapshot in query.stream():
-        row = snapshot.to_dict() or {}
-        if not row.get('dormant') and row.get('lease_until', 0) <= now and row.get('task_token'):
-            rows.append((snapshot.id, row))
-    return rows
+    page_query = query
+    while True:
+        page = list(page_query.stream())
+        for snapshot in page:
+            row = snapshot.to_dict() or {}
+            if not row.get('dormant') and row.get('lease_until', 0) <= now and row.get('task_token'):
+                yield snapshot.id, row
+        if len(page) < page_size:
+            return
+        page_query = query.start_after(page[-1])
 
 
 def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:
