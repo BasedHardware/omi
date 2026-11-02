@@ -4,6 +4,12 @@ import logging
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
+from config.batch_timeliness import (
+    SLA_SECONDS,
+    batch_timeliness_alarm_enabled,
+    timeliness_epoch,
+    timeliness_interval_seconds,
+)
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
@@ -34,6 +40,42 @@ class QueueMetrics:
             'Last successful oldest projection obligation observation',
             registry=registry,
         )
+        # 2-hour timeliness alarm (David, 2026-11-02). Alert-only: no scheduler, ramp or rollback guard reads it.
+        self.timeliness_age = Gauge(
+            'omi_batch_timeliness_new_oldest_age_seconds',
+            'Oldest unpublished unit admitted (projection legs: committed) at or after the epoch; alarm above 7200s',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_over_sla = Gauge(
+            'omi_batch_timeliness_new_over_sla_units',
+            'Units admitted at or after the epoch and still unpublished past the 2h SLA, by counted leg',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_backlog = Gauge(
+            'omi_batch_timeliness_backlog_units',
+            'Unpublished units from before the epoch, by leg; kept visible, never alarmed',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_truncated = Gauge(
+            'omi_batch_timeliness_scan_truncated',
+            '1 when the bounded uncommitted walk saw only policy holds, so an older unit may be unmeasured',
+            registry=registry,
+        )
+        self.timeliness_observed_at = Gauge(
+            'omi_batch_timeliness_observed_at_seconds',
+            'Last successful timeliness sample',
+            registry=registry,
+        )
+        self.timeliness_samples = Counter(
+            'omi_batch_timeliness_samples_total',
+            'Timeliness sample attempts by outcome',
+            ['outcome'],
+            registry=registry,
+        )
+        self._timeliness_due = 0.0
         self.oldest_age = Gauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
@@ -173,7 +215,34 @@ class QueueMetrics:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
         if isinstance(store, FirestoreStore):
+            self.refresh_timeliness(store, now)
             self.refresh_projection(store, now)
+
+    def refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
+        """At most one sample per interval per process; a failed sample keeps last values and freshness."""
+        if now < self._timeliness_due:
+            return
+        self._timeliness_due = now + timeliness_interval_seconds()
+        if not batch_timeliness_alarm_enabled():
+            self.timeliness_samples.labels('disabled').inc()
+            return
+        try:
+            sample = store.timeliness(timeliness_epoch(), now, SLA_SECONDS)
+        except Exception as error:
+            self.timeliness_samples.labels('error').inc()
+            logging.getLogger(__name__).warning(
+                'event=batch_timeliness_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            return
+        for leg, started in sample['new_oldest'].items():
+            self.timeliness_age.labels(leg).set(max(0.0, now - started) if started is not None else 0)
+        for leg, units in sample['new_over_sla'].items():
+            self.timeliness_over_sla.labels(leg).set(units)
+        for leg, units in sample['backlog'].items():
+            self.timeliness_backlog.labels(leg).set(units)
+        self.timeliness_truncated.set(1 if sample['truncated'] else 0)
+        self.timeliness_observed_at.set(now)
+        self.timeliness_samples.labels('ok').inc()
 
     def refresh_projection(self, store: FirestoreStore, now: float) -> None:
         # Reuses the indexed discovery shape, one row, including durable holds.

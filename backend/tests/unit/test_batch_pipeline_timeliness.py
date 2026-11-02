@@ -1,0 +1,227 @@
+"""2-hour batch timeliness alarm (David, 2026-11-02): store sample, gauges and the Grafana rule."""
+
+import json
+from pathlib import Path
+from unittest.mock import Mock
+
+from prometheus_client import CollectorRegistry
+
+from database.batch_pipeline_store import TIMELINESS_HOLD_SCAN_LIMIT, timeliness_sample
+from utils.batch_pipeline.metrics import QueueMetrics
+
+BACKEND = Path(__file__).resolve().parents[2]
+PENDING = BACKEND / 'charts/monitoring/pending/batch-timeliness.json'
+EPOCH = 100_000.0
+NOW = EPOCH + 5 * 3600
+SLA = 7200
+
+
+class _Count:
+    def __init__(self, value):
+        self.value = value
+
+
+class _Doc:
+    def __init__(self, data):
+        self._data = data
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+class _Query:
+    """The slice of the Firestore query API the sample uses: where, order_by, limit, stream, count."""
+
+    def __init__(self, rows, filters=(), order=None, limit=None):
+        self.rows, self.filters, self.order, self._limit = rows, filters, order, limit
+
+    def where(self, field, op, value):
+        return _Query(self.rows, self.filters + ((field, op, value),), self.order, self._limit)
+
+    def order_by(self, field):
+        return _Query(self.rows, self.filters, field, self._limit)
+
+    def limit(self, n):
+        return _Query(self.rows, self.filters, self.order, n)
+
+    def _match(self, row):
+        ops = {
+            '==': lambda a, b: a == b,
+            'in': lambda a, b: a in b,
+            '>=': lambda a, b: a is not None and a >= b,
+            '<': lambda a, b: a is not None and a < b,
+        }
+
+        def get(field):
+            value = row
+            for part in field.split('.'):
+                value = value.get(part) if isinstance(value, dict) else None
+            return value
+
+        return all(ops[op](get(field), value) for field, op, value in self.filters)
+
+    def _selected(self):
+        rows = [r for r in self.rows if self._match(r)]
+        if self.order:
+            rows.sort(key=lambda r: r[self.order])
+        return rows[: self._limit] if self._limit is not None else rows
+
+    def stream(self):
+        return [_Doc(r) for r in self._selected()]
+
+    def count(self):
+        return Mock(get=lambda: [[_Count(len(self._selected()))]])
+
+
+class _Client:
+    def __init__(self, jobs=(), results=()):
+        self.tables = {'ns_jobs': list(jobs), 'ns_results': list(results)}
+
+    def collection(self, name):
+        return _Query(self.tables[name])
+
+
+def _sample(jobs=(), results=(), now=NOW):
+    return timeliness_sample(_Client(jobs, results), 'ns', EPOCH, now, SLA)
+
+
+def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
+    sample = _sample(
+        jobs=[
+            {'state': 'quarantined', 'recovery_state': 'failed_held', 'enqueued_at': EPOCH - 86400},
+            {'state': 'quarantined', 'recovery_state': 'failed_held', 'enqueued_at': EPOCH + 600},
+            {'state': 'quarantined', 'recovery_state': 'prepared', 'enqueued_at': NOW - 600},
+            {'state': 'committed', 'enqueued_at': EPOCH + 60},
+        ],
+        results=[
+            {'projection_state': 'quarantine_held', 'committed_at': EPOCH - 3600},
+            {'projection_state': 'quarantine_held', 'committed_at': EPOCH + 900},
+            {'projection_state': 'pending', 'committed_at': NOW - 60},
+            {'projection_state': 'completed', 'committed_at': EPOCH + 30},
+        ],
+    )
+    assert sample['new_oldest']['quarantined'] == EPOCH + 600
+    assert sample['new_over_sla'] == {'quarantined': 1, 'projection': 0, 'sibling_held': 1}
+    assert sample['backlog'] == {'uncommitted_incl_holds': 0, 'quarantined': 1, 'projection': 0, 'sibling_held': 1}
+    assert sample['new_oldest']['projection'] == NOW - 60
+    assert sample['new_oldest']['uncommitted'] is None
+
+
+def test_policy_holds_never_fill_the_bound_and_compute_retries_are_measured():
+    # Admission holds park in retry without retry_started_at; a compute failure retry carries it.
+    held = {'state': 'retry', 'priority': 0, 'compute_decision': {'outcome': 'held', 'reason': 'fair_use_restricted'}}
+    holds = [{**held, 'enqueued_at': EPOCH + i} for i in range(TIMELINESS_HOLD_SCAN_LIMIT * 3)]
+    failing = {'state': 'retry', 'priority': 1, 'enqueued_at': EPOCH + 200, 'retry_started_at': EPOCH + 900}
+    sample = _sample(jobs=holds + [failing, {'state': 'leased', 'enqueued_at': EPOCH + 300}])
+    assert sample['new_oldest']['uncommitted'] == EPOCH + 200
+    assert sample['truncated'] is False
+    assert sample['backlog']['uncommitted_incl_holds'] == 0
+    # A pre-epoch unit that starts failing after the epoch stays backlog.
+    late = {'state': 'retry', 'priority': 2, 'enqueued_at': EPOCH - 60, 'retry_started_at': EPOCH + 60}
+    sample = _sample(jobs=[late])
+    assert sample['new_oldest']['uncommitted'] is None
+    assert sample['backlog']['uncommitted_incl_holds'] == 1
+
+
+def _ready(at, outcome='unattempted'):
+    return {
+        'state': 'ready',
+        'priority': 2,
+        'merge_pending': True,
+        'enqueued_at': at,
+        'available_at': at,
+        'compute_decision': {'outcome': outcome, 'reason': 'allowance_exhausted'},
+    }
+
+
+def test_holds_back_in_ready_never_fill_the_bound():
+    holds = [_ready(EPOCH + i, 'held') for i in range(TIMELINESS_HOLD_SCAN_LIMIT * 2)]
+    sample = _sample(jobs=holds + [_ready(EPOCH + 999)])
+    assert sample['new_oldest']['uncommitted'] == EPOCH + 999
+    assert sample['truncated'] is False
+    assert sample['backlog']['uncommitted_incl_holds'] == 0
+
+
+def test_a_prefix_of_only_pre_epoch_retries_reports_truncation():
+    late = {'state': 'retry', 'priority': 0, 'enqueued_at': EPOCH - 60}
+    rows = [{**late, 'retry_started_at': EPOCH + i} for i in range(TIMELINESS_HOLD_SCAN_LIMIT)]
+    rows.append({**late, 'enqueued_at': EPOCH + 5, 'retry_started_at': EPOCH + 999})
+    sample = _sample(jobs=rows)
+    assert sample['new_oldest']['uncommitted'] is None
+    assert sample['truncated'] is True
+
+
+def test_no_new_unit_can_breach_before_two_hours_after_the_epoch():
+    sample = _sample(jobs=[{'state': 'quarantined', 'enqueued_at': EPOCH + 10}], now=EPOCH + SLA - 1)
+    assert sample['new_over_sla'] == {'quarantined': 0, 'projection': 0, 'sibling_held': 0}
+
+
+def _store(sample):
+    store = Mock()
+    store.timeliness.return_value = sample
+    return store
+
+
+SAMPLE = {
+    'new_oldest': {'uncommitted': None, 'quarantined': NOW - 9000, 'projection': NOW - 60, 'sibling_held': None},
+    'new_over_sla': {'quarantined': 1, 'projection': 0, 'sibling_held': 0},
+    'backlog': {'uncommitted_incl_holds': 370, 'quarantined': 596, 'projection': 7, 'sibling_held': 6384},
+    'truncated': False,
+}
+
+
+def test_gauges_counter_and_cadence(monkeypatch):
+    monkeypatch.delenv('BATCH_TIMELINESS_ALARM_ENABLED', raising=False)
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(SAMPLE)
+    metrics.refresh_timeliness(store, NOW)
+    value = registry.get_sample_value
+    assert value('omi_batch_timeliness_new_oldest_age_seconds', {'leg': 'quarantined'}) == 9000
+    assert value('omi_batch_timeliness_new_oldest_age_seconds', {'leg': 'uncommitted'}) == 0
+    assert value('omi_batch_timeliness_new_over_sla_units', {'leg': 'quarantined'}) == 1
+    assert value('omi_batch_timeliness_backlog_units', {'leg': 'sibling_held'}) == 6384
+    assert value('omi_batch_timeliness_observed_at_seconds') == NOW
+    assert value('omi_batch_timeliness_samples_total', {'outcome': 'ok'}) == 1
+    metrics.refresh_timeliness(store, NOW + 60)
+    assert store.timeliness.call_count == 1
+    metrics.refresh_timeliness(store, NOW + 301)
+    assert store.timeliness.call_count == 2
+
+
+def test_failed_sample_keeps_values_and_freshness(monkeypatch):
+    monkeypatch.delenv('BATCH_TIMELINESS_ALARM_ENABLED', raising=False)
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(SAMPLE)
+    metrics.refresh_timeliness(store, NOW)
+    store.timeliness.side_effect = RuntimeError('unavailable')
+    metrics.refresh_timeliness(store, NOW + 600)
+    assert registry.get_sample_value('omi_batch_timeliness_observed_at_seconds') == NOW
+    assert registry.get_sample_value('omi_batch_timeliness_new_over_sla_units', {'leg': 'quarantined'}) == 1
+    assert registry.get_sample_value('omi_batch_timeliness_samples_total', {'outcome': 'error'}) == 1
+
+
+def test_kill_switch_skips_firestore_and_counts_disabled(monkeypatch):
+    monkeypatch.setenv('BATCH_TIMELINESS_ALARM_ENABLED', 'false')
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(SAMPLE)
+    metrics.refresh_timeliness(store, NOW)
+    store.timeliness.assert_not_called()
+    assert registry.get_sample_value('omi_batch_timeliness_samples_total', {'outcome': 'disabled'}) == 1
+    assert not registry.get_sample_value('omi_batch_timeliness_observed_at_seconds')
+
+
+def test_rule_alarms_on_new_legs_only_and_stays_agent_tier():
+    rules = {rule['uid']: rule for rule in json.loads(PENDING.read_text(encoding='utf-8'))}
+    alarm = rules['omi-batch-unit-unpublished-2h']
+    exprs = [q['model'].get('expr') or q['model'].get('expression') for q in alarm['data']]
+    assert 'leg=~"uncommitted|quarantined|projection"' in exprs[0]
+    assert 'sibling_held' not in exprs[0] and 'backlog' not in ' '.join(exprs)
+    assert '$A > 7200 && $B < 900' in exprs
+    stale = rules['omi-batch-timeliness-sample-stale']
+    assert stale['noDataState'] == 'Alerting'
+    for rule in rules.values():
+        assert rule['labels']['tier'] == 'agent'
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
