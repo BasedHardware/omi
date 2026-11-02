@@ -1,5 +1,9 @@
 # Reservation cutoff: client audit and verification
 
+Price references updated 2026-10-18 to the Vertex AI Gemini 2.5 Standard tab
+rate for 2.5 Flash (https://cloud.google.com/vertex-ai/generative-ai/pricing);
+the earlier figures were the Priority tier.
+
 Source audit at `85530e7e32`, 2026-10-02. No production reads. Traffic numbers
 below are the coordinator's 2026-09-30 14:00–20:00 UTC aggregate snapshot, not a
 fresh measurement. Runtime policy: `config/vertex_reservations.py`;
@@ -10,7 +14,7 @@ classification: `utils/llm/desktop_reservation_policy.py`.
 | Positively identified macOS task loop, build 7000 ≤ build < configured first-capable build, including its max/Pro fallback | 2.5 dedicated, existing cheaper overflow | Refuse identified loop with terminal `no_task_found` | No inference spend; no tasks from this loop. It still sends subsequent normal capture requests. Unset/invalid threshold, observe mode, and builds outside that range remain served. |
 | Current/capable macOS old loop, flag-off/out-of-cohort, or new-extractor legacy fallback | 2.5 dedicated, existing cheaper overflow | 2.5 shared (`desktop_other`) | Preserve service; no automatic path selection or consent/cohort override. |
 | macOS new gated one-call extractor | 3.8 dedicated when active; shared otherwise | 3.8 shared | No quality/model change; list $1.50/$7.50 per million input/output when shared. |
-| macOS voice-typing cleanup (`PushToTalkManager`, `ModelQoS.Gemini.dictation`) | 2.5 dedicated | 2.5 shared (`desktop_other`, future `macos_dictation` tag) | Preserve text quality; $0.30/$2.50 per million. Per-lane volume unavailable. |
+| macOS voice-typing cleanup (`PushToTalkManager`, `ModelQoS.Gemini.dictation`) | 2.5 dedicated | 2.5 shared (`desktop_other`, future `macos_dictation` tag) | Preserve text quality; $0.30/$2.50 per million input/output. Per-lane volume unavailable. |
 | macOS max-tier notch suggestions, and their Flash fallback (`SuggestionAssistant`) | 2.5 dedicated | 2.5 shared (`desktop_other`, future `macos_suggestions` tag) | Preserve suggestions; same 2.5 price. Per-lane volume unavailable. |
 | Windows screen task extraction (`assistants/tasks/geminiWire.ts`) | 2.5 dedicated | 2.5 shared (`windows_tasks`) | No new pipeline exists on Windows; keep task capture available. |
 | Windows focus/distraction screenshot analysis (`assistants/focus/gemini.ts`) | 2.5 dedicated | 2.5 shared (`desktop_other`, future `windows_focus` tag) | Preserve focus/distraction classification and notifications. |
@@ -29,7 +33,8 @@ not a measured bill (burndown weighting differs from list-price weighting).
 Refusing all Windows Flash would disable both task extraction and focus for all
 Windows users. Keeping it shared is the default decision awaiting David's review.
 Moving each lane to dedicated 3.8 would avoid its marginal PayGo while capacity
-is available, but unreserved 3.8 costs 5x input / 3x output; this PR does not make
+is available, but unreserved standard-rate 3.8 costs 5x input / 3x output
+compared with 2.5 Flash; this PR does not make
 an unevaluated model switch. Cheap-Lite remaps risk extraction/text quality.
 
 ## Shipped client response audit

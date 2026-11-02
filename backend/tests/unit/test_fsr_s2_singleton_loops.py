@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 from database import durable_queue_age as ages
 from utils.other import fsr_leader_lease as leases
 
@@ -52,12 +53,19 @@ class FakeRedis:
             if retained:
                 self.set(keys[0], old_token, ttl_ms)
                 generation = self.get(keys[1])
+            elif not queue_age and self.get(keys[2]) is None:
+                self.set(keys[0], new_token, ttl_ms)
+                generation = (self.get(keys[1]) or 0) + 1
+                self.values[keys[1]] = generation
             elif owner is None:
                 self.set(keys[0], new_token, ttl_ms)
                 generation = (self.get(keys[1]) or 0) + 1
                 self.values[keys[1]] = generation
             else:
-                return [0, 0, 0, int((self.expires[keys[0]] - self.now) * 1000)]
+                retry = self.expires[keys[0]] - self.now
+                if not queue_age:
+                    retry = min(retry, self.expires[keys[2]] - self.now)
+                return [0, 0, 0, int(retry * 1000)]
             if queue_age and not retained:
                 self.values.pop(keys[2], None)
             admitted = self.get(keys[2]) is None
@@ -72,6 +80,8 @@ class FakeRedis:
         if 'fsr_release' in script:
             if owner == argv[0]:
                 del self.values[keys[0]]
+                if argv[1]:
+                    self.values.pop(keys[1], None)
                 return 1
             return 0
         raise AssertionError('unexpected Redis script')
@@ -128,14 +138,14 @@ def test_startup_restart_does_not_bypass_tick_cooldown_and_shutdown_releases(fle
     assert runs == ['startup', 'next tick']
 
 
-def test_leader_dies_takeover_at_one_ttl_and_old_epoch_is_fenced(fleet):
+def test_leader_dies_takeover_at_one_interval_and_old_epoch_is_fenced(fleet):
     one, two = fleet.replica(), fleet.replica()
     permits = []
     one.run(lambda: permits.append(leases._current_permit.get()), 300)
     old = permits[0]
-    fleet.redis.advance(300)
+    fleet.redis.advance(299)
     assert two.run(lambda: 'too early', 300) is None
-    fleet.redis.advance(300)  # Default TTL = 600s, no orderly release.
+    fleet.redis.advance(1)  # Tick expires before the owner's 600s TTL.
     two.run(lambda: permits.append(leases._current_permit.get()), 300)
     assert permits[1].generation > old.generation
     with pytest.raises(leases.LeaseLost):
@@ -161,28 +171,28 @@ def test_staggered_death_retries_at_expiry_without_extra_scan_interval(fleet, mo
     one.run(lambda: held.append(leases._current_permit.get()), 300)
     fleet.redis.advance(50)
     held[0].check()  # Last heartbeat before dying at t=50; expiry is t=650.
-    fleet.redis.advance(250)
+    fleet.redis.advance(249)
     assert two.run(lambda: pytest.fail('early takeover'), 300) is None
     monkeypatch.setattr(leases, 'loop_lease', lambda _: two)
-    fleet.redis.advance(leases.poll_delay(300))  # t=600, next normal periodic tick.
-    assert two.run(lambda: pytest.fail('early takeover'), 300) is None
-    assert leases.poll_delay(300) == 50  # Do not wait to t=900.
+    assert leases.poll_delay(300) == 1
     fleet.redis.advance(leases.poll_delay(300))
     assert two.run(lambda: 'takeover', 300) == 'takeover'
-    assert fleet.redis.now - 50 == 600
+    assert fleet.redis.now - 50 == 250
 
 
-def test_heartbeat_check_extends_lease_for_long_callback(fleet):
+def test_heartbeat_cannot_block_takeover_after_admission_tick_expires(fleet):
     one, two = fleet.replica(), fleet.replica()
 
     def long_scan():
-        for _ in range(4):
-            fleet.redis.advance(200)
+        fleet.redis.advance(200)
+        leases.check_leader_lease()
+        assert two.run(lambda: pytest.fail('early takeover'), 300) is None
+        fleet.redis.advance(100)
+        assert two.run(lambda: 'replacement', 300) == 'replacement'
+        with pytest.raises(leases.LeaseLost):
             leases.check_leader_lease()
-            assert two.run(lambda: pytest.fail('concurrent scan'), 300) is None
 
     one.run(long_scan, 300)
-    assert fleet.redis.now == 800  # Beyond the original 600s expiration, below the 900s cap.
 
 
 @pytest.mark.parametrize('loop,max_hold,heartbeat', [('test_loop', 900, 200), (leases.QUEUE_AGE_LOOP, 240, 40)])
@@ -208,7 +218,8 @@ def test_hung_callback_expires_at_max_hold_and_second_pod_acquires(fleet, caplog
         while fleet.redis.now + heartbeat < max_hold:
             fleet.redis.advance(heartbeat)
             permit.check()
-            assert two.run(lambda: pytest.fail('early takeover'), 300) is None
+            if loop == leases.QUEUE_AGE_LOOP:
+                assert two.run(lambda: pytest.fail('early takeover'), 300) is None
         fleet.redis.advance(max_hold - fleet.redis.now)
         with caplog.at_level(logging.WARNING, logger=leases.__name__):
             with pytest.raises(leases.LeaseLost):
@@ -483,7 +494,13 @@ def _main_loop_functions():
         ],
         type_ignores=[],
     )
-    namespace = {'os': os, 'asyncio': asyncio, 'db_executor': None, 'logger': logging.getLogger('fsr_s2')}
+    namespace = {
+        'os': os,
+        'asyncio': asyncio,
+        'db_executor': None,
+        'logger': logging.getLogger('fsr_s2'),
+        'quiet_finalization_enabled': quiet_finalization_enabled,
+    }
     exec(compile(module, 'main_loop_functions', 'exec'), namespace)
     return namespace
 
@@ -548,17 +565,21 @@ def test_real_startup_and_periodic_bodies_are_leased_and_attributed(fleet, monke
 
 
 def test_cadence_defaults_overrides_and_ttl_floor(monkeypatch):
+    monkeypatch.delenv('LISTEN_QUIET_FINALIZATION_ENABLED', raising=False)
     namespace = _main_loop_functions()
     for key, function in [
         ('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '_listen_finalization_reconcile_interval_seconds'),
         ('DELETION_WIPE_RECONCILE_INTERVAL_SECONDS', '_deletion_wipe_reconcile_interval_seconds'),
     ]:
         monkeypatch.delenv(key, raising=False)
-        assert namespace[function]() == 300
+        expected = 60 if key == 'LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS' else 300
+        assert namespace[function]() == expected
         monkeypatch.setenv(key, '17')
         assert namespace[function]() == 17
         monkeypatch.setenv(key, 'bad')
-        assert namespace[function]() == 300
+        assert namespace[function]() == expected
+    monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'false')
+    assert namespace['_listen_finalization_reconcile_interval_seconds']() == 300
     monkeypatch.setenv('FSR_LEADER_LEASE_TTL_SECONDS', '2')
     assert leases._ttl_ms(300) > 300000
 

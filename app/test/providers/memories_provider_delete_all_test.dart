@@ -164,8 +164,7 @@ void main() {
     final gate = Completer<void>();
     var page = 0;
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: (
-          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+      fetchMemoriesCursorRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor}) {
         if (page++ == 0) {
           return Future.value(GetMemoriesResult([_memory], true, nextCursor: 'c2'));
         }
@@ -276,8 +275,7 @@ void main() {
     final gate = Completer<void>();
     var page = 0;
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: (
-          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+      fetchMemoriesCursorRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor}) {
         if (page++ == 0) {
           return Future.value(GetMemoriesResult([_memory], true, nextCursor: 'c2'));
         }

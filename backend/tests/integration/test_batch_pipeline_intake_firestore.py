@@ -3,6 +3,7 @@
 All identities/storage/model outputs are synthetic; Firestore is loopback only.
 """
 
+import asyncio
 from dataclasses import asdict
 from io import BytesIO
 import json
@@ -96,7 +97,7 @@ async def test_accepted_upload_drains_after_rollback_with_encrypted_context_and_
 
     def send(request, **kwargs):
         body = json.loads(request.data)
-        return BytesIO(json.dumps(admission.authorize(store, body['leases'])).encode())
+        return BytesIO(json.dumps(asyncio.run(admission.authorize(store, body['leases']))).encode())
 
     monkeypatch.setattr(
         pump_module,

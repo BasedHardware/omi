@@ -1,5 +1,11 @@
 # Mentor and commitment producers
 
+> **Retired (2026-10-26):** both producers this document specifies
+> (`conversation_mentor_v2` and `commitment_followup`) were deleted together
+> with their callers; the registry rows are gone. The text below is the
+> historical specification. See `CONTRACT.md` for the compat-window state of
+> the feed/outcome routes.
+
 `MENTOR_PIPELINE=cohort` is the only valid mode: the legacy mentor pipeline was
 deleted once v2 reached 100% of eligible users. `cohort` selects per user
 through the same server-side `proactivity_v2` resolver and cached PostHog client

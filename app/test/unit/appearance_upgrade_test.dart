@@ -55,19 +55,18 @@ void main() {
     },
     'previous successful boot before onboarding': {BootRecovery.schemaKey: BootRecovery.schemaVersion},
   }.entries) {
-    test('${previousInstall.key} without an appearance choice keeps System across launches', () async {
+    test('${previousInstall.key} without an appearance choice gets Light across launches', () async {
       SharedPreferences.setMockInitialValues(previousInstall.value);
       await SharedPreferencesUtil.init();
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(SharedPreferencesUtil.appearanceModeKey), 'system');
+      expect(prefs.getString(SharedPreferencesUtil.appearanceModeKey), 'light');
 
       await prefs.reload();
       await SharedPreferencesUtil.init();
       final provider = AppearanceProvider();
       addTearDown(provider.dispose);
-      expect(provider.mode, ThemeMode.system);
-      expect(resolveAppearanceBrightness(provider.mode, Brightness.dark), Brightness.dark);
-      expect(resolveAppearanceBrightness(provider.mode, Brightness.light), Brightness.light);
+      expect(provider.mode, ThemeMode.light);
+      expect(resolveAppearanceBrightness(provider.mode, Brightness.dark), Brightness.light);
     });
   }
 
@@ -84,6 +83,25 @@ void main() {
       expect(SharedPreferencesUtil().appearanceMode, mode.name);
     });
   }
+
+  test('System handed out by the Oct 2026 upgrade flips to Light once; a later explicit System stays', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'onboardingCompleted': true,
+      SharedPreferencesUtil.appearanceModeKey: 'system',
+      SharedPreferencesUtil.appearanceDefaultMigrationKey: 'system',
+    });
+    await SharedPreferencesUtil.init();
+    final prefs = await SharedPreferences.getInstance();
+    expect(SharedPreferencesUtil().appearanceMode, 'light');
+    expect(prefs.getString(SharedPreferencesUtil.appearanceDefaultMigrationKey), 'light');
+
+    final provider = AppearanceProvider();
+    addTearDown(provider.dispose);
+    await provider.setMode(ThemeMode.system);
+    await prefs.reload();
+    await SharedPreferencesUtil.init();
+    expect(SharedPreferencesUtil().appearanceMode, 'system');
+  });
 
   test('a later user choice survives initialization and signing out', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{'onboardingCompleted': true});
@@ -142,26 +160,26 @@ void main() {
         });
         await SharedPreferencesUtil.init();
 
-        expect(SharedPreferencesUtil().appearanceMode, existingInstall ? 'system' : 'light');
+        expect(SharedPreferencesUtil().appearanceMode, 'light');
       });
     }
   }
 
   for (final throwsOnWrite in <bool>[false, true]) {
-    test('failed migration ${throwsOnWrite ? 'exception' : 'result'} keeps System and retries', () async {
+    test('failed migration ${throwsOnWrite ? 'exception' : 'result'} keeps Light and retries', () async {
       final store = _AppearancePreferencesStore(throwsOnWrite: throwsOnWrite);
       SharedPreferences.resetStatic();
       SharedPreferencesStorePlatform.instance = store;
       await SharedPreferencesUtil.init();
 
-      expect(SharedPreferencesUtil().appearanceMode, 'system');
+      expect(SharedPreferencesUtil().appearanceMode, 'light');
       expect(store.data.containsKey('flutter.appearanceMode'), isFalse);
 
       store.failAppearanceWrite = false;
       SharedPreferences.resetStatic();
       await SharedPreferencesUtil.init();
 
-      expect(store.data['flutter.appearanceMode'], 'system');
+      expect(store.data['flutter.appearanceMode'], 'light');
       expect(store.appearanceWrites, 2);
     });
 

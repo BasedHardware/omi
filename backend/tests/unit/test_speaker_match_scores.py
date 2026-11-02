@@ -342,7 +342,6 @@ def test_live_score_only_update_does_not_advance_content_revision(monkeypatch):
     planned = SimpleNamespace(segments=[scored], absorbed_into={}, with_segments=lambda accepted: accepted)
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'merge_live_segments', lambda *args, **kwargs: planned)
-    monkeypatch.setattr(db, 'sync_lineage_resolve_active_for', lambda uid: True)
     result = db.update_conversation_segments('u', 'c', [scored], live_segments=[scored])
     assert store.rows[path]['sync_content_revision'] == 7
     assert scores.FIELD not in result[0]
@@ -810,14 +809,13 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     failures = []
     monkeypatch.setattr(merge.conversations_db, 'get_conversation', lambda uid, cid: sources[cid])
     monkeypatch.setattr(merge, '_collect_all_photos', lambda *a: [])
-    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a: [])
+    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a, **_kw: [])
     monkeypatch.setattr(
         merge.lifecycle_service, 'create_processing_conversation', lambda uid, data: captured.append(data)
     )
     monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *a: None)
     monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *a, **k: None)
     monkeypatch.setattr(merge, 'canonical_intake_is_fenced', lambda: False)
-    monkeypatch.setattr(merge, 'record_capture_outcome', lambda *a: None)
     monkeypatch.setattr(merge, '_handle_merge_failure', lambda *a, **k: failures.append(a))
     monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *a: None)
     merge.perform_merge_async('u', ['a', 'b'], reprocess=False)

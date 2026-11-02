@@ -11,6 +11,7 @@ Wal _wal(
   int seconds, {
   WalStatus status = WalStatus.miss,
   WalStorage storage = WalStorage.disk,
+  WalStorage? originalStorage,
   String device = 'pendant-a',
   int retryCount = 0,
 }) =>
@@ -20,6 +21,7 @@ Wal _wal(
       seconds: seconds,
       status: status,
       storage: storage,
+      originalStorage: originalStorage,
       device: device,
       retryCount: retryCount,
     );
@@ -106,5 +108,55 @@ void main() {
 
     expect(block.state, WalSyncDisplayState.failed);
     expect(block.representative.timerStart, _t0 + 150);
+  });
+
+  test('gaps between grouped chunks are excluded from recording duration', () {
+    // Three 5-second WALs at 08:00, 08:01, and 08:02 group as one recording
+    // (gaps of 55 s <= 120 s) and must count 15 s of audio, not 2m 5s (125 s).
+    final wals = _newestFirst([
+      _wal(0, 5),
+      _wal(60, 5),
+      _wal(120, 5),
+    ]);
+
+    final blocks = groupRecordingBlocks(wals);
+
+    expect(blocks, hasLength(1));
+    expect(blocks.single.wals, hasLength(3));
+    expect(blocks.single.startSeconds, _t0);
+    expect(blocks.single.seconds, 15);
+  });
+
+  test('overlapping phone and device copies count once while gaps stay excluded', () {
+    final wals = _newestFirst([
+      _wal(0, 60, storage: WalStorage.sdcard),
+      _wal(0, 60, storage: WalStorage.disk, originalStorage: WalStorage.sdcard),
+      _wal(30, 60, storage: WalStorage.disk, originalStorage: WalStorage.sdcard),
+      _wal(150, 30, storage: WalStorage.sdcard),
+      _wal(150, 20, storage: WalStorage.disk, originalStorage: WalStorage.sdcard),
+    ]);
+
+    final blocks = groupRecordingBlocks(wals, joinDeviceCopies: true);
+
+    expect(blocks, hasLength(1));
+    expect(blocks.single.wals, hasLength(5));
+    // [0, 90] union [150, 180] = 90 + 30 = 120 s (excludes the 60 s gap [90, 150]).
+    expect(blocks.single.seconds, 120);
+  });
+
+  test('zero and negative chunk lengths do not inflate or turn duration negative', () {
+    final emptyWals = _newestFirst([
+      _wal(0, 0),
+      _wal(60, -5),
+    ]);
+    expect(RecordingBlock(emptyWals).seconds, 0);
+
+    final mixedWals = _newestFirst([
+      _wal(0, 0),
+      _wal(30, 10),
+      _wal(90, -10),
+      _wal(100, 15),
+    ]);
+    expect(RecordingBlock(mixedWals).seconds, 25);
   });
 }

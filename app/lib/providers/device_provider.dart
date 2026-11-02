@@ -21,11 +21,13 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -63,6 +65,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
+
+  /// Whether the app remembers any device, including before [getDeviceInfo] hydrates
+  /// [pairedDevice] on the connect path. A cold start with a pendant that never reconnects
+  /// still has the persisted pairing in `SharedPreferencesUtil().btDevice`.
+  bool get hasRememberedDevice => pairedDevice?.id.isNotEmpty ?? SharedPreferencesUtil().btDevice.id.isNotEmpty;
 
   /// Capability-normalized identity for capture/home restarts.
   ///
@@ -194,6 +201,33 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
+    // Wiring only, no periodic timer here: tests construct this provider
+    // directly, and a pending timer at test end fails the binding. App
+    // bootstrap (main) owns the watchdog's periodic loop.
+    SyncHealthWatchdog.instance
+      ..onEvaluation = _onSyncHealthEvaluation
+      ..evaluateSyncHealth();
+  }
+
+  bool _isSyncStalled = false;
+
+  /// The sync health watchdog's verdict for the paired pendant (#15501):
+  /// no sync activity at all for over its stall threshold.
+  bool get isSyncStalled => _isSyncStalled;
+
+  /// The watchdog's latest evaluation, null before the first one.
+  SyncHealthEvaluation? get syncHealth => SyncHealthWatchdog.instance.lastEvaluation;
+
+  /// Mirrors every watchdog evaluation into the wedge monitor's Needs
+  /// attention row and rebuilds listeners when the stall state flips.
+  void _onSyncHealthEvaluation(SyncHealthEvaluation evaluation) {
+    _wedgeMonitor.observeSyncSilence(
+      stalled: evaluation.isStalled,
+      since: DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().lastSyncTimestamp),
+    );
+    if (_isSyncStalled == evaluation.isStalled) return;
+    _isSyncStalled = evaluation.isStalled;
+    notifyListeners();
   }
 
   bool _isCurrent(int generation) => !_isDisposed && generation >= 0 && generation == _sessionGeneration;
@@ -216,6 +250,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// is hardware and is not torn down; WAL attach, coordinator wake, and other
   /// account publication from the retired generation must not land.
   void clearUserData() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _sessionGeneration++;
     _admittedLink = null;
     _readoptExpectedPair = null;
@@ -808,6 +843,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    // Arm recovery even if native restoration connected before the home frame.
+    if (pairedDeviceId.isNotEmpty && SharedPreferencesUtil().btDevice.locator?.kind == TransportKind.bluetooth) {
+      await ServiceManager.instance().device.reconnectSavedDevice('launch');
+      return;
+    }
+
     // Already connected — nothing to do
     if (isConnected || connectedDevice != null) return;
 
@@ -920,6 +961,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _isDisposed = true;
     _sessionGeneration++;
     nativeLink.dispose();
@@ -939,6 +981,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _deviceHealthTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
+    if (SyncHealthWatchdog.instance.onEvaluation == _onSyncHealthEvaluation) {
+      SyncHealthWatchdog.instance.onEvaluation = null;
+    }
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -1000,6 +1045,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+
+    // Re-evaluate sync health while the app is open: a link drop is not a
+    // stall by itself (#3328), but the evaluation keeps the persisted silence
+    // age and the Needs attention row current after any transport change.
+    SyncHealthWatchdog.instance.evaluateSyncHealth();
   }
 
   /// Emits the enriched Device Disconnected analytics event with the reason
@@ -1026,6 +1076,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       reasonCode: latest?.reasonCode,
       appState: latest?.appState,
     );
+  }
+
+  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
+  /// Best-effort: no device or no history is an empty list.
+  Future<List<BleDisconnectEvent>> disconnectHistory() async {
+    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
+    if (id == null || id.isEmpty) return const [];
+    final diagnostics = await _bleDiagnosticsLoader(id);
+    return diagnostics.disconnectHistory;
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -1083,6 +1142,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await setisDeviceStorageSupport();
     if (!_isCurrent(generation)) return;
     setIsConnected(true);
+    // A live link is sync-activity evidence for the stall watchdog: the
+    // pendant (re)connecting means retrieval can proceed (#15501).
+    SyncHealthWatchdog.instance.recordSyncActivity(source: 'device_connected');
 
     // Read initial battery level
     int currentLevel = await _retrieveBatteryLevel(device.id);
@@ -1111,7 +1173,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    if (!syncOnly) await captureProvider?.streamDeviceRecording(device: normalizedDevice);
+    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
     if (!_isCurrent(generation)) return;
 
     await getDeviceInfo();
@@ -1305,10 +1367,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _handleDeviceConnected(String deviceId, int generation, {bool requirePersistedPair = false}) async {
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     _admittedConnectGeneration = generation;
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     if (connection == null) {
       return;
     }
@@ -1647,12 +1709,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Reset firmware update state when update completes or fails
   void resetFirmwareUpdateState() {
     _isFirmwareUpdateInProgress = false;
+    ServiceManager.instance().device.reconnectPaused = false;
+    unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
     notifyListeners();
   }
 
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
+    ServiceManager.instance().device.reconnectPaused = inProgress;
     if (inProgress) {
       _firmwareUpdatePromptCoordinator.invalidatePresentation();
     }

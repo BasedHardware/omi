@@ -2,11 +2,22 @@
 
 The subscription version is price-keyed; legacy APIs continue to own admission.
 `config.plan_catalog.entitlement_budget_units` evaluates dormant ladder budgets.
-`config.rate_card` prices inputs from immutable `rate_card_v1.json` at $0.001/unit.
-The loader checks v1 against `config.rate_card_versions`; an independent literal
-in the unit test pins both the registry and file bytes. Updating the registry
-alone cannot approve a changed v1. Subsequent revisions require a new version
-file; this v1 is finalized during draft review before production use. No vendor feed or environment variable changes the rate card.
+`config.rate_card` prices inputs from an immutable, hash-pinned card at
+$0.001/unit. `RATE_CARD_VERSION` selects `v1` or `v2`; unset defaults to `v1`,
+so existing behavior remains unchanged. The loader checks each file against
+`config.rate_card_versions`; independent literals in `test_rate_card.py` pin
+the registry and file bytes. Updating the registry alone cannot approve a
+changed card. A later revision requires another version file.
+
+`rate_card_v1.json` remains byte-identical. `rate_card_v2.json` corrects
+Gemini 2.5 Flash to the Vertex AI Gemini 2.5 Standard tab rates verified
+2026-10-18 (https://cloud.google.com/vertex-ai/generative-ai/pricing; $0.30
+input, $0.03 cached, $2.50 output per million tokens), matching the Flash
+rates v1 already carries, and adds Gemini 3.8 Flash at its standard rate
+effective 2027-01-01 ($1.50 / $0.15 / $7.50). Other v1 entries carry forward.
+No vendor feed changes either card. Selecting v2 changes the units charged for
+features using those model rates; it does not alter any plan budget number or
+admission behavior.
 
 The loading factor is the ratio of summed fully loaded variable costs to summed
 vendor list costs in `omi_finops.unit_cost_user_day`, September 22–October 9,
@@ -62,9 +73,16 @@ internal helpers with no API/client surface.
 `database.usage_units` projects units into the same `hourly_usage` set/merge
 writes and the existing `llm_gateway_user_days` rollup writes. Sync's content
 marker remains in its existing transaction. Gateway attempt identity remains
-the canonical deduplication boundary, and each immutable attempt includes its
-v1 unit annotation. LLM retries are separate cost attempts; duplicate attempt
-IDs do not add units. Provider counters are never copied into request content.
+the canonical deduplication boundary. Each immutable attempt has a
+`usage_units_v1` or `usage_units_v2` annotation with its explicit card version;
+hourly documents and user-day rollups likewise keep separate `shadow_v1` and
+`shadow_v2` projections. The default reader sums their stored units across card
+versions because both cards keep the same $0.001 unit; it reports the active
+`RATE_CARD_VERSION` and the versions present in the total. Passing an explicit
+version reads that card's projection alone. Neither path reprices historical
+data, so v1 history retains its original meaning. LLM retries are separate cost
+attempts; duplicate attempt IDs do not add units. Provider counters are never
+copied into request content.
 
 Live provenance follows the provider serving at flush time. A Deepgram BYOK
 key only excludes cloud Deepgram; Parakeet/Modulate remain Omi-funded, and

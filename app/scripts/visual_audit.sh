@@ -78,7 +78,10 @@ prepare() {
     printf 'API_BASE_URL=\nUSE_WEB_AUTH=true\nUSE_AUTH_CUSTOM_TOKEN=true\nSTAGING_API_URL=\n' > .dev.env
     : > .env
     flutter pub get
-    dart run build_runner build --delete-conflicting-outputs
+    # flutter-aware solver: a bare `dart run` re-resolves with the pure-Dart solver,
+    # which cannot satisfy flutter-constrained dependencies such as
+    # device_info_plus_platform_interface once their pub.dev metadata is in the cache.
+    flutter pub run build_runner build --delete-conflicting-outputs
   )
 }
 
@@ -89,7 +92,12 @@ suite_for() {
   for dir in "$snapshot"/visual_audit/compat/*/; do
     [[ -f "$dir/UNTIL" ]] || continue
     until="$(tr -d '[:space:]' < "$dir/UNTIL")"
-    until_sha="$(git -C "$repo_root" rev-parse --verify "$until^{commit}")"
+    # An UNTIL that does not resolve (a PR commit a squash merge kept off main) would otherwise
+    # pick this suite for every revision.
+    until_sha="$(git -C "$repo_root" rev-parse --verify --quiet "$until^{commit}")" || {
+      echo "compat/$(basename "$dir")/UNTIL: $until is not a commit in this repository" >&2
+      return 1
+    }
     git -C "$repo_root" merge-base --is-ancestor "$until_sha" "$sha" && continue
     t="$(git -C "$repo_root" log -1 --format=%ct "$until_sha")"
     if [[ -z "$best" || "$t" -lt "$best_time" ]]; then best="$(basename "$dir")"; best_time="$t"; fi

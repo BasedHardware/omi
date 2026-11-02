@@ -46,6 +46,9 @@ Shaped context assembly is owned by `utils/retrieval/shaped_chat.py` and
 volatile digest/scope/clock in the final user turn, eligible stable explicit boundaries.
 `database/chat_context.py` owns source paging, generation invalidation and CAS state.
 Channel events remain bounded audit/fence data; only the current runtime event supplements
-authoritative message history. Optional context reads are deadline-bounded and fail open to plain history.
+authoritative message history. Request context uses a four-worker zero-queue executor,
+bounded RPCs, and a projected fresh fence check at mount. It fails open to plain history
+without occupying setup's database workers. `database/chat_context_prefetch.py` owns
+request snapshots and at-use fences; refresh keeps the transactional store.
 Summaries refresh after turns in tracked, budgeted background jobs. See the rollout
 runbook for index readiness and fallback operations.

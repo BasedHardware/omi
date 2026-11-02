@@ -14,7 +14,7 @@ from tests.unit.test_soniox_finalize_padding import setup_peer, send_observed, c
 from tests.unit.test_soniox_capture_axis_r10 import close, managed, soniox_capture_uuid
 from tests.unit.test_capture_window_merge_union_r5 import tick, known
 from tests.unit.test_audio_timeline_round3 import RATE, T0
-from utils.stt import soniox, soniox_wire_metrics
+from utils.stt import soniox, soniox_wire_ledger, soniox_wire_metrics
 from utils.stt.soniox_idle import IdleSonioxSocket
 
 
@@ -33,9 +33,11 @@ async def barrier(raw, wire):
 
 
 def gate_values(mode):
+    # Read the labeled child directly: REGISTRY.get_sample_value() walks every metric family
+    # in the process per call, which dominated this file's CPU time under load.
+    controls = soniox_wire_metrics.finalize_gate_metrics().controls
     return {
-        outcome: REGISTRY.get_sample_value('omi_soniox_wire_ledger_controls_total', {'mode': mode, 'outcome': outcome})
-        or 0
+        outcome: controls.labels(mode=mode, outcome=outcome)._value.get()
         for outcome in ('sent', 'verified', 'mismatch', 'unverified')
     }
 
@@ -186,7 +188,10 @@ async def test_gate_counts_successful_controls_once_and_releases_occupancy(
     try:
         send_observed(receiver, leg, 42732)
         await barrier(leg.raw, peer)
-        count = 65 if case == 'overflow' else 4 if case in ('mismatch', 'combined', 'missing') else 1
+        if case == 'overflow':
+            # Same overflow path at a small cap: 64 real controls cost ~1s CPU.
+            monkeypatch.setattr(soniox_wire_ledger, 'MAX_PENDING_PREDICTIONS', 4)
+        count = 5 if case == 'overflow' else 4 if case in ('mismatch', 'combined', 'missing') else 1
         if case == 'failed':
             peer.reject = True
             with pytest.raises(RuntimeError):

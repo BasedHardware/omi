@@ -40,7 +40,7 @@ AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
 MANUAL_DEPLOY_CONDITION = "\n".join(
     (
         "github.ref == 'refs/heads/main' &&",
-        "github.event.inputs.mode == 'deploy'",
+        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')",
     )
 )
 MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
@@ -59,6 +59,34 @@ MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
         "needs.firestore_readiness.result == 'success' &&",
         "(needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
     )
+)
+MANUAL_BUILD_ONLY_JOB_CONDITION = MANUAL_DEPLOY_JOB_CONDITION.replace(
+    "github.event.inputs.mode == 'deploy' &&", "github.event.inputs.mode == 'build-only' &&"
+).replace("always() &&", "always() && !cancelled() &&", 1)
+MANUAL_BUILD_ONLY_HEAD_CHECK = '"$head_sha" != "$ADMITTED_SHA"'
+MANUAL_BUILD_ONLY_SMOKE = "runtime_image_contracts.py smoke"
+MANUAL_BUILD_ONLY_PUSH = 'docker push "$IMAGE"'
+MANUAL_BUILD_ONLY_ADMITTED_CHECKOUT = "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}"
+# build-only publishes an image and must never reach a serving surface.
+MANUAL_BUILD_ONLY_FORBIDDEN = (
+    "deploy-backend-stack",
+    "deploy-cloudrun",
+    "gcloud run",
+    "gcloud container clusters",
+    "get-gke-credentials",
+    "kubectl",
+    "setup-helm",
+    "helm upgrade",
+    "helm install",
+    "helm rollback",
+    "update-traffic",
+    "repair_cloud_run_traffic",
+    "set-env-vars",
+    "update-env-vars",
+    ":latest",
+    "push: true",
+    "cache-to:",
+    "ensure_",
 )
 
 
@@ -175,8 +203,12 @@ def validate_firestore_gate_steps(
         (f"source_sha: {source_sha_binding}", f"{label} must bind the gate to the admitted source SHA"),
         ("project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}", f"{label} must target the runtime project"),
         (
-            "credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}",
-            f"{label} must pass read-only Firestore credentials to the gate",
+            "service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com",
+            f"{label} must pass the keyless index-check identity to the gate",
+        ),
+        (
+            "workloadIdentityPools/omi-gha-deploy-",
+            f"{label} must authenticate the gate through a deploy workload identity pool",
         ),
     ):
         require_fragment(errors, gate, fragment, message)
@@ -412,19 +444,14 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         ):
             require_fragment(errors, admission, fragment, message)
         admission_index = named_step_index(readiness_steps, "Resolve and verify the newest proven main source")
-        credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
         gate_index = named_step_index(readiness_steps, FIRESTORE_GATE_STEP)
-        if admission_index is not None and credential_index is not None and admission_index > credential_index:
-            errors.append("automatic release-proof freshness validation must run before read-only credential use")
         if admission_index is not None and checkout_index is not None and admission_index > checkout_index:
             errors.append(
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution"
             )
         if admission_index is not None and gate_index is not None and admission_index > gate_index:
             errors.append("automatic release-proof freshness validation must run before the Firestore readiness gate")
-        if credential_index is not None and checkout_index is not None and credential_index > checkout_index:
-            errors.append("read-only credential use must run before admitted-source checkout")
         if checkout_index is not None and gate_index is not None and checkout_index > gate_index:
             errors.append("admitted-source checkout must run before the Firestore readiness gate")
         validate_firestore_gate_steps(
@@ -480,7 +507,7 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     require_fragment(
         errors,
         text,
-        "      release_sha:\n        description: 'Exact main SHA with a successful Release Eligibility proof (deploy mode only)'\n        required: false",
+        "      release_sha:\n        description: 'Exact main SHA with a successful Release Eligibility proof (deploy and build-only modes)'\n        required: false",
         "manual backend deploy must keep release_sha optional for traffic-only repair",
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
@@ -614,6 +641,50 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         )
         if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
             errors.append("manual deployment must bind every release vector to the admitted SHA")
+    errors.extend(validate_manual_build_only_job(text))
+    return errors
+
+
+def validate_manual_build_only_job(text: str) -> list[str]:
+    errors: list[str] = []
+    build_job = mapping_block(text, "build-image", 2)
+    if build_job is None:
+        return ["manual backend deploy is missing its build-only image job"]
+    require_fragment(
+        errors,
+        build_job,
+        MANUAL_DEPLOY_JOB_NEEDS,
+        "build-only must depend on production-boundary validation, source admission, and break-glass audit",
+    )
+    if folded_job_condition(build_job) != MANUAL_BUILD_ONLY_JOB_CONDITION:
+        errors.append("build-only must use exactly the admitted, audited main-ref build condition")
+    require_fragment(
+        errors,
+        build_job,
+        "environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}",
+        "build-only must push from the same Environment protection as deploy",
+    )
+    if build_job.count(MANUAL_BUILD_ONLY_ADMITTED_CHECKOUT) != 1:
+        errors.append("build-only must check out exactly the admitted SHA")
+    if "github.event.inputs.release_sha" in build_job:
+        errors.append("build-only must build the admitted SHA, never the raw release_sha input")
+    smoke_at = build_job.find(MANUAL_BUILD_ONLY_SMOKE)
+    push_at = build_job.find(MANUAL_BUILD_ONLY_PUSH)
+    if smoke_at < 0 or push_at < 0 or smoke_at > push_at or build_job.count(MANUAL_BUILD_ONLY_PUSH) != 1:
+        errors.append("build-only must smoke the built image before pushing its exact tag")
+    if MANUAL_BUILD_ONLY_HEAD_CHECK not in build_job:
+        errors.append("build-only must verify the checked-out HEAD is the admitted SHA")
+    root_checkouts = [
+        step
+        for step in re.split(r"(?m)^      - ", build_job)
+        if "uses: actions/checkout@" in step
+        and not re.search(r"(?m)^          path: (?!['\"]?\.?/?['\"]?\s*$)\S", step)
+    ]
+    if len(root_checkouts) != 1:
+        errors.append("build-only must check out exactly one root source tree")
+    for forbidden in MANUAL_BUILD_ONLY_FORBIDDEN:
+        if forbidden in build_job:
+            errors.append(f"build-only must not touch a serving surface or mutable tag ({forbidden!r})")
     return errors
 
 

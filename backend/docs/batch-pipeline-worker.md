@@ -140,6 +140,9 @@ that span, it has no batch transcript words and no invented placeholder. Other
 successful units use normal assignment. The durable upload status is `failed`,
 with `failed_segments` and the closed `batch_worker_quarantined` error, no success
 result and no further polling delay. This is a transcript gap, not recovery.
+Once fenced recovery (below) owns the unit, recovery states `held`, `prepared`
+and `running` poll as `processing` with a nonzero `poll_after_ms`; only a
+terminal quarantine such as `failed_held` reports `failed`.
 
 No legacy transcription is dispatched in this change. The upload-wide
 `dispatch_protocol=batch_v1` claim and run fence remain intact; duplicate
@@ -160,6 +163,13 @@ are best effort; durable quarantined job records are the authoritative census
 (including an ambiguous commit reply or process death before telemetry).
 
 ### Fenced recovery follow-up
+
+Status (2026-11-01): shipped. `utils/batch_pipeline/quarantine_recovery.py`
+gives each held unit one fenced paid recovery (`recovery.epoch`/`token` on the
+job). Prod census for the last 24h: 1,486 quarantines, 79% recovered and
+committed, the rest awaiting recovery or terminal `failed_held`. Only
+`failed_held` remains a transcript gap, and it needs a reviewed operator redrive
+(`redrive_scope.py`). The design notes below are the original plan.
 
 The existing legacy claim/run entry points own an entire upload, not one batch
 unit. Clearing that claim or dispatching the whole upload could replay already
@@ -187,6 +197,52 @@ priority, unit kind, optional conversation and pinned privacy generation.
 out of order. Each result supplies segment ID, encrypted URI and success/silence.
 Missing/failed items retry up to the quarantine ceiling; decode/provider failures never become silence.
 
+Artifact IO overlaps GPU work using one shared worker pool: up to
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 5, `1` = serial, max 8) items
+fetch/decrypt/decode ahead of the item on the GPU, and as many encrypted result
+writes run while later items diarize. Prefetch stays inside the existing
+two-audio-hour decode group and, beyond the next item, within 1800 audio seconds
+ahead. Model calls, CUDA work and the chain lock stay on the calling thread; a
+fatal GPU error waits for outstanding IO before the flight raises.
+
+Each pump lane may submit its first fetch/decode before acquiring the GPU lock.
+These prepared attempts share a strict 1800-audio-second budget across all lanes;
+oversize units take ordinary locked decode. An attempt-local handle carries its
+audio, language and capture stream, never another lease's cached context. Stop
+and lost-lease paths cancel queued preparation while a lane waits. After GPU
+dispatch, the current bounded chain drains; the waiting-lane watcher is stopped
+and joined before dispatch. Running IO drains before renewal ends.
+The first prepared unit counts against this budget until
+its lane finishes; the existing active-flight prefetch/group bounds still apply.
+
+The final bounded persist tail settles after CUDA quiescence and release of the
+pump GPU lock. Leases keep renewing through settlement and fenced publication.
+Only settled writes produce WorkResults; a persist failure takes the same
+per-unit failure/recovery path. Token, privacy and ordered-merge checks remain
+authoritative. Set Helm `worker.ioConcurrency=1` to remove preparation and
+restore serial artifact IO, including persistence under the model lock.
+
+`omi_batch_pipeline_completed_audio_seconds_total{outcome="success"|"silence"|"no_recoverable_speech"}`
+counts admitted capture seconds only on a new fenced completion, including
+silence; duplicate completion receipts contribute zero. It is not a projection
+or vendor-spend denominator. `events{event="requeued"}` counts retry-to-ready
+wakeups; `retry` now counts actual worker failures. Admission receipt outcomes
+are `received`, `timeout`, `transport`, `invalid_receipt`, and `unconfigured`.
+
+CPU-only strict VAD runs as record-only decode work. Its result never gates VAD,
+ASR, diarization, persistence or publication. The shadow counter records
+`evaluated`, `strict_silent`, `strict_silent_pyannote_nonempty`, and `unavailable`
+(including a missing pyannote comparison); synthetic shadow traffic is excluded.
+Units are sampled deterministically by segment hash at
+`BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT` (default 10; 0 disables the shadow,
+100 restores full sampling), so a re-leased unit samples identically and
+unsampled units emit no shadow counters or stage timings.
+Thread CPU seconds and the optional `strict_vad_shadow` wall stage measure its
+cost. Local Apple Silicon synthetic silence/tone measurements at 60 seconds
+were 0.278/0.280 CPU seconds (about 0.47% of audio duration); first ONNX setup
+cost 0.094 CPU seconds. This is not an L4 CPU-cost certificate.
+No new model forward or GPU synchronization is added.
+
 B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
 CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
 use the same contract. Production jobs require an OIDC compute-admission seal from the backend before
@@ -198,6 +254,10 @@ sweep and legacy playback/enrichment. D checks account/source deletion,
 protection and generation inside each mutation transaction. Encrypted,
 owner-bound, generation-pinned objects have a pre-upload deletion outbox.
 Completion-only retention never expires pending work.
+The optional sync-off `voice_evidence` artifact is an explicit exception:
+[ADR-0004 retention](batch-voice-evidence-retention.md) enforces a capture-based
+24h deadline even for pending work, shortened to completion +1h. It contains no
+audio and never extends accepted-audio retention or incident preservation.
 
 ## Capacity and autoscaling
 
@@ -211,9 +271,148 @@ trough is an opportunity to measure slack, not permission to run.
 
 Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
-labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
-reject stale samples. B's dedicated chart documents the external-metric HPA.
-CPU is not the scale signal; non-preemptible batch latency still needs bounds.
+labels. Queue age is an SLO diagnostic, not a replica demand multiplier: a parked
+allowance hold can re-enter `ready` after its backoff while keeping a days-old
+enqueue time. One such row must not buy the entire GPU ceiling. Evaluated policy
+defers also export their bounded hold reason
+(`omi_batch_pipeline_admission_hold_reasons_total{reason}`, the closed
+`AdmissionHoldReason` enum; anything unrecognized folds to `unknown`), so the
+cycling-hold population can be split by spend class without reading job rows.
+
+Capacity uses `omi_batch_pipeline_admissible_ready_units`, an indexed aggregate
+over ready, merge-pending, currently available work whose compute status is
+`unattempted` or `allowed`. New admission records `unattempted`; it does not
+authorize a paid call. Existing workers already replace that status with
+allowed/held or clear it on an unevaluated refusal, so mixed worker versions
+cannot leave a separate eligibility bit true. Held/parked/unevaluated and
+unmarked legacy debt do not request new GPUs; warm workers still drain them
+under the existing funding/privacy checks. No historical backfill is required.
+
+The three priority counts publish atomically with a separate capacity freshness
+clock. Only the dedicated worker's supervised sampler runs these aggregates;
+serving requests keep their existing gauges without scanning GPU capacity.
+A capacity-query failure leaves its clock unchanged and cannot fail recovery
+or projection. The adapter requires all three classes younger than60seconds, takes the
+maximum per class across identical worker samplers, then sums the classes.
+Absent/stale/partial data stays unavailable; never replace it with zero or sum
+the same global queue once per replica.
+
+Production values hold a four-worker on-demand GPU floor (vendor routing,
+11-01; was three, lead 114a22/724762) so batch keeps GPUs through vendor
+outages and L4 stockouts; see `docs/runbooks/batch-vendor-routing-capacity.md`.
+The qualified cutover shape (lead f05065, 10-28) is a single OD-pinned HPA,
+now at min4/max16: every replica pins to
+`batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
+Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
+balanced-pool machinery stays available for non-production explicit-budget
+tests. The chart rejects it when the stage, values namespace, or Helm release
+namespace marks a production install, including even replica overrides. Going
+above 16 replicas is a second, separately qualified step; never pre-provision
+nodes. When the scaler is enabled, op1 raises `batch-pipeline-pool`'s node
+maximum (3 -> 16) in the same reviewed
+qualification window, using a real scale-up during the 25% soak as the
+scheduling proof.
+
+The scaler sizes on the **higher of two signals** (max-of-two, batchdesign
+2026-11-01 PR-2): the incumbent admissible-ready backlog
+(`targetQueuedUnitsPerWorker=32`) and GPU-chain occupancy — the external metric
+`omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet `worker_flight` busy
+seconds per second (10m rate, one series per pod) at `targetChainBusyPerWorker=0.5` (~89% of the measured
+healthy per-worker chain ceiling 0.56; hpafit 2026-11-01). Occupancy alone sheds
+lanes whenever claims bind rather than flights: through a claim-chain wedge the
+ready backlog is real work that converts the moment the wedge clears, so the
+ready count holds capacity exactly when occupancy under-reads. Occupancy pays
+the reverse dividend — through a healthy drain the backlog reads low while
+flights are real, and the 24h replay shows the chain signal covering hours the
+ready-only answer starves (37 minutes), with the combined replay at 0 starved
+minutes and replica counts at or above the ready-only answer whenever backlog
+exceeds the per-worker target. Both signals are minute-scale sawtooths at 25%
+(ready flaps 0 <-> 128 units; 2m chain demand spikes to 5.8 s/s while the 10m
+rate stays under 3), and the 1800s window holds the highest recommendation it
+saw, so the ready target is 32 rather than 16 and the chain rule rates over 10m.
+The smoothed chain rate answers a sustained load step late; the ready backlog,
+which only builds when capacity is short, stays the fast path (step model 1.1 ->
+5.8 chain s/s: worst backlog wait 3.4 min vs 2.8 min before). Two scrape jobs
+read every worker pod, so the rule takes one series per pod before summing;
+without that, demand reads double. The batchretune replay over
+2026-11-01T23:41Z..02:41Z holds a mean of 4.9 replicas with no minute above 0.85
+chain s/s per worker, sheds from 12 to 5 within an hour, and compares with 12 for
+the 16-unit, 2m, undeduplicated shape
+(`test_batch_pipeline_hpa_retune_replay.py`). Scale-down sheds one pod per 600s after a 1800s
+window so a stockout never costs a warm on-demand node it cannot re-obtain; the
+admissible-count adapter rule stays installed so rollback is a values revert
+without an adapter redeploy. The targets remain provisional pending throughput
+qualification before any apply.
+
+For cutover/rollback, op1 captures the current release values/manifest privately,
+keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
+drain, and verifies the single OD deployment/image, the HPA budget when enabled,
+and all count classes. Production has no Spot companion. If qualification
+fails, restore the prior release with autoscaling off and three Ready OD
+workers. CPU is not the scale signal; queue latency,
+useful throughput, GPU duty and the cost ledger still gate cohort expansion.
+
+## Stage profiling (metrics-only)
+
+`BATCH_PIPELINE_STAGE_PROFILING_ENABLED` gates the dedicated runtime's
+`omi_batch_pipeline_stage_seconds{stage=...}` wall-clock histogram. Default on
+only when `OMI_ENV_STAGE=dev`; prod and an unset stage stay off, and an explicit
+`true`/`false` (1/0, on/off, yes/no; malformed values fall back to the stage
+default) overrides, so local/offline can opt in. The histogram is created once
+at worker startup on the worker's own explicit `CollectorRegistry` — the same
+`/metrics` endpoint as the queue gauges — and a disabled or unwired
+`StageTimings` instance is a pure pass-through: no runtime behavior, precision,
+or concurrency change, and no scrape difference outside dev.
+
+Pump-side stages: `pump_cycle` (one full maintain+flight pass), `maintenance`
+(expired-lease recovery, result_ready sweep, hold pages, leader lease),
+`pull` (the claim transaction), `admission` (compute-admission authorization),
+`renew` (lease heartbeat rechecks), `publication` (every lease-fenced scheduler
+transition: defer/fail/complete/release), `ordered_merge` (per-owner commits),
+`projection` (pending projection and on-committed callbacks), and
+`worker_flight` (executor wait plus the whole GPU chain, including its CUDA
+quiescence `cuda_sync`). The pump's GPU-slot wait precedes `worker_flight`
+and is included only in its parent `pump_cycle`, not the worker timer.
+Worker-chain leaves: `fetch_decode` (download+decrypt+decode of one unit),
+`vad`, `windows` (speech window assembly), `asr` (batched `transcribe_batch`),
+`asr_recovery` (the padded retry, including cap-dispatch callbacks),
+`flight_segment`/`flight_diarize` (packed pyannote segmentation and packed
+embedding+clustering passes), `diarize` (serial per-unit diarization including
+speech compaction), `persist` (encrypt+upload), `cuda_sync` (the pre-existing
+final synchronize; profiling adds no new GPU synchronization).
+
+Timings include failed operations and executor wait; a prefetched fetch/decode
+and a submitted persist are measured where they execute (background IO threads),
+not at the later consuming wait. `pump_cycle` contains the whole pass and
+`worker_flight` contains the worker leaves and CUDA synchronization: never add
+parent and child sums. `asr`, `asr_recovery` and the packed flight stages are
+batched across windows/units of several leased jobs, so one observation is not
+one lease: divide a stage's `_sum` rate by the worker-scoped leased-event rate
+(`omi_batch_pipeline_events_total{event="leased"}`) for an amortized
+seconds-per-leased-job view, and use `_count` for per-call means. Model leaves
+measure host-observed wall time, not isolated CUDA kernel occupancy. Speaker
+embedding is timed at pyannote's existing `get_embeddings` hook (`embedding`),
+and at the shared-trunk packed forward (`flight_embedding`). The latter is
+nested inside `embedding` on a speech-only shared-trunk call; never add them.
+Full-unit packed calls may compute `flight_embedding` before cached per-unit
+hook reads. Both are children of diarization, not additional critical-path time.
+The worker also exposes `download_metadata`, `download`, `decrypt`, `decode`,
+`encrypt`, `artifact_register` and `upload` on the actual artifact IO thread.
+Download metadata is a separate GCS request. Encryption/upload/registration are
+children of `persist`; download/decrypt/decode are children of `fetch_decode`.
+Outside the dedicated worker's active context these artifact timers are no-ops.
+Retained-audio manifests also time each generation-pinned source download,
+framed decryption and codec decode/resample. One lease may contain several
+source objects, so these leaf percentiles are per operation, not per lease.
+Per-call p50/p95 for batched stages are batch percentiles; dividing them by
+batch size does not produce per-lease percentiles. Use the summed-time/leased
+count normalization above for amortized per-lease cost.
+Unattributed worker time includes validation, packing, policy callbacks, the
+live-reuse lookup, silence inspection and left-context assembly. Optional or
+skipped stages (silence units, packed-flight fallbacks, recovery paths not
+taken) emit no samples. No owner, segment, URI, or exception labels exist, and
+a telemetry failure (clock or observe) is swallowed: it can never invalidate
+compute or a durable transition.
 
 ## Flags, rollout and rollback
 
@@ -235,3 +434,11 @@ Turning admission off returns new unowned uploads to legacy; existing batch
 claims drain through their recorded protocol. Never copy in-flight work into
 legacy or purge pending artifacts to roll back. Detailed RPC/index/operator
 settings are in `batch-pipeline-serving.md`; no merge/deploy is authorized here.
+
+With dark `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=true`, both exhausted
+padded `empty_asr` and `no_owned_words` hand off immediately to the existing
+fenced CPU recovery lane. Strict local VAD on the original unit makes the final
+silence decision; the GPU worker never infers silence from empty text or from
+words outside its core. Speech gets the once-only legacy recovery attempt.
+See [serving recovery](batch-pipeline-serving.md#dark-empty-asr-disposition) for
+closed diagnostics, historical held-unit disposition and rollback semantics.

@@ -59,6 +59,12 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
               if (provider.transcriptionComplete) ...[
                 const SizedBox(height: 16),
                 _buildSuccessCard(),
+                const SizedBox(height: 12),
+                Text(
+                  context.l10n.walkthroughBackgroundRecordingNote,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
               ],
               if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),

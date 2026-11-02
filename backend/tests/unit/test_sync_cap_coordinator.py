@@ -1,5 +1,9 @@
 """Exercise real v2 coordination: coverage precedes custody and late holds do not bill."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
+import pytest
+
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -49,11 +53,13 @@ def _ledger(pipeline, monkeypatch):
     return writer
 
 
-async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinator, monkeypatch, tmp_path):
+@pytest.mark.parametrize('dispatch', [False, True])
+async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinator, monkeypatch, tmp_path, dispatch):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     state = _wire(
         pipeline,
         monkeypatch,
@@ -62,7 +68,7 @@ async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinat
     )
     writer = _ledger(pipeline, monkeypatch)
     monkeypatch.setattr(
-        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+        cap_hold, 'funded_allowance', lambda uid, **kw: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
     )
     retained = []
 
@@ -90,7 +96,9 @@ async def test_late_hold_reports_custody_and_charges_only_dispatched_speech(coor
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[])
     writer = _ledger(pipeline, monkeypatch)
-    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=True, reason='available'))
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda uid, **kw: SimpleNamespace(managed=True, reason='available')
+    )
     paths = [tmp_path / '1760000000.wav', tmp_path / '1760000002.5.wav']
     for path in paths:
         _write_labeled_wav(path, range(5))
@@ -114,3 +122,36 @@ async def test_late_hold_reports_custody_and_charges_only_dispatched_speech(coor
     assert writer.call_args.kwargs['hold_ids'] == ['late']
     assert pipeline.record_usage.call_args.kwargs['transcription_seconds'] == 2
     assert pipeline.record_usage.call_args.kwargs['speech_seconds'] == 2
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('cohort,lanes', [('', 'sync'), ('uid:other', 'sync'), ('all', 'live')])
+async def test_actual_v2_coordinator_does_not_hold_outside_scope(
+    coordinator, monkeypatch, tmp_path, ladder, cohort, lanes
+):
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[])
+    # This assertion owns intake through the real VAD boundary. No speech
+    # pieces are needed; ordinary segment dispatch is exercised separately.
+    pipeline.retrieve_vad_segments = lambda path, *args, **kwargs: state.vad_seen.append(path)
+    _ledger(pipeline, monkeypatch)
+    allowance = Mock(side_effect=AssertionError('excluded sync allowance read'))
+    monkeypatch.setattr(cap_hold, 'funded_allowance', allowance)
+    await _run(module, tmp_path)
+    assert state.vad_seen
+    allowance.assert_not_called()
+    sync_cap_holds.mark_content_held.assert_not_called()
+
+
+async def test_v2_default_offline_scope_holds_before_vad(coordinator, monkeypatch, tmp_path):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    await test_full_hold_contains_only_wal_audio_not_already_committed(
+        coordinator, monkeypatch, tmp_path, dispatch=False
+    )

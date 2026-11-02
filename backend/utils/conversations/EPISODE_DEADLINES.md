@@ -27,10 +27,10 @@ Keep rollout at zero until effective-deadline/fallback results and gateway effor
 parity are accepted. Provider read timeouts are not strict wall-clock cancellation;
 process termination and requests abandoned by clients remain inherited risks.
 
-Direct DEV requests using a 115s socket deadline returned complete notes as late
-as 136.40s (deterministic tiered) / 151.54s including selector (Jev tiered), with
-zero endpoint timeout/fallback errors. These are quiet-read timeouts, NOT total
-wall-clock deadlines; they do not establish success behind the 120s gateway.
+Direct DEV requests using a 115s socket deadline returned complete deterministic
+tiered notes as late as 136.40s, with zero endpoint timeout/fallback errors.
+This is a quiet-read timeout, NOT a total wall-clock deadline; it does not
+establish success behind the 120s gateway.
 Receipts mark `writer_deadline_overrun` and disable paid repair while preserving
 an already completed usable note. Fakes pin a real timeout buying exactly one C7
 rewrite. Gateway timeout/cancellation and blended fallback billing still need

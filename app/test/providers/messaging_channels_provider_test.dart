@@ -38,7 +38,15 @@ void main() {
         expect(config.endpoint(ChatChannel.telegram)?.address, '@OmiBot');
         expect(config.endpoint(ChatChannel.imessage)?.address, '+15550100100');
         expect(config.endpoint(ChatChannel.imessage)?.provider, 'linq');
+        expect(config.endpoint(ChatChannel.whatsapp), isNull);
       }
+      final whatsApp = ChatAppsConfig.fromPayload(
+        enabled: true,
+        payload: {
+          'whatsapp': {'provider': 'keiki', 'address': '+15550100100'},
+        },
+      );
+      expect(whatsApp.endpoint(ChatChannel.whatsapp)?.provider, 'keiki');
     });
 
     test(
@@ -390,6 +398,32 @@ void main() {
         );
       },
     );
+
+    test('WhatsApp opens click-to-chat with the digits and a prefilled text', () {
+      const endpoint = ChatChannelEndpoint(provider: 'keiki', address: '+1 (555) 010-0100');
+      expect(
+        chatAppUri(ChatChannel.whatsapp, endpoint, body: 'Hi Omi, link code AB12', platform: TargetPlatform.iOS)
+            .toString(),
+        'https://wa.me/15550100100?text=Hi%20Omi%2C%20link%20code%20AB12',
+      );
+      expect(
+        chatAppProofUri(
+          channel: ChatChannel.whatsapp,
+          endpoint: endpoint,
+          body: 'code',
+          platform: TargetPlatform.android,
+        ).toString(),
+        'https://wa.me/15550100100?text=code',
+      );
+      expect(
+        chatAppUri(
+          ChatChannel.whatsapp,
+          const ChatChannelEndpoint(provider: 'keiki', address: 'none'),
+          platform: TargetPlatform.iOS,
+        ),
+        isNull,
+      );
+    });
 
     test('codes are grouped by four for reading', () {
       expect(groupedLinkCode('9F2C4A7B1D'), '9F2C 4A7B 1D');

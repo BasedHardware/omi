@@ -9,7 +9,7 @@ from utils.observability.fallback import record_fallback
 from utils.stt.diarization import get_diarizer_backend, LegacyAHC
 from utils.stt.diarization_eval import score_words
 from utils.stt.diarization_turns import exclusive_from_activity
-from utils.stt.vad import offline_pcm_speech_segments
+from utils.stt.local_vad import offline_pcm_speech_segments
 from utils.stt.vad_compaction import diarize_with_speech_compaction
 
 import httpx

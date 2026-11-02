@@ -35,7 +35,7 @@ class NativeLinkReconciler {
       return null;
     }
     final id = SharedPreferencesUtil().btDevice.id;
-    return id.isEmpty ? null : id;
+    return id.isEmpty || !ServiceManager.instance().device.canAutoReconnectDevice(id) ? null : id;
   }
 
   Future<void> reconcile() async {

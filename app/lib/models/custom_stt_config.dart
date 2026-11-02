@@ -122,6 +122,8 @@ class CustomSttConfig {
       'request_type': requestType,
       'headers': headers,
       'params': params,
+      if (audioFieldName != null) 'audio_field_name': audioFieldName,
+      if (schemaJson != null) 'schema': schemaJson,
       'send_raw_audio_to_omi': sendRawAudioToOmi,
     };
 

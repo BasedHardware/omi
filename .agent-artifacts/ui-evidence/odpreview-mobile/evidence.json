@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-live-preview-streaming-dark.png",
+      "platform": "mobile-ios",
+      "description": "Local-preview session: Live preview caption and explanation; settled on-device lines in primary text, the still-revisable line in secondary text (iOS look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-preview-starting-dark.png",
+      "platform": "mobile-ios",
+      "description": "Local-preview session while the on-device engine starts: caption plus a small spinner and \"Starting live preview…\" (iOS look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-live-preview-listening-dark.png",
+      "platform": "mobile-ios",
+      "description": "On-device engine running, no words recognized yet: caption and \"Listening… words appear here as you speak.\" (iOS look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-live-preview-no-engine-dark.png",
+      "platform": "mobile-ios",
+      "description": "Admitted session on a phone with no on-device engine: calm \"Transcribing…\" state, no error and no setup action (iOS look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-cloud-transcript-unchanged-dark.png",
+      "platform": "mobile-ios",
+      "description": "Session not admitted to local preview: today's cloud live transcript, unchanged (iOS look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-home-card-preview-line-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home live capture card showing the newest on-device preview line in its existing last-line slot (iOS look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-live-preview-streaming-light.png",
+      "platform": "mobile-ios",
+      "description": "Local-preview session: Live preview caption and explanation; settled on-device lines in primary text, the still-revisable line in secondary text (iOS look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-live-preview-starting-light.png",
+      "platform": "mobile-ios",
+      "description": "Local-preview session while the on-device engine starts: caption plus a small spinner and \"Starting live preview…\" (iOS look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-live-preview-listening-light.png",
+      "platform": "mobile-ios",
+      "description": "On-device engine running, no words recognized yet: caption and \"Listening… words appear here as you speak.\" (iOS look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-live-preview-no-engine-light.png",
+      "platform": "mobile-ios",
+      "description": "Admitted session on a phone with no on-device engine: calm \"Transcribing…\" state, no error and no setup action (iOS look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-cloud-transcript-unchanged-light.png",
+      "platform": "mobile-ios",
+      "description": "Session not admitted to local preview: today's cloud live transcript, unchanged (iOS look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-home-card-preview-line-light.png",
+      "platform": "mobile-ios",
+      "description": "Home live capture card showing the newest on-device preview line in its existing last-line slot (iOS look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-android-live-preview-streaming-dark.png",
+      "platform": "mobile-android",
+      "description": "Local-preview session: Live preview caption and explanation; settled on-device lines in primary text, the still-revisable line in secondary text (Android look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-live-preview-starting-dark.png",
+      "platform": "mobile-android",
+      "description": "Local-preview session while the on-device engine starts: caption plus a small spinner and \"Starting live preview…\" (Android look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-live-preview-listening-dark.png",
+      "platform": "mobile-android",
+      "description": "On-device engine running, no words recognized yet: caption and \"Listening… words appear here as you speak.\" (Android look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-live-preview-no-engine-dark.png",
+      "platform": "mobile-android",
+      "description": "Admitted session on a phone with no on-device engine: calm \"Transcribing…\" state, no error and no setup action (Android look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-cloud-transcript-unchanged-dark.png",
+      "platform": "mobile-android",
+      "description": "Session not admitted to local preview: today's cloud live transcript, unchanged (Android look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-android-home-card-preview-line-dark.png",
+      "platform": "mobile-android",
+      "description": "Home live capture card showing the newest on-device preview line in its existing last-line slot (Android look, dark mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-android-live-preview-streaming-light.png",
+      "platform": "mobile-android",
+      "description": "Local-preview session: Live preview caption and explanation; settled on-device lines in primary text, the still-revisable line in secondary text (Android look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-android-live-preview-starting-light.png",
+      "platform": "mobile-android",
+      "description": "Local-preview session while the on-device engine starts: caption plus a small spinner and \"Starting live preview…\" (Android look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-android-live-preview-listening-light.png",
+      "platform": "mobile-android",
+      "description": "On-device engine running, no words recognized yet: caption and \"Listening… words appear here as you speak.\" (Android look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-android-live-preview-no-engine-light.png",
+      "platform": "mobile-android",
+      "description": "Admitted session on a phone with no on-device engine: calm \"Transcribing…\" state, no error and no setup action (Android look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-cloud-transcript-unchanged-light.png",
+      "platform": "mobile-android",
+      "description": "Session not admitted to local preview: today's cloud live transcript, unchanged (Android look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-mobile-android-home-card-preview-line-light.png",
+      "platform": "mobile-android",
+      "description": "Home live capture card showing the newest on-device preview line in its existing last-line slot (Android look, light mode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

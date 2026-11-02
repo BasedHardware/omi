@@ -115,8 +115,9 @@ def memo(uid, key, fetch):
 
 
 def user_snapshot(uid, client, fields=None):
-    # Only opted-in requests use a shared entitlement projection so subscription
-    # and BYOK share one user-document read without retaining unrelated fields.
+    # Only opted-in requests use a shared entitlement projection so subscription,
+    # BYOK and the Stripe customer id share one user-document read without
+    # retaining unrelated fields.
     holder = _request.get()
     if not _bypass.get() and holder is not None and not holder.closed and lever_enabled('request_read_dedupe', uid):
         # SDK snapshots contain clients/locks and cannot be deep-copied. Retain
@@ -125,7 +126,9 @@ def user_snapshot(uid, client, fields=None):
             key = (uid, ('user_snapshot', plane_id(client)))
             if key not in holder.values:
                 _event('request_read_dedupe', 'snapshot_miss')
-                holder.values[key] = client.collection('users').document(uid).get(['subscription', 'byok'])
+                holder.values[key] = (
+                    client.collection('users').document(uid).get(['subscription', 'byok', 'stripe_customer_id'])
+                )
             else:
                 _event('request_read_dedupe', 'snapshot_hit')
             return holder.values[key]
@@ -148,6 +151,16 @@ def _forget(uid):
             for key in list(holder.values):
                 if key[0] == uid:
                     del holder.values[key]
+
+
+def forget_request_reads(uid):
+    """Drop this request's memoized reads after a durable write.
+
+    Request dedupe has no Redis generation of its own. Writers of a document
+    that ``memo`` may have already returned call this so a later read in the
+    same request sees the write. No request scope is a no-op.
+    """
+    _forget(uid)
 
 
 # These are correctness limits, not merely tunable defaults.

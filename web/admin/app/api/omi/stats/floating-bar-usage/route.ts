@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { cachedPosthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ let cache: { data: any; days: number; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -26,8 +26,12 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "30", 10), 90);
 
-    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
-      return NextResponse.json(cache.data);
+    if (
+      cache &&
+      cache.days === days &&
+      Date.now() - cache.timestamp < CACHE_TTL
+    ) {
+      return authResult.json(cache.data);
     }
 
     // Query 1: Daily total queries and unique users
@@ -74,18 +78,34 @@ export async function GET(request: NextRequest) {
 
     // Sequential (not Promise.all) so we don't burst the rate-limited PostHog key;
     // each is Firestore-cached + stale-on-throttle via cachedPosthogFetch.
-    const totalRes = await cachedPosthogFetch(host, projectId, apiKey, totalQuery);
-    const voiceRes = await cachedPosthogFetch(host, projectId, apiKey, voiceQuery);
-    const sessionsRes = await cachedPosthogFetch(host, projectId, apiKey, sessionsQuery);
+    const totalRes = await cachedPosthogFetch(
+      host,
+      projectId,
+      apiKey,
+      totalQuery
+    );
+    const voiceRes = await cachedPosthogFetch(
+      host,
+      projectId,
+      apiKey,
+      voiceQuery
+    );
+    const sessionsRes = await cachedPosthogFetch(
+      host,
+      projectId,
+      apiKey,
+      sessionsQuery
+    );
 
     if (!totalRes.ok || !voiceRes.ok || !sessionsRes.ok) {
-      const failedRes = !totalRes.ok ? totalRes : !voiceRes.ok ? voiceRes : sessionsRes;
+      const failedRes = !totalRes.ok
+        ? totalRes
+        : !voiceRes.ok
+        ? voiceRes
+        : sessionsRes;
       const text = await failedRes.text();
       console.error("PostHog query error:", text);
-      return NextResponse.json(
-        { error: "PostHog API error" },
-        { status: 502 }
-      );
+      return authResult.json({ error: "PostHog API error" }, { status: 502 });
     }
 
     const totalResult = await totalRes.json();
@@ -94,14 +114,16 @@ export async function GET(request: NextRequest) {
 
     const totalRows: [string, number, number][] = totalResult?.results ?? [];
     const voiceRows: [string, number][] = voiceResult?.results ?? [];
-    const sessionsRows: [string, number, number][] = sessionsResult?.results ?? [];
+    const sessionsRows: [string, number, number][] =
+      sessionsResult?.results ?? [];
 
     // Build lookups by date
     const voiceByDate: Record<string, number> = {};
     for (const [date, count] of voiceRows) {
       voiceByDate[date.slice(0, 10)] = count;
     }
-    const sessionsByDate: Record<string, { sessions: number; users: number }> = {};
+    const sessionsByDate: Record<string, { sessions: number; users: number }> =
+      {};
     for (const [date, sessions, users] of sessionsRows) {
       sessionsByDate[date.slice(0, 10)] = { sessions, users };
     }
@@ -111,9 +133,13 @@ export async function GET(request: NextRequest) {
       const d = date.slice(0, 10);
       const voice = voiceByDate[d] || 0;
       const text = totalQueries - voice;
-      const avgPerUser = uniqueUsers > 0 ? Math.round((totalQueries / uniqueUsers) * 10) / 10 : 0;
+      const avgPerUser =
+        uniqueUsers > 0
+          ? Math.round((totalQueries / uniqueUsers) * 10) / 10
+          : 0;
       const sess = sessionsByDate[d] || { sessions: 0, users: 0 };
-      const avgSessionsPerUser = sess.users > 0 ? Math.round((sess.sessions / sess.users) * 10) / 10 : 0;
+      const avgSessionsPerUser =
+        sess.users > 0 ? Math.round((sess.sessions / sess.users) * 10) / 10 : 0;
       return {
         date: d,
         total_queries: totalQueries,
@@ -142,18 +168,24 @@ export async function GET(request: NextRequest) {
         totalVoice: totalAllVoice,
         totalText: totalAllText,
         totalSessions: totalAllSessions,
-        overallAvgPerUserPerDay: totalAllUsers > 0 ? Math.round((totalAllQueries / totalAllUsers) * 10) / 10 : 0,
-        overallAvgSessionsPerUserPerDay: totalAllUsers > 0 ? Math.round((totalAllSessions / totalAllUsers) * 10) / 10 : 0,
+        overallAvgPerUserPerDay:
+          totalAllUsers > 0
+            ? Math.round((totalAllQueries / totalAllUsers) * 10) / 10
+            : 0,
+        overallAvgSessionsPerUserPerDay:
+          totalAllUsers > 0
+            ? Math.round((totalAllSessions / totalAllUsers) * 10) / 10
+            : 0,
         activeDays,
       },
     };
 
     cache = { data: result, days, timestamp: Date.now() };
 
-    return NextResponse.json(result);
+    return authResult.json(result);
   } catch (error) {
     console.error("Floating bar usage error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch floating bar usage" },
       { status: 500 }
     );

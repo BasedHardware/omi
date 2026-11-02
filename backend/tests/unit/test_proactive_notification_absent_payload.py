@@ -135,7 +135,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
     """Load the production coordinator fresh, with every blocking dependency
     stubbed, mirroring the sanctioned isolation harness used by
     test_realtime_integrations_usage_tracking.py."""
-    process_mentor_notification = MagicMock(return_value=None)
     get_available_apps = MagicMock(return_value=[])
     add_app_message = MagicMock(return_value={'id': 'msg-1'})
     send_notification_async = AsyncMock(return_value=None)
@@ -308,10 +307,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             'utils.log_sanitizer',
             sanitize=MagicMock(side_effect=lambda value: value),
             sanitize_pii=MagicMock(side_effect=lambda value: value),
-        ),
-        'utils.mentor_notifications': _module(
-            'utils.mentor_notifications',
-            process_mentor_notification=process_mentor_notification,
         ),
     }
 

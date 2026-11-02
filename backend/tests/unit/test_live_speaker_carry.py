@@ -251,6 +251,8 @@ class _CarryHarness:
 
     async def call(self, fn, *args, **kwargs):
         name = fn.__name__
+        if name == 'arm':
+            return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'authority_snapshot':
             return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'open_live_recording_session':
@@ -531,7 +533,7 @@ def _managed_receiver():
 
 
 @pytest.mark.anyio
-async def test_managed_chain_reconnect_mints_a_fresh_speaker_scope(monkeypatch):
+async def test_managed_chain_reconnect_preserves_same_provider_speaker_scope(monkeypatch):
     callbacks = []
     raw_socket = SimpleNamespace(is_connection_dead=False, finish=lambda: None, send=lambda data: True)
 
@@ -556,10 +558,10 @@ async def test_managed_chain_reconnect_mints_a_fresh_speaker_scope(monkeypatch):
     scope_one = first_epoch.current_scope
     await session.connect(16000, same_provider=True)
     second_epoch = receiver.speaker_provider_epoch
-    assert second_epoch is not first_epoch
+    assert second_epoch is first_epoch
     callbacks[1]([{'speaker': 'SPEAKER_0', 'start': 1.0, 'end': 2.0, 'text': 'b'}])
-    assert stamped[-1][0]['speaker_id_scope'] == second_epoch.current_scope != scope_one
-    assert receiver.speaker_provider_epoch is second_epoch
+    assert stamped[-1][0]['speaker_id_scope'] == scope_one
+    assert receiver.speaker_provider_epoch is first_epoch
 
 
 class _FakeSendTracker:
@@ -574,7 +576,7 @@ class _FakeSendTracker:
 
 
 @pytest.mark.anyio
-async def test_managed_chain_late_v2_callback_stamps_its_own_stream_scope(monkeypatch):
+async def test_managed_chain_late_v2_callback_preserves_same_provider_scope(monkeypatch):
     callbacks = []
     raw_socket = SimpleNamespace(is_connection_dead=False, finish=lambda: None, send=lambda data: True)
 
@@ -598,14 +600,12 @@ async def test_managed_chain_late_v2_callback_stamps_its_own_stream_scope(monkey
     scope_one = first_epoch.current_scope
     await session.connect(16000, _FakeSendTracker(), same_provider=True)
     second_epoch = receiver.speaker_provider_epoch
-    assert second_epoch is not first_epoch
+    assert second_epoch is first_epoch
     callbacks[1]([{'speaker': 'SPEAKER_0', 'start': 1.0, 'end': 2.0, 'text': 'b'}])
-    scope_two = second_epoch.current_scope
-    assert scope_two != scope_one and receiver.speaker_provider_epoch is second_epoch
+    assert stamped[-1][0]['speaker_id_scope'] == scope_one
     callbacks[0]([{'speaker': 'SPEAKER_0', 'start': 2.0, 'end': 3.0, 'text': 'late'}])
     assert stamped[-1][0]['speaker_id_scope'] == scope_one
-    assert receiver.speaker_provider_epoch is second_epoch
-    assert receiver.speaker_provider_epoch.current_scope == scope_two
+    assert receiver.speaker_provider_epoch is first_epoch
 
 
 @pytest.mark.anyio

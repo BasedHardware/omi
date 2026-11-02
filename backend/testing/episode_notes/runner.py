@@ -11,13 +11,14 @@ from testing.episode_notes.prompts import (
     BASELINE_PROMPT,
     CANDIDATE_MODEL,
     CANDIDATE_PROMPT,
+    GENERATION_REVIEW_PROMPT,
     SCORING_MODEL,
     SOURCE_FIELDS,
 )
 from testing.episode_notes.reporting import arm_reports, paired_reports
-from testing.episode_notes.selection import evaluate_selection, evaluate_jev_selection, routed_candidate_request
+from testing.episode_notes.writer import routed_candidate_request
 from testing.episode_notes.schema import FixtureSet, JudgeScore, LLMCallError, LLMResult
-from config.episode_writer import EpisodeWriterSettings
+from testing.episode_notes.settings import EpisodeEvalSettings
 from testing.episode_notes.prompts import fixture_evidence_items
 from utils.conversations.episode_selection import (
     deterministic_episode_selection,
@@ -25,7 +26,7 @@ from utils.conversations.episode_selection import (
 from models.episode_extraction import EpisodeStructuredExtraction
 from utils.conversations.episode_evidence import restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
-from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
+from testing.episode_notes.policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 
 REFERENCE_PROMPT = (
     '''Describe what happened during this episode and what matters to its owner using ALL supplied
@@ -55,16 +56,19 @@ reasons (strings). A concrete account of missing capture coverage is informative
 )
 
 
-def combined_cost(writer: LLMResult, selection: LLMResult | None) -> dict:
-    if selection is None:
-        return writer.cost()
+def total_cost(*receipts: LLMResult | None) -> dict:
+    available = [receipt for receipt in receipts if receipt is not None]
+    if not available:
+        return LLMResult(content={}).cost()
+    if len(available) == 1:
+        return available[0].cost()
     return {
         key: (
-            writer.cost()[key] + selection.cost()[key]
-            if writer.cost()[key] is not None and selection.cost()[key] is not None
+            sum(receipt.cost()[key] for receipt in available)
+            if all(receipt.cost()[key] is not None for receipt in available)
             else None
         )
-        for key in writer.cost()
+        for key in available[0].cost()
     }
 
 
@@ -118,7 +122,7 @@ def evaluate(
     candidate_model: str = CANDIDATE_MODEL,
     reference_model: str = SCORING_MODEL,
     judge_model: str = SCORING_MODEL,
-    settings: EpisodeWriterSettings | None = None,
+    settings: EpisodeEvalSettings | None = None,
     judge_samples: int = 1,
     experiment: str = 'none',
     experiment_cutoff: float = 0.3,
@@ -126,19 +130,18 @@ def evaluate(
     provider_default_effort: bool = False,
 ) -> dict:
     from testing.episode_notes.gateway_parity import CandidateEffortParity
-    from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
 
     llm = CandidateEffortParity(
         llm,
-        excluded_prompts=(REFERENCE_PROMPT, JUDGE_PROMPT, JEV_SELECTOR_PROMPT),
-        jev_prompt=JEV_SELECTOR_PROMPT,
+        excluded_prompts=(REFERENCE_PROMPT, JUDGE_PROMPT, GENERATION_REVIEW_PROMPT),
+        jev_prompt=GENERATION_REVIEW_PROMPT,
         provider_default=provider_default_effort,
     )
-    settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
+    settings = settings or EpisodeEvalSettings(claims=True)
     if candidate_max_tokens is not None and (split != 'dev' or not 1000 <= candidate_max_tokens <= 32000):
         raise ValueError('C6 output-budget experiments require DEV and 1000..32000 tokens')
     if experiment != 'none' and split != 'dev':
-        raise ValueError('generation/selection experiments are DEV only')
+        raise ValueError('generation experiments are DEV only')
     if (
         experiment
         not in {
@@ -147,13 +150,6 @@ def evaluate(
             'fact_check',
             'facts_first',
             'best_two',
-            'jev_veto',
-            'jev_per_source',
-            'jev_per_source_pool',
-            'jev_rank',
-            'jev_rank_verify',
-            'jev_discussed',
-            'jev_choice',
         }
         or not 0 <= experiment_cutoff <= 1
     ):
@@ -189,7 +185,7 @@ def evaluate(
         def error_row(arm, phase, exc, candidate=None, judge=None):
             receipt = exc.result if isinstance(exc, LLMCallError) else LLMResult(content={})
             reference = receipt if phase == 'reference' else reference_result
-            candidate = receipt if phase in {'candidate', 'selection'} else candidate or LLMResult(content={})
+            candidate = receipt if phase == 'candidate' else candidate or LLMResult(content={})
             judge = receipt if phase == 'judge' else judge or LLMResult(content={})
             return {
                 'id': episode.id,
@@ -226,7 +222,6 @@ def evaluate(
             writer_arm = arm
             tier, route_reason, tier_fallback, failed_writer = 'none', 'none', False, None
             result, judged = None, None
-            selection_result, selection_fallback = None, None
             helper_result, experiment_receipt = None, {}
             selected_items = fixture_evidence_items(episode)
             phase = 'candidate'
@@ -235,33 +230,9 @@ def evaluate(
                     result = LLMResult(content=stored[episode.id])
                     prompt_hash = None
                 else:
-                    if arm == 'episode' and experiment.startswith('jev_'):
-                        from testing.episode_notes.selection_experiments import experiment_selection
-
-                        selected_items, selection_result, selection_fallback = experiment_selection(
-                            selected_items,
-                            episode,
-                            mode=experiment.removesuffix('_verify'),
-                            cutoff=experiment_cutoff,
-                            cache_dir=cache_dir,
-                            llm=llm,
-                        )
-                    elif arm == 'episode' and settings.selection == 'deterministic':
+                    if arm == 'episode':
                         selected_items = deterministic_episode_selection(
                             selected_items, finished_at=episode.evidence.finished_at
-                        )
-                    elif arm == 'episode' and settings.selection == 'luna':
-                        selected_items, selection_result, selection_fallback = evaluate_selection(
-                            selected_items,
-                            episode,
-                            cache_dir=cache_dir,
-                            candidate_model=candidate_model,
-                            llm=llm,
-                            settings=settings,
-                        )
-                    elif arm == 'episode' and settings.selection == 'jev':
-                        selected_items, selection_result, selection_fallback = evaluate_jev_selection(
-                            selected_items, episode, cache_dir=cache_dir, llm=llm, settings=settings
                         )
                     phase = 'candidate'
                     if arm == 'episode' and experiment == 'facts_first':
@@ -301,11 +272,11 @@ def evaluate(
                         result = cached_call(cache_dir, writer_arm, candidate_model, prompt, payload, llm)
                         tier_fallback = True
                     prompt_hash = fingerprint(prompt)
-                    if arm == 'episode' and experiment in {'verify', 'fact_check', 'best_two', 'jev_rank_verify'}:
+                    if arm == 'episode' and experiment in {'verify', 'fact_check', 'best_two'}:
                         from testing.episode_notes.generation_experiments import verify_draft, fact_check, best_of_two
 
                         try:
-                            if experiment in {'verify', 'jev_rank_verify'}:
+                            if experiment == 'verify':
                                 remaining = settings.writer_timeout - (result.latency_seconds or 0)
                                 if remaining >= 15:
                                     result, helper_result, experiment_receipt = verify_draft(
@@ -365,12 +336,10 @@ def evaluate(
                         {
                             'id': episode.id,
                             'judge_sample': sample,
-                            'selection_fallback': selection_fallback,
                             'source_inclusion': {
                                 kind: sum(i.source_kind == kind for i in selected_items)
                                 for kind in SOURCE_FIELDS.values()
                             },
-                            'selection_cost': selection_result.cost() if selection_result else None,
                             'writer_cost': result.cost(),
                             'tier': tier,
                             'route_reason': route_reason,
@@ -385,18 +354,7 @@ def evaluate(
                             'thinking_fallback': arm == 'episode' and writer_arm == 'baseline',
                             'status': 'ok',
                             'candidate': result.content,
-                            'candidate_cost': combined_cost(
-                                (
-                                    LLMResult(content={}, **combined_cost(result, failed_writer))
-                                    if failed_writer
-                                    else result
-                                ),
-                                (
-                                    LLMResult(content={}, **combined_cost(helper_result, selection_result))
-                                    if helper_result
-                                    else selection_result
-                                ),
-                            ),
+                            'candidate_cost': total_cost(result, failed_writer, helper_result),
                             'generation_performed': arm != 'stored',
                             'effective_efforts': {
                                 'candidate': result.effective_effort,
@@ -412,7 +370,6 @@ def evaluate(
                             'judge_cost': judged.cost(),
                             'finish_reasons': {
                                 'candidate': result.finish_reason,
-                                'selection': selection_result.finish_reason if selection_result else None,
                                 'reference': reference_result.finish_reason,
                                 'judge': judged.finish_reason,
                             },
@@ -450,12 +407,8 @@ def evaluate(
         'paired': paired_reports(first_sample),
         'configuration': {
             'effort': settings.effort,
-            'selection': settings.selection,
             'claims': settings.claims,
-            'selection_effort': settings.selection_effort,
-            'selection_timeout': settings.selection_timeout,
             'thinking_max_input_bytes': settings.thinking_max_input_bytes,
-            'jev_threshold': settings.jev_threshold,
             'tiered': settings.tiered,
             'apply_deadlines': settings.apply_deadlines,
             'writer_timeout': settings.writer_timeout,

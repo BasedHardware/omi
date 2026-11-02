@@ -53,23 +53,65 @@ class Document(StrictFirestoreDocument):
 
 
 class Query:
-    def __init__(self, database, path, *, order=None, descending=False, bound=None):
+    def __init__(self, database, path, *, order=None, descending=False, bound=None, after=None, ids_only=False):
         self.database = database
         self.path = path
         self.order = order
         self.descending = descending
         self.bound = bound
+        self.after = after
+        self.ids_only = ids_only
 
     def document(self, key):
         return Document(self.database, (*self.path, key))
 
     def order_by(self, field, direction='ASCENDING'):
-        assert field in {'last_changed_at', 'created_at'}
-        return Query(self.database, self.path, order=field, descending=direction == 'DESCENDING', bound=self.bound)
+        assert field in {'last_changed_at', 'created_at', '__name__'}
+        return Query(
+            self.database,
+            self.path,
+            order=field,
+            descending=direction == 'DESCENDING',
+            bound=self.bound,
+            after=self.after,
+            ids_only=self.ids_only,
+        )
+
+    def select(self, fields):
+        assert fields == ['id']
+        return Query(
+            self.database,
+            self.path,
+            order=self.order,
+            descending=self.descending,
+            bound=self.bound,
+            after=self.after,
+            ids_only=True,
+        )
+
+    def start_after(self, cursor):
+        assert self.order == '__name__' and set(cursor) == {'__name__'}
+        return Query(
+            self.database,
+            self.path,
+            order=self.order,
+            descending=self.descending,
+            bound=self.bound,
+            after=cursor['__name__'].id,
+            ids_only=self.ids_only,
+        )
 
     def limit(self, count):
         assert 0 < count <= 500
-        return Query(self.database, self.path, order=self.order, descending=self.descending, bound=count)
+        return Query(
+            self.database,
+            self.path,
+            order=self.order,
+            descending=self.descending,
+            bound=count,
+            after=self.after,
+            ids_only=self.ids_only,
+        )
 
     def _rows(self):
         return [(path, row) for path, row in self.database.rows.items() if path[:-1] == self.path]
@@ -83,15 +125,25 @@ class Query:
 
         return SimpleNamespace(get=get)
 
-    def stream(self, transaction=None):
+    def stream(self, transaction=None, timeout=None):
+        if timeout is not None:
+            assert 0 < timeout <= 3
         assert self.order and self.bound
         if transaction is not None:
             assert transaction._database is self.database
             transaction._assert_read_allowed()
-        rows = sorted(self._rows(), key=lambda pair: (pair[1][self.order], pair[0]), reverse=self.descending)
+        rows = sorted(
+            self._rows(),
+            key=lambda pair: (pair[0][-1] if self.order == '__name__' else pair[1][self.order], pair[0]),
+            reverse=self.descending,
+        )
+        if self.after is not None:
+            rows = [pair for pair in rows if pair[0][-1] > self.after]
         result = []
         for path, row in rows[: self.bound]:
-            snapshot = StrictFirestoreSnapshot(row)
+            snapshot = StrictFirestoreSnapshot(
+                {'id': row['id']} if self.ids_only and 'id' in row else {} if self.ids_only else row
+            )
             snapshot.reference = Document(self.database, path)
             snapshot.id = path[-1]
             result.append(snapshot)

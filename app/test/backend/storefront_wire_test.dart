@@ -23,4 +23,13 @@ void main() {
     final roundTrip = GeneratedStorefrontResponse.fromJson(decoded.toJson());
     expect(roundTrip.toJson(), decoded.toJson());
   });
+  test('flagged at-cap copy decodes through the generated contract', () {
+    final raw = jsonDecode(File('../backend/tests/fixtures/storefront_v2/free_settings.json').readAsStringSync())
+        as Map<String, dynamic>;
+    raw['at_cap'] = jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync());
+    final decoded = GeneratedStorefrontResponse.fromJson(raw);
+    expect(decoded.atCap!.onDeviceUpgradeLine, 'Upgrade to Pro for speaker separation and higher accuracy');
+    expect(decoded.atCap!.onDeviceLabel, 'Keep going on this phone');
+    expect(GeneratedStorefrontResponse.fromJson(decoded.toJson()).atCap!.toJson(), decoded.atCap!.toJson());
+  });
 }

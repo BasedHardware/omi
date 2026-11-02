@@ -1003,6 +1003,8 @@ protocol BleHostApi {
   func startScan(timeout timeoutSeconds: Int64, serviceUuids: [String]) throws
   func stopScan() throws
   func manageDevice(uuid: String, requiresBond: Bool) throws
+  /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+  func configureSavedReconnect(uuid: String, enabled: Bool) throws
   func unmanageDevice(uuid: String) throws
   func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void)
   func readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
@@ -1078,6 +1080,23 @@ class BleHostApiSetup {
       }
     } else {
       manageDeviceChannel.setMessageHandler(nil)
+    }
+    /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+    let configureSavedReconnectChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.configureSavedReconnect\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      configureSavedReconnectChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        let enabledArg = args[1] as! Bool
+        do {
+          try api.configureSavedReconnect(uuid: uuidArg, enabled: enabledArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      configureSavedReconnectChannel.setMessageHandler(nil)
     }
     let unmanageDeviceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
@@ -1367,6 +1386,7 @@ class BleHostApiSetup {
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
 protocol BleFlutterApiProtocol {
   func onBluetoothStateChanged(state stateArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onSavedReconnect(peripheralUuid peripheralUuidArg: String, attempt attemptArg: Int64, result resultArg: String, disconnectedMs disconnectedMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPeripheralDiscovered(peripheral peripheralArg: BlePeripheral, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onDeviceReady(peripheralUuid peripheralUuidArg: String, services servicesArg: [BleService], completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void)
@@ -1396,6 +1416,24 @@ class BleFlutterApi: BleFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBluetoothStateChanged\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([stateArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onSavedReconnect(peripheralUuid peripheralUuidArg: String, attempt attemptArg: Int64, result resultArg: String, disconnectedMs disconnectedMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onSavedReconnect\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([peripheralUuidArg, attemptArg, resultArg, disconnectedMsArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

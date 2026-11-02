@@ -12,18 +12,11 @@ For difficult SwiftUI/AppKit runtime bugs—stale views, lost input, layout loop
   launch writes to its own owner-only log; ask the running named bundle for its
   exact path with `./scripts/omi-ctl log-path` rather than reading a shared dev log.
 
-### Release Health (Sentry)
-Check errors in the latest (or specific) release using the **sentry-release skill**:
-```bash
-./scripts/sentry-release.sh              # new issues in latest version (default)
-./scripts/sentry-release.sh --version X  # specific version
-./scripts/sentry-release.sh --all        # include carryover issues
-./scripts/sentry-release.sh --quota      # billing/quota status
-```
-Run the script with `--help` for the full option list.
-
 ### User Issue Investigation
-When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
+When debugging issues for a specific user, check PostHog events, the local log, and the
+diagnostics ring buffer. Desktop crash reporting was removed together with Sentry; the
+release lane retains the UUID-verified dSYM as a GitHub release artifact for offline
+symbolication.
 
 ### Product analytics integrity
 
@@ -42,7 +35,7 @@ When debugging issues for a specific user, check Sentry dashboard for crashes an
   analytics is disabled or refactored.
 - PostHog receives bounded dimensions and shape metadata only. Never send raw
   prompts, responses, notification/window titles, filesystem paths, or exception
-  messages. Keep diagnostic detail in the private local log and Sentry.
+  messages. Keep diagnostic detail in the private local log.
 - Production `QueryTracer` output is shape-only and stored under a `0700`
   directory in `0600` files. Full prompt/response/tool content is a deliberate
   non-production debugging capability only.
@@ -62,7 +55,7 @@ Beta candidates ship on the **hourly release train**: `desktop_auto_release.yml`
 
 1. **GitHub Actions** (`desktop_auto_release.yml`) — the planner auto-increments the version and pushes a timestamped annotated `v*-macos` tag. Every invocation passes `--min-tag-interval-seconds 3600`, so scheduled and manual retries create at most one candidate per hour, measured from the previous candidate's GitHub-release `createdAt` after publication or its annotated-tag creation time while still building. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. GitHub compile queues do not gate tagging: the tag stays on the exact newest source, or its mechanically verified changelog-only child, while later macOS merges remain queued for the next hourly candidate. The workflow immediately API-dispatches exactly one same-tag `omi-desktop-swift-release` build, verifies its immutable source identity, and retains JSON intake evidence; retries reuse an existing exact-tag build instead of duplicating it.
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — API-dispatched with the immutable tag, runs on Mac mini M4 and owns compile/release admission:
-   - Builds the universal app and dSYM, UUID-checks and attempts to upload symbols to Sentry, and always publishes the verified dSYM with the release so a Sentry credential outage is repairable without blocking the signed candidate
+   - Builds the universal app and dSYM, UUID-checks the dSYM against the executable, and always publishes the verified dSYM with the release so crashes stay symbolicable offline
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` (signed app, Sparkle ZIP, DMG) before publishing, with a mandatory in-app Keychain write/read/delete canary
@@ -233,7 +226,7 @@ do not hand-edit those paths to match a specific machine.
 - `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
-- Local embeddings (opt-in): [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
+- Local embeddings: [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 
@@ -293,7 +286,6 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - **ALWAYS prefix the name with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so named bundles are visually grouped in `/Applications/` alongside "Omi Dev" and "Omi Beta"
 - Use short names: the name sets the app name and bundle ID suffix.
 - The named bundle gets its own permissions and writable database. A full `./run.sh` install auto-seeds auth/onboarding and a one-time consistent Rewind snapshot from the shared local profile; every full or fast named-bundle launch mirrors the curated settings allowlist — including both hotkeys — from the resolved settings authority: `OMI_SETTINGS_SEED_SOURCE` if set (fail-closed when that domain is missing), else production "Omi" (`com.omi.computer-macos`) when installed, else "Omi Dev". Set `OMI_SKIP_REWIND_SEED=1` to start with an empty Rewind profile or `OMI_SKIP_SETTINGS_SEED=1` to preserve intentional bundle-local settings.
-- JIT QA: [runbook](../../backend/docs/runbooks/jit-qa-cloud-run.md).
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch, falling back to the production "Omi" session when Omi Dev's is missing (`OMI_AUTH_DUMP_SOURCE=<bundle-id>` pins a source explicitly).
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
@@ -335,7 +327,7 @@ Fast path (skips web login and sidebar click-through):
 3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
    `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`
    (production); `./run.sh` prints the isolated local Python desktop-backend log path at
-   launch; per-user issues in Sentry/PostHog.
+   launch; PostHog for remote events.
 4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
 ### Default agent development loop

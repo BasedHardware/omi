@@ -22,14 +22,24 @@ INTERNAL_POLICY = '_gateway_cache_policy'
 def cache_policies() -> dict[str, Any]:
     with POLICY_FILE.open() as source:
         policies = yaml.safe_load(source)
-    for value in [policies['default'], *policies['lanes'].values(), *policies['prefixes'].values()]:
+    values = [policies['default'], *policies['lanes'].values(), *policies['prefixes'].values()]
+    for provider_policy in policies.get('providers', {}).values():
+        values.extend(provider_policy.get('lanes', {}).values())
+        values.extend(provider_policy.get('prefixes', {}).values())
+    for value in values:
         if value not in {'explicit', 'implicit', 'off'}:
             raise ValueError('Invalid gateway cache policy')
     return policies
 
 
-def lane_cache_policy(lane: str) -> str:
+def lane_cache_policy(lane: str, *, provider: str | None = None) -> str:
     policies = cache_policies()
+    provider_policy = policies.get('providers', {}).get(provider, {}) if provider else {}
+    if lane in provider_policy.get('lanes', {}):
+        return provider_policy['lanes'][lane]
+    for prefix, policy in provider_policy.get('prefixes', {}).items():
+        if lane.startswith(prefix):
+            return policy
     if lane in policies['lanes']:
         return policies['lanes'][lane]
     for prefix, policy in policies['prefixes'].items():
@@ -75,7 +85,7 @@ def estimated_prefix_tokens(prefix: object, tools: object = None) -> int:
 def apply_lane_cache_policy(request: dict[str, Any], *, lane: str, provider: str, model: str) -> None:
     from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 
-    policy = lane_cache_policy(lane)
+    policy = lane_cache_policy(lane, provider=provider)
     seed = lane in {'omi:auto:dream-reasoning', 'omi:auto:chat-agent'} or 'session' in lane
     messages = request.get('messages', [])
     prefix, _ = split_prefix(messages, seed=seed)

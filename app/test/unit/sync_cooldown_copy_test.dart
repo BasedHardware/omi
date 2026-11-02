@@ -24,5 +24,11 @@ void main() {
       expect(syncCooldownTitle(RateLimitReason.backendBusy, l), l.syncCardBackendBusy);
       expect(syncCooldownTitle(RateLimitReason.fairUse, l), l.syncCardRateLimited);
     });
+
+    test('a dispatch hold reads as a short pause that resumes on its own, not server capacity', () {
+      final title = syncCooldownTitle(RateLimitReason.dispatchHold, l);
+      expect(title, l.syncCardUploadsPaused);
+      expect(title, isNot(l.syncCardBackendBusy));
+    });
   });
 }

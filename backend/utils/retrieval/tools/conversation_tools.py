@@ -33,11 +33,8 @@ from utils.metrics import OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref
-from utils.retrieval.tools.conversation_jit import (
-    MAX_JIT_CONVERSATIONS,
-    format_active_jit_conversations,
-    is_jit_conversation_retrieval_enabled,
-)
+from utils.retrieval.tool_services.transcript_search import search_saved_transcripts_text
+from utils.retrieval.transcript_recall import begin_transcript_recall
 import logging
 from utils.model_text import (
     DisplayClock,
@@ -124,47 +121,9 @@ def _scoped_conversation_fetch(
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
 MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
-MAX_JIT_SUMMARY_SEARCHES = 4
-_JIT_SEARCH_BUDGET_COUNT_ATTR = '_jit_conversation_summary_search_count'
-_JIT_SEARCH_BUDGET_EXHAUSTED = (
-    'JIT conversation summary search budget exhausted: at most 4 summary searches are allowed per request. '
-    'Use the candidates already returned or hydrate a bounded transcript window for one candidate.'
-)
-_jit_search_budget_lock = threading.Lock()
 
 
-def _consume_jit_summary_search_budget(configurable: Dict[str, Any]) -> Optional[str]:
-    """Atomically reserve one of the request's four JIT summary searches.
-
-    AgentSafetyGuard is already request-scoped and survives LangChain's shallow
-    config copies. Missing or malformed request state fails closed so alternate
-    callers and concurrent tool dispatch cannot silently bypass the bound.
-    """
-    with _jit_search_budget_lock:
-        safety_guard = configurable.get('safety_guard')
-        if safety_guard is None:
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-        current = getattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, 0)
-        if type(current) is not int or current < 0 or current > MAX_JIT_SUMMARY_SEARCHES:
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-        if current >= MAX_JIT_SUMMARY_SEARCHES:
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-        try:
-            setattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, current + 1)
-        except (AttributeError, TypeError):
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-    return None
-
-
-def _parse_exact_search_reference(query: str, *, jit_enabled: bool) -> Optional[str]:
-    """Keep owner-scoped card refs additive to the gated JIT retrieval path.
-
-    Bare UUIDs and released share URLs remain exact references regardless of the
-    JIT gate. ``conversation:<id>`` is emitted by JIT cards, so gate-off requests
-    must continue treating that shape as an ordinary semantic-search query.
-    """
-    if not jit_enabled and query.startswith('conversation:'):
-        return None
+def _parse_exact_search_reference(query: str) -> Optional[str]:
     return parse_exact_conversation_reference(query)
 
 
@@ -201,26 +160,6 @@ def _withheld_conversation_notes(locked: int = 0, discarded: int = 0) -> str:
         withheld_note(count=discarded, subject='conversations', reason='discarded'),
     ]
     return '\n'.join(note for note in notes if note)
-
-
-def _jit_speaker_names(
-    uid: str, conversations: List[Dict[str, Any]], include_transcript: bool
-) -> Tuple[str, Dict[str, str]]:
-    if not include_transcript:
-        return 'User', {}
-    user_name = get_user_name(uid, use_default=False) or 'User'
-    person_ids = {
-        str(segment.get('person_id'))
-        for conversation in conversations
-        for segment in conversation.get('transcript_segments', [])
-        if isinstance(segment, dict) and segment.get('person_id')
-    }
-    if not person_ids:
-        return user_name, {}
-    people = users_db.get_people_by_ids(uid, list(person_ids))
-    return user_name, {
-        str(person['id']): str(person['name']) for person in people if person.get('id') and person.get('name')
-    }
 
 
 def _owner_safe_conversation_rows(
@@ -265,53 +204,67 @@ def _bounded_result(result: str, total_found: int, truncated: bool, *, already_b
     return result
 
 
+# Citation [k] resolves to conversations_collected[k - 1]. Tool calls in one model turn run on
+# executor threads that share that list, so numbering a record and appending its card is one step.
+_collected_conversations_lock = threading.Lock()
+
+
 def _render_addressable_conversations(conversations, *, configurable, admitted_ids=None, **render_options) -> str:
-    """Publish cards and refs only for records actually admitted to the model's budget."""
+    """Publish cards and refs only for records actually admitted to the model's budget.
+
+    A conversation already collected this turn keeps its citation number instead of gaining a
+    duplicate card.
+    """
     collected = configurable.get('conversations_collected', [])
     blocks = []
     used = 0
     elapsed_legend_emitted = False
     untrusted_legend_emitted = False
-    for conversation in conversations:
-        block = conversations_to_string(
-            [conversation], include_refs=True, index_start=len(collected) + 1, **render_options
-        )
-        if ELAPSED_LEGEND in block:
-            if elapsed_legend_emitted:
-                block = block.replace(ELAPSED_LEGEND + '\n', '', 1)
-            else:
-                elapsed_legend_emitted = True
-        if UNTRUSTED_LEGEND in block:
-            if untrusted_legend_emitted:
-                block = block.replace(UNTRUSTED_LEGEND + '\n', '', 1)
-            else:
-                untrusted_legend_emitted = True
-        size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
-        if used + size > MAX_RESULT_CHARS:
-            if not blocks:
-                blocks.append(
-                    'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
-                    'or omit the transcript.'
-                )
-            else:
-                blocks.append(
-                    truncation_note(
-                        shown=len(blocks),
-                        total=len(conversations),
-                        unit='conversations',
-                        how_to_get_more='Narrow the read for more detail.',
+    with _collected_conversations_lock:
+        numbers = {card.get('id'): number for number, card in enumerate(collected, start=1)}
+        for conversation in conversations:
+            number = numbers.get(conversation.id)
+            block = conversations_to_string(
+                [conversation], include_refs=True, index_start=number or len(collected) + 1, **render_options
+            )
+            if ELAPSED_LEGEND in block:
+                if elapsed_legend_emitted:
+                    block = block.replace(ELAPSED_LEGEND + '\n', '', 1)
+                else:
+                    elapsed_legend_emitted = True
+            if UNTRUSTED_LEGEND in block:
+                if untrusted_legend_emitted:
+                    block = block.replace(UNTRUSTED_LEGEND + '\n', '', 1)
+                else:
+                    untrusted_legend_emitted = True
+            size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
+            if used + size > MAX_RESULT_CHARS:
+                if not blocks:
+                    blocks.append(
+                        'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
+                        'or omit the transcript.'
                     )
-                )
-            break
-        blocks.append(block)
-        used += size
-        collected.append(conversation_to_citation_card(conversation))
-        register_record_ref(configurable, 'conversations', conversation.id)
-        if admitted_ids is not None:
-            admitted_ids.add(conversation.id)
-        for person in render_options.get('people') or ():
-            if person.id in conversation.get_person_ids():
-                register_record_ref(configurable, 'people', person.id)
+                else:
+                    blocks.append(
+                        truncation_note(
+                            shown=len(blocks),
+                            total=len(conversations),
+                            unit='conversations',
+                            how_to_get_more='Narrow the read for more detail.',
+                        )
+                    )
+                break
+            blocks.append(block)
+            used += size
+            if number is None:
+                collected.append(conversation_to_citation_card(conversation))
+                numbers[conversation.id] = len(collected)
+            register_record_ref(configurable, 'conversations', conversation.id)
+            if admitted_ids is not None:
+                admitted_ids.add(conversation.id)
+            for person in render_options.get('people') or ():
+                if person.id in conversation.get_person_ids():
+                    register_record_ref(configurable, 'people', person.id)
     return '\n\n---------------------\n\n'.join(blocks)
 
 
@@ -388,7 +341,7 @@ def get_conversations_tool(
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
+        logger.error("❌ get_conversations_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration not available"
 
     if not uid:
@@ -396,7 +349,6 @@ def get_conversations_tool(
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
     display_clock = clock_for_turn(configurable, str(uid))
-    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -419,8 +371,10 @@ def get_conversations_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info("Parsed conversation start_date")
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return (
+                f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
+            )
 
     if end_date:
         try:
@@ -429,18 +383,10 @@ def get_conversations_tool(
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info("Parsed conversation end_date")
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
-    # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
-    # reach the result. The legacy path intentionally retains its existing limit.
-    limit = min(limit, MAX_JIT_CONVERSATIONS if jit_enabled else 5000)
-
-    if jit_enabled:
-        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
-        if budget_error:
-            logger.warning("get_conversations_tool rejected by JIT summary-search budget")
-            return budget_error
+    limit = min(limit, 5000)
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -483,7 +429,7 @@ def get_conversations_tool(
             locked_count = sum(1 for conversation in conversations_data if conversation.get('is_locked', False))
             conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
     except Exception as e:
-        logger.error(f"❌ Unexpected error retrieving conversations: {e}", exc_info=True)
+        logger.error("❌ Unexpected error retrieving conversations: %s", type(e).__name__, exc_info=True)
         return "An unexpected error occurred while fetching conversations. Please try again later."
 
     # Bound how many conversations are formatted for the chat model so a wide date range cannot
@@ -502,20 +448,6 @@ def get_conversations_tool(
             msg += '\n' + withheld
         logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
-
-    if jit_enabled:
-        logger.info("🔧 get_conversations_tool - using explicitly enabled JIT retrieval contract")
-        jit_user_name, jit_people_names = _jit_speaker_names(str(uid), conversations_data, include_transcript)
-        result = format_active_jit_conversations(
-            conversations_data,
-            configurable=cast(Dict[str, Any], configurable),
-            max_transcript_segments=max_transcript_segments if include_transcript else 0,
-            clock=display_clock,
-            user_name=jit_user_name,
-            people_names=jit_people_names,
-        )
-        withheld = _withheld_conversation_notes(locked=locked_count)
-        return f"{withheld}\n{result}" if withheld else result
 
     try:
         # Only load people if transcripts will be included (people are used for speaker names in transcripts)
@@ -567,7 +499,7 @@ def get_conversations_tool(
 
                 conversations.append(conversation)
             except Exception as e:
-                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+                logger.error("Error parsing conversation %s: %s", conv_data.get('id'), type(e).__name__)
                 continue
 
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
@@ -591,7 +523,7 @@ def get_conversations_tool(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_conversations_tool: {e}", exc_info=True)
+        logger.error("❌ Unexpected error in get_conversations_tool: %s", type(e).__name__, exc_info=True)
         return "An unexpected error occurred while fetching conversations. Please try again later."
 
 
@@ -604,6 +536,8 @@ def search_conversations_tool(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    transcript_query: Optional[str] = None,
+    transcript_cursor: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -611,6 +545,12 @@ def search_conversations_tool(
 
     Natural-language queries search titles/summaries and indexed transcript chunks - USE THIS FOR EVENTS/INCIDENTS.
     Canonical UUIDs and h.omi.me conversation links resolve to one exact conversation.
+
+    When asked to search transcripts or verify an exact spoken detail, set transcript_query to a few literal
+    words (e.g. "invoice", not "what was the invoice amount?"). This reads actual saved transcripts directly,
+    including unindexed old and new recordings, without relying on semantic search. Continue with the returned
+    transcript_cursor and unchanged query/dates until you find evidence or reach the end. A page with no match
+    is not a complete search. Never guess a detail after pushback; cite the returned verbatim source.
 
     This tool combines exact keyword matching on conversation titles/summaries (best for proper names
     like people or places) with AI embeddings that find semantically similar conversations even if
@@ -656,6 +596,8 @@ def search_conversations_tool(
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
+        transcript_query: Literal words/phrase to search in saved transcripts directly, at most 200 characters.
+        transcript_cursor: Opaque continuation from direct transcript search; omit for a new query/date scope.
     Returns:
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
@@ -677,7 +619,7 @@ def search_conversations_tool(
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
+        logger.error("❌ search_conversations_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration not available"
 
     if not uid:
@@ -689,8 +631,7 @@ def search_conversations_tool(
         uid,
         limit,
     )
-    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
-    exact_conversation_id = _parse_exact_search_reference(query, jit_enabled=jit_enabled)
+    exact_conversation_id = _parse_exact_search_reference(query)
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -716,8 +657,10 @@ def search_conversations_tool(
             logger.info("Parsed conversation search start_date")
             start_dt = dt
             starts_at = int(dt.timestamp())
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return (
+                f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
+            )
 
     if end_date:
         try:
@@ -727,8 +670,8 @@ def search_conversations_tool(
             logger.info("Parsed conversation search end_date")
             end_dt = dt
             ends_at = int(dt.timestamp())
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     # Limit to reasonable max
     limit = min(limit, 20)
@@ -737,11 +680,38 @@ def search_conversations_tool(
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
         return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
 
-    if jit_enabled and not exact_conversation_id and not scoped_id:
-        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
-        if budget_error:
-            logger.warning("search_conversations_tool rejected by JIT summary-search budget")
-            return budget_error
+    if transcript_cursor is not None and transcript_query is None:
+        return 'Error: transcript_cursor requires the original transcript_query.'
+    if transcript_query is not None:
+        if not include_transcript:
+            return 'Error: direct transcript search requires include_transcript=true.'
+        recall_evidence = begin_transcript_recall(configurable)
+
+        def cite_transcript(conversation):
+            with _collected_conversations_lock:
+                collected = configurable.setdefault('conversations_collected', [])
+                for index, card in enumerate(collected, start=1):
+                    if card.get('id') == conversation.id:
+                        number = index
+                        break
+                else:
+                    collected.append(conversation_to_citation_card(conversation))
+                    number = len(collected)
+                register_record_ref(configurable, 'conversations', conversation.id)
+                recall_evidence.found = True
+            return f'[{number}]'
+
+        return search_saved_transcripts_text(
+            str(uid),
+            transcript_query,
+            start_date=start_dt,
+            end_date=end_dt,
+            limit=limit,
+            cursor=transcript_cursor,
+            conversation_id=str(scoped_id or exact_conversation_id) if (scoped_id or exact_conversation_id) else None,
+            clock=display_clock,
+            citation_for=cite_transcript,
+        )
 
     conversations_data: List[Dict[str, Any]] = []
     withheld_locked = 0
@@ -841,9 +811,6 @@ def search_conversations_tool(
 
         if scoped_id or exact_conversation_id:
             record_path('firestore', len(conversations_data))
-        if jit_enabled:
-            conversation_ids = conversation_ids[:MAX_JIT_CONVERSATIONS]
-
         logger.info(
             "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
             len(conversation_ids),
@@ -899,26 +866,6 @@ def search_conversations_tool(
                 )
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
-
-        if jit_enabled:
-            logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
-            jit_user_name, jit_people_names = _jit_speaker_names(str(uid), conversations_data, include_transcript)
-            result = format_active_jit_conversations(
-                conversations_data,
-                configurable=cast(Dict[str, Any], configurable),
-                query=None if exact_conversation_id else query,
-                max_transcript_segments=max_transcript_segments if include_transcript else 0,
-                coverage_note=(
-                    chat_transcript_coverage_note(False)
-                    if not exact_conversation_id and not scoped_id and not transcript_search.searched
-                    else None
-                ),
-                clock=display_clock,
-                user_name=jit_user_name,
-                people_names=jit_people_names,
-            )
-            withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
-            return with_keyword_note(f"{withheld}\n{result}" if withheld else result)
 
         # Only load people if transcripts will be included
         people: List[Person] = []

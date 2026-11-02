@@ -10,7 +10,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL
+from config.jev_decisions import (
+    JEV_AUTO_LANE_ID,
+    JEV_GATEWAY_REQUEST_MS,
+    JEV_MODEL,
+    SCREEN_TASK_JEV_AUTO_LANE_ID,
+    SCREEN_TASK_JEV_MODEL,
+)
 from llm_gateway.gateway.accounting import ProviderResponseMetadata, ProviderUsage
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
@@ -81,6 +87,16 @@ def test_lane_is_pinned_to_one_jev_version_with_one_attempt_and_no_fallback():
     assert route.fallbacks == [] and route.retry.max_attempts == 1
     assert route.timeouts.request_ms == JEV_GATEWAY_REQUEST_MS
     assert lane.last_known_good == lane.active_route
+
+
+def test_screen_task_lane_is_pinned_to_jev_114_without_changing_the_shared_lane():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[SCREEN_TASK_JEV_AUTO_LANE_ID]
+    route = config.route_artifacts[lane.active_route]
+
+    assert (route.primary.provider, route.primary.model) == ('openrouter', SCREEN_TASK_JEV_MODEL)
+    assert route.fallbacks == [] and route.retry.max_attempts == 1
+    assert config.route_artifacts[config.lanes[JEV_AUTO_LANE_ID].active_route].primary.model == JEV_MODEL
 
 
 def test_requires_service_auth():

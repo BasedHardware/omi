@@ -7,11 +7,40 @@
     "title": "Synthetic planning meeting",
     "overview": "Discuss the release.",
     "meeting_type": "planning",
-    "sections": [{ "heading": "Decision", "body_markdown": "Ship Thursday.", "kind": "main" }],
-    "participants": [{ "name": "Ada Example", "organization": "Example Labs", "role": "Engineer" }],
+    "sections": [
+      {
+        "heading": "Decision",
+        "body_markdown": "Ship Thursday.",
+        "kind": "main",
+        "source_segment_ids": [
+          "segment-2",
+          "segment-1",
+          "segment-2",
+          "missing"
+        ]
+      }
+    ],
+    "participants": [
+      {
+        "name": "Ada Example",
+        "organization": "Example Labs",
+        "role": "Engineer"
+      }
+    ],
     "action_items": [
-      { "description": "Send the release plan", "completed": false, "owner_name": "Ada Example", "due_at": "2026-10-05T16:00:00Z", "context": "For review" },
-      { "description": "Choose a venue", "completed": true, "owner_name": null, "due_at": null }
+      {
+        "description": "Send the release plan",
+        "completed": false,
+        "owner_name": "Ada Example",
+        "due_at": "2026-10-05T16:00:00Z",
+        "context": "For review"
+      },
+      {
+        "description": "Choose a venue",
+        "completed": true,
+        "owner_name": null,
+        "due_at": null
+      }
     ],
     "events": [
       {
@@ -24,9 +53,32 @@
     ]
   },
   "transcript_segments": [
-    { "text": "I will send the plan.", "speaker": "SPEAKER_00", "speaker_id": 0, "is_user": true, "person_id": "person-ada", "start": 65.5, "end": 70 },
-    { "text": "Ship Thursday.", "speaker": "Ada Example", "speaker_id": 1, "is_user": false, "person_id": null, "start": 71, "end": 75 }
+    {
+      "text": "I will send the plan.",
+      "speaker": "SPEAKER_00",
+      "speaker_id": 0,
+      "is_user": true,
+      "person_id": "person-ada",
+      "start": 65.5,
+      "end": 70,
+      "id": "segment-1"
+    },
+    {
+      "text": "Ship Thursday.",
+      "speaker": "Ada Example",
+      "speaker_id": 1,
+      "is_user": false,
+      "person_id": null,
+      "start": 71,
+      "end": 75,
+      "id": "segment-2"
+    }
   ],
-  "people": [{ "id": "person-ada", "name": "Ada Example" }],
+  "people": [
+    {
+      "id": "person-ada",
+      "name": "Ada Example"
+    }
+  ],
   "apps_results": []
 }

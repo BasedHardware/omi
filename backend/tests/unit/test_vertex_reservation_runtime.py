@@ -206,7 +206,9 @@ async def test_desktop_redis_confirms_cutoff_without_gateway_shared_state(monkey
             byok=False,
             refresh=proxy._refresh_reservations,
         )
-        assert calls == [OLD, NEW] * 4
+        # Four legacy failures still establish the move, but discovery does
+        # not renew the successor's probe lease while its PT proof is fresh.
+        assert calls == [OLD, NEW, OLD, OLD, NEW, OLD]
         await owner.aclose()
         await gateway.aclose()
     await db.aclose()

@@ -62,6 +62,20 @@ def credentials():
     return build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='synthetic-owner'))
 
 
+@pytest.fixture
+def force_explicit_dream_cache(setup_dream):
+    """Exercise stale-handle guards without changing Gemini's implicit lane policy."""
+
+    def force(request):
+        policy = request['_gateway_cache_policy']
+        assert policy['lane'] in DREAM_LANES
+        assert policy['mode'] == 'implicit'
+        policy['mode'] = 'explicit'
+        return request
+
+    return force
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('lane', sorted(DREAM_LANES))
 @pytest.mark.parametrize('mode', ['reserved', 'on_demand'])
@@ -193,19 +207,11 @@ def test_inactive_dream_never_selects_lkg(lane):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['reserved', 'on_demand'])
 @pytest.mark.parametrize('stream', [False, True])
-async def test_stale_cached_content_does_not_buy_second_dream_generation(setup_dream, monkeypatch, mode, stream):
+async def test_implicit_dream_generation_does_not_create_cached_content(setup_dream, monkeypatch, mode, stream):
     calls = []
 
     def handler(request):
         calls.append(request)
-        if request.url.path.endswith('/cachedContents'):
-            return httpx.Response(
-                200,
-                json={
-                    'name': request.url.path.removeprefix('/v1/') + '/invented-cache',
-                    'usageMetadata': {'totalTokenCount': 6000},
-                },
-            )
         return httpx.Response(404, json={'error': {'message': 'invented cache expired'}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -219,11 +225,8 @@ async def test_stale_cached_content_does_not_buy_second_dream_generation(setup_d
                 {'role': 'user', 'content': 'invented continuation'},
             ],
         )
-        # Explicit marker ends the system prefix, leaving a real continuation.
         request = provider_request_for(route, route.active_route.primary)
-        request['messages'][0]['content'] = [
-            {'type': 'text', 'text': request['messages'][0]['content'], 'prompt_cache_breakpoint': {'mode': 'explicit'}}
-        ]
+        assert request['_gateway_cache_policy']['mode'] == 'implicit'
         with pytest.raises(ProviderFailure):
             if stream:
                 _ = [
@@ -236,6 +239,65 @@ async def test_stale_cached_content_does_not_buy_second_dream_generation(setup_d
                 await provider.create_chat_completion(
                     request, provider_ref=route.active_route.primary, credentials=credentials(), timeout_ms=10000
                 )
-        assert len(calls) == 2  # One cache creation, exactly one generation.
-        assert len([r for r in calls if '/models/' in r.url.path]) == 1
+        generations = [r for r in calls if '/models/' in r.url.path]
+        assert len(generations) == 1
+        assert not any(r.url.path.endswith('/cachedContents') for r in calls)
+        assert 'cachedContent' not in json.loads(generations[0].content)
+        assert provider._content_cache.entries == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['reserved', 'on_demand'])
+@pytest.mark.parametrize('stream', [False, True])
+async def test_stale_cached_content_does_not_buy_second_dream_generation(
+    setup_dream, force_explicit_dream_cache, monkeypatch, mode, stream
+):
+    calls = []
+    cache_name = 'projects/synthetic-project/locations/us/cachedContents/invented-cache'
+
+    def handler(request):
+        calls.append(request)
+        if request.url.path.endswith('/cachedContents'):
+            return httpx.Response(200, json={'name': cache_name, 'usageMetadata': {'totalTokenCount': 6400}})
+        return httpx.Response(404, json={'error': {'message': 'invented cache expired'}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=access_token)
+        monkeypatch.setattr(provider._reservations, 'record', AsyncMock())
+        route = resolved(
+            'omi:auto:dream-reasoning',
+            mode,
+            messages=[
+                {
+                    'role': 'system',
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': 'invented static contract ' * 1000,
+                            'prompt_cache_breakpoint': {'mode': 'explicit'},
+                        }
+                    ],
+                },
+                {'role': 'user', 'content': 'invented continuation'},
+            ],
+        )
+        request = force_explicit_dream_cache(provider_request_for(route, route.active_route.primary))
+        with pytest.raises(ProviderFailure):
+            if stream:
+                _ = [
+                    chunk
+                    async for chunk in provider.stream_chat_completion(
+                        request, provider_ref=route.active_route.primary, credentials=credentials(), timeout_ms=10000
+                    )
+                ]
+            else:
+                await provider.create_chat_completion(
+                    request, provider_ref=route.active_route.primary, credentials=credentials(), timeout_ms=10000
+                )
+
+        creates = [r for r in calls if r.url.path.endswith('/cachedContents')]
+        generations = [r for r in calls if '/models/' in r.url.path]
+        assert len(creates) == 1
+        assert len(generations) == 1
+        assert 'cachedContent' in json.loads(generations[0].content)
         assert provider._content_cache.entries == {}

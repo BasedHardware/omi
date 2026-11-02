@@ -13,6 +13,9 @@
     "paths": {
       "@renderer/*": [
         "src/renderer/src/*"
+      ],
+      "@omi/note-shared/*": [
+        "../../web/packages/note-shared/*"
       ]
     }
   }

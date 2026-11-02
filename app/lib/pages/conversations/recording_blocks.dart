@@ -21,8 +21,29 @@ class RecordingBlock {
   int get startSeconds => oldest.timerStart;
 
   int get seconds {
-    final end = wals.map((w) => w.timerStart + w.seconds).reduce((a, b) => a > b ? a : b);
-    return end - startSeconds;
+    final intervals = <_AudioInterval>[
+      for (final w in wals)
+        if (w.seconds > 0) _AudioInterval(w.timerStart, w.timerStart + w.seconds),
+    ];
+    if (intervals.isEmpty) return 0;
+    intervals.sort((a, b) {
+      final byStart = a.start.compareTo(b.start);
+      return byStart != 0 ? byStart : a.end.compareTo(b.end);
+    });
+    var total = 0;
+    var currentStart = intervals.first.start;
+    var currentEnd = intervals.first.end;
+    for (var i = 1; i < intervals.length; i++) {
+      final next = intervals[i];
+      if (next.start <= currentEnd) {
+        if (next.end > currentEnd) currentEnd = next.end;
+      } else {
+        total += currentEnd - currentStart;
+        currentStart = next.start;
+        currentEnd = next.end;
+      }
+    }
+    return total + (currentEnd - currentStart);
   }
 
   /// The piece whose state the row shows: the most serious one, so a block is
@@ -30,6 +51,13 @@ class RecordingBlock {
   Wal get representative => wals.reduce((a, b) => _rank(b.syncDisplayState) > _rank(a.syncDisplayState) ? b : a);
 
   WalSyncDisplayState get state => representative.syncDisplayState;
+}
+
+class _AudioInterval {
+  const _AudioInterval(this.start, this.end);
+
+  final int start;
+  final int end;
 }
 
 /// Higher is more serious. A switch, not a list, so a new state cannot compile

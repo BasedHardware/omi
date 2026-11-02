@@ -47,7 +47,7 @@ def test_byte_heuristic_rounds_up_at_three_and_a_half_bytes_per_token():
 
 
 def test_cached_input_uses_the_cached_rate_and_3_8_is_priced():
-    listed = date(2026, 10, 15)
+    listed = date(2026, 10, 18)
     full, status = price_attempt(
         'gemini', 'gemini-2.5-flash', prompt_tokens=1000, cached_tokens=0, completion_tokens=100, at=listed
     )
@@ -55,9 +55,9 @@ def test_cached_input_uses_the_cached_rate_and_3_8_is_priced():
         'gemini', 'gemini-2.5-flash', prompt_tokens=1000, cached_tokens=400, completion_tokens=100, at=listed
     )
     assert status == cached_status == 'priced'
-    # 1000 * $0.54 + 100 * $4.50, and 600 * $0.54 + 400 * $0.054 + 100 * $4.50.
-    assert full == 990
-    assert cached == 796
+    # 1000 * $0.30 + 100 * $2.50, and 600 * $0.30 + 400 * $0.03 + 100 * $2.50.
+    assert full == 550
+    assert cached == 442
     assert cached < full
     micro, flash_status = price_attempt(
         'gemini',

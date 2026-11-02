@@ -20,6 +20,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_action_items,
 )
 from utils.conversations.wake_word import find_wake_word_segment_ids
+from utils.conversations.action_item_extraction import filter_extracted_items
 from utils.llm.usage_tracker import Features, track_usage
 from utils.llm.wake_word_adjudication import (
     WakeWordAdjudication,
@@ -225,6 +226,8 @@ def process_before_legacy(
     that it handled the extraction.
     """
 
+    if not conversation_id:
+        raise ValueError('extracted action items require conversation provenance')
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
@@ -262,10 +265,13 @@ def process_conversation_before_legacy(
     conversation: Any,
     wake_word_gate: WakeWordCaptureGate | None = None,
 ) -> bool:
+    if not conversation.id:
+        raise ValueError('extracted action items require conversation provenance')
+    items = filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation)
     return process_before_legacy(
         uid,
         conversation.id,
-        conversation.structured.action_items,
+        items,
         getattr(conversation, 'transcript_segments', ()) or (),
         wake_word_gate,
     )

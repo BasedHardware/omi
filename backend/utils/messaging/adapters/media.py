@@ -39,6 +39,7 @@ MEDIA_TYPES = (
     'audio/wav',
     'audio/webm',
     'video/mp4',
+    'video/quicktime',
     'video/webm',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -74,6 +75,10 @@ def is_audio_video(attachment: InboundAttachment) -> bool:
     )
 
 
+def is_video(attachment: InboundAttachment) -> bool:
+    return attachment.mime_type.startswith('video/') or Path(attachment.name).suffix.lower() in _VIDEO_EXTENSIONS
+
+
 def decode_audio(data: bytes) -> bytes:
     """Decode an untrusted container to bounded 16 kHz mono signed little-endian PCM.
 
@@ -82,11 +87,21 @@ def decode_audio(data: bytes) -> bytes:
     """
     if len(data) > MAX_MEDIA_BYTES:
         raise MediaPreparationError('media_size', SIZE_REPLY)
+    with tempfile.TemporaryDirectory(prefix='omi-channel-audio-') as directory:
+        source = Path(directory) / 'input'
+        source.write_bytes(data)
+        return decode_audio_file(source)
+
+
+def decode_audio_file(source: Path) -> bytes:
+    """decode_audio for a file already on disk (an in-app upload larger than a channel's cap).
+
+    The duration cap, not the container size, bounds the PCM it returns.
+    """
     executable = get_media_decoder()
     try:
         with tempfile.TemporaryDirectory(prefix='omi-channel-audio-') as directory:
-            source, output = Path(directory) / 'input', Path(directory) / 'output.pcm'
-            source.write_bytes(data)
+            output = Path(directory) / 'output.pcm'
             subprocess.run(
                 [
                     executable,
@@ -225,10 +240,24 @@ class ChatMediaStore:
             chat.add_multi_files(uid, [row])
         return Artifact(row['id'], row['mime_type'], len(data), name)
 
+    def video_digest(self, data: bytes, duration_hint: float = 0):
+        from utils.media.video_frames import digest_video
+
+        return digest_video(data, duration_hint)
+
+    def ingest_video(self, uid, attachment, digest, transcript):
+        """Store a clip as its contact sheet and filmstrip; the video bytes are not kept."""
+        from utils.media.video_upload import store_video
+
+        row = store_video(uid, Path(attachment.name).name, digest, transcript)
+        return Artifact(row['id'], row['mime_type'], row['size'], row['name'])
+
     def transcribe(self, data: bytes, uid: str) -> str:
+        return self.transcribe_pcm(decode_audio(data), uid)
+
+    def transcribe_pcm(self, pcm: bytes, uid: str) -> str:
         from utils.chat import resolve_voice_message_language, transcribe_pcm_bytes
 
-        pcm = decode_audio(data)
         try:
             language = resolve_voice_message_language(uid, None)
             text, _ = transcribe_pcm_bytes(pcm, uid, language=language)
@@ -263,6 +292,40 @@ class ChatMediaStore:
         return Artifact(file_id, row['mime_type'], row['size'], row['name'])
 
 
+async def prepare_video(media, attachment, data: bytes, uid: str):
+    """Frames and speech in parallel; either alone is enough to answer.
+
+    Returns (artifact or None, model note). A clip with no picture (an audio-only .mp4)
+    falls back to its transcript; a silent clip keeps its frames. Only when both fail
+    does the user get the voice-note reply.
+    """
+    import asyncio
+
+    from utils.http_client import get_stt_semaphore
+    from utils.media.video_frames import VideoFramesError, describe
+
+    async def frames():
+        try:
+            return await run_blocking(sync_executor, media.video_digest, data, attachment.duration_seconds)
+        except VideoFramesError:
+            return None
+
+    async def speech():
+        try:
+            async with get_stt_semaphore():
+                return await run_blocking(sync_executor, media.transcribe, data, uid)
+        except MediaPreparationError:
+            return ''
+
+    digest, transcript = await asyncio.gather(frames(), speech())
+    if digest is None:
+        if not transcript:
+            raise MediaPreparationError('media_transcription', VOICE_REPLY)
+        return None, transcript
+    artifact = await run_blocking(storage_executor, media.ingest_video, uid, attachment, digest, transcript)
+    return artifact, describe(digest.duration, digest.sheet_times, transcript)
+
+
 async def prepare_media(adapter, message, uid, session, guard):
     from dataclasses import replace
     from database import chat
@@ -292,7 +355,13 @@ async def prepare_media(adapter, message, uid, session, guard):
         if len(data) > MAX_MEDIA_BYTES:
             raise MediaPreparationError('media_size', SIZE_REPLY)
         try:
-            if is_audio_video(attachment):
+            if is_video(attachment) and hasattr(adapter.media, 'video_digest'):
+                artifact, note = await prepare_video(adapter.media, attachment, data, uid)
+                text += '\n' + note
+                if artifact is not None:
+                    artifacts.append(artifact)
+                succeeded += 1
+            elif is_audio_video(attachment):
                 from utils.http_client import get_stt_semaphore
 
                 async with get_stt_semaphore():

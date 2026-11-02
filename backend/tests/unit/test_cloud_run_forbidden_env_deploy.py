@@ -50,10 +50,14 @@ def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, cap
                 monkeypatch.setenv(entry['env_var'], str(entry.get('default', 'synthetic-value')))
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'synthetic-network')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'synthetic-subnet')
+    github_output = tmp_path / 'github-output'
+    github_output.touch()
+    monkeypatch.setenv('GITHUB_OUTPUT', str(github_output))
     monkeypatch.setitem(RENDER['main'].__globals__, '_load_yaml', lambda _: manifest)
     monkeypatch.setattr(sys, 'argv', ['render', '--env', stage])
     assert RENDER['main']() == 0
-    rendered = _outputs(capsys.readouterr().out)
+    assert capsys.readouterr().out == ''
+    rendered = _outputs(github_output.read_text(encoding='utf-8'))
     stack = _action('deploy-backend-stack')
     worker = next(s for s in stack if s.get('id') == 'sync-backfill')
     for name in ('backend', 'backend-sync', 'backend-integration'):

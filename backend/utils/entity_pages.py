@@ -35,7 +35,7 @@ def resolve_entity(uid: str, entity_id: str) -> dict:
     seen = set()
     while node.get('redirect_entity_id'):
         if entity_id in seen or len(seen) >= 8:
-            raise store.ReviewConflict('Entity redirect cycle')
+            raise store.ReviewStale('Entity redirect cycle')
         seen.add(entity_id)
         entity_id = _id(node['redirect_entity_id'])
         node = knowledge_graph.get_knowledge_node(uid, entity_id) or {}

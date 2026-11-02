@@ -194,7 +194,7 @@ def test_lever_off_writer_still_invalidates_enabled_readers(monkeypatch):
 
 
 @pytest.mark.parametrize('generation', [7, 8])
-def test_real_score_writer_invalidates_only_after_generation_fence(monkeypatch, generation):
+def test_real_score_writer_finally_invalidates_on_success_or_fence_error(monkeypatch, generation):
     fake = Redis()
     monkeypatch.setattr(cache, '_redis', lambda: fake)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"candidates_page":100}')
@@ -226,7 +226,9 @@ def test_real_score_writer_invalidates_only_after_generation_fence(monkeypatch, 
                 'u', 'c1', relevance_score=99, account_generation=generation
             )
         assert not writes
-        assert fake.get(cache._version_key('u')) == before
+        # Conservatively invalidate on errors too: a batch/transaction adapter
+        # can commit a prefix before raising. The durable fence still rejects it.
+        assert fake.get(cache._version_key('u')) != before
     else:
         result = candidates_db.update_candidate_compatibility_score(
             'u', 'c1', relevance_score=99, account_generation=generation

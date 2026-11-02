@@ -6,7 +6,11 @@ export async function getWebDeviceIdHash(): Promise<string | null> {
 
   let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
   if (!deviceId) {
-    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    const randomBytes = crypto.getRandomValues(new Uint8Array(16));
+    const randomSuffix = Array.from(randomBytes, (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join('');
+    deviceId = `web_${Date.now()}_${randomSuffix}`;
     localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
   }
 

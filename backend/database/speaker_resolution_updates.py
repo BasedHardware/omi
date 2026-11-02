@@ -8,6 +8,7 @@ import config.speaker_match_scores as match_scores
 from database import conversations
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.conversation_revisions import firestore_revision_datetime
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,9 @@ def persist_speaker_resolution_if_current(
         # verdict through the outer transaction; aborted/retried callbacks emit nothing.
         if not snapshot.exists:
             return False, 'missing', None
-        if deleting.exists:
+        if account_deletion_marker_blocks_access(
+            marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+        ):
             return False, 'account_deleting', None
         if conversations.is_soft_deleted(current):
             return False, 'deleted', None

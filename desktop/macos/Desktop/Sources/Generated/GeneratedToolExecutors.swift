@@ -16,13 +16,6 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case getMemories = "get_memories"
   case searchMemories = "search_memories"
   case createMemory = "create_memory"
-  case searchKnowledge = "search_knowledge"
-  case readPlaybook = "read_playbook"
-  case searchHistoricalFacts = "search_historical_facts"
-  case getEntityTimelineTool = "get_entity_timeline_tool"
-  case savePlaybook = "save_playbook"
-  case createStandingTrigger = "create_standing_trigger"
-  case closeFact = "close_fact"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case createContextReminder = "create_context_reminder"
@@ -62,8 +55,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:4091ca56341e6b1ad3383255cae1299ad2c283052826bf2c19b70447cdc3200e"
-  static let chatFirstManifestDigest = "sha256:fe76965fa939c00fc301084866afa42c96459d648cf72cace5b5cbde8eaacc4d"
+  static let manifestDigest = "sha256:2485219c4f7346983e817847193494a8e8a1520ec1272925521e8bc7370ee23e"
+  static let chatFirstManifestDigest = "sha256:ce20a45ebe23f393a8c6898b1efde8b49b6367b53e0d494d6d958c4a6a334b58"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -86,13 +79,6 @@ enum GeneratedToolExecutors {
     .getMemories: .chatToolExecutor,
     .searchMemories: .chatToolExecutor,
     .createMemory: .chatToolExecutor,
-    .searchKnowledge: .chatToolExecutor,
-    .readPlaybook: .chatToolExecutor,
-    .searchHistoricalFacts: .chatToolExecutor,
-    .getEntityTimelineTool: .chatToolExecutor,
-    .savePlaybook: .chatToolExecutor,
-    .createStandingTrigger: .chatToolExecutor,
-    .closeFact: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
     .createContextReminder: .chatToolExecutor,
@@ -168,13 +154,6 @@ enum GeneratedToolExecutors {
     case getMemories
     case searchMemories
     case createMemory
-    case searchKnowledge
-    case readPlaybook
-    case searchHistoricalFacts
-    case getEntityTimelineTool
-    case savePlaybook
-    case createStandingTrigger
-    case closeFact
     case getActionItems
     case createActionItem
     case createContextReminder
@@ -221,13 +200,6 @@ enum GeneratedToolExecutors {
     case .getMemories: return .getMemories
     case .searchMemories: return .searchMemories
     case .createMemory: return .createMemory
-    case .searchKnowledge: return .searchKnowledge
-    case .readPlaybook: return .readPlaybook
-    case .searchHistoricalFacts: return .searchHistoricalFacts
-    case .getEntityTimelineTool: return .getEntityTimelineTool
-    case .savePlaybook: return .savePlaybook
-    case .createStandingTrigger: return .createStandingTrigger
-    case .closeFact: return .closeFact
     case .getActionItems: return .getActionItems
     case .createActionItem: return .createActionItem
     case .createContextReminder: return .createContextReminder

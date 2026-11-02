@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-merged-layout-assumed-from-source-order",
+  "violated_contract": "When one step combines several sources into one sequence and a later step must find each source's items in it, the later step must use the layout the combining step actually produced. Re-deriving positions from source order (source k's items as one block after source k-1's) breaks as soon as the combining step sorts or interleaves. A consumer that validates the assumed positions then rejects valid work, and one that does not validate binds data to another source's item.",
+  "canonical_prevention": "The combining step returns an explicit position map with the combined sequence, and the consumer checks and moves data through that map, never through running offsets. A behavioural test feeds interleaving sources through the real producer and the real consumer and asserts the moved data lands on the right item.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_merge_overlapping_sources.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/merge_conversations.py",
+    "backend/database/review_overlay_merge.py"
+  ],
+  "status": "open"
+}

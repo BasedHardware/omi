@@ -204,4 +204,36 @@ void main() {
     expect(bucket(const Duration(days: 20)), ConversationUntitledRenderedAgeBucket.under30d);
     expect(bucket(const Duration(days: 400)), ConversationUntitledRenderedAgeBucket.over30d);
   });
+
+  group('display title citation repair', () {
+    TranscriptSegment segment(String id) => TranscriptSegment(
+        id: id, text: 'Hi', speaker: null, isUser: false, personId: null, start: 0, end: 1, translations: []);
+
+    test('repairs debris against the transcript and keeps the stored title', () {
+      final conversation = _conversation(title: 'Kickoff [s01234]', segments: [segment('s01234')]);
+      expect(conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.values.first),
+          'Kickoff');
+      expect(conversation.structured.title, 'Kickoff [s01234]');
+    });
+
+    test('strips speaker labels and ID-like brackets without a transcript', () {
+      expect(presentableConversationTitle(_conversation(title: 'Speaker_00 recap [s01234]')), 'recap');
+      expect(presentableConversationTitle(_conversation(title: 'Q3 planning (draft)')), 'Q3 planning (draft)');
+    });
+
+    test('secondary surfaces fall back when the stored title was only debris', () {
+      expect(presentableConversationTitleOrFallback(_conversation(title: 'Project [Q3]'), l10n), 'Project [Q3]');
+      expect(
+          presentableConversationTitleOrFallback(
+              _conversation(title: '[s01234]', segments: [_segment('Ship the beta on Friday.')]), l10n),
+          'Ship the beta on Friday.');
+      expect(presentableConversationTitleOrFallback(_conversation(), l10n), isEmpty);
+    });
+
+    test('a title that is only debris falls back like an untitled one', () {
+      final conversation = _conversation(title: '[s01234]', segments: [_segment('Ship the beta on Friday.')]);
+      expect(conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.values.first),
+          'Ship the beta on Friday.');
+    });
+  });
 }

@@ -322,8 +322,13 @@ def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(mon
                     return found
         return None
 
-    policy = find(manifest)
-    assert policy
+    assert find(manifest) is None  # Cloud Run must retain its live policy on merge.
+    policy = json.dumps(
+        {
+            'telegram': {'enabled': True, 'cohort': '*'},
+            'imessage': {'enabled': True, 'cohort': ['synthetic-rollout-member'], 'seat_cap': 'off'},
+        }
+    )
     monkeypatch.setenv('OMI_MESSAGING_CHANNEL_POLICY', policy)
     monkeypatch.delenv('OMI_MESSAGING_KILL_SWITCH_DOC', raising=False)
     monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
@@ -334,7 +339,8 @@ def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(mon
         raise AssertionError('No capacity IO allowed')
 
     monkeypatch.setattr(store, 'capacity', capacity)
-    david = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+    david = 'synthetic-rollout-member'
+    monkeypatch.setattr('config.messaging.in_rollout_cohort', lambda owner, name, **kwargs: owner == david)
     access.require_access('paid-outsider', 'telegram')
     with pytest.raises(access.AccessDenied):
         access.require_access('paid-outsider', 'imessage')
@@ -691,7 +697,7 @@ def test_ten_requested_photos_reach_file_model_in_sync_and_stream(monkeypatch):
     tool = object.__new__(chat_file.FileChatTool)
     tool.uid = 'u'
 
-    def ask(question, files):
+    def ask(question, files, video_window=None):
         assert {f.id for f in files} == set(ids)
         return 'all ten'
 

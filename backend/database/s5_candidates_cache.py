@@ -16,6 +16,11 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from database import redis_db
+from database.staged_promote_cache import (
+    compatibility_version_key,
+    invalidate_around_write,
+    rotate_compatibility_version,
+)
 from database.read_boundary import MalformedDocError, parse_payload_strict
 from models.candidate import CandidateRecord
 from config.firestore_read_levers import lever_enabled
@@ -55,25 +60,25 @@ def _ttl() -> int:
 
 
 def _version_key(uid: str) -> str:
-    return f'fsr:s5:candidates:version:{uid}'
+    return compatibility_version_key(uid)
+
+
+def _invalidate_dependency(uid: str) -> bool:
+    try:
+        confirmed = rotate_compatibility_version(uid, client=_redis())
+    except Exception:
+        confirmed = False
+    if confirmed:
+        CACHE_OPERATIONS.labels(outcome='invalidated').inc()
+    else:
+        _cache_unavailable('invalidation_unavailable')
+    return confirmed
 
 
 def invalidate_after_write(fn):
-    @functools.wraps(fn)
-    def wrapped(uid, *args, **kwargs):
-        result = fn(uid, *args, **kwargs)
-        # Unconditional: enabled readers on other revisions/cohorts may hold this UID's entry.
-        try:
-            # Random generations cannot expire back onto a live entry or
-            # reuse an old counter following version-key eviction.
-            _redis().set(_version_key(uid), uuid4().hex, ex=7 * 86400)
-            CACHE_OPERATIONS.labels(outcome='invalidated').inc()
-        except RedisError:
-            _cache_unavailable('invalidation_unavailable')
-            logger.warning('Candidate compatibility cache invalidation unavailable')
-        return result
-
-    return wrapped
+    # The coordinator calls this dependency in finally, even for a committed
+    # prefix followed by an error, before it can publish a cacheable version.
+    return invalidate_around_write(fn, invalidate_dependency=_invalidate_dependency)
 
 
 def load_compatibility_candidates(uid: str, generation: int, loader) -> list[CandidateRecord]:

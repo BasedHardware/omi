@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from config.capture_evidence import listen_committed_capture_coverage_enabled
 from database import conversations as conversations_db
 from models.conversation import Conversation
 from models.structured import Structured
@@ -18,6 +17,7 @@ from tests.unit.test_listen_audio_timeline_stack import _Stack
 from routers.listen.transcripts import TranscriptProcessor
 from utils.capture_evidence import SourcePositionMap
 from utils.committed_capture import CommittedCaptureMap, PROOF_KIND
+from utils.stt.transcript_admission import AdmissionState
 
 
 def _conversation(cid, t0):
@@ -446,17 +446,6 @@ def test_missing_segment_id_is_assigned_uuid():
     assert committed.notes[assigned] == ((0, SPF),)
 
 
-def test_listen_committed_flag_tokens(monkeypatch):
-    monkeypatch.delenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', raising=False)
-    assert listen_committed_capture_coverage_enabled() is True
-    for token in ('', ' ', '1', 'true', 'TRUE', 'yes', 'on', 'enabled'):
-        monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', token)
-        assert listen_committed_capture_coverage_enabled() is True
-    for token in ('0', 'false', 'off', 'ture', 'disabled', 'no'):
-        monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', token)
-        assert listen_committed_capture_coverage_enabled() is False
-
-
 def test_source_position_map_off_byte_identical_snapshot():
     payload = b'\x01\x00' * SPF
     off = SourcePositionMap()
@@ -508,8 +497,7 @@ def test_committed_accepts_receipt_wall_time_optional():
 
 @pytest.mark.parametrize('v2', [False, True])
 async def test_enqueue_epoch_segments_remembers_raw_provider_fields(monkeypatch, v2):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     stack = _Stack(monkeypatch, v2=v2, conversation_id='committed-fields')
     try:
         stack.receiver.capture_timeline.accept(b'\x01\x00' * SPF, 1000.0, 0.0)
@@ -527,12 +515,12 @@ async def test_enqueue_epoch_segments_remembers_raw_provider_fields(monkeypatch,
 
 
 async def test_large_callback_notes_stay_bounded_while_enqueue_admission_owns_speech(monkeypatch):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     stack = _Stack(monkeypatch, v2=True, conversation_id='committed-cap')
     try:
         stack.receiver.capture_timeline.accept(b'\x01\x00' * SPF, 1000.0, 0.0)
         processor = object.__new__(TranscriptProcessor)
+        processor.media_admission = AdmissionState()
         processor.host = stack.host
         processor.segment_buffer = deque(maxlen=4)
         processor._v2_legacy_fallback = deque(maxlen=4)
@@ -592,8 +580,7 @@ def _transcript_segment(segment_id, text='hello'):
 
 
 async def test_live_persistence_writes_committed_proof_atomically(monkeypatch):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     store = StrictFirestore()
     cid = 'conv-committed'
     processor, source_map, committed, _t0 = await _live_setup(monkeypatch, store, cid)
@@ -618,8 +605,7 @@ async def test_live_persistence_writes_committed_proof_atomically(monkeypatch):
 
 
 async def test_failed_live_transaction_publishes_neither_proof_nor_acknowledgement(monkeypatch):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     store = StrictFirestore()
     cid = 'conv-failed-proof'
     processor, source_map, committed, _t0 = await _live_setup(monkeypatch, store, cid)
@@ -660,48 +646,9 @@ async def test_failed_live_transaction_publishes_neither_proof_nor_acknowledgeme
     assert [(r['source_frame_start'], r['source_frame_end']) for r in evidence['runs']] == [(2, 4)]
 
 
-@pytest.mark.parametrize('flag_value', ['false', 'ture'])
-async def test_flag_off_writes_legacy_receipt_snapshot_byte_identical(monkeypatch, flag_value):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', flag_value)
-    store = StrictFirestore()
-    cid = 'conv-flag-off'
-    _seed_row(store, cid, started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
-    processor, _sent = _processor(monkeypatch, store, current=cid)
-    source_map = SourcePositionMap(committed=True)
-    for i in range(11):
-        source_map.accept(
-            _claim(i),
-            sample_start=i * SPF,
-            sample_count=SPF,
-            rate_hz=RATE,
-            payload=b'\x01\x00' * SPF,
-            receipt_wall_time=1000.0 + i * SPF / RATE,
-        )
-    source_map.remember_transcripts(_note_segments(s1=(2 * SPF, 4 * SPF)))
-    processor.host.state.source_position_map = source_map
-    processor.host.state.conversation_sample_ranges = [(0, 11 * SPF, cid)]
-    conversation = _conversation(cid, T0)
-    await processor._update_live_conversation(
-        conversation,
-        [_transcript_segment('s1')],
-        [],
-        datetime.fromtimestamp(T0 + 30, tz=timezone.utc),
-        datetime.fromtimestamp(T0, tz=timezone.utc),
-        update_finished_at=False,
-    )
-    evidence = store.rows[('users', UID, 'conversations', cid)].get('capture_evidence')
-    expected = source_map.snapshot(
-        (start, end) for start, end, owner in processor.host.state.conversation_sample_ranges if owner == cid
-    )
-    assert evidence == expected
-    assert 'proof' not in evidence
-
-
 @pytest.mark.parametrize('speaker_clock', ['true', 'false'])
 async def test_speaker_clock_flag_does_not_alter_committed_notes(monkeypatch, speaker_clock):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_CAPTURE_CLOCK', speaker_clock)
     stack = _Stack(monkeypatch, v2=False, conversation_id='committed-speaker-clock')
     try:
@@ -798,8 +745,7 @@ def test_snapshot_history_is_deep_copied_against_late_receipts():
 @pytest.mark.parametrize('v2', [False, True])
 @pytest.mark.parametrize('speaker_clock', ['true', 'false'])
 async def test_real_stt_callback_remembers_notes_and_persists_committed_frames(monkeypatch, v2, speaker_clock):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_CAPTURE_CLOCK', speaker_clock)
     cid = 'committed-callback'
     stack = _Stack(monkeypatch, v2=v2, conversation_id=cid)
@@ -866,8 +812,7 @@ def _forbidden_receipt_snapshot(self, *args, **kwargs):
 
 @pytest.mark.parametrize('unavailable', ['missing_note', 'conflict', 'incomplete', 'overflow'])
 async def test_flag_on_unavailable_proof_persists_unknown_without_receipt_snapshot(monkeypatch, unavailable):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
+
     store = StrictFirestore()
     cid = f'conv-unavailable-{unavailable}'
     processor, source_map, committed, _t0 = await _live_setup(monkeypatch, store, cid)

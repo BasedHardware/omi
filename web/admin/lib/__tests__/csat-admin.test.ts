@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
 }));
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => ({}) }));
 
 import { normalizeCsatConfig } from "@/app/api/omi/csat/route";
+import { testIdentity } from "./support/test-identity";
 
 describe("normalizeCsatConfig", () => {
   it("clamps question_threshold to 1..50 and comment_max_score to 1..5", () => {
