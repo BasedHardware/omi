@@ -248,6 +248,56 @@ def test_no_claim_worker_keeps_named_task_as_five_minute_fallback(db, monkeypatc
     assert registry.claim_worker('a', 'job', claim['epoch'], 'late-worker', now=NOW + timedelta(seconds=300)) is None
 
 
+@pytest.mark.parametrize('filtered_by', ['cohort', 'legacy_dark'])
+def test_pull_claim_reaches_owner_after_first_100_filtered_candidates(db, monkeypatch, filtered_by):
+    from config import sync_backfill_worker as policy
+    from utils.sync import legacy_dark, worker_control
+
+    # Persist eligibility at 100%, then reduce the cohort: all first-page
+    # owners remain available but are outside the current 5% rollout.
+    excluded = [f'a-synthetic-{i:04d}' for i in range(1000) if policy.cohort_bucket(f'a-synthetic-{i:04d}', '') >= 5][
+        :100
+    ]
+    eligible = next(f'z-synthetic-{i:04d}' for i in range(1000) if policy.cohort_bucket(f'z-synthetic-{i:04d}', '') < 5)
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'false')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(sync_jobs, 'get_sync_ledger_fence_mode', lambda: sync_jobs.SyncLedgerFenceMode.ACTIVE)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for uid in [*excluded, eligible]:
+        payload = {'uid': uid, 'job_id': 'job', 'lane': 'backfill', 'ledger_fence_mode': 'active'}
+        registry.register_job(uid, 'job', payload, None, now=NOW)
+        assert registry.claim_next(uid, now=NOW)
+    if filtered_by == 'cohort':
+        monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '5')
+        assert all(not policy.selected(uid) for uid in excluded)
+        assert policy.selected(eligible)
+    else:
+        monkeypatch.setattr(
+            legacy_dark,
+            'current_mode',
+            lambda uid=None: legacy_dark.LegacySyncMode.ON if uid == eligible else legacy_dark.LegacySyncMode.DARK,
+        )
+    pages = []
+    stream = _Query.stream
+
+    def record_page(query, transaction=None):
+        rows = stream(query, transaction=transaction)
+        if query.path == (registry.COLLECTION,) and query.equals == ('worker_available', True):
+            pages.append([doc.id for doc in rows])
+        return rows
+
+    monkeypatch.setattr(_Query, 'stream', record_page)
+    lease = worker_control.claim()
+    assert lease is not None
+    assert lease['payload']['uid'] == eligible
+    assert pages == [excluded, [eligible]]
+    assert all(db.docs[(registry.COLLECTION, uid)]['worker_available'] for uid in excluded)
+    assert not db.docs[(registry.COLLECTION, eligible)]['worker_available']
+
+
 def test_worker_completion_immediately_dispatches_next_head_once(db, monkeypatch):
     from utils.sync import legacy_dark, worker_control
 
