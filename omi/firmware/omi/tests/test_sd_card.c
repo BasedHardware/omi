@@ -209,6 +209,9 @@ uint32_t get_utc_time(void)
     return z_utc;
 }
 
+/* sd_card.c counts storage errors for diagnostics; this suite does not assert them. */
+void omi_diagnostics_inc_storage_error(void) {}
+
 #include "../src/sd_card.c"
 
 static int failures;

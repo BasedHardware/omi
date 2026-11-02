@@ -52,6 +52,7 @@ C_PREFIX = r'''
 #define K_MSEC(x) (x)
 #define LOG_DBG(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
+static void omi_diagnostics_inc_ble_tx_drop(void) {}
 
 struct bt_conn { int placeholder; };
 struct bt_gatt_notify_params {
@@ -186,8 +187,11 @@ def run_c_seam(source_path: Path) -> int:
             subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", str(c_file), "-o", str(executable)], check=True)
             res = subprocess.run([str(executable)], check=False)
             return res.returncode
-        except Exception as e:
-            print(f"Warning: C compiler seam failed ({e}), falling back to behavioral simulation.")
+        except subprocess.CalledProcessError as e:
+            print(f"C compiler seam failed: {e}")
+            return 1
+        except OSError as e:
+            print(f"Warning: C compiler unavailable ({e}), falling back to behavioral simulation.")
             return -1
 
 def run_behavioral_simulation() -> int:
