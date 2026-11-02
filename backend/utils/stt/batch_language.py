@@ -5,6 +5,7 @@ No recognizer text participates in the decision. Errors/uncertainty stay multili
 """
 
 from dataclasses import dataclass, replace
+import hashlib
 from io import BytesIO
 import math
 import os
@@ -17,6 +18,7 @@ from config.prerecorded_language import (
     MIN_AUDIO_LID_CONFIDENCE,
     audio_lid_confidence_floor,
     language_class,
+    language_gate_confident_skip,
     language_gate_shadow_enabled,
     language_guard_enabled,
     self_lid_confidence_floor,
@@ -305,6 +307,34 @@ def compare_shadow_pair(audio: bytes, *, before_call, surface='batch_shadow') ->
     return verdict is not None and vendor.evidence == 'audio_lid' and vendor.confidence >= 0.9
 
 
+# Share of skippable probes that still pay the vendor, so the shadow agreement series
+# (omi_stt_language_gate_shadow_total) keeps measuring what the skip decides.
+CONFIDENT_SKIP_AUDIT_PERCENT = 5
+
+
+def _confident_skip_audited(audio: bytes) -> bool:
+    digest = hashlib.sha256(audio).digest()
+    return int.from_bytes(digest[:8], 'big') % 100 < CONFIDENT_SKIP_AUDIT_PERCENT
+
+
+def _confident_skip_route(surface: str, verdict: language_gate.SelfVerdict | None) -> str | None:
+    """The route a confident shadow verdict decides on its own, or None to ask the vendor.
+
+    Legacy sync only: sampled batch admission requires vendor audio_lid evidence. A self-parakeet
+    verdict clears the enforced gate's floor (prod shadow 24 h to 11-02 04:55Z: the vendor called
+    0.07% of them an unsupported language at >= 0.9). An unsupported top-1 can only move speech to
+    the multilingual route. Anything in between keeps the vendor probe.
+    """
+    if surface != 'prerecorded' or verdict is None:
+        return None
+    mode = language_gate_confident_skip()
+    if mode == 'off':
+        return None
+    if verdict.parakeet:
+        return 'parakeet' if mode == 'both' else None
+    return 'multilingual' if language_class(verdict.language) == 'unsupported' else None
+
+
 def resolve_language(
     language,
     audio: bytes,
@@ -325,7 +355,14 @@ def resolve_language(
     )
     if enforced:
         language_gate.record_enforced(surface, verdict)
+    skip = None if enforced else _confident_skip_route(surface, verdict)
+    if skip is not None and _confident_skip_audited(audio):
+        language_gate.record_confident_skip(surface, 'audit')
+        skip = None
     if enforced and verdict is not None:
+        decision = _self_decision(verdict)
+    elif skip is not None and verdict is not None:
+        language_gate.record_confident_skip(surface, skip)
         decision = _self_decision(verdict)
     else:
         # Gate unavailable in an enforced cohort falls back to today's vendor path.
