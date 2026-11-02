@@ -304,7 +304,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "GCP_LOCATION",
             "GEMINI_API_KEY",
             "HOSTED_PUSHER_API_URL",
-            "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",

@@ -7786,6 +7786,17 @@ two units and 47.6 recorded audio seconds; cross-owner execution still requires
 the lead's combined budget approval. Empty replies remain held. This does not
 change automatic recovery or grant a runtime provider fallback.
 
+New operator speech-redrive and prepared take-over markers distinguish
+`paid_state: attempted` from `spent`. A validated words/empty response spends the
+attempt; a caught provider failure permits one explicit retry with a rotated
+token and retained failure receipt. Running/process loss and historical markers
+never retry automatically. The CLI approval digest binds two maximum attempts,
+and both count against spend and decoded-audio caps (including the ordinary
+route's 47.6-second cap). Local refusals precede intent creation; measured speech
+evidence survives without an intent. Historical no-call attestation is dry-run
+only and cannot override validated paid evidence. See
+[proof format and restrictions](runbooks/paid-attempt-refusal.md).
+
 ### Stale reconnect recovery
 
 Reconnect recovery claims at most ten `in_progress` rows older than one hour,

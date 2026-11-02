@@ -27,9 +27,10 @@ def load(path: Path = CONTRACT_PATH) -> dict[str, Any]:
 
 
 def _pending(hold: dict[str, Any], accept_pending: bool = False) -> bool:
-    """Not yet a bound: the control the bound relies on is unverified, or the ruling is pending. accept_pending asks
-    "would a pending ruling fit?"; it never waives an unverified control."""
-    return hold.get('control_verified') is False or (hold.get('ruling') == 'pending' and not accept_pending)
+    """Not yet a bound: the hold names a control that is not explicitly verified (missing or null fails closed), or
+    the ruling is pending. accept_pending asks "would a pending ruling fit?"; it never waives an unverified control."""
+    unverified = ('control' in hold or 'control_verified' in hold) and hold.get('control_verified') is not True
+    return unverified or (hold.get('ruling') == 'pending' and not accept_pending)
 
 
 def required_days(contract: dict[str, Any], bucket: str, accept_pending: bool = False) -> float | None:

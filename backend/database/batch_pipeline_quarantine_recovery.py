@@ -14,6 +14,7 @@ from database.batch_pipeline_policy import (
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
 from config.batch_language_recovery import MAX_AUDIO_SECONDS, language_guarded
+from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import owner_key
@@ -209,7 +210,7 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def start(self, segment_id, token, now, *, provider="legacy_sync"):
+    def start(self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             result = tx.get('results', segment_id)
@@ -228,6 +229,8 @@ class RecoveryStore:
                 raise ValueError('closed recovery provider required')
             job['recovery']['provider'] = provider
             job['recovery']['started_at'] = now
+            if operator_paid_attempt:
+                attempted(job['recovery'], 'soniox', max_attempts=2)
             tx.put('jobs', segment_id, job)
             return True
 
@@ -323,7 +326,7 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def start_duration_limited(self, segment_id, token, now, *, audio_uri, audio_seconds):
+    def start_duration_limited(self, segment_id, token, now, *, audio_uri, audio_seconds, operator_paid_attempt=False):
         """Operator take-over of a duration-limited intent: refusal -> running.
 
         The exact mirror of hold_duration_limit: only the never-started guarded
@@ -367,9 +370,45 @@ class RecoveryStore:
             recovery.pop('refusal', None)
             recovery.pop('settled_at', None)
             recovery.update(provider='modulate', started_at=now)
+            if operator_paid_attempt:
+                attempted(recovery, 'soniox', max_attempts=2)
             job['recovery_state'] = 'running'
             tx.put('jobs', segment_id, job)
             return True
+
+        return self.store.run(commit)
+
+    def retry_paid_takeover(self, segment_id, token, now):
+        """One explicit operator retry, with a new token fencing late writers."""
+        next_token = uuid4().hex
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            marker = job.get('recovery') or {}
+            if (
+                marker.get('token') != token
+                or not retryable(marker, job.get('recovery_state'))
+                or not language_guarded(job)
+                or marker.get('epoch') != 1
+                or job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+                or job.get('speech_redrive')
+                or job.get('silence_disposition')
+                or job.get('terminal_disposition')
+            ):
+                return None
+            job['recovery'] = renewed(marker, next_token)
+            job['recovery'].update(started_at=now)
+            attempted(job['recovery'], 'soniox')
+            job['recovery_state'] = 'running'
+            tx.put('jobs', segment_id, job)
+            return next_token
 
         return self.store.run(commit)
 

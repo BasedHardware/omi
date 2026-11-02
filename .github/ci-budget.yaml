@@ -1632,7 +1632,7 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 2,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
@@ -5104,7 +5104,7 @@
     "gcp_nllb_translation.yml": {
       "name": "Deploy NLLB Translation to GKE",
       "owner": "CI maintainers",
-      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger",
+      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger. Prod NLLB retired 2026-11-02 (translation on Luna): development only",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5117,8 +5117,7 @@
               "default": "development",
               "description": "Select the environment to deploy to",
               "options": [
-                "development",
-                "prod"
+                "development"
               ],
               "required": "true",
               "type": "choice"

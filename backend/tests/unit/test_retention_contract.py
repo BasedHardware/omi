@@ -60,6 +60,19 @@ def test_the_finalization_alarm_entry_is_davids_ruling():
     assert round(hold['days'] * 86400) == pytest.approx(hold['finalization_alarm_seconds'], abs=60)
 
 
+@pytest.mark.parametrize('value', ['missing', None, 'yes', 1])
+def test_a_named_control_counts_only_when_explicitly_verified(value):
+    contract = copy.deepcopy(CONTRACT)
+    hold = contract['holds']['batch_finalization_alarm']
+    if value == 'missing':
+        del hold['control_verified']
+    else:
+        hold['control_verified'] = value
+    assert rc.required_days(contract, BATCH) is None  # fails closed
+    hold['control_verified'] = True
+    assert rc.required_days(contract, BATCH) == 8.0
+
+
 def test_an_unverified_alarm_leaves_the_hold_unbounded():
     # failed_held units never finalize: until an age-since-enqueue alarm covering them is verified, any age Delete
     # on batch staging can remove the only copy unseen (Luna #24349 r3).
