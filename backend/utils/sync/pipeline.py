@@ -2573,7 +2573,7 @@ async def _resolve_safety_wal_target(
 
 @sync_attempt
 @sync_snapshot_resolve_job
-async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
+async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
     raw_paths: list,
@@ -3731,7 +3731,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_subtype=failure_subtype,
             )
             if content_id and failed_segments == 0 and custody:
-                await _delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
+                await delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
             if content_id and failed_segments > 0:
                 failure_kwargs = (
                     {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
@@ -3926,11 +3926,11 @@ def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
         return 0
 
 
-async def _delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
+async def delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
     return await run_blocking(storage_executor, _delete_staged_blobs, blob_paths, **custody)
 
 
-def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
+def download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
     """Bound backfill downloads and expansion before any decode allocation."""
     if bounded_backfill and len(blob_paths) > MAX_BACKFILL_FILES:
         raise BackfillInputLimitExceeded('backfill staged file count exceeded')

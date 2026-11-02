@@ -14,6 +14,8 @@ from omi_logging import configure_logging
 configure_logging(service='sync-backfill-worker')
 logger = logging.getLogger(__name__)
 
+from utils.sync.worker_client import ControlClient
+
 
 def bootstrap() -> None:
     from utils.staging_fence import assert_staging_isolation
@@ -77,7 +79,7 @@ async def cleanup_terminal(payload: dict, job: dict) -> None:
     from utils.executors import db_executor, run_blocking
     from utils.sync.backfill import release_backfill_slot
     from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
-    from utils.sync.pipeline import _delete_staged_blobs_async
+    from utils.sync.pipeline import delete_staged_blobs_async
 
     uid, job_id = payload['uid'], payload['job_id']
     if job['status'] in ('failed', 'partial_failure'):
@@ -99,19 +101,19 @@ async def cleanup_terminal(payload: dict, job: dict) -> None:
                 **terminal_repeat_failure_kwargs(job),
             )
     else:
-        await _delete_staged_blobs_async(
+        await delete_staged_blobs_async(
             payload['raw_blob_paths'], uid=uid, content_id=payload.get('content_id'), job_id=job_id
         )
     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
 
 
-async def execute(lease: dict, client) -> bool:
+async def execute(lease: dict, client: ControlClient) -> bool:
     from database import sync_jobs
     from database.account_deletion_marker import account_deletion_blocks_user_work
     from utils.account_cutover.access import should_skip_background_account_mutation
     from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
     from utils.sync.ledger_completion import SyncJobRunLeaseLost, bind_or_converge_sync_ledger_completion
-    from utils.sync.pipeline import _download_staged_files, _run_full_pipeline_background_async
+    from utils.sync.pipeline import download_staged_files, run_full_pipeline_background_async
     from models.conversation import ConversationSource
     from models.geolocation import Geolocation
 
@@ -174,10 +176,10 @@ async def execute(lease: dict, client) -> bool:
         )
         if converged is None:
             if not await run_blocking(
-                storage_executor, _download_staged_files, payload['raw_blob_paths'], bounded_backfill=True
+                storage_executor, download_staged_files, payload['raw_blob_paths'], bounded_backfill=True
             ):
                 return False  # Fallback retains the existing missing-source disposition.
-            await _run_full_pipeline_background_async(
+            await run_full_pipeline_background_async(
                 job_id,
                 uid,
                 payload['raw_blob_paths'],

@@ -142,7 +142,7 @@ class TestSyncV2Structure:
         func_body = source[start:next_section]
 
         assert 'start_background_task' in func_body, "v2 must use start_background_task for async coordinator"
-        assert '_run_full_pipeline_background_async' in func_body, "v2 must dispatch the async pipeline coordinator"
+        assert 'run_full_pipeline_background_async' in func_body, "v2 must dispatch the async pipeline coordinator"
         assert 'submit_with_context' not in func_body, (
             "v2 must NOT use submit_with_context — async coordinator runs on event loop, "
             "not a thread pool slot (#7361)"
@@ -187,7 +187,7 @@ class TestSyncV2Structure:
     def test_v2_background_has_cleanup(self):
         """Background worker must clean up files in finally block."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -202,7 +202,7 @@ class TestSyncV2Structure:
     def test_v2_background_records_dg_after_processing(self):
         """DG usage must be recorded after processing, not before."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -218,7 +218,7 @@ class TestSyncV2Structure:
     def test_v2_background_does_decode_and_vad(self):
         """Background worker must run decode and VAD (#7281 — moved from inline)."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -236,7 +236,7 @@ class TestSyncV2Structure:
     def test_v2_background_has_stage_heartbeats(self):
         """Background worker must heartbeat with stage info during decode and VAD."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -270,7 +270,7 @@ class TestSyncV2Structure:
     def test_v2_bg_worker_fetches_prefs_and_cache(self):
         """Background worker must fetch transcription prefs and build person embeddings cache."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -285,7 +285,7 @@ class TestSyncV2Structure:
     def test_v2_bg_worker_forwards_private_cloud_sync_enabled(self):
         """Background worker must forward private cloud sync intent into process_segment."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -598,12 +598,12 @@ class TestSyncJobsRedis:
 
 
 class TestFullPipelineBackground:
-    """Test _run_full_pipeline_background_async async coordinator function."""
+    """Test run_full_pipeline_background_async async coordinator function."""
 
     @staticmethod
     def _get_bg_func_body():
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -889,7 +889,7 @@ class TestSyncJobsRedisBoundary:
 
 
 class TestAsyncCoordinatorStructure:
-    """Structural tests for _run_full_pipeline_background_async async coordinator (#7361).
+    """Structural tests for run_full_pipeline_background_async async coordinator (#7361).
 
     The function is now async and cannot be called from sync test context.
     These tests verify structure via source inspection.
@@ -898,7 +898,7 @@ class TestAsyncCoordinatorStructure:
     @staticmethod
     def _get_bg_func_body():
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -1058,7 +1058,7 @@ class TestAsyncCoordinatorScenarios:
     @staticmethod
     def _get_bg_func_body():
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\nasync def ', start + 1)
         if next_boundary == -1:
             next_boundary = source.find('\ndef ', start + 1)
@@ -1299,7 +1299,7 @@ def _install_sync_observability_stubs(saved_modules):
 
 
 class TestAsyncCoordinatorBehavioral:
-    """Behavioral tests that invoke _run_full_pipeline_background_async with
+    """Behavioral tests that invoke run_full_pipeline_background_async with
     mocked dependencies. Verifies actual call sequences and outcomes."""
 
     @staticmethod
@@ -1836,7 +1836,7 @@ class TestAsyncCoordinatorBehavioral:
 
         pipeline.run_blocking = tracking_run_blocking
 
-        await module._run_full_pipeline_background_async(
+        await module.run_full_pipeline_background_async(
             'job-durable-metric',
             'uid',
             [],
@@ -1868,7 +1868,7 @@ class TestAsyncCoordinatorBehavioral:
         )
 
         with pytest.raises(pipeline.SyncJobRunLeaseLost):
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'job-old',
                 'uid',
                 ['/tmp/input.opus'],
@@ -1902,7 +1902,7 @@ class TestAsyncCoordinatorBehavioral:
             )
 
             with pytest.raises(pipeline.SyncJobRunLeaseLost):
-                await module._run_full_pipeline_background_async(
+                await module.run_full_pipeline_background_async(
                     'job-old',
                     'uid',
                     ['/tmp/input.opus'],
@@ -1934,7 +1934,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.release_sync_content_claim = MagicMock()
 
             with pytest.raises(pipeline.SyncJobRunLeaseLost):
-                await module._run_full_pipeline_background_async(
+                await module.run_full_pipeline_background_async(
                     'job-old',
                     'uid',
                     ['/tmp/input.opus'],
@@ -2089,7 +2089,7 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline.start_background_task = _start_task
             coordinator = asyncio.create_task(
-                module._run_full_pipeline_background_async(
+                module.run_full_pipeline_background_async(
                     'job-wait',
                     'uid',
                     ['/tmp/file.opus'],
@@ -2154,7 +2154,7 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline.start_background_task = _start_task
             coordinator = asyncio.create_task(
-                module._run_full_pipeline_background_async(
+                module.run_full_pipeline_background_async(
                     'job-renew-error',
                     'uid',
                     ['/tmp/file.opus'],
@@ -2212,7 +2212,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.start_background_task = _start_task
 
             with pytest.raises(asyncio.CancelledError):
-                await module._run_full_pipeline_background_async(
+                await module.run_full_pipeline_background_async(
                     'job-teardown',
                     'uid',
                     ['/tmp/file.opus'],
@@ -2250,7 +2250,7 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline.run_blocking = _run_blocking_with_hung_decode
             coordinator = asyncio.create_task(
-                module._run_full_pipeline_background_async(
+                module.run_full_pipeline_background_async(
                     'job-decode-cancel',
                     'uid',
                     ['/tmp/raw-retry.opus'],
@@ -2311,7 +2311,7 @@ class TestAsyncCoordinatorBehavioral:
                 pipeline.shutil, 'rmtree'
             ) as rmtree:
                 coordinator = asyncio.create_task(
-                    module._run_full_pipeline_background_async(
+                    module.run_full_pipeline_background_async(
                         'job-vad-cancel',
                         'uid',
                         [raw_path],
@@ -2357,7 +2357,7 @@ class TestAsyncCoordinatorBehavioral:
             )
             stubs['pipeline']._cleanup_files = MagicMock()
 
-            await module._run_full_pipeline_background_async('j1', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job1')
+            await module.run_full_pipeline_background_async('j1', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job1')
 
             stubs['sync_jobs'].mark_job_failed.assert_called()
             args = stubs['sync_jobs'].mark_job_failed.call_args[0]
@@ -2374,7 +2374,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].decode_files_to_wav = MagicMock(side_effect=RuntimeError('corrupt file'))
             stubs['pipeline']._cleanup_files = MagicMock()
 
-            await module._run_full_pipeline_background_async('j2', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job2')
+            await module.run_full_pipeline_background_async('j2', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job2')
 
             stubs['sync_jobs'].mark_job_failed.assert_called()
             args = stubs['sync_jobs'].mark_job_failed.call_args[0]
@@ -2391,7 +2391,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline']._cleanup_files = MagicMock()
             stubs['pipeline'].get_sync_job = MagicMock(return_value={'status': 'failed'})
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j3', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job3', content_id='content-3'
             )
 
@@ -2419,7 +2419,7 @@ class TestAsyncCoordinatorBehavioral:
 
             stubs['pipeline'].retrieve_vad_segments = _bad_vad
 
-            await module._run_full_pipeline_background_async('j4', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job4')
+            await module.run_full_pipeline_background_async('j4', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job4')
 
             stubs['sync_jobs'].mark_job_failed.assert_called()
             args = stubs['sync_jobs'].mark_job_failed.call_args[0]
@@ -2447,7 +2447,7 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline.retrieve_vad_segments = _bad_vad
 
-            await module._run_full_pipeline_background_async('jv', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/jobv')
+            await module.run_full_pipeline_background_async('jv', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/jobv')
 
             kwargs = pipeline.finalize_sync_job_failure_now.call_args.kwargs
             assert kwargs['error_code'] == 'sync_vad_failed'
@@ -2492,7 +2492,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.prerecorded = MagicMock(side_effect=_provider)
             stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_a, **_k: {'status': 'partial_failure'}
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j-sil',
                 'uid',
                 ['/tmp/f.opus'],
@@ -2517,7 +2517,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.prerecorded.reset_mock()
             pipeline.add_processed_sync_segment_id.reset_mock()
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j-sil',
                 'uid',
                 ['/tmp/f.opus'],
@@ -2550,7 +2550,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].retrieve_vad_segments = MagicMock()
             stubs['pipeline'].get_wav_duration = MagicMock(return_value=0.0)
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j5', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job5', content_id='content-5'
             )
 
@@ -2614,7 +2614,7 @@ class TestAsyncCoordinatorBehavioral:
                 terminal_events.append('job_finalized') or {'status': 'completed'}
             )
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j-empty',
                 'uid',
                 ['/tmp/f.opus'],
@@ -2679,7 +2679,7 @@ class TestAsyncCoordinatorBehavioral:
                 side_effect=lambda *_args: terminal_events.append('epoch_delete')
             )
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'job-tokenized',
                 'uid',
                 ['/tmp/f.opus'],
@@ -2725,7 +2725,7 @@ class TestAsyncCoordinatorBehavioral:
                 side_effect=RuntimeError('ledger unavailable')
             )
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'checkpoint-job',
                 'uid',
                 ['/tmp/f.opus'],
@@ -2758,7 +2758,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].mark_sync_content_completed.side_effect = RuntimeError('ledger unavailable')
 
             with pytest.raises(RuntimeError, match='ledger unavailable'):
-                await module._run_full_pipeline_background_async(
+                await module.run_full_pipeline_background_async(
                     'j-ledger',
                     'uid',
                     ['/tmp/f.opus'],
@@ -2794,7 +2794,7 @@ class TestAsyncCoordinatorBehavioral:
             module.get_rolling_speech_ms = MagicMock(return_value={})
             module.check_soft_caps = MagicMock(return_value=[])
 
-            await module._run_full_pipeline_background_async('j6', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job6')
+            await module.run_full_pipeline_background_async('j6', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job6')
 
             stubs['sync_jobs'].mark_job_failed.assert_called()
             args = stubs['sync_jobs'].mark_job_failed.call_args[0]
@@ -2829,7 +2829,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].record_dg_usage_ms = MagicMock()
             stubs['pipeline'].record_usage = MagicMock()
 
-            await module._run_full_pipeline_background_async('j7', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job7')
+            await module.run_full_pipeline_background_async('j7', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job7')
 
             stubs['sync_jobs'].finalize_sync_job.assert_called_once()
             stubs['pipeline'].process_segment.assert_called_once()
@@ -2880,7 +2880,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.record_dg_usage_ms = MagicMock()
             pipeline.record_usage = MagicMock()
 
-            await module._run_full_pipeline_background_async('j-plan', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job')
+            await module.run_full_pipeline_background_async('j-plan', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job')
 
             pipeline.users_db.get_existing_user_subscription.assert_called_once_with('uid')
             pipeline.check_soft_caps.assert_called_once_with('uid', speech_totals=speech_totals, plan=expected_plan)
@@ -2934,7 +2934,7 @@ class TestAsyncCoordinatorBehavioral:
 
             stubs['pipeline'].process_segment = _process_seg_fails_once
 
-            await module._run_full_pipeline_background_async('j8', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job8')
+            await module.run_full_pipeline_background_async('j8', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job8')
 
             stubs['sync_jobs'].finalize_sync_job.assert_called_once()
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
@@ -2968,7 +2968,7 @@ class TestAsyncCoordinatorBehavioral:
             module.sanitize = lambda value: value
             stubs['pipeline'].process_segment = MagicMock(side_effect=RuntimeError('executor exploded'))
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j-generic-segment-error', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-generic'
             )
 
@@ -3002,7 +3002,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].process_segment = MagicMock()
             stubs['sync_jobs'].get_processed_segments.return_value = {segment_path}
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j-retry',
                 'uid',
                 ['/tmp/f.opus'],
@@ -3053,7 +3053,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline._reprocess_merged_conversations = MagicMock()
             pipeline._finalize_sync_audio_files = MagicMock()
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'job-retry-fenced',
                 'uid',
                 ['/tmp/f.opus'],
@@ -3127,7 +3127,7 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline.run_blocking = _threaded_run_blocking
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'job-fence-checkpoint',
                 'uid',
                 ['/tmp/f.opus'],
@@ -3187,7 +3187,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.run_blocking = _threaded_run_blocking
 
             with pytest.raises(pipeline.SyncJobRunLeaseLost):
-                await module._run_full_pipeline_background_async(
+                await module.run_full_pipeline_background_async(
                     'job-fence-lease-lost',
                     'uid',
                     ['/tmp/f.opus'],
@@ -3229,7 +3229,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].process_segment = _capture_process
             stubs['pipeline'].record_usage = MagicMock()
 
-            await module._run_full_pipeline_background_async('j9', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job9')
+            await module.run_full_pipeline_background_async('j9', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job9')
 
             assert captured_cache['value'] == {}
             stubs['sync_jobs'].finalize_sync_job.assert_called_once()
@@ -3263,7 +3263,7 @@ class TestAsyncCoordinatorBehavioral:
 
             stubs['pipeline'].process_segment = _capture_target
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j10', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job10', target_conversation_id='conv-123'
             )
 
@@ -3297,7 +3297,7 @@ class TestAsyncCoordinatorBehavioral:
 
             stubs['pipeline'].process_segment = _capture_private_sync
 
-            await module._run_full_pipeline_background_async(
+            await module.run_full_pipeline_background_async(
                 'j-private', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-private'
             )
 
@@ -3325,7 +3325,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].process_segment = MagicMock()
             stubs['pipeline'].record_usage = MagicMock()
 
-            await module._run_full_pipeline_background_async('j11', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job11')
+            await module.run_full_pipeline_background_async('j11', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job11')
 
             stubs['byok'].set_byok_keys.assert_called_with({})
             assert len(cleanup_calls) >= 3
@@ -3347,7 +3347,7 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].retrieve_vad_segments = _vad_one_seg
             stubs['pipeline'].get_wav_duration = MagicMock(side_effect=RuntimeError('unexpected crash'))
 
-            await module._run_full_pipeline_background_async('j12', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job12')
+            await module.run_full_pipeline_background_async('j12', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job12')
 
             stubs['byok'].set_byok_keys.assert_called_with({})
             stubs['sync_jobs'].mark_job_failed.assert_called()
@@ -3882,7 +3882,7 @@ class TestV2EndpointExecution:
             async def _noop_pipeline(*args, **kwargs):
                 pass
 
-            module._run_full_pipeline_background_async = _noop_pipeline
+            module.run_full_pipeline_background_async = _noop_pipeline
             scheduled_tasks = []
 
             def _capture_background_task(coro, *, name):
@@ -4115,7 +4115,7 @@ class TestBYOKContextPropagation:
     def test_async_coordinator_clears_byok_in_finally(self):
         """Async coordinator must clear BYOK context in its finally block."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
@@ -4127,7 +4127,7 @@ class TestBYOKContextPropagation:
     def test_async_coordinator_sets_byok_uid_before_work(self):
         """Async coordinator must attach the uid to inherited BYOK key context."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
@@ -4262,7 +4262,7 @@ class TestTimeoutConfiguration:
     def test_segment_workers_are_not_detached_by_async_timeout(self):
         """Executor threads must not outlive the coordinator after an asyncio timeout."""
         source = _read_pipeline_source()
-        start = source.index('async def _run_full_pipeline_background_async')
+        start = source.index('async def run_full_pipeline_background_async')
         end = source.find('\nasync def ', start + 1)
         if end == -1:
             end = source.find('\ndef ', start + 1)

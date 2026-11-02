@@ -116,7 +116,7 @@ def execution(monkeypatch):
     monkeypatch.setattr(account_deletion, 'account_deletion_blocks_user_work', lambda _: False)
     monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _: False)
     monkeypatch.setattr(ledger_completion, 'bind_or_converge_sync_ledger_completion', lambda **kw: None)
-    monkeypatch.setattr(pipeline, '_download_staged_files', lambda *args, **kwargs: True)
+    monkeypatch.setattr(pipeline, 'download_staged_files', lambda *args, **kwargs: True)
     cleanup = AsyncMock()
     monkeypatch.setattr(worker_job, 'cleanup_terminal', cleanup)
     return redis, pipeline, cleanup
@@ -133,7 +133,7 @@ class Client:
 async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monkeypatch):
     redis, pipeline, cleanup = execution
     process = AsyncMock()
-    monkeypatch.setattr(pipeline, '_run_full_pipeline_background_async', process)
+    monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', process)
     assert not await worker_job.execute(LEASE, Client(False))
     process.assert_not_awaited()
     cleanup.assert_not_awaited()
@@ -155,7 +155,7 @@ async def test_worker_runs_fenced_pipeline_without_request_budget(execution, mon
         row['status'] = 'completed'
         redis.set('sync_job:job', json.dumps(row))
 
-    monkeypatch.setattr(pipeline, '_run_full_pipeline_background_async', process)
+    monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', process)
     assert await worker_job.execute(LEASE, Client())
     cleanup.assert_awaited_once()
     assert not sync_jobs.sync_job_run_lock_present('job')
@@ -167,7 +167,7 @@ async def test_cancelled_worker_keeps_redis_fence_and_retry_material(execution, 
     async def cancelled(*args, **kwargs):
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(pipeline, '_run_full_pipeline_background_async', cancelled)
+    monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', cancelled)
     with pytest.raises(asyncio.CancelledError):
         await worker_job.execute(LEASE, Client())
     cleanup.assert_not_awaited()
