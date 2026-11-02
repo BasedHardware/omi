@@ -14659,9 +14659,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get episodeOnThisPhone => 'On this phone';
 
   @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Final transcript about $duration behind';
   }
@@ -14676,7 +14673,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Recording safely';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live on this phone';
+  String get livePreviewOnPhoneDivider => 'Just now, on this phone';
 
   @override
   String get livePreviewTurnOnLiveText => 'Turn on live text';
@@ -14920,21 +14917,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count parts',
-      many: '$count parts',
-      few: '$count parts',
-      two: '$count parts',
-      one: '$count part',
-      zero: '$count parts',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Send the message in $app. This screen updates as soon as Omi gets it.';
   }
@@ -14943,4 +14925,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Get a new code and send it from $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Writing notes…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Finishing the transcript first. You can leave this page.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Covers up to $time · full notes when it wraps up';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcribed up to $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration saved';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
 }

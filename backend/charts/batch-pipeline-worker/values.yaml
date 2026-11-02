@@ -29,9 +29,30 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+# Borrow idle on-demand L4 nodes from other pools (L4 stockout, l4capacity
+# 2026-11-01). When on, a separate `<release>-borrow` Deployment with its own
+# HPA (min 1, max maxReplicas, same queue metric) runs only on `pools`, at a
+# negative PriorityClass so the owning workload (default priority 0) preempts
+# it, with a short grace so the owner gets the GPU back in minutes, not the OD
+# worker's 1500s drain. A freed node then passes straight to a borrower instead
+# of returning to GCE. The OD deployment, its HPA and its drain are unchanged.
+# Each pool must be on-demand g2-standard-8 + L4 whose only taint the worker
+# tolerates. Outside a stockout the min-1 borrower can make the autoscaler buy
+# one owner-pool node, so turn this off once OD scale-ups succeed again.
+borrowedNodePools:
+  enabled: false
+  pools: []
+  maxReplicas: 3
+  # A preempted borrower stops within this bound; its leases retry elsewhere.
+  terminationGracePeriodSeconds: 120
+  # In [-10, 0): below pods without a class (0), and not below the cluster
+  # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
+  priority: -1
 worker:
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
+  # One shard transaction leases up to the pull batch; false leases one per transaction.
+  pullMultiLeaseEnabled: true
   # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
   contentionRetryEnabled: true
   # null preserves the runtime's stage-dependent profiling default.
@@ -48,18 +69,30 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  # Independent pump processes sharing the pod's GPU (1-3), each with its own
+  # model chain, leases and pump depth; 1 runs one process with no supervisor.
+  # Counts above 1 take pod resources from processResources. Two lifted the
+  # 3-CPU T4 bench 33.8 -> 45.4 audio-h/GPU-h but added nothing on top of the
+  # shared embedding trunk there; stays 1 until an 8-vCPU L4 run shows a gain.
+  processes: 1
   # Shared artifact IO pool, including first decode before the GPU lock.
   # 1 disables preparation and restores serial artifact IO.
   ioConcurrency: 5
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
+  # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
+  # restores full sampling (the silence qualification reads this evidence).
+  strictVadShadowPercent: 10
   unitSeconds: 3600
   paddedSeconds: 272
   # Pack pyannote segmentation/embedding forwards across one flight's units.
   # Dark until the L4 paired run passes (diarizer/batch_pipeline_flight_qualify.py).
   flightBatchingEnabled: false
   flightBatchSeconds: 1800
+  # Kill switch: one speaker-embedding trunk forward per 10s chunk of a unit,
+  # pooled per local speaker. Ship on; false restores pyannote's per-pair forward.
+  sharedEmbeddingTrunkEnabled: true
   emptyAsrRecoveryEnabled: false
   # Activation follows the CPU role's separately approved secret-access change.
   independentLanguageRecoveryEnabled: false
@@ -86,6 +119,21 @@ resources:
     cpu: "8"
     memory: 14Gi
     nvidia.com/gpu: "1"
+# Pod resources per worker.processes above 1; a count without an entry fails
+# the render. Each process repeats the one-process host peak (models, CUDA
+# context, decoded audio), so the sizing is the single-process rule times the
+# count, held inside g2-standard-8 allocatable (~28Gi, ~7.9 vCPU) minus daemons.
+# Three processes (~29Gi of host peak) do not fit this machine shape.
+processResources:
+  "2":
+    requests:
+      cpu: "6"
+      memory: 24Gi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "8"
+      memory: 26Gi
+      nvidia.com/gpu: "1"
 autoscaling:
   # Enable only after scoped admissible-count series/adapter and target qualify.
   enabled: false
@@ -95,16 +143,32 @@ autoscaling:
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
   # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
-  # a single OD-pinned HPA (prod 3/16); balanced stays machinery-only.
+  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
     spotNodePool: batch-pipeline-pool-spot
   # External metrics from the supplied Prometheus adapter rules must be installed
   # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
-  # PROVISIONAL development target: slot bound only, NOT throughput evidence.
-  # Qualify useful throughput/queue latency before the production apply.
-  targetQueuedUnitsPerWorker: 16
+  # Max-of-two (batchdesign 2026-11-01 PR-2): the HPA keeps the admissible-ready
+  # backlog target AND adds GPU-chain occupancy, sizing on the higher
+  # recommendation. The ready count holds capacity through claim-chain wedges
+  # (occupancy alone sheds lanes whenever claims bind rather than flights);
+  # occupancy keeps capacity through healthy drains where backlog reads low but
+  # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
+  # replica dominance over the ready-only answer whenever backlog exceeds the
+  # per-worker target). 32, not 16: at 25% the ready count flaps 0 <-> 128
+  # minute to minute and the floor drains each burst in about two minutes, so 16
+  # bought nodes that arrived after the work was done and the 1800s window held
+  # them. Ready stays the fast path for a sustained load step, since backlog
+  # only builds when capacity is short; the chain rate is smoothed over 10m
+  # (batchretune 2026-11-02 replay: mean 4.9 vs 7.7 replicas).
+  targetQueuedUnitsPerWorker: 32
+  # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
+  # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
+  targetChainBusyPerWorker: "0.5"
+  # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
+  scaleDownStabilizationSeconds: 1800
 podMonitoring:
   enabled: true
 recordSealRepair:

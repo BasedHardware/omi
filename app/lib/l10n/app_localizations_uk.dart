@@ -14703,9 +14703,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get episodeOnThisPhone => 'На цьому телефоні';
 
   @override
-  String get liveCardTitle => 'Наживо';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Фінальна розшифровка відстає приблизно на $duration';
   }
@@ -14720,7 +14717,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Безпечний запис';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Наживо на цьому телефоні';
+  String get livePreviewOnPhoneDivider => 'Щойно, на цьому телефоні';
 
   @override
   String get livePreviewTurnOnLiveText => 'Увімкнути текст наживо';
@@ -14966,21 +14963,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count частини',
-      many: '$count частин',
-      few: '$count частини',
-      two: '$count частини',
-      one: '$count частина',
-      zero: '$count частини',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Надішліть повідомлення в застосунку «$app». Цей екран оновиться, щойно Omi його отримає.';
   }
@@ -14989,4 +14971,28 @@ class AppLocalizationsUk extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Отримайте новий код і надішліть його з застосунку «$app».';
   }
+
+  @override
+  String get episodeWritingNotes => 'Пишемо нотатки…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Спочатку завершуємо транскрипцію. Можете залишити цю сторінку.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Охоплює до $time · повні нотатки після завершення';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Транскрибовано до $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Збережено $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Учасники й остаточна транскрипція з\'являться тут під час завантаження.';
 }

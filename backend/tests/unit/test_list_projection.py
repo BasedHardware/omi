@@ -77,7 +77,7 @@ def store(monkeypatch):
     monkeypatch.setattr(checks, '_version', read_version)
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'synthetic-complete-writer-rollout')
     monkeypatch.setenv('OMI_BACKEND_RELEASE_SHA', 'a' * 40)
-    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     state.client = client
     return state
 
@@ -500,6 +500,27 @@ def test_release_and_epoch_rotation_invalidate_existing_validator(store, monkeyp
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'synthetic-complete-writer-rollout')
     monkeypatch.setenv('OMI_BACKEND_RELEASE_SHA', 'b' * 40)
     assert client.get('/v1/conversations', headers=headers).status_code == 200
+
+
+@pytest.mark.parametrize('epoch', ['', 'synthetic-complete-writer-rollout'])
+@pytest.mark.parametrize('family', ['conversations', 'action_items'])
+def test_writer_off_by_default_keeps_readers_on_the_source_path(store, monkeypatch, epoch, family):
+    # Default (unset) is off: no row/version is written, and a conditional GET
+    # never consults a version, so a stale version can never answer 304.
+    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', epoch)
+    assert not projection.writer_enabled()
+    writes = [Write(update={'name': f'projects/p/databases/(default)/documents/users/owner/{family}/one'})]
+    assert projection.project_writes(writes) is writes
+
+    path = '/v1/conversations' if family == 'conversations' else '/v1/action-items'
+    headers = [(b'if-none-match', b'W/"lp1-x"')]
+    request = Request({'type': 'http', 'path': path, 'headers': headers, 'query_string': b''})
+    before = checks.VALIDATORS.labels(checks.ORIGINS[path], 'present')._value.get()
+    check = checks.ListVersionCheck.start(request, 'owner', family)
+    assert not check.active and check.not_modified is None and check.etag is None
+    assert store.reads == 0
+    assert checks.VALIDATORS.labels(checks.ORIGINS[path], 'present')._value.get() == before + 1
 
 
 def test_no_header_action_polls_keep_old_cache_path_without_marker_reads(store):

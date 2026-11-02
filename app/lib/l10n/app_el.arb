@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Οι σημειώσεις ξεκινούν όταν φτάσει η τελική απομαγνητοφώνηση.",
     "episodeOnDeviceNotesFootnote": "Συντάσσονται στο τηλέφωνό σας καθώς μιλάτε. Οι πλήρεις σημειώσεις έρχονται με την τελική απομαγνητοφώνηση.",
     "episodeOnThisPhone": "Σε αυτό το τηλέφωνο",
-    "liveCardTitle": "Ζωντανά",
     "livePreviewBehind": "Η τελική απομαγνητοφώνηση υστερεί περίπου {duration}",
     "livePreviewCatchingUp": "Η τελική απομαγνητοφώνηση ενημερώνεται",
     "livePreviewNoEngineBody": "Τα λόγια σας εμφανίζονται εδώ ένα έως δύο λεπτά μετά τα πείτε.",
     "livePreviewNoEngineTitle": "Ασφαλή εγγραφή",
-    "livePreviewOnPhoneDivider": "Ζωντανά σε αυτό το τηλέφωνο",
+    "livePreviewOnPhoneDivider": "Μόλις τώρα, σε αυτό το τηλέφωνο",
     "livePreviewTurnOnLiveText": "Ενεργοποίηση ζωντανού κειμένου",
     "deviceCatchUpOnItsWay": "στο δρόμο",
     "deviceCatchUpWhenOnline": "μόλις επανέλθει η σύνδεση",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Η ετήσια χρέωση δεν είναι διαθέσιμη για το πρόγραμμά σας αυτή τη στιγμή.",
     "yearlySwitchDoneTitle": "Είστε πλέον σε ετήσια χρέωση",
     "yearlySwitchDoneBody": "Χρεώθηκαν σήμερα {amount}. Ανανέωση στις {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} μέρη} one{{count} μέρος} two{{count} μέρη} few{{count} μέρη} many{{count} μέρη} other{{count} μέρη}}",
     "chatAppsWaitingMessageIn": "Στείλε το μήνυμα από τα {app}. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.",
-    "chatAppsCodeExpiredMessageIn": "Πάρε νέο κωδικό και στείλ' τον από τα {app}."
+    "chatAppsCodeExpiredMessageIn": "Πάρε νέο κωδικό και στείλ' τον από τα {app}.",
+    "episodeWritingNotes": "Γράφονται οι σημειώσεις…",
+    "episodeWritingNotesDetail": "Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.",
+    "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",
+    "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",
+    "liveAudioSaved": "Αποθηκεύτηκαν {duration}",
+    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση."
 }

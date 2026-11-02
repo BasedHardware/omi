@@ -33,6 +33,11 @@ from utils.batch_pipeline.intake import (
     get_durable_job_status,
     privacy_blocked_response,
 )
+from utils.batch_pipeline.intake_outcome import (
+    IntakeRouteEvidence,
+    legacy_landing_outcome,
+    record_upload_outcome,
+)
 from models.sync_job_status import (
     SyncJobStartResponse,
     SyncJobStatusResponse,
@@ -674,7 +679,7 @@ async def sync_local_files_v2(
     # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
     # fresh instance cannot admit legacy work on the 'on' default after the ramp went
     # draining/dark (M3 review; batch intake reads the mode the same way).
-    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
     legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     legacy_mode_read_at = time.monotonic()
     lane_decision = classify_sync_lane(
@@ -865,6 +870,7 @@ async def sync_local_files_v2(
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
         candidate_policy = resolve_batch_policy(uid)
+        intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(
             db_executor,
             ramp_admission_policy,
@@ -875,6 +881,7 @@ async def sync_local_files_v2(
             incoming_audio_seconds=audio_span(
                 {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
             ),
+            evidence=intake_evidence,
         )
         record_response = await registered_record_response(
             uid=uid,
@@ -890,6 +897,7 @@ async def sync_local_files_v2(
             # A legacy_final_pass_v1 owner is re-homed to batch once legacy is
             # draining/dark (final_pass_rehome); the route answers BATCH then.
             legacy_mode=legacy_mode,
+            evidence=intake_evidence,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
@@ -933,8 +941,14 @@ async def sync_local_files_v2(
                 },
                 record_router=registered_record_response,
                 policy=batch_policy,
+                evidence=intake_evidence,
             )
             if batch_response is not None:
+                # Count only a fresh admission this request (a re-ACK of prior
+                # custody, a fence/unavailable response, or a rehomed final-pass
+                # owner is a follow-on, not a batch landing).
+                if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
+                    record_upload_outcome('batch')
                 return batch_response
             sequencer_registration_started = False
 
@@ -942,7 +956,7 @@ async def sync_local_files_v2(
             # A legacy job is created only on a young mode read: a request that read 'on'
             # and then stalled (a long batch decode, a slow fallback) must not carry it past
             # a draining re-home of the same conversation (final_pass_rehome's flip grace).
-            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
             legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
 
         if not legacy_allowed:
@@ -973,6 +987,12 @@ async def sync_local_files_v2(
         else:
             admission_reason = legacy_dark.LegacyAdmissionReason.BATCH_NOT_ENABLED
         legacy_dark.record_legacy_admission(admission_reason, legacy_mode)
+        legacy_outcome = legacy_landing_outcome(intake_evidence, candidate_batch_enabled=candidate_policy.batch_enabled)
+        if legacy_outcome is not None:
+            # Fresh routing decisions only: an upload following a durable owner
+            # (legacy record owner, prior content receipt, final-pass owner) has
+            # no fresh decision and stays outside the closed outcome set.
+            record_upload_outcome(legacy_outcome)
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
@@ -1752,7 +1772,7 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     uid = payload.get('uid') if isinstance(payload, dict) else None
     if not isinstance(uid, str) or not uid:
         return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
-    if not legacy_dark.sequencer_dispatch_allowed():
+    if not legacy_dark.sequencer_dispatch_allowed(uid=uid):
         return legacy_dark.sequencer_dark_response()
     try:
         dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
@@ -1803,14 +1823,14 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
     except Exception:
         return await _run_sync_job_body(request, task_retry_count, entry_state)
-    if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                await warm_rollout_cohorts(payload['uid'])
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        if isinstance(payload.get('uid'), str):
+            try:
+                async with asyncio.timeout_at(route_deadline):
+                    await warm_rollout_cohorts(payload['uid'])
+            except TimeoutError:
+                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
         return await enrichment_response(payload)
     if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
         # Kill switch, before the sequencer lease and any lock, download or paid
@@ -1828,7 +1848,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
-            and not legacy_dark.sequencer_registration_allowed()
+            and not legacy_dark.sequencer_registration_allowed(uid=payload.get('uid'))
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -1848,7 +1868,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             except TimeoutError:
                 logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=dark_owner_probe')
                 return _budget_deferral_fallback('preamble_timeout', 'degraded')
-            if registered and legacy_dark.sequencer_dispatch_allowed():
+            if registered and legacy_dark.sequencer_dispatch_allowed(uid=payload.get('uid')):
                 # The draining sweep dispatches this job; acking keeps it the only dispatcher.
                 legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNS_JOB)
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
@@ -1863,7 +1883,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
-            and legacy_dark.sequencer_registration_allowed()
+            and legacy_dark.sequencer_registration_allowed(uid=payload.get('uid'))
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -1958,18 +1978,18 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
     # One absolute budget deadline for the whole sequenced request (entry_state,
     # captured and enforced at route entry): the fence read, payload parsing,
-    # begin_job, and the prior-job read below each run inside a timeout_at
+    # begin_job (including its prior-job snapshot) each run inside a timeout_at
     # against that deadline, so a stall in any of them ends the request through
     # the queue-owned 409 instead of carrying it past the Cloud Tasks dispatch
     # deadline or the middleware cap this change exists to stay under.
     sequenced_attempt_state: dict = entry_state
     try:
         async with asyncio.timeout_at(route_deadline):
-            began = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
+            claim = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=begin_job')
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
-    if not began:
+    if claim is None:
         logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
         return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
     stop = asyncio.Event()
@@ -1978,12 +1998,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         name=f'sync:uid-lease:{job_id}',
     )
     try:
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                prior_job = await run_blocking(db_executor, get_sync_job, job_id)
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=prior_read')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
+        prior_job = claim['job']
         prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
         effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
         # One state dict carries the post-budget deadline from the deferral
@@ -2575,7 +2590,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
 async def _release_expired_attempt_run_lock(
     attempt_state: dict, *, deadline: Optional[float] = None, strict: bool = False
 ) -> bool:
-    """Release a budget-expired attempt's run lock once its job is terminal.
+    """Release an expired run lock after terminalization or a read-only preamble.
 
     A terminal Redis transition is the pipeline's proven result: the
     redelivery's terminal branch only retries exact-job cleanup and never
@@ -2585,16 +2600,15 @@ async def _release_expired_attempt_run_lock(
     optional deadline bounds the release to the remaining response headroom;
     expiry skips it, again leaving the lock to its TTL.
 
-    ``strict=True`` demands a confirmed release: the caller returns 500 so
-    the queue redelivers into the terminal branch's retry-only cleanup, and
-    an unconfirmed release must not stand behind that obligation. With the
-    lock surviving to its TTL, every short-backoff queue retry would deflect
-    off the still-held 30-minute lock as a 409 — spending the task's whole
-    attempt contract without one cleanup retry landing; a direct backfill
-    job's per-UID slot would then stay held for its ~2-day TTL because no
-    later terminal poll releases it. Those callers fall back to the
-    preserved-lock deferral instead, which acks and schedules one
-    replacement past the lock's TTL.
+    Cohort warming has no in-flight pipeline/storage mutation. A confirmed
+    release also lets that preamble timeout retain its queue-owned 409.
+
+    ``strict=True`` demands confirmed release before a queue retry: terminal
+    cleanup returns 500 and cohort-read expiry returns 409. If the lock stays
+    held until TTL, short-backoff retries burn the whole attempt contract
+    without reaching work or cleanup; a direct backfill slot can then stick
+    until its own TTL. Unconfirmed releases keep the preserved-lock deferral,
+    which acks and schedules one replacement past the lock's TTL.
     """
     job_id = attempt_state.get('job_id')
     lock_token = attempt_state.get('lock_token')
@@ -2663,6 +2677,19 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
             async with budget:
                 return await _run_sync_job_attempt(request, task_retry_count, state)
     except TimeoutError:
+        if state.pop('cohort_warm_pending', False):
+            # Warming moved behind the no-op checks, but a read timeout must
+            # still return the original 409 before any paid work. Release
+            # only our confirmed token; uncertainty keeps the existing
+            # preserved-lock continuation, never retries against a held lock.
+            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
+            cleanup_started = time.monotonic()
+            release_deadline = cleanup_started + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
+            continuation_deadline = cleanup_started + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
+            state['post_budget_deadline'] = release_deadline
+            if await _release_expired_attempt_run_lock(state, deadline=release_deadline, strict=True):
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
+            return await _defer_sync_job_after_handler_budget_expiry(request, state, deadline=continuation_deadline)
         if not budget.expired():
             raise
         if not state.get('run_lock_reached'):
@@ -2940,6 +2967,18 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
+
+        # Membership is only needed for actual work. Epoch, migration, lock,
+        # expired-job, terminal and reconciled deliveries keep their existing
+        # acknowledgement/cleanup paths without a cohort-store round trip.
+        attempt_state['cohort_warm_pending'] = True
+        try:
+            await warm_rollout_cohorts(uid)
+        except TimeoutError:
+            # Let the wrapper confirm release before it returns the 409.
+            release_lock = False
+            raise
+        attempt_state.pop('cohort_warm_pending', None)
 
         if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
             await _finalize_sync_job_failure(

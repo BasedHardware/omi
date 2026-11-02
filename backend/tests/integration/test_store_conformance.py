@@ -412,6 +412,154 @@ def test_projection_cursor_survives_removal_of_its_source_row(h):
     assert h.store.projection_page(10, after=cursor)[0] == ['r0', 'r1']
 
 
+# -- merge, capacity and projection hints (Store protocol parity, plan A3 step 1) ----------------------------
+def _pending(h, segment, owner='o', **fields):
+    return ('jobs', segment, job(h, segment, owner=owner, merge_pending=True, **fields))
+
+
+def test_first_ready_pending_is_the_earliest_pending_row_with_a_result(h):
+    put_all(
+        h,
+        [
+            _pending(h, 'a', capture_at=1.0, state='leased'),
+            _pending(h, 'c', capture_at=3.0, state='result_ready'),
+            _pending(h, 'b', capture_at=2.0, state='result_ready'),
+            _pending(h, 'd', owner='p', capture_at=0.5, state='result_ready'),
+            ('jobs', 'e', job(h, 'e', capture_at=0.1, state='result_ready', merge_pending=False)),
+        ],
+    )
+    key = owner_key(h.uid('o'))
+    assert h.store.run(lambda tx: tx.first_ready_pending(key))['segment_id'] == 'b'
+    assert h.store.run(lambda tx: tx.first_ready_pending(owner_key(h.uid('nobody')))) is None
+
+
+def test_longest_ready_pending_orders_by_ready_at_and_ignores_rows_without_it(h):
+    put_all(
+        h,
+        [
+            _pending(h, 'a', state='result_ready', ready_at=5.0),
+            _pending(h, 'b', state='result_ready', ready_at=2.0),
+            _pending(h, 'c', state='result_ready'),
+            _pending(h, 'd', state='ready', ready_at=1.0),
+            ('jobs', 'e', job(h, 'e', state='result_ready', ready_at=0.5, merge_pending=False)),
+        ],
+    )
+    assert h.store.longest_ready_pending(owner_key(h.uid('o')))['segment_id'] == 'b'
+    assert h.store.longest_ready_pending(owner_key(h.uid('p'))) is None
+
+
+def test_fresh_pending_returns_the_earliest_fresh_rows_in_any_state(h):
+    put_all(
+        h,
+        [
+            _pending(h, 'a', capture_at=3.0, fresh_capture=True),
+            _pending(h, 'b', capture_at=1.0, fresh_capture=True),
+            _pending(h, 'c', capture_at=0.0, fresh_capture=False),
+            _pending(h, 'e', capture_at=2.0, fresh_capture=True, state='leased'),
+            ('jobs', 'f', job(h, 'f', capture_at=0.5, fresh_capture=True, merge_pending=False)),
+            _pending(h, 'g', owner='p', capture_at=0.1, fresh_capture=True),
+        ],
+    )
+    key = owner_key(h.uid('o'))
+    assert [row['segment_id'] for row in h.store.fresh_pending(key, 2)] == ['b', 'e']
+    assert [row['segment_id'] for row in h.store.fresh_pending(key, 10)] == ['b', 'e', 'a']
+
+
+def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h):
+    held = owner_key(h.uid('o'))
+    put_all(
+        h,
+        [
+            _pending(h, 'a'),
+            ('merge_holds', held, {'held': True}),
+            ('merge_holds', 'ok-stale', {'held': True}),
+            ('merge_holds', owner_key(h.uid('p')), {'held': False}),
+        ],
+    )
+    expected = sorted([(held, h.uid('o')), ('ok-stale', None)])  # document-name (byte) order
+    assert h.store.held_merge_owners(10) == expected
+    assert h.store.held_merge_owners(1) == expected[:1]
+    assert h.store.held_merge_owners(10, after=expected[0][0]) == expected[1:]
+
+
+def test_projection_successor_follows_one_link_and_fails_closed_on_a_fork(h):
+    key = 'ok-log'
+    links = {'r1': None, 'r2': 'r1', 'r3': 'r2', 'r3b': 'r2'}
+    rows = []
+    for segment, previous in links.items():
+        rows.append(('jobs', segment, job(h, segment)))
+        rows.append(('results', segment, {'segment_id': segment, 'owner_key': key, 'previous_segment_id': previous}))
+    rows.append(('jobs', 'r9', job(h, 'r9')))
+    rows.append(('results', 'r9', {'segment_id': 'r9', 'owner_key': key}))  # no link field never equals None
+    rows.append(('jobs', 'x1', job(h, 'x1')))
+    rows.append(('results', 'x1', {'segment_id': 'x1', 'owner_key': 'ok-other', 'previous_segment_id': 'r1'}))
+    put_all(h, rows)
+    assert h.store.projection_successor(key, None) == 'r1'
+    assert h.store.projection_successor(key, 'r1') == 'r2'
+    assert h.store.projection_successor(key, 'r2') is None  # two successors: fail closed
+    assert h.store.projection_successor(key, 'missing') is None
+
+
+def test_ready_for_capacity_counts_only_due_admissible_ready_work(h):
+    def row(segment, priority=1, state='ready', available_at=10.0, outcome='unattempted'):
+        decision = {} if outcome is None else {'compute_decision': {'outcome': outcome}}
+        return _pending(h, segment, priority=priority, state=state, available_at=available_at, **decision)
+
+    put_all(
+        h,
+        [
+            row('a'),
+            row('b', outcome='allowed'),
+            row('c', outcome='held'),
+            row('d', outcome=None),
+            row('e', available_at=500.0),
+            row('f', state='leased'),
+            row('g', priority=2),
+            ('jobs', 'h', job(h, 'h', available_at=10.0, compute_decision={'outcome': 'unattempted'})),
+        ],
+    )
+    assert h.store.ready_for_capacity(1, 100.0) == 2
+    assert h.store.ready_for_capacity(2, 100.0) == 1
+    empty = h.store.ready_for_capacity(0, 100.0)
+    assert empty == 0 and type(empty) is int
+
+
+def test_oldest_uncommitted_age_skips_allowance_holds(h):
+    hold = {'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'}}
+    parked = {'last_policy_hold': {'reason': 'allowance_exhausted'}}
+    put_all(h, [_pending(h, 'a', enqueued_at=1.0, **hold), _pending(h, 'b', enqueued_at=2.0, **parked)])
+    assert h.store.oldest(1) is None  # only holds, and the scan was not truncated
+    put_all(h, [_pending(h, 'c', enqueued_at=3.0)])
+    assert h.store.oldest(1) == 3.0
+    assert h.store.oldest(1, ready_only=True) == 1.0
+
+
+def test_key_tie_breaks_use_firestore_byte_order_not_the_database_collation(h):
+    """Firestore orders names bytewise; a locale collation would put 'a' before 'B' and 'ä' before 'z'."""
+    keys = ['ä', 'a', 'z', 'B']  # byte order: B < a < z < ä
+    rows = []
+    for key in keys:
+        rows.append(_pending(h, key, capture_at=1.0, state='retry', available_at=1.0))
+        rows.append(('results', key, {'segment_id': key, 'projection_state': 'pending', 'committed_at': 1.0}))
+    put_all(h, rows)
+    assert h.store.run(lambda tx: tx.first_pending(owner_key(h.uid('o'))))['segment_id'] == 'B'
+    assert h.store.due('retry', 5.0, 100) == ['B', 'a', 'z', 'ä']
+    first, cursor = h.store.projection_page(2)
+    assert first == ['B', 'a'] and h.store.projection_page(2, after=cursor)[0] == ['z', 'ä']
+
+
+def test_projection_page_narrows_to_requested_drain_states(h):
+    rows = []
+    for i, state in enumerate(('pending', 'quarantine_held', 'completed', 'ready')):
+        rows.append(('jobs', f'q{i}', job(h, f'q{i}')))
+        rows.append(('results', f'q{i}', {'segment_id': f'q{i}', 'projection_state': state, 'committed_at': 1.0 + i}))
+    put_all(h, rows)
+    assert h.store.projection_page(10)[0] == ['q0', 'q3']
+    assert h.store.projection_page(10, states=('quarantine_held',))[0] == ['q1']
+    with pytest.raises(ValueError):
+        h.store.projection_page(10, states=('completed',))
+
+
 # -- contention ---------------------------------------------------------------------------------------------
 def test_concurrent_read_modify_write_never_loses_an_update(h):
     need(h, 'sim')  # the simulator is single-threaded by design
@@ -427,3 +575,59 @@ def test_concurrent_read_modify_write_never_loses_an_update(h):
     with ThreadPoolExecutor(max_workers=2) as pool:  # Firestore aborts after 5 attempts under heavier contention
         list(pool.map(bump, range(6)))
     assert h.store.run(lambda tx: tx.get('owners', 'ctr'))['n'] == 6
+
+
+def test_reading_a_missing_document_fences_a_concurrent_create(h):
+    need(h, 'sim')  # the simulator is single-threaded by design
+
+    def create(i):
+        def body(tx):
+            if tx.get('gpus', 'slot'):
+                return False
+            tx.put('gpus', 'slot', {'token': f't{i}'})
+            return True
+
+        return h.store.run(body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        created = list(pool.map(create, range(4)))
+    assert created.count(True) == 1
+    assert h.store.run(lambda tx: tx.get('gpus', 'slot'))['token'] in {f't{i}' for i in range(4)}
+
+
+def test_concurrent_schedulers_lease_every_job_exactly_once(h):
+    """Four pullers over one store (A3 contention gate): no job is lost, none is leased twice."""
+    need(h, 'sim')  # the simulator is single-threaded by design
+    import threading
+    import time
+
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.scheduler import Scheduler
+
+    owners = [h.seed_user(f'c{i}') for i in range(4)]
+    expected = set()
+    seed = Scheduler(h.store)
+    for i, uid in enumerate(owners):
+        for j in range(3):
+            segment = f'c{i}-{j}'
+            expected.add(segment)
+            seed.enqueue(WorkItem(segment, uid, 1000.0 + j, f'gs://synthetic/{segment}', 30.0, Priority.DEEP), 1.0)
+    leased: list[str] = []
+    lock = threading.Lock()
+
+    def drain(worker):
+        scheduler = Scheduler(h.store, worker_id=f'w{worker}')
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            with lock:
+                if len(leased) >= len(expected):
+                    return
+            got = scheduler.pull(time.time(), 1)
+            with lock:
+                leased.extend(lease.item.segment_id for lease in got)
+            if not got:
+                time.sleep(0.05)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(drain, range(4)))
+    assert sorted(leased) == sorted(expected)

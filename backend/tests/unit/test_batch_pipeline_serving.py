@@ -171,10 +171,14 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=SimpleNamespace(allowed=True)))
     calls = []
+    budgets = []
+    deadline = admission.deadline_seconds
+    monkeypatch.setattr(admission, 'deadline_seconds', lambda value: budgets.append(value) or deadline(value))
 
     def send(request, timeout):
         calls.append(request.full_url)
-        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data))
+        headers = {'X-Omi-Admission-Seconds': request.get_header('X-omi-admission-seconds')}
+        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data), headers=headers)
         assert response.status_code == 200
         return io.BytesIO(response.content)
 
@@ -192,6 +196,8 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     pump = pump_module.Pump(Scheduler(store), worker, capacity=lambda: PoolCapacity(time.time(), 1))
     assert await pump.run_once() == 1
     assert worker.calls == 1 and len(calls) == 1
+    # The worker's advertised deadline reaches the server's clamp.
+    assert budgets == ['8.0'] and deadline(budgets[0]) == 8.0
     assert store.rows['jobs', 'synthetic']['state'] == 'committed'
     assert store.rows['jobs', 'synthetic']['compute_admission_token'] == store.rows['jobs', 'synthetic']['token']
 

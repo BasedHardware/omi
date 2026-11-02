@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Märkmed algavad, kui saabub lõplik transkriptsioon.",
     "episodeOnDeviceNotesFootnote": "Koostatakse teie telefonis, samal ajal kui räägite. Täielikud märkmed saabuvad koos lõpliku transkriptsiooniga.",
     "episodeOnThisPhone": "Selles telefonis",
-    "liveCardTitle": "Otse",
     "livePreviewBehind": "Lõplik transkriptsioon jääb umbes {duration} maha",
     "livePreviewCatchingUp": "Lõplik transkriptsioon jõuab järgi",
     "livePreviewNoEngineBody": "Teie sõnad ilmuvad siia ühe kuni kahe minuti pärast.",
     "livePreviewNoEngineTitle": "Salvestab turvaliselt",
-    "livePreviewOnPhoneDivider": "Otse selles telefonis",
+    "livePreviewOnPhoneDivider": "Just praegu, selles telefonis",
     "livePreviewTurnOnLiveText": "Lülita reaalajas tekst sisse",
     "deviceCatchUpOnItsWay": "teel",
     "deviceCatchUpWhenOnline": "võrgus olles",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Aastamaks pole sinu paketile praegu saadaval.",
     "yearlySwitchDoneTitle": "Maksad nüüd kord aastas",
     "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} osa} one{{count} osa} two{{count} osa} few{{count} osa} many{{count} osa} other{{count} osa}}",
     "chatAppsWaitingMessageIn": "Saada sõnum rakenduses {app}. See ekraan uueneb, kui Omi selle kätte saab.",
-    "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}."
+    "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}.",
+    "episodeWritingNotes": "Kirjutame märkmeid…",
+    "episodeWritingNotesDetail": "Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.",
+    "episodeCoversUpTo": "Katab kuni {time} · täielikud märkmed lõpus",
+    "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
+    "liveAudioSaved": "{duration} salvestatud",
+    "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal."
 }

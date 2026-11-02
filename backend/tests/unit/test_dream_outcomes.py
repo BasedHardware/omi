@@ -181,3 +181,28 @@ def test_undo_redo_of_an_applied_dream_change_each_emit_once(runtime, monkeypatc
     review_changes.set_undone(UID, change_id, True)  # unchanged: no second record
     review_changes.set_undone(UID, change_id, False)
     assert seen == [('dismiss_person', 'undo'), ('dismiss_person', 'redo')]
+
+
+def test_the_canary_undoing_its_own_fixture_is_not_an_owner_decision(runtime, monkeypatch):
+    import asyncio
+
+    from database import review_changes, review_store
+    from tests.unit.test_dream_cleanup_edits import UID
+    from tests.unit.test_dream_harness_runtime import scripted
+    from utils import dream_agent
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+    assert report['outcomes'][0]['status'] == 'applied'
+    change_id = next(
+        review_store.decode_doc(UID, row)['change']['change_id']
+        for key, row in runtime.rows.items()
+        if key[2:3] == ('review_changes',) and review_store.decode_doc(UID, row)
+    )
+    outcomes, undos = [], []
+    monkeypatch.setattr(dream_telemetry, 'record_outcome', lambda *args, **kwargs: outcomes.append(args))
+    monkeypatch.setattr(review_changes, 'record_undo', undos.append)
+    monkeypatch.setattr(review_changes, 'canary_uid', lambda: UID)
+
+    review_changes.set_undone(UID, change_id, True)
+
+    assert outcomes == [] and undos == []

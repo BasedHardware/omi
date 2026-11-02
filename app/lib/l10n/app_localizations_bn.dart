@@ -14669,9 +14669,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get episodeOnThisPhone => 'এই ফোনে';
 
   @override
-  String get liveCardTitle => 'লাইভ';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'চূড়ান্ত ট্রান্সক্রিপ্ট প্রায় $duration পিছিয়ে';
   }
@@ -14686,7 +14683,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'নিরাপদে রেকর্ড হচ্ছে';
 
   @override
-  String get livePreviewOnPhoneDivider => 'এই ফোনে লাইভ';
+  String get livePreviewOnPhoneDivider => 'এইমাত্র, এই ফোনে';
 
   @override
   String get livePreviewTurnOnLiveText => 'লাইভ টেক্সট চালু করুন';
@@ -14930,21 +14927,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countটি অংশ',
-      many: '$countটি অংশ',
-      few: '$countটি অংশ',
-      two: '$countটি অংশ',
-      one: '$countটি অংশ',
-      zero: '$countটি অংশ',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '$app অ্যাপে মেসেজটি পাঠান। Omi পাওয়ামাত্র এই স্ক্রিন আপডেট হবে।';
   }
@@ -14953,4 +14935,28 @@ class AppLocalizationsBn extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'নতুন কোড নিন এবং $app অ্যাপ থেকে পাঠান।';
   }
+
+  @override
+  String get episodeWritingNotes => 'নোট লেখা হচ্ছে…';
+
+  @override
+  String get episodeWritingNotesDetail => 'আগে ট্রান্সক্রিপ্ট শেষ করা হচ্ছে। আপনি এই পেজ ছেড়ে যেতে পারেন।';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time পর্যন্ত · শেষ হলে সম্পূর্ণ নোট';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time পর্যন্ত ট্রান্সক্রাইব হয়েছে';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration সংরক্ষিত';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।';
 }

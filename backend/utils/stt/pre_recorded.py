@@ -38,9 +38,11 @@ from config.stt_provider_policy import (
 from models.transcript_segment import TranscriptSegment
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
-from utils.stt.stream_close import MODULATE_BUDGET_MARKERS
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
+from utils.stt.modulate_batch import MODULATE_TIMEOUT as _MODULATE_TIMEOUT
+from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget_refusal
+from utils.stt.modulate_batch import wav_duration_seconds as _wav_duration_seconds
 from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
@@ -58,7 +60,6 @@ from utils.stt.vendor_guard import (
 )
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
-_MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 _verification_deadline: ContextVar[Optional[float]] = ContextVar('verification_stt_deadline', default=None)
 
 _held_single_attempt: ContextVar[bool] = ContextVar('held_stt_single_attempt', default=False)
@@ -99,16 +100,6 @@ _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
 # Fail-fast retry backoff bounds (sync functions on executor threads).
 MODULATE_FAIL_FAST_RETRY_SLEEP_MIN_SECONDS = 0.25
 MODULATE_FAIL_FAST_RETRY_SLEEP_MAX_SECONDS = 0.75
-
-
-def _wav_duration_seconds(audio_bytes: bytes) -> float:
-    """Cheap WAV-header duration for burn accounting; unparseable audio is 0 seconds."""
-    try:
-        with _wave.open(BytesIO(audio_bytes)) as source:
-            rate = source.getframerate()
-            return source.getnframes() / rate if rate > 0 else 0.0
-    except Exception:
-        return 0.0
 
 
 def _fail_fast_retry_sleep() -> None:
@@ -575,19 +566,81 @@ def deepgram_prerecorded_from_bytes(
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
-def _modulate_budget_refusal(status_code: int, body: str) -> bool:
-    """True when Velma's batch answer is account-budget, not a transient error.
+def modulate_batch_words(
+    result: Any, return_language: bool, language: Optional[str]
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+    """Parse one Velma batch 2xx body; shared by the sync and async clients. Raises on bad shapes."""
+    # Velma's batch success shape carries utterances (a list, empty for silence)
+    # beside text ("" for silence) and duration_ms. A 2xx body without the list
+    # (a JSON error envelope, a null, a bare string) is not a no-speech verdict,
+    # and neither is {"utterances": []} alone, which any unrelated 2xx envelope
+    # could carry. Silence therefore also needs text as a str or duration_ms as a
+    # number — one of them, not both, so the older host this client targets is
+    # held to no more than the docs promise. A non-empty list is parsed as
+    # before. Raise so callers keep the audio as retry material and held-piece
+    # recovery never checkpoints the reply as a completed empty result. See #23081.
+    if not isinstance(result, dict) or not isinstance(result.get('utterances'), list):
+        raise RuntimeError('Modulate response must carry an utterances list')
 
-    402 is credits regardless of wording; 429 is budget only when the body
-    carries a budget marker such as "insufficient credits" — the answer
-    Velma-2 gives when the account is out of credits (2026-10-22 outage: sync
-    jobs recorded it as a retryable upstream_error under provider=unknown).
-    The body is matched, never logged or labeled.
-    """
+    utterances = result['utterances']
+    if not utterances:
+        has_text = isinstance(result.get('text'), str)
+        duration_ms = result.get('duration_ms')
+        has_duration = isinstance(duration_ms, (int, float)) and not isinstance(duration_ms, bool)
+        if not (has_text or has_duration):
+            raise RuntimeError('Modulate response with empty utterances must carry text or duration_ms')
+        if has_text and result['text'].strip():
+            # Transcript text without utterances contradicts itself; never settle it as silence.
+            raise RuntimeError('Modulate response with empty utterances must not carry transcript text')
+        if return_language:
+            return [], language or 'multi'
+        return []
 
-    if status_code == 402:
-        return True
-    return status_code == 429 and any(marker in body.lower() for marker in MODULATE_BUDGET_MARKERS)
+    words: List[Dict[str, Any]] = []
+    language_votes: List[Tuple[str, int, float]] = []
+    for utt in utterances:
+        text = utt.get('text', '').strip()
+        if not text:
+            continue
+
+        start_ms = utt.get('start_ms', 0)
+        duration_ms = utt.get('duration_ms', 0)
+        start = start_ms / 1000.0
+        end = (start_ms + duration_ms) / 1000.0
+
+        raw_speaker = utt.get('speaker')
+        if isinstance(raw_speaker, int) and raw_speaker >= 1:
+            speaker_idx = raw_speaker - 1
+        else:
+            speaker_idx = 0
+        speaker = f'SPEAKER_{speaker_idx:02d}'
+
+        words.append({'timestamp': [start, end], 'speaker': speaker, 'text': text})
+
+        lang = utt.get('language')
+        if lang:
+            lang = lang.split('-')[0].split('_')[0].lower()
+            language_votes.append((lang, len(text.split()), max(0, duration_ms)))
+
+    top_text = result.get('text')
+    if not words and isinstance(top_text, str) and top_text.strip():
+        # Transcript text with only blank utterances is contradictory; never return it as silence.
+        raise RuntimeError('Modulate response with blank utterances must not carry transcript text')
+
+    if return_language:
+        # Tiny acknowledgments are noisy detection evidence. Only use them
+        # when the provider supplied no longer transcribed utterance.
+        has_long_utterance = any(len(utt.get('text', '').split()) >= 3 for utt in utterances)
+        totals: Dict[str, Tuple[int, float]] = {}
+        for lang, word_count, duration in language_votes:
+            if has_long_utterance and word_count < 3:
+                continue
+            count, seconds = totals.get(lang, (0, 0))
+            totals[lang] = (count + word_count, seconds + duration)
+        detected_language = max(totals, key=lambda lang: totals[lang]) if totals else language or 'multi'
+        return words, detected_language
+
+    return words
 
 
 @timeit
@@ -651,79 +704,7 @@ def modulate_prerecorded_from_bytes(
         # The POST itself reached the vendor and was accepted; a later shape
         # validation failure is not a second burned POST.
         record_vendor_burn(ENDPOINT_STT, 'ok', burn_seconds)
-        result = response.json()
-
-        # Velma's batch success shape carries utterances (a list, empty for silence)
-        # beside text ("" for silence) and duration_ms. A 2xx body without the list
-        # (a JSON error envelope, a null, a bare string) is not a no-speech verdict,
-        # and neither is {"utterances": []} alone, which any unrelated 2xx envelope
-        # could carry. Silence therefore also needs text as a str or duration_ms as a
-        # number — one of them, not both, so the older host this client targets is
-        # held to no more than the docs promise. A non-empty list is parsed as
-        # before. Raise so callers keep the audio as retry material and held-piece
-        # recovery never checkpoints the reply as a completed empty result. See #23081.
-        if not isinstance(result, dict) or not isinstance(result.get('utterances'), list):
-            raise RuntimeError('Modulate response must carry an utterances list')
-
-        utterances = result['utterances']
-        if not utterances:
-            has_text = isinstance(result.get('text'), str)
-            duration_ms = result.get('duration_ms')
-            has_duration = isinstance(duration_ms, (int, float)) and not isinstance(duration_ms, bool)
-            if not (has_text or has_duration):
-                raise RuntimeError('Modulate response with empty utterances must carry text or duration_ms')
-            if has_text and result['text'].strip():
-                # Transcript text without utterances contradicts itself; never settle it as silence.
-                raise RuntimeError('Modulate response with empty utterances must not carry transcript text')
-            if return_language:
-                return [], language or 'multi'
-            return []
-
-        words: List[Dict[str, Any]] = []
-        language_votes: List[Tuple[str, int, float]] = []
-        for utt in utterances:
-            text = utt.get('text', '').strip()
-            if not text:
-                continue
-
-            start_ms = utt.get('start_ms', 0)
-            duration_ms = utt.get('duration_ms', 0)
-            start = start_ms / 1000.0
-            end = (start_ms + duration_ms) / 1000.0
-
-            raw_speaker = utt.get('speaker')
-            if isinstance(raw_speaker, int) and raw_speaker >= 1:
-                speaker_idx = raw_speaker - 1
-            else:
-                speaker_idx = 0
-            speaker = f'SPEAKER_{speaker_idx:02d}'
-
-            words.append({'timestamp': [start, end], 'speaker': speaker, 'text': text})
-
-            lang = utt.get('language')
-            if lang:
-                lang = lang.split('-')[0].split('_')[0].lower()
-                language_votes.append((lang, len(text.split()), max(0, duration_ms)))
-
-        top_text = result.get('text')
-        if not words and isinstance(top_text, str) and top_text.strip():
-            # Transcript text with only blank utterances is contradictory; never return it as silence.
-            raise RuntimeError('Modulate response with blank utterances must not carry transcript text')
-
-        if return_language:
-            # Tiny acknowledgments are noisy detection evidence. Only use them
-            # when the provider supplied no longer transcribed utterance.
-            has_long_utterance = any(len(utt.get('text', '').split()) >= 3 for utt in utterances)
-            totals: Dict[str, Tuple[int, float]] = {}
-            for lang, word_count, duration in language_votes:
-                if has_long_utterance and word_count < 3:
-                    continue
-                count, seconds = totals.get(lang, (0, 0))
-                totals[lang] = (count + word_count, seconds + duration)
-            detected_language = max(totals, key=lambda lang: totals[lang]) if totals else language or 'multi'
-            return words, detected_language
-
-        return words
+        return modulate_batch_words(response.json(), return_language, language)
 
     except TranscriptionFailure:
         # Typed terminal failures never retry and never re-wrap into the

@@ -15,6 +15,15 @@
         }
       },
       {
+        "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
+        "condition": {
+          "age": 90,
+          "matchesPrefix": ["chunks/"],
+          "matchesStorageClass": ["COLDLINE"],
+          "matchesSuffix": [".batch.enc", ".batch.bin"]
+        }
+      },
+      {
         "action": {"type": "Delete"},
         "condition": {
           "isLive": false,

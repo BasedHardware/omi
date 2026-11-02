@@ -14774,9 +14774,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get episodeOnThisPhone => 'இந்த ஃபோனில்';
 
   @override
-  String get liveCardTitle => 'நேரலை';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'இறுதி எழுத்துப்பிரதி சுமார் $duration பின்தங்கியுள்ளது';
   }
@@ -14792,7 +14789,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'பாதுகாப்பாக பதிவு செய்கிறது';
 
   @override
-  String get livePreviewOnPhoneDivider => 'இந்த ஃபோனில் நேரலை';
+  String get livePreviewOnPhoneDivider => 'இப்போதுதான், இந்த ஃபோனில்';
 
   @override
   String get livePreviewTurnOnLiveText => 'நேரலை உரையை இயக்கு';
@@ -15038,21 +15035,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பகுதிகள்',
-      many: '$count பகுதிகள்',
-      few: '$count பகுதிகள்',
-      two: '$count பகுதிகள்',
-      one: '$count பகுதிகள்',
-      zero: '$count பகுதிகள்',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '$app-இல் மெசேஜை அனுப்புங்கள். Omi-க்குக் கிடைத்தவுடன் இந்தத் திரை புதுப்பிக்கப்படும்.';
   }
@@ -15061,4 +15043,28 @@ class AppLocalizationsTa extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'புதிய குறியீட்டைப் பெற்று $app-இலிருந்து அனுப்புங்கள்.';
   }
+
+  @override
+  String get episodeWritingNotes => 'குறிப்புகள் எழுதப்படுகின்றன…';
+
+  @override
+  String get episodeWritingNotesDetail => 'முதலில் படியெடுப்பை முடிக்கிறோம். இந்தப் பக்கத்தை விட்டு வெளியேறலாம்.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time வரை · முடிந்ததும் முழு குறிப்புகள்';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time வரை படியெடுக்கப்பட்டது';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration சேமிக்கப்பட்டது';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.';
 }
