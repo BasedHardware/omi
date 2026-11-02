@@ -233,9 +233,8 @@ def _empty(at, speech=0):
     }
 
 
-def test_terminal_empty_counts_as_unprocessed_by_default_and_stays_visible():
-    assert TERMINAL_EMPTY_IS_PROCESSED is False
-    sample = _sample(jobs=[_empty(EPOCH + 60), _empty(EPOCH - 60)])
+def test_switched_off_terminal_empty_counts_as_unprocessed_and_stays_visible():
+    sample = _sample(jobs=[_empty(EPOCH + 60), _empty(EPOCH - 60)], terminal_empty_processed=False)
     assert sample['new_oldest']['quarantined'] == EPOCH + 60
     assert sample['new_over_sla']['quarantined'] == 1
     assert sample['new_over_sla']['terminal_empty'] == 1
@@ -243,6 +242,8 @@ def test_terminal_empty_counts_as_unprocessed_by_default_and_stays_visible():
 
 
 def test_switched_on_terminal_empty_without_speech_is_processed_but_measured_speech_still_alarms():
+    # David, 2026-11-02: "finished recording counts as processed".
+    assert TERMINAL_EMPTY_IS_PROCESSED is True
     jobs = [_empty(EPOCH + 60), _empty(EPOCH + 90, speech=1.2), _empty(NOW - 600)]
     sample = _sample(jobs=jobs, terminal_empty_processed=True)
     assert sample['new_oldest']['quarantined'] == EPOCH + 90

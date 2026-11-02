@@ -31,11 +31,11 @@ Legs:
 - `terminal_empty` (counts only): the quarantined units that are `failed_held` with recovery failure `empty_asr`
   and measured held VAD speech exactly 0, the existing silence contract for "no recoverable speech".
 
-Open question for David: does a terminal empty unit count as processed? `TERMINAL_EMPTY_IS_PROCESSED` in
-`config/batch_timeliness.py` is the one-line switch. It defaults to `False`, so those units stay in the alarm. `True`
-subtracts them exactly from the `quarantined` leg; `terminal_empty` stays visible either way. On prod at
-2026-11-02 10:36Z, no quarantined `empty_asr` unit had zero measured speech: 13 of 13 admitted since the epoch carried
-some (10 under 2 s), so flipping it would not change today's alarm.
+David, 2026-11-02 10:45Z: "finished recording counts as processed". So `TERMINAL_EMPTY_IS_PROCESSED` in
+`config/batch_timeliness.py` defaults to `True`: terminal empty units are subtracted exactly from the `quarantined`
+leg, and `terminal_empty` stays visible. `False` puts them back in the alarm. On prod at 2026-11-02 10:36Z, no
+quarantined `empty_asr` unit had zero measured speech: 13 of 13 admitted since the epoch carried some (10 under
+2 s), so today the default changes nothing. Units with measured speech always stay in the alarm.
 
 Config: `BATCH_TIMELINESS_ALARM_ENABLED` (default on; `false` stops the Firestore reads),
 `BATCH_TIMELINESS_EPOCH` (default `2026-11-02T06:09:00Z`, when the target was set) and

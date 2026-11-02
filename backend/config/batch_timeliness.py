@@ -10,10 +10,10 @@ import os
 SLA_SECONDS = 7200
 DEFAULT_EPOCH = '2026-11-02T06:09:00Z'
 DEFAULT_INTERVAL_SECONDS = 300.0
-# Open question for David (2026-11-02): does a terminal empty_asr unit with no recoverable speech (failed held,
-# measured held VAD speech exactly 0) count as processed? False keeps it in the 2h alarm; it stays a visible
-# count either way.
-TERMINAL_EMPTY_IS_PROCESSED = False
+# David, 2026-11-02 10:45Z: "finished recording counts as processed". A terminal empty_asr unit with no recoverable
+# speech (failed held, measured held VAD speech exactly 0) leaves the 2h alarm; it stays a visible count. False puts
+# it back in the alarm.
+TERMINAL_EMPTY_IS_PROCESSED = True
 
 
 def batch_timeliness_alarm_enabled() -> bool:
