@@ -6,7 +6,7 @@ import XCTest
 
 final class PostHogFlagRequestBlockerTests: XCTestCase {
   func testOnlyFlagPathsAreHandledLocally() async throws {
-    for path in ["/flags/?v=2", "/decide/?v=3"] {
+    for path in ["/flags/?v=2", "/flags?v=2", "/decide/?v=3", "/decide?v=3"] {
       let url = try XCTUnwrap(URL(string: "https://posthog.invalid" + path))
       let session = URLSession(configuration: PostHogFlagRequestBlocker.sessionConfiguration())
       defer { session.invalidateAndCancel() }
@@ -43,8 +43,12 @@ final class PostHogFlagRequestBlockerTests: XCTestCase {
     PostHogSDK.shared.capture("flags-cut-capture")
     PostHogSDK.shared.flush()
     await fulfillment(of: [capture], timeout: 5)
-    XCTAssertFalse(recorder.paths.contains { $0 == "/flags/" || $0 == "/decide/" })
-    XCTAssertTrue(recorder.paths.contains("/batch/"))
+    XCTAssertFalse(
+      recorder.paths.contains {
+        let path = $0.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return path == "flags" || path == "decide"
+      })
+    XCTAssertTrue(recorder.paths.contains { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "batch" })
   }
 }
 
@@ -58,7 +62,7 @@ private final class FlagTrafficRecorder: @unchecked Sendable {
   func record(_ path: String) {
     lock.withLock {
       seen.append(path)
-      if path == "/batch/", !captured {
+      if path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "batch", !captured {
         captured = true
         capture.fulfill()
       }
