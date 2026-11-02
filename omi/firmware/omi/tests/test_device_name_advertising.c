@@ -24,7 +24,9 @@ static unsigned warnings;
             __VA_ARGS__                                                                                                \
         }                                                                                                              \
     }
+// clang-format off: local and CI versions disagree on a brace in a macro body.
 #define BT_DATA(type, pointer, length) {type, length, (const uint8_t *) (pointer)}
+// clang-format on
 #define BT_LE_ADV_CONN NULL
 struct bt_data {
     uint8_t type;
