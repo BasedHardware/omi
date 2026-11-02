@@ -113,7 +113,6 @@ class _DreamReportPageState extends State<DreamReportPage> {
                 _RunCard(
                   key: ValueKey('dream_run_${run.runId}'),
                   run: run,
-                  live: report.live,
                   expanded: run.runId == _expandedRunId,
                   onToggle: () => setState(() => _expandedRunId = run.runId == _expandedRunId ? null : run.runId),
                 ),
@@ -184,12 +183,9 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _RunCard extends StatelessWidget {
-  const _RunCard({super.key, required this.run, required this.live, required this.expanded, required this.onToggle});
+  const _RunCard({super.key, required this.run, required this.expanded, required this.onToggle});
 
   final DreamRun run;
-
-  /// Edits were applied; in preview mode they are only proposed.
-  final bool live;
   final bool expanded;
   final VoidCallback onToggle;
 
@@ -246,7 +242,7 @@ class _RunCard extends StatelessWidget {
               ),
             ),
           ),
-          if (expanded) _RunDetail(run: run, live: live),
+          if (expanded) _RunDetail(run: run),
         ],
       ),
     );
@@ -265,18 +261,27 @@ IconData _editIcon(String kind) => switch (kind) {
     };
 
 class _RunDetail extends StatelessWidget {
-  const _RunDetail({required this.run, required this.live});
+  const _RunDetail({required this.run});
 
   final DreamRun run;
-  final bool live;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final children = <Widget>[];
-    if (run.edits.isNotEmpty) {
-      children.add(ReviewSectionLabel(label: live ? l10n.dreamReportFixed : l10n.dreamReportWouldFix));
-      for (final edit in run.edits) {
+    // Each edit carries its own outcome: only an applied one reads as fixed, whatever the report's mode.
+    final applied = [
+      for (final edit in run.edits)
+        if (edit.applied) edit
+    ];
+    final proposed = [
+      for (final edit in run.edits)
+        if (!edit.applied) edit
+    ];
+    for (final (label, edits) in [(l10n.dreamReportFixed, applied), (l10n.dreamReportWouldFix, proposed)]) {
+      if (edits.isEmpty) continue;
+      children.add(ReviewSectionLabel(label: label));
+      for (final edit in edits) {
         children.add(_EditRow(edit: edit));
       }
     }
