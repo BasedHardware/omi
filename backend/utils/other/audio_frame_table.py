@@ -99,23 +99,35 @@ def receipt_frames(bucket, uid: str, receipt: dict) -> tuple[list[dict], int]:
 
 
 def entries(frames: list[dict], rate: int, source: dict[str, Any]) -> list[dict]:
-    """Expose each original frame separately, with its offset in the decoded object."""
+    """Walk original frames; coalesce only sample-contiguous rows, retaining every real gap."""
     validate_frames(frames, rate)
     result = []
     offset = 0
     for frame in frames:
         count = round(frame['samples'] * 16000 / rate)
-        result.append(
-            {
-                **source,
-                'timestamp': frame['start'],
-                'raw_end': frame['start'] + frame['samples'] / rate,
-                'span': {'start': frame['start'], 'samples': count, 'sample_rate': 16000},
-                'raw_offset_samples': round(offset * 16000 / rate),
-                'gap_before': frame['gap_before'],
-                'is_batch': False,
-            }
-        )
+        entry = {
+            **source,
+            'timestamp': frame['start'],
+            'raw_end': frame['start'] + frame['samples'] / rate,
+            'span': {'start': frame['start'], 'samples': count, 'sample_rate': 16000},
+            'raw_offset_samples': round(offset * 16000 / rate),
+            'gap_before': frame['gap_before'],
+            'is_batch': False,
+        }
+        previous = result[-1] if result else None
+        expected = previous['timestamp'] + previous['span']['samples'] / 16000 if previous else 0.0
+        if (
+            previous
+            and not frame['gap_before']
+            and previous['raw_offset_samples'] + previous['span']['samples'] == entry['raw_offset_samples']
+            and math.isclose(
+                frame['start'], expected, rel_tol=0, abs_tol=2 * max(math.ulp(frame['start']), math.ulp(expected))
+            )
+        ):
+            previous['span']['samples'] += count
+            previous['raw_end'] = entry['raw_end']
+        else:
+            result.append(entry)
         offset += frame['samples']
     return result
 

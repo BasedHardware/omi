@@ -11,7 +11,16 @@ from utils.other.audio_chunk_replay import AudioChunkContentConflict
 
 
 def upload_projection(
-    bucket, private_bucket, uid, conversation_id, chunks, protection, sample_rate, write_gate, archive_capture=None
+    bucket,
+    private_bucket,
+    uid,
+    conversation_id,
+    chunks,
+    protection,
+    sample_rate,
+    write_gate,
+    archive_capture=None,
+    verify_overlap=None,
 ):
     paths = []
     for chunk in chunks:
@@ -21,6 +30,8 @@ def upload_projection(
         digest = hashlib.sha256(payload).hexdigest()
         if rate != sample_rate or digest != receipt['pcm_sha256'] or len(payload) != receipt['samples'] * 2:
             raise ValueError('framed projection differs from custody PCM')
+        if verify_overlap is not None:
+            verify_overlap(payload, frames)
         suffix = 'enc' if protection == 'enhanced' else 'bin'
         path = f'chunks/{uid}/{conversation_id}/{frames[0]["start"]:.3f}-{frames[-1]["start"]:.3f}.batch.{suffix}'
         blob = bucket.blob(path)
