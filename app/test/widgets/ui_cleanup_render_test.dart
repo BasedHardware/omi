@@ -28,18 +28,13 @@ import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/search/global_search.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/review_provider.dart';
-import 'package:omi/services/on_device/on_device_model.dart';
-import 'package:omi/services/on_device/on_device_settings.dart';
-import 'package:omi/services/on_device/on_device_transcription_controller.dart';
-import 'package:omi/services/on_device/phone_power_source.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../helpers/sfpro_font_fixtures.dart';
-import '../support/on_device_fakes.dart';
 
 /// Home after the UI cleanup: only Questions for you above the list, and recordings waiting for a
-/// plan back as locked rows that offer this phone or a plan. CI runs it as a layout check.
+/// plan back as locked rows that open the plans. CI runs it as a layout check.
 const _output = String.fromEnvironment('UI_CLEANUP_RENDER_OUTPUT');
 
 class _EnvFields implements EnvFields {
@@ -76,13 +71,6 @@ Future<void> _loadFonts() async {
     await loader.load();
   }
 }
-
-OnDeviceTranscriptionController _phone({OnDeviceSettings settings = const OnDeviceSettings(enabled: false)}) =>
-    OnDeviceTranscriptionController(
-      model: FakeOnDeviceModel(
-          const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed, sizeBytes: 120 * 1024 * 1024), null),
-      power: const UnknownPhonePowerSource(),
-    )..debugActivate(settings: settings, transcribing: false);
 
 final _start = DateTime(2026, 10, 27, 21, 59).millisecondsSinceEpoch ~/ 1000;
 final _recordings = [
@@ -201,25 +189,6 @@ void main() {
     expect(find.byType(HeldRecordingLockedRow), findsNWidgets(3));
     await _snap(tester, b, '001-mobile-ios-home-locked-rows');
     review.dispose();
-    debugDefaultTargetPlatformOverride = null;
-  });
-
-  testWidgets('tapping a locked row offers this phone or a plan', (tester) async {
-    final phone = _phone();
-    final b = await pump(
-        tester,
-        Builder(
-          builder: (context) => ListView(children: [
-            HeldRecordingLockedRow(
-              recording: _recordings.first,
-              onPressed: () => openLockedRecordingChoice(context, controller: phone),
-            ),
-          ]),
-        ));
-    await tester.tap(find.byType(HeldRecordingLockedRow));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await _snap(tester, b, '002-mobile-ios-locked-row-choice');
     debugDefaultTargetPlatformOverride = null;
   });
 

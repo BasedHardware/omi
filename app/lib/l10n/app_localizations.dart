@@ -22581,6 +22581,12 @@ abstract class AppLocalizations {
   /// **'Nothing to fix'**
   String get dreamReportNothingFound;
 
+  /// Section label for edits proposed in preview mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Would fix'**
+  String get dreamReportWouldFix;
+
   /// Section label for edits that were applied.
   ///
   /// In en, this message translates to:
@@ -25880,24 +25886,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recordings that fail keep retrying in the background. Anything we can\'t transcribe is reported to us automatically.'**
   String get onTheWayFootnote;
-
-  /// Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}'**
-  String homeNoiseFoldHidden(int count);
-
-  /// Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place.
-  ///
-  /// In en, this message translates to:
-  /// **'Show'**
-  String get homeNoiseFoldShow;
-
-  /// Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
-  String homeNoiseFoldHide(int count);
 
   /// Loss warning only for recordings stored on this phone and not uploaded
   ///

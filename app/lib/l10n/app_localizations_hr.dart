@@ -12671,6 +12671,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get dreamReportNothingFound => 'Nema što ispraviti';
 
   @override
+  String get dreamReportWouldFix => 'Ispravio bi';
+
+  @override
   String get dreamReportFixed => 'Ispravljeno';
 
   @override
@@ -14647,31 +14650,6 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Snimci koji ne uspiju i dalje se pokušavaju u pozadini. Sve što ne možemo transkribirati automatski nam se prijavljuje.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kratkih isječaka skriveno',
-      one: '1 kratki isječak skriven',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Prikaži';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skrij $count kratkih isječaka',
-      one: 'Skrij 1 kratki isječak',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

@@ -12629,6 +12629,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dreamReportNothingFound => 'Nie je čo opraviť';
 
   @override
+  String get dreamReportWouldFix => 'Opravil by';
+
+  @override
   String get dreamReportFixed => 'Opravené';
 
   @override
@@ -14606,31 +14609,6 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nahrávky, ktorých odosielanie zlyhá, sa budú na pozadí opakovať. Všetko, čo nedokážeme prepísať, sa nám automaticky nahlási.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skrytých krátkych nahrávok: $count',
-      one: '1 skrytá krátka nahrávka',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Zobraziť';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skryť $count krátkych nahrávok',
-      one: 'Skryť 1 krátku nahrávku',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

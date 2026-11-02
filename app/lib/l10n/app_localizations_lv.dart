@@ -12664,6 +12664,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dreamReportNothingFound => 'Nav ko labot';
 
   @override
+  String get dreamReportWouldFix => 'Labotu';
+
+  @override
   String get dreamReportFixed => 'Labots';
 
   @override
@@ -14645,31 +14648,6 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Ieraksti, kas neizdodas, turpina mēģināt fonā. Viss, ko nevaram transkribēt, mums tiek ziņots automātiski.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Paslēpti $count īsi ieraksti',
-      one: 'Paslēpts 1 īss ieraksts',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Rādīt';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Slēpt $count īsus ierakstus',
-      one: 'Slēpt 1 īsu ierakstu',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

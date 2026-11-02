@@ -12634,6 +12634,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get dreamReportNothingFound => 'Không có gì cần sửa';
 
   @override
+  String get dreamReportWouldFix => 'Sẽ sửa';
+
+  @override
   String get dreamReportFixed => 'Đã sửa';
 
   @override
@@ -14613,31 +14616,6 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Các bản ghi âm bị lỗi sẽ tiếp tục được thử lại trong nền. Những gì chúng tôi không thể phiên âm sẽ tự động được báo cáo cho chúng tôi.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Đã ẩn $count clip ngắn',
-      one: 'Đã ẩn 1 clip ngắn',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Hiển thị';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Ẩn $count clip ngắn',
-      one: 'Ẩn 1 clip ngắn',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

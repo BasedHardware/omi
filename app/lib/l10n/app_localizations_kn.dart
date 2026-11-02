@@ -12673,6 +12673,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get dreamReportNothingFound => 'ಸರಿಪಡಿಸಲು ಏನೂ ಇಲ್ಲ';
 
   @override
+  String get dreamReportWouldFix => 'ಸರಿಪಡಿಸುತ್ತಿತ್ತು';
+
+  @override
   String get dreamReportFixed => 'ಸರಿಪಡಿಸಲಾಗಿದೆ';
 
   @override
@@ -14659,31 +14662,6 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'ವಿಫಲವಾದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮರುಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತವೆ. ನಾವು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗದ ವಿಷಯಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಮಗೆ ವರದಿಯಾಗುತ್ತವೆ.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ',
-      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'ತೋರಿಸಿ';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ',
-      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

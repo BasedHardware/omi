@@ -12457,6 +12457,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportNothingFound => '수정할 내용 없음';
 
   @override
+  String get dreamReportWouldFix => '수정할 예정';
+
+  @override
   String get dreamReportFixed => '수정됨';
 
   @override
@@ -14410,31 +14413,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayFootnote => '실패한 녹음은 백그라운드에서 계속 다시 시도합니다. 전사할 수 없는 내용은 자동으로 저희에게 보고됩니다.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 클립 $count개 숨겨짐',
-      one: '짧은 클립 1개 숨겨짐',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => '표시';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 클립 $count개 숨기기',
-      one: '짧은 클립 1개 숨기기',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

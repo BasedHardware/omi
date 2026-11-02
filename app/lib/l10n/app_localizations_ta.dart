@@ -12724,6 +12724,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get dreamReportNothingFound => 'சரிசெய்ய எதுவும் இல்லை';
 
   @override
+  String get dreamReportWouldFix => 'சரிசெய்திருக்கும்';
+
+  @override
   String get dreamReportFixed => 'சரிசெய்யப்பட்டது';
 
   @override
@@ -14713,31 +14716,6 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'தோல்வியுற்ற பதிவுகள் பின்னணியில் மீண்டும் முயற்சிக்கும். எழுத்துப்பெயர்க்க முடியாதவை தானாகவே எங்களுக்குத் தெரிவிக்கப்படும்.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count குறுகிய பதிவுகள் மறைக்கப்பட்டன',
-      one: '1 குறுகிய பதிவு மறைக்கப்பட்டது',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'காட்டவும்';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count குறுகிய பதிவுகளை மறைக்கவும்',
-      one: '1 குறுகிய பதிவை மறைக்கவும்',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

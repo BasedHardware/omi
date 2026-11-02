@@ -12648,6 +12648,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get dreamReportNothingFound => 'Düzeltilecek bir şey yok';
 
   @override
+  String get dreamReportWouldFix => 'Düzeltirdi';
+
+  @override
   String get dreamReportFixed => 'Düzeltildi';
 
   @override
@@ -14624,31 +14627,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Başarısız olan kayıtlar arka planda yeniden denenmeye devam eder. Transkriptini çıkaramadığımız her şey bize otomatik olarak bildirilir.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kısa kayıt gizlendi',
-      one: '1 kısa kayıt gizlendi',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Göster';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kısa kaydı gizle',
-      one: '1 kısa kaydı gizle',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

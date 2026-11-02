@@ -12640,6 +12640,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get dreamReportNothingFound => 'Inget att åtgärda';
 
   @override
+  String get dreamReportWouldFix => 'Skulle åtgärda';
+
+  @override
   String get dreamReportFixed => 'Åtgärdat';
 
   @override
@@ -14620,31 +14623,6 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Inspelningar som misslyckas försöker igen i bakgrunden. Allt som vi inte kan transkribera rapporteras automatiskt till oss.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count korta klipp dolda',
-      one: '1 kort klipp dolt',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Visa';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Dölj $count korta klipp',
-      one: 'Dölj 1 kort klipp',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

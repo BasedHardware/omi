@@ -12649,6 +12649,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get dreamReportNothingFound => 'ٹھیک کرنے کو کچھ نہیں';
 
   @override
+  String get dreamReportWouldFix => 'ٹھیک کرتا';
+
+  @override
   String get dreamReportFixed => 'ٹھیک کر دیا گیا';
 
   @override
@@ -14624,31 +14627,6 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'ناکام ہونے والی ریکارڈنگز پس منظر میں دوبارہ کوشش کرتی رہتی ہیں۔ جو ہم ٹرانسکرائب نہیں کر سکتے وہ خود بخود ہمیں رپورٹ ہو جاتا ہے۔';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count مختصر کلپس چھپائے گئے',
-      one: '1 مختصر کلپ چھپایا گیا',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'دکھائیں';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count مختصر کلپس چھپائیں',
-      one: '1 مختصر کلپ چھپائیں',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

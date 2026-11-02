@@ -12638,6 +12638,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get dreamReportNothingFound => 'Ei korjattavaa';
 
   @override
+  String get dreamReportWouldFix => 'Korjaisi';
+
+  @override
   String get dreamReportFixed => 'Korjattu';
 
   @override
@@ -14616,31 +14619,6 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nauhoitukset, jotka epäonnistuvat, yritetään yhä uudelleen taustalla. Kaikki, mitä emme pysty transkriboimaan, ilmoitetaan meille automaattisesti.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lyhyttä leikettä piilotettu',
-      one: '1 lyhyt leike piilotettu',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Näytä';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Piilota $count lyhyttä leikettä',
-      one: 'Piilota 1 lyhyt leike',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

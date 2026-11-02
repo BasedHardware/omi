@@ -12436,6 +12436,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dreamReportNothingFound => '没有需要修复的内容';
 
   @override
+  String get dreamReportWouldFix => '将会修复';
+
+  @override
   String get dreamReportFixed => '已修复';
 
   @override
@@ -14385,31 +14388,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onTheWayFootnote => '失败的录音会在后台持续重试。我们无法转录的内容会自动报告给我们。';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已隐藏 $count 段短录音',
-      one: '已隐藏 1 段短录音',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => '显示';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '隐藏 $count 段短录音',
-      one: '隐藏 1 段短录音',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

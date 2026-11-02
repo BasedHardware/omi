@@ -12630,6 +12630,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dreamReportNothingFound => 'Pole midagi parandada';
 
   @override
+  String get dreamReportWouldFix => 'Parandaks';
+
+  @override
   String get dreamReportFixed => 'Parandatud';
 
   @override
@@ -14604,31 +14607,6 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Salvestised, mis ei õnnestu, proovitakse taustal pidevalt uuesti. Kõik, mida me ei suuda transkribeerida, raporteeritakse meile automaatselt.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lühikest klippi on peidetud',
-      one: '1 lühike klipp on peidetud',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Kuva';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Peida $count lühikest klippi',
-      one: 'Peida 1 lühike klipp',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

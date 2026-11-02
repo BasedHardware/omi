@@ -489,7 +489,9 @@ class _SyncPageState extends State<SyncPage> {
     final readyToSync = syncProvider.missingWals.length;
     final step = _runTracker.update(s, syncProvider.allWals);
     String dur(int seconds) => OmiDuration.compact(seconds, l);
-    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
+    // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
+    final paused = syncProvider.isRateLimited && syncProvider.rateLimitReason != RateLimitReason.edgeThrottle;
+    final bool showSpinner = (isActive || uploaded > 0) && !paused;
 
     String title;
     String? subtitle;
@@ -526,10 +528,9 @@ class _SyncPageState extends State<SyncPage> {
           }
           break;
       }
-    } else if (syncProvider.isRateLimited) {
+    } else if (paused) {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
-      // An edge throttle clears on its own, so it reads as a neutral pause, not an amber warning.
-      if (syncProvider.rateLimitReason != RateLimitReason.edgeThrottle) titleColor = Colors.orangeAccent;
+      titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
       final job = syncProvider.offlineServerProcessingSeconds;

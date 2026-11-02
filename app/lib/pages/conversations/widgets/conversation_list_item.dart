@@ -234,7 +234,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      unawaited(openLockedRecordingChoice(context));
+      openHeldAudioPlans(context);
       return;
     }
     if (widget.homeEpisode case final episode?) {
@@ -507,7 +507,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
     return OmiLockedPreview(
-      status: context.l10n.statusPending,
       label: context.l10n.upgrade,
       onPressed: onTap,
       child: content,
@@ -960,7 +959,7 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    await openLockedRecordingChoice(context);
+    openHeldAudioPlans(context);
   }
 
   @override
@@ -971,7 +970,6 @@ class LockedConversationRun extends StatelessWidget {
         key: const Key('locked_conversation_run'),
         // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
         interactive: true,
-        status: context.l10n.statusPending,
         label: context.l10n.upgrade,
         onPressed: () => _openUsage(context),
         child: Column(

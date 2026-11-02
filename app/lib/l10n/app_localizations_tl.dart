@@ -12737,6 +12737,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dreamReportNothingFound => 'Walang aayusin';
 
   @override
+  String get dreamReportWouldFix => 'Aayusin sana';
+
+  @override
   String get dreamReportFixed => 'Naayos';
 
   @override
@@ -14728,31 +14731,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Ang mga recording na nabigo ay patuloy na susubukan ulit sa background. Awtomatikong maiuulat sa amin ang mga hindi namin matranscribe.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Nakatago ang $count maikling clip',
-      one: 'Nakatago ang 1 maikling clip',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Ipakita';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Itago ang $count maikling clip',
-      one: 'Itago ang 1 maikling clip',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

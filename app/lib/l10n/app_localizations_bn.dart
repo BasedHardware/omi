@@ -12633,6 +12633,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get dreamReportNothingFound => 'ঠিক করার মতো কিছু নেই';
 
   @override
+  String get dreamReportWouldFix => 'ঠিক করত';
+
+  @override
   String get dreamReportFixed => 'ঠিক করা হয়েছে';
 
   @override
@@ -14607,31 +14610,6 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'ব্যর্থ হওয়া রেকর্ডিং পটভূমিতে আবার চেষ্টা করতে থাকে। আমরা যা ট্রান্সক্রাইব করতে পারি না, তা স্বয়ংক্রিয়ভাবে আমাদের কাছে জানানো হয়।';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countটি ছোট ক্লিপ লুকানো হয়েছে',
-      one: '1টি ছোট ক্লিপ লুকানো হয়েছে',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'দেখান';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countটি ছোট ক্লিপ লুকান',
-      one: '1টি ছোট ক্লিপ লুকান',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

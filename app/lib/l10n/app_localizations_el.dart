@@ -12717,6 +12717,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dreamReportNothingFound => 'Δεν υπάρχει κάτι για διόρθωση';
 
   @override
+  String get dreamReportWouldFix => 'Θα διόρθωνε';
+
+  @override
   String get dreamReportFixed => 'Διορθώθηκε';
 
   @override
@@ -14709,31 +14712,6 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Οι ηχογραφήσεις που αποτυγχάνουν συνεχίζουν να δοκιμάζουν στο παρασκήνιο. Οτιδήποτε δεν μπορούμε να μεταγράψουμε αναφέρεται αυτόματα σε εμάς.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Κρύφτηκαν $count σύντομα αποσπάσματα',
-      one: 'Κρύφτηκε 1 σύντομο απόσπασμα',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Εμφάνιση';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Απόκρυψη $count σύντομων αποσπασμάτων',
-      one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

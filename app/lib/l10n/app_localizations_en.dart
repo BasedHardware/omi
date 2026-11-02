@@ -12621,6 +12621,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dreamReportNothingFound => 'Nothing to fix';
 
   @override
+  String get dreamReportWouldFix => 'Would fix';
+
+  @override
   String get dreamReportFixed => 'Fixed';
 
   @override
@@ -14597,31 +14600,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Recordings that fail keep retrying in the background. Anything we can\'t transcribe is reported to us automatically.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Show';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

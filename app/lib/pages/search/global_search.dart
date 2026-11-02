@@ -160,7 +160,12 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
   Future<ConversationSearchResult> conversations(String query,
           {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) =>
       searchConversationsServerResult(query,
-          limit: 20, includeDiscarded: includeNoise, speakerId: speakerId, startDate: startDate, endDate: endDate);
+          // Short clips are filtered from the discarded matches here, so that search reads a deeper page.
+          limit: includeNoise ? 50 : 20,
+          includeDiscarded: includeNoise,
+          speakerId: speakerId,
+          startDate: startDate,
+          endDate: endDate);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) =>

@@ -12642,6 +12642,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get dreamReportNothingFound => 'दुरुस्त करण्यासारखे काही नाही';
 
   @override
+  String get dreamReportWouldFix => 'दुरुस्त केले असते';
+
+  @override
   String get dreamReportFixed => 'दुरुस्त केले';
 
   @override
@@ -14620,31 +14623,6 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'अपयशी ठरलेली रेकॉर्डिंग पार्श्वभूमीमध्ये पुन्हा प्रयत्न करत राहतात. आम्ही लिप्यंतरित करू न शकणारे मजकूर आपोआप आम्हाला नोंदवला जातो.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count लहान क्लिप्स लपवली आहेत',
-      one: '1 लहान क्लिप लपवले आहे',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'दाखवा';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count लहान क्लिप्स लपवा',
-      one: '1 लहान क्लिप लपवा',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

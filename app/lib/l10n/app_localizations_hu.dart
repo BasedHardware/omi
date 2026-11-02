@@ -12685,6 +12685,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dreamReportNothingFound => 'Nincs javítanivaló';
 
   @override
+  String get dreamReportWouldFix => 'Javítana';
+
+  @override
   String get dreamReportFixed => 'Javítva';
 
   @override
@@ -14669,31 +14672,6 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'A sikertelen felvételek a háttérben újra és újra próbálkoznak. Amit nem tudunk átírni, arról automatikusan értesítést kapunk.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rövid felvétel elrejtve',
-      one: '1 rövid felvétel elrejtve',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Megjelenítés';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rövid felvétel elrejtése',
-      one: '1 rövid felvétel elrejtése',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

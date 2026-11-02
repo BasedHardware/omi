@@ -12691,6 +12691,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dreamReportNothingFound => 'Nimic de remediat';
 
   @override
+  String get dreamReportWouldFix => 'Ar remedia';
+
+  @override
   String get dreamReportFixed => 'Remediat';
 
   @override
@@ -14674,31 +14677,6 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Înregistrările care eșuează continuă să fie reîncercate în fundal. Orice nu putem transcrie ni se raportează automat.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count clipuri scurte ascunse',
-      one: '1 clip scurt ascuns',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Afișează';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Ascunde $count clipuri scurte',
-      one: 'Ascunde 1 clip scurt',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

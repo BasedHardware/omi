@@ -12678,6 +12678,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dreamReportNothingFound => 'Исправлять нечего';
 
   @override
+  String get dreamReportWouldFix => 'Исправил бы';
+
+  @override
   String get dreamReportFixed => 'Исправлено';
 
   @override
@@ -14659,31 +14662,6 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Если загрузка записи завершится сбоем, попытки продолжатся в фоновом режиме. Всё, что мы не сможем расшифровать, будет автоматически отправляться нам.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Скрыто $count коротких записей',
-      one: 'Скрыта 1 короткая запись',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Показать';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Скрыть $count коротких записей',
-      one: 'Скрыть 1 короткую запись',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

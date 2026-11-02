@@ -12636,6 +12636,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get dreamReportNothingFound => 'Není co opravovat';
 
   @override
+  String get dreamReportWouldFix => 'Opravil by';
+
+  @override
   String get dreamReportFixed => 'Opraveno';
 
   @override
@@ -14610,31 +14613,6 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nahrávky, které se nepodaří nahrát, se na pozadí odesílají znovu a znovu. Cokoli, co nedokážeme přepsat, se nám hlásí automaticky.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skryto krátkých nahrávek: $count',
-      one: 'Skrytá 1 krátká nahrávka',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Zobrazit';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skrýt krátké nahrávky: $count',
-      one: 'Skrýt 1 krátkou nahrávku',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {

@@ -110,7 +110,7 @@ void main() {
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_title)), findsOneWidget);
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_upgrade)), findsNothing);
         expect(find.byType(BackdropFilter), findsNothing);
-        expect(find.text('Pending'), findsOneWidget);
+        expect(find.text('Pending'), findsNothing, reason: 'David, 11-02: the frosted card carries no Pending text');
         expect(find.byIcon(Icons.lock_outline), findsNothing);
         expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);

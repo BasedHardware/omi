@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/subscription.dart';
-import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
-import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
@@ -19,15 +17,6 @@ bool heldAudioPhoneEligible(OnDeviceTranscriptionController controller) {
   return controller.model.status.isSupported;
 }
 
-Future<void> chooseHeldAudioOnPhone(BuildContext context, OnDeviceTranscriptionController controller) async {
-  await controller.updateSettings(controller.settings.copyWith(enabled: true));
-  if (!context.mounted) return;
-  final model = controller.model;
-  if (!model.engineResolved) await model.refresh();
-  if (!context.mounted || !model.status.isSupported || model.status.isInstalled) return;
-  await openOnDeviceSetup(context, controller: controller);
-}
-
 void openHeldAudioPlans(BuildContext context) {
   unawaited(openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'));
 }
@@ -36,23 +25,6 @@ void openHeldAudioPlans(BuildContext context) {
 List<HeldAudioRecording> lockedHeldRecordings(HeldAudioSummary? held, ProcessingBacklog? backlog) {
   if (held == null || held.seconds <= 0 || backlog?.isProcessing == true) return const [];
   return held.recordings;
-}
-
-/// What a locked row offers: this phone, when it can run the engine, or a plan.
-Future<void> openLockedRecordingChoice(BuildContext context, {OnDeviceTranscriptionController? controller}) async {
-  final resolved = controller ?? OnDeviceTranscriptionController.instance;
-  if (!heldAudioPhoneEligible(resolved) || resolved.settings.enabled) {
-    openHeldAudioPlans(context);
-    return;
-  }
-  final choice = await showOnDeviceAtCapSheet(context);
-  if (!context.mounted || choice == null) return;
-  switch (choice) {
-    case OnDeviceAtCapChoice.transcribeOnPhone:
-      await chooseHeldAudioOnPhone(context, resolved);
-    case OnDeviceAtCapChoice.upgrade:
-      openHeldAudioPlans(context);
-  }
 }
 
 class HeldRecordingLockedRow extends StatelessWidget {
@@ -75,9 +47,8 @@ class HeldRecordingLockedRow extends StatelessWidget {
         children: [
           OmiLockedPreview(
             key: Key('held_recording_locked_${recording.id}'),
-            status: l10n.statusPending,
             label: l10n.upgrade,
-            onPressed: onPressed ?? () => openLockedRecordingChoice(context),
+            onPressed: onPressed ?? () => openHeldAudioPlans(context),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
               decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),

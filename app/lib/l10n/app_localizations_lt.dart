@@ -12656,6 +12656,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dreamReportNothingFound => 'Nėra ką taisyti';
 
   @override
+  String get dreamReportWouldFix => 'Ką pataisytų';
+
+  @override
   String get dreamReportFixed => 'Pataisyta';
 
   @override
@@ -14633,31 +14636,6 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Paslėpta $count trumpų įrašų',
-      one: 'Paslėptas 1 trumpas įrašas',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Rodyti';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Slėpti $count trumpus įrašus',
-      one: 'Slėpti 1 trumpą įrašą',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
