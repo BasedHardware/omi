@@ -121,6 +121,9 @@ cleanup and immediately kicks the next queued UID head, just like Cloud Tasks;
 duplicate completion cannot enqueue it again. The parent stops intake at
 shutdown, drains for 1450s within the
 1500s pod grace, then kills its owned group. No global pattern-based kill.
+Normal child exit first flushes active holds for up to 30s and drains tracked
+background tasks for up to 10s, without importing the API lifespan. Lease loss
+skips that flush and exits immediately under the retained Redis fence.
 
 Google identity is attached Workload Identity only; the chart masks legacy
 key variables from the full runtime secret. `OMI_CUSTOMER_DATA_PROJECT` must

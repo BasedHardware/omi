@@ -130,6 +130,66 @@ class Client:
         return {'accepted': self.accepted}
 
 
+@pytest.mark.parametrize('status', [0, 1])
+async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatch, status):
+    from utils.executors import start_background_task
+    from utils.sync import cap_hold_lifecycle
+
+    closed = asyncio.Event()
+    drained = asyncio.Event()
+
+    class Hold:
+        async def close(self):
+            closed.set()
+
+    async def tail():
+        try:
+            await asyncio.Event().wait()
+        finally:
+            drained.set()
+
+    class Exited(BaseException):
+        pass
+
+    def exit_process(code):
+        assert code == status
+        assert closed.is_set()
+        assert drained.is_set()
+        raise Exited
+
+    monkeypatch.setattr(cap_hold_lifecycle, 'ACTIVE', {Hold()})
+    monkeypatch.setattr(worker_job, 'run', AsyncMock(return_value=status))
+    monkeypatch.setattr(worker_job.os, '_exit', exit_process)
+    task = start_background_task(tail(), name='test:worker-exit-tail')
+    await asyncio.sleep(0)
+    try:
+        with pytest.raises(Exited):
+            await worker_job.process_entry(LEASE)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_lease_loss_exits_before_flushing_past_its_fence(monkeypatch):
+    from utils.sync import cap_hold_lifecycle
+
+    flush = AsyncMock()
+
+    class Exited(BaseException):
+        pass
+
+    def exit_process(code):
+        assert code == 2
+        flush.assert_not_awaited()
+        raise Exited
+
+    monkeypatch.setattr(worker_job, 'run', AsyncMock(side_effect=asyncio.CancelledError))
+    monkeypatch.setattr(cap_hold_lifecycle, 'flush_active', flush)
+    monkeypatch.setattr(worker_job.os, '_exit', exit_process)
+    with pytest.raises(Exited):
+        await worker_job.process_entry(LEASE)
+
+
 @pytest.mark.parametrize('project', ['', '   '])
 def test_bootstrap_refuses_unpinned_customer_project_before_clients(monkeypatch, project):
     monkeypatch.setenv('OMI_DEPLOYMENT', 'production')
