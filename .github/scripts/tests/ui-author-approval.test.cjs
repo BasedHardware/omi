@@ -114,6 +114,38 @@ test('arbitrarily named SwiftUI file is gated by immutable contents', async () =
   await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
 
+test('Swift over the 1 MB contents limit is read through its blob; inconsistent blobs fail closed', async () => {
+  const large = (head, size = 1129163) => {
+    const body = Buffer.alloc(size, ' '); body.write(head); return body;
+  };
+  const setup = (body, blob = {}) => {
+    const f = fixture();
+    f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift'}],commits:[],total_commits:0}});
+    f.github.rest.repos.getContent = async () => ({data:{encoding:'none',content:'',size:body.length,sha:'b'.repeat(40)}});
+    f.blobs = [];
+    f.github.rest.git = {getBlob: async ({file_sha}) => {
+      f.blobs.push(file_sha);
+      return {data:{encoding:'base64',sha:file_sha,size:body.length,content:body.toString('base64'),...blob}};
+    }};
+    return f;
+  };
+  let f = setup(large('import Foundation\nstruct Client {}'));
+  await run(f); assert.equal(f.statuses.at(-1).state,'success');
+  assert.deepEqual(f.blobs,['b'.repeat(40),'b'.repeat(40)]);  // base and head
+  f = setup(large('import SwiftUI\nstruct Hidden: View {}'));
+  await run(f); assert.equal(f.statuses.at(-1).state,'failure');  // still gated by contents
+  for (const blob of [{sha:'f'.repeat(40)}, {size:5}, {content:''}, {encoding:'utf-8'}]) {
+    f = setup(large('import Foundation'), blob);
+    await assert.rejects(run(f), /Incomplete Swift source evidence/);
+    assert.equal(f.statuses.at(-1).state,'failure');
+  }
+  f = setup(large('import Foundation'));
+  f.github.rest.git.getBlob = async () => { const e = new Error('Not Found'); e.status = 404; throw e; };
+  await assert.rejects(run(f), /Incomplete Swift source evidence/);  // never read as an absent file
+  f = setup(large('import Foundation', 101 * 1024 * 1024));
+  await assert.rejects(run(f), /Incomplete Swift source evidence/);
+});
+
 test('arbitrarily named AppKit panel requires approval', async () => {
   const f = fixture();
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Chrome/CustomChrome.swift'}],commits:[],total_commits:0}});

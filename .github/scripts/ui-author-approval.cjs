@@ -23,6 +23,29 @@ function decision(pr, files, commits, comments) {
   return {required, allowed: !required || (!incomplete && !!approved), incomplete};
 }
 
+// The contents API inlines files up to 1 MB; above that it answers encoding
+// 'none' with the blob SHA. Read those through the Git blob API (100 MB limit),
+// so a large generated client is still inspected. Anything incomplete or
+// inconsistent fails closed.
+const INLINE_LIMIT = 1000000;
+const BLOB_LIMIT = 100 * 1024 * 1024;
+async function swiftSource(github, repo, path, ref) {
+  const {data} = await github.rest.repos.getContent({...repo,path,ref});
+  if (data.encoding === 'base64' && data.content && data.size <= INLINE_LIMIT) {
+    return Buffer.from(data.content,'base64').toString('utf8');
+  }
+  if (data.encoding !== 'none' || !data.sha || !(data.size > INLINE_LIMIT && data.size <= BLOB_LIMIT)) {
+    throw new Error('Incomplete Swift source evidence');
+  }
+  // A missing blob is not a missing file: never let its 404 read as "absent at this ref".
+  const blob = await github.rest.git.getBlob({...repo,file_sha:data.sha}).then(r => r.data, () => ({}));
+  const source = blob.encoding === 'base64' && blob.content ? Buffer.from(blob.content,'base64') : null;
+  if (!source || blob.sha !== data.sha || blob.size !== data.size || source.length !== data.size) {
+    throw new Error('Incomplete Swift source evidence');
+  }
+  return source.toString('utf8');
+}
+
 async function evidence(github, repo, pr) {
   const basehead = `${pr.base.sha}...${pr.head.sha}`;
   const first = (await github.rest.repos.compareCommitsWithBasehead({
@@ -62,11 +85,7 @@ async function evidence(github, repo, pr) {
       if (!/^desktop\/macos\/.*\.swift$/.test(path)) continue;
       for (const ref of [pr.base.sha,pr.head.sha]) {
         try {
-          const {data} = await github.rest.repos.getContent({...repo,path,ref});
-          if (data.encoding !== 'base64' || !data.content || data.size > 1000000) {
-            throw new Error('Incomplete Swift source evidence');
-          }
-          const source = Buffer.from(data.content,'base64').toString('utf8');
+          const source = await swiftSource(github,repo,path,ref);
           file.ui ||= /\bimport\s+(?:SwiftUI|AppKit)\b|:\s*(?:[\w.]+\s*,\s*)*(?:NSView|NSViewController|NSPanel|NSWindow|UIView|UIViewController)\b/.test(source);
         } catch (error) {
           if (error.status !== 404) throw error;
