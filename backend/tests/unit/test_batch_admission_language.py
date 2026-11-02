@@ -494,12 +494,28 @@ async def test_refused_sample_leaves_the_upload_for_legacy_staging(monkeypatch, 
     assert not os.path.exists(os.path.dirname(seen[0]))
 
 
-def test_repeated_upload_name_links_once_and_keeps_the_list_shape(tmp_path):
+def test_repeated_upload_name_is_decoded_once(tmp_path):
     wal = wal_upload(tmp_path)
     directory, linked = intake._private_sample_paths([str(wal), str(wal)])
     try:
-        assert linked[0] == linked[1] and os.path.basename(linked[0]) == wal.name
+        # A second decode pass over the same consumed file would fail the whole upload.
+        assert len(linked) == 1 and os.path.basename(linked[0]) == wal.name
         assert open(linked[0], 'rb').read() == b'synthetic-wal'
+    finally:
+        intake.shutil.rmtree(directory)
+
+
+def test_real_decode_of_a_repeated_name_reads_the_private_link_and_spares_the_upload(tmp_path):
+    from tests.unit.test_batch_pipeline_audio import pcm
+    from utils.batch_pipeline.capture_decode import decode_units
+
+    upload = pcm(tmp_path, 1750000100, 16000)
+    original = open(upload, 'rb').read()
+    directory, linked = intake._private_sample_paths([upload, upload])
+    try:
+        units = list(decode_units(linked))
+        assert len(units) == 1 and units[0].duration_seconds == 1
+        assert open(upload, 'rb').read() == original  # legacy still stages the router's file
     finally:
         intake.shutil.rmtree(directory)
 

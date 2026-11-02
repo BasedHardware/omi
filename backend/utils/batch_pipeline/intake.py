@@ -123,17 +123,15 @@ def _private_sample_paths(paths: list[str]) -> tuple[str, list[str]]:
     """
     directory = tempfile.mkdtemp(prefix='omi-batch-sample-')
     try:
-        linked, targets = [], {}
-        for path in paths:
-            # A repeated upload name is one router file; link it once, keep the list shape.
-            if path not in targets:
-                target = os.path.join(directory, os.path.basename(path))
-                try:
-                    os.link(path, target)
-                except OSError:
-                    shutil.copy2(path, target)
-                targets[path] = target
-            linked.append(targets[path])
+        linked = []
+        # A repeated upload name is one router file on disk; decode consumes it, so decode it once.
+        for path in dict.fromkeys(paths):
+            target = os.path.join(directory, os.path.basename(path))
+            try:
+                os.link(path, target)
+            except OSError:
+                shutil.copy2(path, target)
+            linked.append(target)
         return directory, linked
     except Exception:
         shutil.rmtree(directory, ignore_errors=True)
