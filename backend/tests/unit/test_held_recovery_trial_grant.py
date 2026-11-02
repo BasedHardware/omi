@@ -130,22 +130,30 @@ def _subscription_event(kind, previous_status=None):
 
 @pytest.fixture
 def release_hooks(monkeypatch):
+    """The real upgrade path down to choose(); Stripe and the trial grant are synthetic."""
     from models.users import PlanType
-    import utils.processing_backlog as backlog
 
     calls = []
-
-    async def upgrade(uid, request_key, *, intent_at):
-        calls.append(('conversion', request_key))
+    increased = {'value': False}
+    statuses = {}
 
     async def trial(uid, stripe_subscription):
         calls.append(('trial', stripe_subscription['id']))
 
-    monkeypatch.setattr(worker, 'upgrade_async', upgrade)
+    async def immediate(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'run_blocking', immediate)
+    monkeypatch.setattr(
+        worker, 'choose', lambda uid, *, request_key, automatic, intent_at: calls.append(('conversion', request_key))
+    )
     monkeypatch.setattr(worker, 'trial_started_async', trial)
-    monkeypatch.setattr(backlog, 'allowance_increased', lambda previous, current: False)
-    paid = SimpleNamespace(plan=PlanType.unlimited_v2)
-    return SimpleNamespace(calls=calls, paid=paid, basic=SimpleNamespace(plan=PlanType.basic))
+    monkeypatch.setattr(worker, '_stripe_status', lambda subscription_id: statuses.get(subscription_id))
+    monkeypatch.setattr(backlog, 'allowance_increased', lambda previous, current: increased['value'])
+    paid = SimpleNamespace(plan=PlanType.unlimited_v2, stripe_subscription_id='sub_synthetic', current_period_end=9)
+    return SimpleNamespace(
+        calls=calls, increased=increased, statuses=statuses, paid=paid, basic=SimpleNamespace(plan=PlanType.basic)
+    )
 
 
 async def test_only_the_subscription_creation_grants_a_trial(release_hooks):
@@ -156,6 +164,14 @@ async def test_only_the_subscription_creation_grants_a_trial(release_hooks):
     await worker.subscription_changed_async(UID, updated, trialing(), release_hooks.paid, release_hooks.paid)
     created_free = _subscription_event('customer.subscription.created')
     await worker.subscription_changed_async(UID, created_free, trialing(), None, release_hooks.basic)
+    assert release_hooks.calls == [('trial', trialing()['id'])]
+
+
+async def test_a_trial_start_that_raises_the_allowance_releases_only_the_grant(release_hooks):
+    """Basic -> Unlimited trial raises the allowance, but a trialing subscription never converts."""
+    release_hooks.increased['value'] = True
+    created = _subscription_event('customer.subscription.created')
+    await worker.subscription_changed_async(UID, created, trialing(), None, release_hooks.paid)
     assert release_hooks.calls == [('trial', trialing()['id'])]
 
 
@@ -171,6 +187,29 @@ async def test_a_trial_converting_on_real_payment_releases_as_a_conversion(relea
         UID, past_due, trialing(status='past_due'), release_hooks.paid, release_hooks.paid
     )
     assert release_hooks.calls == []
+
+
+async def test_a_trial_checkout_never_converts_and_a_paid_one_does(release_hooks):
+    release_hooks.increased['value'] = True
+    event = {'id': 'evt', 'created': TRIAL_START}
+    session = {'id': 'cs_synthetic', 'subscription': 'sub_synthetic'}
+    for status in ('trialing', None, 'incomplete'):
+        release_hooks.statuses['sub_synthetic'] = status
+        await worker.checkout_completed_async(UID, event, session, None, release_hooks.paid)
+    assert release_hooks.calls == []
+    release_hooks.statuses['sub_synthetic'] = 'active'
+    await worker.checkout_completed_async(UID, event, session, None, release_hooks.paid)
+    assert release_hooks.calls == [('conversion', 'checkout:cs_synthetic')]
+
+
+def test_a_plan_change_while_trialing_never_converts(release_hooks):
+    release_hooks.increased['value'] = True
+    release_hooks.statuses['sub_synthetic'] = 'trialing'
+    worker.plan_changed(UID, 'price_synthetic', release_hooks.basic, release_hooks.paid)
+    assert release_hooks.calls == []
+    release_hooks.statuses['sub_synthetic'] = 'active'
+    worker.plan_changed(UID, 'price_synthetic', release_hooks.basic, release_hooks.paid)
+    assert release_hooks.calls == [('conversion', 'plan-change:sub_synthetic:price_synthetic:9')]
 
 
 def test_trial_grant_is_a_plain_config_value():
@@ -318,6 +357,23 @@ async def test_each_released_recording_carries_its_source_to_admission(grant_run
     await worker.run(UID)
     assert grant_run.sources == ['trial']
     assert worker.backlog_release.source.get() is None
+
+
+async def test_an_automatic_release_passes_over_a_hold_legacy_already_started(grant_run):
+    """Legacy spend pins a hold to the legacy route, outside the idle gate and vendor table."""
+    hour = 3600
+    grant_run.holds(
+        [
+            (
+                'legacy',
+                {'listed_at': 900, 'created_at': 500, 'seconds': hour, 'state': 'held', 'piece_receipts': {'p': {}}},
+            ),
+            ('batch', {'listed_at': 800, 'created_at': 500, 'seconds': hour, 'state': 'held'}),
+        ]
+    )
+    await worker.run(UID)
+    assert grant_run.processed == ['batch']
+    assert grant_run.job['remaining'] == pytest.approx(GRANT - RATE)
 
 
 def test_new_recordings_on_a_trial_transcribe_normally(monkeypatch):

@@ -112,6 +112,8 @@ def _candidate(kind, snap) -> dict[str, Any]:
         'at': at,
         'units': max(0, units),
         'state': row.get('state'),
+        # Legacy recovery already spent on this hold, so it can only finish on the legacy route.
+        'legacy_started': kind == 'audio' and bool(row.get('piece_receipts') or row.get('processed_paths')),
         'queued_at': row.get('created_at' if kind == 'audio' else 'queued_at', 0),
     }
 
@@ -358,6 +360,14 @@ async def run(
                 if not await save(updates):
                     return False
                 continue
+            if job.get('automatic') and item.get('legacy_started'):
+                # An automatic release never takes the legacy route, where neither the idle gate
+                # nor the vendor table applies. It is passed over like audio that does not fit and stays
+                # held for a manual choice.
+                record_release('legacy_started')
+                if not await save(updates):
+                    return False
+                continue
             if job.get('automatic'):
                 release = await run_blocking(
                     db_executor, partial(backlog_release.decide, uid, job, item['units'], kind=item['kind'])
@@ -408,29 +418,78 @@ async def run(
     return continuation
 
 
-def upgrade(uid: str, request_key: str, *, intent_at):
-    """Only payment intent calls this; monthly renewal/reset never creates intent."""
+def _stripe_status(subscription_id) -> str | None:
+    """The subscription's live Stripe status; None when Stripe can't say."""
+    if not subscription_id:
+        return None
+    try:
+        import stripe
+
+        return (stripe.Subscription.retrieve(subscription_id).to_dict() or {}).get('status')
+    except Exception as error:
+        logger.warning(
+            'event=processing_backlog outcome=conversion_status_unavailable exception_type=%s', type(error).__name__
+        )
+        return None
+
+
+def upgrade(uid: str, request_key: str, *, intent_at, subscription_id=None, status=None):
+    """Only payment intent calls this; monthly renewal/reset never creates intent.
+
+    A conversion releases only on a real charge (``active``). A trialing subscription is
+    covered by its 25h grant, and its own trialing->active update converts later, so a
+    trial's checkout or creation can never release past the grant. Unknown status waits.
+    """
+    if (status if status is not None else _stripe_status(subscription_id)) != 'active':
+        return
     choose(uid, request_key=request_key, automatic=True, intent_at=intent_at)
 
 
-async def upgrade_async(uid: str, request_key: str, *, intent_at):
-    await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
+async def upgrade_async(uid: str, request_key: str, *, intent_at, subscription_id=None, status=None):
+    await run_blocking(
+        db_executor,
+        partial(upgrade, uid, request_key, intent_at=intent_at, subscription_id=subscription_id, status=status),
+    )
+
+
+def plan_changed(uid: str, price_id: str, previous, current) -> None:
+    """An immediate plan change that raises the allowance releases within it."""
+    from utils.processing_backlog import allowance_increased
+
+    if allowance_increased(previous, current):
+        key = f'plan-change:{current.stripe_subscription_id}:{price_id}:{current.current_period_end}'
+        upgrade(uid, key, intent_at=time.time(), subscription_id=current.stripe_subscription_id)
+
+
+async def checkout_completed_async(uid: str, event: dict, session: dict, previous, current) -> None:
+    """A completed checkout that raises the allowance releases within it, once the charge is real."""
+    from utils.processing_backlog import allowance_increased
+
+    if allowance_increased(previous, current):
+        await upgrade_async(
+            uid,
+            f'checkout:{session.get("id")}',
+            intent_at=event.get('created'),
+            subscription_id=session.get('subscription'),
+        )
 
 
 async def subscription_changed_async(uid: str, event: dict, stripe_subscription: dict, previous, current) -> None:
     """A Stripe subscription event's automatic releases, for an owner whose funded processing is on.
 
-    A trial's conversion to a real charge, or an allowance increase, releases within the plan's
-    allowance. Only the subscription's creation (the trial start) grants; a later update such as
-    a plan change while trialing never does.
+    A trial's conversion to a real charge, or an allowance increase on an active subscription,
+    releases within the plan's allowance. Only the subscription's creation (the trial start)
+    grants; a later update such as a plan change while trialing never does.
     """
     from utils.processing_backlog import allowance_increased
     from utils.subscription import is_paid_plan
 
+    status = stripe_subscription.get('status')
     previous_status = ((event.get('data') or {}).get('previous_attributes') or {}).get('status')
-    converted = previous_status == 'trialing' and stripe_subscription.get('status') == 'active'
-    if converted or allowance_increased(previous, current):
-        await upgrade_async(uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'))
+    if previous_status == 'trialing' or allowance_increased(previous, current):
+        await upgrade_async(
+            uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'), status=status or ''
+        )
     if event.get('type') == 'customer.subscription.created' and is_paid_plan(current.plan):
         await trial_started_async(uid, stripe_subscription)
 
