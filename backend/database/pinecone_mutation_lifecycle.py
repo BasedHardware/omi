@@ -5,6 +5,7 @@ process-wide lock over Firestore IO. A late admission settles before returning
 to its provider caller. No provider work is retried by this registry.
 """
 
+import asyncio
 from collections.abc import Callable
 import logging
 from threading import Lock
@@ -16,6 +17,20 @@ logger = logging.getLogger(__name__)
 PENDING = Gauge('omi_pinecone_mutations_inflight', 'Process-local admitted or admitting Pinecone mutations')
 UNCERTAIN = Counter('omi_pinecone_mutation_uncertain_marks_total', 'Successful uncertain settlement calls')
 DRAIN_ERRORS = Counter('omi_pinecone_mutation_drain_errors_total', 'Failed shutdown settlement calls')
+
+
+async def drain_on_shutdown(drain: Callable[[], Any], *, timeout: float = 5.0) -> None:
+    """Reserve grace for audio/client cleanup even when Firestore is unavailable.
+
+    Timeout stops waiting, not the worker: settlement may continue during the
+    remaining platform grace. It never asserts that the provider has stopped.
+    """
+    try:
+        await asyncio.wait_for(asyncio.to_thread(drain), timeout=timeout)
+    except TimeoutError:
+        logger.warning('event=pinecone_mutation_drain outcome=shutdown_wait_timeout')
+    except Exception:
+        logger.error('event=pinecone_mutation_drain outcome=shutdown_failed')
 
 
 class MutationRegistry:

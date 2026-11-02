@@ -30,8 +30,10 @@ provider acknowledgement cannot clear a ticket already marked uncertain.
 
 The drain runs before other application cleanup consumes the shutdown grace.
 It offloads synchronous Firestore settlement independently of the shared DB
-executor, whose workers may all be blocked in provider calls. It
-does not wait for provider calls to finish. Firestore RPC latency and platform
+executor, whose workers may all be blocked in provider calls. The lifespan waits
+at most five seconds, leaving time for audio/client cleanup; settlement may
+continue in its worker during the remaining platform grace. It does not wait
+for provider calls to finish. Firestore RPC latency and platform
 shutdown grace still bound what can persist. SIGKILL, OOM, a blocked event loop
 that never reaches lifespan shutdown, or exhaustion of platform grace can leave
 pending records. Admission commit acknowledgement loss also remains a gap:

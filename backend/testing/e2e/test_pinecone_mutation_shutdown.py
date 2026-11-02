@@ -56,4 +56,4 @@ async def test_pinecone_mutation_shutdown_runs_before_other_cleanup(client, monk
         with pytest.raises(RuntimeError, match='later cleanup failure'):
             async with pusher.lifespan(pusher.app):
                 await asyncio.sleep(0)
-    assert state.drain_mutations() == 0
+    assert drain() == 0

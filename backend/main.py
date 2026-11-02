@@ -487,10 +487,11 @@ async def shutdown_event():
 
     from utils.executors import db_executor, run_blocking
     from database.pinecone_partition_state import drain_mutations
+    from database.pinecone_mutation_lifecycle import drain_on_shutdown
 
     # Run before other bounded drains consume the platform shutdown grace.
     # Do not queue behind the same DB workers whose provider calls are draining.
-    await asyncio.to_thread(drain_mutations)
+    await drain_on_shutdown(drain_mutations)
 
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:
