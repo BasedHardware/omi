@@ -11,6 +11,7 @@
 
 import type { ProductionAdapterId } from "../adapters/interface.js";
 import {
+  agentDisplayName,
   agentUnavailableGuidance,
   type AgentUnavailableGuidance,
 } from "./agent-install.js";
@@ -70,6 +71,13 @@ export interface AgentRouteUnavailable {
   readonly kind: "no_agent_available";
   /** Why each connected agent was ruled out. */
   readonly reasons: readonly string[];
+  /**
+   * Set when the user's own words left nothing to run: they named or ruled out
+   * an agent. The surface must answer with this rather than start the task on a
+   * default, which could be the very agent they excluded. Unset for an unnamed
+   * task, where the caller's default is still the right answer.
+   */
+  readonly refusal?: string;
 }
 
 export type AgentRoute =
@@ -99,6 +107,7 @@ export function routeAgentRequest(request: AgentRouteRequest): AgentRoute {
     return {
       kind: "no_agent_available",
       reasons: [`every connected agent was ruled out (${[...excluded].join(", ")})`],
+      refusal: `Every connected agent was ruled out (${namesOf(excluded)}), so nothing was started.`,
     };
   }
 
@@ -136,7 +145,12 @@ export function routeAgentRequest(request: AgentRouteRequest): AgentRoute {
     // chain. Route to what can actually do the job and report the substitution.
     const skipped = scored.find((entry) => entry.adapterId === requested);
     if (rankedChain.length === 0) {
-      return { kind: "no_agent_available", reasons: reasonsFrom(scored) };
+      const name = agentDisplayName(requested);
+      return {
+        kind: "no_agent_available",
+        reasons: reasonsFrom(scored),
+        refusal: `${name} can't run this task (missing ${(skipped?.missing ?? []).join(", ") || "requirements"}), and no other connected agent can, so nothing was started.`,
+      };
     }
     return {
       kind: "route",
@@ -158,7 +172,13 @@ export function routeAgentRequest(request: AgentRouteRequest): AgentRoute {
   }
 
   if (rankedChain.length === 0) {
-    return { kind: "no_agent_available", reasons: reasonsFrom(scored) };
+    return {
+      kind: "no_agent_available",
+      reasons: reasonsFrom(scored),
+      ...(excluded.size > 0
+        ? { refusal: `No connected agent can run this task once ${namesOf(excluded)} is ruled out, so nothing was started.` }
+        : {}),
+    };
   }
 
   const winner = scored.find((entry) => entry.adapterId === rankedChain[0]);
@@ -170,6 +190,28 @@ export function routeAgentRequest(request: AgentRouteRequest): AgentRoute {
     explicitProvider: null,
     reasons: winner?.reasons ?? [],
   };
+}
+
+/**
+ * What to tell the user when a named agent was passed over. `ranOn` is the agent
+ * actually running the task: the route's pick on a spawn, the session's own agent
+ * on a follow-up. Undefined when the named agent is the one running it.
+ */
+export function agentSubstitutionNotice(route: AgentRoute, ranOn: string) {
+  if (route.kind !== "route" || !route.requestedButIneligible) return undefined;
+  const { adapterId: requestedAdapterId, missing } = route.requestedButIneligible;
+  if (requestedAdapterId === ranOn) return undefined;
+  const reason = missing.join(", ") || "requirements";
+  return {
+    requestedAdapterId,
+    adapterId: ranOn,
+    missing,
+    message: `${agentDisplayName(requestedAdapterId)} can't run this task (missing ${reason}), so ${agentDisplayName(ranOn as MentionableAgentId)} is running it instead.`,
+  };
+}
+
+function namesOf(agents: ReadonlySet<string>): string {
+  return [...agents].map((id) => agentDisplayName(id as MentionableAgentId)).join(", ");
 }
 
 function reasonsFrom(scored: readonly { adapterId: string; missing: readonly string[] }[]): readonly string[] {

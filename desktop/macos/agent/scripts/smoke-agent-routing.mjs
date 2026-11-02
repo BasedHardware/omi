@@ -201,7 +201,7 @@ check("an agent that cannot do the job is excluded, not silently substituted", (
   return {
     notes: [
       route.kind === "route"
-        ? `${toolless} ruled out, ran ${route.adapterId}, and said why`
+        ? `${toolless} ruled out; the route records the substitution to ${route.adapterId}`
         : `${toolless} ruled out: ${route.kind}`,
     ],
   };
@@ -224,6 +224,31 @@ check("a ruled-out agent leaves the fallback chain too", () => {
     notes: [`"fix this, but don't use ${excluded}" -> ${route.adapterId}`, `chain: ${route.chain.join(" -> ")}`],
   };
 });
+
+// Through the real control tool, because a verdict only counts if the tool obeys
+// it. A refusal returns before anything is spawned, so this starts no subprocess.
+const REFUSAL_CHECK = "ruling out the only connected agent starts nothing";
+if (connected.length !== 1 || connected[0] !== "acp") {
+  skip(REFUSAL_CHECK, "needs Claude Code as the only connected agent; run without --with");
+} else {
+  try {
+    const result = JSON.parse(await handleAgentControlToolCall(context, "spawn_background_agent", {
+      prompt: "fix this, but don't use claude",
+      title: "Agent routing smoke",
+      externalRefKind: "pill",
+      externalRefId: "smoke-pill-refusal",
+      originSurfaceKind: "floating_bar",
+      requestId: `smoke-refusal-${Date.now()}`,
+      clientId: "smoke-client",
+      ownerId: "smoke-owner",
+    }));
+    must(result.noAgentAvailable, "the spawn did not refuse");
+    must(!result.session, "a session was created on the agent the user ruled out");
+    pass(REFUSAL_CHECK, [result.noAgentAvailable.message]);
+  } catch (error) {
+    fail(REFUSAL_CHECK, error.message);
+  }
+}
 
 console.log(bold("\n  Criterion 3 — name one you do not have, get help installing it"));
 

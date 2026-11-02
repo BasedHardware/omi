@@ -26,12 +26,18 @@ fails those suites rather than passing quietly.
    documents that it has no language heuristics; keep string matching at the
    surface and capability facts in `desktop/macos/agent/src/adapters/interface.ts`. An agent that declares
    `supportsTools: false` is ineligible for a tool task as a fact, and the user is
-   told why rather than silently given a different agent.
+   told why rather than silently given a different agent: both
+   `spawn_background_agent` and `send_agent_message` return `agentSubstituted`,
+   naming the agent actually running the task.
 2. **An explicitly requested adapter is never substituted.** A caller that passes
    `adapterId` gets exactly that agent; only an unnamed task may be ranked.
 3. **A ruled-out agent is dropped from the chain, not just from selection.**
    "don't use hermes" is not honoured by a runtime that starts elsewhere and then
-   falls back to Hermes.
+   falls back to Hermes. If the user's own words leave nothing to run, the route
+   carries a `refusal` and `spawn_background_agent` answers with
+   `noAgentAvailable` rather than starting on the profile default, which could be
+   the agent they excluded. An unnamed task with nothing eligible keeps the
+   default.
 4. **Fallback reacts to the terminal run event, never to the spawn.**
    `spawnBackgroundAgent` returns a receipt and runs the adapter asynchronously
    (`void execution` in `kernel-runs.ts`), so a spawn-time retry loop cannot

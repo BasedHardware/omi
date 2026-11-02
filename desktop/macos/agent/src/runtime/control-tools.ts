@@ -16,6 +16,7 @@ import type {
 } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
 import { AGENT_FALLBACK_CHAIN_KEY } from "./agent-fallback.js";
+import { agentSubstitutionNotice } from "./agent-routing.js";
 import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot, maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
@@ -1105,20 +1106,21 @@ export async function handleAgentControlToolCall(
         // its lifetime (assertAdapterAllowedForDirectSessionContinuation resolves
         // every continuation within the session's own provider boundary), so
         // switching agents mid-session is a new spawn, not a message.
-        if (!parsed.adapterId) {
-          const namedRoute = context.kernel.resolveAgentRoute(parsed.prompt, { needsTools: true });
-          if (namedRoute.kind === "install_required") {
-            return stringifyToolResult({
-              agentUnavailable: {
-                adapterId: namedRoute.adapterId,
-                message: namedRoute.guidance.message,
-                commands: namedRoute.guidance.commands,
-                docsUrl: namedRoute.guidance.docsUrl,
-              },
-            });
-          }
+        const namedRoute = parsed.adapterId
+          ? null
+          : context.kernel.resolveAgentRoute(parsed.prompt, { needsTools: true });
+        if (namedRoute?.kind === "install_required") {
+          return stringifyToolResult({
+            agentUnavailable: {
+              adapterId: namedRoute.adapterId,
+              message: namedRoute.guidance.message,
+              commands: namedRoute.guidance.commands,
+              docsUrl: namedRoute.guidance.docsUrl,
+            },
+          });
         }
         const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
+        const agentSubstituted = namedRoute ? agentSubstitutionNotice(namedRoute, adapterId) : undefined;
         assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -1157,6 +1159,7 @@ export async function handleAgentControlToolCall(
         ));
         const result = routed.result;
         return stringifyToolResult({
+          ...(agentSubstituted ? { agentSubstituted } : {}),
           routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),
@@ -1191,6 +1194,15 @@ export async function handleAgentControlToolCall(
             },
           });
         }
+        // The profile default below could be the very agent the user ruled out.
+        if (utteranceRoute?.kind === "no_agent_available" && utteranceRoute.refusal) {
+          return stringifyToolResult({
+            noAgentAvailable: {
+              message: utteranceRoute.refusal,
+              reasons: utteranceRoute.reasons,
+            },
+          });
+        }
         const adapterId =
           namedAdapterId ??
           (utteranceRoute?.kind === "route" ? utteranceRoute.adapterId : undefined) ??
@@ -1204,6 +1216,7 @@ export async function handleAgentControlToolCall(
           !namedAdapterId && utteranceRoute?.kind === "route"
             ? utteranceRoute.chain.slice(1)
             : [];
+        const agentSubstituted = utteranceRoute ? agentSubstitutionNotice(utteranceRoute, adapterId) : undefined;
         const cwd = parsed.cwd ?? spawnProfile.workingDirectory;
         const model = parsed.model ?? spawnProfile.modelProfile ?? undefined;
         assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId);
@@ -1252,6 +1265,7 @@ export async function handleAgentControlToolCall(
         const result = routed.result;
         context.executionLease?.retainRun?.(result.run.runId);
         return stringifyToolResult({
+          ...(agentSubstituted ? { agentSubstituted } : {}),
           routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),

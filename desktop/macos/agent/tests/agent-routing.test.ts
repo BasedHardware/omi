@@ -3,7 +3,7 @@ import {
   adapterCapabilitiesFor,
   type ProductionAdapterId,
 } from "../src/adapters/interface.js";
-import { routeAgentRequest } from "../src/runtime/agent-routing.js";
+import { agentSubstitutionNotice, routeAgentRequest } from "../src/runtime/agent-routing.js";
 import type { AdapterCandidate } from "../src/runtime/adapter-scoring.js";
 
 function connected(...adapterIds: ProductionAdapterId[]): AdapterCandidate[] {
@@ -189,5 +189,40 @@ describe("agent routing", () => {
     expect(route.kind).toBe("route");
     if (route.kind !== "route") return;
     expect(route.adapterId).toBe("hermes");
+  });
+});
+
+describe("refusals and substitution notices", () => {
+  it("leaves an unnamed task free to use the caller's default", () => {
+    const route = routeAgentRequest({
+      utterance: "edit these files",
+      connected: connected("openclaw"),
+      requirements: CODING_TASK,
+    });
+
+    expect(route.kind).toBe("no_agent_available");
+    expect(route.kind === "no_agent_available" && route.refusal).toBeUndefined();
+  });
+
+  it("refuses when ruling one agent out leaves only agents that cannot do the job", () => {
+    const route = routeAgentRequest({
+      utterance: "edit these files, but don't use hermes",
+      connected: connected("hermes", "openclaw"),
+      requirements: CODING_TASK,
+    });
+
+    expect(route.kind === "no_agent_available" && route.refusal).toContain("Hermes");
+  });
+
+  it("has no notice when the named agent is the one already running", () => {
+    // A session pinned to OpenClaw that hears "use openclaw" substituted nothing.
+    const route = routeAgentRequest({
+      utterance: "use openclaw to edit this",
+      connected: connected("acp", "openclaw"),
+      requirements: CODING_TASK,
+    });
+
+    expect(agentSubstitutionNotice(route, "openclaw")).toBeUndefined();
+    expect(agentSubstitutionNotice(route, "acp")?.adapterId).toBe("acp");
   });
 });
