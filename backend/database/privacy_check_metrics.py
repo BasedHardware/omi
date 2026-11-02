@@ -1,5 +1,6 @@
 """Privacy decisions and session census with closed, identifier-free labels."""
 
+import asyncio
 from collections import Counter as Counts
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -219,20 +220,41 @@ def session_memo():
     return session.memo if session is not None and not session.closed else None
 
 
+async def _pusher_census_ticks(holder):
+    from utils.executors import db_executor, run_blocking
+
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await run_blocking(db_executor, holder.flush)
+        except Exception:
+            pass  # Telemetry must not end an otherwise healthy socket.
+
+
 def with_session_census(plane):
     def decorate(function):
         @wraps(function)
         async def wrapped(*args, **kwargs):
             holder = SessionCensus(plane)
             token = _SESSION.set(holder)
+            ticker = (
+                asyncio.create_task(_pusher_census_ticks(holder), name='privacy:pusher:census')
+                if holder.plane == 'pusher'
+                else None
+            )
             try:
                 return await function(*args, **kwargs)
             finally:
-                with holder.lock:
-                    holder.closed = True
-                    holder.counts.clear()
-                    holder.memo.close()
-                _SESSION.reset(token)
+                try:
+                    if ticker is not None:
+                        ticker.cancel()
+                        await asyncio.gather(ticker, return_exceptions=True)
+                finally:
+                    with holder.lock:
+                        holder.closed = True
+                        holder.counts.clear()
+                        holder.memo.close()
+                    _SESSION.reset(token)
 
         return wrapped
 

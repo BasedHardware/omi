@@ -57,6 +57,11 @@ def test_all_authority_shapes_share_one_atomic_commit(authority, operation):
             write.current_document = {'update_time': {'seconds': 42}}
     request = CommitRequest(database='db', transaction=b'attempt', writes=[write])
     before = CommitRequest.serialize(request)
+    if authority.startswith('batch_pipeline_privacy/') and operation == 'delete':
+        with pytest.raises(ValueError, match='authority must survive deletion'):
+            fence.augment_commit(request)
+        assert CommitRequest.serialize(request) == before
+        return
     prepared, count = fence.augment_commit(request)
     assert count == 1 and len(prepared.writes) == 2
     assert prepared.writes[0] == write
@@ -80,6 +85,33 @@ def test_one_token_per_plane_and_owner_and_random_on_every_retry():
     assert count == 12 and len(first.writes) == 15
     assert len({w.update.name for w in first.writes[-3:]}) == 3
     assert first.writes[-1] != second.writes[-1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.parametrize('bulk', [False, True])
+async def test_authority_delete_refuses_whole_request_before_transport(asynchronous, bulk):
+    called = []
+
+    def transport(*args, **kwargs):
+        called.append(True)
+        raise AssertionError('destructive authority request reached transport')
+
+    async def async_transport(*args, **kwargs):
+        return transport(*args, **kwargs)
+
+    wrap = fence._wrap_bulk if bulk else fence._wrap_commit
+    wrapped = wrap(async_transport if asynchronous else transport)
+    request = {
+        'database': 'db',
+        'writes': [Write(delete=f'{ROOT}/users/u/conversations/source'), Write(delete=TOKEN)],
+    }
+    with pytest.raises(ValueError, match='authority must survive deletion'):
+        if asynchronous:
+            await wrapped(None, request=request)
+        else:
+            wrapped(None, request=request)
+    assert called == []
 
 
 def test_unrelated_writes_are_byte_identical_and_expanded_batches_never_drop_fence():

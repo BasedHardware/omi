@@ -66,6 +66,11 @@ def authority_tokens(writes: Any) -> set[str]:
             continue
         root, family, owner = '/'.join(parts[:5]), parts[5], parts[6]
         if family == PRIVACY_COLLECTION and len(parts) == 7:
+            # This authority intentionally survives account erasure. Recreating
+            # a deleted row with token fields alone would erase block/purge
+            # state and its generation. Refuse before any RPC, including bulk.
+            if write.delete:
+                raise ValueError('batch privacy authority must survive deletion')
             tokens.add(path)
         elif (family in _ROOT_AUTHORITIES and len(parts) == 7) or (
             family == 'users'
@@ -98,8 +103,9 @@ def augment_commit(request: Any) -> tuple[Any, int]:
     if not tokens:
         return request, count
     prepared = CommitRequest(request)
-    # Appending after source writes also handles replacement/deletion of the
-    # privacy document itself. The final token is unique after wipe/recreation;
+    # Appending after source writes also handles authority field updates.
+    # Authority deletion is rejected above; account-subtree erasure retains it.
+    # The final token is unique after source wipe/recreation;
     # no generation, blocked or purging field is changed by this masked write.
     prepared.writes.extend(token_write(path) for path in sorted(tokens))
     # Preserve expanded atomic batches. The installed list-projection writer

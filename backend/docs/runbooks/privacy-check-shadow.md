@@ -18,6 +18,9 @@ write cannot commit its token. Nonatomic bulk authority writes become individual
 atomic source/token Commits; unrelated bulk writes keep their original shape.
 Labeled authority BatchWrite requests are rejected before writing because Commit
 cannot preserve those labels.
+Deleting the privacy authority itself is rejected before any RPC, including
+mixed bulk requests: it must survive wipes with its generation/block/purge state.
+Token invalidation must never recreate that authority with only memo fields.
 
 Covered authorities: account deletion markers (including grace transitions),
 legal holds and deletion gates, protection/migration fields, speaker consent

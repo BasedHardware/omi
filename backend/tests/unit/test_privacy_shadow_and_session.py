@@ -267,3 +267,53 @@ def test_metric_and_log_labels_cannot_contain_identifiers(caplog):
         assert identifier not in repr(metrics.DECISION_MISMATCH.collect())
         assert identifier not in repr(metrics._LOG_AT)
     assert 'family=batch' in caplog.text and 'live=unknown' in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cancelled', [False, True])
+async def test_pusher_censuses_full_minute_and_collects_ticker_on_exit(world, monkeypatch, cancelled):
+    import asyncio
+    from types import SimpleNamespace
+    from utils.executors import db_executor, run_blocking
+
+    db, _, _, _ = world
+    waiting, tick, flushed, never = (asyncio.Event() for _ in range(4))
+    tickers, holders = [], []
+
+    async def sleep(seconds):
+        assert seconds == 60
+        if not tickers:
+            tickers.append(asyncio.current_task())
+            waiting.set()
+            await tick.wait()
+        else:
+            flushed.set()  # A full flush completed before the next interval.
+            await never.wait()
+
+    monkeypatch.setattr(
+        metrics, 'asyncio', SimpleNamespace(sleep=sleep, create_task=asyncio.create_task, gather=asyncio.gather)
+    )
+    histogram = metrics.CENSUS.labels('pusher', 'external', 'live', 'reads')
+    before = histogram._sum.get()
+
+    @metrics.with_session_census('pusher')
+    async def session():
+        holders.append(metrics.session_memo())
+        await asyncio.wait_for(waiting.wait(), timeout=10)
+        assert await run_blocking(db_executor, external, db)
+        assert histogram._sum.get() == before
+        tick.set()
+        await asyncio.wait_for(flushed.wait(), timeout=10)
+        assert histogram._sum.get() == before + 2
+        if cancelled:
+            raise asyncio.CancelledError
+        return 'completed'
+
+    if cancelled:
+        with pytest.raises(asyncio.CancelledError):
+            await session()
+    else:
+        assert await session() == 'completed'
+    assert metrics.session_memo() is None
+    assert holders[0]._closed
+    assert tickers[0].cancelled()

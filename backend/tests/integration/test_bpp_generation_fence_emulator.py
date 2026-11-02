@@ -479,6 +479,36 @@ def test_real_account_subtree_wipe_keeps_blocked_token_outside_user_walk(world, 
             w.check()
 
 
+@pytest.mark.parametrize('bulk', [False, True])
+def test_privacy_authority_delete_preserves_blocked_generation_and_purge(world, bulk):
+    from google.cloud import firestore
+
+    w = world
+    w.token.set({'generation': 7, 'blocked': True, 'purging': True}, merge=True)
+    before = w.token.get().to_dict()
+    w.requests.clear()
+    with pytest.raises(ValueError, match='authority must survive deletion'):
+        if bulk:
+            from google.cloud.firestore_v1.types import Write
+
+            w.client._firestore_api.batch_write(
+                database=w.client._database_string,
+                writes=[Write(delete=w.source._document_path), Write(delete=w.token._document_path)],
+            )
+        else:
+            w.token.delete()
+    assert w.requests == []
+    assert w.token.get().to_dict() == before
+    assert w.source.get().exists
+
+    @firestore.transactional
+    def deny_without_expected_generation(tx):
+        return w.privacy.assert_batch_write_allowed(w.client, tx, w.uid, conversation_ids=['source'])
+
+    with pytest.raises(w.privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+        deny_without_expected_generation(w.client.transaction())
+
+
 def test_standalone_platform_backfill_installs_fence_before_admin_client(world, monkeypatch):
     import sys
     from scripts import backfill_user_signup_platform as backfill
