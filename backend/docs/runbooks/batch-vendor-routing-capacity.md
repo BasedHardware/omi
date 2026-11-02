@@ -289,18 +289,23 @@ backend-integration. A comma-free delimiter is needed because the JSON
 contains commas:
 
 ```
-(
-  set -e
-  TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
+TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
+if [ -z "$TABLE" ]; then
+  echo "STOPPED: table did not parse; nothing updated"
+else
   for s in backend-sync backend-sync-backfill backend-integration; do
-    gcloud run services update "$s" --region us-central1 --project based-hardware \
-      --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"
+    if ! gcloud run services update "$s" --region us-central1 --project based-hardware \
+        --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"; then
+      echo "STOPPED at $s: run the rollback on the services updated before it"
+      break
+    fi
   done
-) || echo "STOPPED on a failed update: run the rollback on the services already updated"
+fi
 ```
 
-The subshell stops at the first failed update, so the services never stay
-split between two tables without a message saying so.
+Each update is checked explicitly (not with `set -e`, which a `||` or `if`
+around it would suspend). The loop stops at the first failure and says where,
+so the services never stay split between two tables without notice.
 
 Once served, Soniox failover is live for vendor-routed units even at routing
 percent 0, because the stage reads the served table. Overflow needs the cohort
