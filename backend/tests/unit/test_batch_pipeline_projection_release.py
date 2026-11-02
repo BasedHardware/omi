@@ -259,15 +259,17 @@ def test_release_scan_seed_stays_inside_the_hex_id_keyspace(monkeypatch):
 
 def test_release_scan_counts_rows_by_outcome(monkeypatch):
     import database.batch_pipeline_projection_release as release
-    from utils.batch_pipeline import correctness_metrics, projection
+    from utils.batch_pipeline import correctness_metrics
+
+    def outcome(self, segment_id, now):
+        if segment_id == 'broken':
+            raise RuntimeError('synthetic')
+        return segment_id == 'restored'
 
     monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'true')
-    monkeypatch.setattr(
-        release,
-        'release_page',
-        lambda *args, **kwargs: ({'released': 2, 'waiting': 5, 'error': 1, 'examined': 8}, None),
-    )
+    monkeypatch.setattr(release, 'held_page_ids', lambda *args: ['restored', 'waiting', 'broken'])
+    monkeypatch.setattr(release.ProjectionReleaseStore, 'release', outcome)
     before = {o: correctness_metrics.RELEASE_ROWS.labels(o)._value.get() for o in ('released', 'waiting', 'error')}
-    projection.Projector(Mock(), Mock()).release_held_scan()
+    release_page(Mock(), limit=3, after_id=None, now=100)
     after = {o: correctness_metrics.RELEASE_ROWS.labels(o)._value.get() for o in ('released', 'waiting', 'error')}
-    assert {o: after[o] - before[o] for o in after} == {'released': 2, 'waiting': 5, 'error': 1}
+    assert {o: after[o] - before[o] for o in after} == {'released': 1, 'waiting': 1, 'error': 1}

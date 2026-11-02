@@ -14,6 +14,7 @@ tombstones keep the strict Firestore test fixture's sentinel contract intact.
 """
 
 import logging
+import secrets
 import time
 from typing import Any
 
@@ -22,6 +23,7 @@ from google.cloud import firestore
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_projection import assignment_held_without_recovery
 from database.batch_pipeline_shadow_hook import mirror_refresh
+from utils.batch_pipeline.correctness_metrics import record_release_rows
 from utils.batch_pipeline.scheduler import owner_key
 from config.batch_pipeline import projection_hold_recovery_enabled
 from utils.conversations.fragment_visibility import is_automatic_discard
@@ -32,6 +34,19 @@ logger = logging.getLogger(__name__)
 RELEASE_PAGE = 128
 RELEASE_TICK_SECONDS = 5.0
 MAX_RELEASE_ATTEMPTS = 3
+
+
+def release_scan_start() -> str | None:
+    """Where a new process starts the held-release scan.
+
+    Serving instances restart and trade the maintenance lease far more often
+    than one time-bounded pass wraps the held set, so a scan that always began
+    at the first document name re-examined the same prefix forever. Held ids
+    are sha256 hex, so a random hex cursor starts anywhere in the keyspace;
+    the short page at the end still wraps to the first name. With hold
+    recovery off the scan starts at the first name, as before.
+    """
+    return secrets.token_hex(32) if projection_hold_recovery_enabled() else None
 
 
 class ProjectionReleaseStore:
@@ -185,6 +200,7 @@ def release_page(store, *, limit: int, after_id: str | None, now: float | None =
             )
         if deadline is not None and time.monotonic() >= deadline:
             break
+    record_release_rows(counts)
     processed = counts['examined']
     next_after = page[processed - 1] if processed and (processed < len(page) or len(page) >= limit) else None
     return counts, next_after
