@@ -146,7 +146,9 @@ def mirrored(doc: dict) -> dict:
 
 
 def compare(primary_doc: dict, shadow_doc: dict) -> ShadowParityOutcome:
-    primary_doc, shadow_doc = mirrored(primary_doc), mirrored(shadow_doc)
+    # Only the primary side: a shadow copy that still holds an unmirrored field must read as stale, so backfill
+    # recopies it without the field (Luna #24366 r4).
+    primary_doc = mirrored(primary_doc)
     if not primary_doc and not shadow_doc:
         return ShadowParityOutcome.MATCH
     if not shadow_doc:
