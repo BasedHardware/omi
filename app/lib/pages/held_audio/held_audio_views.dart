@@ -50,7 +50,6 @@ class HeldAudioCardView extends StatelessWidget {
     required this.phoneChosen,
     required this.onUpgrade,
     required this.onTranscribeOnPhone,
-    this.personal = false,
   });
 
   final bool atCap;
@@ -61,15 +60,12 @@ class HeldAudioCardView extends StatelessWidget {
   final VoidCallback onUpgrade;
   final VoidCallback onTranscribeOnPhone;
 
-  /// A Free owner outside the copy holdout: their holds wait for an upgrade, not a choice.
-  final bool personal;
-
   @override
   Widget build(BuildContext context) {
     if (seconds <= 0) return const SizedBox.shrink();
     final l10n = context.l10n;
     final duration = OmiDuration.compact(seconds, l10n);
-    final body = personal ? l10n.processingFreeUpgrade : l10n.processingStored;
+    final body = l10n.processingStored;
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
       child: Container(
@@ -93,18 +89,14 @@ class HeldAudioCardView extends StatelessWidget {
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
                   child: Text(
-                    personal
-                        ? l10n.processingFreeHeld(duration)
-                        : atCap
-                            ? l10n.processingPaused
-                            : l10n.heldAudioWaiting(duration),
+                    atCap ? l10n.processingPaused : l10n.heldAudioWaiting(duration),
                     style: OmiType.headline,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: OmiSpacing.xxs),
-            if (atCap && !personal) Text(l10n.heldAudioWaiting(duration), style: OmiType.subhead),
+            if (atCap) Text(l10n.heldAudioWaiting(duration), style: OmiType.subhead),
             Text(body, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
             const SizedBox(height: OmiSpacing.sm),
             OmiButton(
@@ -249,7 +241,6 @@ class HeldAudioHomeSection extends StatelessWidget {
               phoneChosen: resolved.settings.enabled,
               onUpgrade: onUpgrade ?? () => openHeldAudioPlans(context),
               onTranscribeOnPhone: onPhone ?? () => unawaited(chooseHeldAudioOnPhone(context, resolved)),
-              personal: heldAudioPersonalCopy(context),
             ),
             for (final recording in held.recordings) HeldAudioRecordingRow(recording: recording, recovering: false),
             if (held.count > held.recordings.length)
@@ -275,11 +266,7 @@ class HeldAudioLiveBannerView extends StatelessWidget {
     required this.phoneChosen,
     required this.onUpgrade,
     required this.onTranscribeOnPhone,
-    this.personal = false,
   });
-
-  /// A Free owner outside the copy holdout; see [HeldAudioCardView.personal].
-  final bool personal;
 
   final bool phoneEligible;
   final bool phoneChosen;
@@ -304,10 +291,7 @@ class HeldAudioLiveBannerView extends StatelessWidget {
           children: [
             Text(l10n.processingPaused, style: OmiType.headline),
             const SizedBox(height: OmiSpacing.xxs),
-            Text(
-              personal ? l10n.processingFreeStored : l10n.processingStored,
-              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35),
-            ),
+            Text(l10n.processingStored, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
             const SizedBox(height: OmiSpacing.sm),
             OmiButton(
               key: const Key('held_audio_live_upgrade'),
@@ -429,7 +413,6 @@ class HeldAudioLiveBanner extends StatelessWidget {
               phoneChosen: chosen,
               onUpgrade: onUpgrade ?? () => openHeldAudioPlans(context),
               onTranscribeOnPhone: onPhone ?? () => unawaited(chooseHeldAudioOnPhone(context, resolved)),
-              personal: heldAudioPersonalCopy(context),
             ),
             if (!chosen && resetAt > 0)
               HeldAudioLivePlaceholder(
