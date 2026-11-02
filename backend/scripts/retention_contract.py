@@ -38,7 +38,20 @@ def _rules(lifecycle: Any) -> list[dict[str, Any]]:
 
 
 def _noncurrent_only(condition: dict[str, Any]) -> bool:
-    return condition.get('isLive') is False or 'numNewerVersions' in condition or 'daysSinceNoncurrentTime' in condition
+    """True only for conditions GCS can never match on a live object. A live object has zero newer versions, so
+    numNewerVersions counts only when >= 1; daysSinceNoncurrentTime and noncurrentTimeBefore apply to noncurrent
+    generations only."""
+    newer = condition.get('numNewerVersions')
+    return (
+        condition.get('isLive') is False
+        or (isinstance(newer, int) and not isinstance(newer, bool) and newer >= 1)
+        or 'daysSinceNoncurrentTime' in condition
+        or 'noncurrentTimeBefore' in condition
+    )
+
+
+# A cache max-age rule covers a prefix only when nothing else narrows it: GCS requires every condition to match.
+_COVERING_KEYS = frozenset({'age', 'matchesPrefix'})
 
 
 def _reaches(rule_prefixes: list[str], prefixes: list[str]) -> bool:
@@ -92,7 +105,7 @@ def ceiling_findings(contract: dict[str, Any], bucket: str, metadata: dict[str, 
     for prefix, max_age in (ceiling.get('max_age_days') or {}).items():
         covered = any(
             r['action'].get('type') == 'Delete'
-            and not _noncurrent_only(r.get('condition') or {})
+            and set(r.get('condition') or {}) <= _COVERING_KEYS
             and isinstance((r.get('condition') or {}).get('age'), (int, float))
             and r['condition']['age'] <= max_age
             and (

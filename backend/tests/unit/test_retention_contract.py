@@ -88,6 +88,37 @@ def test_source_audio_prefix_rejects_any_live_delete_but_allows_noncurrent_clean
     assert rc.floor_violations(CONTRACT, SYNC, ok) == []
 
 
+@pytest.mark.parametrize(
+    'condition,live_reachable',
+    [
+        ({'numNewerVersions': 0, 'matchesPrefix': ['chunks/']}, True),  # a live object has 0 newer versions
+        ({'numNewerVersions': 1, 'matchesPrefix': ['chunks/']}, False),
+        ({'isLive': False, 'matchesPrefix': ['chunks/']}, False),
+        ({'noncurrentTimeBefore': '2026-01-01', 'matchesPrefix': ['chunks/']}, False),
+        ({'daysSinceNoncurrentTime': 30, 'matchesPrefix': ['chunks/']}, False),
+        ({'isLive': True, 'age': 400, 'matchesPrefix': ['chunks/']}, True),
+    ],
+)
+def test_only_conditions_gcs_cannot_match_on_a_live_object_count_as_noncurrent(condition, live_reachable):
+    rule = {'action': {'type': 'Delete'}, 'condition': condition}
+    assert bool(rc.floor_violations(CONTRACT, SYNC, {'rule': [rule]})) is live_reachable
+
+
+def test_a_narrowed_cache_rule_does_not_cover_the_prefix():
+    narrowed = {
+        'lifecycle': {
+            'rule': [
+                delete(3, matchesPrefix=['merged/']),
+                delete(30, matchesPrefix=['playback/'], createdBefore='2026-01-01'),
+                {'action': {'type': 'Delete'}, 'condition': {'isLive': False, 'numNewerVersions': 1}},
+            ]
+        },
+        'soft_delete_seconds': '0',
+        'versioning': True,
+    }
+    assert rc.ceiling_findings(CONTRACT, SYNC, narrowed) == ['ceiling_max_age:pending']
+
+
 def test_ceilings_report_soft_delete_noncurrent_and_cache_age():
     live_sync = {
         'lifecycle': {'rule': [delete(30, matchesPrefix=['playback/'])]},
