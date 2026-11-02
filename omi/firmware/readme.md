@@ -73,3 +73,7 @@ On CV1, disconnected audio is packed into a raw-sector ring on soldered SD NAND,
 The DevKit has a separate file-based SD storage implementation.
 
 The format of each packet is different to the streaming audio packets.
+
+## Contributor checks without a jig
+
+Run the [CV1 contributor tools](tools/cv1/README.md) for shared-C host checks and key-free application-object compilation. See the [personal OTA/recovery design](docs/ota-development.md) for the everyday-user requirement and current migration limits. These tools do not flash, sign, publish or change device trust.

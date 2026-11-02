@@ -62,6 +62,7 @@ async def upload(
     decision=None,
     evidence=None,
     unit_count=1,
+    paths=(),
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -110,7 +111,7 @@ async def upload(
         uid='synthetic-owner',
         job_id='new',
         content_id='new',
-        paths=[],
+        paths=list(paths),
         lane='fresh',
         recording_age_seconds=0,
         source='omi',

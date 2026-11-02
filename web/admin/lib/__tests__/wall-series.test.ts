@@ -17,6 +17,7 @@ import {
   STORE_FAIL_LIMIT,
   UNIT_DAYS,
   warmSeries,
+  funnelFrames,
 } from "../wall-series";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import {
@@ -1721,5 +1722,79 @@ describe("variable margin frames (David 2026-10-23)", () => {
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "MRR: n/a (no book snapshot that day)"
     );
+  });
+});
+
+describe("funnelFrames", () => {
+  const now = new Date("2026-11-02T12:00:00Z");
+  // period, entry, device, people, onboarded, conv1, conv7, activated, kept
+  const deviceFunnel = Object.assign(
+    [
+      [0, "ios", 1, 40, 36, 20, 30, 28, 0],
+      [0, "ios", 0, 60, 54, 6, 12, 12, 0],
+      [0, "android", 0, 100, 80, 10, 20, 25, 0],
+      [4, "ios", 1, 10, 9, 5, 7, 7, 5],
+      [4, "ios", 0, 90, 80, 9, 18, 20, 3],
+    ],
+    { sourceRefreshedAt: null }
+  );
+
+  it("splits the latest cohort by paired and shows Kept from the older one", () => {
+    const { funnel } = funnelFrames({ deviceFunnel }, now);
+    expect(funnel[0]).toEqual({
+      step: "Share of new users",
+      Device: 20,
+      Organic: 80,
+    });
+    expect(funnel.find((r) => r.step === "Activated")).toEqual({
+      step: "Activated",
+      Device: 70,
+      Organic: 23.1,
+    });
+    expect(funnel.at(-1)).toEqual({
+      step: "Kept, weeks 2–5 (older cohort)",
+      Device: 50,
+      Organic: 3.3,
+    });
+  });
+
+  it("counts Onboarded only on clients that report it", () => {
+    const rows = Object.assign(
+      [
+        [0, "ios", 0, 10, 5, 0, 0, 0, 0],
+        [0, "windows", 0, 10, 0, 0, 0, 0, 0],
+      ],
+      { sourceRefreshedAt: null }
+    );
+    const { funnel } = funnelFrames({ deviceFunnel: rows }, now);
+    expect(funnel[1]).toEqual({
+      step: "Onboarded (phone and Mac)",
+      Device: null,
+      Organic: 50,
+    });
+  });
+
+  it("orders platforms by size and leaves an absent split empty", () => {
+    const { funnelPlatforms } = funnelFrames({ deviceFunnel }, now);
+    expect(funnelPlatforms).toEqual([
+      { platform: "iOS · 100", Device: 70, Organic: 20 },
+      { platform: "Android · 100", Device: null, Organic: 25 },
+    ]);
+  });
+
+  it("dates weeks by the cohort's last day, oldest first, skipping missing ones", () => {
+    const { funnelWeekly } = funnelFrames({ deviceFunnel }, now);
+    expect(funnelWeekly.map((r) => r.date)).toEqual([
+      "2026-09-27T00:00:00Z",
+      "2026-10-25T00:00:00Z",
+    ]);
+  });
+
+  it("is empty when the leg has not filled", () => {
+    expect(funnelFrames({}, now)).toEqual({
+      funnel: [],
+      funnelPlatforms: [],
+      funnelWeekly: [],
+    });
   });
 });
