@@ -482,14 +482,20 @@ next sweep asks again:
 | --- | --- | --- |
 | Kill switch | `BACKLOG_RELEASE_ENABLED`, on unless set off; stops running releases at their next recording. Audio already admitted finishes; nothing is deleted | `config/backlog_release.py` |
 | Owner | 5h per UTC day, summaries included | `release_day_units` on the summary |
+| Batch route | Audio only: the owner is out of legacy sync (`legacy_dark.current_mode` is not `on`). While legacy serves the owner a hold would recover on the live Parakeet pool or a vendor, which the idle gate cannot see, so nothing is released (`legacy_route`) | `backlog_release.batch_serves` |
 | Normal priority | First 2.5h of a trial grant (RECENT) | `release_priority_units` |
-| Idle (everything else, DEEP) | Fresh + recent ready under 64 and deep ready under 32, below the 128 units that would add a replica at the 4-replica floor. No sample reads as not idle | `IdleGate` |
+| Idle (other audio, DEEP) | Fresh + recent ready under 64 and deep ready under 32, below the 128 units that would add a replica at the 4-replica floor. No sample reads as not idle | `IdleGate` |
 | Fleet | 20 audio-h/h and 400 audio-h per UTC day, Redis, fails closed | `database/backlog_release_budget.py` |
 
 DEEP-only flights time as `worker_flight_deep`, so the HPA's `worker_flight` chain
 metric does not size on them. Held audio never takes the cheaper-vendor table
 (`vendor_table=False`); a language Parakeet cannot serve still uses its provider
-route. Metric: `omi_held_content_backlog_release_total{decision}`.
+route, and those hours count against the same fleet budget. A deferred summary (text)
+uses no GPU: it skips the route and idle checks and still spends the owner day and
+the fleet budget. Each released recording carries `release` (`trial` or `conversion`)
+on its intake record and every batch job row, so hard-3 and the 2h alarm can count
+released backfill apart from fresh audio. Metric:
+`omi_held_content_backlog_release_total{decision}`.
 
 A paid owner's tap expires at the monthly rollover only when recovery spends a
 finite allowance (Plus keeps the monthly tap, so prior consent never spends a new

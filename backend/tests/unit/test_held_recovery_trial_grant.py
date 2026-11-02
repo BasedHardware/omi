@@ -173,7 +173,7 @@ async def test_kill_switch_stops_a_release_already_running(monkeypatch):
 def grant_run(monkeypatch):
     """Drive one fenced worker visit over synthetic newest-first holds."""
     monkeypatch.setattr(
-        worker.backlog_release, 'decide', lambda job, units: worker.backlog_release.Decision(True, 'granted')
+        worker.backlog_release, 'decide', lambda uid, job, units, **kw: worker.backlog_release.Decision(True, 'granted')
     )
     job = {
         'state': 'processing',
@@ -202,10 +202,11 @@ def grant_run(monkeypatch):
     monkeypatch.setattr(funded, 'allowance', lambda uid: SimpleNamespace(managed=True))
     monkeypatch.setattr(funded, 'capacity', lambda allowance: (None, None))
     monkeypatch.setattr(worker, '_selected', AsyncMock(return_value=True))
-    processed = []
+    processed, sources = [], []
 
     async def process(uid, item):
         processed.append(item['id'])
+        sources.append(worker.backlog_release.source.get())
         return worker.AttemptOutcome.COMPLETE
 
     monkeypatch.setattr(worker, '_process', process)
@@ -231,7 +232,7 @@ def grant_run(monkeypatch):
         )
         monkeypatch.setattr(worker.cap_hold, 'remaining_seconds', lambda row: row['seconds'])
 
-    return SimpleNamespace(job=job, processed=processed, finished=finished, holds=holds)
+    return SimpleNamespace(job=job, processed=processed, sources=sources, finished=finished, holds=holds)
 
 
 async def test_trial_grant_spends_newest_first_and_stops_at_25_hours(grant_run):
@@ -261,6 +262,15 @@ async def test_new_recordings_on_a_trial_never_count_against_the_grant(grant_run
     await worker.run(UID)
     assert grant_run.processed == ['held']
     assert grant_run.job['remaining'] == pytest.approx(GRANT - RATE)
+
+
+async def test_each_released_recording_carries_its_source_to_admission(grant_run):
+    hour = 3600
+    grant_run.holds([('held', {'listed_at': 900, 'created_at': 500, 'seconds': 1 * hour, 'state': 'held'})])
+    grant_run.job['trial_grant'] = True
+    await worker.run(UID)
+    assert grant_run.sources == ['trial']
+    assert worker.backlog_release.source.get() is None
 
 
 def test_new_recordings_on_a_trial_transcribe_normally(monkeypatch):

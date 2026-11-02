@@ -103,7 +103,7 @@ RECOVERY_SKIPPED = Counter(
     ['outcome'],
 )
 BACKLOG_CHOICE_SOURCES = ('manual', 'trial', 'conversion')
-RELEASE_DECISIONS = ('granted', 'kill_switch', 'owner_day', 'not_idle', 'fleet_budget')
+RELEASE_DECISIONS = ('granted', 'kill_switch', 'owner_day', 'legacy_route', 'not_idle', 'fleet_budget')
 RELEASE = Counter(
     'omi_held_content_backlog_release',
     'Automatic release decisions per recording; granted is the only one that spends budget',

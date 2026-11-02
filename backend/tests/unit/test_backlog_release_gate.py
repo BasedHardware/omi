@@ -15,8 +15,17 @@ NOW = 1_793_664_000.0  # a fixed UTC moment; only the day string is derived from
 DAY = '2026-11-03'
 
 
-def decide(job, hours=1.0, *, idle=True, fleet=True):
-    return release.decide(job, hours * RATE, now=NOW, idle_now=lambda: idle, reserve_fleet=lambda seconds: fleet)
+def decide(job, hours=1.0, *, idle=True, fleet=True, batch=True, kind='audio'):
+    return release.decide(
+        'synthetic',
+        job,
+        hours * RATE,
+        kind=kind,
+        now=NOW,
+        batch_serving=lambda uid: batch,
+        idle_now=lambda: idle,
+        reserve_fleet=lambda seconds: fleet,
+    )
 
 
 def test_kill_switch_stops_everything_including_priority_hours(monkeypatch):
@@ -64,8 +73,45 @@ def test_fleet_budget_refusal_changes_nothing():
 
 def test_a_refusal_earlier_in_line_spends_no_fleet_budget():
     fleet = Mock(return_value=True)
-    release.decide({}, RATE, now=NOW, idle_now=lambda: False, reserve_fleet=fleet)
+    release.decide(
+        'synthetic', {}, RATE, now=NOW, batch_serving=lambda uid: True, idle_now=lambda: False, reserve_fleet=fleet
+    )
     fleet.assert_not_called()
+
+
+def test_while_legacy_serves_the_owner_nothing_is_released_not_even_priority_hours():
+    """Legacy recovery runs on the live Parakeet pool or a vendor, which the idle gate cannot see."""
+    fleet = Mock(return_value=True)
+    decision = release.decide(
+        'synthetic',
+        {'release_priority_units': PRIORITY_HOURS * RATE},
+        RATE,
+        now=NOW,
+        batch_serving=lambda uid: False,
+        idle_now=lambda: True,
+        reserve_fleet=fleet,
+    )
+    assert (decision.allowed, decision.reason, decision.updates) == (False, 'legacy_route', {})
+    fleet.assert_not_called()
+
+
+def test_batch_serves_reads_the_owners_legacy_mode(monkeypatch):
+    from utils.sync import legacy_dark
+
+    modes = {'on-owner': legacy_dark.LegacySyncMode.ON, 'dark-owner': legacy_dark.LegacySyncMode.DARK}
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: modes[uid])
+    assert release.batch_serves('on-owner') is False
+    assert release.batch_serves('dark-owner') is True
+
+
+def test_a_deferred_summary_skips_the_gpu_checks_but_spends_the_day_and_fleet():
+    decision = decide({'release_priority_units': PRIORITY_HOURS * RATE}, kind='text', idle=False, batch=False)
+    assert decision.allowed and not decision.normal_priority
+    assert 'release_priority_units' not in decision.updates
+    assert decision.updates['release_day_units'] == pytest.approx(RATE)
+    assert decide({}, kind='text', fleet=False).reason == 'fleet_budget'
+    spent = {'release_day': DAY, 'release_day_units': OWNER_HOURS_PER_DAY * RATE}
+    assert decide(spent, kind='text').reason == 'owner_day'
 
 
 def counts(fresh=0, recent=0, deep=0):
@@ -171,10 +217,69 @@ async def test_held_audio_takes_normal_priority_only_when_granted_and_never_the_
 
     await admission.admit_held('synthetic', snapshot, {})
     token = release.normal_priority.set(True)
+    source = release.source.set('trial')
     try:
         await admission.admit_held('synthetic', snapshot, {})
     finally:
+        release.source.reset(source)
         release.normal_priority.reset(token)
 
     assert [row['recording_age_seconds'] for row in seen] == [None, 0]
     assert [row['vendor_table'] for row in seen] == [False, False]
+    # A manual tap is untagged; an automatic release carries its source to the batch rows.
+    assert [row['release'] for row in seen] == [None, 'trial']
+
+
+def test_admission_tags_every_released_row_and_leaves_others_untagged():
+    from database import batch_pipeline_intake
+    from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+
+    def admitted(intake):
+        rows = {}
+
+        class Tx:
+            def get(self, collection, key):
+                return dict(rows.get((collection, key), {}))
+
+            def put(self, collection, key, value):
+                rows[(collection, key)] = dict(value)
+
+            def patch(self, collection, key, value):
+                rows.setdefault((collection, key), {}).update(value)
+
+        class Store:
+            def run(self, fn):
+                return fn(Tx())
+
+        items = [
+            WorkItem(
+                f'seg-{index}',
+                'synthetic',
+                1.0 + index,
+                f'gs://bucket/{index}',
+                30.0,
+                Priority.DEEP,
+                privacy_generation=0,
+            )
+            for index in range(2)
+        ]
+        binding = ProjectionBinding(
+            owner_id='synthetic',
+            job_id='job',
+            content_id='content',
+            segment_ids=tuple(item.segment_id for item in items),
+            source='omi',
+        )
+
+        def enqueue(tx, item, now, *, policy):
+            tx.put('jobs', item.segment_id, {'state': 'ready', 'policy': {}})
+            return True
+
+        policy = Mock(batch_enabled=True, provider_reason=None)
+        batch_pipeline_intake.admit(
+            Store(), items, binding, 10.0, namespace='ns', intake=intake, policy=policy, enqueue=enqueue
+        )
+        return [row for (collection, _), row in rows.items() if collection == 'jobs']
+
+    assert [row.get('release') for row in admitted({'lane': 'backfill', 'release': 'trial'})] == ['trial', 'trial']
+    assert [row.get('release') for row in admitted({'lane': 'backfill'})] == [None, None]

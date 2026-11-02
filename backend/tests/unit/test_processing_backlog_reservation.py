@@ -26,7 +26,7 @@ def source_path(kind, identity='excluded', uid=UID):
 @pytest.fixture
 def reservation(monkeypatch):
     monkeypatch.setattr(
-        worker.backlog_release, 'decide', lambda job, units: worker.backlog_release.Decision(True, 'granted')
+        worker.backlog_release, 'decide', lambda uid, job, units, **kw: worker.backlog_release.Decision(True, 'granted')
     )
     monkeypatch.setattr(store.time, 'time', lambda: NOW)
     monkeypatch.setattr(store, '_request_memo', lambda: SimpleNamespace(forget_request_reads=lambda uid: None))

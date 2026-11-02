@@ -28,8 +28,11 @@ from config.rate_card import recording_units_per_hour
 
 logger = logging.getLogger(__name__)
 
-# Set around one admission attempt; admit_held reads it to pick the batch priority.
+# Set around one admission attempt; admit_held reads them to pick the batch priority and to
+# tag the batch rows, so hard-3 and the 2h alarm can tell released backfill from fresh audio.
 normal_priority: contextvars.ContextVar[bool] = contextvars.ContextVar('backlog_release_normal_priority', default=False)
+SOURCES = ('trial', 'conversion')
+source: contextvars.ContextVar[str | None] = contextvars.ContextVar('backlog_release_source', default=None)
 
 
 @dataclass(frozen=True)
@@ -91,15 +94,33 @@ def _reserve_fleet(seconds: float) -> bool:
     return backlog_release_budget.reserve(seconds)
 
 
+def batch_serves(uid: str) -> bool:
+    """Held audio reaches the batch GPUs only once legacy sync is off for this owner.
+
+    While legacy serves the owner, a hold recovers on the live Parakeet pool or a
+    vendor, which the idle gate cannot see, so an automatic release waits instead.
+    """
+    from utils.sync import legacy_dark
+
+    return legacy_dark.current_mode(uid) is not legacy_dark.LegacySyncMode.ON
+
+
 def decide(
+    uid: str,
     job: dict[str, Any],
     units: float,
     *,
+    kind: str = 'audio',
     now: float | None = None,
+    batch_serving: Callable[[str], bool] = batch_serves,
     idle_now: Callable[[], bool] = idle,
     reserve_fleet: Callable[[float], bool] = _reserve_fleet,
 ) -> Decision:
-    """The checks run cheapest first, and the fleet budget last so a refusal spends nothing."""
+    """The checks run cheapest first, and the fleet budget last so a refusal spends nothing.
+
+    A deferred summary (``kind='text'``) uses no GPU: it skips the route and idle checks but
+    still spends the owner's day and the fleet budget.
+    """
     if not enabled():
         return Decision(False, 'kill_switch')
     rate = float(recording_units_per_hour('batch'))
@@ -108,9 +129,12 @@ def decide(
     # A single recording longer than the limit still runs alone on an unspent day.
     if spent > 0 and spent + units > OWNER_HOURS_PER_DAY * rate:
         return Decision(False, 'owner_day')
+    audio = kind != 'text'
+    if audio and not batch_serving(uid):
+        return Decision(False, 'legacy_route')
     priority_left = float(job.get('release_priority_units') or 0)
-    normal = priority_left > 0
-    if not normal and not idle_now():
+    normal = audio and priority_left > 0
+    if audio and not normal and not idle_now():
         return Decision(False, 'not_idle')
     if not reserve_fleet(units / rate * 3600):
         return Decision(False, 'fleet_budget')

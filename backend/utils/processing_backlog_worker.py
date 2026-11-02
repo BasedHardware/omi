@@ -242,10 +242,14 @@ async def run(
         # Executors and spawned callbacks inherit this UID/month grant. Later
         # model/STT dispatches must not silently adopt a reset allowance.
         token_priority = backlog_release.normal_priority.set(bool(item.get('normal_priority')))
+        token_source = backlog_release.source.set(
+            item.get('release') if item.get('release') in backlog_release.SOURCES else None
+        )
         try:
             with funded_processing.backlog_consent(uid, job['period']):
                 outcome = await _process(uid, item)
         finally:
+            backlog_release.source.reset(token_source)
             backlog_release.normal_priority.reset(token_priority)
         if outcome in (AttemptOutcome.COMPLETE, AttemptOutcome.DEFERRED):
             # A returned deferred result is known complete, unlike a busy lease
@@ -355,11 +359,14 @@ async def run(
                     return False
                 continue
             if job.get('automatic'):
-                release = await run_blocking(db_executor, backlog_release.decide, job, item['units'])
+                release = await run_blocking(
+                    db_executor, partial(backlog_release.decide, uid, job, item['units'], kind=item['kind'])
+                )
                 record_release(release.reason)
                 if not release.allowed:
                     return False  # Nothing advanced: the next sweep asks again for this same recording.
                 item['normal_priority'] = release.normal_priority
+                item['release'] = 'trial' if job.get('trial_grant') else 'conversion'
                 updates.update(release.updates)
             updates.update(reserved=item, remaining=None if remaining is None else max(0, remaining - item['units']))
             if not await save(updates):

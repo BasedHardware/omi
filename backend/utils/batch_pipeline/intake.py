@@ -341,6 +341,7 @@ async def accept_upload(
     usage_period: str | None = None,
     evidence: IntakeRouteEvidence | None = None,
     vendor_table: bool = True,
+    release: str | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -808,6 +809,9 @@ async def accept_upload(
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),
+                # An automatic release (trial or conversion) is backfill the owner did not tap for;
+                # its rows carry the source so hard-3 and the 2h alarm can count it apart.
+                **({'release': release} if release else {}),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,

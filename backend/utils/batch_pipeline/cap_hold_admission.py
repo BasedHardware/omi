@@ -128,6 +128,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
             recording_age_seconds=0 if backlog_release.normal_priority.get() else None,
             # Held audio never takes a cheaper-vendor route; a language GPUs cannot serve still may.
             vendor_table=False,
+            release=backlog_release.source.get(),
             source=meta['source'],
             # The owner's processing choice funded this audio; it is not re-locked.
             should_lock=False,
