@@ -10,6 +10,43 @@ from fastapi import Request, Response
 from utils import external_list_reads as cache, external_polling_cache as policy
 
 
+def test_disabled_policy_does_not_touch_request_identity(monkeypatch):
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false')
+    touched = []
+
+    class UnusableRequest:
+        @property
+        def headers(self):
+            touched.append('headers')
+            raise AssertionError('identity must be untouched while off')
+
+        @property
+        def url(self):
+            touched.append('url')
+            raise AssertionError('route must be untouched while off')
+
+    client = Mock()
+    request = UnusableRequest()
+    assert policy.adaptive_ttl(client, request, 'owner', object()) == 10
+    assert policy.negative_key(request, 'owner', object(), 'item') is None
+    assert touched == []
+    client.eval.assert_not_called()
+
+
+def test_enabled_policy_with_unusable_identity_bypasses_without_breaking_source(monkeypatch):
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', 'true')
+    request = Request(
+        {'type': 'http', 'method': 'GET', 'path': '/v1/dev/user/memories', 'headers': [], 'query_string': b''}
+    )
+    context = SimpleNamespace(app_id=object(), key_id='key')
+    client = Mock()
+    assert policy.adaptive_ttl(client, request, 'owner', context) == 10
+    assert policy.negative_key(request, 'owner', context, 'item') is None
+    client.eval.assert_not_called()
+
+
 @pytest.fixture
 def polling(monkeypatch):
     client = fakeredis.FakeRedis()

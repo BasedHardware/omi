@@ -49,30 +49,42 @@ def identity(request: Any, uid: str, context: Any) -> str:
         getattr(context, 'key_id', None),
         request.headers.get('authorization', ''),
     ]
+    if any(value is not None and not isinstance(value, str) for value in raw):
+        raise ValueError('unsupported cache identity')
     return hashlib.sha256(json.dumps(raw, separators=(',', ':')).encode()).hexdigest()
 
 
-def enabled(digest: str) -> bool:
+def rollout_percent() -> int:
     if os.getenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', '').strip().lower() == 'false':
-        return False
+        return 0
     if os.getenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false').strip().lower() != 'true':
-        return False
+        return 0
     try:
         percent = int(os.getenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '0'))
     except ValueError:
-        return False
-    return 0 <= percent <= 100 and int(digest[:8], 16) % 100 < percent
+        return 0
+    return percent if 0 <= percent <= 100 else 0
+
+
+def enabled(digest: str) -> bool:
+    percent = rollout_percent()
+    return percent > 0 and int(digest[:8], 16) % 100 < percent
 
 
 def adaptive_ttl(client: Any, request: Any, uid: str, context: Any, query: dict | None = None) -> int:
-    digest = identity(request, uid, context)
+    if rollout_percent() == 0:
+        return NORMAL_TTL
+    try:
+        route = request.url.path
+        if route not in {'/v1/dev/user/conversations', '/v1/dev/user/memories'}:
+            return NORMAL_TTL
+        if query and query.get('cursor') is not None:
+            return NORMAL_TTL  # Cursor expiry remains owned by the original reader.
+        digest = identity(request, uid, context)
+    except Exception:
+        return NORMAL_TTL  # Unusable metadata can never break the source route.
     if not enabled(digest):
         return NORMAL_TTL
-    route = request.url.path
-    if route not in {'/v1/dev/user/conversations', '/v1/dev/user/memories'}:
-        return NORMAL_TTL
-    if query and query.get('cursor') is not None:
-        return NORMAL_TTL  # Cursor expiry remains owned by the original reader.
     # Paging/filter fan-out is not evidence that one query is being polled.
     raw = json.dumps([digest, route, query], sort_keys=True, separators=(',', ':'), default=str)
     key = 'external-poll:v1:' + hashlib.sha256(raw.encode()).hexdigest()
@@ -93,14 +105,17 @@ class NegativeEntry:
 
 
 def negative_key(request: Any, uid: str, context: Any, item_id: str) -> NegativeEntry | None:
-    if request is None:
+    if request is None or rollout_percent() == 0:
         return None
-    digest = identity(request, uid, context)
-    if not enabled(digest):
+    try:
+        digest = identity(request, uid, context)
+        if not enabled(digest):
+            return None
+        # Route templates prevent raw item IDs from appearing in Redis key names.
+        raw = [digest, getattr(request.scope.get('route'), 'path', request.url.path), item_id]
+        key = 'external-missing:v1:' + hashlib.sha256(json.dumps(raw).encode()).hexdigest()
+    except Exception:
         return None
-    # Route templates prevent raw item IDs from appearing in Redis key names.
-    raw = [digest, getattr(request.scope.get('route'), 'path', request.url.path), item_id]
-    key = 'external-missing:v1:' + hashlib.sha256(json.dumps(raw).encode()).hexdigest()
     return NegativeEntry(key, time.time() + NEGATIVE_TTL)
 
 
