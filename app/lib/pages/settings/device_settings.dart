@@ -399,14 +399,17 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Sections.
 
-  // DeviceProvider ticks rebuild this page, and a rebuilt OmiSettingsRow relays out and repaints
-  // its whole group. Reuse the group while everything it reads is unchanged, so a tick skips it.
+  // Device-info refreshes rebuild this page (e.g. pairedDevice becomes BtDevice.empty() for a
+  // pendant that was never saved), and a rebuilt OmiSettingsRow relays out and repaints its whole
+  // group. The group reads only what is keyed here, so reuse it while that is unchanged.
   Object? _customizationInputs;
   Widget? _customizationGroupCache;
 
   Widget _cachedCustomizationGroup(BtDevice? device, DeviceProvider provider) {
+    final (isOmi, supportsFind) = _customizationDeviceTraits(device);
     final inputs = (
-      device,
+      isOmi,
+      supportsFind,
       provider,
       Localizations.localeOf(context),
       _isFindingDevice,
@@ -422,10 +425,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return _customizationGroupCache!;
   }
 
+  (bool, bool) _customizationDeviceTraits(BtDevice? device) {
+    final isOmi = device?.type == DeviceType.omi;
+    return (isOmi, isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device));
+  }
+
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
-    final isOmi = device?.type == DeviceType.omi;
-    final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
+    final (isOmi, supportsFind) = _customizationDeviceTraits(device);
     return OmiSettingsGroup(
       header: l10n.customizationSection,
       children: [

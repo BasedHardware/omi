@@ -77,13 +77,15 @@ class _DeviceButtonGestureRowsState extends State<DeviceButtonGestureRows> {
         showChevron: false,
       ),
     ];
-    // OmiSettingsGroup only divides its direct children, so divide these rows the same way.
+    // OmiSettingsGroup only divides its direct children, so divide these rows with the same 1pt
+    // line, drawn as one coloured box rather than a Divider's five render objects.
+    final divider = SizedBox(height: 1, width: double.infinity, child: ColoredBox(color: OmiColors.border));
     return RepaintBoundary(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0) Divider(height: 1, thickness: 1, color: OmiColors.border),
+            if (i > 0) divider,
             rows[i],
           ],
         ],
