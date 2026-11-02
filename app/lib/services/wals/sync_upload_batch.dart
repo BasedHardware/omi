@@ -223,15 +223,38 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
     });
   if (indexed.isEmpty) return const [];
   final ordered = [for (final entry in indexed) entry.$1];
-  final conversationId = ordered.first.conversationId;
-  final recordingSessionId = ordered.first.recordingSessionId;
-  final locationKey = _walLocationBatchKey(ordered.first);
-  final group = ordered
+  // Never mix a repair with new audio, or silently upload a surviving subset.
+  // Incomplete/over-budget repairs wait while unrelated recordings can drain.
+  final repairGroups = <String, List<Wal>>{};
+  for (final wal in ordered) {
+    if (wal.repairJobId != null) repairGroups.putIfAbsent(wal.repairJobId!, () => []).add(wal);
+  }
+  bool completeRepair(List<Wal> group) {
+    final expected = group.first.repairFileCount;
+    if (expected <= 0 || group.length != expected || group.any((w) => w.repairFileCount != expected)) return false;
+    var seconds = 0;
+    for (var index = 0; index < group.length; index++) {
+      if (!_batchHasRoom(index, seconds, group[index])) return false;
+      seconds += group[index].seconds;
+    }
+    return true;
+  }
+
+  final available =
+      ordered.where((w) => w.repairJobId == null || completeRepair(repairGroups[w.repairJobId]!)).toList();
+  if (available.isEmpty) return const [];
+  final first = available.first;
+  if (first.repairJobId != null) return repairGroups[first.repairJobId]!;
+  final conversationId = first.conversationId;
+  final recordingSessionId = first.recordingSessionId;
+  final locationKey = _walLocationBatchKey(first);
+  final group = available
       .where(
         (wal) =>
+            wal.repairJobId == null &&
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
-            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
+            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(first) &&
             _walLocationBatchKey(wal) == locationKey,
       )
       .toList();

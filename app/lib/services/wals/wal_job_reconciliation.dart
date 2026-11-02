@@ -180,6 +180,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                 changed = true;
                 heldChanged |= w.holdForUser;
                 w.status = WalStatus.synced;
+                w.clearRepairBundle();
                 w.holdForUser = false;
                 w.jobId = null;
                 if (w.syncedAt == 0) w.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
@@ -215,6 +216,12 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                   w.markUnsupportedAudio();
                   w.lastRetryAt = nowSecs;
                 } else {
+                  if (s.status == 'failed' && s.reasonCode == 'batch_artifact_missing') {
+                    w.repairJobId ??= hadJob;
+                    if (w.repairFileCount <= 0) {
+                      w.repairFileCount = s.totalFiles > 0 ? s.totalFiles : members.length;
+                    }
+                  }
                   w.status = WalStatus.miss;
                   w.jobId = null;
                   if (!admissionPaced) {

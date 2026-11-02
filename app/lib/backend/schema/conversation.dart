@@ -892,6 +892,7 @@ class SyncJobStartResponse {
 class SyncJobStatusResponse {
   final String jobId;
   final String status;
+  final int totalFiles;
   final int totalSegments;
   final int processedSegments;
   final int successfulSegments;
@@ -906,6 +907,7 @@ class SyncJobStatusResponse {
   SyncJobStatusResponse({
     required this.jobId,
     required this.status,
+    this.totalFiles = 0,
     this.totalSegments = 0,
     this.processedSegments = 0,
     this.successfulSegments = 0,
@@ -929,6 +931,7 @@ class SyncJobStatusResponse {
     return SyncJobStatusResponse(
       jobId: generated.jobId,
       status: generated.status,
+      totalFiles: generated.totalFiles,
       totalSegments: generated.totalSegments,
       processedSegments: generated.processedSegments,
       successfulSegments: generated.successfulSegments,

@@ -1043,6 +1043,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   String? captureEvidence,
+  String? repairJobId,
   String? recordingSessionId,
   double? audioStartSeconds,
   double? audioEndSeconds,
@@ -1056,6 +1057,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   final query = <String, String>{
+    if (repairJobId != null) 'repair_job_id': repairJobId,
     if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
     if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
     if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
@@ -1168,7 +1170,7 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
 Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
-    headers: {},
+    headers: const {'X-Omi-Custody-Repair-Protocol': '1'},
     method: 'GET',
     body: '',
   );

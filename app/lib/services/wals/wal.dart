@@ -630,6 +630,29 @@ class Wal {
     _changed();
   }
 
+  /// Original content bundle for a metadata-proven missing-artifact retry.
+  /// Survives handle clearing, refusal, manual retry and process restart.
+  String? _repairJobId;
+  String? get repairJobId => _repairJobId;
+  set repairJobId(String? value) {
+    if (_repairJobId == value) return;
+    _repairJobId = value;
+    _changed();
+  }
+
+  int _repairFileCount;
+  int get repairFileCount => _repairFileCount;
+  set repairFileCount(int value) {
+    if (_repairFileCount == value) return;
+    _repairFileCount = value;
+    _changed();
+  }
+
+  void clearRepairBundle() {
+    repairJobId = null;
+    repairFileCount = 0;
+  }
+
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int _uploadedAt;
   int get uploadedAt => _uploadedAt;
@@ -856,6 +879,8 @@ class Wal {
     int retryCount = 0,
     int lastRetryAt = 0,
     String? jobId,
+    String? repairJobId,
+    int repairFileCount = 0,
     int uploadedAt = 0,
     int jobPendingConfirmedAt = 0,
     int syncedAt = 0,
@@ -901,6 +926,8 @@ class Wal {
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
         _jobId = jobId,
+        _repairJobId = repairJobId,
+        _repairFileCount = repairFileCount,
         _uploadedAt = uploadedAt,
         _jobPendingConfirmedAt = jobPendingConfirmedAt,
         _syncedAt = syncedAt,
@@ -958,6 +985,8 @@ class Wal {
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
+      repairJobId: json['repair_job_id'] is String ? json['repair_job_id'] as String : null,
+      repairFileCount: json['repair_file_count'] is int ? json['repair_file_count'] as int : 0,
       uploadedAt: json['uploaded_at'] ?? 0,
       jobPendingConfirmedAt: json['job_pending_confirmed_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
@@ -1013,6 +1042,8 @@ class Wal {
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
+      if (repairJobId != null) 'repair_job_id': repairJobId,
+      if (repairFileCount > 0) 'repair_file_count': repairFileCount,
       'uploaded_at': uploadedAt,
       'job_pending_confirmed_at': jobPendingConfirmedAt,
       'synced_at': syncedAt,
@@ -1073,6 +1104,8 @@ class Wal {
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);
     h = _mixFingerprint(h, jobId?.hashCode ?? 0);
+    h = _mixFingerprint(h, repairJobId?.hashCode ?? 0);
+    h = _mixFingerprint(h, repairFileCount);
     h = _mixFingerprint(h, uploadedAt);
     h = _mixFingerprint(h, jobPendingConfirmedAt);
     h = _mixFingerprint(h, syncedAt);

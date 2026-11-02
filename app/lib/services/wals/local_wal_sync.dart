@@ -1418,6 +1418,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           (wal) =>
               wal.storage == WalStorage.disk &&
               wal.status == WalStatus.synced &&
+              wal.repairJobId == null &&
               wal.syncedAt > 0 &&
               wal.syncedAt <= cutoff,
         )
@@ -2071,8 +2072,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final candidates = waiting.isNotEmpty ? waiting : pending;
       var batch = nextSyncUploadBatch(candidates, batchNowSeconds);
       if (batch.isEmpty) break;
-      if (batch
-          .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
+      if (batch.first.repairJobId == null &&
+          batch.any(
+              (wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
         batch = [batch.first];
       }
       final drainGroup = groupKeys[batch.first]!;
@@ -2177,6 +2179,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         Logger.debug("Files are empty");
         continue;
       }
+      if (batch.first.repairJobId != null && batchWals.length != batch.first.repairFileCount) {
+        // A missing/corrupt member cannot turn an exact repair into a new
+        // content identity. Surviving bytes remain pending; other groups drain.
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          attemptedWalIds.add(walAttemptKey(wal));
+        }
+        await _saveWalsToFile(generation);
+        _notifyUpdated(generation);
+        continue;
+      }
 
       void reportUploadProgress() {
         if (!_isCurrent(generation)) return;
@@ -2201,6 +2214,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final audioBounds = syncUploadAudioBounds(batchWals);
         final result = await _uploadGate.upload(
           files,
+          repairJobId: batchWals.first.repairJobId,
           conversationId: batchWals.first.conversationId,
           captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           recordingSessionId: batchWals.first.recordingSessionId,
@@ -2224,6 +2238,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           );
           for (final wal in batchWals) {
             wal.status = WalStatus.synced;
+            wal.clearRepairBundle();
             wal.isSyncing = false;
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
@@ -2505,6 +2520,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final audioBounds = syncUploadAudioBounds([walToSync]);
       final result = await _uploadGate.upload(
         [walFile],
+        repairJobId: walToSync.repairJobId,
         conversationId: walToSync.conversationId,
         captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
         recordingSessionId: walToSync.recordingSessionId,
@@ -2526,6 +2542,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           ),
         );
         walToSync.status = WalStatus.synced;
+        walToSync.clearRepairBundle();
         walToSync.isSyncing = false;
         walToSync.syncStartedAt = null;
         walToSync.syncEtaSeconds = null;

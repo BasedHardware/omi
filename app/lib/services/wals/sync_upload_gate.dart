@@ -27,6 +27,18 @@ typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   Geolocation? geolocation,
 });
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
+typedef SyncRepairFilesUploader = Future<UploadFilesResult> Function(
+  List<File> files, {
+  required String repairJobId,
+  UploadProgressCallback? onUploadProgress,
+  String? conversationId,
+  String? captureEvidence,
+  String? recordingSessionId,
+  double? audioStartSeconds,
+  double? audioEndSeconds,
+  bool claimLiveCapture,
+  Geolocation? geolocation,
+});
 typedef UploadTelemetryEmitter = void Function(String eventName, Map<String, dynamic> properties);
 typedef UploadAttemptIdFactory = String Function();
 typedef UploadClock = DateTime Function();
@@ -41,6 +53,7 @@ class SyncUploadGate {
   SyncUploadGate({
     required SyncRateLimiter limiter,
     required SyncFilesUploader uploader,
+    SyncRepairFilesUploader? repairUploader,
     required FairUseStatusLoader fairUseStatusLoader,
     UploadTelemetryEmitter? telemetryEmitter,
     UploadAttemptIdFactory? attemptIdFactory,
@@ -48,6 +61,7 @@ class SyncUploadGate {
     ClientTelemetry? clientTelemetry,
   })  : _limiter = limiter,
         _uploader = uploader,
+        _repairUploader = repairUploader,
         _fairUseStatusLoader = fairUseStatusLoader,
         _telemetryEmitter = telemetryEmitter,
         _attemptIdFactory = attemptIdFactory ?? _defaultAttemptId,
@@ -57,6 +71,7 @@ class SyncUploadGate {
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,
     uploader: uploadLocalFilesV2,
+    repairUploader: uploadLocalFilesV2,
     fairUseStatusLoader: getFairUseStatus,
     telemetryEmitter: _emitProductionTelemetry,
   );
@@ -65,6 +80,7 @@ class SyncUploadGate {
 
   final SyncRateLimiter _limiter;
   final SyncFilesUploader _uploader;
+  final SyncRepairFilesUploader? _repairUploader;
   final FairUseStatusLoader _fairUseStatusLoader;
   final UploadTelemetryEmitter? _telemetryEmitter;
   final UploadAttemptIdFactory _attemptIdFactory;
@@ -160,6 +176,7 @@ class SyncUploadGate {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
     String? captureEvidence,
+    String? repairJobId,
     String? recordingSessionId,
     double? audioStartSeconds,
     double? audioEndSeconds,
@@ -213,17 +230,33 @@ class SyncUploadGate {
       );
 
       try {
-        final result = await _uploader(
-          files,
-          onUploadProgress: onUploadProgress,
-          conversationId: conversationId,
-          captureEvidence: captureEvidence,
-          recordingSessionId: recordingSessionId,
-          audioStartSeconds: audioStartSeconds,
-          audioEndSeconds: audioEndSeconds,
-          claimLiveCapture: claimLiveCapture,
-          geolocation: geolocation,
-        );
+        if (repairJobId != null && _repairUploader == null) {
+          throw StateError('Exact-bundle repair transport unavailable; retain audio');
+        }
+        final result = repairJobId == null
+            ? await _uploader(
+                files,
+                onUploadProgress: onUploadProgress,
+                conversationId: conversationId,
+                captureEvidence: captureEvidence,
+                recordingSessionId: recordingSessionId,
+                audioStartSeconds: audioStartSeconds,
+                audioEndSeconds: audioEndSeconds,
+                claimLiveCapture: claimLiveCapture,
+                geolocation: geolocation,
+              )
+            : await _repairUploader!(
+                files,
+                repairJobId: repairJobId,
+                onUploadProgress: onUploadProgress,
+                conversationId: conversationId,
+                captureEvidence: captureEvidence,
+                recordingSessionId: recordingSessionId,
+                audioStartSeconds: audioStartSeconds,
+                audioEndSeconds: audioEndSeconds,
+                claimLiveCapture: claimLiveCapture,
+                geolocation: geolocation,
+              );
         SyncJobPoller.instance.validateOwner(result);
         if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
         final queued = result.isQueued;

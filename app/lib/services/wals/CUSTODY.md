@@ -58,6 +58,14 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    the entire WAL in its capture root, mono channel, clock epoch and (when supplied) recording session.
    Gaps, foreign owners, missing ordinals and in-flight/manual/on-device WALs never release.
    A release marks server-confirmed synced retention; only the existing retention policy deletes bytes.
+   A retryable `batch_artifact_missing` is never confirmation. The phone persists its original job
+   and file count, retains every surviving member, and retries only the complete original bundle
+   with `repair_job_id`. New audio cannot join it. A missing/ineligible member holds that repair
+   while unrelated recordings can drain. The tag survives restart and even a separately synced
+   local copy cannot age out while tagged. Only actual whole-job completion clears the tag.
+   Status requests advertise `X-Omi-Custody-Repair-Protocol: 1`; servers keep older clients in
+   `processing`. Operator disposition stays off until a capable client is live. This protocol
+   cannot recover files a prior client already acknowledged and deleted.
 3. **Owner before anything.** A WAL's `ownerUid` is set before it is listed, played, uploaded or
    deleted. Watch copies take the owner from their iPhone receipt. Other native files take the
    signed-in uid at intake, the same as every other producer. Once registered, the ledger
