@@ -34217,6 +34217,11 @@
             "title": "Successful Segments",
             "type": "integer"
           },
+          "total_files": {
+            "default": 0,
+            "title": "Total Files",
+            "type": "integer"
+          },
           "total_segments": {
             "default": 0,
             "title": "Total Segments",
@@ -85277,6 +85282,24 @@
             }
           },
           {
+            "description": "Original batch job for an exact custody repair bundle",
+            "in": "query",
+            "name": "repair_job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Original batch job for an exact custody repair bundle",
+              "title": "Repair Job Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-App-Platform",
             "required": false,
@@ -85492,6 +85515,22 @@
               "default": false,
               "title": "Surface Open",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Custody-Repair-Protocol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Custody-Repair-Protocol"
             }
           },
           {

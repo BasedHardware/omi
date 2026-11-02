@@ -365,6 +365,7 @@ async def accept_upload(
     policy: BatchUnitPolicy | None = None,
     usage_period: str | None = None,
     evidence: IntakeRouteEvidence | None = None,
+    repair_job_id: str | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -382,7 +383,44 @@ async def accept_upload(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+        if repair_job_id is not None and (
+            not isinstance(repair_job_id, str)
+            or not repair_job_id.startswith(JOB_PREFIX)
+            or len(repair_job_id) > 128
+            or '/' in repair_job_id
+            or previous.get('dispatch_protocol') != 'batch_v1'
+            or previous.get('job_id') != repair_job_id
+        ):
+            # A regrouped/subset retry must never enter fresh admission. The
+            # client retains every surviving file and the original repair tag.
+            return JSONResponse(
+                status_code=409,
+                content={
+                    'code': 'sync_repair_bundle_changed',
+                    'detail': 'The original complete upload is required; retain local audio',
+                },
+            )
         if previous.get('dispatch_protocol') == 'batch_v1':
+            if previous.get('artifact_missing_units'):
+                # A fresh owner would lose batch checkpoint identities. Repair
+                # only missing spans under the original content/job binding.
+                from utils.batch_pipeline.artifact_reupload import restore_upload
+
+                repair_artifacts = await run_blocking(storage_executor, artifacts_for, store)
+                await restore_upload(
+                    store,
+                    uid,
+                    content_id,
+                    paths,
+                    source=source,
+                    should_lock=should_lock,
+                    conversation_id=conversation_id,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
+                    intake_context=intake_context,
+                    artifacts=repair_artifacts,
+                    decode=decode,
+                )
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
@@ -903,7 +941,7 @@ def privacy_blocked_response() -> JSONResponse:
     )
 
 
-def get_durable_job_status(job_id: str, uid: str) -> dict | None:
+def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:
     if not job_id.startswith(JOB_PREFIX):
         return None
     if len(job_id) > 128 or '/' in job_id:
@@ -912,4 +950,8 @@ def get_durable_job_status(job_id: str, uid: str) -> dict | None:
     status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
+    if status.get('reason_code') == 'batch_artifact_missing' and not artifact_retry:
+        # Released clients regroup terminal failures and cannot preserve the
+        # original content identity. Only a capable exact-bundle client retries.
+        return {**status, 'status': 'processing', 'poll_after_ms': 300000}
     return status
