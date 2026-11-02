@@ -733,10 +733,18 @@ def test_payoff_stratified_window_reaches_stranded_yielders(queue, monkeypatch):
     assert sorted(ranked) == sorted(uid for uid, _ in rows)
 
 
-@pytest.mark.parametrize('count', [0, 1, 299, 300, 999, 1000, 1001])
+@pytest.mark.parametrize('count', [0, 1, 299, 300, 999, 1000])
 def test_payoff_window_small_queues_keep_fifo_ties(queue, count):
     rows = [(f'owner-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(count)]
     assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == [uid for uid, _ in rows]
+
+
+def test_payoff_window_just_over_cap_keeps_every_owner_and_samples_newest(queue):
+    rows = [(f'owner-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(1001)]
+    ranked = dream_scheduler.payoff_order(rows, NOW, firestore_client=queue)
+    assert sorted(ranked) == sorted(uid for uid, _ in rows)
+    assert ranked[:300] == [uid for uid, _ in rows[:300]]
+    assert rows[-1][0] in ranked[:1000]
 
 
 def test_payoff_clamps_existing_pre_epoch_due_without_aging_priority(queue):
