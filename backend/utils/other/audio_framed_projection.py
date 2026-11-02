@@ -10,7 +10,9 @@ from utils.other.audio_frame_table import receipt_frames
 from utils.other.audio_chunk_replay import AudioChunkContentConflict
 
 
-def upload_projection(bucket, private_bucket, uid, conversation_id, chunks, protection, sample_rate, write_gate):
+def upload_projection(
+    bucket, private_bucket, uid, conversation_id, chunks, protection, sample_rate, write_gate, archive_capture=None
+):
     paths = []
     for chunk in chunks:
         receipt = chunk['custody_receipt']
@@ -41,4 +43,17 @@ def upload_projection(bucket, private_bucket, uid, conversation_id, chunks, prot
                 ):
                     raise AudioChunkContentConflict('framed projection content conflict')
         paths.append(path)
+        if archive_capture is not None:
+            captures, offset = [], 0
+            for frame in frames:
+                size = frame['samples'] * 2
+                captures.append(
+                    {
+                        'data': payload[offset : offset + size],
+                        'timestamp': frame['start'],
+                        'span': {'start': frame['start'], 'samples': frame['samples'], 'sample_rate': rate},
+                    }
+                )
+                offset += size
+            archive_capture(captures, uid, conversation_id, protection, sample_rate)
     return paths

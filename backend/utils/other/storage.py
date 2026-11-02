@@ -966,6 +966,7 @@ def upload_audio_chunks_batch(
             protection_level,
             sample_rate,
             owner_storage_write_gate,
+            archive_capture=_archive_pusher_capture if audio_packs.enabled() else None,
         )
 
     if audio_archive.admitted(uid, 'STOP_PCM') and audio_archive.admitted(uid, 'READ'):
