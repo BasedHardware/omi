@@ -62,8 +62,19 @@ async function evidence(github, repo, pr) {
       if (!/^desktop\/macos\/.*\.swift$/.test(path)) continue;
       for (const ref of [pr.base.sha,pr.head.sha]) {
         try {
-          const {data} = await github.rest.repos.getContent({...repo,path,ref});
-          if (data.encoding !== 'base64' || !data.content || data.size > 1000000) {
+          let {data} = await github.rest.repos.getContent({...repo,path,ref});
+          // The contents API omits bodies over 1 MB (encoding "none"); read those
+          // through the immutable blob by SHA instead of failing every PR that
+          // touches a large generated file such as OmiApi.generated.swift.
+          if (data.encoding === 'none' && data.type === 'file' && /^[a-f0-9]{40}$/.test(data.sha || '')) {
+            const blob = (await github.rest.git.getBlob({...repo,file_sha:data.sha})).data;
+            if (blob.sha !== data.sha || blob.size !== data.size || blob.encoding !== 'base64' || !blob.content
+              || Buffer.from(blob.content,'base64').length !== blob.size) {
+              throw new Error('Incomplete Swift source evidence');
+            }
+            data = blob;
+          }
+          if (data.encoding !== 'base64' || !data.content) {
             throw new Error('Incomplete Swift source evidence');
           }
           const source = Buffer.from(data.content,'base64').toString('utf8');
