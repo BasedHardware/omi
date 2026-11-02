@@ -800,11 +800,11 @@ class ListenSessionRuntime:
                 break
 
     async def _record_usage_periodically(self) -> None:
-        reset_session_census()
+        await self.persistence.call(reset_session_census)
         while self.state.active:
             if await self.wait(60):
                 break
-            flush_session_census()
+            await self.persistence.call(flush_session_census)
             transcription_seconds = await self._flush_usage(final=False)
             if self.use_custom_stt:
                 continue
