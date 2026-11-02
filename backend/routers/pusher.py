@@ -1,3 +1,4 @@
+from utils import pusher_projection_errors
 import hashlib
 import os
 import struct
@@ -5,11 +6,12 @@ import asyncio
 import time
 import uuid
 from contextlib import ExitStack
-from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from utils.pusher_audio_window import append_window_run, v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 from config.audio_custody import framed_pack
+from utils.other.audio_seal_index import create_seal_index
+from utils.other import storage as audio_storage
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_audio_projection import PusherAudioProjection, projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
@@ -17,8 +19,7 @@ from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
 
 from fastapi import APIRouter
-from fastapi.websockets import WebSocketDisconnect, WebSocket
-from starlette.websockets import WebSocketState
+from fastapi.websockets import WebSocketDisconnect, WebSocket, WebSocketState
 from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
@@ -119,28 +120,6 @@ PROJECTION_RETRY_BUDGET = 2
 # same range fail closed and are never overwritten.
 
 
-def _projection_raising_frame(exc: BaseException) -> str:
-    """Innermost raising frame name, for RCA attribution of projection failures.
-
-    Only the code object's name is ever returned — the exception message and
-    args can carry user-identifying object paths and must not reach logs.
-    """
-    frame_name = 'unknown'
-    tb = exc.__traceback__
-    while tb is not None:
-        frame_name = tb.tb_frame.f_code.co_name
-        tb = tb.tb_next
-    return frame_name
-
-
-def _projection_grpc_code(exc: BaseException) -> str:
-    """Only the SDK's closed gRPC status enum; never message/metadata/reason text."""
-    code = cast(object, getattr(exc, 'grpc_status_code', None))
-    if isinstance(code, StatusCode):
-        return code.name
-    return 'UNKNOWN'
-
-
 # Queue size limits
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 
@@ -174,16 +153,6 @@ RECORD_INLINE_FINISH_TIMEOUT = 20.0  # projection wait and metadata combined
 def _projection_wait_bound_enabled() -> bool:
     """Emergency rollback of the capacity deadline only; custody ownership stays."""
     return os.getenv('PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED', 'true').strip().lower() != 'false'
-
-
-def _ack_peer_departed(exc: Exception, websocket: Any) -> bool:
-    if isinstance(exc, (WebSocketDisconnect, OSError)):
-        return True
-    return isinstance(exc, RuntimeError) and (
-        getattr(websocket, 'application_state', None) == WebSocketState.DISCONNECTED
-        or getattr(websocket, 'client_state', None) == WebSocketState.DISCONNECTED
-        or str(exc) == 'Cannot call "send" once a close message has been sent.'
-    )
 
 
 async def _dispatch_transcript_item(
@@ -294,7 +263,7 @@ async def _commit_durable_audio_window(
             except Exception as exc:
                 # Slot ownership precedes the ACK: peer departure cannot bypass
                 # projection delivery. The ordinary close worker promotes it.
-                if _ack_peer_departed(exc, websocket):
+                if pusher_projection_errors.ack_peer_departed(exc, websocket):
                     raise WebSocketDisconnect(code=1006) from None
                 raise
         if receipt.conversation_id and receipt.samples:
@@ -421,7 +390,8 @@ async def _run_websocket_util_trigger(
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
-    framed_audio = durable_audio and audio_timeline_v2 and sample_rate == 16000 and framed_pack(uid)
+    index_audio = durable_audio and framed_pack(uid)
+    framed_audio = index_audio and audio_timeline_v2 and sample_rate == 16000
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
@@ -432,6 +402,13 @@ async def _run_websocket_util_trigger(
     inline_finish_done = asyncio.Event()
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
+    seal_index = (
+        await run_blocking(
+            storage_executor, create_seal_index, audio_storage, uid, custody_root, cached_protection_level
+        )
+        if index_audio
+        else None
+    )
 
     audio_projection = PusherAudioProjection(uid)
     deleted_conversations: set[str] = set()
@@ -482,6 +459,10 @@ async def _run_websocket_util_trigger(
                     cached_protection_level,
                     sample_rate=sample_rate,
                 )
+                if seal_index:
+                    for chunk in chunks:
+                        if chunk.get('custody_receipt'):
+                            seal_index.project(chunk['custody_receipt'], uploaded_paths)
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
@@ -536,8 +517,8 @@ async def _run_websocket_util_trigger(
                 logger.warning(
                     'Durable audio projection failure class: %s raised by %s grpc_code=%s',
                     type(exc).__name__,
-                    _projection_raising_frame(exc),
-                    _projection_grpc_code(exc),
+                    pusher_projection_errors.raising_frame(exc),
+                    pusher_projection_errors.grpc_code(exc),
                 )
                 logger.info('Durable audio projection rejected; archive receipt retained')
             except NotFound as exc:
@@ -584,8 +565,8 @@ async def _run_websocket_util_trigger(
             logger.warning(
                 'Durable audio projection failure class: %s raised by %s grpc_code=%s',
                 type(exc).__name__,
-                _projection_raising_frame(exc),
-                _projection_grpc_code(exc),
+                pusher_projection_errors.raising_frame(exc),
+                pusher_projection_errors.grpc_code(exc),
             )
             if (
                 websocket_active
@@ -664,6 +645,8 @@ async def _run_websocket_util_trigger(
                 ):
                     await flush_refs(conv_id)
             for conv_id in list(record_close_requests):
+                if seal_index and conv_id not in pending_refs and not durable_queue.has_conversation(conv_id):
+                    await run_blocking(storage_executor, seal_index.try_seal, conv_id)
                 if (
                     conv_id == inline_finish_conversation
                     and conv_id not in pending_refs
@@ -1183,6 +1166,7 @@ async def _run_websocket_util_trigger(
             nonlocal durable_tail_has_receipt
             nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
+            receipt_frames = tuple(durable_window_frames)
 
             def committed():
                 nonlocal durable_tail_has_receipt
@@ -1191,10 +1175,10 @@ async def _run_websocket_util_trigger(
                 durable_window_frames.clear()
 
             try:
-                return await _commit_durable_audio_window(
+                receipt = await _commit_durable_audio_window(
                     uid=uid,
                     payload=bytes(private_cloud_sync_buffer),
-                    frames=list(durable_window_frames),
+                    frames=list(receipt_frames),
                     conversation_id=current_conversation_id,
                     start=private_cloud_chunk_start_time,
                     sample_rate=sample_rate,
@@ -1209,11 +1193,21 @@ async def _run_websocket_util_trigger(
                     on_committed=committed,
                     framed=framed_audio,
                 )
+                if seal_index and receipt and receipt.conversation_id:
+                    if framed_audio:
+                        await run_blocking(
+                            storage_executor, seal_index.try_add, receipt.to_dict(), list(receipt_frames)
+                        )
+                    else:
+                        seal_index.failed.add(receipt.conversation_id)
+                return receipt
             except BaseException:
                 # A failed/cancelled dispatch can have committed remotely. The
                 # shutdown tail must never rerun that unknown storage operation.
                 if not durable_tail_has_receipt:
                     durable_commit_unresolved = True
+                    if seal_index and current_conversation_id:
+                        seal_index.failed.add(current_conversation_id)
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
@@ -1584,6 +1578,12 @@ async def _run_websocket_util_trigger(
                 # id, committed under 'unlinked' at the next flush boundary);
                 # the window itself commits in _queue_private_cloud_chunk.
                 if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
+                    if seal_index and current_conversation_id and current_conversation_id not in seal_index.active:
+                        await run_blocking(storage_executor, seal_index.begin, current_conversation_id)
+                    if seal_index and current_conversation_id:
+                        seal_index.accept(current_conversation_id, len(audio_data) // 2)
+                        if not framed_audio:
+                            seal_index.failed.add(current_conversation_id)
                     if (
                         framed_audio
                         and private_cloud_sync_buffer

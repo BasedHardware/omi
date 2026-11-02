@@ -126,7 +126,17 @@ async def test_media_put_without_manifest_holds_wal_retry_issues_one_receipt(rem
     assert receipt and len(sock.sent) == 1 and budget.used == 0
     assert all((receipt.generation, receipt.manifest_generation, receipt.sha256, receipt.manifest_sha256))
     assert audio_outbox_metrics.CUSTODY_COMMITS._value.get() == before + 1
-    assert len(remote.list_blobs('raw-live/')) == len(remote.list_blobs('audio-outbox/')) == 1
+    assert len(remote.list_blobs('raw-live/')) == 1
+    assert (
+        len(
+            [
+                blob
+                for blob in remote.list_blobs('audio-outbox/')
+                if (blob.metadata or {}).get('format') == 'audio-custody-manifest-v1'
+            ]
+        )
+        == 1
+    )
     assert audio_outbox.read_pcm('owner', receipt) == payload
 
 
@@ -197,4 +207,14 @@ async def test_mid_window_death_leaves_tail_held_and_prior_part_released(remote,
     receipts = _sent_receipts(sock)
     assert len(receipts) == 1 and audio_outbox.read_pcm('owner', receipts[0]) == captured[0]
     assert receipts[0].samples == 160 and sock.close_code == 1011
-    assert len(remote.list_blobs('raw-live/')) == len(remote.list_blobs('audio-outbox/')) == 1
+    assert len(remote.list_blobs('raw-live/')) == 1
+    assert (
+        len(
+            [
+                blob
+                for blob in remote.list_blobs('audio-outbox/')
+                if (blob.metadata or {}).get('format') == 'audio-custody-manifest-v1'
+            ]
+        )
+        == 1
+    )

@@ -422,6 +422,11 @@ markers across send pauses. The 60 s / 16 MiB and 4096-frame bounds still
 apply. Raw/PCM discovery exposes frame spans with decoded sample offsets;
 receipt-based WAL release remains per part, with both immutable generations
 and plaintext digests. Readers continue walking old framed objects at percent 0.
+That cohort publishes a generation-CAS `audio-outbox/<owner>/<conversation>/seal.json`
+snapshot and immutable per-source/part seals at 16 MiB or close. Open writer
+markers invalidate the snapshot before new frames are accepted; all writers
+must close. Per-part ACKs precede index publication and never await conversation
+end. Indexes retain raw frame receipts and known PCM projection paths.
 See [custody, recovery, metrics and acceptance](runbooks/audio-durable-outbox.md).
 
 ## Production runtime identity
