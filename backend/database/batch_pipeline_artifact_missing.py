@@ -66,7 +66,7 @@ class ArtifactMissingStore:
         from database.batch_pipeline_projection import held_without_recovery
 
         def read(tx):
-            ledger, binding, jobs = self._reupload_content(tx, uid, content_id)
+            _ledger, binding, jobs = self._reupload_content(tx, uid, content_id)
             missing = {job['segment_id']: job for job in jobs if artifact_missing(job)}
             if not missing:
                 return None

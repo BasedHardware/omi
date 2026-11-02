@@ -934,7 +934,7 @@ def privacy_blocked_response() -> JSONResponse:
     )
 
 
-def _repair_owner_matches(ledger: dict, job_id: str) -> bool:
+def _repair_owner_matches(ledger: dict, job_id: object) -> bool:
     return (
         isinstance(job_id, str)
         and job_id.startswith(JOB_PREFIX)
