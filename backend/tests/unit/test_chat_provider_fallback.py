@@ -72,9 +72,6 @@ async def test_openai_compatible_modes_use_current_supervised_runner(
         )
         await callback.end()
 
-    async def fake_jit(_uid):
-        return False
-
     fake_tool = SimpleNamespace(name='core_tool')
     monkeypatch.setattr(agentic, 'CORE_TOOLS', (fake_tool,))
     monkeypatch.setattr(agentic, 'fit_within_budget', lambda value, *_args: (value, False))
@@ -82,8 +79,6 @@ async def test_openai_compatible_modes_use_current_supervised_runner(
     monkeypatch.setattr(agentic, 'should_route_chat_agent_through_gateway', lambda: gateway_enabled)
     monkeypatch.setattr(agentic, 'run_blocking', fake_run_blocking)
     monkeypatch.setattr(agentic, 'get_mobile_city', fake_mobile_city)
-    monkeypatch.setattr(agentic, '_resolve_jit_conversation_retrieval', fake_jit)
-    monkeypatch.setattr(agentic, 'append_jit_conversation_retrieval_prompt', lambda prompt, enabled=False: prompt)
     monkeypatch.setattr(agentic, 'get_current_datetime_block', lambda *_args, **_kwargs: 'NOW')
     monkeypatch.setattr(agentic, '_convert_tools', lambda *_args: ([{'name': 'core_tool'}], {'core_tool': fake_tool}))
     monkeypatch.setattr(agentic, '_langchain_tool_to_openai', lambda *_args, **_kwargs: {'name': 'web_search'})
