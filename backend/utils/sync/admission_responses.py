@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 
@@ -17,4 +18,12 @@ def sync_content_in_progress_response(job_id: Optional[str]) -> JSONResponse:
             'job_id': job_id,
             'poll_after_ms': 10000,
         },
+    )
+
+
+def sync_finalization_retrying() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail='Sync recovery finalization is retrying; local audio remains available.',
+        headers={'Retry-After': '10'},
     )

@@ -209,3 +209,98 @@ def test_legacy_segments_without_a_scope_pass_through_unharmed():
     assert legacy['speaker_id'] == 7
     assert sentinel['speaker_id'] == 99
     assert allocator._speaker_ids == {}
+
+
+def test_allocator_reuses_owner_and_person_speaker_id_across_sync_scopes():
+    # Regression for #22755 / #23364: when live or earlier sync chunks already
+    # established a conversation-local speaker_id for the owner (is_user=True)
+    # or a known person (person_id), subsequent sync scopes must reuse that
+    # speaker_id instead of minting a fresh speaker_id per uploaded chunk.
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(
+        [
+            {
+                'speaker': 'SPEAKER_0',
+                'speaker_id': 10,
+                'speaker_id_scope': 'live-conn:4',
+                'is_user': True,
+                'person_id': None,
+            },
+            {
+                'speaker': 'SPEAKER_1',
+                'speaker_id': 11,
+                'speaker_id_scope': 'live-conn:4',
+                'is_user': False,
+                'person_id': 'person-alice',
+            },
+        ]
+    )
+
+    sync_chunk_1_owner = {
+        'speaker': 'SPEAKER_0',
+        'speaker_id_scope': 'sync:sync_0000:0',
+        'is_user': True,
+        'person_id': None,
+    }
+    sync_chunk_2_owner = {
+        'speaker': 'SPEAKER_1',
+        'speaker_id_scope': 'sync:sync_0001:0',
+        'is_user': True,
+        'person_id': None,
+    }
+    sync_chunk_2_alice = {
+        'speaker': 'SPEAKER_0',
+        'speaker_id_scope': 'sync:sync_0001:0',
+        'is_user': False,
+        'person_id': 'person-alice',
+    }
+    sync_chunk_2_unknown = {
+        'speaker': 'SPEAKER_2',
+        'speaker_id_scope': 'sync:sync_0001:0',
+        'is_user': False,
+        'person_id': None,
+    }
+
+    allocator.assign(sync_chunk_1_owner)
+    allocator.assign(sync_chunk_2_owner)
+    allocator.assign(sync_chunk_2_alice)
+    allocator.assign(sync_chunk_2_unknown)
+
+    assert sync_chunk_1_owner['speaker_id'] == 10
+    assert sync_chunk_2_owner['speaker_id'] == 10
+    assert sync_chunk_2_alice['speaker_id'] == 11
+    assert sync_chunk_2_unknown['speaker_id'] == 12
+
+
+def test_persisted_scope_binding_wins_over_a_later_owner_hint():
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(
+        [
+            {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'live:0', 'speaker_id': 4, 'is_user': True},
+            {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old', 'speaker_id': 8},
+        ]
+    )
+    replay = {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old', 'is_user': True}
+    allocator.assign(replay)
+    assert replay['speaker_id'] == 8
+    retry = {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old'}
+    allocator.assign(retry)
+    assert retry['speaker_id'] == replay['speaker_id']
+
+
+def test_batch_owner_hint_cannot_bypass_an_abstained_acoustic_link():
+    allocator = ConversationSpeakerIdAllocator()
+    first = {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:first', 'is_user': True}
+    second = {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:second', 'is_user': True}
+    allocator.assign(first)
+    allocator.assign(second)
+    assert first['speaker_id'] != second['speaker_id']
+
+
+def test_persisted_acoustic_binding_wins_over_legacy_identity_reuse():
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate([{'speaker': 'SPEAKER_00', 'speaker_id_scope': 'live:0', 'speaker_id': 1, 'is_user': True}])
+    allocator.hydrate([{'speaker': 'SPEAKER_02', 'speaker_id_scope': 'final:batch:new', 'speaker_id': 5}])
+    segment = {'speaker': 'SPEAKER_02', 'speaker_id_scope': 'final:batch:new', 'is_user': True}
+    allocator.assign(segment)
+    assert segment['speaker_id'] == 5

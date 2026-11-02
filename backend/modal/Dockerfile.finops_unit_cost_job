@@ -29,11 +29,13 @@ RUN apt-get update && apt-get -y dist-upgrade \
 
 COPY --from=builder /opt/venv /opt/venv
 
-# Recreate the two repo-relative paths the code expects:
+# Recreate the repo-relative paths the code expects:
 #   pull_stripe.py: CATALOG = HERE/../../config/plan_catalog.json
+#   pull_modulate_modelled.py: RATE_CARD = HERE/../../config/rate_card_v2.json
 #   pull_providers/posthog run from /app/finops directly.
 COPY backend/scripts/finops/ /app/monorepo/backend/scripts/finops/
 COPY backend/config/plan_catalog.json /app/monorepo/backend/config/plan_catalog.json
+COPY backend/config/rate_card_v2.json /app/monorepo/backend/config/rate_card_v2.json
 
 ENV FINOPS_AUTH=cloudrun \
     FINOPS_SECRETS_DIR=/run/secrets/finops \

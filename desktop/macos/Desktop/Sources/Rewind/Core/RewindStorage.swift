@@ -4,7 +4,6 @@ import CoreImage
 import Foundation
 import ImageIO
 import OmiSupport
-import Sentry
 
 /// A Sendable inspection sample for a decoded video frame. This lets callers
 /// verify video readback without moving AppKit's non-Sendable `NSImage` outside
@@ -422,17 +421,6 @@ actor RewindStorage {
     frameCursor?.cancel()
     frameCursor = active
 
-    let breadcrumb = Breadcrumb(level: .info, category: "frame_extraction")
-    breadcrumb.message = "Extracted frame from video"
-    breadcrumb.data = [
-      "video_path": videoPath,
-      "frame_offset": frameOffset,
-      "image_width": cgImage.width,
-      "image_height": cgImage.height,
-      "decoder": "AVAssetReader",
-    ]
-    SentrySDK.addBreadcrumb(breadcrumb)
-
     return cgImage
   }
 
@@ -494,7 +482,7 @@ actor RewindStorage {
     let imageData = try? Data(contentsOf: outputPath)
     let image = imageData.flatMap { NSImage(data: $0) }
 
-    guard let imageData, let image else {
+    guard let image else {
       // ffmpeg exited 0 but produced no output — selected frame was not present.
       // Treat as missing frame (not a real error) so the backfill silently skips it.
       if !fileExists || fileSize == 0 {
@@ -506,21 +494,9 @@ actor RewindStorage {
         ? Int(Double(ProcessInfo.processInfo.physicalMemory) / 1_048_576)
         : -1
       let detail =
-        "fileExists=\(fileExists), fileSize=\(fileSize), dataLoaded=\(imageData != nil), imageDecoded=\(image != nil), systemMemoryMB=\(memoryMB), videoPath=\(videoPath), frameOffset=\(frameOffset)"
+        "fileExists=\(fileExists), fileSize=\(fileSize), dataLoaded=\(imageData != nil), imageDecoded=false, systemMemoryMB=\(memoryMB), videoPath=\(videoPath), frameOffset=\(frameOffset)"
       throw RewindError.storageError("Failed to load extracted frame, \(detail)")
     }
-
-    // Log extracted frame dimensions to Sentry for debugging quality issues
-    let breadcrumb = Breadcrumb(level: .info, category: "frame_extraction")
-    breadcrumb.message = "Extracted frame from video"
-    breadcrumb.data = [
-      "video_path": videoPath,
-      "frame_offset": frameOffset,
-      "image_width": Int(image.size.width),
-      "image_height": Int(image.size.height),
-      "data_size_bytes": imageData.count,
-    ]
-    SentrySDK.addBreadcrumb(breadcrumb)
 
     // Clean up temp file
     try? FileManager.default.removeItem(at: outputPath)

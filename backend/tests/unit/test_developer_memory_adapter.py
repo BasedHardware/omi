@@ -103,7 +103,7 @@ def test_developer_route_reads_use_universal_service_without_legacy_fallback():
         and node.func.value.id == 'service'
         and node.func.attr == 'read'
     ]
-    assert len(reads) == 2  # Unfiltered page and sparse category scan.
+    assert len(reads) == 3  # Unfiltered, adaptive category operation, and flag-off compatibility scan.
     for read in reads:
         assert ast.unparse(read.args[0]) == 'uid'
         keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in read.keywords}

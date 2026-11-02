@@ -22,6 +22,9 @@ routing:
     - ai-chat
     - observability
   # Policy-based Instatus routes are not encoded in repo JSON; Phase 2.
+  # Always-on time interval (live Grafana) that mutes tier=agent rules; only
+  # tier=page rules notify the Telegram receiver.
+  agent_tier_mute_timing: omi-tier-silent
 
 no_data_semantics:
   # Documented classes — individual rules are asserted by existing contract tests
@@ -46,6 +49,17 @@ scrape_jobs:
   # Opt-in batch release. No target exists until installed; HPA/flag gates
   # require a fresh per-pod queue sample rather than treating absence as zero.
   - name: diarizer-batch-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: null
+    coverage_status: declared
+
+  # GPU batch-pipeline workers (HPA external-metric path, #23891). Targets
+  # exist only while the release runs; the adapter requires a fresh per-pod
+  # three-priority sample, so absence makes the HPA read unavailable, never a
+  # fabricated zero.
+  - name: batch-pipeline-worker-metrics
     mechanism: additionalScrapeConfigs
     auth: null
     namespace: prod-omi-backend

@@ -39,14 +39,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Opus
         script: |
@@ -147,7 +142,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -226,14 +220,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Android SDK
         script: |
@@ -310,13 +299,36 @@ workflows:
             echo "App Store version lookup failed; refusing to guess a release version." >&2
             exit 1
           fi
-          if ! PLAY_RAW=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null); then
+          # google-play bundles list needs codemagic-cli-tools >= 0.57.0 and
+          # the build image's preinstalled CLI is unknown: upgrade in place
+          # only when the subcommand is missing, so a newer image CLI that
+          # other steps depend on is never downgraded.
+          if ! google-play bundles list --help >/dev/null 2>&1; then
+            echo "google-play bundles list unavailable; upgrading codemagic-cli-tools to >=0.57.0" >&2
+            if ! pip3 install --upgrade 'codemagic-cli-tools>=0.57.0,<1'; then
+              echo "codemagic-cli-tools upgrade failed; refusing to guess a release version." >&2
+              exit 1
+            fi
+            if ! google-play bundles list --help >/dev/null 2>&1; then
+              echo "google-play bundles list unavailable after upgrading codemagic-cli-tools; refusing to guess a release version." >&2
+              exit 1
+            fi
+          fi
+          # No --tracks: the highest build number across every Play track.
+          if ! PLAY_RAW=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" 2>/dev/null); then
             echo "Play version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          # A rejected release leaves its uploaded bundle on no track, where
+          # the track lookup above cannot see it, but its version code is
+          # burned forever; the bundle list covers every uploaded code.
+          if ! PLAY_BUNDLES_RAW=$(google-play bundles list --package-name "$PACKAGE_NAME" --json 2>/dev/null); then
+            echo "Play bundle list lookup failed; refusing to guess a release version." >&2
             exit 1
           fi
           STORE_INPUT="$(mktemp)"
           trap 'rm -f "$STORE_INPUT"' EXIT
-          export TF_RAW AS_RAW PLAY_RAW
+          export TF_RAW AS_RAW PLAY_RAW PLAY_BUNDLES_RAW
           python3 - "$STORE_INPUT" <<'PY'
           import json
           import os
@@ -327,6 +339,7 @@ workflows:
               "testflight": {"stdout": os.environ["TF_RAW"], "exit_code": 0},
               "app_store": {"stdout": os.environ["AS_RAW"], "exit_code": 0},
               "play": {"stdout": os.environ["PLAY_RAW"], "exit_code": 0},
+              "play_bundles": {"stdout": os.environ["PLAY_BUNDLES_RAW"], "exit_code": 0},
           }), encoding="utf-8")
           PY
           PUBSPEC_VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
@@ -354,7 +367,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -375,6 +387,12 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
+        # Codemagic android-internal-auto builds on 2026-10-28 at 03:18Z,
+        # 05:55Z and 06:24Z uploaded bundles but failed at Publishing:
+        # "Changes cannot be sent for review automatically. Please set the
+        # query parameter changesNotSentForReview to true." Hold for the
+        # required Play Console Send changes for review press.
+        changes_not_sent_for_review: true
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -514,7 +532,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -791,6 +808,8 @@ workflows:
     scripts:
       - name: Installing Android SDK
         script: |
+          set -euo pipefail
+          rm -f "$HOME/.omi-android-prod-internal-build-identity"
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
@@ -904,6 +923,8 @@ workflows:
           TAG_BUILD_NUMBER="$BUILD_NUMBER"
           BUILD_NUMBER="$(jq -er '.build_number' <<<"$PLAY_PLAN")"
           echo "Android build number $BUILD_NUMBER (tag $TAG_BUILD_NUMBER, source: $(jq -r '.source' <<<"$PLAY_PLAN"))"
+          echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"
 
           bash scripts/admit_android_source.sh "$CHECKED_OUT_SHA"
 
@@ -917,8 +938,13 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
+
+          # Post-publish scripts also run after a failed build. Persist the exact
+          # identity only after Flutter has completed successfully.
+          printf '%s\n%s\n%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" "${CM_TAG:?CM_TAG is required}" \
+            "${CM_BUILD_ID:?CM_BUILD_ID is required}" \
+            > "$HOME/.omi-android-prod-internal-build-identity"
 
 
     artifacts:
@@ -938,9 +964,36 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
+        # Publishing-block variables are evaluated before build scripts run.
+        # These built-in values bind the release to its tag and Codemagic run.
+        release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        release_promotion:
-          track: "alpha"
+        # Keep tag releases held too: on 2026-10-28 Play said "Changes cannot
+        # be sent for review automatically" and required
+        # changesNotSentForReview=true. Submit these changes from Play Console.
+        changes_not_sent_for_review: true
+      scripts:
+        - name: Promote the exact internal build to alpha
+          script: |
+            set -euo pipefail
+            IDENTITY="$HOME/.omi-android-prod-internal-build-identity"
+            if [[ ! -f "$IDENTITY" ]]; then
+              echo "Android internal build did not complete; skipping alpha promotion."
+              exit 0
+            fi
+            {
+              read -r PROMOTE_BUILD_NAME
+              read -r PROMOTE_BUILD_NUMBER
+              read -r PROMOTE_BUILD_TAG
+              read -r PROMOTE_BUILD_ID
+            } < "$IDENTITY"
+            python3 scripts/mobile_store_promote.py \
+              --confirm promote-internal-to-alpha \
+              --platform android \
+              --version "${PROMOTE_BUILD_NAME:?missing Android build name}" \
+              --android-build "${PROMOTE_BUILD_NUMBER:?missing Android build number}" \
+              --build-tag "${PROMOTE_BUILD_TAG:?missing Android release tag}" \
+              --build-id "${PROMOTE_BUILD_ID:?missing Codemagic build ID}"
 
   ios-prod-patch:
     name: Patch iOS to Production
@@ -1745,7 +1798,6 @@ workflows:
   #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
   #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
   #   RESEND_API_KEY
-  #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
   #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and signed Beta promotion
   #   GITHUB_TOKEN                     — repo-scoped token used for immutable candidate-release publishing
@@ -2674,13 +2726,6 @@ workflows:
           fi
           set -euo pipefail
 
-          # Keep symbol publication repairable: a Sentry credential outage must not
-          # strand an otherwise signed and smoke-tested candidate. The exact,
-          # UUID-verified dSYM is retained as a GitHub release artifact below.
-          scripts/publish-desktop-debug-symbols.sh upload-best-effort \
-            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
-            --dsym "$DSYM_PATH"
-
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2908,6 +2953,28 @@ workflows:
     artifacts:
       - dist/*.dmg
       - dist/*.zip
+
+  # Manual/API only. No build, upload, iOS action, or rollout advancement.
+  android-rollout-brake:
+    name: Android Production Rollout Brake
+    instance_type: mac_mini_m2
+    max_build_duration: 10
+    environment:
+      groups:
+        - google_play
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for the writer quiescence check
+      vars:
+        BRAKE_ACTION: "unset"
+        BRAKE_VERSION_CODE: "0"
+        BRAKE_USER_FRACTION: "unset"
+        BRAKE_SUPERSEDES_VERSION_CODE: "0"
+        CONFIRM: "not-confirmed"
+    working_directory: app
+    scripts:
+      - name: Read or brake the explicitly selected production rollout
+        script: |
+          set -euo pipefail
+          python3 scripts/mobile_rollout_brake.py
 
   mobile-store-promote:
     name: Promote Existing Mobile Builds to Store Review

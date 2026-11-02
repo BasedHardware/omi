@@ -14,9 +14,13 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from check_mobile_ui_isolate import (
     RULE_IDS,
+    SEMANTICS_ALLOWLIST,
+    _mask,
+    check_semantics,
     check_provider_graph,
     compare,
     count_hits,
@@ -37,6 +41,12 @@ WAL_INDEX = "app/lib/utils/wal_file_manager.dart"
 
 # One violating snippet per rule, each the shape of a defect found in the 2026-10 lag audit.
 VIOLATIONS: dict[str, str] = {
+    "forced-semantics": "SemanticsBinding.instance.ensureSemantics();",
+    "global-input-listener": "return Listener(onPointerMove: observe, child: child);",
+    "unselected-provider-listener": "CaptureProvider capture;\ncapture.addListener(onCapture);",
+    "json-in-build": "Widget build(BuildContext context) => Text(jsonDecode(raw));",
+    "sort-in-build": "Widget build(BuildContext context) {\n final rows = items..sort(compare);\n return list;\n}",
+    "list-item-layer": "ListView.builder(itemBuilder: (c, i) => Opacity(opacity: .5, child: row));",
     "sync-file-io": "for (final entity in dir.listSync().whereType<File>()) {",
     "json-in-provider": "SharedPreferencesUtil().cache = jsonEncode(conversations);",
     "history-json-on-ui": "final jsonString = jsonEncode(jsonData);",
@@ -66,14 +76,14 @@ class RuleTests(unittest.TestCase):
     def test_allow_comment_on_the_line_suppresses_the_hit(self) -> None:
         for rule_id, snippet in VIOLATIONS.items():
             with self.subTest(rule=rule_id):
-                allowed = f"{snippet} // omi-perf-allow: {rule_id} -- measured, bounded input"
-                self.assertEqual(count_hits(allowed, self._path(rule_id))[rule_id], 0)
+                allowed = "\n".join(f"{line} // omi-perf-allow: {rule_id} -- measured, bounded input" for line in snippet.splitlines())
+                self.assertEqual(count_hits(allowed, self._path(rule_id))[rule_id], int(rule_id == "forced-semantics"))
 
     def test_allow_comment_on_the_line_above_suppresses_the_hit(self) -> None:
         for rule_id, snippet in VIOLATIONS.items():
             with self.subTest(rule=rule_id):
-                allowed = f"  // omi-perf-allow: {rule_id} -- measured, bounded input\n{snippet}"
-                self.assertEqual(count_hits(allowed, self._path(rule_id))[rule_id], 0)
+                allowed = "\n".join(f"  // omi-perf-allow: {rule_id} -- measured, bounded input\n{line}" for line in snippet.splitlines())
+                self.assertEqual(count_hits(allowed, self._path(rule_id))[rule_id], int(rule_id == "forced-semantics"))
 
     def test_allow_comment_without_reason_is_ignored(self) -> None:
         snippet = VIOLATIONS["sync-file-io"] + " // omi-perf-allow: sync-file-io"
@@ -147,6 +157,233 @@ class RuleTests(unittest.TestCase):
         self.assertFalse(is_contract_source("app/lib/gen/pigeon_communicator.g.dart"))
         self.assertFalse(is_contract_source("app/lib/env/dev_env.g.dart"))
         self.assertFalse(is_contract_source("app/test/foo_test.dart"))
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    def test_selected_guard_must_compare_selected_and_stored_value(self):
+        template = """CaptureProvider capture;
+void initState() { capture.addListener(onCapture); }
+void onCapture() {
+ final next = capture.version;
+ if (CONDITION) return;
+ _version = next;
+ work();
+}"""
+        for condition in ("next > 0 && _version == 0", "!identical(next, _version)", "!(next == _version)", "identical(next, _version) == false"):
+            self.assertEqual(count_hits(template.replace("CONDITION", condition))["unselected-provider-listener"], 1, condition)
+        for condition in ("next == _version", "identical(next, _version)", "_version == next"):
+            self.assertEqual(count_hits(template.replace("CONDITION", condition))["unselected-provider-listener"], 0, condition)
+
+    def test_positional_sliver_rows_inline_and_named(self):
+        for body in ("Opacity(opacity: .5, child: row)", "CustomPaint(painter: canvas..saveLayer(bounds, paint))"):
+            self.assertEqual(count_hits(f"SliverChildBuilderDelegate((c, i) => {body})")["list-item-layer"], 1)
+        text = """SliverChildBuilderDelegate(buildRow);
+Widget buildRow(BuildContext c, int i) => Opacity(opacity: .5, child: row);"""
+        self.assertEqual(count_hits(text)["list-item-layer"], 1)
+
+    def test_all_scroll_notification_subclasses_are_input(self):
+        for kind in ("OverscrollNotification", "UserScrollNotification", "ScrollStartNotification", "ScrollUpdateNotification", "ScrollEndNotification", "ScrollMetricsNotification"):
+            self.assertEqual(count_hits(f"NotificationListener<{kind}>(onNotification: work, child: child)")["global-input-listener"], 1, kind)
+
+    def test_named_listener_cannot_borrow_another_class_guard(self):
+        text = """class A {
+ CaptureProvider capture;
+ void initState() { capture.addListener(onCapture); }
+ void onCapture() {
+  final next = capture.version;
+  if (next == _version) return;
+  _version = next;
+  work();
+ }
+}
+class B {
+ CaptureProvider capture;
+ void initState() { capture.addListener(onCapture); }
+ void onCapture() { work(); }
+}"""
+        self.assertEqual(count_hits(text)["unselected-provider-listener"], 1)
+
+    def test_build_helpers_do_not_visit_other_class_data_methods(self):
+        text = """class A {
+ Widget build(BuildContext c) => helper();
+ Widget helper() => Text('x');
+}
+class B {
+ void load() { helper(); }
+ void helper() { jsonDecode(raw); items..sort(compare); }
+}"""
+        self.assertEqual(count_hits(text)["json-in-build"], 0)
+        self.assertEqual(count_hits(text)["sort-in-build"], 0)
+        self.assertEqual(count_hits(text.replace("Text('x')", "Text(jsonDecode(raw))"))["json-in-build"], 1)
+
+    def test_forwarded_widget_fields_and_aliases_are_not_name_dependent(self):
+        for name in ("content", "body", "page"):
+            template = f"""class Wrapper extends StatelessWidget {{
+ final Widget {name};
+ Widget build(BuildContext c) => Listener(onPointerMove: work, child: CHILD);
+}}"""
+            for child in (name, f"widget.{name}"):
+                self.assertEqual(count_hits(template.replace("CHILD", child))["global-input-listener"], 1)
+        alias = """class Wrapper {
+ final Widget content;
+ Widget build(BuildContext c) {
+  final forwarded = content;
+  return Listener(onPointerMove: work, child: forwarded);
+ }
+}"""
+        self.assertEqual(count_hits(alias)["global-input-listener"], 1)
+        local = "Widget build(BuildContext c) { final Widget content = Slider(); return Listener(onPointerMove: work, child: content); }"
+        self.assertEqual(count_hits(local)["global-input-listener"], 0)
+
+
+class ScopedRatchetTests(unittest.TestCase):
+    def test_all_new_mutations_fail_on_new_and_existing_files(self) -> None:
+        for rule in ("global-input-listener", "unselected-provider-listener", "json-in-build", "sort-in-build", "list-item-layer"):
+            snippet = VIOLATIONS[rule]
+            with self.subTest(rule=rule):
+                self.assertTrue(any(rule in problem for problem in compare(PROVIDER, snippet, None)))
+                self.assertEqual(compare(PROVIDER, snippet, snippet), [])
+                self.assertEqual(compare(PROVIDER, "", snippet), [])
+                self.assertTrue(any(rule in problem for problem in compare(PROVIDER, snippet + "\n" + snippet, snippet)))
+
+    def test_semantics_is_absolute_even_in_existing_files(self) -> None:
+        snippet = VIOLATIONS["forced-semantics"]
+        self.assertTrue(compare(PROVIDER, snippet, snippet))
+        self.assertTrue(compare(PROVIDER, snippet, "void existing() {}"))
+        self.assertTrue(compare(PROVIDER, snippet + " // omi-perf-allow: forced-semantics -- reason", snippet))
+
+    def test_semantics_allowlist_is_call_specific_and_single_use(self) -> None:
+        snippet = VIOLATIONS["forced-semantics"]
+        key = (PROVIDER, "SemanticsBinding.instance.ensureSemantics();")
+        with patch.dict(SEMANTICS_ALLOWLIST, {key: "reviewed explicit accessibility owner"}):
+            self.assertEqual(count_hits(snippet, PROVIDER)["forced-semantics"], 0)
+            self.assertEqual(count_hits(snippet + "\n" + snippet, PROVIDER)["forced-semantics"], 1)
+            self.assertEqual(count_hits(snippet, "app/lib/existing.dart")["forced-semantics"], 1)
+            self.assertEqual(count_hits("other.ensureSemantics();", PROVIDER)["forced-semantics"], 1)
+
+    def test_mask_handles_multiline_nested_comments_raw_strings_and_interpolation(self) -> None:
+        for rule, snippet in VIOLATIONS.items():
+            with self.subTest(rule=rule):
+                # A comment starts on a different line; ordinary per-line regex masking misses this.
+                for masked in (f"/* outer\n /* nested */\n{snippet}\n*/", f"final s = r'''\n{snippet}\n''';", f'final s = """\n{snippet}\n""";'):
+                    self.assertEqual(count_hits(masked, PROVIDER)[rule], 0)
+        text = "final url = 'https://example.com';\nfinal s = '${SemanticsBinding.instance.ensureSemantics()}';"
+        self.assertEqual(len(_mask(text)), len(text))
+        self.assertEqual(count_hits(text, PROVIDER)["forced-semantics"], 1)
+        self.assertEqual(count_hits("final s = r'${ensureSemantics()}';", PROVIDER)["forced-semantics"], 0)
+
+    def test_local_gestures_and_domain_notifications_are_not_global_input(self) -> None:
+        for snippet in (
+            "Listener(onPointerMove: drag, child: Slider(value: value));",
+            "Listener(onPointerUp: commit, child: child);",
+            "NotificationListener<SelectAppNotification>(onNotification: selectApp, child: child);",
+            "Listener(child: child);",
+            "NotificationListener<ScrollNotification>(onNotification: (_) => false, child: child);",
+            "Listener(onPointerMove: (_) {}, child: child);",
+        ):
+            self.assertEqual(count_hits(snippet)["global-input-listener"], 0, snippet)
+        for snippet in (
+            "NotificationListener<ScrollNotification>(onNotification: observe, child: child);",
+            "NotificationListener(onNotification: observe, child: widget.child);",
+            "Listener(onPointerDown: inspect, child: MaterialApp(home: home));",
+        ):
+            self.assertEqual(count_hits(snippet)["global-input-listener"], 1, snippet)
+        self.assertEqual(count_hits("Listener(onPointerMove: inspect, child: guidedContent)", "app/lib/main.dart")["global-input-listener"], 1)
+        self.assertEqual(count_hits("Listener(onPointerUp: commit, child: Listener(onPointerMove: drag, child: child));")["global-input-listener"], 1)
+
+    def test_provider_types_aliases_inline_and_named_callbacks(self) -> None:
+        for snippet in (
+            "final p = context.read<CaptureProvider>();\np.addListener(onChange);",
+            "context.read<SyncProvider>().addListener(() { setState(() {}); });",
+            "final p = Provider.of<MessageProvider>(context, listen: false);\np.addListener(refresh);",
+            "CaptureProvider _capture;\n_capture?.addListener(_onCapture);",
+            "CaptureProvider _capture;\n_capture..addListener(_onCapture);",
+            "CaptureProvider capture;\nfinal first = capture;\nfinal second = first;\nsecond.addListener(refresh);",
+        ):
+            self.assertEqual(count_hits(snippet)["unselected-provider-listener"], 1, snippet)
+        for snippet in (
+            "FocusNode focus;\nfocus.addListener(onFocus);",
+            "AnimationController controller;\ncontroller.addListener(paint);",
+            "ValueNotifier<int> tick;\ntick.addListener(paint);",
+            "CaptureProvider capture;\ncapture.waveformTick.addListener(paint);",
+            "Selector<CaptureProvider, int>(selector: (_, p) => p.version, builder: build);",
+        ):
+            self.assertEqual(count_hits(snippet)["unselected-provider-listener"], 0, snippet)
+        unrelated_selector = "Selector<CaptureProvider, int>(selector: (_, p) => p.version, builder: build);"
+        self.assertEqual(count_hits(VIOLATIONS["unselected-provider-listener"] + unrelated_selector)["unselected-provider-listener"], 1)
+
+    def test_adding_callback_to_existing_global_wrapper_is_an_increase(self) -> None:
+        base = "Listener(onPointerDown: inspect, child: child);"
+        head = "Listener(onPointerDown: inspect, onPointerMove: walkTree, child: child);"
+        self.assertEqual(count_hits(base)["global-input-listener"], 1)
+        self.assertEqual(count_hits(head)["global-input-listener"], 2)
+        self.assertTrue(any("global-input-listener 1 → 2" in problem for problem in compare(PROVIDER, head, base)))
+
+    def test_global_input_exception_only_covers_its_callback_line(self) -> None:
+        text = """Listener(
+  // omi-perf-allow: global-input-listener -- one bounded on-demand hit test
+  onPointerDown: inspect,
+  onPointerMove: walkTree,
+  child: child,
+);"""
+        self.assertEqual(count_hits(text)["global-input-listener"], 1)
+
+    def test_selected_callback_requires_guard_before_work(self) -> None:
+        text = """
+CaptureProvider capture;
+void initState() { capture.addListener(onCapture); }
+void onCapture() {
+  final next = capture.version;
+  if (next == _version) return;
+  _version = next;
+  setState(() {});
+}
+"""
+        self.assertEqual(count_hits(text)["unselected-provider-listener"], 0)
+        for changed in (
+            text.replace("if (next == _version) return;", "if (disposed == true) return;"),
+            text.replace("  final next", "  setState(() {});\n  final next"),
+            text.replace("  final next", "  walkTranscript();\n  final next"),
+            text.replace("if (next == _version) return;", "if (next == _version) logSame();"),
+        ):
+            self.assertEqual(count_hits(changed)["unselected-provider-listener"], 1)
+
+    def test_json_and_sort_build_scope_and_helper_resolution(self) -> None:
+        for call, rule in (("jsonDecode(raw)", "json-in-build"), ("json.decode(raw)", "json-in-build"), ("items..sort(compare)", "sort-in-build")):
+            for text in (
+                f"Widget build(BuildContext context) => Text({call});",
+                f"build(context) => Text({call});",
+                f"Widget build(BuildContext context) {{\n return helper();\n}}\nWidget helper() => Text({call});",
+                f"Consumer<Foo>(builder: (c, p, child) {{ final data = {call}; return row; }});",
+                f"Widget build(BuildContext c) {{ handleTap(); return Button(onPressed: handleTap); }}\nvoid handleTap() {{ final data = {call}; }}",
+            ):
+                self.assertEqual(count_hits(text)[rule], 1, text)
+            for text in (
+                f"Future<void> load() async {{ final data = {call}; }}",
+                f"Widget build(BuildContext c) => row;\nvoid notCalled() {{ final data = {call}; }}",
+                f"Widget build(BuildContext c) => offUiIsolate(() => {call}, size: n, threshold: t);",
+                f"Widget build(BuildContext c) => Button(onPressed: () {{ final data = {call}; }});",
+                f"Widget build(BuildContext c) => Button(onPressed: handleTap);\nvoid handleTap() {{ final data = {call}; }}",
+            ):
+                self.assertEqual(count_hits(text)[rule], 0, text)
+
+    def test_list_layers_inline_referenced_eager_and_row_classes(self) -> None:
+        for text in (
+            "ListView.builder(itemBuilder: buildRow);\nWidget buildRow(c, i) => Opacity(opacity: .5, child: row);",
+            "ListView(children: [Opacity(opacity: alpha, child: row)]);",
+            "class ConversationListItem extends StatelessWidget {\n Widget build(BuildContext c) => Opacity(opacity: alpha, child: row);\n}",
+            "class MessageRow extends StatelessWidget {\n Widget build(BuildContext c) => draw();\n void draw() { canvas.saveLayer(bounds, paint); }\n}",
+            "ListView.builder(itemBuilder: (c, i) { canvas.saveLayer(bounds, paint); return row; });",
+            "ListView.builder(itemBuilder: (c, i) => CustomPaint(painter: BubblePainter()));\nclass BubblePainter extends CustomPainter {\n void paint(Canvas canvas, Size size) { canvas.saveLayer(bounds, paint); }\n}",
+        ):
+            self.assertEqual(count_hits(text)["list-item-layer"], 1, text)
+        for text in (
+            "Widget build(BuildContext c) => Opacity(opacity: .5, child: hero);",
+            "ListView.builder(itemBuilder: (c, i) => FadeTransition(opacity: alpha, child: row));",
+            "void paint(Canvas canvas) { canvas.saveLayer(bounds, paint); }",
+            "ListView.builder(itemBuilder: (c, i) => row);\nclass UnusedPainter extends CustomPainter {\n void paint(Canvas canvas, Size size) { canvas.saveLayer(bounds, paint); }\n}",
+        ):
+            self.assertEqual(count_hits(text)["list-item-layer"], 0, text)
 
 
 class RatchetTests(unittest.TestCase):
@@ -384,6 +621,17 @@ class CliTests(unittest.TestCase):
             changed.write_text("app/lib/providers/capture.dart\n")
             self.assertEqual(main(["--root", str(root), "--changed-files", str(changed), "--base", "HEAD"]), 1)
             self.assertEqual(main(["--root", str(root), "--graph"]), 1)
+
+    def test_semantics_in_an_unchanged_file_fails_even_without_changed_dart(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "app/lib/existing.dart"
+            source.parent.mkdir(parents=True)
+            source.write_text(VIOLATIONS["forced-semantics"])
+            changed = root / "changed.txt"
+            changed.write_text(".github/scripts/check_mobile_ui_isolate.py\n")
+            self.assertEqual(len(check_semantics(root)), 1)
+            self.assertEqual(main(["--root", str(root), "--changed-files", str(changed), "--base", "HEAD"]), 1)
 
 
 if __name__ == "__main__":

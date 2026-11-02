@@ -1,22 +1,20 @@
 """Dark, batch-hash live vendor retirement; final transcript ownership is durable."""
 
-import math
-import os
-
-from config.batch_pipeline import in_percent_cohort, record_capture_eligible
+from config.batch_pipeline import record_capture_eligible
+from config.server_batch import MARKER
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
 def rollout_percent() -> float:
-    try:
-        value = float(os.getenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0'))
-        return value if math.isfinite(value) and 0 <= value <= 100 else 0
-    except ValueError:
-        return 0
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy('').retire_percent
 
 
 def selected(uid: str) -> bool:
-    return in_percent_cohort(uid, rollout_percent())
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy(uid).live_stt_retired
 
 
 def language_qualified(host, capture: dict) -> bool:
@@ -53,7 +51,7 @@ def covered(host) -> bool:
 
 def capture_snapshot(capture: dict) -> dict:
     """Retain only scalar eligibility evidence, never decoded content/photos."""
-    return {
+    snapshot = {
         key: capture.get(key)
         for key in (
             'id',
@@ -66,3 +64,13 @@ def capture_snapshot(capture: dict) -> dict:
             'language',
         )
     }
+    if (capture.get('external_data') or {}).get(MARKER) is True:
+        snapshot[MARKER] = True
+    return snapshot
+
+
+def local_preview_batch_owned(uid: str) -> bool:
+    """The uid's recordings belong to the batch record lane (allowlist or batch percent)."""
+    from config.policy import resolve_batch_policy
+
+    return bool(uid) and resolve_batch_policy(uid).batch_enabled

@@ -18,4 +18,25 @@ if ! dev_harness_python_floor_ok "$PYTHON_BIN"; then
   dev_harness_python_floor_advisory >&2
   exit 1
 fi
+
+# --all / OMI_PREFLIGHT_ALL=1 selects the keep-going orchestrator, which runs
+# every selected gate after a failure and reports all of them in one summary.
+# PRE_PUSH_PREFLIGHT_ALL is the hook-safe env form; pre-push-singleflight also
+# fingerprints it, so keep-going and fail-fast pushes cannot join the same run.
+# The default stays fail-fast so ordinary preflight runs retain their existing
+# duration; use the opt-in mode when a complete repair list is useful.
+KEEP_GOING=0
+for flag_value in "${OMI_PREFLIGHT_ALL:-}" "${PRE_PUSH_PREFLIGHT_ALL:-}"; do
+  case "$flag_value" in
+    1|[Tt][Rr][Uu][Ee]) KEEP_GOING=1 ;;
+  esac
+done
+for arg in "$@"; do
+  if [ "$arg" = "--all" ]; then
+    KEEP_GOING=1
+  fi
+done
+if [ "$KEEP_GOING" -eq 1 ]; then
+  exec "$PYTHON_BIN" scripts/pr_preflight_all.py "$@"
+fi
 exec "$PYTHON_BIN" .github/scripts/pr_preflight.py "$@"

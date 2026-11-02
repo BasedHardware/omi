@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/transcription_allowance.dart';
 import 'package:omi/providers/usage_provider.dart';
 
 UserSubscriptionResponse _proSubscription() {
@@ -28,6 +29,21 @@ UserSubscriptionResponse _subscriptionOn(PlanType plan, {required int used, requ
 }
 
 void main() {
+  test('exhausted ladder budget overrides the Pro unlimited-transcription shortcut', () {
+    final provider = UsageProvider();
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.operator, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      transcriptionAllowance: const TranscriptionAllowanceSnapshot(
+          mode: 'on_device', reason: 'usage_budget_exhausted', remainingSeconds: 0),
+    ));
+    expect(provider.isOutOfCredits, true);
+  });
   group('UsageProvider.clearUserData', () {
     test('resets subscription state so the next login cannot inherit the previous account plan', () {
       final provider = UsageProvider();

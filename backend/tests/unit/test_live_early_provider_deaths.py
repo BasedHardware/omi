@@ -295,7 +295,8 @@ async def test_connect_death_counts_once_and_reaches_new_gate_generation(monkeyp
         state = live_chain.health._cost_local.get(('modulate-velma-2', language), GateState())
         expected = int(language not in changed or in_trial)
         assert state.n == state.failures == expected
-    assert leg.leg_outcome.generations is None  # No supplementary session writer exists.
+    # Connect failures follow normal gate changes, but retain a reset epoch.
+    assert leg.leg_outcome.generations is not None
 
 
 class _ClientFrames:

@@ -10,9 +10,9 @@ as data instead of as junk in a user's list.
 Discard is always recoverable (Show discarded, restore). A user's restore is
 recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
 
-With ``CONVERSATION_RELEVANCE_JEV_ENABLED`` the model tier asks the Jev decision
-model (``relevance_jev.py``) before ``conv_discard`` for transcript-only
-conversations. It discards above the default ``JEV_DISCARD_THRESHOLD`` (#14835),
+The ``CONVERSATION_RELEVANCE_JEV_PERCENT`` cohort asks the Jev decision model
+(``relevance_jev.py``) before ``conv_discard`` for transcript-only conversations.
+It discards above the default ``JEV_DISCARD_THRESHOLD`` (#14835),
 unless the bounded cutoff or inclusive comparison is explicitly configured.
 """
 
@@ -20,14 +20,18 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
-from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance, deterministic_tiebreak
-from utils.conversations import relevance_rescue
+from utils.conversations.relevance_rules import (
+    RULES_VERSION,
+    deterministic_relevance,
+    deterministic_tiebreak,
+    transcript_word_count,
+)
 
 from utils.observability.fallback import record_fallback
 from utils.metrics import record_relevance_scorer_outcome
@@ -89,10 +93,6 @@ class RelevanceDecision:
     # Jev's P(discard) when the Jev tier ran, including a calendar override of its discard.
     jev_p_discard: Optional[float] = None
     arm: Optional[RelevanceArm] = None
-    # Request-local evidence for shadow admission, never serialized as text.
-    model_tier_reached: bool = field(default=False, compare=False)
-    nano_verdict: Optional[Literal['keep', 'discard']] = field(default=None, compare=False)
-    nano_reason: Optional[str] = field(default=None, compare=False)
     # Snapshot the effective cutoff when Jev decides so later serialization
     # cannot report a different policy if the process environment changes.
     jev_threshold: Optional[float] = None
@@ -185,12 +185,10 @@ def _decision_chain(arms: Sequence[DecisionArm]) -> RelevanceDecision:
                     decision = terminal.decide()
                     assert decision is not None
                     return replace(
-                        decision,
-                        model_tier_reached=True,
-                        reason='circuit_open' if decision.decided_by == 'deterministic' else decision.reason,
+                        decision, reason='circuit_open' if decision.decided_by == 'deterministic' else decision.reason
                     )
         if decision is not None:
-            return replace(decision, model_tier_reached=primary is not None)
+            return decision
         if index + 1 < len(available):
             record_fallback(
                 component='conversation_relevance',
@@ -221,7 +219,10 @@ def find_neighbor(
     best: Optional[Neighbor] = None
     for row in rows:
         other_id = row.get('id')
-        other_start, other_end = row.get('started_at'), row.get('finished_at')
+        from utils.conversations.recorded_time import conversation_span
+
+        span = conversation_span(row)
+        other_start, other_end = (span.recorded_start, span.recorded_end) if span else (None, None)
         if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
             continue
         if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):
@@ -249,6 +250,7 @@ def decide_relevance(
     model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
+    occasion_retains: Callable[[], Optional[str]] = lambda: None,
     jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
     arm: RelevanceArm = 'nano',
     record_arm: bool = False,
@@ -261,8 +263,24 @@ def decide_relevance(
     model exception advances the chain. The final arm uses only lexicon evidence,
     never duration or raw length to discard. Photos and trusted wake words
     keep when no model can assess their content. Calendar protection applies
-    to every discard. keep_all retains its existing nano counterfactual.
+    to every discard. A capture below the short-clip floor is not sent to Jev
+    (its keep would stand the clip up with full notes); the quiet-minimum path
+    upstream normally intercepts such clips first, so a calendar rescue here
+    only ever keeps a short in-meeting fragment instead of discarding it.
     """
+
+    # Speech the floor can measure: an empty transcript is not a short clip but a
+    # capture scrap, whose calendar retention (SCA-381 evidence) stands unchanged.
+    # Lazy: notes_short_clip pulls the notes/recovery stack, which this leaf module must not import eagerly.
+    from utils.llm.notes_short_clip import below_short_clip_floor
+
+    floor_words = sum(transcript_word_count(text) for text in texts)
+    short_clip = (
+        floor_words > 0
+        and not has_photos
+        and not trusted_wake_word
+        and below_short_clip_floor(words=floor_words, speech_seconds=speech_seconds)
+    )
 
     def keep(decided_by: DecidedBy, reason: str) -> RelevanceDecision:
         return RelevanceDecision('keep', decided_by, reason, trigger)
@@ -301,6 +319,18 @@ def decide_relevance(
     if user_kept:
         return keep('user', 'restored')
 
+    # A member is evidence of the whole occasion. A continuation can only be
+    # hidden after transactional absorption proves its content reached a survivor.
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        occasion_reason = occasion_retains()
+        if occasion_reason:
+            return keep('policy', occasion_reason)
+        adjacent = neighbor()
+        if adjacent is not None:
+            return replace(keep('policy', 'occasion_neighbor'), neighbor_id=adjacent.conversation_id)
+
     # Photos carry content the transcript rules cannot see, and a trusted wake
     # word is judged by the model's wake-word rules (an invocation the
     # assistant already handled may be discarded); both skip the rules.
@@ -309,45 +339,10 @@ def decide_relevance(
         if verdict == 'keep':
             return keep('rule', rule)
         if verdict == 'discard':
-            decision = discard_unless_calendar('rule', rule)
-            mode = relevance_rescue.rescue_mode()
-            if decision.discard and mode != 'off' and relevance_rescue.should_rescue(texts, rule):
-                rescue = relevance_rescue.score_segments(texts)
-                relevance_rescue.record_rescue(mode=mode, rule=rule, outcome=rescue.outcome)
-                if mode == 'on' and rescue.rescued:
-                    return RelevanceDecision('keep', 'jev', f'rescue_{rule}', trigger, jev_p_discard=rescue.score)
-            return decision
-
-    def model_decision(decision: RelevanceDecision) -> RelevanceDecision:
-        return replace(decision, model_tier_reached=True, arm=arm if record_arm or arm != 'nano' else None)
+            return discard_unless_calendar('rule', rule)
 
     if model_discards is None:
         return keep('policy', 'model_withheld')
-
-    if arm == 'keep_all':
-        assert model_discards is not None
-        # Keep regardless, but still ask nano (as the control path would) so the
-        # record carries the verdict nano would have acted on: the counterfactual.
-        failed = False
-
-        def on_keep_all_error(_error: Exception) -> None:
-            nonlocal failed
-            failed = True
-
-        adjacent_kept = neighbor()
-        would_discard = model_discards(on_keep_all_error, adjacent_kept)
-        decision = model_decision(keep('policy', 'keep_all_arm'))
-        if failed:
-            return decision
-        return replace(
-            decision,
-            nano_verdict='discard' if would_discard else 'keep',
-            nano_reason=(
-                'neighbor_fragment'
-                if would_discard and adjacent_kept
-                else 'model_discard' if would_discard else 'model_keep'
-            ),
-        )
 
     jev_failed = False
 
@@ -399,7 +394,7 @@ def decide_relevance(
         decision = discard_unless_calendar('model', reason) if discards else keep('model', reason)
         if discards and adjacent and decision.discard:
             decision = replace(decision, neighbor_id=adjacent.conversation_id)
-        return replace(decision, nano_verdict='discard' if discards else 'keep', nano_reason=nano_reason)
+        return decision
 
     def deterministic_decision() -> RelevanceDecision:
         reason = 'jev_fallback_deterministic' if jev_failed else 'model_fallback_deterministic'
@@ -412,7 +407,10 @@ def decide_relevance(
 
     arms: list[DecisionArm] = []
     if jev_discard_probability is not None:
-        arms.append(DecisionArm('jev', lambda: jev_discard_probability is not None, jev_decision))
+        # A sub-floor capture never reaches Jev: its keep would stand the clip up
+        # as a standalone conversation. Unavailable (not a declined answer) so the
+        # scorer circuit does not read the floor as a Jev failure.
+        arms.append(DecisionArm('jev', lambda: jev_discard_probability is not None and not short_clip, jev_decision))
     arms.extend(
         (
             DecisionArm('model', lambda: model_discards is not None, nano_decision),
@@ -442,3 +440,14 @@ def sync_intake_decision(rule: str) -> dict[str, Any]:
         'trigger': 'sync_intake',
         'rules_version': RULES_VERSION,
     }
+
+
+def content_minimum(uid: str, conversation: Any, *, user_kept: bool = False) -> Any:
+    """V2 pre-model content policy; owners wire this before paid relevance/notes.
+
+    Lazy import keeps the existing deterministic relevance authority import-light.
+    The optional minimum is a compute decision, never a duration discard verdict.
+    """
+    from utils.conversations.relevance_media import minimum_for_processing
+
+    return minimum_for_processing(uid, conversation, user_kept=user_kept)

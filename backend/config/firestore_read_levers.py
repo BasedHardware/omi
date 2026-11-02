@@ -8,10 +8,11 @@ below its percentage. Missing, malformed or out-of-range values mean off.
 
 # LIFECYCLE: permanent
 
-import hashlib
 import json
 import logging
 import os
+
+from config.policy.batch import cohort_bucket
 from functools import lru_cache
 from typing import Dict, Optional
 
@@ -28,6 +29,7 @@ KNOWN_LEVERS = frozenset(
         'subscription_cache',
         'deletion_marker_cache',
         'usage_month_cache',
+        'usage_month_total',
         'request_read_dedupe',
         'serving_config_cache',
         'candidates_page',
@@ -37,6 +39,14 @@ KNOWN_LEVERS = frozenset(
         'historical_scan_memo',
         'ledger_purge_coalesce',
         'people_scan_dedupe',
+        'queue_age_sample_budget',
+        'memory_list_index_window',
+        'mcp_conversation_cards_cache',
+        'canonical_statuses_dedupe',
+        'batch_privacy_memoize',
+        'sync_snapshot_resolve_cache',
+        'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
+        'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
     }
 )
 
@@ -82,5 +92,4 @@ def lever_enabled(name: str, key: Optional[str] = None) -> bool:
         return True
     if pct <= 0 or not key:
         return False
-    digest = hashlib.sha256(f'{name}:{key}'.encode()).digest()
-    return int.from_bytes(digest[:8], 'big') % 100 < pct
+    return cohort_bucket(key, name, bits=64, formula='modulo') < pct

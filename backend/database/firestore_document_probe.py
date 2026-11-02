@@ -72,6 +72,7 @@ from prometheus_client import Counter
 
 from database.firestore_tier_context import current_tier
 from database.firestore_read_origin import current_read_origin
+from utils.observability.firestore_request_reads import trace_request_reads
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ _PLUMBING_MODULES = frozenset(
         'database._client',
         'database.read_boundary',
         'database.helpers',
+        'database.released_memory_projection',
         'utils.other.list_budget',
         'utils.executors',
     }
@@ -361,6 +363,10 @@ _KNOWN_PATTERNS = frozenset(
         'users/memory_outbox',
         'users/memory_historical_overrides',
         'users/memory_state',
+        # Commit-boundary list projection (database/list_projection.py); hot on the write probe.
+        'users/list_serving_versions',
+        'users/conversation_list_rows',
+        'users/action_item_list_rows',
         'users/memories',
         'users/candidates',
         'users/knowledge_nodes',
@@ -503,6 +509,10 @@ def _is_plumbing_module(module: str) -> bool:
     return module.startswith(_PLUMBING_PREFIXES)
 
 
+# Shared with the write probe, which skips the same SDK and runtime frames.
+is_plumbing_module = _is_plumbing_module
+
+
 def bound_caller(label: str) -> str:
     """Accept a ``module:function`` label, or ``other`` once the cap is full.
 
@@ -565,6 +575,7 @@ def _record(
         kind = 'not_found' if outcome == 'miss' else 'lookup'
     if caller is None:
         caller = 'unattributed'
+    trace_request_reads(amount)
     tier = current_tier()
     origin = current_read_origin()
     if _LEDGER_ENABLED:

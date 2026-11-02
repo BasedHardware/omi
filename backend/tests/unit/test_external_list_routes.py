@@ -25,6 +25,7 @@ PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/ac
 @pytest.fixture
 def routes(monkeypatch):
     storage = FakeRedis()
+    monkeypatch.setattr(cache.action_item_versions, 'version', lambda uid: 'stable-' + uid)
     monkeypatch.setattr(cache, 'submit_with_context', immediate_population)
     monkeypatch.setattr(cache, '_client', storage)
     app = FastAPI()
@@ -67,7 +68,7 @@ def routes(monkeypatch):
     monkeypatch.setattr(developer, 'authorize_memory_external_default_memory_read', grant)
     monkeypatch.setattr(mcp, 'authorize_memory_external_default_memory_read', grant)
     monkeypatch.setattr(developer, 'check_conversation_transcript_read_limit', lambda *a, **k: calls.transcript_rate())
-    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *a: None)
+    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *a, **kwargs: None)
     monkeypatch.setattr(developer, 'populate_folder_names', lambda *a: None)
 
     def origin(name):

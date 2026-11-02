@@ -86,7 +86,8 @@ class PhoneCallTokenResult {
 Future<PhoneCallTokenResult> getPhoneCallToken() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/phone/token', headers: {}, method: 'POST', body: '');
   if (response == null) return const PhoneCallTokenResult();
-  Logger.debug('getPhoneCallToken: ${response.body}');
+  // A 200 body is a live call access token; log only the status.
+  Logger.debug('getPhoneCallToken: ${response.statusCode}');
   if (response.statusCode == 200) {
     final generated = wire.GeneratedTokenResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return PhoneCallTokenResult(token: PhoneCallToken.fromGenerated(generated));

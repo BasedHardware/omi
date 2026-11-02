@@ -1,0 +1,8 @@
+{
+  "version": "0.12.524",
+  "date": "2026-10-22",
+  "changes": [
+    "Improved recognition of your voice, speaker labels after transcript updates, and long local recording uploads",
+    "Fixed open messaging chats being mistaken for meeting participants"
+  ]
+}

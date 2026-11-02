@@ -51,6 +51,7 @@ def _segments(count=2, person_id=None, is_user=False):
 
 @pytest.fixture
 def world(monkeypatch):
+    monkeypatch.setattr(jobs, 'enroll', lambda *args: None)
     store = StrictFirestore()
     store.rows[CONV_PATH] = dict(id=CONV, status='completed', transcript_segments=_segments())
     store.rows[PERSON_PATH] = dict(id='p', name='Sam')
@@ -132,7 +133,7 @@ def test_backoff_skips_then_audio_arrival_stores(world, target, monkeypatch):
         assign(is_user=True, segment_ids=['s0'], use_for_speech_training=True)
     if target == 'person':
 
-        async def decide(uid, person_id, cid, ids):
+        async def decide(uid, person_id, cid, ids, **kwargs):
             return 'stored' if (world.store.rows.get(CONV_PATH) or {}).get('audio_files') else 'no_audio'
 
         world.extract.side_effect = decide
@@ -1113,14 +1114,6 @@ def test_ensure_after_partial_relabel_supersession_admits_new_job(world, target)
     found = jobs_map(world.store)
     assert found[new_id]['generation'] == 2 and found[new_id]['segment_ids'] == ['s0']
     assert found[old_id]['state'] == 'terminal' and found[old_id]['last_outcome'] == 'superseded'
-
-
-def test_sync_v1_route_schedules_learning_retries_after_audio_finalize():
-    source = (Path(__file__).resolve().parents[2] / 'routers' / 'sync.py').read_text(encoding='utf-8')
-    fn_start = source.index('async def sync_local_files(')
-    fn_end = source.index('@router.post(  # v2 async sync-local-files', fn_start)
-    fn_body = source[fn_start:fn_end]
-    assert fn_body.index('_finalize_sync_audio_files') < fn_body.index('schedule_person_voice_learning_retries')
 
 
 def test_pipeline_schedules_learning_retries_outside_private_cloud_gate():

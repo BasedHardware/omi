@@ -23,7 +23,7 @@ from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 
 NAMESPACE = "index-oracle-fixture"
 PROJECT = "based-hardware-dev"
-DATABASE = "jit-qa"
+DATABASE = "(default)"
 PARENT = f"projects/{PROJECT}/databases/{DATABASE}/collectionGroups/-"
 
 PROD_DECODED_TOKEN = "ClRwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvY29udmVyc2F0aW9ucy9pbmRleGVzL18QARoNCglkaXNjYXJkZWQQARoOCgpjcmVhdGVkX2F0EAEaDAoIX19uYW1lX18QAQ"
@@ -1445,9 +1445,9 @@ def test_main_uses_default_dev_target_when_flags_omitted(tmp_path, monkeypatch):
     code = oracle.main(["--export", str(export_path), "--output-dir", str(tmp_path / "out")])
     assert code == 0
     assert tracked["client_project"] == "based-hardware-dev"
-    assert tracked["client_database"] == "jit-qa"
+    assert tracked["client_database"] == "(default)"
     report = json.loads((tmp_path / "out" / "report.json").read_text())
-    assert report["project"] == "based-hardware-dev" and report["database"] == "jit-qa"
+    assert report["project"] == "based-hardware-dev" and report["database"] == "(default)"
 
 
 def test_main_count_aggregation_uses_live_manifest_not_export_flag(tmp_path, monkeypatch):
@@ -1675,12 +1675,12 @@ def test_main_refuses_numeric_alias_and_emulator_before_clients(tmp_path, monkey
 def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatch):
     monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     tracked = {}
-    default_name = "projects/based-hardware/databases/jit-qa/collectionGroups/__default__/fields/*"
+    default_name = "projects/based-hardware/databases/(default)/collectionGroups/__default__/fields/*"
 
     admin = FakeAdmin(
         indexes=[
             firestore_admin_v1.Index(
-                name="projects/based-hardware/databases/jit-qa/collectionGroups/conversations/indexes/i",
+                name="projects/based-hardware/databases/(default)/collectionGroups/conversations/indexes/i",
                 query_scope="COLLECTION",
                 state="READY",
                 fields=[_asc("discarded"), _asc("created_at"), _asc("__name__")],
@@ -1692,7 +1692,7 @@ def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatc
                 _index_config(
                     [
                         firestore_admin_v1.Index(
-                            name="projects/based-hardware/databases/jit-qa/collectionGroups/__default__/indexes/_",
+                            name="projects/based-hardware/databases/(default)/collectionGroups/__default__/indexes/_",
                             query_scope="COLLECTION",
                             fields=[_asc("x"), _asc("__name__")],
                         )
@@ -1811,7 +1811,7 @@ def test_main_refuses_root_probe_on_other_dev_databases(tmp_path, monkeypatch):
     assert built == []
 
 
-def test_main_root_probe_allowed_on_dev_jit_qa(tmp_path, monkeypatch):
+def test_main_root_probe_allowed_on_dev(tmp_path, monkeypatch):
     tracked = {}
     export_path, _admin = _matching_main_setup(tmp_path, monkeypatch, tracked, [])
     export = json.loads(export_path.read_text())

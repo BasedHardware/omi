@@ -1,15 +1,15 @@
 """Capture groups: one event recorded by several capture surfaces (#3244).
 
 A capture group records that conversations from different surfaces (desktop,
-pendant, phone...) captured the same real-world event, confirmed by shared speech
-or the gated desktop meeting/pendant policy.
+pendant, phone...) captured the same real-world event, confirmed by shared speech.
 Grouping is metadata only: no transcript, summary, or derived effect changes,
 and every member remains a complete conversation of its own.
 
 Storage: every member document carries the same ``capture_group`` record
 (``id``, ``primary_id``, ``revision``, ``members``). The group id is minted
 independently of any member, so the usual primary (the longest window) can change
-without changing the event's identity. Call groups pin the desktop as primary.
+without changing the event's identity. Legacy desktop/pendant call groups remain
+readable; new membership is shared-speech only.
 ``capture_group_exclusions`` holds conversation ids a person separated from this one; they never regroup.
 ``capture_group_closed`` marks a conversation being deleted: it leaves its group
 and can never join one again, which fences a concurrent finalizer.
@@ -30,7 +30,6 @@ from typing import Any, Callable, Mapping, Optional
 
 from google.cloud import firestore
 
-from config.desktop_pendant_call_link import CALL_GROUP_KIND, call_pair, desktop_meeting
 from ._client import get_firestore_client
 
 logger = logging.getLogger(__name__)
@@ -39,6 +38,7 @@ CAPTURE_GROUP_FIELD = 'capture_group'
 EXCLUSIONS_FIELD = 'capture_group_exclusions'
 CLOSED_FIELD = 'capture_group_closed'
 MAX_GROUP_MEMBERS = 12
+_LEGACY_CALL_GROUP_KIND = 'desktop_pendant_call'
 _CONVERSATIONS = 'conversations'
 
 
@@ -65,10 +65,10 @@ def _member(conversation_id: str, row: Mapping[str, Any], evidence: Optional[dic
     return member
 
 
-def _primary_rank(member: Mapping[str, Any]) -> tuple[float, str]:
+def _primary_rank(member: Mapping[str, Any]) -> tuple:
     start, finish = member.get('started_at'), member.get('finished_at')
     duration = (finish - start).total_seconds() if start and finish else 0.0
-    return (-duration, member['id'])
+    return tuple(member['quality_rank']) if member.get('quality_rank') else (-duration, member['id'])
 
 
 def _record(group_id: str, members: list[dict], revision: int) -> dict:
@@ -88,6 +88,27 @@ def _live(row: Optional[Mapping[str, Any]]) -> bool:
 
 def _joinable(row: Optional[Mapping[str, Any]]) -> bool:
     return row is not None and _live(row) and not row.get('discarded') and row.get('status') == 'completed'
+
+
+DUPLICATE_HINT_FIELDS = ('duplicate_capture_of', 'cross_device_duplicate')
+
+
+def preserve_duplicate_hint(write_data: dict, existing: Mapping[str, Any]) -> None:
+    """Keep the cross-device duplicate hint that a processor snapshot predates.
+
+    ``database.conversations.link_duplicate_capture`` is the only writer of these
+    ``external_data`` keys, and it can commit between a processor's read and its
+    merge write: from-segments re-persists its in-memory conversation right after
+    processing linked it. A merge carrying ``external_data`` without the hint
+    (``None`` for a fresh upload) would erase it, and smart merge's
+    ``user_managed`` fence with it.
+    """
+    current = existing.get('external_data')
+    if 'external_data' not in write_data or not isinstance(current, Mapping):
+        return
+    hint = {key: current[key] for key in DUPLICATE_HINT_FIELDS if current.get(key) is not None}
+    if hint:
+        write_data['external_data'] = {**(write_data.get('external_data') or {}), **hint}
 
 
 def transcript_fingerprint(row: Optional[Mapping[str, Any]]) -> Optional[str]:
@@ -130,10 +151,9 @@ def join_capture_group(
     *,
     expected_windows: Optional[Mapping[str, tuple[Any, Any]]] = None,
     expected_fingerprints: Optional[Mapping[str, Optional[str]]] = None,
-    call_primary_id: Optional[str] = None,
-    continuation_from: Optional[str] = None,
     expected_group_revision: Optional[int] = None,
     join_guard: Optional[Callable[[Mapping[str, Any], Any, Any], bool]] = None,
+    quality_ranker: Optional[Callable[[Mapping[str, Any]], tuple]] = None,
     firestore_client=None,
 ) -> Optional[str]:
     """Put two confirmed captures in one group; return the group id.
@@ -145,10 +165,7 @@ def join_capture_group(
     the transaction: deleted, closed, or departed members are pruned from the
     record, and a discard or deletion of either capture fences the write.
     ``expected_windows`` and ``expected_fingerprints`` fence capture-window and
-    transcript changes after the evidence was gathered. ``call_primary_id``
-    enables the strict two-member call policy; ``continuation_from`` requires
-    the caller's transaction-time policy guard before growing a call group.
-    ``expected_group_revision=0`` requires an ungrouped pair; a positive value
+    transcript changes after the evidence was gathered. ``expected_group_revision=0`` requires an ungrouped pair; a positive value
     fences the existing membership used for group-wide speech confirmation.
     Ordinary callers may supply ``join_guard`` to recheck eligibility for all
     members on transaction snapshots before any membership write.
@@ -192,41 +209,13 @@ def join_capture_group(
         # Deleted, closed, or departed members (e.g. absorbed by sync, or regrouped
         # by a race with deletion) are pruned rather than advertised.
         existing_id = (existing or {}).get('id')
-        if call_primary_id:
-            desktop = rows.get(call_primary_id)
-            if desktop is None or not desktop_meeting(desktop):
-                return None
-            if continuation_from:
-                predecessor = rows.get(continuation_from) or {}
-                # Membership/revision and all curated guards are rechecked on
-                # current snapshots, after every group member has been read.
-                if (
-                    not existing
-                    or continuation_from != first_id
-                    or second_id in {m['id'] for m in existing.get('members', [])}
-                    or existing.get('revision') != expected_group_revision
-                    or (predecessor.get(CAPTURE_GROUP_FIELD) or {}).get('id') != existing_id
-                    or not join_guard
-                    or not join_guard(rows, transaction, client)
-                    or any(not _joinable(r) for r in rows.values())
-                    or any(
-                        (r.get(CAPTURE_GROUP_FIELD) or {}).get('id') != existing_id
-                        for cid, r in rows.items()
-                        if cid != second_id
-                    )
-                    or any(_source(r) != 'omi' for cid, r in rows.items() if cid != call_primary_id)
-                ):
-                    return None
-            elif (
-                call_primary_id not in (first_id, second_id)
-                or set(rows) != {first_id, second_id}
-                or call_pair(dict(rows[first_id], id=first_id), dict(rows[second_id], id=second_id)) is None
-            ):
-                return None
-        elif existing and existing.get('kind') == CALL_GROUP_KIND:
-            # The ordinary shared-speech path cannot grow a call group.
+        if existing and existing.get('primary_policy') == 'cross_device_v1' and not quality_ranker:
             return None
-        if not call_primary_id and join_guard and not join_guard(rows, transaction, client):
+        if existing and existing.get('kind') == _LEGACY_CALL_GROUP_KIND:
+            # Keep already-written call groups readable and isolated from new
+            # shared-speech membership decisions.
+            return None
+        if join_guard and not join_guard(rows, transaction, client):
             return None
         live: dict[str, Mapping[str, Any]] = {
             cid: row
@@ -240,14 +229,7 @@ def join_capture_group(
             return None
         if len(live) > MAX_GROUP_MEMBERS:
             return None
-        if (
-            existing
-            and set(live) == {m.get('id') for m in existing.get('members', [])}
-            and (
-                not call_primary_id
-                or (existing.get('kind') == CALL_GROUP_KIND and existing.get('primary_id') == call_primary_id)
-            )
-        ):
+        if not quality_ranker and existing and set(live) == {m.get('id') for m in existing.get('members', [])}:
             return existing['id']  # already grouped; exclusions checked first
 
         group_id = existing['id'] if existing else str(uuid.uuid4())
@@ -259,9 +241,14 @@ def join_capture_group(
             else:
                 partner = second_id if cid == first_id else first_id
                 members.append(_member(cid, row, {**evidence, 'matched_conversation_id': partner}))
+        if quality_ranker:
+            for member in members:
+                member['quality_rank'] = list(quality_ranker({**live[member['id']], 'id': member['id']}))
         record = _record(group_id, members, int((existing or {}).get('revision') or 0) + 1)
-        if call_primary_id:
-            record.update(kind=CALL_GROUP_KIND, primary_id=call_primary_id)
+        if quality_ranker:
+            record['primary_policy'] = 'cross_device_v1'
+            if existing and all(existing.get(k) == record.get(k) for k in ('members', 'primary_id', 'primary_policy')):
+                return existing['id']
         for cid in live:
             transaction.update(collection.document(cid), {CAPTURE_GROUP_FIELD: record})
         return group_id
@@ -316,8 +303,13 @@ def leave_capture_group(
             [_member(cid, r, (prior.get(cid) or {}).get('evidence')) for cid, r in remaining.items()],
             int(group.get('revision') or 0) + 1,
         )
-        if group.get('kind') == CALL_GROUP_KIND and group.get('primary_id') in remaining:
-            record.update(kind=CALL_GROUP_KIND, primary_id=group['primary_id'])
+        if group.get('primary_policy') == 'cross_device_v1':
+            for member in record['members']:
+                member['quality_rank'] = prior[member['id']]['quality_rank']
+            record['primary_id'] = min(record['members'], key=_primary_rank)['id']
+            record['primary_policy'] = 'cross_device_v1'
+        if group.get('kind') == _LEGACY_CALL_GROUP_KIND and group.get('primary_id') in remaining:
+            record.update(kind=_LEGACY_CALL_GROUP_KIND, primary_id=group['primary_id'])
         for cid in remaining:
             transaction.update(collection.document(cid), {CAPTURE_GROUP_FIELD: record})
         return True

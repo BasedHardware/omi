@@ -59,8 +59,11 @@ def main():
 
     incoming = {
         'id': 'wal',
-        'started_at': begun + timedelta(seconds=100),
-        'finished_at': begun + timedelta(seconds=109.5),
+        # The retry must adopt actual recorded overlap, not the stub's broad
+        # wall finished_at. This overlaps the live speech below and adds a
+        # new tail, which must survive adoption and remain replay-idempotent.
+        'started_at': begun + timedelta(seconds=25),
+        'finished_at': begun + timedelta(seconds=34.5),
         'source': 'omi',
         'client_device_id': 'pendant',
         'data_protection_level': 'standard',

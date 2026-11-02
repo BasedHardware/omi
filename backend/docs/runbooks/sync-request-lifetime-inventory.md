@@ -37,7 +37,6 @@ Static source inventory for the shared app and sync-reachable producers, 2026-10
 | `backend/utils/conversations/process_conversation.py:3310` | `_emit_derived_effects` | `submit_with_context` | `update_goal_progress` |
 | `backend/utils/conversations/process_conversation.py:3342` | `_emit_derived_effects` | `submit_with_context` | `_run_webhook` |
 | `backend/utils/conversations/lifecycle.py:348` | `processing_admission_guard` | `threading.Thread` | `_run_processing_lease_heartbeat` |
-| `backend/utils/conversations/jev_shadow.py:138` | `_submit` | `submit_with_context` | `_run` |
 | `backend/utils/conversations/transcription_shadow.py:47` | `<module>` | `ThreadPoolExecutor` | `` |
 | `backend/utils/conversations/transcription_shadow.py:125` | `maybe_start_shadow` | `start_background_task` | `_run_later(uid, conversation.id)` |
 | `backend/utils/stt/live_health.py:394` | `launch` | `start_background_task` | `coroutine` |

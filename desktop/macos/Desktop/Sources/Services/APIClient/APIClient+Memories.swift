@@ -266,18 +266,6 @@ struct ServerMemory: Decodable, Identifiable {
   let ledgerMetadata: [String: String]
   /// Optional generated-v3 evidence retained in a bounded local mirror.
   let evidenceState: ServerMemoryEvidenceState
-  /// Server-assessed memory currency. These fields are evidence metadata only;
-  /// the desktop never derives a band from age or applies its own half-life.
-  let asOf: Date?
-  let currency: Double?
-  let currencyBand: String?
-  let beliefClass: String?
-  let halfLifeDays: Double?
-  let beliefComputedAt: Date?
-  /// True when at least one currency/belief field was present on the wire.
-  /// This distinguishes an explicit unknown classification from a legacy
-  /// response that predates the temporal contract.
-  let currencyMetadataIsExplicit: Bool
   var evidence: [ServerMemoryEvidence] {
     guard case .valid(let values) = evidenceState else { return [] }
     return values
@@ -330,12 +318,6 @@ struct ServerMemory: Decodable, Identifiable {
     case ledgerArguments = "arguments"
     case ledgerTriggerCondition = "trigger_condition"
     case ledgerWriteReason = "write_reason"
-    case asOf = "as_of"
-    case currency
-    case currencyBand = "currency_band"
-    case beliefClass = "belief_class"
-    case halfLifeDays = "half_life_days"
-    case beliefComputedAt = "belief_computed_at"
   }
 
   init(from decoder: Decoder) throws {
@@ -384,32 +366,6 @@ struct ServerMemory: Decodable, Identifiable {
     let updatedAtString = wire?.updatedAt ?? (try? container.decode(String.self, forKey: .updatedAt))
     updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
-    func parseMemoryDate(_ key: CodingKeys) -> Date? {
-      guard let raw = try? container.decode(String.self, forKey: key) else { return nil }
-      return f.date(from: raw) ?? std.date(from: raw)
-        ?? {
-          let dateOnly = DateFormatter()
-          dateOnly.calendar = Calendar(identifier: .gregorian)
-          dateOnly.locale = Locale(identifier: "en_US_POSIX")
-          dateOnly.timeZone = TimeZone(secondsFromGMT: 0)
-          dateOnly.dateFormat = "yyyy-MM-dd"
-          return dateOnly.date(from: raw)
-        }()
-    }
-    asOf = parseMemoryDate(.asOf)
-    currency = try container.decodeIfPresent(Double.self, forKey: .currency)
-    currencyBand = try container.decodeIfPresent(String.self, forKey: .currencyBand)
-    beliefClass = try container.decodeIfPresent(String.self, forKey: .beliefClass)
-    halfLifeDays = try container.decodeIfPresent(Double.self, forKey: .halfLifeDays)
-    beliefComputedAt = parseMemoryDate(.beliefComputedAt)
-    currencyMetadataIsExplicit =
-      container.contains(.asOf)
-      || container.contains(.currency)
-      || container.contains(.currencyBand)
-      || container.contains(.beliefClass)
-      || container.contains(.halfLifeDays)
-      || container.contains(.beliefComputedAt)
-
     // layer / tier / memory_tier alias resolution. Prefer wire DTO fields
     // (schema-validated); fall back to container decoding when the wire DTO
     // could not be constructed (missing required fields like uid).
@@ -616,54 +572,6 @@ struct ServerMemory: Decodable, Identifiable {
     }
   }
 
-  /// Server-owned temporal classification. Unknown/missing classifications are
-  /// intentionally visible in Useful now until the server makes a decision.
-  private var hasServerRetainedHistoryMarker: Bool {
-    ["invalid_at", "superseded_by"].contains { key in
-      guard let value = ledgerMetadata[key] else { return false }
-      let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      return !normalized.isEmpty && normalized != "null"
-    }
-  }
-
-  var isUsefulNow: Bool {
-    guard memoryUseSuppressed != true, !hasServerRetainedHistoryMarker else { return false }
-    let normalized = currencyBand?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return normalized != "history"
-  }
-
-  var isHistory: Bool {
-    currencyBand?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "history"
-      || hasServerRetainedHistoryMarker
-      || memoryUseSuppressed == true
-  }
-
-  /// Use feedback is meaningful for active memories and reversible suppression
-  /// state. Closed/superseded ledger rows are retained for history but cannot
-  /// be re-enabled through the current-memory preference surface.
-  private var hasInactiveLedgerStatus: Bool {
-    guard let value = ledgerMetadata["status"] else { return false }
-    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return !normalized.isEmpty && normalized != "null" && normalized != "active"
-  }
-
-  var isUseControlEligible: Bool {
-    !hasServerRetainedHistoryMarker && !hasInactiveLedgerStatus
-  }
-
-  /// Server-owned reversible use state is carried in the existing canonical
-  /// `arguments` bag. Keep it read-only here; mutation remains the explicit
-  /// `/use` route and must not be inferred from truth review fields.
-  var memoryUseSuppressed: Bool? {
-    guard let argumentsJSON = ledgerMetadata[MemoryLedgerMetadata.argumentsJSONKey],
-      let data = argumentsJSON.data(using: .utf8),
-      let object = try? JSONSerialization.jsonObject(with: data),
-      let arguments = object as? [String: Any],
-      let use = arguments["memory_use"] as? [String: Any],
-      let suppressed = use["suppressed"] as? Bool
-    else { return nil }
-    return suppressed
-  }
 }
 
 // MARK: - Force Process Conversation API
@@ -862,45 +770,6 @@ extension APIClient {
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
   private static let listTruncatedHeader = "X-Omi-List-Truncated"
-  private static let beliefEnabledHeader = "X-Omi-Memory-Belief-Enabled"
-
-  enum MemoryTemporalView: String, Sendable {
-    case usefulNow = "useful_now"
-    case history
-    case all
-  }
-
-  enum KnowledgeLedgerPromptAuthority: String, Decodable, Equatable, Sendable {
-    case disabled
-    case enabled
-    case killed
-    case compatibility
-    case unknown
-  }
-
-  struct KnowledgeLedgerPromptSnapshot: Decodable {
-    let schemaVersion: String
-    let authority: KnowledgeLedgerPromptAuthority
-    let reason: String
-    let sourceHeadCommitID: String?
-    let memories: [ServerMemory]
-
-    var isAuthoritative: Bool {
-      authority == .enabled
-        && schemaVersion == KnowledgeLedgerPromptProjection.schemaVersion
-        && sourceHeadCommitID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        && Set(memories.map(\.id)).count == memories.count
-    }
-
-    enum CodingKeys: String, CodingKey {
-      case schemaVersion = "schema_version"
-      case authority = "mode"
-      case reason
-      case sourceHeadCommitID = "source_head_commit_id"
-      case memories = "rows"
-    }
-  }
-
   struct MemoryListPage {
     let memories: [ServerMemory]
     let nextCursor: String?
@@ -908,7 +777,6 @@ extension APIClient {
     let deviceScopeSupported: Bool?
     let defaultMemoryDeleteSupported: Bool
     let truncated: Bool
-    let beliefEnabled: Bool?
 
     init(
       memories: [ServerMemory],
@@ -916,8 +784,7 @@ extension APIClient {
       canonicalLifecycleExposed: Bool,
       deviceScopeSupported: Bool?,
       defaultMemoryDeleteSupported: Bool,
-      truncated: Bool,
-      beliefEnabled: Bool? = nil
+      truncated: Bool
     ) {
       self.memories = memories
       self.nextCursor = nextCursor
@@ -925,7 +792,6 @@ extension APIClient {
       self.deviceScopeSupported = deviceScopeSupported
       self.defaultMemoryDeleteSupported = defaultMemoryDeleteSupported
       self.truncated = truncated
-      self.beliefEnabled = beliefEnabled
     }
   }
 
@@ -940,7 +806,6 @@ extension APIClient {
     includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    view: MemoryTemporalView? = nil
   ) async throws -> [ServerMemory] {
     let page = try await getMemoriesPage(
       limit: limit,
@@ -951,8 +816,7 @@ extension APIClient {
       includeDismissed: includeDismissed,
       includeArchive: includeArchive,
       deviceScope: deviceScope,
-      authorizationSnapshot: authorizationSnapshot,
-      view: view)
+      authorizationSnapshot: authorizationSnapshot)
     return page.memories
   }
 
@@ -967,7 +831,6 @@ extension APIClient {
     includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    view: MemoryTemporalView? = nil
   ) async throws -> MemoryListPage {
     var endpoint = "v3/memories?limit=\(limit)"
     if let cursor, !cursor.isEmpty {
@@ -992,9 +855,6 @@ extension APIClient {
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
-    }
-    if let view {
-      endpoint += "&view=\(view.rawValue)"
     }
 
     guard let url = URL(string: baseURL + endpoint) else {
@@ -1031,36 +891,14 @@ extension APIClient {
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
     let truncated = httpResponse.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true"
-    let beliefHeader = httpResponse.value(forHTTPHeaderField: Self.beliefEnabledHeader)
-    let beliefEnabled = beliefHeader.flatMap { value in
-      switch value.lowercased() {
-      case "true": return true
-      case "false": return false
-      default: return nil
-      }
-    }
     return MemoryListPage(
       memories: memories,
       nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported,
       defaultMemoryDeleteSupported: defaultMemoryDeleteSupported,
-      truncated: truncated,
-      beliefEnabled: beliefEnabled
+      truncated: truncated
     )
-  }
-
-  /// Read the dedicated server-owned snapshot decision. The backend returns
-  /// `enabled` only after the shared JIT rollout and kill-switch decision,
-  /// migration completion and generation-fenced zero-legacy receipt, privacy
-  /// filtering, and strict response bounds all pass for this exact owner.
-  func getKnowledgeLedgerPromptSnapshot(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async throws -> KnowledgeLedgerPromptSnapshot {
-    try await get(
-      "v1/jit/knowledge-ledger/prompt-snapshot",
-      expectedOwnerId: authorizationSnapshot.ownerID,
-      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Managed LLM synthesis takes longer than a normal API call (the profile route runs two
@@ -1330,32 +1168,6 @@ extension APIClient {
       "v3/memories/\(id)/review?value=\(keep)",
       body: EmptyBody()
     )
-  }
-
-  enum MemoryUseAction: String, Encodable, Sendable {
-    case suppress
-    case allow
-    case useful
-  }
-
-  /// Records a reversible owner use preference without deleting the memory.
-  /// The caller owns one feedback id per user action and reuses it on retry.
-  func recordMemoryUse(
-    id: String,
-    action: MemoryUseAction,
-    feedbackId: String
-  ) async throws {
-    struct UseRequest: Encodable {
-      let action: MemoryUseAction
-      let feedbackId: String
-      enum CodingKeys: String, CodingKey {
-        case action
-        case feedbackId = "feedback_id"
-      }
-    }
-    let _: MemoryStatusResponse = try await post(
-      "v3/memories/\(id)/use",
-      body: UseRequest(action: action, feedbackId: feedbackId))
   }
 
   /// Marks all memories as read

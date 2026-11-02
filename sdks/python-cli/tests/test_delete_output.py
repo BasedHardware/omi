@@ -53,3 +53,19 @@ def test_delete_declined_confirmation_makes_no_request(resource, authed_profile,
 
     assert result.exit_code != 0
     assert not route.called
+    # JSON mode writes nothing but JSON to stdout; the prompt belongs on stderr.
+    assert result.stdout == ""
+    assert "Delete" in result.stderr
+
+
+def test_profile_and_local_task_delete_prompts_keep_json_stdout_clean(config_path, cli_runner) -> None:
+    """The other two prompted deletes follow the same JSON contract as the resource deletes."""
+    created = cli_runner.invoke(app, ["config", "profile", "use", "work"])
+    assert created.exit_code == 0, created.output
+
+    for argv in (["--json", "config", "profile", "delete", "work"], ["--json", "local", "task", "delete", "task_1"]):
+        result = cli_runner.invoke(app, argv, input="n\n")
+
+        assert result.exit_code != 0, argv
+        assert result.stdout == "", argv
+        assert "Delete" in result.stderr, argv

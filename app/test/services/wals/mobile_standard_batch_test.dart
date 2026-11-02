@@ -13,6 +13,8 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
+import '../../support/on_device_fakes.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 
@@ -344,6 +346,58 @@ void main() {
       await world.dispose();
       monitor.dispose();
     }
+  });
+
+  test('phone-only overflow wins over an unexpired Standard batch authorization', () async {
+    final previous = OnDeviceTranscriptionController.instance;
+    final onPhone = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), manageNativeCustody: false);
+    onPhone.debugActivate();
+    onPhone.updateEntitlement(atCap: true, paid: true);
+    OnDeviceTranscriptionController.instance = onPhone;
+    final world = await CaptureReplayWorld.boot(
+        tempDir: directory, pendantCodec: BleAudioCodec.opus, initialPrefs: {'uid': 'owner'});
+    world.deviceConnection = ScriptedDeviceConnection();
+    world.controller.installMobileStandardBatch(lane);
+    try {
+      await world.controller
+          .streamDeviceRecording(device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40));
+      await world.settle();
+      world.socket!.emitServerMessage('{"type":"service_status","status":"ready","mobile_standard_batch":true}');
+      await lane.pendingInitialization;
+      world.deviceConnection!.emitAudio(value: 9);
+      await world.settle();
+      await buffer.pending;
+      expect(world.socket!.sentBinary, isEmpty);
+      expect(published, isEmpty);
+      expect(world.wal.syncs.phone.testFrames.single.payload, List.filled(80, 9));
+    } finally {
+      await world.dispose();
+      onPhone.dispose();
+      OnDeviceTranscriptionController.instance = previous;
+    }
+  });
+
+  test('local-preview grant ignores transcript visibility; ordinary grant keeps the visibility rule', () async {
+    lane.authorize(true, localPreview: true);
+    expect(lane.warmingUp, true);
+    await lane.pendingInitialization;
+    expect(lane.warmingUp, false);
+    state.capturePageOpened();
+    expect(state.value.transcriptVisible, true);
+    expect(route(1), true, reason: 'visible audio still journals in local-preview mode');
+    await lane.pendingInference;
+    lane.visibilityChanged();
+    expect(route(2), true);
+    await lane.pendingInference;
+    lane.authorize(true);
+    expect(lane.localPreview, false);
+    expect(route(3), false, reason: 'ordinary Standard batch hands visible audio back to live');
+    lane.authorize(false, localPreview: true);
+    expect(lane.localPreview, false, reason: 'a revoked grant is never a local-preview grant');
+    clock = clock.add(const Duration(minutes: 3));
+    lane.authorize(true, localPreview: true);
+    clock = clock.add(const Duration(minutes: 2));
+    expect(route(4), false, reason: 'same two-minute expiry as any authorization');
   });
 
   testWidgets('existing visibility signal drives foreground/background routing', (tester) async {

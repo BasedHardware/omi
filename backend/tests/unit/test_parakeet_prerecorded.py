@@ -119,56 +119,32 @@ class TestFactoryRouting:
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
         assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
-    def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
-        client = MagicMock()
-        factory = MagicMock(return_value=client)
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
-        monkeypatch.setattr(pr, 'DeepgramClient', factory)
-        monkeypatch.setenv('DEEPGRAM_API_KEY', 'test-key')
-
-        assert pr._get_deepgram_client() is client
-        assert pr._get_deepgram_client() is client
-        assert factory.call_count == 1
-
-    def test_deepgram_process_client_reports_missing_key(self, monkeypatch):
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+    def test_deepgram_process_client_refuses_retired_provider(self, monkeypatch):
+        """Deepgram retired 2026-08-27: the client boundary fails closed."""
         monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
 
         with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
             pr._deepgram_client_for_request()
 
         assert exc_info.value.provider == pr.PrerecordedSTTService.DEEPGRAM
-        assert exc_info.value.missing_env == 'DEEPGRAM_API_KEY'
+        assert exc_info.value.missing_env == 'DEEPGRAM_RETIRED'
 
-    def test_deepgram_byok_does_not_require_process_key(self, monkeypatch):
-        client = MagicMock()
-        factory = MagicMock(return_value=client)
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
+    def test_deepgram_byok_cannot_bypass_retirement(self, monkeypatch):
+        """Retirement outranks BYOK: no user key reopens the retired provider."""
+        factory = MagicMock()
         monkeypatch.setattr(pr, 'DeepgramClient', factory)
         monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
 
-        assert pr._deepgram_client_for_request() is client
-        assert factory.call_args.args[0] == 'user-byok-key'
+        with pytest.raises(pr.PrerecordedSTTConfigurationError, match='DEEPGRAM_RETIRED'):
+            pr._deepgram_client_for_request()
+        factory.assert_not_called()
 
-    def test_byok_client_leaves_managed_credential_intact(self, monkeypatch):
-        """DeepgramClient.__init__ rewrites the options it is handed, so each
-        client needs its own — a shared object bills the managed client's
-        requests to whichever BYOK key was constructed last."""
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+    def test_managed_credential_cannot_bypass_retirement_either(self, monkeypatch):
+        """Deepgram retired 2026-08-27: even a configured managed key refuses."""
         monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
 
-        managed = pr._deepgram_client_for_request()
-        assert managed._config.api_key == 'managed-key'
-
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
-        assert pr._deepgram_client_for_request()._config.api_key == 'user-byok-key'
-
-        assert managed._config.api_key == 'managed-key'
+        with pytest.raises(pr.PrerecordedSTTConfigurationError, match='DEEPGRAM_RETIRED'):
+            pr._deepgram_client_for_request()
 
 
 class TestTranscribeBytes:
@@ -342,18 +318,31 @@ class TestTranscribeBytes:
 
     # A degraded/foreign 200 must not be mapped to "no speech": sync treats a
     # word-less segment as success, marks the job completed, and the client then
-    # discards the only copy of the audio. See #9586.
+    # discards the only copy of the audio (#9586); held-piece recovery would
+    # checkpoint it as a completed empty reply and purge the audio (#23081). The
+    # success shape carries both keys with their contract types, so a partial
+    # envelope is as foreign as an empty one.
     @pytest.mark.parametrize(
         'body',
         [
             {},
             {'detail': 'Model loading, try again shortly'},
             [],
+            None,
+            'ok',
+            {'segments': []},
+            {'text': ''},
+            {'text': '', 'segments': None},
+            {'text': '', 'segments': {}},
+            {'text': '', 'segments': 'none'},
+            {'text': {'error': 'upstream'}, 'segments': []},
+            {'text': 0, 'segments': []},
         ],
     )
-    def test_response_without_segments_or_text_raises(self, body):
+    def test_response_without_both_segments_and_text_raises(self, body):
         wav = _make_wav()
         resp = MagicMock()
+        resp.status_code = 200
         resp.raise_for_status = MagicMock()
         resp.json.return_value = body
 
@@ -367,17 +356,38 @@ class TestTranscribeBytes:
             with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
 
+    @pytest.mark.parametrize('body', [{'segments': []}, {'text': ''}, {'detail': 'Model loading'}])
+    def test_held_dispatch_raises_on_malformed_body_after_one_call(self, body):
+        wav = _make_wav()
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            with pr.held_single_attempt(), pytest.raises(RuntimeError, match='failed after 1 attempts'):
+                pr.parakeet_prerecorded_from_bytes(wav, diarize=False, return_language=True)
+
+        assert mock_client.post.call_count == 1
+
     @pytest.mark.parametrize(
         'body',
         [
             {'text': '', 'segments': []},
-            {'segments': []},
-            {'text': ''},
+            {'text': '   ', 'segments': []},
+            {'text': None, 'segments': []},
         ],
     )
     def test_well_formed_silence_is_still_no_speech(self, body):
         wav = _make_wav()
         resp = MagicMock()
+        resp.status_code = 200
         resp.raise_for_status = MagicMock()
         resp.json.return_value = body
 
@@ -389,6 +399,9 @@ class TestTranscribeBytes:
             mock_client_cls.return_value = mock_client
 
             assert pr.parakeet_prerecorded_from_bytes(wav, diarize=False) == []
+            assert pr.parakeet_prerecorded_from_bytes(wav, diarize=False, return_language=True) == ([], 'en')
+
+        assert mock_client.post.call_count == 2
 
 
 class TestTranscribeUrl:
@@ -530,13 +543,13 @@ class TestStreamingFactoryRouting:
             assert service == STTService.parakeet
             assert model == 'parakeet'
 
-    def test_parakeet_streaming_fallback_for_cjk_uses_deepgram(self):
+    def test_parakeet_streaming_fallback_for_cjk_skips_retired_deepgram(self):
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
             service, lang, model = get_stt_service_for_language('ja')
-            assert service == STTService.deepgram
-            assert model == 'nova-3'
+            assert service == STTService.modulate
+            assert model == 'velma-2'
 
     def test_parakeet_fallback_without_url_uses_policy_default(self):
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(os.environ, {}, clear=False):

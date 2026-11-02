@@ -1,3 +1,4 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
 import hashlib
 import hmac
@@ -6,10 +7,11 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
+from config import firestore_read_levers
 import database._client as db_client_module
 from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
@@ -32,7 +34,6 @@ from utils.memory.memory_service import (
     MemoryService,
     fetch_memory_dict,
 )
-from utils.memory.canonical_memory_adapter import mint_direct_user_write_authority
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
 from utils.feedback import record_memory_feedback
@@ -42,10 +43,8 @@ from utils.memory.import_write_guard import (
     import_write_violation_for_guard,
     is_per_file_local_import_tags,
 )
-from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure
 from utils.memory.memory_api_response import memory_item_response, memory_list_response
-from utils.memory.belief_model import belief_model_enabled, normalize_temporal_read_view
 from utils.memory.universal_list_cursor import UniversalListCursorError, cursor_secret, cursor_ttl_seconds
 from utils.memory.memory_system import MemorySystem
 from utils.other.list_budget import (
@@ -183,8 +182,6 @@ _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-E
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
 _MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
-_MEMORY_BELIEF_ENABLED_HEADER = 'X-Omi-Memory-Belief-Enabled'
-_MEMORY_AS_OF_HEADER = 'X-Omi-Memory-As-Of'
 
 
 def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
@@ -452,6 +449,8 @@ async def extract_memory_log(
     Does not write Firestore. Desktop onboarding/import should call this instead of inventing
     memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     # Deferred with the LLM helper: this router is covered by a module-isolation test
     # that stubs a minimal dependency graph, and utils.subscription pulls database.users
     # in at import time.
@@ -532,7 +531,6 @@ async def create_memory(
             operation="create_memory",
             upsert_vector=False,
             require_canonical_promotion=True,
-            direct_user_authority=mint_direct_user_write_authority(),
         )
     except HTTPException:
         raise
@@ -632,7 +630,6 @@ async def create_memories_batch(
             operation="batch_create_memory",
             upsert_vectors=False,
             require_canonical_promotion=True,
-            direct_user_authority=mint_direct_user_write_authority(),
         )
     except HTTPException:
         raise
@@ -727,6 +724,8 @@ def get_memories(
     ),
     device_scope: str = Query('all'),
     client_device_id: Optional[str] = Query(None),
+    # Released clients may still send these retired belief-view selectors.
+    # Accept them for wire compatibility while always serving the released view.
     view: str = 'released',
     as_of: Optional[datetime] = None,
     uid: str = Depends(auth.get_current_user_uid),
@@ -739,22 +738,6 @@ def get_memories(
     partial array with the ``X-Omi-List-Truncated: true`` header and no
     ``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).
     """
-    if view == 'released':
-        # Keep the direct-import/stub compatibility path cheap and preserve
-        # the exact released behavior when the selector is omitted.
-        temporal_view = 'released'
-    else:
-        try:
-            temporal_view = normalize_temporal_read_view(view)
-        except ValueError as exc:
-            detail = _sanitize_memories_error(exc, "unsupported memory read view")
-            raise HTTPException(status_code=422, detail=detail) from exc
-        if not belief_model_enabled():
-            temporal_view = 'released'
-    if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
-        raise HTTPException(status_code=422, detail='as_of must be timezone-aware')
-    if as_of is not None:
-        as_of = as_of.astimezone(timezone.utc)
 
     scope_request = _resolve_get_memories_device_scope(
         device_scope,
@@ -780,11 +763,8 @@ def get_memories(
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
         _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'true',
-        _MEMORY_BELIEF_ENABLED_HEADER: 'true' if belief_model_enabled() else 'false',
         'Cache-Control': 'no-store',
     }
-    if as_of is not None:
-        response_headers[_MEMORY_AS_OF_HEADER] = as_of.isoformat()
 
     def _finalize(page_memories: List[MemoryDB], *, truncated: bool, next_cursor: Optional[str]) -> JSONResponse:
         if next_cursor and not truncated:
@@ -801,6 +781,36 @@ def get_memories(
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
     cursor = _normalize_memory_list_cursor(cursor)
+    if cursor is not None and firestore_read_levers.lever_enabled('memory_list_index_window', uid):
+        try:
+            page = MemoryService(db_client=db_client).read_page(
+                uid,
+                limit=bounded_limit,
+                cursor=cursor,
+                device_scope_request=scope_request,
+                include_pending_processing=True,
+                include_archive=include_archive,
+                request_budget=budget,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 400 or not str(exc.detail).startswith('invalid_or_stale_cursor:'):
+                raise
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='cursor_page' if bounded_offset == 0 else 'offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            cursor = None
+        else:
+            if bounded_offset != 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Memory cursor pagination cannot be combined with offset",
+                )
+            return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
@@ -816,8 +826,6 @@ def get_memories(
             include_pending_processing=True,
             include_archive=include_archive,
             request_budget=budget,
-            view=temporal_view,
-            as_of=as_of,
         )
         return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
 
@@ -833,8 +841,6 @@ def get_memories(
                 include_pending_processing=True,
                 include_archive=include_archive,
                 request_budget=budget,
-                view=temporal_view,
-                as_of=as_of,
             )
         except MemoryBackingStoreUnavailable as exc:
             if exc.detail == MEMORY_LIST_SCAN_BUDGET_DETAIL:
@@ -882,23 +888,7 @@ def get_memories(
         "include_archive": include_archive,
         "budget": budget,
     }
-    if temporal_view != 'released':
-        # Apply the temporal admission before offset/limit slicing inside the
-        # service read; post-filtering one already-paged released window would
-        # drop history rows and underfill every offset page.
-        read_kwargs["view"] = temporal_view
-        if as_of is not None:
-            read_kwargs["as_of"] = as_of
     memories = MemoryService(db_client=db_client).read(uid, **read_kwargs)
-    if temporal_view != 'released':
-        from utils.memory.belief_model import temporal_view_allows_record
-
-        clock = as_of or datetime.now(timezone.utc)
-        memories = [
-            memory
-            for memory in memories
-            if temporal_view_allows_record(memory, view=temporal_view, now=clock, include_archive=include_archive)
-        ]
     return _finalize(memories, truncated=budget.truncated, next_cursor=None)
 
 
@@ -924,21 +914,6 @@ def get_ledger_history(
     ``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never
     resurrected for history UI.
     """
-
-    # The mobile client calls this on every memories-tab load for every user.
-    # Outside the JIT rollout no ledger history can exist, so answer empty
-    # without paying the bounded 501-row provider scan for the whole fleet.
-    # Unknown/error rollout states also take this cheap path (fail closed).
-    rollout = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY)
-    if not rollout.permits_work:
-        return memory_list_response(
-            [],
-            MemoryApiExposure.CANONICAL,
-            headers={
-                'Cache-Control': 'no-store',
-                _MEMORY_BELIEF_ENABLED_HEADER: 'true' if belief_model_enabled() else 'false',
-            },
-        )
 
     db_client = getattr(db_client_module, 'db', None)
     budget = list_read_budget_for_request(request, route='memories-ledger-history')
@@ -966,7 +941,6 @@ def get_ledger_history(
         raise HTTPException(status_code=503, detail="Ledger history unavailable") from exc
 
     headers = {'Cache-Control': 'no-store'}
-    headers[_MEMORY_BELIEF_ENABLED_HEADER] = 'true' if belief_model_enabled() else 'false'
     next_cursor = None
     next_start_after_raw = getattr(page, 'next_start_after', None)
     if isinstance(next_start_after_raw, tuple):

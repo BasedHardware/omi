@@ -9,11 +9,14 @@ This package records bounded operational signals and owns their presentation/exp
 | `sync_phases.py` | Context-scoped sync phase latency/calls and request-bound aggregate export |
 | `finalization.py` | Finalization outcomes |
 | `fallback.py` | Shared fallback telemetry |
+| `listen_close.py` | Listen websocket close outcomes (code class, initiator, cap-held) and close-to-finalize time |
+| `listen_loop.py` | Listen event-loop lag probe, per-frame processing time and VAD window rate (`LISTEN_LOOP_METRICS_ENABLED`) |
 | `speaker_identification.py` | Speaker decision/review metrics |
 | `speaker_learning_jobs.py` | Voice-learning job event metrics |
 | `speaker_tag_prompts.py` | Speaker prompt telemetry |
 | `subscription_events.py` | Bounded billing/subscription events |
 | `api_keys.py` | API-key observability |
+| `held_content.py` | Held-content ramp counters, choice latency, and the redrive fleet snapshot |
 | `langsmith.py` | Trace integration |
 | `langsmith_prompts.py` | Cached prompt retrieval and rendering |
 

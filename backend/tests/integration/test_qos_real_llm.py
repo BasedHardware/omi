@@ -98,7 +98,6 @@ class TestPremiumMini:
     MINI_FEATURES = [
         'external_structure',
         'memories',
-        'memory_conflict',
         'knowledge_graph',
         'chat_extraction',
         'chat_graph',

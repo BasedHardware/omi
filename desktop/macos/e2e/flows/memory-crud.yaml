@@ -9,9 +9,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+ReconcileRetry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/KnowledgeLedgerMirrorStagingSchema.swift
-  - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage+StaleLocalOnlyPurge.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+MemoryDelete.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
 preconditions:

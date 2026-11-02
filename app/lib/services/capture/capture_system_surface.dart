@@ -71,9 +71,13 @@ class CaptureSystemSurface {
     final connecting = state == RecordingState.initialising;
     // Until a pendant's audio is verified the app claims neither Listening nor a running time
     // (CaptureIngressHealth), so the card names the pendant without either, and its clock stops:
-    // waiting for audio is not capture time.
+    // waiting for audio is not capture time. A confirmed-subscription quiet verifies, so silence
+    // keeps the clock; only a wait or an exhausted recovery stops it.
     final unverified = !capture.pendantCaptureVerified;
-    final paused = userPaused || interrupted || connecting || unverified;
+    // Native recovery is exhausted and audio still is not arriving: a failure the
+    // reader can act on (reconnect), not a wait. The island warns at once.
+    final noAudio = capture.pendantCaptureActionRequired;
+    final paused = userPaused || interrupted || connecting || unverified || noAudio;
     final now = _now();
     if (id != _recordingId || revision != _conversationRevision) {
       _recordingId = id;
@@ -97,15 +101,17 @@ class CaptureSystemSurface {
             ? 'paused'
             : interrupted
                 ? 'interrupted'
-                : connecting
-                    ? 'connecting'
-                    : unverified
-                        ? 'unverified'
-                        : batch
-                            ? 'recording'
-                            : capture.transcriptServiceReady
-                                ? 'listening'
-                                : 'reconnecting';
+                : noAudio
+                    ? 'noAudio'
+                    : connecting
+                        ? 'connecting'
+                        : unverified
+                            ? 'unverified'
+                            : batch
+                                ? 'recording'
+                                : capture.transcriptServiceReady
+                                    ? 'listening'
+                                    : 'reconnecting';
     return {
       'recordingId': id ?? '',
       'conversationRevision': revision,
@@ -180,6 +186,11 @@ class CaptureSystemSurface {
       final allowed = switch (action) {
         'pause' || 'resume' => current['canPause'],
         'finish' => current['canFinish'],
+        // Offered by the unheard notice: only a pendant that owes audio (an
+        // exhausted recovery, or a subscription never confirmed past the grace)
+        // has a reconnect to perform.
+        'reconnect' =>
+          current['source'] == 'pendant' && (current['status'] == 'noAudio' || current['status'] == 'unverified'),
         _ => false,
       };
       if (allowed != true) throw StateError('Action is unavailable for this recording');

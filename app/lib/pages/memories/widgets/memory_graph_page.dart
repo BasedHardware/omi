@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -17,10 +18,12 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/memories/widgets/memory_graph_catalog.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/memory_graph_identity.dart';
 
 class GraphNode3D {
   final String id;
@@ -229,15 +232,6 @@ String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
   return name.isNotEmpty ? name : l10n.you;
 }
 
-/// Lowercased graph labels that identify the user's own node: the backend's English labels
-/// plus the given name. The localized display fallback is not one of them, so a concept
-/// node that happens to read "tú" or "you" stays a concept.
-@visibleForTesting
-Set<String> memoryGraphKnownUserLabels(String givenName) {
-  final name = givenName.trim().toLowerCase();
-  return {'me', 'the user', if (name.isNotEmpty) name};
-}
-
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
 
@@ -255,6 +249,7 @@ class MemoryGraphPage extends StatefulWidget {
   final bool fitToBounds;
   @visibleForTesting
   final Future<Map<String, dynamic>> Function() loadGraph;
+  final Future<Map<String, dynamic>> Function(String cursor)? loadMoreGraph;
 
   const MemoryGraphPage({
     super.key,
@@ -265,8 +260,9 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
-    this.fitToBounds = false,
+    this.fitToBounds = true,
     this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
+    this.loadMoreGraph,
   });
 
   @override
@@ -298,6 +294,21 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
 
   bool _isLoading = true;
   String? _error;
+  Map<String, dynamic> _graphData = {'nodes': [], 'edges': []};
+  int _loadGeneration = 0;
+  bool _loadingMore = false;
+
+  bool get _hasContent => simulation.nodes.length > 1 || (_graphData['catalog_nodes'] as List? ?? []).isNotEmpty;
+
+  Widget? get _loadMoreButton => _graphData['has_more'] != true
+      ? null
+      : OmiButton.secondary(
+          key: const ValueKey('mind_map_load_more'),
+          label: context.l10n.showMore,
+          isLoading: _loadingMore,
+          onPressed: () => _loadGraph(loadMore: true),
+          size: OmiButtonSize.compact,
+        );
 
   final _repaintNotifier = ValueNotifier<int>(0);
 
@@ -388,96 +399,96 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
     _repaintNotifier.value++;
   }
 
-  Future<void> _loadGraph({bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-    }
-
+  Future<void> _loadGraph({bool silent = false, bool loadMore = false}) async {
+    if (!mounted) return;
+    if (loadMore && _loadingMore) return;
+    final cursor = loadMore ? _graphData['next_cursor'] as String? : null;
+    if (loadMore && cursor == null) return;
+    final generation = ++_loadGeneration;
+    setState(() {
+      _loadingMore = loadMore;
+      if (!silent && !loadMore) _isLoading = true;
+      _error = null;
+    });
     try {
-      final data = await widget.loadGraph();
-      if (!mounted) return;
-
-      final newNodes = data['nodes'] as List<dynamic>? ?? [];
-      final newEdges = data['edges'] as List<dynamic>? ?? [];
-
-      if (_error != null && mounted) {
-        setState(() {
-          _error = null;
-        });
+      final data = loadMore
+          ? await (widget.loadMoreGraph?.call(cursor!) ?? KnowledgeGraphApi.getKnowledgeGraph(cursor: cursor))
+          : await widget.loadGraph();
+      if (!mounted || generation != _loadGeneration) return;
+      final merged = loadMore ? mergeKnowledgeGraphPages(_graphData, data) : data;
+      final unchanged = jsonEncode(_graphData['nodes']) == jsonEncode(merged['nodes']) &&
+          jsonEncode(_graphData['edges']) == jsonEncode(merged['edges']);
+      setState(() => _graphData = merged);
+      if (!unchanged) {
+        _populateGraph(merged);
+        _hasFittedBounds = false;
+        _runLayoutSync();
       }
-
-      if (_isSameGraph(newNodes, newEdges)) {
-        if (!silent) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      _populateGraph(data);
-      _hasFittedBounds = false;
-      _runLayoutSync();
     } catch (e) {
       Logger.debug('Knowledge graph load failed: $e');
-      if (!mounted) return;
-      if (!silent) {
-        setState(() {
-          _error = context.l10n.couldNotLoadKnowledgeGraph;
-        });
+      if (!mounted || generation != _loadGeneration) return;
+      if (e is KnowledgeGraphSessionChanged) {
+        _clearGraph();
+        setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
+      } else if (e is KnowledgeGraphCursorExpired) {
+        // The old revision may contain a memory that was just deleted.
+        // Discard it before restarting, including if that restart fails.
+        _clearGraph();
+        await _loadGraph();
+      } else if (_hasContent) {
+        // A resume refresh runs while another tab may be showing; it keeps the map and says nothing.
+        if (!silent) {
+          OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
+              actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
+        }
+      } else {
+        setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
       }
     } finally {
-      if (mounted && !silent) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _isLoading = false;
+          _loadingMore = false;
         });
       }
     }
   }
 
-  bool _isSameGraph(List<dynamic> newNodes, List<dynamic> newEdges) {
-    final hasUserNode = simulation.nodes.any((n) => n.id == 'user-node');
-    // If we expect N+1 nodes (content + user), we should account for that
-    if (newNodes.length + (hasUserNode ? 0 : 1) != simulation.nodes.length) return false;
-    if (newEdges.length != simulation.edges.length) return false;
-
-    final currentIds = simulation.nodes.map((n) => n.id).toSet();
-    for (var n in newNodes) {
-      if (!currentIds.contains(n['id'])) return false;
-    }
-    return true;
+  void _clearGraph() {
+    setState(() {
+      simulation.nodes.clear();
+      simulation.edges.clear();
+      simulation.nodeMap.clear();
+      _graphData = {'nodes': [], 'edges': []};
+      _selectedNodeId = null;
+      _highlightedNodeIds.clear();
+      _hasFittedBounds = false;
+    });
   }
 
   void _populateGraph(Map<String, dynamic> data) {
+    _selectedNodeId = null;
+    _highlightedNodeIds.clear();
     simulation.nodes.clear();
     simulation.edges.clear();
     simulation.nodeMap.clear();
 
-    final nodes = data['nodes'] as List<dynamic>? ?? [];
+    // The canvas runs a quadratic force simulation. Keep the legacy endpoint's
+    // 200-entity overview bound when canonical pages contain more records.
+    final allNodes = data['nodes'] as List<dynamic>? ?? [];
+    final nodes = allNodes.take(200).toList();
     final edges = data['edges'] as List<dynamic>? ?? [];
 
     final givenName = SharedPreferencesUtil().givenName;
     final userLabel = memoryGraphUserLabel(givenName, context.l10n);
-    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
-    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
-      final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
-      final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
-      return knownUserLabels.contains(label) || nodeType == 'user';
-    }
-
-    String? primaryUserId;
-    for (final nodeData in nodes) {
-      if (nodeData is Map && isUserLikeNode(nodeData)) {
-        primaryUserId = (nodeData['id'] ?? '').toString();
-        if (primaryUserId.isNotEmpty) break;
-      }
-    }
-    primaryUserId ??= 'user-node';
-
-    final remappedIds = <String, String>{};
+    final primaryUserId = memoryGraphPrimaryOwnerId(allNodes);
+    // Resolve owner aliases before bounding the canvas so their incident edges
+    // keep the canonical anchor even when an alias is outside the visible page.
+    final remappedIds = <String, String>{
+      for (final node in allNodes.whereType<Map>())
+        if (memoryGraphIsUserNode(node) && (node['id'] ?? '').toString().isNotEmpty && node['id'] != primaryUserId)
+          (node['id'] ?? '').toString(): primaryUserId,
+    };
     final addedNodeIds = <String>{};
 
     for (final rawNodeData in nodes) {
@@ -486,13 +497,8 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
       final originalId = (nodeData['id'] ?? '').toString();
       if (originalId.isEmpty) continue;
 
-      final isUserLike = isUserLikeNode(nodeData);
-      if (isUserLike && originalId != primaryUserId) {
-        remappedIds[originalId] = primaryUserId;
-        continue;
-      }
-
-      final nodeId = remappedIds[originalId] ?? originalId;
+      if (remappedIds.containsKey(originalId)) continue;
+      final nodeId = originalId;
       if (addedNodeIds.contains(nodeId)) continue;
 
       final isUser = nodeId == primaryUserId;
@@ -719,19 +725,27 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
               title: Text(context.l10n.memoryGraphTitle),
               backgroundColor: Colors.transparent,
               leading: const OmiBackButton(),
-              actions: widget.showShareButton
-                  ? [
-                      OmiIconButton(
-                        key: _shareButtonKey,
-                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
-                        label: context.l10n.share,
-                        onPressed: _shareGraph,
-                      ),
-                    ]
-                  : null,
+              actions: [
+                OmiIconButton(
+                  key: const ValueKey('mind_map_refresh'),
+                  icon: const Icon(Icons.refresh),
+                  label: context.l10n.refresh,
+                  onPressed: _loadGraph,
+                ),
+                if (widget.showShareButton && simulation.nodes.length > 1)
+                  OmiIconButton(
+                      key: _shareButtonKey,
+                      icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                      label: context.l10n.share,
+                      onPressed: _shareGraph),
+              ],
             )
           : null,
-      body: _buildBody(),
+      body: Column(children: [
+        Expanded(child: _buildBody()),
+        if (_loadMoreButton != null && simulation.nodes.length > 1)
+          SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(OmiSpacing.sm), child: _loadMoreButton!)),
+      ]),
     );
   }
 
@@ -749,14 +763,21 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
     }
 
     // Check if graph is effectively empty (only has user node or truly empty)
-    final bool isEmpty =
-        simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
+    final bool isEmpty = simulation.nodes.every((node) => node.isFixed);
 
     if (isEmpty) {
+      final catalog = _graphData['catalog_nodes'] as List? ?? [];
+      if (catalog.isNotEmpty) {
+        return MemoryGraphCatalog(records: catalog, compact: widget.preview, loadMore: _loadMoreButton);
+      }
       final emptyState = OmiEmptyState(
         icon: Icons.hub_outlined,
         title: context.l10n.noKnowledgeGraphYet,
         message: context.l10n.knowledgeGraphWillBuildAutomatically,
+        action: widget.preview
+            ? null
+            : (_loadMoreButton ??
+                OmiButton.secondary(label: context.l10n.refresh, onPressed: _loadGraph, size: OmiButtonSize.compact)),
       );
       if (!widget.embedded) {
         return SafeArea(child: emptyState);
@@ -1079,10 +1100,12 @@ class GraphPainter3D extends CustomPainter {
       }
     }
 
+    final readableOverview = nodes.length <= 20 && zoom < 0.7;
+    final placedLabels = <Rect>[];
     for (var p in projectedNodes) {
       final node = p.node;
       final centerOffset = Offset(p.x, p.y);
-      final radius = node.radius * p.scale;
+      final radius = readableOverview ? max(4.0, node.radius * p.scale) : node.radius * p.scale;
 
       if (radius < 0.5) continue;
 
@@ -1115,24 +1138,50 @@ class GraphPainter3D extends CustomPainter {
       canvas.drawCircle(centerOffset, radius, _nodePaint);
       _nodePaint.shader = null;
 
-      final showLabel = screenshotMode || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
+      final showLabel =
+          screenshotMode || (readableOverview && p.alpha > 0.2) || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
       if (showLabel) {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
             color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
-              alpha: screenshotMode ? 0.95 : p.alpha * 0.9,
+              alpha: screenshotMode ? 0.95 : (readableOverview ? max(0.8, p.alpha) : p.alpha) * 0.9,
             ),
-            fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
+            fontSize: screenshotMode ? 11.0 : (readableOverview ? 12.0 : (10 * p.scale).clamp(8, 14)),
             fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        var labelOffset = centerOffset + Offset(-tp.width / 2, radius + 3);
+        if (readableOverview) {
+          // A fitted small graph must remain readable without labels colliding
+          // near the owner node. Keep these choices in screen coordinates.
+          Offset? available;
+          for (final candidate in [
+            labelOffset,
+            centerOffset + Offset(-tp.width / 2, -radius - tp.height - 3),
+            centerOffset + Offset(radius + 6, -tp.height / 2),
+            centerOffset + Offset(-radius - tp.width - 6, -tp.height / 2),
+          ]) {
+            final rect = candidate & tp.size;
+            if (rect.left >= 0 &&
+                rect.right <= size.width &&
+                rect.top >= 0 &&
+                rect.bottom <= size.height &&
+                !placedLabels.any((placed) => placed.overlaps(rect.inflate(2)))) {
+              available = candidate;
+              placedLabels.add(rect);
+              break;
+            }
+          }
+          if (available == null) continue;
+          labelOffset = available;
+        }
         if (OmiColors.active == OmiPalette.light) {
           final labelRect = Rect.fromLTWH(
-            centerOffset.dx - tp.width / 2 - 4,
-            centerOffset.dy + radius,
+            labelOffset.dx - 4,
+            labelOffset.dy - 3,
             tp.width + 8,
             tp.height + 6,
           );
@@ -1141,7 +1190,7 @@ class GraphPainter3D extends CustomPainter {
             Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
           );
         }
-        tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
+        tp.paint(canvas, labelOffset);
       }
     }
   }

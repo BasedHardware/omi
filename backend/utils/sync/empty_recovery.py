@@ -19,18 +19,12 @@ def enabled() -> bool:
     return os.getenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'false').lower() == 'true'
 
 
-def recover(
-    path: str | Path,
-    *,
-    transcribe: Callable[..., Any],
-    authorize: Callable[[], None],
-    observe: Callable[[float | None, list[dict] | None], None] | None = None,
-) -> tuple[list[dict], str, float, list[dict]]:
-    """Only validated zero-span VAD authorizes silence; all uncertainty fails closed.
+def inspect_strict(path: str | Path) -> tuple[bytes, float, list[dict]]:
+    """Canonicalize the local segment and run the strict local VAD.
 
-    The input is the existing local segment. Canonicalize supported legacy PCM
-    formats, rejecting truncated input before conversion. Provider metadata never
-    receives the source WAV's ancillary chunks. The caller owns funded admission.
+    Shared by the paid multilingual recovery and the (free) empty-success guard.
+    Raises RuntimeError on any inspection failure; a failure is never silence
+    evidence.
     """
     try:
         audio = Path(path).read_bytes()
@@ -47,15 +41,32 @@ def recover(
         segment = AudioSegment.from_wav(io.BytesIO(audio)).set_channels(1).set_sample_width(2).set_frame_rate(16000)
         output = io.BytesIO()
         segment.export(output, format='wav')
-        pcm, duration, spans = inspect_audio(
-            SimpleNamespace(duration_seconds=len(segment.raw_data) / 32000), output.getvalue()
-        )
+        return inspect_audio(SimpleNamespace(duration_seconds=len(segment.raw_data) / 32000), output.getvalue())
     except Exception:
-        if observe is not None:
-            observe(None, None)
         # RecoveryFailure is a ValueError; don't misclassify VAD uncertainty as
         # permanent bad user input in the legacy public failure classifier.
         raise RuntimeError('sync empty recovery inspection failed') from None
+
+
+def recover(
+    path: str | Path,
+    *,
+    transcribe: Callable[..., Any],
+    authorize: Callable[[], None],
+    observe: Callable[[float | None, list[dict] | None], None] | None = None,
+) -> tuple[list[dict], str, float, list[dict]]:
+    """Only validated zero-span VAD authorizes silence; all uncertainty fails closed.
+
+    The input is the existing local segment. Canonicalize supported legacy PCM
+    formats, rejecting truncated input before conversion. Provider metadata never
+    receives the source WAV's ancillary chunks. The caller owns funded admission.
+    """
+    try:
+        pcm, duration, spans = inspect_strict(path)
+    except Exception:
+        if observe is not None:
+            observe(None, None)
+        raise
     # Observe every strict verdict before admission/provider/result handling can
     # fail. Logging only successful recovery would bias the speech-loss sample.
     if observe is not None:

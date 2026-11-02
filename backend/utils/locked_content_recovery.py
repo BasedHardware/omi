@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Callable
 
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
 from utils.locked_content_flags import reset_recovery_enabled
 
 logger = logging.getLogger(__name__)
@@ -40,11 +39,8 @@ def _memory_page_drained(count: int, page_size: int) -> bool:
 
 
 def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
-    if stt_cap_dispatch_enabled() and _cap_audio_recovery is not None:
-        try:
-            _cap_audio_recovery(uid)
-        except Exception as error:
-            logger.warning('event=stt_cap_recovery outcome=schedule_deferred exception_type=%s', type(error).__name__)
+    # Funded audio/text backlog requires explicit choice. A calendar reset or
+    # ordinary authenticated request must never mint processing intent.
     if not reset_recovery_enabled():
         return
     # Lazy imports keep the flag-off auth path free of additional dependencies.

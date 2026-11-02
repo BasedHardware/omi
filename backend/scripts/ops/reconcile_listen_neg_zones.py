@@ -151,10 +151,31 @@ def _neg_status_from_service(service: Any) -> tuple[str, set[str]]:
     return neg_name, declared_zones
 
 
-def _neg_zones(neg_list: Any, expected_name: str, allowed_zones: set[str]) -> set[str]:
+def _neg_owner(item: dict[str, Any]) -> tuple[str, str, str, str] | None:
+    """GKE writes cluster-uid/namespace/service-name/port into a NEG's description."""
+    try:
+        owner = json.loads(item.get("description") or "")
+        return (owner["cluster-uid"], owner["namespace"], owner["service-name"], str(owner["port"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _neg_zones(
+    neg_list: Any, expected_name: str, allowed_zones: set[str], *, namespace: str, service: str
+) -> tuple[set[str], set[str]]:
+    """Return (zones, owned zones outside the Service's declared list).
+
+    The Service's neg-status zone list can lag the NEGs GKE actually created:
+    on 2026-10-18 it listed a/b/c while GKE had created an f NEG for the same
+    Service when fallback-pool listen pods landed there. An exact-name zonal NEG
+    outside the declared zones is in scope only when its GKE owner metadata
+    names the same cluster, namespace, Service and port as the declared-zone
+    NEGs; anything else still fails closed and is never attached.
+    """
     if not isinstance(neg_list, list):
         raise ReconcileError("NEG listing returned an unexpected response")
-    zones: set[str] = set()
+    declared: dict[str, dict[str, Any]] = {}
+    undeclared: dict[str, dict[str, Any]] = {}
     out_of_scope: set[str] = set()
     for item in neg_list:
         if not isinstance(item, dict) or item.get("name") != expected_name:
@@ -163,23 +184,31 @@ def _neg_zones(neg_list: Any, expected_name: str, allowed_zones: set[str]) -> se
         zone = _zone_from_resource(zone_value) if isinstance(zone_value, str) else None
         # `gcloud compute network-endpoint-groups list` covers global, regional, and
         # every zonal scope by default, while GKE only guarantees custom NEG name
-        # uniqueness within a region. Only the Service's declared zones may attach;
-        # exact-name resources anywhere else are rejected, never attached.
+        # uniqueness within a region. Regional/global exact-name resources are
+        # always rejected, never attached.
         if zone is None:
             out_of_scope.add("a regional or global scope")
             continue
-        if zone not in allowed_zones:
-            out_of_scope.add(zone)
-            continue
-        if zone in zones:
+        bucket = declared if zone in allowed_zones else undeclared
+        if zone in bucket:
             raise ReconcileError("NEG listing returned duplicate resources for a zone")
-        zones.add(zone)
+        bucket[zone] = item
+    if not declared:
+        raise ReconcileError("no exact-name zonal NEGs were found")
+    owners = {_neg_owner(item) for item in declared.values()}
+    owner = next(iter(owners)) if len(owners) == 1 else None
+    if owner is None or owner[1] != namespace or owner[2] != service:
+        raise ReconcileError("declared-zone NEGs do not share GKE owner metadata for the listen Service")
+    owned_extra: set[str] = set()
+    for zone, item in undeclared.items():
+        if _neg_owner(item) == owner:
+            owned_extra.add(zone)
+        else:
+            out_of_scope.add(zone)
     if out_of_scope:
         detail = ", ".join(sorted(out_of_scope))
         raise ReconcileError(f"exact-name NEGs exist outside the listen Service's declared zones: {detail}")
-    if not zones:
-        raise ReconcileError("no exact-name zonal NEGs were found")
-    return zones
+    return set(declared) | owned_extra, owned_extra
 
 
 def _group_name_and_zone(group: str) -> tuple[str, str] | None:
@@ -294,7 +323,14 @@ def reconcile(args: argparse.Namespace) -> None:
         operation="NEG listing",
         permission="compute.networkEndpointGroups.list",
     )
-    zones = _neg_zones(listed_negs, neg_name, declared_zones)
+    zones, owned_extra = _neg_zones(
+        listed_negs, neg_name, declared_zones, namespace=args.namespace, service=args.service
+    )
+    if owned_extra:
+        print(
+            "NEG zones outside the Service's declared list, accepted by matching GKE owner metadata: "
+            + ", ".join(sorted(owned_extra))
+        )
     unlisted_declared_zones = declared_zones - zones
     if unlisted_declared_zones:
         missing = ", ".join(sorted(unlisted_declared_zones))

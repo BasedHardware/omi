@@ -101,7 +101,7 @@ import XCTest
           metadata: #"{"continuityKey":"turn-1"}"#))
 
       XCTAssertEqual(provider.messages.first(where: { $0.id == "assistant-canonical" })?.text, "journal value")
-      let signals = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().filter {
+      let signals = DesktopDiagnosticsManager.shared.currentSnapshots().filter {
         $0["seam"] as? String == DesktopStateAuthoritySeam.chatTranscriptProjection.rawValue
       }
       XCTAssertEqual(
@@ -157,7 +157,7 @@ import XCTest
         XCTFail("Expected journal-owned completed status")
       }
       XCTAssertEqual(output, "journal result")
-      let directions = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().compactMap {
+      let directions = DesktopDiagnosticsManager.shared.currentSnapshots().compactMap {
         $0["direction"] as? String
       }
       XCTAssertTrue(directions.contains("projection_value_overridden"))

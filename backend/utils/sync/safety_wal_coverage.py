@@ -13,6 +13,7 @@ import os
 import time
 import uuid
 import wave
+from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable, Collection
 from concurrent.futures import Executor
 from typing import Any
@@ -24,6 +25,7 @@ from database import conversations
 from utils.other import storage
 from utils.sync.live_overlap import compatible_capture
 from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.capture_clock import capture_time_rejection
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.observability.fallback import record_fallback
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
@@ -115,7 +117,12 @@ def _materialize(path: str, intervals: list[tuple[float, float]], offset: float)
     timestamp = get_timestamp_from_path(path)
     for first, _last in intervals:
         candidate = f'wal_{timestamp + offset + math.floor(first * rate) / rate:.6f}.wav'
-        parse_sync_filename_timestamp(candidate)
+        candidate_time = parse_sync_filename_timestamp(candidate, enforce_window=False)
+        # Coverage cuts keep the strict pre-skew contract: a derivative that
+        # would sit in the future means the clock estimate is unreliable, so
+        # abstain and keep the whole WAL rather than cut against it.
+        if capture_time_rejection(datetime.fromtimestamp(candidate_time, tz=timezone.utc), future_skew_seconds=0):
+            raise ValueError('implausible coverage timestamp')
     try:
         os.makedirs(directory)
         with wave.open(path, 'rb') as source:

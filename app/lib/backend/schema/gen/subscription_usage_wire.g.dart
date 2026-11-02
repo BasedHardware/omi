@@ -255,6 +255,134 @@ class GeneratedTranscriptionAllowanceSnapshot {
   }
 }
 
+class GeneratedHeldAudioRecording {
+  final String id;
+  final int seconds;
+  final int startedAt;
+
+  const GeneratedHeldAudioRecording({
+    required this.id,
+    required this.seconds,
+    required this.startedAt,
+  });
+
+  factory GeneratedHeldAudioRecording.fromJson(Map<String, dynamic> json) {
+    return GeneratedHeldAudioRecording(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      seconds: _required(_readFieldValue<int>(_readField(json, const ["seconds"]), "seconds", _readInt, requiredField: true, nullable: false), "seconds"),
+      startedAt: _required(_readFieldValue<int>(_readField(json, const ["started_at"]), "started_at", _readInt, requiredField: true, nullable: false), "started_at"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'seconds': seconds,
+      'started_at': startedAt,
+    };
+  }
+}
+
+class GeneratedHeldAudioSummary {
+  final int count;
+  final List<GeneratedHeldAudioRecording> recordings;
+  final int resetAt;
+  final bool retainLive;
+  final int seconds;
+  final String state;
+
+  const GeneratedHeldAudioSummary({
+    this.count = 0,
+    this.recordings = const [],
+    required this.resetAt,
+    required this.retainLive,
+    required this.seconds,
+    this.state = "paused",
+  });
+
+  factory GeneratedHeldAudioSummary.fromJson(Map<String, dynamic> json) {
+    return GeneratedHeldAudioSummary(
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "count"),
+      recordings: _required(_readFieldValue<List<GeneratedHeldAudioRecording>>(_readField(json, const ["recordings"]), "recordings", (value) => _readObjectList(value, GeneratedHeldAudioRecording.fromJson), requiredField: false, nullable: false, defaultValue: const []), "recordings"),
+      resetAt: _required(_readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt, requiredField: true, nullable: false), "reset_at"),
+      retainLive: _required(_readFieldValue<bool>(_readField(json, const ["retain_live"]), "retain_live", _readBool, requiredField: true, nullable: false), "retain_live"),
+      seconds: _required(_readFieldValue<int>(_readField(json, const ["seconds"]), "seconds", _readInt, requiredField: true, nullable: false), "seconds"),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: false, nullable: false, defaultValue: "paused"), "state"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'count': count,
+      'recordings': recordings.map((value) => value.toJson()).toList(),
+      'reset_at': resetAt,
+      'retain_live': retainLive,
+      'seconds': seconds,
+      'state': state,
+    };
+  }
+}
+
+class GeneratedProcessingBacklog {
+  final bool budgetExhausted;
+  final int deferredConversations;
+  final int deferredSeconds;
+  final double estimatedHours;
+  final double estimatedPercent;
+  final double estimatedUnits;
+  final bool exceedsRemaining;
+  final int heldAudioCount;
+  final int heldAudioSeconds;
+  final double? remainingUnits;
+  final String state;
+
+  const GeneratedProcessingBacklog({
+    this.budgetExhausted = false,
+    this.deferredConversations = 0,
+    this.deferredSeconds = 0,
+    this.estimatedHours = 0,
+    this.estimatedPercent = 0,
+    this.estimatedUnits = 0,
+    this.exceedsRemaining = false,
+    this.heldAudioCount = 0,
+    this.heldAudioSeconds = 0,
+    this.remainingUnits,
+    required this.state,
+  });
+
+  factory GeneratedProcessingBacklog.fromJson(Map<String, dynamic> json) {
+    return GeneratedProcessingBacklog(
+      budgetExhausted: _required(_readFieldValue<bool>(_readField(json, const ["budget_exhausted"]), "budget_exhausted", _readBool, requiredField: false, nullable: false, defaultValue: false), "budget_exhausted"),
+      deferredConversations: _required(_readFieldValue<int>(_readField(json, const ["deferred_conversations"]), "deferred_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "deferred_conversations"),
+      deferredSeconds: _required(_readFieldValue<int>(_readField(json, const ["deferred_seconds"]), "deferred_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "deferred_seconds"),
+      estimatedHours: _required(_readFieldValue<double>(_readField(json, const ["estimated_hours"]), "estimated_hours", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "estimated_hours"),
+      estimatedPercent: _required(_readFieldValue<double>(_readField(json, const ["estimated_percent"]), "estimated_percent", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "estimated_percent"),
+      estimatedUnits: _required(_readFieldValue<double>(_readField(json, const ["estimated_units"]), "estimated_units", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "estimated_units"),
+      exceedsRemaining: _required(_readFieldValue<bool>(_readField(json, const ["exceeds_remaining"]), "exceeds_remaining", _readBool, requiredField: false, nullable: false, defaultValue: false), "exceeds_remaining"),
+      heldAudioCount: _required(_readFieldValue<int>(_readField(json, const ["held_audio_count"]), "held_audio_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "held_audio_count"),
+      heldAudioSeconds: _required(_readFieldValue<int>(_readField(json, const ["held_audio_seconds"]), "held_audio_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "held_audio_seconds"),
+      remainingUnits: _readFieldValue<double>(_readField(json, const ["remaining_units"]), "remaining_units", _readDouble, requiredField: false, nullable: true),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'budget_exhausted': budgetExhausted,
+      'deferred_conversations': deferredConversations,
+      'deferred_seconds': deferredSeconds,
+      'estimated_hours': estimatedHours,
+      'estimated_percent': estimatedPercent,
+      'estimated_units': estimatedUnits,
+      'exceeds_remaining': exceedsRemaining,
+      'held_audio_count': heldAudioCount,
+      'held_audio_seconds': heldAudioSeconds,
+      'remaining_units': remainingUnits,
+      'state': state,
+    };
+  }
+}
+
 class GeneratedUserSubscriptionResponse {
   final List<GeneratedSubscriptionPlan> availablePlans;
   final bool chatQuotaAllowed;
@@ -262,15 +390,19 @@ class GeneratedUserSubscriptionResponse {
   final int? chatQuotaResetAt;
   final String? chatQuotaUnit;
   final double chatQuotaUsed;
+  final bool? cloudScreenVectors;
   final int? desktopGrandfatherUntil;
+  final GeneratedHeldAudioSummary? heldAudio;
   final int insightsGainedLimit;
   final int insightsGainedUsed;
   final GeneratedPhoneCallQuota? phoneCallQuota;
+  final GeneratedProcessingBacklog? processingBacklog;
   final bool showSubscriptionUi;
   final GeneratedSubscription subscription;
   final GeneratedTranscriptionAllowanceSnapshot? transcriptionAllowance;
   final int transcriptionSecondsLimit;
   final int transcriptionSecondsUsed;
+  final bool trialEligible;
   final int wordsTranscribedLimit;
   final int wordsTranscribedUsed;
 
@@ -281,15 +413,19 @@ class GeneratedUserSubscriptionResponse {
     this.chatQuotaResetAt,
     this.chatQuotaUnit,
     this.chatQuotaUsed = 0.0,
+    this.cloudScreenVectors,
     this.desktopGrandfatherUntil,
+    this.heldAudio,
     required this.insightsGainedLimit,
     required this.insightsGainedUsed,
     this.phoneCallQuota,
+    this.processingBacklog,
     this.showSubscriptionUi = true,
     required this.subscription,
     this.transcriptionAllowance,
     required this.transcriptionSecondsLimit,
     required this.transcriptionSecondsUsed,
+    this.trialEligible = false,
     required this.wordsTranscribedLimit,
     required this.wordsTranscribedUsed,
   });
@@ -302,15 +438,19 @@ class GeneratedUserSubscriptionResponse {
       chatQuotaResetAt: _readFieldValue<int>(_readField(json, const ["chat_quota_reset_at"]), "chat_quota_reset_at", _readInt, requiredField: false, nullable: true),
       chatQuotaUnit: _readFieldValue<String>(_readField(json, const ["chat_quota_unit"]), "chat_quota_unit", _readString, requiredField: false, nullable: true),
       chatQuotaUsed: _required(_readFieldValue<double>(_readField(json, const ["chat_quota_used"]), "chat_quota_used", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "chat_quota_used"),
+      cloudScreenVectors: _readFieldValue<bool>(_readField(json, const ["cloud_screen_vectors"]), "cloud_screen_vectors", _readBool, requiredField: false, nullable: true),
       desktopGrandfatherUntil: _readFieldValue<int>(_readField(json, const ["desktop_grandfather_until"]), "desktop_grandfather_until", _readInt, requiredField: false, nullable: true),
+      heldAudio: _readFieldValue<GeneratedHeldAudioSummary>(_readField(json, const ["held_audio"]), "held_audio", (value) => _readObject(value, GeneratedHeldAudioSummary.fromJson), requiredField: false, nullable: true),
       insightsGainedLimit: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_limit"]), "insights_gained_limit", _readInt, requiredField: true, nullable: false), "insights_gained_limit"),
       insightsGainedUsed: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_used"]), "insights_gained_used", _readInt, requiredField: true, nullable: false), "insights_gained_used"),
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
+      processingBacklog: _readFieldValue<GeneratedProcessingBacklog>(_readField(json, const ["processing_backlog"]), "processing_backlog", (value) => _readObject(value, GeneratedProcessingBacklog.fromJson), requiredField: false, nullable: true),
       showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
       subscription: _required(_readFieldValue<GeneratedSubscription>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedSubscription.fromJson), requiredField: true, nullable: false), "subscription"),
       transcriptionAllowance: _readFieldValue<GeneratedTranscriptionAllowanceSnapshot>(_readField(json, const ["transcription_allowance"]), "transcription_allowance", (value) => _readObject(value, GeneratedTranscriptionAllowanceSnapshot.fromJson), requiredField: false, nullable: true),
       transcriptionSecondsLimit: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_limit"]), "transcription_seconds_limit", _readInt, requiredField: true, nullable: false), "transcription_seconds_limit"),
       transcriptionSecondsUsed: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_used"]), "transcription_seconds_used", _readInt, requiredField: true, nullable: false), "transcription_seconds_used"),
+      trialEligible: _required(_readFieldValue<bool>(_readField(json, const ["trial_eligible"]), "trial_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "trial_eligible"),
       wordsTranscribedLimit: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_limit"]), "words_transcribed_limit", _readInt, requiredField: true, nullable: false), "words_transcribed_limit"),
       wordsTranscribedUsed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_used"]), "words_transcribed_used", _readInt, requiredField: true, nullable: false), "words_transcribed_used"),
     );
@@ -324,15 +464,19 @@ class GeneratedUserSubscriptionResponse {
       'chat_quota_reset_at': chatQuotaResetAt,
       'chat_quota_unit': chatQuotaUnit,
       'chat_quota_used': chatQuotaUsed,
+      'cloud_screen_vectors': cloudScreenVectors,
       'desktop_grandfather_until': desktopGrandfatherUntil,
+      'held_audio': heldAudio?.toJson(),
       'insights_gained_limit': insightsGainedLimit,
       'insights_gained_used': insightsGainedUsed,
       'phone_call_quota': phoneCallQuota?.toJson(),
+      'processing_backlog': processingBacklog?.toJson(),
       'show_subscription_ui': showSubscriptionUi,
       'subscription': subscription.toJson(),
       'transcription_allowance': transcriptionAllowance?.toJson(),
       'transcription_seconds_limit': transcriptionSecondsLimit,
       'transcription_seconds_used': transcriptionSecondsUsed,
+      'trial_eligible': trialEligible,
       'words_transcribed_limit': wordsTranscribedLimit,
       'words_transcribed_used': wordsTranscribedUsed,
     };

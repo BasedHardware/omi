@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create or update the Cloud Scheduler trigger for the finops unit-cost Cloud Run Job.
 
-Source-derived contract (same pattern as provision_daily_memory_sweep_scheduler.py):
+Source-derived contract for the FinOps unit-cost scheduler.
 the deployment workflow checks out an admitted SHA before running this, so the
 scheduler target always matches the job revision being deployed.
 

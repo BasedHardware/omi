@@ -714,16 +714,3 @@ class TestRequestToolDimension:
             )
         assert response.status_code == 200
         assert authed.request_log.call_args.kwargs["tool_name"] is None
-
-
-def test_flag_reads_never_use_shared_capture_aliases(monkeypatch):
-    from utils import jit_rollout, free_tier_cohort
-
-    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
-    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
-    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'phc_capture-only')
-    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing-only')
-    provider = jit_rollout.PostHogJITFlagProvider.__new__(jit_rollout.PostHogJITFlagProvider)
-    provider._timeout_seconds = 1
-    assert provider._build_client() is None
-    assert free_tier_cohort._build_posthog_client() is None

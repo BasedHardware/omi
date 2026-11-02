@@ -1,0 +1,7 @@
+{
+  "version": "0.12.527",
+  "date": "2026-10-23",
+  "changes": [
+    "Fixed Japanese meetings being transcribed in the wrong language: Japanese now uses an on-device Japanese model, and languages without an on-device model use cloud transcription"
+  ]
+}

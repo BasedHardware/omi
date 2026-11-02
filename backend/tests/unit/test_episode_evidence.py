@@ -1,5 +1,7 @@
 import json
-import os
+from testing.episode_notes.legacy_prompts import (
+    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
+)
 import importlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,9 +21,8 @@ from utils.conversations.episode_evidence import (
 )
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
-    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
 )
-from utils.llm.episode_notes_prompts import EPISODE_CONTRACT, episode_static_instructions
+from testing.episode_notes.contract import EPISODE_CONTRACT, episode_static_instructions
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
 
 START = datetime(2026, 1, 12, 10, tzinfo=timezone.utc)
@@ -41,21 +42,6 @@ def valid_note(title='Written approval', overview='The message shows approval.')
 def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
     monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
-    # Isolate annotation/repair regressions from the separately tested selector.
-    from dataclasses import replace
-    from config import episode_writer
-
-    configured = episode_writer.episode_writer_settings
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
-    monkeypatch.setattr(
-        episode_writer,
-        'episode_writer_settings',
-        lambda: (
-            replace(configured(), selection='compact')
-            if os.getenv('MEETING_NOTES_EPISODE_SELECTION') == 'compact'
-            else configured()
-        ),
-    )
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 
@@ -74,7 +60,7 @@ def processing():
 
 
 def test_flag_off_prompt_bytes_pinned_to_base(processing):
-    from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
+    from testing.episode_notes.legacy_prompts import rich_volatile_instructions
 
     fixture = json.loads((Path(__file__).parent / 'fixtures/episode_notes/flag_off_prompts.json').read_text())
     static, volatile = (
@@ -212,7 +198,6 @@ def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     sources = SimpleNamespace(load_people_documents=lambda *a: [], resolve_owner_identity=lambda *a: (None, ()))
     monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
     monkeypatch.setattr(wiring, '_rich_meeting_context_block', lambda *a, **k: None)
-    monkeypatch.setattr(wiring, 'meeting_notes_screen_frames_context_enabled', lambda: True)
     observed = []
     image = NotesFrameImage('frame', '+00:00', 'data:image/jpeg;base64,eA==')
     monkeypatch.setattr(
@@ -221,7 +206,7 @@ def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     conv = SimpleNamespace(
         id='synthetic', source='desktop', external_data={'conversation_role': 'meeting'}, started_at=START
     )
-    roster, _, _, images = wiring.rich_notes_inputs(
+    roster, _, _, images, _frame_count = wiring.rich_notes_inputs(
         'synthetic',
         conv,
         None,
@@ -292,7 +277,7 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
 
 def test_episode_person_provenance_and_relevance_rules_are_shared():
     from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT
-    from utils.llm.episode_policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
+    from testing.episode_notes.policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
     from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
 
     for rule in [EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:

@@ -10,6 +10,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from utils import rollout_cohorts as cohorts
+from utils.rollout import runtime_percent as rp
+
+
+@pytest.fixture(autouse=True)
+def no_remote_ramp_io(monkeypatch):
+    monkeypatch.setattr(rp, '_cache', rp._RampCache(lambda: None))
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -361,12 +367,25 @@ async def test_unconfigured_scheduler_denies_without_database_importing_utils(mo
     )
 
 
-def test_config_cohorts_has_only_standard_library_dependencies():
+def test_config_cohorts_has_only_stdlib_and_lazy_shared_bucket_dependency():
     import ast
 
     tree = ast.parse((Path(__file__).parents[2] / 'config/rollout_cohorts.py').read_text())
-    assert {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)} <= {'__future__', 'typing'}
-    assert {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} == {'os'}
+    assert {node.module for node in tree.body if isinstance(node, ast.ImportFrom)} <= {'__future__', 'typing'}
+    shared = [
+        node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module == 'config.policy.batch'
+    ]
+    bucket = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'cohort_bucket')
+    assert len(shared) == 1 and shared[0] in bucket.body
+    assert [alias.name for alias in shared[0].names] == ['cohort_bucket']
+    assert {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)} <= {
+        '__future__',
+        'typing',
+        'config.policy.batch',
+    }
+    assert {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} == {
+        'os',
+    }
 
 
 def test_serving_composition_roots_bind_private_cohort_runtime():

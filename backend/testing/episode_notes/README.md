@@ -148,32 +148,24 @@ receipts) into a second outside-worktree cache and run the same DEV comparison.
 This fixes evidence/reference/candidates and resamples only the judge; it does
 not measure generation variance. Never include held-out inputs in an iteration.
 
-Round-9 configurations use `--selection compact|deterministic|model`,
-`--no-claims`, and `--candidate-effort default|high|xhigh`. Only the writer's
-Luna request receives the selected thinking effort; default inherits the gateway
-policy in eval, while production sends no request override.
-The optional Luna selector uses low effort, a 30-second deadline and the same
-production large-input guard/fallback. It returns exact source IDs and short
-connection reasons; the writer sees selected original evidence, not the reasons.
 `--judge-samples 2` generates one candidate per arm then obtains two separately
-cached judgments against the same reference. Effort/selection/claim mode enter
-candidate cache identities; the selector's effort/deadline enter its own cache.
-Reference/judge rules are unchanged, so their receipts can be shared across configs.
+cached judgments against the same reference. Effort and claim mode enter
+candidate cache identities. Reference/judge rules are unchanged, so their receipts
+can be shared across configs.
 
-`candidate_cost` includes selection plus writing, while `writer_cost` and
-`selection_cost` retain individual receipts. Reports include reasoning tokens
+`candidate_cost` includes writer and generation-helper calls, while `writer_cost`
+and `helper_cost` retain individual receipts. Reports include reasoning tokens
 (a SUBSET of billed output, never add them twice) and USD `provider_cost` when
-reported by the endpoint; unknown usage/cost stays null. A reused selector receipt
-is charged to each configuration's hypothetical production note cost; it does not
-claim a second actual API bill. Eval reference/judge spend is separate. Repeated
-payload caching and OpenRouter routing do not predict production bills/latency.
+reported by the endpoint; unknown usage/cost stays null. Eval reference/judge
+spend is separate. Repeated payload caching and OpenRouter
+routing do not predict production bills/latency.
 The harness still omits production presentation/vacuity repairs; long-input and
 remaining-time repair guards are tested with fakes, not a live production route.
 
-The CLI retains historical `compact` + claims-on defaults for reproducible before
-comparisons. To test the current tiered production defaults, pass
-`--selection deterministic --no-claims --candidate-effort default --tiered --thinking-max-input-bytes 0`
-explicitly. Eval otherwise permits 300s per writer call; use
+The evaluator applies the serving deterministic evidence filter unconditionally.
+To test current tiered production defaults, pass
+`--no-claims --candidate-effort default --tiered --thinking-max-input-bytes 0`.
+Eval otherwise permits 300s per writer call; use
 `--apply-deadlines --writer-timeout 120 --c6-timeout 115` for the
 durable tier comparison. Synchronous production paths retain C7/60s. A socket
 timeout is not a hard total wall-clock limit. Record deadline exceedances
@@ -188,15 +180,9 @@ both samples comparable. Reports record `writer_arm` and `thinking_fallback`;
 no unseen candidate is synthesized from scores. A cache-only replay must reject
 every cache miss and must not be described as a new live generation or resampling.
 
-Round 10 selector experiments use `--selection deterministic|jev|luna`
-(`compact` remains the historical offline control), `--jev-threshold`, and
-`--tiered`. Jev sends the production shared-state/typed-question shape to
-`/systemone`, using the pinned `typesafe/jev-1.13` instead of the internal gateway
-lane alias. Scores are cached independently of threshold/writer effort so a sweep
-reuses decisions. Unknown SystemOne usage is reported as unknown, not zero; writer
-and selector receipts remain separately available. Consecutive screen captures
-are grouped only with observed app/window/time metadata. Flattened external
-fixtures lacking that metadata cannot reproduce production segmentation.
+The Jev/Luna evidence selector and its thresholds were retired on 2026-10-18.
+Offline evaluation now uses the same deterministic evidence filter as serving and
+does not make a model call to choose evidence.
 
 The tier route uses admitted speech words/source kinds, never fixture strata or
 IDs. `--tiered` composes fixed C6/C7 candidate/judge caches when requests match;
@@ -206,15 +192,11 @@ as indeterminate when the provider does not return usage. Outer serving limits,
 legacy synchronous requests and inherited gateway effort defaults are audited in
 `utils/conversations/EPISODE_DEADLINES.md`. Never run held-out inputs for calibration.
 
-Round-11 DEV ablations are explicit `--experiment` modes, never production
-settings: `verify`, `fact_check`, `facts_first`, `best_two`, `jev_veto`,
-`jev_per_source`, `jev_per_source_pool`, `jev_rank`, `jev_discussed`, `jev_choice`,
-and `jev_rank_verify` (rank followed by the same bounded verifier).
-Use `--experiment-cutoff` for a selector/fact-check threshold (rank uses a
-fraction of the existing deterministic pool). Every selector is removal-only;
-the pool variant asks Jev only about already-admitted candidates. Existing
-writer/reference/judge contracts remain unchanged. Experiments reject held-out,
-even with `--frozen`; this is separate from the normal frozen acceptance CLI.
+DEV generation ablations are explicit `--experiment` modes, never production
+settings: `verify`, `fact_check`, `facts_first`, and `best_two`. Use
+`--experiment-cutoff` for the fact-check threshold. Existing writer/reference/
+judge contracts remain unchanged. Experiments reject held-out, even with
+`--frozen`; this is separate from the normal frozen acceptance CLI.
 
 `--tier-min-words` / `--tier-min-source-kinds` parameterize offline routing.
 `--candidate-max-tokens` caps C6 only, includes the cap in its request/cache key,
@@ -228,8 +210,7 @@ Private spend-log/output/cache paths must all be outside git worktrees.
 no models are called. Keep a complete C6 candidate map: a previously unrouted
 C7 row must not masquerade as a C6 candidate. Real fixtures expose capture times
 and segment start timestamps, but not segment ends: timestamp span/capture span
-are duration proxies, not measured active speech time. Selection-only sweeps
-measure removals/input volume, not note quality. Best-of-two receipts report
+are duration proxies, not measured active speech time. Best-of-two receipts report
 summed call latency plus a separately marked **modeled parallel critical path**;
 reusing an already cached first draft does not demonstrate production parallel
 serving latency. Failed exact-quote extraction is a per-case error, not a valid

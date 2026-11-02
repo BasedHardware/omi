@@ -113,7 +113,6 @@ def _scan(db, monkeypatch, *, enabled, pending=True, archive=False, page_size=10
     from utils.memory import canonical_memory_adapter as adapter
 
     monkeypatch.setattr(adapter, 'indexed_list_reads_enabled', lambda: enabled)
-    monkeypatch.setattr(adapter, 'belief_model_enabled', lambda: False)
     cursor = None
     output = []
     while True:

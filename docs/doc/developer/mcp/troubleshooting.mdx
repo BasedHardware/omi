@@ -9,7 +9,7 @@ description: "Debug and fix common MCP connection issues"
 <AccordionGroup>
   <Accordion title="OAuth sign-in or consent does not open" icon="lock">
     - Confirm the remote server URL is exactly `https://api.omi.me/v1/mcp`
-    - Use Omi's registered ChatGPT or Claude connection flow, or a client that identifies itself with an HTTPS **Client ID Metadata Document** URL (`client_id`) + PKCE — dynamic client registration is not offered, and the client must send the user through Omi's consent flow on one of its registered redirect URIs
+    - Use Omi's registered ChatGPT or Claude connection flow, or a client that identifies itself with an HTTPS **Client ID Metadata Document** URL (`client_id`) + PKCE. Dynamic client registration is not offered, and the client must send the user through Omi's consent flow on one of its registered redirect URIs
     - For Claude, use client ID `omi-claude-prod` and leave the client secret blank
     - For ChatGPT's developer-mode fallback, use `omi-chatgpt-prod`, leave the secret blank, and set token auth method to `none`
     - If the client cannot complete OAuth, use the manual MCP-key fallback in the [Setup guide](/doc/developer/mcp/setup)
@@ -24,7 +24,7 @@ description: "Debug and fix common MCP connection issues"
   <Accordion title="Calling the REST API with an MCP key (404 or 401)" icon="code">
     An `omi_mcp_...` key authenticates the MCP endpoints only. Two things follow:
 
-    - **Use the `/v1/mcp/` REST endpoints** — e.g. `GET /v1/mcp/memories`, `GET /v1/mcp/memories/search?query=...`, `GET /v1/mcp/conversations`, `GET /v1/mcp/action-items`. They accept the same key as the MCP server and return plain JSON.
+    - **Use the `/v1/mcp/` REST endpoints.** For example, `GET /v1/mcp/memories`, `GET /v1/mcp/memories/search?query=...`, `GET /v1/mcp/conversations`, `GET /v1/mcp/action-items`. They accept the same key as the MCP server and return plain JSON.
     - **`/v1/memories` and `/v2/memories` do not exist.** Requests to them return `404 Not Found` regardless of the key.
 
     ```bash
@@ -37,7 +37,7 @@ description: "Debug and fix common MCP connection issues"
     other's endpoints returns a `401` that names the endpoints that key does authenticate.
   </Accordion>
   <Accordion title="No tools showing up" icon="toolbox">
-    - With protocol `2026-07-28` there is no initialize handshake — call
+    - With protocol `2026-07-28` there is no initialize handshake. Call
       `server/discover` then `tools/list` directly; older clients still need
       their `initialize` handshake first
     - Check that your client supports the Streamable HTTP transport (the server
@@ -50,7 +50,7 @@ description: "Debug and fix common MCP connection issues"
   <Accordion title="Search returns empty results" icon="magnifying-glass">
     - Semantic search requires conversations/memories to be indexed in the vector database
     - New data may take a few minutes to be indexed after creation
-    - Try broader queries — very specific queries may not match if phrased differently than the original
+    - Try broader queries. Very specific queries may not match if phrased differently than the original
     - Use `get_memories` or `get_conversations` with filters as a fallback
   </Accordion>
   <Accordion title="Rate limit errors (429)" icon="gauge-high">
@@ -64,8 +64,6 @@ description: "Debug and fix common MCP connection issues"
     - Locked memories still appear in list/search results with truncated content
   </Accordion>
 </AccordionGroup>
-
----
 
 ## Debugging Tools
 
@@ -87,7 +85,7 @@ description: "Debug and fix common MCP connection issues"
   </Tab>
   <Tab title="curl" icon="terminal">
     Test the server directly. With protocol `2026-07-28` there is no handshake
-    or session header — every request carries `_meta` plus the
+    or session header. Every request carries `_meta` plus the
     `MCP-Protocol-Version`/`Mcp-Method` headers:
 
     ```bash
@@ -131,8 +129,6 @@ description: "Debug and fix common MCP connection issues"
     ```
   </Tab>
 </Tabs>
-
----
 
 ## Need Help?
 

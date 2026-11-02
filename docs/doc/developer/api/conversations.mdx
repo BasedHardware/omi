@@ -27,7 +27,21 @@ description: "Create and retrieve conversations via the Developer API"
   </Card>
 </CardGroup>
 
----
+## Saved transcripts awaiting processing
+
+When funded processing is paused at an account's allowance limit, conversation
+creation still preserves the submitted transcript or external text. An additive
+`processing_deferred: true` field identifies a saved conversation waiting for
+cloud summaries, memories, tasks, and app processing. Its completed capture status
+does not imply that those generated results exist. Reading or reopening the
+conversation preserves this waiting state.
+
+A monthly allowance reset admits new recordings while saved waiting recordings
+remain waiting. The user chooses whether to process that backlog in the app,
+after reviewing its estimated allowance use. If it cannot all fit, the newest
+recordings that fit are processed and the remainder stays waiting. An upgrade
+can start backlog processing automatically when the estimate fits the upgraded
+allowance. Transcript retrieval remains available throughout.
 
 ## Get Conversations
 
@@ -225,8 +239,6 @@ List results may be up to 10 seconds stale after any write. Response bodies rema
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Create Conversation from Text
 
 <Card title="POST /v1/dev/user/conversations" icon="upload" color="#3b82f6" horizontal>
@@ -334,8 +346,6 @@ List results may be up to 10 seconds stale after any write. Response bodies rema
 Memories and action items are extracted asynchronously. Use the GET endpoints to retrieve them after creation.
 </Note>
 
----
-
 ## Create Conversation from Transcript Segments
 
 <Card title="POST /v1/dev/user/conversations/from-segments" icon="waveform-lines" color="#3b82f6" horizontal>
@@ -363,6 +373,8 @@ intent prevents backlog recreation. No automatic tombstone expiry is currently c
     | `finished_at` | datetime | No | When conversation finished (calculated from last segment if not provided) |
     | `language` | string | No | Language code (default: 'en') |
     | `geolocation` | object | No | Geolocation data |
+    | `folder_id` | string | No | ID of one of your folders (from `GET /v1/dev/user/folders`). The conversation is filed there and AI folder assignment is skipped; an unknown ID returns 422 |
+    | `calendar_meeting_context` | object | No | Calendar meeting this conversation belongs to: `calendar_event_id`, `title`, `start_time`, `duration_minutes` (required) and optional `participants` (`name`/`email`), `platform`, `meeting_link`, `notes`. Used as context for the summary and to identify participants |
   </Accordion>
   <Accordion title="Transcript Segment Fields" icon="list">
     | Field | Type | Required | Description |
@@ -493,8 +505,6 @@ intent prevents backlog recreation. No automatic tombstone expiry is currently c
 Unlike text-based conversations, transcript segments ARE stored in the `transcript_segments` field and can be retrieved with `include_transcript=true`.
 </Note>
 
----
-
 ## Get Single Conversation
 
 <Card title="GET /v1/dev/user/conversations/{conversation_id}" icon="file" color="#22c55e" horizontal>
@@ -576,8 +586,6 @@ Unlike text-based conversations, transcript segments ARE stored in the `transcri
   }
   ```
 </Accordion>
-
----
 
 ## Update Conversation
 
@@ -679,8 +687,6 @@ Unlike text-based conversations, transcript segments ARE stored in the `transcri
 Use `discarded: true` to hide a conversation from the main list without permanently deleting it.
 </Tip>
 
----
-
 ## Delete Conversation
 
 <Card title="DELETE /v1/dev/user/conversations/{conversation_id}" icon="trash" color="#ef4444" horizontal>
@@ -743,8 +749,6 @@ Use `discarded: true` to hide a conversation from the main list without permanen
 <Warning>
 This action is permanent. Deleted conversations and their associated photos cannot be recovered. Consider using `PATCH` with `discarded: true` to hide a conversation instead.
 </Warning>
-
----
 
 ## Use Case: Upload Meeting Transcript
 
@@ -843,8 +847,6 @@ This action is permanent. Deleted conversations and their associated photos cann
     ```
   </Tab>
 </Tabs>
-
----
 
 ## Use Case: Export Conversations
 
@@ -948,7 +950,6 @@ This action is permanent. Deleted conversations and their associated photos cann
     ```
   </Tab>
 </Tabs>
-
 
 ## Public shared notes for agents
 

@@ -2,9 +2,14 @@
 
 import os
 
+from config.refactor_switches import default_on as rollout_default_on
+
 
 def preparation_width() -> int:
-    if os.getenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on').strip().lower() != 'on':
+    if not rollout_default_on(
+        'SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED',
+        os.getenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on').strip().lower() == 'on',
+    ):
         return 1
     try:
         return max(1, min(4, int(os.getenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '2'))))

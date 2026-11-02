@@ -254,7 +254,7 @@ async def test_healthy_fairness_keys_expire_but_bench_and_trial_do_not():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('family', ['modulate', 'soniox'])
-async def test_local_queue_full_is_capacity_not_provider_fault(monkeypatch, family):
+async def test_local_queue_full_is_a_local_bound_not_provider_fault(monkeypatch, family):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
     ws = ProviderWebSocket()
     cls = st.SafeModulateSocket if family == 'modulate' else SafeSonioxSocket
@@ -264,7 +264,7 @@ async def test_local_queue_full_is_capacity_not_provider_fault(monkeypatch, fami
     leg = managed_leg(receiver, raw, family=family)
     try:
         assert not leg.send(b'\x00\x00')
-        assert leg.normalized_death_reason == 'capacity_full'
+        assert leg.normalized_death_reason == 'send_queue_full'
         live_failure.settle_terminal_socket(leg, family, 'send_failed')
         assert not live_chain.health._cost_local
     finally:

@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import time
 import os
+from copy import deepcopy
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Mapping, cast
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds, enabled
+from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
 
@@ -96,6 +98,9 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
         data['summary_title_provenance'] = 'server_minimum'
+        if intentional_short_clip_minimum(data):
+            data['summary_due_at'] = None
+            return
         if data.get('discarded'):
             # Intake discards owe no summary. Keep them out of the indexed debt
             # prefix, while allowing a later keep to start a fresh obligation.
@@ -120,6 +125,8 @@ def refusal(row: Row) -> str | None:
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
         return 'local_only'
+    if intentional_short_clip_minimum(row):
+        return 'content_below_floor'
     if row.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
         return 'privacy'
     if row.get('terminal_no_derived_effects') or row.get('client_processing'):
@@ -150,13 +157,14 @@ def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
 
 
 def creation_result(write: Row, uid: str) -> Row | None:
-    # A deliberate minimum is durable debt, not a terminal summary receipt.
+    # Intake minima owe summaries; audited short-clip floors intentionally waive that debt.
     if (
         write.get('summary_title_provenance') == 'server_minimum'
         and not write.get('summary_output_present')
         and not write.get('terminal_no_derived_effects')
         and write.get('processing_state') != 'local_pending'
         and not write.get('deferred')
+        and not intentional_short_clip_minimum(write)
     ):
         return None
     return merge_result({}, write, uid)
@@ -171,6 +179,13 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         if name in existing:
             write[name] = existing[name]
     if write.get('status') != 'completed':
+        return None
+    if (
+        intentional_short_clip_minimum(write)
+        and not write.get('summary_output_present')
+        and not existing.get('summary_completed_at')
+    ):
+        waive_short_clip_summary_debt(write, PROCESS_CONTEXT.get())
         return None
     if (
         write.get('terminal_no_derived_effects')
@@ -194,9 +209,44 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
-    if not rich and not discarded:
+    # The fence guards an open first-summary obligation only. Rows outside the
+    # server-minimum protocol, already-enriched rows, and rows whose empty
+    # budget is exhausted have no caller that catches this exception — the
+    # sync outbox alone records empty-output strikes — so raising there
+    # strands the completed write instead of retaining recoverable debt.
+    obligation_open = (
+        write.get('summary_title_provenance') == 'server_minimum'
+        and not write.get('summary_completed_at')
+        and existing.get('summary_blocked_reason') != 'empty_output_exhausted'
+    )
+    if not rich and not discarded and obligation_open:
         raise SummaryOutputUnavailable('kept first-summary output is empty')
     if existing.get('summary_completed_at'):
+        # An enriched row already holds a usable summary. The old fence refused
+        # the whole write to protect it, which stranded completed results in
+        # every lane without an outbox. Commit instead, but never let an empty
+        # reprocess overwrite the banked summary: re-apply its content and
+        # receipts onto this write so `merge=True` restores what the empty
+        # structured payload would otherwise clobber.
+        if not rich and not discarded:
+            banked = existing.get('structured')
+            if banked:
+                # The caller re-applies manual edits onto the write before this
+                # merge; restoring the banked content must not bury them.
+                from database.conversations import effective_user_title
+
+                restored = deepcopy(banked)
+                user_title = effective_user_title(existing.get('user_title'))
+                if user_title is not None:
+                    restored['title'] = user_title
+                if existing.get('user_overview'):
+                    restored['overview'] = existing['user_overview']
+                write['structured'] = restored
+            write['summary_output_present'] = bool(banked)
+            write['summary_title_provenance'] = existing.get('summary_title_provenance') or 'generated'
+            write['summary_completed_at'] = existing['summary_completed_at']
+            write['summary_discard_receipted'] = existing.get('summary_discard_receipted', False)
+            write['summary_processing_lease_until'] = 0
         return None
     if discarded and existing.get('summary_discard_receipted'):
         return None

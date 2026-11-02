@@ -4,6 +4,8 @@ No embeddings, text, or storage IO. Diagnostics load only when observed. Stage-l
 resolution/reconnects. Each stage retains at most 16 rows, updated in place.
 """
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import math
 import os
 from typing import Any, Mapping
@@ -17,7 +19,13 @@ MAX_STORED_BYTES = 8 * 1024
 
 def enabled() -> bool:
     default = 'true' if os.getenv('OMI_ENV_STAGE', 'prod') in ('dev', 'local', 'offline') else 'false'
-    return os.getenv('SPEAKER_MATCH_SCORES_ENABLED', default).strip().lower() in ('true', '1', 'on', 'yes')
+    env = dict(os.environ)
+    env.setdefault('SPEAKER_MATCH_SCORES_ENABLED', default)
+    return rollout_default_off(
+        'SPEAKER_MATCH_SCORES_ENABLED',
+        env['SPEAKER_MATCH_SCORES_ENABLED'].strip().lower() in ('true', '1', 'on', 'yes'),
+        environ=env,
+    )
 
 
 def record_failure(log, *, trimmed: bool = False, reason: str = 'other') -> None:

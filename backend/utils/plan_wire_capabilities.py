@@ -27,6 +27,15 @@ def understands_plan_identity(
         'windows': MIN_WINDOWS_VERSION,
         'web': '0.1.0',
     }
+    if os.getenv('LADDER_V1_WIRE_IDENTITY_ENABLED', 'false') == 'true':
+        # Floors must be approved shipped decoder versions; absent configuration preserves the old floor.
+        floors.update(
+            {
+                'ios': os.getenv('LADDER_V1_MIN_MOBILE_VERSION', MIN_MOBILE_VERSION),
+                'android': os.getenv('LADDER_V1_MIN_MOBILE_VERSION', MIN_MOBILE_VERSION),
+                'windows': os.getenv('LADDER_V1_MIN_WINDOWS_VERSION', MIN_WINDOWS_VERSION),
+            }
+        )
     platform_key = (platform or '').lower()
     if platform_key not in floors:
         return False

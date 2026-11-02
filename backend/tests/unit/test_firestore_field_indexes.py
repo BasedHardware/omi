@@ -71,8 +71,8 @@ def test_expected_field_requirements_parses_only_additive_overrides():
         (requirement.collection_group, requirement.field_path, requirement.collection_group_modes)
         for requirement in FIELD_INDEX_REQUIREMENTS
     ]
-    assert len(requirements) == 17
-    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 19
+    assert len(requirements) == 22
+    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 24
     assert all(
         requirement.collection_group_modes
         and all(mode in {'ASCENDING', 'DESCENDING', 'CONTAINS'} for mode in requirement.collection_group_modes)
@@ -748,3 +748,86 @@ def test_lro_done_but_mode_still_creating_polls_with_sleep_until_ready():
     assert changed == {('conversations', 'status')}
     assert len(patched) == 1
     assert sleeps
+
+
+def test_start_only_launches_all_missing_fields_without_operation_polling():
+    def payload(method, url, body):
+        if method == 'PATCH':
+            return {'name': f'projects/{PROJECT}/databases/{DATABASE}/operations/build'}
+        requirement = next(r for r in (_STATUS, _TAGS) if url == _field_url(r))
+        return {
+            'name': _field_name(requirement),
+            'indexConfig': {'indexes': _collection_defaults(requirement.field_path)},
+        }
+
+    request = _request(payload)
+    patched = fields.provision_field_requirements(
+        requirements=(_STATUS, _TAGS),
+        wait_for_ready=False,
+        project=PROJECT,
+        database=DATABASE,
+        request=request,
+        timeout_seconds=10,
+        poll_interval_seconds=1,
+        sleep=lambda _: pytest.fail('start-only must not sleep'),
+        monotonic=lambda: 0,
+    )
+    assert patched == {('conversations', 'status'), ('memories', 'tags')}
+    assert [method for method, _, _ in request.calls] == ['GET', 'PATCH', 'GET', 'PATCH']
+    for method, _, body in request.calls:
+        if method == 'PATCH':
+            assert len(body['indexConfig']['indexes']) == 4, 'preserve all collection defaults'
+
+
+@pytest.mark.parametrize('state', ['READY', 'CREATING'])
+def test_start_only_never_repatches_existing_builds(state):
+    request = _request(
+        {
+            'name': _field_name(_STATUS),
+            'indexConfig': {
+                'indexes': [
+                    *_collection_defaults('status'),
+                    _index('COLLECTION_GROUP', 'status', 'ASCENDING', state=state),
+                ]
+            },
+        }
+    )
+    assert (
+        fields.provision_field_requirements(
+            requirements=(_STATUS,),
+            wait_for_ready=False,
+            project=PROJECT,
+            database=DATABASE,
+            request=request,
+            timeout_seconds=10,
+            poll_interval_seconds=1,
+            sleep=lambda _: pytest.fail('start-only must not sleep'),
+            monotonic=lambda: 0,
+        )
+        == set()
+    )
+    assert [method for method, _, _ in request.calls] == ['GET']
+
+
+def test_start_only_reports_immediate_operation_failure():
+    def payload(method, url, body):
+        if method == 'PATCH':
+            return {
+                'name': f'projects/{PROJECT}/databases/{DATABASE}/operations/build',
+                'done': True,
+                'error': {'code': 9},
+            }
+        return {'name': _field_name(_STATUS), 'indexConfig': {'indexes': _collection_defaults('status')}}
+
+    with pytest.raises(fields.FieldIndexError, match='failed on submission'):
+        fields.provision_field_requirements(
+            requirements=(_STATUS,),
+            wait_for_ready=False,
+            project=PROJECT,
+            database=DATABASE,
+            request=_request(payload),
+            timeout_seconds=10,
+            poll_interval_seconds=1,
+            sleep=lambda _: pytest.fail('start-only must not sleep'),
+            monotonic=lambda: 0,
+        )

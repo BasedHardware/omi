@@ -8,6 +8,7 @@ import yaml
 from config.stt_provider_policy import (
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
+    HELD_RECOVERY_SECOND_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_PROVIDER,
@@ -37,23 +38,42 @@ def _chart_env_value(values_path: Path, name: str) -> str | None:
     return None
 
 
-def test_hosted_deepgram_serves_streaming_only():
-    assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
-    # PTT dispatches only Parakeet and Modulate and raises on anything else;
-    # batch is carried by Parakeet/Velma.
+def test_deepgram_is_retired_on_every_surface():
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys.
+    # Absent from PROVIDER_SERVING_SURFACES, so both deployments answer False
+    # everywhere and no `dg-*` token can be admitted by an env edit.
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
-
-
-def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
-    assert provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
+    assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.HELD_RECOVERY)
+
+
+def test_soniox_async_is_limited_to_held_recovery_and_batch_failover():
+    from config.prerecorded_stt import (
+        DEFAULT_STT_PRERECORDED_MODELS,
+        provider_for_model_token as prerecorded_provider_for_model_token,
+        providers_for_model_config,
+    )
+
+    assert HELD_RECOVERY_SECOND_PROVIDER == 'soniox'
+    assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    # Admitted on prerecorded only so the batch route table may name it as failover capacity.
+    assert provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled('soniox', STTServingSurface.PTT)
+    # General prerecorded selection can still never reach it, even when a deployment lists it.
+    assert 'soniox' not in DEFAULT_STT_PRERECORDED_MODELS
+    assert 'soniox' not in providers_for_model_config('soniox,parakeet,modulate-velma-2')
+    # Deployment validation maps no prerecorded token to Soniox; get_prerecorded_service
+    # matches only the parakeet and modulate-velma-2 tokens.
+    assert prerecorded_provider_for_model_token('soniox') is None
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,dg-nova-3,parakeet',
+        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,parakeet',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
         STTServingSurface.PTT: 'modulate-velma-2,parakeet',
     }
@@ -69,9 +89,10 @@ def test_deepgram_model_tokens_report_the_hosted_deployment_by_default():
     assert deepgram_provider_for_runtime(True) == DEEPGRAM_SELF_HOSTED_PROVIDER
 
 
-def test_deepgram_token_is_admissible_while_either_deployment_serves_the_surface():
-    assert model_is_enabled('dg-nova-3', STTServingSurface.STREAMING)
+def test_retired_deepgram_tokens_are_never_admissible():
+    assert not model_is_enabled('dg-nova-3', STTServingSurface.STREAMING)
     assert not model_is_enabled('dg-nova-3', STTServingSurface.PRERECORDED)
+    assert not model_is_enabled('nova-3', STTServingSurface.STREAMING)
 
 
 def test_parakeet_capability_tracks_the_model_selected_for_each_surface():

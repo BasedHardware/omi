@@ -44,7 +44,6 @@ def processing(stack, monkeypatch):
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])
-    monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **_: None)
     monkeypatch.setattr(pc, 'decide_relevance', lambda **_: SimpleNamespace(discard=False, reason='kept'))
     return pc
 
@@ -56,7 +55,12 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
 ):
     now = datetime(2026, 10, 1, tzinfo=timezone.utc)
     segment = stack.segments.TranscriptSegment(
-        id='segment-1', text='Synthetic transcript', speaker='SPEAKER_00', is_user=False, start=0, end=10
+        id='segment-1',
+        text='Synthetic transcript with enough workshop planning details to reach the real notes model',
+        speaker='SPEAKER_00',
+        is_user=False,
+        start=0,
+        end=10,
     )
     fields = dict(started_at=now, finished_at=now, source=source, transcript_segments=[segment])
     if model_name == 'Conversation':
@@ -218,3 +222,50 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
     )
     assert restored.discarded is False
     assert restored.structured.title.startswith('Recording · ')
+
+
+@pytest.mark.parametrize('model_name', ['Conversation', 'CreateConversation'])
+@pytest.mark.parametrize('output_kind', ['notes', 'minimum'])
+def test_completed_boundary_finalizes_salience(stack, processing, monkeypatch, model_name, output_kind):
+    from utils.conversations import relevance_salience as contract
+    from models.speaker_evidence import SpeakerEvidence, VoiceCluster
+
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    rows = [
+        stack.segments.TranscriptSegment(
+            id=f's{i}',
+            text='Synthetic broadcast. Synthetic broadcast.',
+            speaker_id=i % 2,
+            is_user=output_kind == 'notes' and i % 2 == 0,
+            start=i * 2,
+            end=i * 2 + 1,
+        )
+        for i in range(4)
+    ]
+    fields = dict(started_at=now, finished_at=now, transcript_segments=rows)
+    if model_name == 'Conversation':
+        fields.update(id='synthetic-salience', created_at=now, structured=stack.structured.Structured())
+    capture = getattr(stack.models, model_name)(**fields)
+    ev = SpeakerEvidence(
+        status='resolved',
+        policy_version='synthetic',
+        clusters=[
+            VoiceCluster(id=f'v{i}', segment_ids=[s.id for s in rows if s.speaker_id == i], speech_seconds=2)
+            for i in range(2)
+        ],
+    )
+    monkeypatch.setattr(contract, 'get_evidence', lambda *_: ev)
+    note = (
+        stack.structured.Structured(title='Synthetic note', salience='background')
+        if output_kind == 'notes'
+        else stack.structured.Structured(title='Synthetic minimum', title_provenance='server_minimum')
+    )
+    result = processing._get_conversation_obj('synthetic-account', note, capture, relevance_discarded=False)
+    assert result.structured.salience == ('highlight' if output_kind == 'notes' else 'background')
+    assert result.discarded is False
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

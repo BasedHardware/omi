@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-empty-ble-read-taken-as-capability",
+  "violated_contract": "A device capability must be decided from what the device advertises, not from whether a read of it threw. The native BLE transport answers a characteristic the firmware does not expose with an empty read rather than an error, so OmiDeviceConnection.performHasPhotoStreamingCharacteristic reported a camera on every pendant, and CaptureController re-armed photo streaming on each reset, logging a photo-controller start and an image listener for a device with no camera. Data in the read is no test either: glass leaves the image characteristic empty until it has captured.",
+  "canonical_prevention": "On NativeBleTransport, photo capability is NativeBleTransport.hasCharacteristic on the discovered GATT table, the check playToSpeakerHaptic already uses; other transports, which throw for an absent characteristic, keep the read. Tests drive a pendant that does not advertise the characteristic while every read returns data (no camera, nothing read), glass discovered as an omi device and glass that has not captured (both have a camera), and a throwing non-native transport.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/omi_connection_photo_capability_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/devices/connectors/omi_connection.dart",
+    "app/lib/services/devices/connectors/omiglass_connection.dart",
+    "app/lib/services/capture/capture_controller.dart"
+  ],
+  "status": "open"
+}

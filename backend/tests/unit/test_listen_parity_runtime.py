@@ -181,13 +181,32 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
     monkeypatch.setattr(runtime, '_build_components', build_components)
 
 
+@pytest.fixture
+def runtime_session():
+    websocket = _FakeWebSocket(audio=_AUDIO)
+    runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
+    # Clear the cold router-import graph in setup, rather than charging its first
+    # automatic collection to the async capture lifecycle under test.
+    import gc
+
+    gc.collect()
+    return runtime
+
+
+@pytest.fixture
+def parity_export_module():
+    import routers.listen.parity_pack_export as export_module
+
+    return export_module
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('fail_usage', [False, True], ids=['normal-close', 'teardown-persistence-failure'])
 async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_close(
-    tmp_path, monkeypatch, caplog, fail_usage
+    tmp_path, monkeypatch, caplog, fail_usage, parity_export_module, runtime_session
 ):
     """Bootstrap, real receiver callback attachment, audio, close, persist, export."""
-    import routers.listen.parity_pack_export as export_module
+    export_module = parity_export_module
 
     root = tmp_path / 'absolute-capture-root'
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
@@ -230,8 +249,7 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     monkeypatch.setattr(export_module, 'ensure_reconcile_loop', lambda *, environ=None: reconcile_calls.append(environ))
     monkeypatch.setattr(export_module, '_storage_client', lambda: FakeClient())
 
-    websocket = _FakeWebSocket(audio=_AUDIO)
-    runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
+    runtime = runtime_session
     runtime.persistence = cast(Any, _FakePersistence(fail_usage=fail_usage))
     stt_sockets = []
     blocking_calls = []

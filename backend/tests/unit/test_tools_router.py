@@ -49,7 +49,7 @@ def _stub_module(name):
 
 def _stub_package(name):
     mod = types.ModuleType(name)
-    mod.__path__ = []
+    mod.__path__ = [str(BACKEND_DIR / 'utils')] if name == 'utils' else []
     sys.modules[name] = mod
     if "." in name:
         parent_name, attr_name = name.rsplit(".", 1)
@@ -77,6 +77,7 @@ def _load_module_from_file(module_name, file_path):
 # They are restored right after the modules under test are imported.
 # ---------------------------------------------------------------------------
 _SYS_MODULE_NAMES = [
+    "utils.retrieval.tool_services.transcript_search",
     "firebase_admin",
     "firebase_admin.firestore",
     "firebase_admin.auth",
@@ -123,7 +124,6 @@ _SYS_MODULE_NAMES = [
     "utils.other",
     "utils.other.endpoints",
     "utils.memory",
-    "utils.memory.belief_model",
     "utils.memory.chat_memory_adapter",
     "utils.memory.default_read_rollout",
     "utils.memory.memory_system",
@@ -211,17 +211,12 @@ _stub_package("utils.conversations")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
+direct_transcript_svc = _stub_module("utils.retrieval.tool_services.transcript_search")
+direct_transcript_svc.search_saved_transcripts_text = MagicMock(return_value="Direct transcript search result")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 transcript_for_llm_stub = _stub_module("utils.conversations.transcript_for_llm")
 transcript_for_llm_stub.owner_safe_transcript_segments = lambda segments, **_kwargs: (list(segments), "")
-
-# This router suite exercises the released service contract. Temporal policy
-# and Beta traversal are covered by the memory service's dedicated suites.
-belief_model_stub = _stub_module("utils.memory.belief_model")
-belief_model_stub.belief_model_enabled = lambda: False
-belief_model_stub.memory_use_suppressed = lambda _memory: False
-belief_model_stub.normalize_temporal_read_view = lambda view: view
 
 memory_service_stub = _stub_module("utils.memory.memory_service")
 
@@ -1534,19 +1529,19 @@ class TestErrorHandling:
         vector_db.query_vectors.side_effect = None
 
     def test_get_memories_db_error(self):
-        """DB failure in get_memories returns error text."""
+        """DB failures return a generic message without internal details."""
         memories_db.get_memories.side_effect = Exception("Firestore down")
         result = memories_svc.get_memories_text(uid="test-uid")
-        assert "Error" in result
-        assert "Firestore down" in result
+        assert result == "Error retrieving memories. Please try again."
+        assert "Firestore down" not in result
         memories_db.get_memories.side_effect = None
 
     def test_search_memories_vector_error(self):
-        """Vector DB failure in search_memories returns error text."""
+        """Vector DB failures do not expose internal exception details."""
         vector_db.find_similar_memories.side_effect = Exception("Vector timeout")
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
-        assert "Error" in result
-        assert "Vector timeout" in result
+        assert result == "Error searching memories. Please try again."
+        assert "Vector timeout" not in result
         vector_db.find_similar_memories.side_effect = None
 
     def test_get_action_items_db_error(self):

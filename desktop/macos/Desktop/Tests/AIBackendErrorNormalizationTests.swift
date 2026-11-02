@@ -3,7 +3,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class AIBackendErrorNormalizationTests: XCTestCase {
-  func testEmbeddingTrialExpiredIsProductGateAndNotSentryActionable() {
+  func testEmbeddingTrialExpiredIsProductGateAndNotErrorActionable() {
     let error = EmbeddingService.EmbeddingError.serverError(
       statusCode: 402,
       body: #"{"error":"trial_expired"}"#)

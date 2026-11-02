@@ -1,0 +1,18 @@
+{
+  "id": "capture-recovery",
+  "kind": "question",
+  "owner": "Mobile reliability",
+  "question": "How often does live pendant capture need self-healing, by kind, trigger and release build? A skipped capture start must be followed by a redriven one; orphaned pendant audio and timed-out transfer passes are loss precursors.",
+  "query": "contracts/analytics/consumers/capture-recovery-presence.sql",
+  "events": [
+    "captureRecoveryObserved"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "kind",
+    "trigger"
+  ],
+  "zero_policy": "Presence is not health. Zero skipped starts can mean no sync pass overlapped a reconnect; compare skipped against redriven, never report a recovery rate without skipped starts.",
+  "outcomes_query": "contracts/analytics/consumers/capture-recovery.sql"
+}

@@ -318,6 +318,35 @@ void main() {
     await sync.stop();
   });
 
+  test('records from different days never share a chunk; a stale restarted clock gets its own run', () async {
+    final card = _FakeRingDevice(ringInfo: _info());
+    final local = _FakeLocalSync();
+    final wal = ringWal(records: 5);
+    final sync = syncWith(local, card, wal);
+
+    final future = sync.syncWal(wal: wal);
+    await card.readReady.timeout(const Duration(seconds: 5));
+    card.emit(_readBegin(5, 5));
+    const day1 = 1790422841;
+    card.emit(_record(timestamp: day1));
+    card.emit(_record(timestamp: day1 + 1));
+    // Pendant off overnight: the next recording is a day later.
+    card.emit(_record(timestamp: day1 + 86400));
+    // Power loss: the clock restarts from its last phone sync, behind day 2.
+    card.emit(_record(timestamp: day1 + 600));
+    card.emit(_record(timestamp: day1 + 601));
+    card.emit(_done(0, 10));
+    await future;
+
+    expect(local.added.map((w) => w.timerStart), [day1, day1 + 86400, day1 + 600]);
+    expect(local.added[0].clockRun, isNull);
+    expect(local.added[1].clockRun, isNull);
+    expect(local.added[2].clockRun, isNotNull);
+    expect(local.added[2].filePath, contains('_clke${local.added[2].clockRun}_${day1 + 600}'));
+    await card.controller.close();
+    await sync.stop();
+  });
+
   test(
     'CAP_APP_ACK_RECLAIM: incremental advance fires on each durable chunk, scoped to the read-proof ring id',
     () async {
@@ -393,7 +422,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, hasLength(1));
     expect(wal.status, isNot(WalStatus.synced));
@@ -416,7 +445,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, hasLength(1));
     expect(card.advances.single.ringId, 42);
@@ -437,7 +466,7 @@ void main() {
     card.emit(_record());
     card.custodyEpochValue = 8;
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));

@@ -14,6 +14,14 @@ source scripts/dev-harness/_resolve_python.sh
 PYTHON_BIN="$(dev_harness_python)"
 export PYTHON="$PYTHON_BIN"
 
+# The runner fingerprints PRE_PUSH_* variables. Normalize the direct wrapper
+# switch into that namespace so concurrent pushes with different preflight
+# modes cannot join the same single-flight run.
+case "${OMI_PREFLIGHT_ALL:-}" in
+  1|[Tt][Rr][Uu][Ee]) PRE_PUSH_PREFLIGHT_ALL=1; export PRE_PUSH_PREFLIGHT_ALL ;;
+  0|[Ff][Aa][Ll][Ss][Ee]) PRE_PUSH_PREFLIGHT_ALL=0; export PRE_PUSH_PREFLIGHT_ALL ;;
+esac
+
 PREFLIGHT_COMMAND=(scripts/pre-push "$@")
 if dev_harness_python_uses_windows_paths "$PYTHON_BIN"; then
   if ! command -v cygpath >/dev/null 2>&1; then

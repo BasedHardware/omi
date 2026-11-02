@@ -721,7 +721,7 @@ def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
     monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     quarantines = []
     monkeypatch.setattr(live_session.health, 'quarantine', lambda *args: quarantines.append(args))
-    breaker = SimpleNamespace(record_serve_failure=lambda: None, serve_error_bench_seconds=180.0)
+    breaker = SimpleNamespace(record_serve_failure=lambda **_kwargs: None, serve_error_bench_seconds=180.0)
     monkeypatch.setattr(st, '_circuit_for_primary', lambda _service: breaker)
     success = []
     closed = []

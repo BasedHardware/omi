@@ -1,9 +1,11 @@
 'use client';
 
-import { QuoteTimestamps } from './QuoteTimestamps';
-import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
+import { AudioLines } from 'lucide-react';
+import {
+  presentableNoteSection,
+  resolvableNoteSources,
+} from '@omi/note-shared/note-sources.mjs';
 import ReactMarkdown from 'react-markdown';
-import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 import { cn } from '@/lib/utils';
 import { splitNoteSections, type NoteSectionInput } from '@/lib/meetingNotes';
 
@@ -45,31 +47,45 @@ export function NoteSections({
   const transcriptIDs = transcriptSegments.flatMap((segment) =>
     segment.id ? [segment.id] : [],
   );
-  const presentable = sections.map((section) => {
-    const valid = [...transcriptIDs, ...(section.source_segment_ids ?? [])];
-    return {
-      ...section,
-      heading: repairNoteCitations(section.heading ?? '', valid).text,
-      body_markdown: repairNoteCitations(section.body_markdown ?? '', valid).text,
-    };
-  });
+  // Inline citations the repair removes become the section's source control, so a legacy
+  // note whose only evidence was `[s01234]` keeps its pointer to the transcript.
+  const presentable = sections.map((section) =>
+    presentableNoteSection(section, transcriptIDs),
+  );
   const { mains, sideNotes } = splitNoteSections(presentable);
 
-  const sourceRow = (sourceIDs?: string[] | null) => {
-    const ids = resolvableNoteSources(sourceIDs ?? [], transcriptIDs);
-    const sources = ids.flatMap((id) => {
+  // One quiet control per section, beside its heading, instead of a row of timestamps under
+  // the prose. It opens the transcript at the section's first resolvable source.
+  const sourcesButton = (heading: string, sourceIDs?: string[] | null) => {
+    if (!onOpenSource) return null;
+    const first = resolvableNoteSources(sourceIDs ?? [], transcriptIDs).find((id) => {
       const segment = transcriptSegments.find((segment) => segment.id === id);
-      return segment && Number.isFinite(segment.start) && segment.start >= 0
-        ? [{ id, start: segment.start }]
-        : [];
+      return segment && Number.isFinite(segment.start) && segment.start >= 0;
     });
-    if (!sources.length || !onOpenSource) return null;
+    if (!first) return null;
     return (
-      <QuoteTimestamps
-        key={JSON.stringify(ids)}
-        sources={sources}
-        onOpenSource={onOpenSource}
-      />
+      <button
+        type="button"
+        title="Show in transcript"
+        aria-label={heading ? `Show ${heading} in transcript` : 'Show in transcript'}
+        onClick={() => onOpenSource(first)}
+        className="-mr-1.5 shrink-0 rounded-md p-1.5 text-text-tertiary opacity-60 transition-opacity hover:text-text-secondary hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 group-hover:opacity-100"
+      >
+        <AudioLines aria-hidden="true" className="h-4 w-4" />
+      </button>
+    );
+  };
+
+  const sectionHeader = (heading: string | undefined, sourceIDs?: string[] | null) => {
+    const button = sourcesButton(heading ?? '', sourceIDs);
+    if (!heading && !button) return null;
+    return (
+      <div className={cn('mb-2 flex items-start gap-2', !heading && 'justify-end')}>
+        {heading ? (
+          <h2 className="flex-1 text-lg font-semibold text-text-primary">{heading}</h2>
+        ) : null}
+        {button}
+      </div>
     );
   };
 
@@ -79,27 +95,21 @@ export function NoteSections({
         const heading = section.heading?.trim();
         const body = section.body_markdown?.trim();
         return (
-          <section key={index} className={cn(index > 0 && 'mt-8')}>
-            {heading ? (
-              <h2 className="mb-2 text-lg font-semibold text-text-primary">{heading}</h2>
-            ) : null}
+          <section key={index} className={cn('group', index > 0 && 'mt-6')}>
+            {sectionHeader(heading, section.source_segment_ids)}
             {body ? <NoteMarkdown body={body} /> : null}
-            {sourceRow(section.source_segment_ids)}
           </section>
         );
       })}
       {sideNotes.length > 0 && (
-        <aside className="mt-8 rounded-xl border border-bg-quaternary/50 bg-bg-secondary p-4">
+        <aside className="mt-6 rounded-xl border border-bg-quaternary/50 bg-bg-secondary p-4">
           {sideNotes.map((section, index) => {
             const heading = section.heading?.trim() || 'Side notes';
             const body = section.body_markdown?.trim();
             return (
-              <div key={index} className={cn(index > 0 && 'mt-4')}>
-                <h2 className="mb-2 text-lg font-semibold text-text-primary">
-                  {heading}
-                </h2>
+              <div key={index} className={cn('group', index > 0 && 'mt-4')}>
+                {sectionHeader(heading, section.source_segment_ids)}
                 {body ? <NoteMarkdown body={body} quiet /> : null}
-                {sourceRow(section.source_segment_ids)}
               </div>
             );
           })}

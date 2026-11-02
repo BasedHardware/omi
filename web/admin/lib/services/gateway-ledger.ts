@@ -101,8 +101,6 @@ export const FEATURE_CLASS: Record<string, FeatureClass> = {
   memories: "sharedExtraction",
   x_memory_extraction_flex: "sharedExtraction",
   learnings: "sharedExtraction",
-  memory_conflict: "sharedExtraction",
-  memory_conflict_flex: "sharedExtraction",
   knowledge_graph: "sharedExtraction",
   memory_l1: "sharedExtraction",
   memory_l2: "sharedExtraction",

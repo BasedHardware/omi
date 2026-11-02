@@ -70,7 +70,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 
@@ -90,7 +90,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 

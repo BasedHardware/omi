@@ -133,7 +133,9 @@ async def test_stalled_paid_writer_keeps_bounded_capacity_failure(monkeypatch, p
             actual._stt_buffer_start_sample = n * 640
             await actual._flush_stt_buffer(bytearray(b'\x01\x00' * 640), force=True)
         await until(lambda: actual.stt_socket.is_connection_dead)
-        assert actual.stt_socket.typed_death_reason == 'capacity_full'
+        # The stalled paid writer let a live frame's delivery deadline pass:
+        # a local bound (delivery_expired), never destination capacity.
+        assert actual.stt_socket.typed_death_reason == 'delivery_expired'
         await actual._monitor_stt_death()
         assert actual.host.state.stt_terminal_failure
         assert raw._send_queue.high_water <= 2

@@ -15,20 +15,30 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
+from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env, shadow_parity_collectors
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
+from utils.batch_pipeline.gpu_skip_metrics import register_on as register_gpu_skip_counters
+from utils.batch_pipeline.worker_metrics import COLLECTORS as WORKER_IO_COLLECTORS
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.stage_timings import StageTimings
+from database.batch_pipeline_shadow import ShadowStore
+from utils.batch_pipeline.shadow_worker import ShadowRunner
+from utils.batch_pipeline.shadow_metrics import COLLECTORS as SHADOW_COLLECTORS
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
 from utils.rollout_cohorts import configure_rollout_runtime
@@ -54,24 +64,40 @@ class SynchronizedWorker:
         synchronize: Callable[[], None] = synchronize_gpu,
         on_fatal: Callable[[], None] | None = None,
         memory_probe: Any = None,
+        timings: StageTimings | None = None,
     ):
         self.worker = worker
         self.synchronize = synchronize
         self.on_fatal = on_fatal
         self.memory_probe = memory_probe
+        self.timings = timings or StageTimings()
         self._unavailable = False
 
     def process_batch(self, items, **kwargs):
+        return self._process(items, self.worker.process_batch, **kwargs)
+
+    def prepare_first(self, items):
+        prepare = getattr(self.worker, 'prepare_first', None)
+        return prepare(items) if prepare is not None else None
+
+    def process_batch_deferred(self, items, **kwargs):
+        process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
+        return self._process(items, process, **kwargs)
+
+    def _process(self, items, process, **kwargs):
         if self._unavailable:
             raise FatalGpuError('GPU chain unavailable; restart required')
+        pending = None
         try:
             baseline = self.memory_probe.begin() if self.memory_probe else None
             try:
-                return self.worker.process_batch(items, **kwargs)
+                pending = process(items, **kwargs)
+                return pending
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
-                self.synchronize()
+                # Profiling times the existing synchronize; it adds no new one.
+                self.timings.call('cuda_sync', self.synchronize)
                 if self.memory_probe:
                     sample = self.memory_probe.finish(baseline)
                     logger.info(
@@ -81,6 +107,12 @@ class SynchronizedWorker:
                         sample,
                     )
         except Exception as error:
+            # Synchronization can fail after compute handed off writes. Fatal
+            # CUDA must not leave those writes running beyond the receipt.
+            # Keep the poisoned GPU slot held until that fatal drain completes.
+            close = getattr(pending, 'close', None)
+            if callable(close):
+                close()
             if is_fatal_cuda_error(error):
                 self._unavailable = True
                 if self.on_fatal:
@@ -90,11 +122,19 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
-    if cap_dispatch_enabled():
+    registry.register(LANGUAGE_ROUTES)
+    for collector in WORKER_IO_COLLECTORS:
+        registry.register(collector)
+    for collector in SHADOW_COLLECTORS:
+        registry.register(collector)
+    if cap_dispatch_enabled() or offline_enforcement_enabled('batch'):
         registry.register(AUDIO_SECONDS)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
+    register_gpu_skip_counters(registry)  # diarization decisions + per-unit FP32-parity counters
+    for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
+        registry.register(collector)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -119,13 +159,31 @@ def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -
     return server
 
 
+# Prometheus-adapter drops a sampler series older than 60s
+# (charts/batch-pipeline-worker/prometheus-adapter-rules.yaml); sample well inside it.
+METRICS_SAMPLE_SECONDS = 15
+
+
 async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event) -> None:
     async def tick():
         while True:
             state.ticked_at = time.monotonic()
             await asyncio.sleep(5)
 
-    ticking = asyncio.create_task(tick())
+    async def sample():
+        # Independent of run_once: a replica inside a multi-minute GPU batch
+        # still refreshes its queue gauges, so the HPA never goes blind when
+        # every replica is busy. Failures retain the last sample and freshness.
+        while True:
+            try:
+                await pump.sample_metrics()
+            except Exception as error:
+                logger.warning('event=batch_queue_metrics outcome=retry exception_type=%s', type(error).__name__)
+            await asyncio.sleep(METRICS_SAMPLE_SECONDS)
+
+    tasks = [asyncio.create_task(tick())]
+    if callable(getattr(pump, 'sample_metrics', None)):
+        tasks.append(asyncio.create_task(sample()))
     state.ready = True
     try:
         await pump.run(stop_event)
@@ -133,8 +191,9 @@ async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event) -
             raise RuntimeError('GPU chain quarantined; process restart required')
     finally:
         state.ready = False
-        ticking.cancel()
-        await asyncio.gather(ticking, return_exceptions=True)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, state: RuntimeState) -> None:
@@ -158,19 +217,37 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
+        # One shared stage-timing instance spans the worker chain, its CUDA
+        # quiescence and the pump; samples land on the worker's own registry.
+        timings = StageTimings(registry)
+        worker.timings = timings
+        from utils.batch_pipeline.compute_client import shadow_from_env
+
+        # Lazy client creation keeps a dark rollout independent of API config.
+        def shadow_recover(segment):
+            return shadow_from_env().shadow_recover(segment)
+
         metrics = QueueMetrics(
             registry,
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
             namespace=os.environ.get('POD_NAMESPACE', 'unscoped'),
+            capacity_sampling=True,
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
-            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
+            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings),
             metrics=metrics,
+            timings=timings,
             batch_size=config.batch_size,
+            flights=worker_pipeline_depth(),
             capacity=lambda: PoolCapacity(
                 observed_at=time.time(), available_slots=config.batch_size, max_item_seconds=config.max_unit_seconds
             ),
+            # One replica runs recovery/drain per tick; a holder stuck in a long
+            # GPU batch hands over after the TTL. Fails open on store errors.
+            leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
+            inline_metrics=False,  # supervise() samples on its own task.
+            shadow=ShadowRunner(ShadowStore(store), shadow_recover),
         )
         await supervise(pump, state, stop_event)
     finally:
@@ -188,7 +265,7 @@ def main() -> None:
     store = FirestoreStore(namespace)
     if not os.getenv('FIRESTORE_EMULATOR_HOST') and not os.getenv('OMI_FIRESTORE_DATA_PLANE_PROJECT'):
         raise RuntimeError('explicit customer data-plane project required')
-    store = FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client())
+    store = shadow_from_env(FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client()))
     # The worker evaluates live-reuse admission (sync_live_dedupe_active_for)
     # on admitted work items; bind the cached cohort resolver before pumping.
     configure_rollout_runtime()

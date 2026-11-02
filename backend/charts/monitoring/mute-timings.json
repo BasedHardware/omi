@@ -1,0 +1,21 @@
+{
+  "description": "Grafana mute timings referenced by notification_settings.mute_time_intervals in alerts/*.json. The --mode import path (verify_pusher_live_alert_route.py, run by gcp_cloud_run_metrics_egress.yml) creates each referenced timing on the target Grafana when it is absent; an existing live timing is never overwritten. omi-tier-silent is the always-on interval that mutes agent-tier rules (#23590); it has existed in prod Grafana since 2026-10-25 but development Grafana never received it, so the first dev import after #23590 failed with HTTP 500 and froze pusher dev qualification from run 40192461076. The interval body stays minimal on purpose: every weekday with no times block (whole day) and no location (server UTC). A first attempt with explicit times 00:00-24:00 was rejected by Grafana with HTTP 400 (strict HH:mm end parsing, run 40223879004); omitting the optional selectors avoids that version-dependent validation entirely.",
+  "mute_timings": [
+    {
+      "name": "omi-tier-silent",
+      "time_intervals": [
+        {
+          "weekdays": [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday"
+          ]
+        }
+      ]
+    }
+  ]
+}

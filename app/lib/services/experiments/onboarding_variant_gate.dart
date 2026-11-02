@@ -13,7 +13,11 @@ enum OnboardingVariant {
   reid('reid'),
 
   /// Yinka's onboarding ending in a first conversation (PR #21445), native.
-  yinka('yinka');
+  yinka('yinka'),
+
+  /// Pocket's order: sign-up paywall with a 30-day upsell, permissions, pairing that starts by
+  /// itself, the device walkthrough, then the remaining native steps.
+  pocket('pocket');
 
   const OnboardingVariant(this.wireName);
 
@@ -34,6 +38,7 @@ class OnboardingArm {
 
   static const control = OnboardingArm(OnboardingVariant.control);
   static const yinka = OnboardingArm(OnboardingVariant.yinka);
+  static const pocket = OnboardingArm(OnboardingVariant.pocket);
 
   final OnboardingVariant variant;
 
@@ -62,7 +67,7 @@ abstract final class OnboardingVariantGate {
   /// PostHog flag key (project 302298). Registered in `config/feature-flags.yaml`.
   static const enabledFlag = 'onboarding-variant';
 
-  /// Debug-build override: `--dart-define=OMI_ONBOARDING_VARIANT=reid|yinka`
+  /// Debug-build override: `--dart-define=OMI_ONBOARDING_VARIANT=reid|yinka|pocket`
   /// (`reid` also needs `OMI_ONBOARDING_WEBVIEW_URL=https://…`).
   static const _debugVariant = String.fromEnvironment('OMI_ONBOARDING_VARIANT');
   static const _debugUrl = String.fromEnvironment('OMI_ONBOARDING_WEBVIEW_URL');
@@ -71,6 +76,7 @@ abstract final class OnboardingVariantGate {
     if (!kDebugMode) return null;
     return switch (OnboardingVariant.fromWire(_debugVariant)) {
       OnboardingVariant.yinka => OnboardingArm.yinka,
+      OnboardingVariant.pocket => OnboardingArm.pocket,
       OnboardingVariant.reid => parse(variant: 'reid', payload: {'url': _debugUrl}),
       _ => null,
     };
@@ -82,6 +88,8 @@ abstract final class OnboardingVariantGate {
     switch (OnboardingVariant.fromWire(variant?.trim())) {
       case OnboardingVariant.yinka:
         return OnboardingArm.yinka;
+      case OnboardingVariant.pocket:
+        return OnboardingArm.pocket;
       case OnboardingVariant.reid:
         Object? value = payload;
         if (value is String) {

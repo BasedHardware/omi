@@ -1,0 +1,33 @@
+namespace: prod-omi-backend
+hpaName: prod-omi-parakeet
+prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
+dryRun: false
+batch:
+  # false until the deployer RBAC for -batch objects is approved (access change, David) and g2's producer exists
+  enabled: false
+  cloudRunRollbackEnabled: true
+  gcpServiceAccount: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com
+floorSchedule:
+  enabled: true
+  # Day/night floor (2026-11-01, liveoptimal, lead ruling f66b37): live
+  # parakeet-window serves again (stage 100), so the all-hours 4 benched-live
+  # table no longer fits. 7 pods carried 165-194 streams at 10-21 req/s with
+  # queue p99 < 1 s on Sunday; a weekday peak (~33-39 req/s) needs 6-7, and
+  # in the us-central1 L4 stockout a fleet shed at night may not come back
+  # by the 13-22Z peak. 4 overnight (00-11Z) keeps the trough saving.
+  # The safety guard can still restore 12 on a trip.
+  # Prior schedule and pool-min rollback: docs/operational/parakeet-benched-floor.md.
+  # COUPLING (Luna r1, #24276): while this schedule is deferred by a rollback
+  # marker, the fleet holds the parakeet chart's minReplicas (7 since
+  # 2026-11-01) — every hour here must stay <= that chart floor so resuming
+  # the schedule never raises the floor above the deferred state (pinned by
+  # test_audio_fleet_helm).
+  # STOCKOUT HOLD (2026-11-02, parakeetguard, lead ruling 1ca4cb): 7 all hours
+  # while the us-central1 L4 stockout is live (FailedScaleUp, GCE out of
+  # resources), so L4s shed overnight cannot leave the 13Z weekday peak short;
+  # 7 pods carried the measured peak with queue p99 < 1 s.
+  # EXIT RULE: after 2 h with Parakeet Pending = 0 and no FailedScaleUp,
+  # restore the day/night table
+  #   [4]*12 + [7]*12  (4 for 00-11Z, 7 for 12-23Z)
+  # and roll incluster-guards. That restore is worth about -$24/day.
+  hours: [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]

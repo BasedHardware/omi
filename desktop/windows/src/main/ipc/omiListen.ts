@@ -254,15 +254,6 @@ export function getListenStats(): Record<string, { bytes: number; chunks: number
   return out
 }
 
-let proactivityWakeup: ((ownerID: string, payload: Record<string, unknown>) => void) | null = null
-
-/** Main-process consumer reads the feed; socket copy never renders a second card. */
-export function setProactivityWakeupHandler(
-  handler: (ownerID: string, payload: Record<string, unknown>) => void
-): void {
-  proactivityWakeup = handler
-}
-
 function emit(ownerId: number, msg: ListenMessage): void {
   const wc = webContents.fromId(ownerId)
   if (wc && !wc.isDestroyed()) {
@@ -460,9 +451,6 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     }
     if (json && typeof json === 'object' && 'type' in (json as object)) {
       const obj = json as Record<string, unknown>
-      if (!session.closed && mode === 'conversation') {
-        proactivityWakeup?.(decodeUidFromIdToken(args.token) ?? '', obj)
-      }
       const event: ListenEvent = { type: String(obj.type), raw: obj }
       emit(session.ownerId, { sessionId: args.sessionId, kind: 'event', event })
     }

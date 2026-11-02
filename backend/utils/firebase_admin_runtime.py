@@ -31,11 +31,7 @@ _AUTH_MUTATORS = frozenset(
 
 def firebase_verify_only_enabled(environ: Mapping[str, str] | None = None) -> bool:
     source = os.environ if environ is None else environ
-    return source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() == "1" or (
-        source.get("OMI_JIT_QA_AUTH_ONLY", "").strip().casefold() in {"1", "true", "yes", "on"}
-        and (source.get("OMI_ENV_STAGE") or "").strip().casefold() == "dev"
-        and (source.get("GOOGLE_CLOUD_PROJECT") or "").strip() == "based-hardware-dev"
-    )
+    return source.get("OMI_ISOLATED_LOCAL_STACK", "").strip() == "1"
 
 
 def firebase_verify_only_credential(environ: Mapping[str, str] | None = None) -> Any | None:
@@ -62,7 +58,7 @@ def firebase_verify_only_credential(environ: Mapping[str, str] | None = None) ->
 def install_firebase_auth_mutation_guard(
     environ: Mapping[str, str] | None = None, *, auth_module: Any | None = None
 ) -> bool:
-    """Mechanically deny every Firebase Auth mutation in local JIT QA."""
+    """Mechanically deny every Firebase Auth mutation in an isolated local stack."""
 
     if not firebase_verify_only_enabled(environ):
         return False
@@ -70,7 +66,7 @@ def install_firebase_auth_mutation_guard(
         from firebase_admin import auth as auth_module
 
     def blocked(*_args: Any, **_kwargs: Any) -> Any:
-        raise RuntimeError("Firebase Auth mutations are disabled in local JIT QA")
+        raise RuntimeError("Firebase Auth mutations are disabled in the isolated local stack")
 
     missing = [name for name in _AUTH_MUTATORS if not hasattr(auth_module, name)]
     if missing:
@@ -83,10 +79,10 @@ def install_firebase_auth_mutation_guard(
 def install_google_adc_guard(
     environ: Mapping[str, str] | None = None, *, google_auth_module: Any | None = None
 ) -> bool:
-    """Deny ADC discovery in general local-JIT backend processes.
+    """Deny ADC discovery in isolated local backend processes.
 
     The separate loopback Vertex broker deliberately does not set
-    ``OMI_JIT_QA_LOCAL_STACK`` and is therefore the only child that can use the
+    ``OMI_ISOLATED_LOCAL_STACK`` and is therefore the only child that can use the
     host's development ADC.
     """
 
@@ -94,13 +90,13 @@ def install_google_adc_guard(
     # The local hermetic stack must deny all ADC discovery because it uses the
     # loopback Vertex broker. Cloud QA still needs Firestore ADC for its
     # isolated data plane, so its auth-only fence is intentionally narrower.
-    if source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() != "1":
+    if source.get("OMI_ISOLATED_LOCAL_STACK", "").strip() != "1":
         return False
     if google_auth_module is None:
         import google.auth as google_auth_module
 
     def blocked(*_args: Any, **_kwargs: Any) -> Any:
-        raise RuntimeError("Google ADC is disabled in local JIT QA; use the loopback Vertex gateway")
+        raise RuntimeError("Google ADC is disabled in the isolated local stack; use the loopback Vertex gateway")
 
     google_auth_module.default = blocked
     return True

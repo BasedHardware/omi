@@ -17,6 +17,7 @@ from utils.byok import (
 )
 from utils.async_tasks import drain_tasks
 from utils.executors import db_executor, run_blocking
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.llm.managed_spend_ledger import (
     DESKTOP_REALTIME_FEATURE,
@@ -295,6 +296,11 @@ async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validat
             log=logger,
         )
     if not byok_serves_session:
+        if generated_compute_configured() and not await run_blocking(
+            db_executor, generated_compute_allowed, uid, 'omni_relay', allow_byok=False
+        ):
+            await websocket.close(code=1008, reason="quota_exceeded")
+            return
         try:
             snapshot = await run_blocking(db_executor, get_chat_quota_snapshot, uid, "desktop")
         except Exception as exc:
@@ -383,6 +389,10 @@ async def _relay_session(
             nonlocal enrolled
             if payer != "omi":
                 return
+            if generated_compute_configured() and not await run_blocking(
+                db_executor, generated_compute_allowed, uid, 'omni_relay', allow_byok=False
+            ):
+                raise QuotaStop("quota_exceeded")
             try:
                 responses, snapshot = await run_blocking(db_executor, _count_relay_response, uid)
             except Exception as exc:
