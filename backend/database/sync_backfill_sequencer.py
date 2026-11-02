@@ -22,6 +22,7 @@ from database._client import get_firestore_client
 from database import sync_redrive, sync_jobs
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
+from config import sync_backfill_worker as worker_policy
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
@@ -193,6 +194,15 @@ def register_job(
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     pending = _pending_ref(client, uid, job_id)
+    # Registration is the durable admission boundary. Never trust a supplied
+    # marker, migrate old jobs, or change batch admission to fill this fleet.
+    payload = dict(payload)
+    payload.pop('worker_eligible', None)
+    if worker_policy.selected(uid) and worker_policy.eligible_payload(payload) and enabled():
+        from utils.sync.legacy_dark import sequencer_registration_allowed
+
+        if sequencer_registration_allowed(uid=uid):
+            payload['worker_eligible'] = True
     accepted_at = now or _now()
     try:
         sort_at = (
@@ -489,6 +499,11 @@ def claim_next(
             'dispatch_attempt': 0,
             'active_state': 'dispatching',
             'worker_available': job['payload'].get('worker_eligible') is True,
+            'worker_fallback_at': (
+                int(current.timestamp()) + DISPATCH_RETRY_SECONDS
+                if job['payload'].get('worker_eligible') is True
+                else None
+            ),
             'active_accepted_at': job['accepted_at'],
             'active_since': current,
             'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
@@ -504,6 +519,7 @@ def claim_next(
             'payload': job['payload'],
             'epoch': epoch,
             'accepted_at': job['accepted_at'],
+            'worker_fallback_at': active['worker_fallback_at'],
         }
 
     return commit(client.transaction())

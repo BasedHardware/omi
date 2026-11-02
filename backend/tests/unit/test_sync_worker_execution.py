@@ -1,0 +1,176 @@
+"""Worker death, stale claims and retry custody on the real Redis fence."""
+
+import asyncio
+import json
+from pathlib import Path
+import sys
+from unittest.mock import AsyncMock
+
+import fakeredis
+import pytest
+
+from database import sync_jobs
+from utils.sync import worker_job, worker_runtime
+
+LEASE = {
+    'payload': {
+        'uid': 'synthetic',
+        'job_id': 'job',
+        'sequencer_epoch': 3,
+        'lane': 'backfill',
+        'ledger_fence_mode': 'active',
+        'worker_eligible': True,
+        'raw_blob_paths': ['syncing/synthetic/job/audio.bin'],
+    },
+    'token': 'worker-token',
+}
+
+
+async def test_lease_loss_kills_job_and_its_executor_process_group(monkeypatch, tmp_path):
+    processes = []
+
+    async def launch():
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(Path(__file__).parent / 'fixtures/sync_worker_child.py'),
+            str(tmp_path),
+            stdin=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+        processes.append(process)
+        return process
+
+    class Client:
+        def __init__(self):
+            self.beats = 0
+
+        async def call(self, operation, body=None):
+            assert operation == 'heartbeat'
+            self.beats += 1
+            return {'accepted': self.beats == 1}
+
+    monkeypatch.setattr(worker_runtime, 'launch_job', launch)
+    monkeypatch.setattr(worker_runtime, 'POLL_SECONDS', 0.01)
+    monkeypatch.setattr(worker_runtime, 'HEARTBEAT_SECONDS', 0.5)
+    runtime = worker_runtime.Runtime(Client())
+    with pytest.raises(RuntimeError, match='sequencer lease lost'):
+        await asyncio.wait_for(runtime.execute(LEASE), 5)
+    assert processes[0].returncode is not None
+    assert runtime.active is False
+    assert (tmp_path / 'pids.json').is_file()
+    before = (tmp_path / 'leaf-tick').read_text()
+    await asyncio.sleep(0.05)
+    assert (tmp_path / 'leaf-tick').read_text() == before
+
+
+async def test_crashed_job_reaps_orphan_leaf_before_fail_rpc(monkeypatch, tmp_path):
+    (tmp_path / 'crash').touch()
+
+    async def launch():
+        return await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(Path(__file__).parent / 'fixtures/sync_worker_child.py'),
+            str(tmp_path),
+            stdin=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+
+    class CrashClient:
+        async def call(self, operation, body=None):
+            if operation == 'fail':
+                before = (tmp_path / 'leaf-tick').read_text()
+                await asyncio.sleep(0.05)
+                assert (tmp_path / 'leaf-tick').read_text() == before
+            return {'accepted': True}
+
+    monkeypatch.setattr(worker_runtime, 'launch_job', launch)
+    await asyncio.wait_for(worker_runtime.Runtime(CrashClient()).execute(LEASE), 5)
+
+
+@pytest.fixture
+def execution(monkeypatch):
+    # The real pipeline imports lazily, without constructing credentialed
+    # clients. Replace provider/storage leaves, retain actual Redis ownership.
+    from database import account_deletion_marker as account_deletion
+    from utils.account_cutover import access
+    from utils.sync import ledger_completion, pipeline
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+    redis.set(
+        'sync_job:job',
+        json.dumps(
+            {
+                'job_id': 'job',
+                'uid': 'synthetic',
+                'status': 'queued',
+                'ledger_fence_mode': 'active',
+                'dispatch_mode': 'sequenced',
+                'created_stage': 'prod',
+                'attempt': 0,
+            }
+        ),
+    )
+    monkeypatch.setattr(account_deletion, 'account_deletion_blocks_user_work', lambda _: False)
+    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _: False)
+    monkeypatch.setattr(ledger_completion, 'bind_or_converge_sync_ledger_completion', lambda **kw: None)
+    monkeypatch.setattr(pipeline, '_download_staged_files', lambda *args, **kwargs: True)
+    cleanup = AsyncMock()
+    monkeypatch.setattr(worker_job, 'cleanup_terminal', cleanup)
+    return redis, pipeline, cleanup
+
+
+class Client:
+    def __init__(self, accepted=True):
+        self.accepted = accepted
+
+    async def call(self, *args):
+        return {'accepted': self.accepted}
+
+
+async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monkeypatch):
+    redis, pipeline, cleanup = execution
+    process = AsyncMock()
+    monkeypatch.setattr(pipeline, '_run_full_pipeline_background_async', process)
+    assert not await worker_job.execute(LEASE, Client(False))
+    process.assert_not_awaited()
+    cleanup.assert_not_awaited()
+    assert not sync_jobs.sync_job_run_lock_present('job')
+
+
+async def test_worker_runs_fenced_pipeline_without_request_budget(execution, monkeypatch):
+    redis, pipeline, cleanup = execution
+
+    async def process(*args, **kwargs):
+        assert kwargs['task_mode'] is True
+        assert kwargs['content_run_bound'] is True
+        assert kwargs['ledger_fence_active'] is True
+        assert kwargs.get('inline_run_lock_token') is None
+        token = kwargs['run_lock_token']
+        assert sync_jobs.renew_job_run_lock('job', token)
+        assert sync_jobs.try_acquire_sync_job_run_lock('job') is None
+        row = json.loads(redis.get('sync_job:job'))
+        row['status'] = 'completed'
+        redis.set('sync_job:job', json.dumps(row))
+
+    monkeypatch.setattr(pipeline, '_run_full_pipeline_background_async', process)
+    assert await worker_job.execute(LEASE, Client())
+    cleanup.assert_awaited_once()
+    assert not sync_jobs.sync_job_run_lock_present('job')
+
+
+async def test_cancelled_worker_keeps_redis_fence_and_retry_material(execution, monkeypatch):
+    redis, pipeline, cleanup = execution
+
+    async def cancelled(*args, **kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(pipeline, '_run_full_pipeline_background_async', cancelled)
+    with pytest.raises(asyncio.CancelledError):
+        await worker_job.execute(LEASE, Client())
+    cleanup.assert_not_awaited()
+    assert sync_jobs.try_acquire_sync_job_run_lock('job') is None
+    assert json.loads(redis.get('sync_job:job'))['status'] == 'queued'
+    assert redis.ttl('sync_job_lock:job') > 1700

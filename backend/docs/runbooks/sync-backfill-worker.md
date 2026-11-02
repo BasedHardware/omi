@@ -45,10 +45,10 @@ an isolated data plane and synthetic accounts before exercising this protocol.
 
 `backend/Dockerfile.roles --target sync-backfill-worker` shares the backend
 runtime lock and source but runs only `python -m utils.sync.worker_runtime`.
-It mounts health/readiness only, polls the OIDC claim RPC and refuses any
-unexpected lease. It does not import `main`, routers, startup reconcilers,
-or the batch serving pump. It is intentionally incapable of processing audio
-until S3. One serial worker per pod; no new HPA until queue metrics qualify.
+It mounts health/readiness only and polls the OIDC claim RPC. It does not
+import `main`, routers, startup reconcilers, or the batch serving pump. The
+S2 image refuses unexpected leases; S3 adds the isolated job process described
+below. One serial worker per pod; no new HPA until queue metrics qualify.
 
 `backend/deploy/sync-backfill-worker.yaml` is the desired on-demand pool and
 IAM plan, **not an installed resource receipt**. Infracost supplies actual
@@ -88,3 +88,43 @@ cost. Rollback: scale the deployment to 0 (or uninstall this release), then
 set the dedicated pool minimum to 0 after its pods have drained. This lane
 does not execute either direction. Infracost reviews idle qualification by
 2026-11-09 under the same clean metrics and ramp ownership above.
+
+## S3: fallback-preserving cohort execution
+
+Registration stamps `worker_eligible` only on newly accepted active-fenced
+backfill jobs selected by `SYNC_BACKFILL_WORKER_PERCENT` while the sequencer
+and legacy registration are on. Caller markers are discarded. Fresh and
+legacy-fenced jobs remain ineligible; draining/dark never creates new worker
+eligibility. Existing batch admission is untouched. Turning percent to zero
+closes claims before persistence reads, even for previously eligible jobs.
+
+Head reservation still enqueues the same named Cloud Task, scheduled five
+minutes from reservation. No worker claim means that task begins the normal
+handler. Task begin and worker claim race the same transaction, so only one
+can choose the drive. Uncertain enqueue retries and failed/expired workers
+redrive directly to Cloud Tasks; they do not start another five-minute hold.
+
+Each claimed job runs `utils.sync.worker_job` in a fresh process group. The
+child takes the existing Redis token, rechecks the sequencer heartbeat after
+acquisition, and uses the existing ledger binding, bounded download and async
+pipeline. There is no HTTP budget or replacement-enqueue wrapper. Parent
+sequencer heartbeat is 120s; the child renews Redis every 300s. TTLs remain
+1800s. A failed renewal cancels execution and exits the entire job process.
+The supervisor kills remaining group members even if the root child already
+crashed, so detached executor/decoder work cannot outlive the local job.
+
+Ordinary retry preserves staged custody, resets the nonterminal job under its
+Redis token, then hands it back through `/fail`. Cancellation or unknown leaf
+state preserves Redis until TTL; `/fail` refuses early release while that lock
+exists. Completion verifies terminal state after the normal custody/slot
+cleanup. The parent stops intake at shutdown, drains for 1450s within the
+1500s pod grace, then kills its owned group. No global pattern-based kill.
+
+Google identity is attached Workload Identity only; the chart masks legacy
+key variables from the full runtime secret. `OMI_CUSTOMER_DATA_PROJECT` must
+explicitly pin the approved data plane. Staging already has a guarded route:
+`OMI_DEPLOYMENT=staging`, production stage semantics, the named `staging`
+database in `based-hardware-dev`, private Redis and staging buckets. Both
+supervisor and child check `utils.staging_fence` before network/data access.
+Do not use shared-data dev as a substitute. Runtime image build/import, live
+identity and staging speech/custody outcomes are separate qualification gates.

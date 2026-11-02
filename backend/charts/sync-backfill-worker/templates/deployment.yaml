@@ -34,6 +34,11 @@ spec:
           envFrom:
             - secretRef: {name: {{ required "complete backend-sync-backfill runtime secret required" .Values.runtimeSecret }}}
           env:
+            # The full runtime contract supplies data/provider secrets, while
+            # the attached Workload Identity remains the only Google identity.
+            - {name: SERVICE_ACCOUNT_JSON, value: ""}
+            - {name: GOOGLE_APPLICATION_CREDENTIALS, value: ""}
+            - {name: FIREBASE_AUTH_CREDENTIALS_PATH, value: ""}
             - {name: OMI_ENV_STAGE, value: prod}
             - {name: SYNC_BACKFILL_WORKER_API_URL, value: {{ .Values.worker.apiUrl | quote }}}
             - {name: SYNC_BACKFILL_WORKER_AUDIENCE, value: {{ .Values.worker.audience | quote }}}

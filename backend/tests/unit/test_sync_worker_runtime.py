@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -53,7 +54,7 @@ async def test_idle_tick_authenticates_and_does_no_pipeline_work(monkeypatch):
     assert 'utils.sync.pipeline' not in sys.modules
 
 
-async def test_idle_image_hands_back_an_unexpected_lease():
+async def test_runtime_passes_claim_to_supervisor():
     class Client:
         def __init__(self):
             self.operations = []
@@ -63,8 +64,11 @@ async def test_idle_image_hands_back_an_unexpected_lease():
             return {'lease': {'payload': {'uid': 'synthetic', 'job_id': 'job', 'sequencer_epoch': 1}, 'token': 't'}}
 
     client = Client()
-    await worker_runtime.Runtime(client).tick()
-    assert client.operations == ['claim', 'fail']
+    runtime = worker_runtime.Runtime(client)
+    runtime.execute = AsyncMock()
+    await runtime.tick()
+    assert client.operations == ['claim']
+    runtime.execute.assert_awaited_once()
 
 
 async def test_stop_interrupts_idle_wait():

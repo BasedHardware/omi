@@ -168,6 +168,8 @@ def db(monkeypatch):
 
 def test_pull_claim_races_fallback_and_slow_worker_is_still_run_locked(db, monkeypatch):
     """Actual sequencer plus actual Redis scripts; no mocked lease decisions."""
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
     payload = {'uid': 'a', 'job_id': 'pull', 'lane': 'backfill', 'ledger_fence_mode': 'active', 'worker_eligible': True}
     registry.register_job('a', 'pull', payload, None, now=NOW)
     epoch = registry.claim_next('a', now=NOW)['epoch']
@@ -202,6 +204,48 @@ def test_pull_claim_races_fallback_and_slow_worker_is_still_run_locked(db, monke
     assert not registry.finish_job('a', 'pull', epoch, 'completed', worker_token='worker-token', now=expired)
     sync_jobs.release_job_run_lock('pull', run_token)
     assert sync_jobs.try_acquire_sync_job_run_lock('pull')
+
+
+@pytest.mark.parametrize(
+    'percent,lane,fence,mode,eligible',
+    [
+        ('0', 'backfill', 'active', 'on', False),
+        ('100', 'fresh', 'active', 'on', False),
+        ('100', 'backfill', 'legacy', 'on', False),
+        ('100', 'backfill', 'active', 'dark', False),
+        ('100', 'backfill', 'active', 'draining', False),
+        ('100', 'backfill', 'active', 'on', True),
+    ],
+)
+def test_admission_marks_only_active_sequenced_backfill_cohort(db, monkeypatch, percent, lane, fence, mode, eligible):
+    from utils.sync import legacy_dark
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', percent)
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode(mode))
+    payload = {'uid': 'a', 'job_id': 'job', 'lane': lane, 'ledger_fence_mode': fence, 'worker_eligible': True}
+    registry.register_job('a', 'job', payload, None, now=NOW)
+    stored = db.docs[(registry.PENDING_COLLECTION, 'job')]['payload']
+    assert (stored.get('worker_eligible') is True) is eligible
+    # Caller-owned payloads never acquire or lose flags by mutation.
+    assert payload['worker_eligible'] is True
+
+
+def test_no_claim_worker_keeps_named_task_as_five_minute_fallback(db, monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(uid='a', job_id='job', lane='backfill', ledger_fence_mode='active')
+    registry.register_job('a', 'job', payload, None, now=NOW)
+    claim = registry.claim_next('a', now=NOW)
+    enqueues = []
+    monkeypatch.setattr(cloud_tasks, '_enqueue_sync_job_routed', lambda *args: enqueues.append(args))
+    uid_sequencer._dispatch(claim)
+    assert enqueues[0][1] == 'job-s1'
+    assert enqueues[0][2] == int(NOW.timestamp()) + 300
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'status': 'queued'})
+    assert registry.begin_job('a', 'job', claim['epoch'], now=NOW + timedelta(seconds=300))
+    assert registry.claim_worker('a', 'job', claim['epoch'], 'late-worker', now=NOW + timedelta(seconds=300)) is None
 
 
 def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):

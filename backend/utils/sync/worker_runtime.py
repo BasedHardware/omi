@@ -1,12 +1,17 @@
 """Dedicated CPU pull entrypoint; never imports main, routers or serving pumps.
 
-S2 is an idle fleet: unexpected leases are handed back without executing audio.
+Each lease executes in its own process group so lease loss kills executor
+leaves before the Cloud Tasks fallback can run the same job.
 """
 
 import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 import logging
+import json
 import os
+import signal
+import sys
 import time
 
 from omi_logging import TraceContextMiddleware, configure_logging
@@ -19,9 +24,21 @@ from starlette.responses import JSONResponse
 
 from utils.executors import start_background_task
 from utils.sync.worker_client import WorkerClient, worker_endpoint
+from utils.staging_fence import assert_staging_isolation
 
 logger = logging.getLogger(__name__)
 POLL_SECONDS = 5
+HEARTBEAT_SECONDS = 120
+
+
+async def launch_job():
+    return await asyncio.create_subprocess_exec(
+        sys.executable,
+        '-m',
+        'utils.sync.worker_job',
+        stdin=asyncio.subprocess.PIPE,
+        start_new_session=True,
+    )
 
 
 class Runtime:
@@ -30,23 +47,70 @@ class Runtime:
         self.stop = asyncio.Event()
         self.last_tick = time.monotonic()
         self.connected = False
+        self.active = False
 
     async def tick(self) -> None:
         result = await self.client.call('claim')
         self.connected = True
         lease = result.get('lease')
         if lease:
-            payload = lease['payload']
-            await self.client.call(
-                'fail',
-                {
-                    'uid': payload['uid'],
-                    'job_id': payload['job_id'],
-                    'epoch': payload['sequencer_epoch'],
-                    'token': lease['token'],
-                },
-            )
-            logger.warning('event=sync_pull_worker outcome=idle_image_refused_lease')
+            await self.execute(lease)
+
+    async def execute(self, lease: dict) -> None:
+        payload = lease['payload']
+        identity = {
+            'uid': payload['uid'],
+            'job_id': payload['job_id'],
+            'epoch': payload['sequencer_epoch'],
+            'token': lease['token'],
+        }
+        if not (await self.client.call('heartbeat', identity)).get('accepted'):
+            return
+        self.active = True
+        process = None
+        waiter = None
+        completed = False
+        try:
+            # Payload and opaque lease token travel through stdin, never argv.
+            process = await launch_job()
+            assert process.stdin is not None
+            process.stdin.write(json.dumps(lease).encode())
+            await process.stdin.drain()
+            process.stdin.close()
+            waiter = start_background_task(process.wait(), name='sync-pull:job-exit')
+            next_heartbeat = time.monotonic() + HEARTBEAT_SECONDS
+            while process.returncode is None:
+                self.last_tick = time.monotonic()
+                try:
+                    await asyncio.wait_for(asyncio.shield(waiter), POLL_SECONDS)
+                except TimeoutError:
+                    pass
+                if process.returncode is not None:
+                    break
+                if time.monotonic() >= next_heartbeat:
+                    if not (await self.client.call('heartbeat', identity)).get('accepted'):
+                        raise RuntimeError('sequencer lease lost')
+                    next_heartbeat = time.monotonic() + HEARTBEAT_SECONDS
+            completed = process.returncode == 0
+        finally:
+            if process is not None:
+                # No pattern-based kill: this child owns a fresh process group.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                await asyncio.wait_for(process.wait(), 10)
+            if waiter is not None:
+                await asyncio.wait_for(waiter, 10)
+            self.active = False
+        # Child exit is the quiescence proof. A killed child leaves Redis held;
+        # fail then refuses early release and the unchanged silence TTL wins.
+        response = await self.client.call('complete' if completed else 'fail', identity)
+        logger.info(
+            'event=sync_pull_worker outcome=%s accepted=%s',
+            'completed' if completed else 'fallback',
+            bool(response.get('accepted')),
+        )
 
     async def run(self) -> None:
         while not self.stop.is_set():
@@ -65,6 +129,7 @@ class Runtime:
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        assert_staging_isolation()
         if os.environ.get('OMI_ENV_STAGE') != 'prod':
             raise ValueError('worker registry requires explicit prod stage; staging needs isolated persistence')
         base, audience = worker_endpoint()
@@ -76,7 +141,12 @@ def create_app() -> FastAPI:
                 yield
             finally:
                 runtime.stop.set()
-                await asyncio.wait_for(task, 30)
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), 1450)
+                except TimeoutError:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await asyncio.wait_for(task, 30)
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TraceContextMiddleware)
