@@ -3871,6 +3871,116 @@
           ],
           "title": "Rejections by class",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Failed requests per second by lane, largest ten. A lane that fails on low traffic barely shows here, so read this with the error rate panel. Reads a recording rule, so it lags about 5 minutes.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 51
+          },
+          "id": 91,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "topk(10, sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m{outcome=\"error\"}) > 0)",
+              "legendFormat": "{{lane_id}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway errors by lane",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Share of each lane's requests that failed, for lanes above about 1 request a minute, highest ten. Reads a recording rule, so it lags about 5 minutes.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 51
+          },
+          "id": 92,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "topk(10, 100 * sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m{outcome=\"error\"}) / (sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m) > 0.0167) > 0)",
+              "legendFormat": "{{lane_id}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway error rate by lane",
+          "type": "timeseries"
         }
       ],
       "title": "AI responses — the LLM gateway behind chat and extraction",
