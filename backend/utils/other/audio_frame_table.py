@@ -167,3 +167,16 @@ def projection_entries(bucket, blob, uid: str, source: dict, *, deadline=None) -
     if (blob.metadata or {}).get('pcm_sha256') != receipt['pcm_sha256']:
         raise ValueError('projection frame identity mismatch')
     return entries(frames, rate, source)
+
+
+def append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, strict):
+    try:
+        chunks.extend(
+            projection_entries(bucket, blob, uid, entry, deadline=deadline) if has_frame_receipt(blob) else [entry]
+        )
+    except ValueError:
+        if strict:
+            raise
+        return
+    if max_count is not None and len(chunks) > max_count:
+        raise TimeoutError('speaker audio listing budget exhausted')

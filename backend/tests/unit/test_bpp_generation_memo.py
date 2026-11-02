@@ -196,23 +196,6 @@ def test_changed_token_new_source_redirect_owner_and_plane(monkeypatch, reads):
             privacy.assert_batch_write_allowed(db, db.transaction(), 'other')
 
 
-@pytest.mark.parametrize('on', [False, True])
-def test_absent_cloud_sync_consent_matches_main_default_and_explicit_opt_out_denies(monkeypatch, reads, on):
-    enabled(monkeypatch, on)
-    db = database()
-    db.rows[('users', UID)].pop('private_cloud_sync_enabled')
-    with batch_privacy_attempt():
-        assert check(db) == 7
-        assert check(db) == 7
-        assert len(reads) == (6 if on else 10)
-        # Model the atomic consent write + token rotation; emulator coverage
-        # below verifies the actual SDK writer rather than this fixture seam.
-        db.rows[('users', UID)]['private_cloud_sync_enabled'] = False
-        db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
-        with pytest.raises(privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
-            check(db)
-
-
 def test_snapshots_exports_stay_live_and_do_not_populate_decisions(monkeypatch, reads):
     enabled(monkeypatch)
     db = database()
@@ -254,13 +237,16 @@ def test_failed_reads_never_publish_partial_decisions(monkeypatch, reads, failur
             check(db)
 
 
-@pytest.mark.parametrize('outer_retry', [False, True])
-def test_real_store_transaction_retries_revalidate_token_and_deny(monkeypatch, reads, outer_retry):
+def test_real_sdk_transaction_retry_revalidates_token_and_denies(monkeypatch, reads):
     enabled(monkeypatch)
+    # This test isolates the SDK callback retry. Current main normally gives
+    # retries to a separate fresh-transaction budget, covered below.
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: False)
     db = database()
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
-    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: outer_retry)
-    original_transaction = db.transaction
+    transaction = db.transaction()
+    transaction._max_attempts = 2
+    monkeypatch.setattr(db, 'transaction', lambda: transaction)
     commits = []
 
     def commit():
@@ -269,17 +255,47 @@ def test_real_store_transaction_retries_revalidate_token_and_deny(monkeypatch, r
         db.rows[('users', UID, 'deleted_conversations', 'source')] = {}
         raise Aborted('synthetic concurrent deletion')
 
-    def transaction(max_attempts=None):
-        tx = original_transaction(max_attempts=2 if max_attempts is None else max_attempts)
-        monkeypatch.setattr(tx, '_commit', commit)
-        return tx
-
-    monkeypatch.setattr(db, 'transaction', transaction)
+    monkeypatch.setattr(transaction, '_commit', commit)
     with batch_privacy_attempt():
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
             store.run(lambda view: view.check_privacy(UID, ['source'], 7))
     assert len(commits) == 1
-    assert len(db.transactions) == (2 if outer_retry else 1)
+    assert Counter(reads)[TOKEN_PATH] == 2
+
+
+def test_outer_contention_retry_uses_fresh_transaction_and_revalidates_token(monkeypatch, reads):
+    from functools import partial
+
+    enabled(monkeypatch)
+    db = database()
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    original_transaction = db.transaction
+    commits = []
+
+    def transaction(*, max_attempts=None):
+        tx = original_transaction(max_attempts=max_attempts)
+
+        def commit():
+            commits.append(tx)
+            db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+            db.rows[('users', UID, 'deleted_conversations', 'source')] = {}
+            raise Aborted('synthetic concurrent deletion')
+
+        monkeypatch.setattr(tx, '_commit', commit)
+        return tx
+
+    monkeypatch.setattr(db, 'transaction', transaction)
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: True)
+    monkeypatch.setattr(
+        storage,
+        'run_with_transaction_contention_retry',
+        partial(storage.run_with_transaction_contention_retry, sleep=lambda delay: None, random_value=lambda: 0.0),
+    )
+    with batch_privacy_attempt():
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+    assert len(commits) == 1
+    assert len(db.transactions) == 2 and db.transactions[0] is not db.transactions[1]
     assert Counter(reads)[TOKEN_PATH] == 2
 
 
@@ -389,6 +405,7 @@ def test_cached_hit_preserves_foreign_wq12_memo_validation(monkeypatch, reads):
 @pytest.mark.parametrize('export_snapshots', [False, True])
 def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypatch, reads, export_snapshots):
     from types import SimpleNamespace
+    from database import privacy_check_metrics as metrics
     from utils.batch_pipeline import retention
 
     item = SimpleNamespace(owner_id=UID, conversation_id='source', privacy_generation=7)
@@ -399,6 +416,7 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
         db = database()
         store = SimpleNamespace(client=db)
         reads.clear()
+        reads_before = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
         with batch_privacy_attempt():
             outputs = []
             for i in range(20):
@@ -408,6 +426,8 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
                 if snapshots is not None:
                     assert snapshots['conversations']['source']['title'] == f'live-{i}'
         counts.append(len(reads))
+        reads_after = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
+        assert reads_after - reads_before == len(reads)
         results.append(outputs)
         if not on:
             assert (
@@ -424,3 +444,75 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
     assert results[0] == results[1]
     # Every call still reads the live protection level. Full-row consumers never hit.
     assert counts == ([100, 100] if export_snapshots else [100, 44])
+
+
+@pytest.mark.parametrize('export_snapshots', [False, True])
+def test_artifact_authorizer_exercises_shadow_without_enforcement_but_exports_stay_live(
+    monkeypatch, reads, export_snapshots
+):
+    from types import SimpleNamespace
+    from database import privacy_check_metrics as metrics
+    from utils.batch_pipeline import retention
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_checks_shadow":100}')
+    assert not levers.lever_enabled('bpp_generation_memo', UID)
+    db = database()
+    store = SimpleNamespace(client=db)
+    item = SimpleNamespace(owner_id=UID, conversation_id='source', privacy_generation=7)
+    before = metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get()
+    outputs = []
+    with batch_privacy_attempt():
+        for i in range(2):
+            db.rows[SOURCE_PATH]['title'] = f'fresh-shadow-{i}'
+            snapshots = {} if export_snapshots else None
+            outputs.append(retention.batch_artifact_authorize(store, item, snapshots=snapshots))
+            if snapshots is not None:
+                assert snapshots['conversations']['source']['title'] == f'fresh-shadow-{i}'
+    assert outputs[0] == outputs[1] and outputs[0].generation == 7
+    assert metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get() == before + (0 if export_snapshots else 2)
+
+
+@pytest.mark.parametrize('on', [False, True])
+def test_absent_cloud_sync_consent_matches_main_default_and_explicit_opt_out_denies(monkeypatch, reads, on):
+    enabled(monkeypatch, on)
+    db = database()
+    db.rows[('users', UID)].pop('private_cloud_sync_enabled')
+    with batch_privacy_attempt():
+        assert check(db) == 7
+        assert check(db) == 7
+        assert len(reads) == (6 if on else 10)
+        # Model the atomic consent write + token rotation; emulator coverage
+        # below verifies the actual SDK writer rather than this fixture seam.
+        db.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+        db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
+            check(db)
+
+
+@pytest.mark.parametrize('outer_retry', [False, True])
+def test_real_store_transaction_retries_revalidate_token_and_deny(monkeypatch, reads, outer_retry):
+    enabled(monkeypatch)
+    db = database()
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: outer_retry)
+    original_transaction = db.transaction
+    commits = []
+
+    def commit():
+        commits.append(True)
+        db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+        db.rows[('users', UID, 'deleted_conversations', 'source')] = {}
+        raise Aborted('synthetic concurrent deletion')
+
+    def transaction(max_attempts=None):
+        tx = original_transaction(max_attempts=2 if max_attempts is None else max_attempts)
+        monkeypatch.setattr(tx, '_commit', commit)
+        return tx
+
+    monkeypatch.setattr(db, 'transaction', transaction)
+    with batch_privacy_attempt():
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+    assert len(commits) == 1
+    assert len(db.transactions) == (2 if outer_retry else 1)
+    assert Counter(reads)[TOKEN_PATH] == 2

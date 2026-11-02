@@ -53,6 +53,7 @@ class ReasonFamily(StrEnum):
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
     VENDOR_ROUTE = 'vendor_route'
+    DELIVERY = 'delivery'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -70,6 +71,14 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class DeliveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DELIVERED = 'delivered'
+    NO_OP = 'no_op'
+    DEFERRED = 'deferred'
+    FAILED = 'failed'
 
 
 class SyncProcessingHoldOutcome(StrEnum):

@@ -34,6 +34,34 @@ def test_framed_projection_reads_fresh_raw_without_synthetic_span_failure(remote
     assert RAW_READ.labels(result='identity_mismatch')._value.get() == before
 
 
+def test_encoded_only_rebuild_inventory_retains_every_framed_span(remote, monkeypatch):
+    pcm = b'\x01\x02' * 320
+    receipt = audio_outbox.commit_pcm_window(
+        'owner',
+        pcm,
+        'conversation',
+        1000,
+        16000,
+        'root',
+        0,
+        [frame(pcm[:320], 1000), frame(pcm[320:], 1003.01, 1, 320, True)],
+        framed=True,
+    )
+    storage.upload_audio_chunks_batch(
+        [{'data': pcm, 'timestamp': 1000, 'custody_receipt': receipt.to_dict()}],
+        'owner',
+        'conversation',
+        'standard',
+        sample_rate=16000,
+    )
+    monkeypatch.setattr(
+        storage, 'list_packs', MagicMock(side_effect=AssertionError('encoded inventory must not list raw'))
+    )
+    listed = storage.list_audio_chunks('owner', 'conversation', include_archive=False)
+    assert [(row['timestamp'], row['span']['samples']) for row in listed] == [(1000, 160), (1003.01, 160)]
+    assert len({row['path'] for row in listed}) == 1
+
+
 def test_projection_raw_failure_is_counted_once_with_loaded_codec(remote, caplog):
     pcm = b'\x01\x02' * 160
     receipt = audio_outbox.commit_pcm_window(

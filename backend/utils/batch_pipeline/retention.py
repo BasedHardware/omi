@@ -22,6 +22,7 @@ from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 from database.batch_privacy_attempt import current_attempt
+from database import privacy_check_metrics
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
@@ -457,7 +458,12 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
         # protection level is read live below. It does not export full rows.
         # Staging/enrichment callers requesting snapshots retain the exact walk.
         decision_only = (
-            snapshots is None and current_attempt() is not None and lever_enabled('bpp_generation_memo', item.owner_id)
+            snapshots is None
+            and current_attempt() is not None
+            and (
+                lever_enabled('bpp_generation_memo', item.owner_id)
+                or lever_enabled('privacy_checks_shadow', item.owner_id)
+            )
         )
         generation = assert_batch_write_allowed(
             store.client,
@@ -471,7 +477,10 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             snapshots.clear()
             snapshots.update(loaded)
         user = (
-            store.client.collection('users').document(item.owner_id).get(transaction=transaction).to_dict() or {}
+            privacy_check_metrics.read_snapshot(
+                'batch', store.client.collection('users').document(item.owner_id), transaction=transaction
+            ).to_dict()
+            or {}
             if decision_only
             else loaded['user']
         )

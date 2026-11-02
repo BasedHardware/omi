@@ -18,7 +18,7 @@ from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PC
 from utils.other.audio_raw_read_metrics import log_failure
 from utils.other.pcm_frames import align_pcm16_frames
 from utils.other.audio_framed_projection import upload_projection
-from utils.other.audio_frame_table import has_frame_receipt, projection_entries
+from utils.other.audio_frame_table import has_frame_receipt, append_projection_entries
 from utils.other.audio_frame_playback import group_frame_jobs, read_frame_fragments
 from utils.other.raw_audio_read import (
     list_packs,
@@ -55,6 +55,7 @@ from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from database.audio_chunk_metadata import PRIVATE_CLOUD_EXTENSIONS, audio_chunk_entry
 from database.audio_timeline import (
     chunk_span,
     chunk_span_bounds,
@@ -99,7 +100,6 @@ OPUS_FRAME_SIZE = audio_opus.OPUS_FRAME_SIZE
 opuslib = audio_opus.opuslib
 
 # Valid private cloud sync extensions (longest first for correct matching)
-PRIVATE_CLOUD_EXTENSIONS = ['.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin']
 
 storage_client = None
 _storage_client_lock = threading.Lock()
@@ -1176,9 +1176,11 @@ def list_audio_chunks(
     source_identity: bool = False,
     require_archive: bool = False,
     include_raw: bool = False,
+    include_archive: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    List all audio chunks for a conversation. ``require_archive``: a failed raw-archive listing raises.
+    List conversation chunks; ``include_archive=False`` selects encoded inventory only.
+    ``require_archive``: a failed raw-archive listing raises.
 
     Returns:
         List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
@@ -1207,48 +1209,9 @@ def list_audio_chunks(
             raise TimeoutError('speaker audio listing budget exhausted')
         if deadline is not None and (time.monotonic() >= deadline or index >= 10000):
             raise TimeoutError('speaker audio listing budget exhausted')
-        # Extract timestamp from filename
-        # Supports single-chunk: '1234567890.123.opus', '1234567890.123.opus.enc', etc.
-        # Supports batch: '1234567890.123-1234567900.123.batch.bin', '1234567890.123.batch.enc'
-        filename = blob.name.split('/')[-1]
-        has_valid_ext = any(filename.endswith(ext) for ext in PRIVATE_CLOUD_EXTENSIONS)
-        if has_valid_ext:
-            try:
-                timestamp_str = _strip_extension(filename)
-                is_batch = '.batch.' in filename
-
-                if is_batch and '-' in timestamp_str:
-                    # Batch blob with timestamp range: "first_ts-last_ts"
-                    first_ts_str, _ = timestamp_str.split('-', 1)
-                    timestamp = float(first_ts_str)
-                else:
-                    timestamp = float(timestamp_str)
-
-                chunk_entry = {
-                    'timestamp': timestamp,
-                    'path': blob.name,
-                    'size': blob.size,
-                    'is_batch': is_batch,
-                    'generation': getattr(blob, 'generation', None),
-                }
-                if source_identity or playback_on_demand():
-                    chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
-                    chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
-                blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
-                if blob_bucket != private_cloud_sync_bucket:
-                    chunk_entry['bucket'] = blob_bucket
-                span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
-                if span is not None:
-                    chunk_entry['span'] = span
-                chunks.extend(
-                    projection_entries(bucket, blob, uid, chunk_entry, deadline=deadline)
-                    if has_frame_receipt(blob)
-                    else [chunk_entry]
-                )
-                if max_count is not None and len(chunks) > max_count:
-                    raise TimeoutError('speaker audio listing budget exhausted')
-            except ValueError:
-                continue
+        entry = audio_chunk_entry(blob, source_identity=source_identity, primary_bucket=private_cloud_sync_bucket)
+        if entry is not None:
+            append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
 
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
@@ -1258,7 +1221,8 @@ def list_audio_chunks(
         conversation_id,
         chunks,
         include_raw=include_raw,
-        enabled=include_raw or (audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None),
+        enabled=include_raw
+        or (include_archive and audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None),
         timeout=timeout,
         deadline=deadline,
         max_count=max_count,
