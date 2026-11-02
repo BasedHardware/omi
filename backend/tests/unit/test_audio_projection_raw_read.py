@@ -1,6 +1,7 @@
 """Framed PCM reads use the receipt table without false single-span hash misses."""
 
 import json
+import struct
 from unittest.mock import MagicMock
 import time
 
@@ -169,6 +170,63 @@ def test_rebatched_projection_preserves_independent_replay_proof(remote, conflic
         storage.upload_audio_chunks_batch(chunks, 'owner', 'conversation', 'standard', sample_rate=16000)
         assert len(remote.list_blobs('chunks/')) == 2
     assert audio_outbox.read_pcm('owner', new) == replay + tail
+
+
+@pytest.mark.parametrize('changed_source', ['projection', 'raw'])
+def test_cross_rate_replay_refuses_conflict_in_either_committed_source(remote, monkeypatch, changed_source):
+    captured = struct.pack('<1024h', *range(1024))
+    old = audio_outbox.commit_pcm_window(
+        'owner', captured, 'conversation', 1000, 44100, 'native', 0, [frame(captured, 1000)], framed=True
+    )
+    path = storage.upload_audio_chunks_batch(
+        [{'data': captured, 'timestamp': 1000, 'custody_receipt': old.to_dict()}],
+        'owner',
+        'conversation',
+        'standard',
+        sample_rate=44100,
+    )[0]
+    replay = raw_audio_read.read_pack(remote, old.path, 'owner', sample_rate=16000)
+    tail = b'\x07\x08' * 160
+    frames = [frame(replay, 1000), frame(tail, 1003, 1, len(replay), True)]
+    new = audio_outbox.commit_pcm_window(
+        'owner', replay + tail, 'conversation', 1000, 16000, 'replay', 0, frames, framed=True
+    )
+    if changed_source == 'projection':
+        # An independently conflicting immutable projection must not be skipped
+        # just because the raw archive agrees with the incoming replay.
+        remote.blob(path).data = b'\xff\x7f' + captured[2:]
+    else:
+        read_pack = audio_chunk_replay.read_pack
+
+        def conflicting_raw(bucket, source_path, *args, **kwargs):
+            result = read_pack(bucket, source_path, *args, **kwargs)
+            return b'\xff\x7f' + result[2:] if source_path == old.path else result
+
+        monkeypatch.setattr(audio_chunk_replay, 'read_pack', conflicting_raw)
+    with pytest.raises(storage.AudioChunkContentConflict):
+        storage.upload_audio_chunks_batch(
+            [{'data': replay + tail, 'timestamp': 1000, 'custody_receipt': new.to_dict()}],
+            'owner',
+            'conversation',
+            'standard',
+            sample_rate=16000,
+        )
+    assert len(remote.list_blobs('chunks/')) == 1
+    assert audio_outbox.read_pcm('owner', old) == captured
+    assert audio_outbox.read_pcm('owner', new) == replay + tail
+
+
+def test_optional_raw_listing_failure_logs_only_a_closed_bucket(caplog):
+    def failed_listing(*args, **kwargs):
+        raise OSError('injected-private-object-details')
+
+    assert (
+        raw_audio_read.raw_chunks_for_listing(None, 'owner', 'conversation', [], enabled=True, list_raw=failed_listing)
+        == []
+    )
+    assert 'result=other codec=other' in caplog.text
+    assert 'injected-private-object-details' not in caplog.text
+    assert 'Traceback' not in caplog.text
 
 
 @pytest.mark.parametrize('read_enabled', [False, True])
@@ -356,3 +414,147 @@ def test_replay_compares_native_rate_raw_capture_in_requested_rendition(remote, 
     else:
         assert remote.blob(upload()[0]).data == replay
     assert audio_outbox.read_pcm('owner', old) == captured
+
+
+@pytest.mark.parametrize('rate', [8000, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 96000])
+@pytest.mark.parametrize('prefix_samples', [0, 1024])
+@pytest.mark.parametrize('coverage', ['start', 'end', 'both', 'middle'])
+def test_clipped_raw_frames_keep_capture_coordinates(remote, monkeypatch, rate, prefix_samples, coverage):
+    captured = struct.pack(f'<{prefix_samples + 1024}h', *range(prefix_samples + 1024))
+    target = captured[prefix_samples * 2 :]
+    frames = (
+        [frame(captured[: prefix_samples * 2], 997), frame(target, 1000, 1, prefix_samples * 2, True)]
+        if prefix_samples
+        else [frame(target, 1000)]
+    )
+    receipt = audio_outbox.commit_pcm_window(
+        'owner', captured, 'conversation', frames[0]['start'], rate, 'root', 0, frames, framed=True
+    )
+    original = raw_audio_read.list_packs(remote, 'owner', 'conversation')[-1]
+    before = dict(original)
+    projected_start = original['raw_offset_samples']
+    projected_end = projected_start + original['span']['samples']
+    count = original['span']['samples']
+    covered = {
+        'start': [(0, 80)],
+        'end': [(count - 80, count)],
+        'both': [(0, 80), (count - 80, count)],
+        'middle': [(count // 2 - 10, count // 2 + 10)],
+    }[coverage]
+    encoded = [
+        {
+            'timestamp': 1000 + lo / 16000,
+            'span': {'start': 1000 + lo / 16000, 'samples': hi - lo, 'sample_rate': 16000},
+        }
+        for lo, hi in covered
+    ]
+    fragments = raw_audio_read.uncovered_raw_packs([original], encoded)
+    remaining = {
+        'start': [(80, count)],
+        'end': [(0, count - 80)],
+        'both': [(80, count - 80)],
+        'middle': [(0, count // 2 - 10), (count // 2 + 10, count)],
+    }[coverage]
+    assert len(fragments) == len(remaining)
+    monkeypatch.setattr(storage, 'list_audio_chunks', lambda *args, **kwargs: fragments)
+    for output_rate in dict.fromkeys((rate, 16000, 48000)):
+        decoded = raw_audio_read.read_pack(remote, receipt.path, 'owner', sample_rate=output_rate)
+        expected = []
+        for fragment, (lo, hi) in zip(fragments, remaining):
+            # Cuts quantize on the source sample clock; an untouched edge stays
+            # at the captured frame endpoint, never a rounded 16 kHz duration.
+            left = prefix_samples if lo == 0 else max(prefix_samples, round((projected_start + lo) * rate / 16000))
+            right = (
+                prefix_samples + 1024
+                if hi == count
+                else min(prefix_samples + 1024, round((projected_start + hi) * rate / 16000))
+            )
+            if output_rate == 16000:
+                wanted = decoded[(projected_start + lo) * 2 : (projected_start + hi) * 2]
+            elif output_rate == rate:
+                wanted = captured[left * 2 : right * 2]
+            else:
+                metadata = remote.blob(receipt.path).metadata
+                start = len(decode_capture(captured[: left * 2], metadata, output_rate)) if left else 0
+                end = len(decode_capture(captured[: right * 2], metadata, output_rate)) if right else 0
+                wanted = decoded[start:end]
+            assert raw_audio_read.select_raw_pcm(decoded, fragment, output_rate) == wanted
+            assert audio_chunk_replay._chunk_pcm(decoded, fragment, output_rate) == wanted
+            assert audio_chunk_replay._chunk_samples(fragment, output_rate) == len(wanted) // 2
+            assert fragment['raw_capture_rate'] == rate
+            assert fragment['raw_capture_offset_samples'] == left
+            assert fragment['raw_capture_samples'] == right - left
+            expected.append(wanted)
+        played = list(iter_audio_chunk_pcm('owner', 'conversation', lambda *args: True, sample_rate=output_rate))
+        assert [pcm for _, pcm in played] == expected
+        assert storage.download_audio_chunks_and_merge(
+            'owner',
+            'conversation',
+            [row['timestamp'] for row in fragments],
+            sample_rate=output_rate,
+            fill_gaps=False,
+            listed_chunks=fragments,
+            strict_sources=True,
+        ) == b''.join(expected)
+    assert projected_end <= len(raw_audio_read.read_pack(remote, receipt.path, 'owner')) // 2
+    assert original == before
+    assert audio_outbox.read_pcm('owner', receipt) == captured
+
+
+@pytest.mark.parametrize('rate', [8000, 22050, 44100, 48000])
+@pytest.mark.parametrize('gap', [False, True])
+@pytest.mark.parametrize('conflict', [False, True])
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_cross_rate_replay_checks_existing_projection_and_raw_archive(
+    remote, monkeypatch, rate, gap, conflict, protection
+):
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *args: False)
+    captured = struct.pack('<2048h', *range(2048))
+    second_start = 1000 + 1024 / rate + (3 if gap else 0)
+    old_frames = [frame(captured[:2048], 1000), frame(captured[2048:], second_start, 1, 2048, gap)]
+    old = audio_outbox.commit_pcm_window(
+        'owner', captured, 'conversation', 1000, rate, 'native', 0, old_frames, framed=True
+    )
+    old_path = storage.upload_audio_chunks_batch(
+        [{'data': captured, 'timestamp': 1000, 'custody_receipt': old.to_dict()}],
+        'owner',
+        'conversation',
+        protection,
+        sample_rate=rate,
+    )[0]
+    old_blob = remote.blob(old_path)
+    old_bytes, old_generation = old_blob.data, old_blob.generation
+    rendition = raw_audio_read.read_pack(remote, old.path, 'owner', sample_rate=16000)
+    replay = b'\xff\x7f' + rendition[2:] if conflict else rendition
+    tail = b'\x07\x08' * 160
+    first_size = len(decode_capture(captured[:2048], remote.blob(old.path).metadata, 16000))
+    tail_start = second_start + 1024 / rate + 3
+    # A continuous rendition has one sample clock. Keeping native packet
+    # boundaries after resampling would shift its second run by a sample.
+    frames = (
+        [frame(replay[:first_size], 1000), frame(replay[first_size:], second_start, 1, first_size, True)]
+        if gap
+        else [frame(replay, 1000)]
+    )
+    frames.append(frame(tail, tail_start, len(frames), len(replay), True))
+    new = audio_outbox.commit_pcm_window(
+        'owner', replay + tail, 'conversation', 1000, 16000, 'replay', 0, frames, framed=True
+    )
+    upload = lambda: storage.upload_audio_chunks_batch(
+        [{'data': replay + tail, 'timestamp': 1000, 'custody_receipt': new.to_dict()}],
+        'owner',
+        'conversation',
+        protection,
+        sample_rate=16000,
+    )
+    if conflict:
+        with pytest.raises(storage.AudioChunkContentConflict):
+            upload()
+        assert len(remote.list_blobs('chunks/')) == 1
+    else:
+        path = upload()[0]
+        assert storage.download_and_decode_chunk_blob(remote, path, 'owner', 16000) == replay + tail
+        assert len(remote.list_blobs('chunks/')) == 2
+    assert (old_blob.data, old_blob.generation) == (old_bytes, old_generation)
+    assert audio_outbox.read_pcm('owner', old) == captured
+    assert audio_outbox.read_pcm('owner', new) == replay + tail

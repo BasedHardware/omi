@@ -198,3 +198,17 @@ async def test_mid_window_death_leaves_tail_held_and_prior_part_released(remote,
     assert len(receipts) == 1 and audio_outbox.read_pcm('owner', receipts[0]) == captured[0]
     assert receipts[0].samples == 160 and sock.close_code == 1011
     assert len(remote.list_blobs('raw-live/')) == len(remote.list_blobs('audio-outbox/')) == 1
+
+
+def test_oversized_frame_manifest_never_issues_an_unreadable_receipt(remote, monkeypatch):
+    # The writer must honor the reader bound before issuing a custody receipt.
+    monkeypatch.setattr(audio_outbox, 'MAX_MANIFEST_BYTES', 1, raising=False)
+    pcm = b'\x01\x02' * 160
+    before = audio_outbox_metrics.CUSTODY_COMMITS._value.get()
+    with pytest.raises(ValueError, match='frame manifest exceeds reader bound'):
+        audio_outbox.commit_pcm_window(
+            'owner', pcm, 'conversation', 1000, 16000, 'root', 0, [frame(pcm, 1000)], framed=True
+        )
+    assert len(remote.list_blobs('raw-live/')) == 1
+    assert not remote.list_blobs('audio-outbox/')
+    assert audio_outbox_metrics.CUSTODY_COMMITS._value.get() == before
