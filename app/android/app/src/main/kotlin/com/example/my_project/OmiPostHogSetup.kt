@@ -48,6 +48,7 @@ object OmiPostHogSetup {
             sendFeatureFlagEvent = false
             optOut = optedOut
             debug = debugging
+            surveys = false
             sessionReplay = false
             sessionReplayConfig.captureLogcat = false
             sdkName = "posthog-flutter"

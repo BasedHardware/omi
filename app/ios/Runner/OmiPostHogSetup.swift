@@ -16,6 +16,7 @@ enum OmiPostHogSetup {
       config.sendFeatureFlagEvent = false
       config.optOut = args["optOut"] as? Bool ?? false
       config.debug = args["debug"] as? Bool ?? false
+      config.surveys = false
       config.sessionReplay = false
       config.sessionReplayConfig.captureNetworkTelemetry = false
       config.urlSessionConfiguration = PostHogFlagRequestBlocker.sessionConfiguration()

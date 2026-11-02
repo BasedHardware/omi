@@ -20,6 +20,7 @@ class PostHogFlagRequestBlockerTest {
         assertEquals("posthog-flutter", config.sdkName)
         assertEquals(BuildConfig.POSTHOG_FLUTTER_VERSION, config.sdkVersion)
         assertEquals(true, config.optOut)
+        assertFalse(config.surveys)
         assertFalse(config.preloadFeatureFlags)
         assertFalse(config.sendFeatureFlagEvent)
         assertEquals(PostHogFlagRequestBlocker::class.java, config.httpClient!!.interceptors.single().javaClass)

@@ -79,6 +79,8 @@ class PostHogAnalyticsAdapter
     config.debug = debug;
     config.sendFeatureFlagEvents = false;
     config.preloadFeatureFlags = false;
+    // Omi has no PosthogObserver / survey surface; keep native survey UI off too.
+    config.surveys = false;
     SessionReplay.configure(config);
     // Own native transport before the Flutter bridge initializes. Native setup is
     // idempotent; the bridge still initializes Dart replay and event callbacks.

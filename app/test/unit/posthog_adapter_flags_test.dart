@@ -51,6 +51,7 @@ void main() {
     await adapter.deliver(eventName: 'Chat Message Sent', properties: {'length': 1});
     final setup = calls.singleWhere((c) => c.method == 'setup').arguments as Map;
     expect(setup['preloadFeatureFlags'], isFalse);
+    expect(setup['surveys'], isFalse);
     expect(setup['sendFeatureFlagEvents'], isFalse);
     expect(calls.where((c) => c.method == 'capture').single.arguments['eventName'], 'Chat Message Sent');
     expect(calls.map((c) => c.method), isNot(contains('reloadFeatureFlags')));
