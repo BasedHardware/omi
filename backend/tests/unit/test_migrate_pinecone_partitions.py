@@ -276,6 +276,49 @@ def test_budget_refuses_before_durable_write_admission(args, key, monkeypatch):
         transport.client.close()
 
 
+@pytest.fixture
+def stop_args(tmp_path, monkeypatch):
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    stop = tmp_path / 'STOP'
+    return (
+        cli.parse_args(
+            ['--index', cli.DEV_INDEX, '--uid', 'owner', '--output-dir', str(tmp_path), '--stop-file', str(stop)]
+        ),
+        stop,
+    )
+
+
+def test_stop_file_refuses_before_durable_write_admission(stop_args, key, monkeypatch):
+    args, stop = stop_args
+    transport = cli.BudgetTransport('unit-test.pinecone.io', 'unit-test-key', args)
+    try:
+        parent_write = Mock(side_effect=AssertionError('durable admission invoked'))
+        monkeypatch.setattr(cli.OwnerMigration, '_write', parent_write)
+        migration = cli.BoundedMigration(key, transport, firestore_client=None)
+        stop.touch()
+        with pytest.raises(cli.BudgetExceeded, match='stop requested'):
+            migration._write('owned-token', 'vectors/upsert', key.family, ['id'], vectors=[])
+        parent_write.assert_not_called()
+    finally:
+        transport.client.close()
+
+
+def test_stop_file_stops_reads_but_never_a_write_inside_its_admission(stop_args, monkeypatch):
+    args, stop = stop_args
+    transport = cli.BudgetTransport('unit-test.pinecone.io', 'unit-test-key', args)
+    try:
+        monkeypatch.setattr(cli.PartitionTransport, 'call', lambda self, path, payload: ({}, {}))
+        assert transport.call('query', {'namespace': 'ns1'}) == ({}, {})
+        stop.touch()
+        with pytest.raises(cli.BudgetExceeded, match='stop requested'):
+            transport.call('query', {'namespace': 'ns1'})
+        # The write was admitted before the stop appeared: its own request must still go out and settle.
+        for path in sorted(cli.WRITE_PATHS):
+            assert transport.call(path, {'namespace': 'ns1', 'ids': ['a']}) == ({}, {})
+    finally:
+        transport.client.close()
+
+
 def test_qualification_script_direct_execution_reaches_safety_gate(tmp_path):
     script = Path(cli.__file__).with_name('qualify_pinecone_partitions.py')
     env = {key: value for key, value in os.environ.items() if key != 'PYTHONPATH'}
