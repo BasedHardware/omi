@@ -120,8 +120,8 @@ Do not `sum()` these gauges, and do not `max()` the gauge itself.
 
 `omi_processing_backlog_choice_total{source,outcome}` counts owner choices:
 `source="manual"` is each `POST /v1/users/processing-backlog/process` (including
-out-of-scope 404s), `source="trial"` is each Stripe trial start (the only automatic
-grant); `outcome` is `accepted`, `out_of_scope`, `not_paid` (a Free owner, by
+out-of-scope 404s), `source="trial"` is each Stripe trial start, `source="conversion"`
+is each paid conversion or allowance increase; `outcome` is `accepted`, `out_of_scope`, `not_paid` (a Free owner, by
 design), `capped`, `nothing_waiting`, `stale_intent` or `error`. A retried
 idempotency key counts again. `omi_held_content_recovery_skipped_total{outcome="not_paid"}`
 counts Free holds a choice skipped; it is intended and outside the recovery gate.

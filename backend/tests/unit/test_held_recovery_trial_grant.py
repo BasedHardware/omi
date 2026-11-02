@@ -1,8 +1,8 @@
-"""The one automatic held-audio recovery: a Stripe trial's start (David, 2026-11-01; synthetic only).
+"""The trial grant: a Stripe trial's start (David, 2026-11-02; synthetic only).
 
-Newest first up to ``TRIAL_RECOVERY_GRANT_HOURS`` of held audio, once per trial. A retry, a
-restart or a later month starts nothing more. Purchases, plan changes, renewals and the first
-real charge never start recovery: held audio waits for the owner's tap.
+Newest first up to ``TRIAL_RECOVERY_GRANT_HOURS`` of held audio, once per account. A retry or a
+restart starts nothing more. The grant carries across a month; its limits are in
+``test_backlog_release_gate``.
 """
 
 from copy import deepcopy
@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from config.backlog_release import PRIORITY_HOURS
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import TRIAL_RECOVERY_GRANT_HOURS
 from database import processing_backlog as store
@@ -114,11 +115,9 @@ async def test_purchases_and_charges_start_nothing(monkeypatch, subscription):
     await worker.trial_started_async(UID, subscription)
 
 
-def test_payment_starts_recovery_only_from_a_trial_start():
-    """Every former automatic start (plan change, checkout, subscription event) is gone."""
+def test_payment_grants_a_trial_only_from_its_start_and_converts_on_real_payment():
     source = (Path(__file__).resolve().parents[2] / 'routers' / 'payment.py').read_text(encoding='utf-8')
-    for retired in ('upgrade_async', 'processing_backlog_worker import upgrade\n', 'allowance_increased', 'choose('):
-        assert retired not in source
+    assert "previous_status == 'trialing' and subscription_obj.get('status') == 'active'" in source
     assert source.count('await trial_started_async(uid, subscription_obj)') == 1
     # Only the subscription's creation (the trial start) may grant; an update such as a plan
     # change while trialing never does, even when no earlier grant receipt exists.
@@ -131,9 +130,51 @@ def test_trial_grant_is_a_plain_config_value():
     assert TRIAL_RECOVERY_GRANT_HOURS == 25
 
 
+async def test_a_second_trial_on_the_same_account_grants_nothing(owner):
+    await worker.trial_started_async(UID, trialing())
+    first = deepcopy(owner.choice())
+    assert first['trial_granted_at'] and first['trial_grant'] is True
+    assert first['release_priority_units'] == PRIORITY_HOURS * RATE
+    owner.client.rows[SUMMARY]['state'] = 'waiting_choice'
+    await worker.trial_started_async(UID, trialing(id='sub_second'))
+    assert owner.choice()['state'] == 'waiting_choice'
+
+
+def test_a_trial_grant_rolls_into_the_next_month_keeping_its_hours(monkeypatch):
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-12')
+    job = {'state': 'processing', 'period': '2026-11', 'automatic': True, 'trial_grant': True}
+    assert backlog.rolls(job, 50.0)
+    assert not backlog.rolls({**job, 'trial_grant': False}, None)
+
+
+async def test_kill_switch_stops_a_release_already_running(monkeypatch):
+    monkeypatch.setenv('BACKLOG_RELEASE_ENABLED', 'false')
+    monkeypatch.setattr(worker, 'recovery_cohort_admits', lambda uid: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
+    monkeypatch.setattr(funded, 'paid_owner', lambda uid: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-11')
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda uid: False)
+    monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
+    monkeypatch.setattr(
+        worker.store, 'read', lambda uid: {'state': 'processing', 'period': '2026-11', 'automatic': True, 'token': 't'}
+    )
+    claim = Mock(side_effect=AssertionError('claimed past the kill switch'))
+    monkeypatch.setattr(worker.store, 'claim', claim)
+
+    async def immediate(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'run_blocking', immediate)
+    assert await worker.run(UID) is None
+    claim.assert_not_called()
+
+
 @pytest.fixture
 def grant_run(monkeypatch):
     """Drive one fenced worker visit over synthetic newest-first holds."""
+    monkeypatch.setattr(
+        worker.backlog_release, 'decide', lambda job, units: worker.backlog_release.Decision(True, 'granted')
+    )
     job = {
         'state': 'processing',
         'period': '2026-11',

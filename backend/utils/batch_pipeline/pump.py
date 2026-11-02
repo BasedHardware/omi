@@ -21,6 +21,7 @@ from utils.batch_pipeline.contracts import (
     RecoveryWork,
     ValidationFailureWork,
 )
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
@@ -485,7 +486,12 @@ class Pump:
                     process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
                     compute = asyncio.create_task(
                         self._run_blocking(
-                            'worker_flight',
+                            # The HPA sizes on worker_flight: idle-only release must not buy a GPU.
+                            (
+                                'worker_flight_deep'
+                                if all(v.item.priority == Priority.DEEP for v in leases)
+                                else 'worker_flight'
+                            ),
                             sync_executor,
                             process,
                             [v.item for v in leases if v.item.segment_id not in skipped],

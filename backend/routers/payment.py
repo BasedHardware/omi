@@ -974,6 +974,16 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                     clear_fair_use_on_upgrade(uid)
+                    if funded_processing_enabled(uid):
+                        from utils.processing_backlog import allowance_increased
+                        from utils.processing_backlog_worker import upgrade
+
+                        if allowance_increased(current_subscription, new_subscription):
+                            upgrade(
+                                uid,
+                                f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_end}',
+                                intent_at=time.time(),
+                            )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -1251,6 +1261,12 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+                if funded_processing_enabled(uid):
+                    from utils.processing_backlog import allowance_increased
+                    from utils.processing_backlog_worker import upgrade_async
+
+                    if allowance_increased(existing_subscription, subscription):
+                        await upgrade_async(uid, f'checkout:{session.get("id")}', intent_at=event.get("created"))
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
@@ -1461,8 +1477,17 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
-                    # Held audio waits for a tap after a purchase; only a trial's start recovers on
-                    # its own. Created is the trial start; a later update (a plan change) never grants.
+                    if funded_processing_enabled(uid) and not adopted_active_paid:
+                        from utils.processing_backlog import allowance_increased
+                        from utils.processing_backlog_worker import upgrade_async
+
+                        previous_status = (event.get('data', {}).get('previous_attributes') or {}).get('status')
+                        converted = previous_status == 'trialing' and subscription_obj.get('status') == 'active'
+                        if converted or allowance_increased(current_subscription, new_subscription):
+                            await upgrade_async(
+                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
+                            )
+                    # Created is the trial start; a later update (a plan change) never grants.
                     if (
                         event['type'] == 'customer.subscription.created'
                         and funded_processing_enabled(uid)

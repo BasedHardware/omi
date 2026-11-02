@@ -114,7 +114,9 @@ def start(
     cutoff: float,
     request_key: str,
     automatic: bool = False,
-    begin: bool = True
+    begin: bool = True,
+    trial: bool = False,
+    priority_units: float = 0.0,
 ) -> dict:
     """Idempotent while active; every run is fenced to its chosen month and cutoff."""
     client = get_firestore_client()
@@ -133,12 +135,22 @@ def start(
         tx.create(receipt, {'period': period, 'created_at': time.time(), 'accepted': begin})
         if not begin:
             return current
+        # The per-account ledger: a second trial on any subscription grants nothing.
+        if trial and current.get('trial_granted_at'):
+            return current
+        ledger = {'trial_granted_at': time.time()} if trial else {}
         if current.get('state') == 'processing' and current.get('period') == period:
             if automatic:
                 # Upgrade intent may extend an earlier partial choice, without
                 # replacing the lease/cursors of work already in progress.
-                pending = {'period': period, 'remaining': remaining, 'cutoff': cutoff}
-                tx.update(ref, {'pending_upgrade': pending})
+                pending = {
+                    'period': period,
+                    'remaining': remaining,
+                    'cutoff': cutoff,
+                    'trial_grant': trial,
+                    'release_priority_units': priority_units,
+                }
+                tx.update(ref, {'pending_upgrade': pending, **ledger})
                 return {**current, 'pending_upgrade': pending}
             return current
         updates = {
@@ -149,6 +161,9 @@ def start(
             'remaining': remaining,
             'lease_until': 0,
             'automatic': automatic,
+            'trial_grant': trial,
+            'release_priority_units': priority_units,
+            **ledger,
             'pending_upgrade': {},
             'reserved': {},
             'scope_skipped': False,
@@ -168,10 +183,11 @@ def roll(uid: str, *, period: str, cutoff: float) -> dict | None:
     """Carry an owner's own earlier-month choice into ``period``; never creates one.
 
     The caller has just confirmed the owner's recovery spends no finite
-    allowance. Only an unleased manual choice rolls: a trial grant or legacy
-    upgrade intent was not a tap. It gets a new token (fencing out any worker
-    of the old month), the new period and a new cutoff. A reservation carries
-    over to finish under its source's idempotent claim and receipts.
+    allowance, or that this is a trial grant. A manual choice rolls with a new
+    cutoff. A trial grant keeps its remaining hours, cutoff and cursors. A
+    conversion intent never rolls. Each gets a new token (fencing out any worker
+    of the old month) and the new period. A reservation carries over to finish
+    under its source's idempotent claim and receipts.
     """
     client = get_firestore_client()
     ref = summary_ref(uid)
@@ -182,7 +198,7 @@ def roll(uid: str, *, period: str, cutoff: float) -> dict | None:
         previous = row.get('period')
         if (
             row.get('state') != 'processing'
-            or row.get('automatic')
+            or (row.get('automatic') and not row.get('trial_grant'))
             or not isinstance(previous, str)
             or previous >= period
             or row.get('lease_until', 0) > time.time()
@@ -200,6 +216,9 @@ def roll(uid: str, *, period: str, cutoff: float) -> dict | None:
             'lease_until': 0,
             'rolled_from': previous,
         }
+        if row.get('trial_grant'):
+            for kept in ('cutoff', 'remaining', 'cursor_audio', 'cursor_text'):
+                updates[kept] = row.get(kept)
         tx.update(ref, updates)
         return {**row, **updates}
 
@@ -388,6 +407,8 @@ def finish(uid: str, token: str, lease: str, period: str) -> bool:
                     'cutoff': pending['cutoff'],
                     'remaining': pending['remaining'],
                     'automatic': True,
+                    'trial_grant': bool(pending.get('trial_grant')),
+                    'release_priority_units': pending.get('release_priority_units', 0.0),
                     'pending_upgrade': {},
                     'reserved': {},
                     'scope_skipped': False,

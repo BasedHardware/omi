@@ -340,6 +340,7 @@ async def accept_upload(
     policy: BatchUnitPolicy | None = None,
     usage_period: str | None = None,
     evidence: IntakeRouteEvidence | None = None,
+    vendor_table: bool = True,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -579,7 +580,7 @@ async def accept_upload(
             byok=byok_enabled,
             uid=uid,
             batch_percent=policy.batch_percent,
-            vendor_eligible=mode is not LegacySyncMode.ON,
+            vendor_eligible=vendor_table and mode is not LegacySyncMode.ON,
             gpu_saturated=(lambda: overflow_enabled() and gpu_overflow.saturated(store)) if fresh else None,
         ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes

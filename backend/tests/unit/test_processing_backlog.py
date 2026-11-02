@@ -666,7 +666,7 @@ def _choices(source, outcome):
         (False, 'none', None, False, 'nothing_waiting'),
         (True, 'waiting_choice', '2026-02', False, 'accepted'),
         (True, 'waiting_choice', '2026-01', False, 'stale_intent'),
-        # The trial grant caps itself at its own budget, so a larger backlog still begins.
+        # An automatic release spends what fits, so a larger backlog still begins.
         (True, 'waiting_choice', '2026-02', True, 'accepted'),
         (True, 'capped', '2026-02', False, 'capped'),
     ],
@@ -688,7 +688,7 @@ def test_backlog_choices_are_counted_by_source_and_outcome(
     intent_at = (
         datetime.strptime(f'{intent_month}-15', '%Y-%m-%d').replace(tzinfo=timezone.utc) if intent_month else None
     )
-    source = 'trial' if automatic else 'manual'
+    source = 'conversion' if automatic else 'manual'
     before = _choices(source, outcome)
     backlog.choose('synthetic', request_key='synthetic-choice', automatic=automatic, intent_at=intent_at)
     assert _choices(source, outcome) == before + 1
@@ -697,10 +697,10 @@ def test_backlog_choices_are_counted_by_source_and_outcome(
 def test_backlog_choice_errors_and_out_of_scope_404s_are_counted(monkeypatch):
     monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'allowance', Mock(side_effect=OSError('synthetic allowance outage')))
-    before = _choices('trial', 'error')
+    before = _choices('conversion', 'error')
     with pytest.raises(OSError):
         backlog.choose('synthetic', request_key='synthetic-choice', automatic=True, intent_at=None)
-    assert _choices('trial', 'error') == before + 1
+    assert _choices('conversion', 'error') == before + 1
 
     monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: False)
     monkeypatch.setattr(backlog, 'choose', Mock(side_effect=AssertionError('chose out of scope')))

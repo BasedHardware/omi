@@ -13,15 +13,16 @@ from google.cloud import firestore
 from database import processing_backlog as store, conversations as conversations_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.conversation import Conversation
-from utils import funded_processing
+from utils import backlog_release, funded_processing
 from utils.processing_backlog import choose, is_active, rolls
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
 from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
+from config.backlog_release import enabled as release_enabled
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import hold_lane, recovery_admission_enabled, recovery_cohort_admits
-from utils.observability.held_content import record_recovery_skipped
+from utils.observability.held_content import record_recovery_skipped, record_release
 from utils.observability.reasons import HeldRecoverySkipOutcome
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,9 @@ async def run(
         job = await _roll(uid, job)
     if not is_active(job):
         return
+    # The kill switch stops a release already under way. Its holds stay held.
+    if job.get('automatic') and not release_enabled():
+        return
     token = job['token']
     lease = await run_blocking(db_executor, store.claim, uid, token, funded_processing.period_id())
     if lease is None:
@@ -237,8 +241,12 @@ async def run(
             return False
         # Executors and spawned callbacks inherit this UID/month grant. Later
         # model/STT dispatches must not silently adopt a reset allowance.
-        with funded_processing.backlog_consent(uid, job['period']):
-            outcome = await _process(uid, item)
+        token_priority = backlog_release.normal_priority.set(bool(item.get('normal_priority')))
+        try:
+            with funded_processing.backlog_consent(uid, job['period']):
+                outcome = await _process(uid, item)
+        finally:
+            backlog_release.normal_priority.reset(token_priority)
         if outcome in (AttemptOutcome.COMPLETE, AttemptOutcome.DEFERRED):
             # A returned deferred result is known complete, unlike a busy lease
             # or an ambiguous application failure. Its queue row stays waiting.
@@ -346,6 +354,13 @@ async def run(
                 if not await save(updates):
                     return False
                 continue
+            if job.get('automatic'):
+                release = await run_blocking(db_executor, backlog_release.decide, job, item['units'])
+                record_release(release.reason)
+                if not release.allowed:
+                    return False  # Nothing advanced: the next sweep asks again for this same recording.
+                item['normal_priority'] = release.normal_priority
+                updates.update(release.updates)
             updates.update(reserved=item, remaining=None if remaining is None else max(0, remaining - item['units']))
             if not await save(updates):
                 return False
@@ -386,13 +401,21 @@ async def run(
     return continuation
 
 
-async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
-    """The only automatic recovery: once per Stripe trial, from its start (David, 2026-11-01).
+def upgrade(uid: str, request_key: str, *, intent_at):
+    """Only payment intent calls this; monthly renewal/reset never creates intent."""
+    choose(uid, request_key=request_key, automatic=True, intent_at=intent_at)
 
-    Keyed to the subscription, so a redelivery, restart or later month finds the
-    receipt and starts nothing. The trial's own start dates the intent: a late
-    first delivery in a later month is stale, not consent. Purchases, renewals
-    and the first real charge never call this; they wait for a tap.
+
+async def upgrade_async(uid: str, request_key: str, *, intent_at):
+    await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
+
+
+async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
+    """One grant per account, from the trial's start (David, 2026-11-02).
+
+    Keyed to the subscription, so a redelivery or restart finds the receipt, and
+    the account ledger refuses any later trial. The trial's own start dates the
+    intent: a late first delivery in a later month is stale, not consent.
     """
     started = stripe_subscription.get('trial_start')
     if stripe_subscription.get('status') != 'trialing' or not stripe_subscription.get('id') or not started:
@@ -404,6 +427,7 @@ async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
         request_key=f'trial-grant:{stripe_subscription["id"]}',
         automatic=True,
         intent_at=started,
+        trial=True,
     )
 
 

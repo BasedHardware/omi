@@ -102,7 +102,15 @@ RECOVERY_SKIPPED = Counter(
     'or not_paid (a Free owner, by design)',
     ['outcome'],
 )
-BACKLOG_CHOICE_SOURCES = ('manual', 'trial')
+BACKLOG_CHOICE_SOURCES = ('manual', 'trial', 'conversion')
+RELEASE_DECISIONS = ('granted', 'kill_switch', 'owner_day', 'not_idle', 'fleet_budget')
+RELEASE = Counter(
+    'omi_held_content_backlog_release',
+    'Automatic release decisions per recording; granted is the only one that spends budget',
+    ['decision'],
+)
+for _decision in RELEASE_DECISIONS:
+    RELEASE.labels(decision=_decision)
 BACKLOG_CHOICE = Counter(
     'omi_processing_backlog_choice',
     'Processing-backlog choices by source: manual is POST /v1/users/processing-backlog/process, trial is a '
@@ -223,6 +231,11 @@ def record_recovery(result: str) -> None:
 
 def record_recovery_skipped(outcome: str) -> None:
     _inc(RECOVERY_SKIPPED, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, HeldRecoverySkipOutcome))
+
+
+def record_release(decision: str) -> None:
+    if decision in RELEASE_DECISIONS:
+        _inc(RELEASE, decision=decision)
 
 
 def record_backlog_choice(source: str, outcome: str) -> None:

@@ -4,7 +4,9 @@ from typing import Any
 import math
 import time
 
-from config.rate_card import recording_units_per_hour, standard_chat_units
+from config.backlog_release import PRIORITY_HOURS
+from config.rate_card import recording_units_per_hour, standard_chat_units, budget_units
+from config.plan_catalog import resolve_subscription_entitlements, allocation_limit
 from config.stt_cap_dispatch import TRIAL_RECOVERY_GRANT_HOURS, recovery_cohort_admits
 from datetime import datetime, timezone
 from models.users import ProcessingBacklog
@@ -82,11 +84,13 @@ def manual_choice_in_scope(uid: str) -> bool:
     return False
 
 
-def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
-    """A tap, or (``automatic``) the one-time trial grant. No other path starts recovery."""
-    source = 'trial' if automatic else 'manual'
+def choose(
+    uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None, trial: bool = False
+) -> dict | None:
+    """A tap, a paid conversion (``automatic``), or the one-per-account trial grant (``trial``)."""
+    source = 'trial' if trial else 'conversion' if automatic else 'manual'
     try:
-        chosen, outcome = _choose(uid, request_key=request_key, automatic=automatic, intent_at=intent_at)
+        chosen, outcome = _choose(uid, request_key=request_key, automatic=automatic, intent_at=intent_at, trial=trial)
     except Exception:
         record_backlog_choice(source, BacklogChoiceOutcome.ERROR)
         raise
@@ -94,7 +98,9 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
     return chosen
 
 
-def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> tuple[dict | None, BacklogChoiceOutcome]:
+def _choose(
+    uid: str, *, request_key: str, automatic: bool, intent_at: Any, trial: bool = False
+) -> tuple[dict | None, BacklogChoiceOutcome]:
     if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
         return None, BacklogChoiceOutcome.OUT_OF_SCOPE
     if not funded_processing.paid_owner(uid):
@@ -131,9 +137,10 @@ def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> t
     if not begin and not automatic:
         return None, outcome
     remaining = result.remaining_units
-    if automatic:
+    rate = float(recording_units_per_hour('batch'))
+    if trial:
         # The worker spends this budget newest first and skips what no longer fits.
-        grant = TRIAL_RECOVERY_GRANT_HOURS * float(recording_units_per_hour('batch'))
+        grant = TRIAL_RECOVERY_GRANT_HOURS * rate
         remaining = grant if remaining is None else min(grant, remaining)
     chosen = store.start(
         uid,
@@ -143,6 +150,8 @@ def _choose(uid: str, *, request_key: str, automatic: bool, intent_at: Any) -> t
         request_key=request_key,
         automatic=automatic,
         begin=begin,
+        trial=trial,
+        priority_units=PRIORITY_HOURS * rate if trial else 0.0,
     )
     return (chosen if begin else None), outcome
 
@@ -152,16 +161,49 @@ def is_active(row: dict) -> bool:
 
 
 def rolls(row: dict, remaining: float | None) -> bool:
-    """An earlier month's tap continues when recovery spends no finite allowance.
+    """An earlier month's tap or trial grant continues; a conversion stays in its month.
 
     ``remaining`` is the owner's current capacity; None is the catalog's
     unlimited marker. A finite plan (Plus) keeps the monthly tap, so prior
-    consent never spends a new month's allowance.
+    consent never spends a new month's allowance. A trial grant keeps its own
+    hours across the month, since the daily limit can carry it past the boundary.
     """
     return (
-        remaining is None
+        (row.get('trial_grant') or (remaining is None and not row.get('automatic')))
         and row.get('state') == 'processing'
-        and not row.get('automatic')
         and isinstance(row.get('period'), str)
         and row['period'] < funded_processing.period_id()
     )
+
+
+def allowance_increased(previous: Any, current: Any) -> bool:
+    """Compare catalog allocations, never Stripe amounts or a calendar renewal.
+
+    Period validity is normalized for identity comparison only. This cannot
+    authorize work: choose() separately resolves the real funded allowance.
+    """
+
+    def fields(value):
+        if value is None:
+            return {'plan': 'basic'}
+        return dict(value) if isinstance(value, dict) else value.model_dump()
+
+    old, new = fields(previous), fields(current)
+    if old.get('plan') == new.get('plan') and old.get('current_price_id') == new.get('current_price_id'):
+        return False
+
+    def limit(value):
+        identity = {
+            **value,
+            'status': 'active',
+            'current_period_end': int(datetime.now(timezone.utc).timestamp()) + 86400,
+        }
+        entitlement = resolve_subscription_entitlements(identity)
+        units = budget_units(entitlement)
+        if units is not None:
+            return float(units)
+        seconds = allocation_limit(entitlement['plan_id'], 'transcription')
+        return None if seconds is None else seconds * float(recording_units_per_hour('batch')) / 3600
+
+    before, after = limit(old), limit(new)
+    return before is not None and (after is None or after > before)

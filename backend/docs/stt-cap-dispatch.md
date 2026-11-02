@@ -459,20 +459,37 @@ reads resume only an already chosen, current-month run. The authenticated
 `POST /v1/users/processing-backlog/process` endpoint requires `Idempotency-Key`;
 a durable receipt prevents duplicate consent even after the original job finishes.
 A choice captures its month, cutoff and estimated remaining allowance. Renewable
-job and hold leases fence concurrent workers. Purchases, plan changes, renewals
-and the first real charge never start recovery: a paid owner's held audio waits,
-with the process action, until the owner taps. The only automatic recovery is a
-Stripe trial's start (`customer.subscription.created` in status `trialing`; a later
-update, such as a plan change while trialing, never grants):
+job and hold leases fence concurrent workers. Renewals never start recovery.
+A Stripe trial's start (`customer.subscription.created` in status `trialing`; a later
+update, such as a plan change while trialing, never grants) does:
 `processing_backlog_worker.trial_started_async` chooses newest first with a budget
 of `TRIAL_RECOVERY_GRANT_HOURS` (25, `config/stt_cap_dispatch.py`) of held audio,
 or less when a finite allowance has less. The job's `remaining` is that budget.
 The request key is `trial-grant:<subscription id>`, so its durable receipt makes a
-retry, restart or later month a no-op, and the trial's own `trial_start` dates the
-intent: a first delivery in a later month is recorded as `stale_intent` and
-declined. Recordings made during the trial are not held (Unlimited) and never
-debit the grant; anything held after the grant's cutoff is outside it. Beyond the
-grant, the owner taps the same process action as anyone else.
+retry or restart a no-op, `trial_granted_at` on the summary refuses a second trial on
+the account, and the trial's own `trial_start` dates the intent: a first delivery in
+a later month is recorded as `stale_intent` and declined. Recordings made during the
+trial are not held (Unlimited) and never debit the grant; anything held after the
+grant's cutoff is outside it. A trial's conversion, a purchase or an allowance
+increase starts a release (source `conversion`) newest first within the plan's
+remaining allowance, all of it at idle.
+
+Every automatic release passes `utils/backlog_release.decide` per recording; a manual
+tap does not. A refusal leaves the recording held and the cursor unmoved, and the
+next sweep asks again:
+
+| Check | Limit | Where |
+| --- | --- | --- |
+| Kill switch | `BACKLOG_RELEASE_ENABLED`, on unless set off; stops running releases at their next recording. Audio already admitted finishes; nothing is deleted | `config/backlog_release.py` |
+| Owner | 5h per UTC day, summaries included | `release_day_units` on the summary |
+| Normal priority | First 2.5h of a trial grant (RECENT) | `release_priority_units` |
+| Idle (everything else, DEEP) | Fresh + recent ready under 64 and deep ready under 32, below the 128 units that would add a replica at the 4-replica floor. No sample reads as not idle | `IdleGate` |
+| Fleet | 20 audio-h/h and 400 audio-h per UTC day, Redis, fails closed | `database/backlog_release_budget.py` |
+
+DEEP-only flights time as `worker_flight_deep`, so the HPA's `worker_flight` chain
+metric does not size on them. Held audio never takes the cheaper-vendor table
+(`vendor_table=False`); a language Parakeet cannot serve still uses its provider
+route. Metric: `omi_held_content_backlog_release_total{decision}`.
 
 A paid owner's tap expires at the monthly rollover only when recovery spends a
 finite allowance (Plus keeps the monthly tap, so prior consent never spends a new
@@ -481,8 +498,9 @@ earlier month's unleased manual choice (`processing_backlog.rolls`,
 `database.processing_backlog.roll`) into the current month with a new token,
 period and cutoff, carrying any reservation to finish under its source's claim and
 receipts. This resumes choices parked by an earlier rollover without a new tap. A
-trial grant or legacy upgrade intent (`automatic`) never rolls, and nothing creates
-a choice for an owner who did not make one. New recordings after reset process normally; older held audio
+trial grant also rolls, whatever the capacity, keeping its remaining hours, cutoff
+and cursors, since the daily limit can carry it past the month's end. A conversion
+never rolls. New recordings after reset process normally; older held audio
 and deferred text stay waiting. For every explicitly chosen provider request, current
 funded allowance and the existing hard abuse restrictions must pass again before
 every new recovered provider request. Already persisted receipts can settle at
