@@ -1374,18 +1374,10 @@ def download_and_decode_chunk_blob(
 
     failure_result = 'decrypt_error' if encrypted else 'decode_error'
     try:
-        if encrypted:
-            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-        else:
-            raw_data = chunk_data
-
+        raw_data = encryption.decrypt_audio_file(chunk_data, uid) if encrypted else chunk_data
         failure_result = 'decode_error'
-        if is_opus:
-            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-            del raw_data
-        else:
-            pcm_data = raw_data
-
+        pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate) if is_opus else raw_data
+        del raw_data
         return _align_pcm16_frames(pcm_data, path)
     except Exception:
         if on_failure:
