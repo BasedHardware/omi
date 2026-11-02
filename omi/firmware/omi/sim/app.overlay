@@ -1,0 +1,10 @@
+/* No host HCI device, even if Bluetooth is accidentally enabled later. */
+/ {
+    chosen {
+        /delete-property/ zephyr,bt-hci;
+    };
+};
+
+&bt_hci_userchan {
+    status = "disabled";
+};

@@ -142,6 +142,9 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if partial_metadata.get('release'):
+                # Readers (hard-3, the 2h alarm) split released backfill from fresh audio per row.
+                job['release'] = partial_metadata['release']
             tx.put('jobs', item.segment_id, job)
         if intake is not None:
             tx.put('intakes', binding.job_id, {**intake, 'accepted_at': now})

@@ -166,6 +166,44 @@ def db(monkeypatch):
     return client
 
 
+def test_pull_claim_races_fallback_and_slow_worker_is_still_run_locked(db, monkeypatch):
+    """Actual sequencer plus actual Redis scripts; no mocked lease decisions."""
+    payload = {'uid': 'a', 'job_id': 'pull', 'lane': 'backfill', 'ledger_fence_mode': 'active', 'worker_eligible': True}
+    registry.register_job('a', 'pull', payload, None, now=NOW)
+    epoch = registry.claim_next('a', now=NOW)['epoch']
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'status': 'queued'})
+    barrier = threading.Barrier(2)
+
+    def compete(drive):
+        barrier.wait(timeout=5)
+        if drive == 'worker':
+            return registry.claim_worker('a', 'pull', epoch, 'worker-token', now=NOW)
+        return registry.begin_job('a', 'pull', epoch, now=NOW)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(compete, ['worker', 'task']))
+    assert sum(value is not None for value in results) == 1
+    # Exercise a slow pull winner independently of scheduling's race winner.
+    owner = db.docs[(registry.COLLECTION, 'a')]
+    owner.update(active_state='dispatching', worker_available=True)
+    owner.pop('worker_token', None)
+    assert registry.claim_worker('a', 'pull', epoch, 'worker-token', now=NOW)
+    run_token = sync_jobs.try_acquire_sync_job_run_lock('pull')
+    assert run_token
+    assert registry.redrive_job('a', 'pull', epoch, now=NOW + timedelta(seconds=1799)) is None
+    expired = NOW + timedelta(seconds=1801)
+    replacement = registry.redrive_job('a', 'pull', epoch, now=expired)
+    assert replacement['epoch'] == epoch + 1
+    assert registry.begin_job('a', 'pull', replacement['epoch'], now=expired)
+    # A delayed worker leaf still owns Redis: fallback cannot execute even
+    # though the sequencer redrive already won. No TTL is shortened.
+    assert sync_jobs.try_acquire_sync_job_run_lock('pull') is None
+    assert not registry.renew_job('a', 'pull', epoch, worker_token='worker-token', now=expired)
+    assert not registry.finish_job('a', 'pull', epoch, 'completed', worker_token='worker-token', now=expired)
+    sync_jobs.release_job_run_lock('pull', run_token)
+    assert sync_jobs.try_acquire_sync_job_run_lock('pull')
+
+
 def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(

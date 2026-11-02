@@ -374,6 +374,8 @@ async def run_session(
                     'merge_people_proposed',
                     'capped',
                     'merge_evidence_rejected',
+                    'plan_dropped',
+                    'plan_overflow',
                     'loop_applied',
                     'recall_keys',
                     'recall_refs',

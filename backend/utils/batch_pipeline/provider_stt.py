@@ -41,7 +41,13 @@ from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline import vendor_route_contracts as contracts
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, held_vad_census, projection_speech_spans
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    WorkResult,
+    held_vad_census,
+    projection_speech_spans,
+    validate_measured_vad,
+)
 from utils.batch_pipeline.recovery_disposition import (
     REASONS,
     STAGES,
@@ -324,9 +330,12 @@ def attempt_outcome_for(failure: RecoveryFailure) -> VendorAttemptOutcome:
 def _record_held_vad(job: dict, speech_seconds: float | None) -> None:
     """F2: a terminal failed_held unit carries its strict-VAD speech, as quarantine recovery's do, so
     the T2 observer measures it instead of falling back to the whole duration. Unmeasured stays unset."""
-    measured = held_vad_census(job, speech_seconds)
-    if measured is not None:
-        job['measured_held_vad_speech_seconds'] = measured
+    # Reconciliation has no in-memory call plan. Reuse the intent's pre-call
+    # measurement, keeping the greatest evidence across all settlement paths.
+    for seconds in (speech_seconds, (job.get('provider_intent') or {}).get('measured_vad_speech_seconds')):
+        measured = held_vad_census(job, seconds)
+        if measured is not None:
+            job['measured_held_vad_speech_seconds'] = measured
 
 
 class ProviderSttStore:
@@ -339,7 +348,16 @@ class ProviderSttStore:
     def read(self, segment_id: str) -> dict:
         return self.store.run(lambda tx: self.fence.checked(tx, segment_id)[0])
 
-    def start(self, segment_id: str, token: str, now: float, service: str, *, table_version: str = 'builtin'):
+    def start(
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        service: str,
+        *,
+        table_version: str = 'builtin',
+        measured_vad_speech_seconds: float | None = None,
+    ):
         """CAS pending -> running, minting attempt N. Returns the job if running (ours or a prior
         intent), else None. Raises ``AttemptRefused`` when the paid-once bounds forbid the mint."""
         if service not in _CALLABLE_SERVICES:
@@ -356,15 +374,25 @@ class ProviderSttStore:
             attempts = bounding_attempts(attempts_of(job))
             number = check_new_attempt(attempts, service)
             attempt = VendorAttempt(number, service, token, binding.privacy_generation, now, table_version)
+            # A failover still owns the same immutable audio. Keep earlier
+            # evidence if its next inspection is unavailable or lower.
+            prior = (job.get('provider_intent') or {}).get('measured_vad_speech_seconds')
+            measurements = [
+                validate_measured_vad(value, job['duration_seconds'])
+                for value in (prior, measured_vad_speech_seconds)
+                if value is not None
+            ]
             job['state'] = RUNNING
             job[ATTEMPTS_FIELD] = [entry.to_dict() for entry in attempts] + [attempt.to_dict()]
-            # Unchanged shape, mirroring the current attempt: a pre-D worker still reconciles it.
+            # Mirror the current attempt; pre-D workers ignore the additive VAD evidence.
             job['provider_intent'] = {
                 'token': token,
                 'service': service,
                 'privacy_generation': binding.privacy_generation,
                 'started_at': now,
             }
+            if measurements:
+                job['provider_intent']['measured_vad_speech_seconds'] = max(measurements)
             tx.put('jobs', segment_id, job)
             return job
 
@@ -925,7 +953,13 @@ class ProviderSttStage:
                 return service
         token = uuid4().hex
         try:
-            started = self.protocol.start(segment_id, token, self.clock(), service)
+            started = self.protocol.start(
+                segment_id,
+                token,
+                self.clock(),
+                service,
+                measured_vad_speech_seconds=_speech_seconds(inspected) if failure is None else None,
+            )
         except AttemptRefused:
             # Read-to-mint race on the attempt list; never mint past the bounds. Re-evaluate later.
             vendor_metrics.paid_intent_violation(service)

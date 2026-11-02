@@ -42,6 +42,9 @@ bool blink_toggle = false;
 
 static void print_reset_reason(void)
 {
+#ifdef CONFIG_OMI_NATIVE_SIM
+    printk("SIM: reset reason unavailable (no Nordic reset peripheral)\n");
+#else
     uint32_t cause = UINT32_MAX;
     int err = hwinfo_get_reset_cause(&cause);
     if (err == 0) {
@@ -54,6 +57,7 @@ static void print_reset_reason(void)
     if (err) {
         printk("Could not clear reset cause: %d\n", err);
     }
+#endif
 }
 
 static void codec_handler(uint8_t *data, size_t len)
