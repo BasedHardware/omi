@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Readers already get the trial paywall and Pocket onboarding through PostHog at 100%; this fixes those arms in code so the app stops reading two flags."
+}
