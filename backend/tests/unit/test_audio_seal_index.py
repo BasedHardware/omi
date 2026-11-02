@@ -7,6 +7,7 @@ from google.cloud.storage.blob import Blob as SDKBlob
 import pytest
 
 from utils.other import audio_outbox, audio_seal_index as seals, storage
+from utils import pusher_audio_projection
 from utils.other.live_audio_archive import LiveAudioArchive
 from tests.unit.test_audio_durable_outbox import remote, host, Socket, _window_harness, _audio_frames, pusher
 from tests.unit.test_audio_custody_frames import frame, _sent_receipts
@@ -156,7 +157,7 @@ async def test_pusher_disconnect_seals_frames_and_existing_pcm_projection_paths(
     _window_harness(remote, monkeypatch)
     monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '100')
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', storage.upload_audio_chunks_batch)
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *args: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a, **kw: [])
     sock = Socket(_audio_frames('conversation', [b'\x01\x02' * 160, b'\x03\x04' * 160], step=3.01))
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
     assert len(_sent_receipts(sock)) == 1
