@@ -67,12 +67,15 @@ async function evidence(github, repo, pr) {
           // through the immutable blob by SHA instead of failing every PR that
           // touches a large generated file such as OmiApi.generated.swift.
           if (data.encoding === 'none' && data.type === 'file' && /^[a-f0-9]{40}$/.test(data.sha || '')) {
-            const blob = (await github.rest.git.getBlob({...repo,file_sha:data.sha})).data;
-            if (blob.sha !== data.sha || blob.size !== data.size || blob.encoding !== 'base64' || !blob.content
-              || Buffer.from(blob.content,'base64').length !== blob.size) {
+            // Any blob failure, 404 included, must fail closed rather than read as an absent file.
+            const blob = await github.rest.git.getBlob({...repo,file_sha:data.sha}).then(r => r.data, () => null);
+            const encoded = typeof blob?.content === 'string' ? blob.content.replace(/\n/g,'') : '';
+            if (!blob || blob.sha !== data.sha || blob.size !== data.size || blob.encoding !== 'base64'
+              || !encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+              || Buffer.from(encoded,'base64').length !== blob.size) {
               throw new Error('Incomplete Swift source evidence');
             }
-            data = blob;
+            data = {encoding:'base64',content:encoded};
           }
           if (data.encoding !== 'base64' || !data.content) {
             throw new Error('Incomplete Swift source evidence');
