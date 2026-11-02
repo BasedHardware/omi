@@ -761,7 +761,8 @@ class _PlansSheetState extends State<PlansSheet> {
         // Pop on build if the server-driven visibility flag is off, in case any
         // caller bypassed the call-site check. Paid subscribers (managing plan/portal)
         // and actively loading storefronts must never be prematurely dismissed.
-        final isPaidSubscriber = provider.subscription?.subscription.plan.isPaid ?? false;
+        final sub = provider.subscription?.subscription;
+        final isPaidSubscriber = sub != null && sub.plan.isPaid && sub.status == SubscriptionStatus.active;
         if (!isPaidSubscriber &&
             (!provider.showSubscriptionUI ||
                 (_storefrontEnabled && !_storefrontLoading && _storefront?.showSubscriptionUi == false))) {

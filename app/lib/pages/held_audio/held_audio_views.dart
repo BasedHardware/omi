@@ -36,11 +36,12 @@ Future<void> chooseHeldAudioOnPhone(BuildContext context, OnDeviceTranscriptionC
   await openOnDeviceSetup(context, controller: controller);
 }
 
-void openHeldAudioPlans(BuildContext context) {
+Future<void> openHeldAudioPlans(BuildContext context) async {
   final provider = context.read<UsageProvider?>();
   if (provider?.subscription?.subscription.plan.isPaid == true) {
-    unawaited(provider?.fetchSubscription());
+    await provider?.fetchSubscription();
   }
+  if (!context.mounted) return;
   unawaited(openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'));
 }
 

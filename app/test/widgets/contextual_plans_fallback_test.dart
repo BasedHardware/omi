@@ -147,4 +147,55 @@ void main() {
     }
     expect(opened, isTrue);
   });
+
+  testWidgets('PlansSheet dismisses when subscriber is not active paid and showSubscriptionUi is false', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+        showSubscriptionUi: false,
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UsageProvider>.value(value: usage),
+          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async =>
+                    openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'),
+                child: const Text('Upgrade'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Upgrade'));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // Since showSubscriptionUi is false and not an active paid subscriber, PlansSheet pops on build.
+    expect(find.byType(PlansSheet), findsNothing);
+  });
 }
+
