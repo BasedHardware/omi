@@ -39,6 +39,15 @@ def test_provider_refusal_precedes_intent(setup, monkeypatch, legacy_dependencie
     stt.assert_not_called()
 
 
+def test_open_vendor_breaker_refuses_before_intent(setup, monkeypatch, legacy_dependencies):
+    client, store, binding, artifacts, _, _, old = enabled(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.breaker_refuses', lambda _: True)
+    stt = Mock()
+    assert run(store, artifacts, binding, old, stt) == 'provider_held'
+    assert not row(client).get('speech_redrive')
+    stt.assert_not_called()
+
+
 def test_provider_error_retains_exactly_one_retry(setup, monkeypatch, legacy_dependencies):
     client, store, binding, artifacts, _, _, old = enabled(setup, monkeypatch, legacy_dependencies)
     stt = Mock(side_effect=RecoveryFailure('provider', 'provider_failed'))

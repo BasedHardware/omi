@@ -51,6 +51,7 @@ from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.fallback import record_fallback
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.stt.soniox_batch import takeover_admitted
+from utils.stt.vendor_guard import breaker_refuses, ENDPOINT_STT
 
 
 def speech_preflight(job, artifacts, uid, *, independent, repair, protocol, now, expected_recovery):
@@ -68,6 +69,8 @@ def speech_preflight(job, artifacts, uid, *, independent, repair, protocol, now,
     if repair and duration > MAX_AUDIO_SECONDS:
         return 'repair_budget_held', None
     provider = 'soniox' if independent else 'modulate'
+    if not independent and breaker_refuses(ENDPOINT_STT):
+        return 'provider_held', None
     if admitted_as_byok(job) and not independent and not repair:
         record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
     elif not sync_allowed(
