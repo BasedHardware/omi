@@ -219,7 +219,8 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                   if (s.status == 'failed' && s.reasonCode == 'batch_artifact_missing') {
                     w.repairJobId ??= hadJob;
                     if (w.repairFileCount <= 0) {
-                      w.repairFileCount = s.totalFiles > 0 ? s.totalFiles : members.length;
+                      // A surviving local subset cannot prove original size.
+                      w.repairFileCount = s.totalFiles > 0 ? s.totalFiles : 0;
                     }
                   }
                   w.status = WalStatus.miss;

@@ -167,6 +167,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// counter let the oldest recording re-enter every pass at the head and
   /// starve the recordings behind it without ever deferring (#14688).
   final Map<String, int> _drainGroupBatchCounts = {};
+  final Set<(int, String)> _manualRepairJobs = {};
   final Map<String, int> _drainGroupCountedAt = {};
 
   /// Session fence. Incremented on logout so in-flight chunk/flush/sync cannot
@@ -1983,7 +1984,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
       _syncAll(progress: progress, liveCaptureOnly: true);
 
-  Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
+  Future<SyncLocalFilesResponse?> _syncAll({
+    IWalSyncProgressListener? progress,
+    required bool liveCaptureOnly,
+    String? repairJobId,
+  }) async {
     final generation = _sessionGeneration;
     await _enqueueBuffer(() => _flush(generation));
     if (!_isCurrent(generation)) return null;
@@ -1991,10 +1996,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _accumulatedResponse = null;
 
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+    bool eligibleForDrain(Wal wal, int nowSeconds) => repairJobId == null
+        ? isAutoUploadEligible(wal, nowSeconds: nowSeconds) &&
+            !_manualRepairJobs.contains((generation, wal.repairJobId))
+        : wal.repairJobId == repairJobId &&
+            !wal.onDeviceOnly &&
+            wal.storage == WalStorage.disk &&
+            wal.status == WalStatus.miss;
     var wals = _wals
         .where((wal) =>
-            isAutoUploadEligible(wal, nowSeconds: initialNowSeconds) &&
-            (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
+            eligibleForDrain(wal, initialNowSeconds) && (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
     if (wals.isEmpty) {
       Logger.debug("All synced!");
@@ -2056,7 +2067,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final groupKeys = recordingGroupKeys(_wals);
       final eligible = _wals
           .where((wal) =>
-              isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
+              eligibleForDrain(wal, batchNowSeconds) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
@@ -2426,7 +2437,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    if (wal.isSyncing || wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) return null;
+    if (wal.isSyncing ||
+        wal.status == WalStatus.uploaded ||
+        (wal.status == WalStatus.synced && wal.repairJobId == null)) return null;
     final held = wal.holdForUser;
     final generation = _sessionGeneration;
     wal.isSyncing = true;
@@ -2439,8 +2452,51 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
+  Future<SyncLocalFilesResponse?> _syncRepairBundle(
+    Wal selected, {
+    required Wal claimedWal,
+    IWalSyncProgressListener? progress,
+  }) async {
+    final generation = _sessionGeneration;
+    final id = selected.repairJobId;
+    if (id == null) return null;
+    final key = (generation, id);
+    final members = _wals.where((wal) => wal.repairJobId == id).toList();
+    final expected = selected.repairFileCount;
+    if (_manualRepairJobs.contains(key) ||
+        expected <= 0 ||
+        members.length != expected ||
+        members.any((wal) =>
+            wal.repairFileCount != expected ||
+            wal.onDeviceOnly ||
+            wal.storage != WalStorage.disk ||
+            wal.status == WalStatus.uploaded ||
+            wal.status == WalStatus.inProgress ||
+            (wal.isSyncing && !identical(wal, claimedWal))) ||
+        nextSyncUploadBatch(members, _now().millisecondsSinceEpoch ~/ 1000).length != expected) return null;
+    _manualRepairJobs.add(key);
+    try {
+      // A deliberate retry authorizes this original bundle, including its held
+      // members and exhausted budgets. It never authorizes unrelated audio.
+      for (final wal in members) {
+        wal.prepareManualRetry();
+        wal.status = WalStatus.miss;
+        wal.isSyncing = true;
+      }
+      await _saveWalsToFile(generation);
+      if (!_isCurrent(generation)) return null;
+      return await _syncAll(progress: progress, liveCaptureOnly: false, repairJobId: id);
+    } finally {
+      _manualRepairJobs.remove(key);
+      for (final wal in members) {
+        wal.isSyncing = false;
+      }
+      await _saveWalsToFile(generation);
+    }
+  }
+
   Future<SyncLocalFilesResponse?> _syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    if (wal.onDeviceOnly || wal.status == WalStatus.uploadRejected) return null;
+    if (wal.onDeviceOnly || (wal.status == WalStatus.uploadRejected && wal.repairJobId == null)) return null;
     final generation = _sessionGeneration;
     await _enqueueBuffer(() => _flush(generation));
     if (!_isCurrent(generation)) return null;
@@ -2451,6 +2507,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
+    if (walToSync.repairJobId != null) {
+      return _syncRepairBundle(walToSync, claimedWal: wal, progress: progress);
+    }
     // A deliberate single-recording retry is a fresh start, so it restores the
     // auto-upload budget a previous failure spent. It costs at most one extra
     // upload for a permanently refused recording: the reconciler spends the

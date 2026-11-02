@@ -63,6 +63,9 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    with `repair_job_id`. New audio cannot join it. A missing/ineligible member holds that repair
    while unrelated recordings can drain. The tag survives restart and even a separately synced
    local copy cannot age out while tagged. Only actual whole-job completion clears the tag.
+   Unknown original size holds the bundle rather than guessing from surviving members. A manual
+   retry from any tagged member retries the complete original group (including retained synced
+   copies), resets that group's retry budget and never uploads unrelated recordings.
    Status requests advertise `X-Omi-Custody-Repair-Protocol: 1`; servers keep older clients in
    `processing`. Operator disposition stays off until a capable client is live. This protocol
    cannot recover files a prior client already acknowledged and deleted.

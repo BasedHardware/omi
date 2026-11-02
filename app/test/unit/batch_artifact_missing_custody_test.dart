@@ -221,6 +221,123 @@ void main() {
     await sync.stop();
   });
 
+  test('unknown original file count cannot authorize a surviving subset', () async {
+    final wire = jsonDecode(File('../backend/tests/fixtures/batch_artifact_missing_status.json').readAsStringSync())
+        as Map<String, dynamic>;
+    wire.remove('total_files');
+    final status = SyncJobStatusResponse.fromJson(wire);
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) async => SyncJobFetch(SyncJobFetchOutcome.ok, status));
+    final survivor = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: 'audio_old.bin')
+      ..jobId = status.jobId;
+    final fresh = Wal(
+        timerStart: 1001,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: 'audio_new.bin');
+    sync.testWals = [survivor, fresh];
+    await sync.reconcileUploadedWals();
+    expect(survivor.repairJobId, status.jobId);
+    expect(survivor.repairFileCount, 0, reason: 'Observed local members do not prove original bundle size');
+    expect(
+        nextSyncUploadBatch(
+            sync.testWals.where((w) => w.status == WalStatus.miss).toList(), now.millisecondsSinceEpoch ~/ 1000),
+        [fresh]);
+    await sync.stop();
+  });
+
+  for (final scenario in [(false, false), (true, false), (false, true)]) {
+    final memberMissing = scenario.$1;
+    final memberSynced = scenario.$2;
+    test('manual retry keeps the entire held repair bundle (missing=$memberMissing, synced=$memberSynced)', () async {
+      final listener = _Listener();
+      final repairs = <List<String>>[];
+      final sync = LocalWalSyncImpl(listener,
+          now: () => now,
+          persistWals: (_) async {},
+          uploadGate: SyncUploadGate(
+              limiter: SyncRateLimiter.instance,
+              fairUseStatusLoader: () async => {'stage': 'none'},
+              uploader: (files,
+                  {onUploadProgress,
+                  conversationId,
+                  captureEvidence,
+                  recordingSessionId,
+                  audioStartSeconds,
+                  audioEndSeconds,
+                  claimLiveCapture = false,
+                  geolocation}) async {
+                fail('Manual repair must not upload unrelated recordings');
+              },
+              repairUploader: (files,
+                  {required repairJobId,
+                  onUploadProgress,
+                  conversationId,
+                  captureEvidence,
+                  recordingSessionId,
+                  audioStartSeconds,
+                  audioEndSeconds,
+                  claimLiveCapture = false,
+                  geolocation}) async {
+                expect(repairJobId, 'bp_original');
+                repairs.add(files.map((f) => f.uri.pathSegments.last).toList());
+                return UploadFilesResult.queued(repairJobId);
+              }));
+      final bundle = <Wal>[];
+      for (var index = 0; index < 2; index++) {
+        final name = 'audio_manual_$index.bin';
+        if (!memberMissing || index == 0) await File('${dir.path}/$name').writeAsBytes([1, 2, 3, 4, 5]);
+        bundle.add(Wal(
+            timerStart: 1000 + index,
+            codec: BleAudioCodec.opus,
+            seconds: 10,
+            status: memberSynced && index == 1 ? WalStatus.synced : WalStatus.miss,
+            holdForUser: true,
+            storage: WalStorage.disk,
+            device: 'omi',
+            filePath: name)
+          ..repairJobId = 'bp_original'
+          ..repairFileCount = 2
+          ..retryCount = walMaxAutoRetries);
+      }
+      final fresh = Wal(
+          timerStart: 1002,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          device: 'omi',
+          filePath: 'audio_unrelated.bin');
+      sync.testWals = [...bundle, fresh];
+      await sync.syncWal(wal: memberSynced ? bundle.last : bundle.first);
+      expect(
+          repairs,
+          memberMissing
+              ? isEmpty
+              : [
+                  ['audio_manual_0.bin', 'audio_manual_1.bin']
+                ]);
+      expect(bundle.first.status, memberMissing ? WalStatus.miss : WalStatus.uploaded);
+      expect(bundle.every((w) => w.repairJobId == 'bp_original' && !w.isSyncing), isTrue);
+      expect(fresh.status, WalStatus.miss);
+      expect(listener.acknowledgements, 0);
+      expect(await File('${dir.path}/audio_manual_0.bin').readAsBytes(), [1, 2, 3, 4, 5]);
+      await sync.stop();
+    });
+  }
+
   test('complete repair sends its original handle and acknowledges only after completion', () async {
     final listener = _Listener();
     final handles = <String>[];
