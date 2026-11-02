@@ -19,6 +19,14 @@ entire conversation. Raw and projection discovery read the committed frame
 table, never treating a media-only orphan as custody. Percent 0 restores the
 per-pause writer while readers retain support for existing framed objects.
 
+The same framed cohort writes a bounded conversation seal index at close or
+16 MiB. A writer marks `audio-outbox/<owner>/<conversation>/seal.json` open
+before accepting new frames; all writers must close before that snapshot can
+serve enumeration. Immutable per-source/part indexes list media/manifest
+generations, plaintext digests, frame positions and known PCM projection paths.
+ACKs precede seal publication and remain per custody part. An interrupted or
+failed seal leaves prefix discovery authoritative. Indexes never release WAL.
+
 For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
 before removing its active pack. LISTEN commits at the pack's own 60-second,

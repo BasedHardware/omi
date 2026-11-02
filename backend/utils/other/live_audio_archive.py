@@ -9,6 +9,8 @@ from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.audio_custody import framed_pack
 from utils.other.audio_frame_table import FRAME_SCHEMA
+from utils.other.audio_seal_index import create_seal_index
+from utils.other import storage
 from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
 from models.message_event import AudioCustodyEvent
 from utils.executors import db_executor, run_blocking, storage_executor
@@ -43,6 +45,8 @@ class LiveAudioArchive:
         # the resolved decision for the connection lifetime.
         self._admitted_snapshot: dict[str, bool] = {}
         self._server_audio_marked: set[str] = set()
+        self.seal_index = None
+        self.closing_conversations: set[str] = set()
 
     def _admitted(self, uid: str, phase: str) -> bool:
         if phase not in self._admitted_snapshot:
@@ -75,11 +79,20 @@ class LiveAudioArchive:
             return
         if self.durable and (self.failed or any(key not in self.running for key in self.uncommitted)):
             await self._retry_pending()
+        if self.durable and conversation_id and framed_pack(request.uid):
+            if self.seal_index is None:
+                self.seal_index = await run_blocking(
+                    storage_executor, create_seal_index, storage, request.uid, self.capture_session_id
+                )
+            if conversation_id not in self.seal_index.active:
+                await run_blocking(storage_executor, self.seal_index.begin, conversation_id)
         pack = self.packs.get(channel)
         if pack is not None and (
             pack.boundary(conversation_id, timestamp, len(raw))
             or (self.durable and len(self.frames.get(id(pack), [])) >= 4096)
         ):
+            if pack.conversation_id and pack.conversation_id != conversation_id:
+                self.closing_conversations.add(pack.conversation_id)
             await self.flush(channel)
             pack = None
         if pack is None:
@@ -199,6 +212,15 @@ class LiveAudioArchive:
             await self._write(pack, channel)
             self.uncommitted.pop(id(pack), None)
             self.frames.pop(id(pack), None)
+            if (
+                self.seal_index
+                and pack.conversation_id in self.closing_conversations
+                and not any(
+                    pending.conversation_id == pack.conversation_id
+                    for pending in [*self.packs.values(), *(item[0] for item in self.uncommitted.values())]
+                )
+            ):
+                await run_blocking(storage_executor, self.seal_index.try_seal, pack.conversation_id)
         except Exception:
             self._disable('upload_failed')
             if self.durable:
@@ -324,6 +346,11 @@ class LiveAudioArchive:
                         frames=frames,
                     )
                 )
+            if self.seal_index and pack.conversation_id:
+                if metadata.get('frame_schema') == FRAME_SCHEMA:
+                    await run_blocking(storage_executor, self.seal_index.try_add, receipt.to_dict(), frames)
+                else:
+                    self.seal_index.failed.add(pack.conversation_id)
             return
         await run_blocking(
             storage_executor,
@@ -365,3 +392,6 @@ class LiveAudioArchive:
             for channel in list(self.packs):
                 await self.flush(channel)
         await self.ensure_durable()
+        if self.seal_index:
+            for conversation_id in list(self.seal_index.active):
+                await run_blocking(storage_executor, self.seal_index.try_seal, conversation_id)

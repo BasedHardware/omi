@@ -64,12 +64,13 @@ class Blob:
         return len(self.data or b'')
 
     def upload_from_string(self, data, *, if_generation_match, **kwargs):
-        assert if_generation_match == 0
-        if self.data is not None:
+        if (if_generation_match == 0 and self.data is not None) or (
+            if_generation_match != 0 and if_generation_match != self.generation
+        ):
             raise PreconditionFailed('immutable')
         self.data = data
         self.stored_metadata = dict(self.metadata)
-        self.generation = 17
+        self.generation = (self.generation or 16) + 1
 
     def reload(self, **kwargs):
         if self.data is None:
@@ -77,6 +78,8 @@ class Blob:
         self.metadata = dict(self.stored_metadata)
 
     def download_as_bytes(self, **kwargs):
+        if self.data is None:
+            raise NotFound('missing')
         if kwargs.get('if_generation_match', self.generation) != self.generation:
             raise PreconditionFailed('generation changed')
         return self.data
@@ -91,6 +94,9 @@ class Bucket:
 
     def __init__(self):
         self.blobs = {}
+
+    def reload(self, **kwargs):
+        self.versioning_enabled = False
 
     def blob(self, name, generation=None):
         blob = self.blobs.setdefault(name, Blob(name))

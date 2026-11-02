@@ -10,6 +10,8 @@ from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
 from utils.pusher_audio_window import append_window_run, v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 from config.audio_custody import framed_pack
+from utils.other.audio_seal_index import create_seal_index
+from utils.other import storage as audio_storage
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
@@ -453,6 +455,13 @@ async def _run_websocket_util_trigger(
     inline_finish_done = asyncio.Event()
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
+    seal_index = (
+        await run_blocking(
+            storage_executor, create_seal_index, audio_storage, uid, custody_root, cached_protection_level
+        )
+        if framed_audio
+        else None
+    )
 
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
@@ -491,7 +500,7 @@ async def _run_websocket_util_trigger(
                     # not capture positions. Preserve the old continuous batch
                     # and its first timestamp; jitter cannot create v2 spans.
                     chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
-                await run_blocking(
+                projection_paths = await run_blocking(
                     storage_executor,
                     upload_audio_chunks_batch,
                     chunks,
@@ -500,6 +509,10 @@ async def _run_websocket_util_trigger(
                     cached_protection_level,
                     sample_rate=sample_rate,
                 )
+                if seal_index:
+                    for chunk in chunks:
+                        if chunk.get('custody_receipt'):
+                            seal_index.project(chunk['custody_receipt'], projection_paths)
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
@@ -679,6 +692,8 @@ async def _run_websocket_util_trigger(
                 ):
                     await flush_refs(conv_id)
             for conv_id in list(record_close_requests):
+                if seal_index and conv_id not in pending_refs and not durable_queue.has_conversation(conv_id):
+                    await run_blocking(storage_executor, seal_index.try_seal, conv_id)
                 if (
                     conv_id == inline_finish_conversation
                     and conv_id not in pending_refs
@@ -1194,6 +1209,7 @@ async def _run_websocket_util_trigger(
             nonlocal durable_tail_has_receipt
             nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
+            receipt_frames = tuple(durable_window_frames)
 
             def committed():
                 nonlocal durable_tail_has_receipt
@@ -1202,10 +1218,10 @@ async def _run_websocket_util_trigger(
                 durable_window_frames.clear()
 
             try:
-                return await _commit_durable_audio_window(
+                receipt = await _commit_durable_audio_window(
                     uid=uid,
                     payload=bytes(private_cloud_sync_buffer),
-                    frames=list(durable_window_frames),
+                    frames=list(receipt_frames),
                     conversation_id=current_conversation_id,
                     start=private_cloud_chunk_start_time,
                     sample_rate=sample_rate,
@@ -1220,11 +1236,16 @@ async def _run_websocket_util_trigger(
                     on_committed=committed,
                     framed=framed_audio,
                 )
+                if seal_index and receipt and receipt.conversation_id:
+                    await run_blocking(storage_executor, seal_index.try_add, receipt.to_dict(), list(receipt_frames))
+                return receipt
             except BaseException:
                 # A failed/cancelled dispatch can have committed remotely. The
                 # shutdown tail must never rerun that unknown storage operation.
                 if not durable_tail_has_receipt:
                     durable_commit_unresolved = True
+                    if seal_index and current_conversation_id:
+                        seal_index.failed.add(current_conversation_id)
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
@@ -1588,6 +1609,8 @@ async def _run_websocket_util_trigger(
                 # id, committed under 'unlinked' at the next flush boundary);
                 # the window itself commits in _queue_private_cloud_chunk.
                 if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
+                    if seal_index and current_conversation_id and current_conversation_id not in seal_index.active:
+                        await run_blocking(storage_executor, seal_index.begin, current_conversation_id)
                     if (
                         framed_audio
                         and private_cloud_sync_buffer
