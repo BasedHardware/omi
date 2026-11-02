@@ -40,6 +40,24 @@ def evidence(job):
     }
 
 
+def test_operator_discovery_counts_permission_unknown_without_inventing_absence(monkeypatch):
+    from importlib import import_module
+    from google.api_core.exceptions import Forbidden
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / 'scripts'))
+    operator = import_module('batch_pipeline_artifact_missing')
+
+    def denied(*args):
+        raise Forbidden('synthetic metadata denial')
+
+    monkeypatch.setattr(operator, 'inspect', denied)
+    assert operator.inspect_candidate(None, None, 'synthetic') == (None, None, 'unknown')
+    monkeypatch.setattr(operator, 'inspect', lambda *args: ({'state': 'quarantined'}, {'status': 404}))
+    assert operator.inspect_candidate(None, None, 'synthetic')[2] == 'missing'
+    monkeypatch.setattr(operator, 'inspect', lambda *args: ({'state': 'quarantined'}, None))
+    assert operator.inspect_candidate(None, None, 'synthetic')[2] == 'not_missing'
+
+
 def mark(setup):
     from database.batch_pipeline_artifact_missing import ArtifactMissingStore
 
