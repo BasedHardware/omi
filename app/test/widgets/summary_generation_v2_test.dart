@@ -51,7 +51,7 @@ Future<void> _openSheet(WidgetTester tester) async {
 
 void main() {
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'defaultSummaryTemplateAppId:': ''});
     await SharedPreferencesUtil.init();
     SummaryGenerationV2Gate.debugOverride = true;
     OmiColors.active = OmiPalette.dark;
@@ -119,6 +119,40 @@ void main() {
       final l10n = summaryL10n(tester);
       expect(find.text(l10n.noSummaryForConversation), findsOneWidget);
       expect(find.text(l10n.summaryNotSummarizedYet), findsNothing);
+    });
+
+    testWidgets('legacy Generate Summary directly retries the default without installed templates', (tester) async {
+      SummaryGenerationV2Gate.debugOverride = false;
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      final reprocess = _Reprocess();
+      final provider = summaryProvider(summaryConversation(), reprocess: reprocess.call);
+      addTearDown(provider.dispose);
+      await tester.pumpWidget(summaryHarness(provider, _summaryTab()));
+      final l10n = summaryL10n(tester);
+      expect(reprocess.appIds, isEmpty);
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await tester.tap(find.text(l10n.generateSummary));
+        await tester.pumpAndSettle();
+        expect(reprocess.appIds, hasLength(attempt + 1));
+        expect(reprocess.appIds.last, 'omi-default-summary');
+        expect(reprocess.forcedOmi.last, isFalse);
+        expect(find.byType(SummarizedAppsBottomSheet), findsNothing);
+      }
+    });
+
+    testWidgets('legacy Generate Summary respects a saved template', (tester) async {
+      SummaryGenerationV2Gate.debugOverride = false;
+      final reprocess = _Reprocess();
+      final provider =
+          summaryProvider(summaryConversation(), reprocess: reprocess.call, catalog: [summaryApp('pg', 'Paul Graham')]);
+      addTearDown(provider.dispose);
+      await provider.setDefaultSummaryTemplateAppId('pg');
+      await tester.pumpWidget(summaryHarness(provider, _summaryTab()));
+      await tester.tap(find.text(summaryL10n(tester).generateSummary));
+      await tester.pumpAndSettle();
+      expect(reprocess.appIds, ['pg']);
+      expect(reprocess.forcedOmi, [false]);
     });
 
     testWidgets('"Use a Different Template" is the one way to the sheet', (tester) async {

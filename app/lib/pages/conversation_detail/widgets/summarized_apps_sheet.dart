@@ -188,7 +188,10 @@ class _AppsListState extends State<_AppsList> {
   @override
   Widget build(BuildContext context) {
     final currentAppId = _currentAppId;
-    final enabledApps = widget.provider.cachedEnabledConversationApps;
+    final enabledApps = [
+      widget.provider.findAppById('omi-default-summary')!,
+      ...widget.provider.cachedEnabledConversationApps
+    ];
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
     final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;

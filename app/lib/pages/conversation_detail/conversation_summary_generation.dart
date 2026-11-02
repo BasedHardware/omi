@@ -65,8 +65,9 @@ bool conversationHasRequestedSummary(ServerConversation conversation, String? ap
 }
 
 /// The production [PreferredSummaryAppWrite]: `PUT` for a template, `DELETE` for Omi.
-Future<bool> writeServerPreferredSummaryApp(String? appId) =>
-    appId == null ? clearPreferredSummarizationAppServer() : setPreferredSummarizationAppServer(appId);
+Future<bool> writeServerPreferredSummaryApp(String? appId) => appId == null || appId == 'omi-default-summary'
+    ? clearPreferredSummarizationAppServer()
+    : setPreferredSummarizationAppServer(appId);
 
 /// Installed summary templates that work on conversations; throws when the list cannot be read.
 Future<List<App>> fetchInstalledSummaryApps() async {
@@ -251,6 +252,23 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Finds an app by ID from cached apps
   App? findAppById(String? appId) {
     if (appId == null) return null;
+    if (appId == 'omi-default-summary') {
+      return App(
+          id: appId,
+          name: 'The Best Summarizer',
+          author: 'Omi',
+          description: '',
+          image: '',
+          capabilities: {'memories'},
+          status: 'approved',
+          category: 'productivity',
+          approved: true,
+          ratingCount: 0,
+          enabled: true,
+          deleted: false,
+          isPaid: false,
+          isUserPaid: false);
+    }
 
     final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
     if (enabledApp != null) return enabledApp;
@@ -324,7 +342,9 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   static String _defaultTemplateKey() => 'defaultSummaryTemplateAppId:${SharedPreferencesUtil().uid}';
 
   String? get defaultSummaryTemplateAppId {
-    final id = SharedPreferencesUtil().getString(_defaultTemplateKey());
+    final prefs = SharedPreferencesUtil();
+    final legacy = prefs.preferredSummarizationAppId;
+    final id = prefs.getString(_defaultTemplateKey(), defaultValue: legacy.isNotEmpty ? legacy : 'omi-default-summary');
     return id.isEmpty ? null : id;
   }
 

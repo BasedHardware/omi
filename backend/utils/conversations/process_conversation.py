@@ -926,7 +926,7 @@ def trigger_conversation_apps(
             )
             if not persisted:
                 raise RuntimeError('conversation disappeared while persisting app result')
-        if usage_attribution in {
+        if app.id != 'omi-default-summary' and usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
         }:
