@@ -215,6 +215,8 @@ def short_clip_relevance(
     keep = RelevanceDecision('keep', 'rule', 'content_below_floor', trigger)
     if PROCESSING_MODES[trigger].relevance is not RelevancePolicy.ASSESS or is_release_probe_uid(uid):
         return keep
+    if getattr(conversation, 'starred', False) or getattr(conversation, 'folder_user_set', False):
+        return keep
     segments = getattr(conversation, 'transcript_segments', None) or []
     texts = [segment.text for segment in segments] or [getattr(conversation, 'text', None) or '']
     rule = content_free_rule(texts, has_photos=False, trusted_wake_word=False)

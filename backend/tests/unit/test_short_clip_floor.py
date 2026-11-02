@@ -251,6 +251,14 @@ def test_a_calendar_overlap_keeps_a_content_free_short_clip(monkeypatch):
     assert not discarded and [d.reason for d in decisions] == ['content_below_floor']
 
 
+@pytest.mark.parametrize('curation', ['starred', 'folder_user_set'])
+def test_a_curated_content_free_short_clip_stays_kept(monkeypatch, curation):
+    clip = _short_clip('Yeah.')
+    setattr(clip, curation, True)
+    _, discarded, decisions = _structure(monkeypatch, clip)
+    assert not discarded and [d.reason for d in decisions] == ['content_below_floor']
+
+
 def test_opening_a_content_free_short_clip_keeps_it(monkeypatch):
     _, discarded, decisions = _structure(
         monkeypatch, _short_clip('Thank you'), trigger=processing.ProcessingTrigger.FIRST_OPEN

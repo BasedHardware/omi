@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from utils.conversations.fragment_visibility import SETTLING_MAX_HOLD_SECONDS, is_settling_fragment
+from utils.episodes import visibility
 
 FINISHED = datetime(2026, 11, 2, 11, 0, tzinfo=timezone.utc)
 NOW = FINISHED.timestamp() + 60
@@ -69,3 +70,16 @@ def test_live_legacy_and_curated_rows_are_never_held(extra):
 def test_the_home_switch_turns_the_hold_off(monkeypatch):
     monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'false')
     assert not is_settling_fragment(_row(), now=NOW)
+
+
+def test_an_episode_of_only_settling_rows_stays_off_live_and_returns(monkeypatch):
+    rows = {'c': _row(finished_at=datetime.now(timezone.utc))}
+    monkeypatch.setattr(
+        visibility.conversations, 'get_conversation_raw_snapshot', lambda _uid, cid, **_kwargs: rows[cid]
+    )
+    episode = {'conversation_ids': ['c']}
+    rows['c']['started_at'] = rows['c']['finished_at'] - timedelta(seconds=45)
+    assert visibility.visible_episode('u', episode) is None
+    rows['c']['record_projection_revision'] = 1
+    assert visibility.visible_episode('u', episode) is episode
+    assert not visibility.hidden_member(_row())
