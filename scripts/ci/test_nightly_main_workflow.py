@@ -41,11 +41,20 @@ INTENTIONAL_BUDGET_CHANGES = {
     # cold-cache step needed recycling room. Run 40009383869 still exhausted
     # the Azure mirror slices; the step now uses official Ubuntu archives,
     # slices downloads only within 300s, and caps the whole install at 7m.
-    # 25m holds 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
+    # 25m held 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
     # 198s for cache save and post-actions (test_nightly_main_native_audio.py).
     # The test regression gate and warm-path walls stay unchanged, so
     # budget_p50 stays 8.
-    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
+    # 2026-10-26 ci-flake (SCA-1151): the step budget moved 720→840s after
+    # four healthy-code wall-budget breaches in ~11h (722s/727s/738s/740s
+    # across runs 40230746415, 40255084596, 40282402360, 40282865834; the
+    # full selection grew 1,727→2,319 files and main green shard walls
+    # reached 700s, leaving 2.9% headroom — see BACKEND_UNIT_STEP_BUDGET_
+    # SECONDS in backend-unit-tests.yml). 25m held 840s + setup with only
+    # 78s of the 180s reserve left, so the ceiling follows to 30m, which
+    # restores the reserve to 378s. Slow steps still fail through the
+    # step's own budget check; this ceiling remains a hang bound.
+    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "30",
 }
 
 
