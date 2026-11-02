@@ -1,5 +1,6 @@
 """Framed PCM reads use the receipt table without false single-span hash misses."""
 
+import json
 from unittest.mock import MagicMock
 
 from utils.other import audio_outbox, raw_audio_read, storage
@@ -28,6 +29,22 @@ def test_framed_projection_reads_fresh_raw_without_synthetic_span_failure(remote
     assert storage.download_and_decode_chunk_blob(remote, paths[0], 'owner', 16000) == pcm
     assert fresh.call_count == 1 and fresh.call_args.args[1] == receipt.path
     assert RAW_READ.labels(result='identity_mismatch')._value.get() == before
+
+
+def test_projection_raw_failure_is_counted_once_with_loaded_codec(remote, caplog):
+    pcm = b'\x01\x02' * 160
+    receipt = audio_outbox.commit_pcm_window(
+        'owner', pcm, 'conversation', 1000, 16000, 'root', 0, [frame(pcm, 1000)], framed=True
+    )
+    remote.blob(receipt.path).data = b'corrupt'
+    before = RAW_READ.labels(result='checksum_mismatch')._value.get()
+    with pytest.raises(raw_audio_read.ChecksumMismatch):
+        raw_audio_read.pcm_for_projection(
+            remote, 'owner', {'framed_receipt': json.dumps(receipt.to_dict()), 'pcm_sha256': receipt.pcm_sha256}, 16000
+        )
+    assert RAW_READ.labels(result='checksum_mismatch')._value.get() == before + 1
+    assert caplog.text.count('event=audio_raw_read') == 1
+    assert 'result=checksum_mismatch codec=pcm16' in caplog.text
 
 
 def test_playback_merger_and_download_limit_read_one_object_for_two_spans(remote, monkeypatch):
