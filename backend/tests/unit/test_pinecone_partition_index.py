@@ -127,6 +127,25 @@ def record(uid='owner-a', id='owner-a-record'):
     return {'id': id, 'values': [0.5, 0.5], 'metadata': {'uid': uid, 'memory_id': 'record'}}
 
 
+def test_account_purge_queries_are_metered_for_both_copies(harness, monkeypatch):
+    scoped, raw, key, _ = harness
+    calls = []
+    monkeypatch.setattr(
+        adapter.pinecone_query_metrics, 'record_query', lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    scoped.delete_all_copies(namespace=key.family, filter={'uid': key.uid})
+    scoped.verify_empty_all_copies(namespace=key.family, filter={'uid': key.uid})
+    assert [(args[:3], kwargs) for args, kwargs in calls] == [
+        ((key.family, key.family, 'account_purge_verify'), {'succeeded': True}),
+        ((key.family, key.partition_namespace, 'account_purge_verify'), {'succeeded': True}),
+    ]
+    assert all(args[3]['usage'] == {'read_units': 1} for args, _ in calls)
+    raw.failure = RuntimeError('provider unavailable')
+    with pytest.raises(RuntimeError, match='provider unavailable'):
+        scoped.verify_empty_all_copies(namespace=key.family, filter={'uid': key.uid})
+    assert calls[-1] == ((key.family, key.family, 'account_purge_verify', None), {'succeeded': False})
+
+
 def test_reads_switch_primary_without_cache_and_preserve_complete_filter(harness):
     scoped, raw, key, db = harness
     where = {'$and': [{'uid': {'$eq': key.uid}}, {'created_at': {'$gte': 100}}, {'private': {'$ne': True}}]}
