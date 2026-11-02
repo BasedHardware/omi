@@ -201,3 +201,43 @@ def test_not_a_person_answer_is_accepted(monkeypatch):
     )
     response = _client(monkeypatch).post('/v1/speaker-tag-prompts/answer', json=_answer_body(answer='not_a_person'))
     assert response.status_code == 200 and seen == ['not_a_person']
+
+
+def test_answer_does_not_reflect_stored_transcript_decode_error(monkeypatch, caplog):
+    client = _client(monkeypatch)
+
+    def corrupt_transcript(*args, **kwargs):
+        router_module.conversations_db._decode_transcript_segments_blob('u', 12345, False)
+
+    monkeypatch.setattr(router_module.service, 'apply_answer', corrupt_transcript)
+    with caplog.at_level('WARNING', logger=router_module.logger.name):
+        res = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
+    assert res.status_code == 409
+    assert 'undecodable' not in res.text and 'transcript_segments' not in res.text
+    assert 'undecodable transcript_segments' in caplog.text
+
+
+def test_answer_does_not_reflect_missing_stored_field_name(monkeypatch, caplog):
+    client = _client(monkeypatch)
+
+    def malformed_document(*args, **kwargs):
+        {}['origin']
+
+    monkeypatch.setattr(router_module.service, 'apply_answer', malformed_document)
+    with caplog.at_level('WARNING', logger=router_module.logger.name):
+        res = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
+    assert res.status_code == 404
+    assert 'origin' not in res.text
+    assert "'origin'" in caplog.text
+
+
+def test_answer_keeps_stale_owner_confirmation_message(monkeypatch):
+    client = _client(monkeypatch)
+
+    def stale(*args, **kwargs):
+        raise router_module.StaleOwnerConfirmation('Owner question is stale; refresh the conversation')
+
+    monkeypatch.setattr(router_module.service, 'apply_answer', stale)
+    res = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
+    assert res.status_code == 409
+    assert res.json()['detail'] == 'Owner question is stale; refresh the conversation'

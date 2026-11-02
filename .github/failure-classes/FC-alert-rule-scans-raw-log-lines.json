@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-alert-rule-scans-raw-log-lines",
+  "violated_contract": "An alert rule's per-tick query cost must be bounded by a pre-aggregated counter, not a scan of raw log lines. A raw-line log-datasource query (Loki or Cloud Logging) re-scans every line in its selector on each 60s evaluation tick, exceeds the 30s datasource timeout, drops evaluation ticks, and loads the shared alerting plane until Grafana's external health check 502s: 2026-10-13 via Cloud Logging (#21390) and 2026-10-14 via Loki, where one {namespace=\"prod-omi-backend\"} regex rule failed 196 times in 3h and helped take the monitoring node's probe-fed control plane with it.",
+  "canonical_prevention": "Express every log-derived alert signal as a bounded counter — a Cloud Monitoring log-based metric or an exported Prometheus counter — never a log-datasource query. test_live_alert_rules_never_query_log_datasources rejects any unpaused rule referencing a log datasource (by type or by the prod Loki datasource UID), and rules held for rework stay paused through metric-inventory.prod.json admission_holds so un-pausing is a reviewed act.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_monitoring_alert_rule_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/alerts/",
+    "backend/charts/monitoring/alert-rules.json"
+  ],
+  "status": "open"
+}

@@ -40,6 +40,9 @@ def test_merge_stores_photos_from_the_source_conversations(monkeypatch):
         lambda _uid, conv_id: next(c for c in sources if c['id'] == conv_id),
     )
     _install(monkeypatch, chunks_by_conv={}, bucket=_FakeBucket())
+    from database import review_overlay_merge
+
+    monkeypatch.setattr(review_overlay_merge, 'transfer', lambda *args, **kwargs: True)
     monkeypatch.setattr(merge, '_collect_all_photos', lambda *_a, **_k: [dict(photo)])
     monkeypatch.setattr(merge, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(merge.lifecycle_service, 'create_processing_conversation', lambda *_a, **_k: None)

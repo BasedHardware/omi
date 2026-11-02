@@ -9,6 +9,7 @@
     "test:memory-daily-sweep:emulator": "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-daily-memory-sweep \"backend/.venv/bin/python backend/scripts/daily_memory_sweep_emulator_test.py\"",
     "test:memory-jit-ledger-user-write:emulator": "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory \"PYTHONPATH=backend MEMORY_MODE=read ENCRYPTION_SECRET=omi_jit_user_write_emulator_key_32_bytes backend/.venv/bin/python backend/scripts/jit_ledger_user_write_emulator_test.py\"",
     "test:listen-lifecycle:emulator": "firebase emulators:exec --only firestore --project demo-listen \"backend/.venv/bin/python backend/scripts/listen_lifecycle_emulator_test.py\"",
+    "test:conversation-transaction-expiry:emulator": "firebase emulators:exec --only firestore --project demo-listen \"backend/.venv/bin/python backend/scripts/conversation_transaction_expiry_emulator_test.py\"",
     "test:desktop-beta-admission:emulator": "bash backend/testing/desktop_beta_admission/run.sh",
     "test:listen-pusher-stack:emulator": "backend/testing/listen_pusher_stack/run.sh",
     "test:sync-cloud-tasks-stack:emulator": "backend/testing/sync_cloud_tasks_stack/run.sh",
@@ -34,8 +35,8 @@
     "firebase-tools": "15.22.0"
   },
   "overrides": {
-    "@hono/node-server": "~2.0.5",
-    "hono": "~4.12.27",
+    "@hono/node-server": "~2.1.3",
+    "hono": "4.13.14",
     "brace-expansion": "~5.0.8",
     "@xmldom/xmldom": "^0.9.8",
     "tar": "~7.5.21",
@@ -44,7 +45,9 @@
     "uuid": ">=11.1.1",
     "ws": ">=8.17.0",
     "@babel/core": "^7.26.0",
-    "fast-uri": "~3.1.4"
+    "fast-uri": "~3.1.4",
+    "qs": "^6.17.1",
+    "@grpc/grpc-js": "^1.14.7"
   },
   "name": "omi-memory-ingestion-pipeline"
 }

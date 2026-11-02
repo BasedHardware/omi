@@ -32,8 +32,19 @@ class ChannelLink(BaseModel):
     linked_at: datetime
 
 
+class ChannelAvailability(BaseModel):
+    """Whether this user may link a channel now, and why not. Content-free."""
+
+    available: bool
+    # channel_disabled | account_deletion | paid_plan | channel_plan | seat_cap | unavailable
+    reason: Optional[str] = None
+    waitlisted: bool = False
+
+
 class ChannelLinksResponse(BaseModel):
     links: list[ChannelLink]
+    # Older clients ignore this; newer clients use it to pick the connect, upgrade or waitlist state.
+    availability: dict[str, ChannelAvailability] = {}
 
 
 class ChannelVisibilityRequest(BaseModel):

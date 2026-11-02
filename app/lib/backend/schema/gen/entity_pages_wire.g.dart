@@ -282,13 +282,83 @@ class GeneratedSamePersonItem {
   }
 }
 
+class GeneratedSpellingContextSegment {
+  final bool isUser;
+  final String? speakerLabel;
+  final String text;
+
+  const GeneratedSpellingContextSegment({
+    this.isUser = false,
+    this.speakerLabel,
+    required this.text,
+  });
+
+  factory GeneratedSpellingContextSegment.fromJson(Map<String, dynamic> json) {
+    return GeneratedSpellingContextSegment(
+      isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_user"),
+      speakerLabel: _readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString, requiredField: false, nullable: true),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'is_user': isUser,
+      'speaker_label': speakerLabel,
+      'text': text,
+    };
+  }
+}
+
+class GeneratedSpellingContext {
+  final DateTime? conversationDate;
+  final String conversationTitle;
+  final int mainIndex;
+  final int? quoteEnd;
+  final int? quoteStart;
+  final List<GeneratedSpellingContextSegment> segments;
+
+  const GeneratedSpellingContext({
+    this.conversationDate,
+    required this.conversationTitle,
+    required this.mainIndex,
+    this.quoteEnd,
+    this.quoteStart,
+    required this.segments,
+  });
+
+  factory GeneratedSpellingContext.fromJson(Map<String, dynamic> json) {
+    return GeneratedSpellingContext(
+      conversationDate: _readFieldValue<DateTime>(_readField(json, const ["conversation_date"]), "conversation_date", _readDateTime, requiredField: false, nullable: true),
+      conversationTitle: _required(_readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString, requiredField: true, nullable: false), "conversation_title"),
+      mainIndex: _required(_readFieldValue<int>(_readField(json, const ["main_index"]), "main_index", _readInt, requiredField: true, nullable: false), "main_index"),
+      quoteEnd: _readFieldValue<int>(_readField(json, const ["quote_end"]), "quote_end", _readInt, requiredField: false, nullable: true),
+      quoteStart: _readFieldValue<int>(_readField(json, const ["quote_start"]), "quote_start", _readInt, requiredField: false, nullable: true),
+      segments: _required(_readFieldValue<List<GeneratedSpellingContextSegment>>(_readField(json, const ["segments"]), "segments", (value) => _readObjectList(value, GeneratedSpellingContextSegment.fromJson), requiredField: true, nullable: false), "segments"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_date': conversationDate?.toUtc().toIso8601String(),
+      'conversation_title': conversationTitle,
+      'main_index': mainIndex,
+      'quote_end': quoteEnd,
+      'quote_start': quoteStart,
+      'segments': segments.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedSpellingItem {
   final bool allowCustom;
+  final GeneratedSpellingContext? context;
   final List<String> options;
   final String termId;
 
   const GeneratedSpellingItem({
     required this.allowCustom,
+    this.context,
     required this.options,
     required this.termId,
   });
@@ -296,6 +366,7 @@ class GeneratedSpellingItem {
   factory GeneratedSpellingItem.fromJson(Map<String, dynamic> json) {
     return GeneratedSpellingItem(
       allowCustom: _required(_readFieldValue<bool>(_readField(json, const ["allow_custom"]), "allow_custom", _readBool, requiredField: true, nullable: false), "allow_custom"),
+      context: _readFieldValue<GeneratedSpellingContext>(_readField(json, const ["context"]), "context", (value) => _readObject(value, GeneratedSpellingContext.fromJson), requiredField: false, nullable: true),
       options: _required(_readFieldValue<List<String>>(_readField(json, const ["options"]), "options", _readStringList, requiredField: true, nullable: false), "options"),
       termId: _required(_readFieldValue<String>(_readField(json, const ["term_id"]), "term_id", _readString, requiredField: true, nullable: false), "term_id"),
     );
@@ -304,6 +375,7 @@ class GeneratedSpellingItem {
   Map<String, dynamic> toJson() {
     return {
       'allow_custom': allowCustom,
+      'context': context?.toJson(),
       'options': options,
       'term_id': termId,
     };

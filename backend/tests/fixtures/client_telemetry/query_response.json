@@ -1,0 +1,283 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-12T12:00:00Z",
+  "coverage_start": "2026-10-12",
+  "complete_through": "2026-10-12",
+  "partial": false,
+  "available": true,
+  "rows": [
+    {
+      "day": "2026-10-12",
+      "platform": "macos",
+      "channel": "production",
+      "family": "upload",
+      "dimensions": {
+        "phase": "completed",
+        "source": "pendant"
+      },
+      "counters": {
+        "observations_total": 1,
+        "completed_total": 1,
+        "request_completed_total": 1
+      },
+      "durations": {
+        "latency_ms": {
+          "count": 1,
+          "sum_ms": 250,
+          "buckets": [
+            {
+              "le_seconds": 0.05,
+              "count": 0
+            },
+            {
+              "le_seconds": 0.1,
+              "count": 0
+            },
+            {
+              "le_seconds": 0.25,
+              "count": 1
+            },
+            {
+              "le_seconds": 0.5,
+              "count": 1
+            },
+            {
+              "le_seconds": 1.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 2.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 5.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 10.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 30.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 60.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 120.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 300.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 900.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 3600.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 86400.0,
+              "count": 1
+            },
+            {
+              "le_seconds": "+Inf",
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "day": "2026-10-12",
+      "platform": "macos",
+      "channel": "production",
+      "family": "upload",
+      "dimensions": {
+        "phase": "started",
+        "source": "pendant"
+      },
+      "counters": {
+        "observations_total": 1,
+        "started_total": 1
+      },
+      "durations": {}
+    },
+    {
+      "day": "2026-10-12",
+      "platform": "macos",
+      "channel": "production",
+      "family": "voice_turn",
+      "dimensions": {
+        "phase": "terminal",
+        "population": "physical_shortcut",
+        "route": "hub",
+        "intent": "hold",
+        "outcome": "success",
+        "reason": "success"
+      },
+      "counters": {
+        "observations_total": 1,
+        "terminal_total": 1
+      },
+      "durations": {
+        "latency_ms": {
+          "count": 1,
+          "sum_ms": 1500,
+          "buckets": [
+            {
+              "le_seconds": 0.05,
+              "count": 0
+            },
+            {
+              "le_seconds": 0.1,
+              "count": 0
+            },
+            {
+              "le_seconds": 0.25,
+              "count": 0
+            },
+            {
+              "le_seconds": 0.5,
+              "count": 0
+            },
+            {
+              "le_seconds": 1.0,
+              "count": 0
+            },
+            {
+              "le_seconds": 2.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 5.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 10.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 30.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 60.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 120.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 300.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 900.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 3600.0,
+              "count": 1
+            },
+            {
+              "le_seconds": 86400.0,
+              "count": 1
+            },
+            {
+              "le_seconds": "+Inf",
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "day": "2026-10-12",
+      "platform": "macos",
+      "channel": "production",
+      "family": "voice_turn",
+      "dimensions": {
+        "phase": "started",
+        "population": "physical_shortcut",
+        "route": "hub",
+        "intent": "hold",
+        "outcome": "unknown"
+      },
+      "counters": {
+        "observations_total": 1,
+        "started_total": 1
+      },
+      "durations": {}
+    },
+    {
+      "day": "2026-10-12",
+      "platform": "macos",
+      "channel": "production",
+      "family": "voice_turn",
+      "dimensions": {
+        "phase": "terminal",
+        "population": "floating_voice",
+        "route": "floating_voice",
+        "intent": "legacy",
+        "outcome": "failure",
+        "reason": "provider_failed"
+      },
+      "counters": {
+        "observations_total": 1,
+        "terminal_total": 1
+      },
+      "durations": {}
+    }
+  ],
+  "voice_rows": [
+    {
+      "day": "2026-10-12",
+      "channel": "production",
+      "actor_id": "owner-a",
+      "health_event": "voice_turn_terminal",
+      "outcome": "failure",
+      "reason": "provider_failed",
+      "route": "floating_voice",
+      "intent": "legacy",
+      "population": "floating_voice",
+      "count": 1,
+      "duration_ms": 0,
+      "latency_count": 0
+    },
+    {
+      "day": "2026-10-12",
+      "channel": "production",
+      "actor_id": "owner-a",
+      "health_event": "voice_turn_started",
+      "outcome": "unknown",
+      "reason": "unknown",
+      "route": "hub",
+      "intent": "hold",
+      "population": "physical_shortcut",
+      "count": 1,
+      "duration_ms": 0,
+      "latency_count": 0
+    },
+    {
+      "day": "2026-10-12",
+      "channel": "production",
+      "actor_id": "owner-a",
+      "health_event": "voice_turn_terminal",
+      "outcome": "success",
+      "reason": "success",
+      "route": "hub",
+      "intent": "hold",
+      "population": "physical_shortcut",
+      "count": 1,
+      "duration_ms": 1500,
+      "latency_count": 1
+    }
+  ]
+}

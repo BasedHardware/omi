@@ -1,21 +1,19 @@
 ---
-title: "Integrate 3P Wearables"
-sidebarTitle: "Integrate 3P Wearables"
+title: "Third-party wearables"
+sidebarTitle: "Third-Party Wearables"
 icon: "puzzle-piece"
-description: "A guide to integrating any wearable device, like Plaud, Limitless, or your own custom hardware, with the Omi open-source ecosystem."
+description: "Learn how to integrate any wearable device, such as Plaud, Limitless, or your own custom hardware, with the Omi open-source ecosystem."
 ---
 
 <Frame>
   <img src="/images/docs/get_started/images/omibanner.png" alt="Omi Banner" />
 </Frame>
 
-Omi is the world's most advanced open-source AI wearable platform. Our mission is to build an open ecosystem for seamless communication, and that includes enabling a wide range of hardware.
+Omi is an open-source AI wearable platform. It supports a wide range of hardware.
 
-This guide will walk you through integrating third-party wearable devices—like Plaud AI, Limitless, or your own custom hardware—into the Omi app. By doing so, you can leverage Omi's powerful features, including high-quality transcription, conversation memory, and a growing app marketplace, for any device.
+This guide walks you through integrating third-party wearable devices, such as Plaud AI, Limitless, or your own custom hardware, into the Omi app. Once integrated, a device can use Omi's transcription, conversation memory, and app marketplace.
 
----
-
-## The Integration Workflow
+## The integration workflow
 
 Integrating a new device involves two main phases:
 
@@ -32,28 +30,26 @@ Integrating a new device involves two main phases:
 This guide focuses on devices that stream audio data, but the principles apply to other data types as well.
 </Note>
 
----
-
 ## Prerequisites
 
 Before you begin, ensure you have the following:
 
 <CardGroup cols={2}>
-  <Card title="The Hardware" icon="microchip">
+  <Card title="The hardware" icon="microchip">
     The third-party device you want to integrate
   </Card>
-  <Card title="Android Phone" icon="android">
-    Highly recommended for superior BLE traffic capturing capabilities
+  <Card title="Android phone" icon="android">
+    Highly recommended for capturing BLE traffic
   </Card>
   <Card title="Wireshark" icon="chart-network">
     Essential tool for analyzing captured network traffic
   </Card>
-  <Card title="Omi App Codebase" icon="code-branch">
+  <Card title="Omi app codebase" icon="code-branch">
     A local development setup of the Omi app
   </Card>
 </CardGroup>
 
-### Technical Knowledge Required
+### Technical knowledge required
 
 | Skill | Level | Description |
 |-------|-------|-------------|
@@ -61,11 +57,9 @@ Before you begin, ensure you have the following:
 | Dart/Flutter | Intermediate | For app integration |
 | Python | Optional | For writing verification scripts |
 
----
+## Part 1: Reverse engineering the device protocol
 
-## Part 1: Reverse Engineering the Device Protocol
-
-Your first goal is to become a detective. You need to learn the device's language, which for most wearables is spoken over Bluetooth Low Energy (BLE).
+Your first goal is to learn the device's language. For most wearables, that language is Bluetooth Low Energy (BLE).
 
 ### Step 1.1: Capture BLE Traffic
 
@@ -74,10 +68,10 @@ The most effective way to learn the protocol is to capture the communication bet
 <Tabs>
   <Tab title="Android (Recommended)" icon="android">
     <Steps>
-      <Step title="Enable Developer Options">
+      <Step title="Enable developer options">
         Go to **Settings → About phone** and tap **Build number** seven times.
       </Step>
-      <Step title="Enable ADB & Snoop Log">
+      <Step title="Enable ADB and snoop log">
         Go to **Settings → System → Developer options**. Enable:
         - USB debugging
         - Enable Bluetooth HCI snoop log
@@ -85,14 +79,14 @@ The most effective way to learn the protocol is to capture the communication bet
       <Step title="Restart Bluetooth">
         Turn Bluetooth off and on again for the change to take effect.
       </Step>
-      <Step title="Generate Traffic">
+      <Step title="Generate traffic">
         Use the official vendor app to connect to your device. Perform key operations like starting and stopping a recording, changing settings, etc.
 
         <Tip>
         Record a video of your phone's screen while you perform actions. This will be invaluable when matching timestamps in Wireshark to see which action generated which BLE command.
         </Tip>
       </Step>
-      <Step title="Retrieve the Log">
+      <Step title="Retrieve the log">
         After capturing, disable the snoop log.
 
         **Non-Rooted Devices:** Generate a bug report from Developer options. The log file `btsnoop_hci.log` will be in the ZIP archive under `FS/data/misc/bluetooth/logs/`.
@@ -115,10 +109,10 @@ The most effective way to learn the protocol is to capture the communication bet
     There are two approaches for iOS: manual exploration or full packet capture.
 
     <AccordionGroup>
-      <Accordion title="Option A: Manual Exploration (Quick Start)" icon="hand-pointer">
+      <Accordion title="Option A: manual exploration (quick start)" icon="hand-pointer">
         Apps like [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nrf-connect-for-mobile) or [LightBlue](https://apps.apple.com/us/app/lightblue-explorer/id557428110) allow you to manually explore your device's services and characteristics. This requires more trial and error but can quickly reveal basic information about UUIDs and simple data formats.
       </Accordion>
-      <Accordion title="Option B: Full Packet Capture with PacketLogger (Recommended)" icon="file-lines">
+      <Accordion title="Option B: full packet capture with PacketLogger (recommended)" icon="file-lines">
         **Requirements:**
         - iOS 13+ device and Lightning/USB-C cable
         - Mac computer with macOS
@@ -164,16 +158,16 @@ The most effective way to learn the protocol is to capture the communication bet
 With your log file open, it's time to find the important packets.
 
 <CardGroup cols={2}>
-  <Card title="Filter by Device" icon="filter">
+  <Card title="Filter by device" icon="filter">
     Find your device's address and apply a display filter to isolate its traffic
   </Card>
-  <Card title="Look for Patterns" icon="chart-line">
+  <Card title="Look for patterns" icon="chart-line">
     For audio streaming, look for large numbers of similar-sized packets sent rapidly
   </Card>
-  <Card title="Inspect Packet Details" icon="magnifying-glass">
+  <Card title="Inspect packet details" icon="magnifying-glass">
     Look for GATT Service UUID, Characteristic UUID, and raw data payload
   </Card>
-  <Card title="Map the Services" icon="sitemap">
+  <Card title="Map the services" icon="sitemap">
     Create a "map" of Service UUIDs, Characteristic UUIDs, and Data Formats
   </Card>
 </CardGroup>
@@ -185,17 +179,17 @@ With your log file open, it's time to find the important packets.
 - **Data Format:** Encoding of the payload (e.g., Opus, PCM, µ-law, AAC)
 </Info>
 
-### Step 1.3: Decode the Data Payload
+### Step 1.3: Decode the data payload
 
 The data payload is a hexadecimal string. Your task is to figure out its structure.
 
 <AccordionGroup>
-  <Accordion title="Example: Identifying Opus Frames" icon="waveform">
+  <Accordion title="Example: identifying Opus frames" icon="waveform">
     Let's say you capture several 240-byte data packets. You notice the first byte is always `b8`, and this byte reappears every 40 bytes within the same packet.
 
-    This is a strong clue! The Opus audio codec uses a Table of Contents (TOC) byte at the start of each frame. The repeating `b8` byte suggests the packet contains six 40-byte Opus frames.
+    This is a strong clue. The Opus audio codec uses a Table of Contents (TOC) byte at the start of each frame. The repeating `b8` byte suggests the packet contains six 40-byte Opus frames.
   </Accordion>
-  <Accordion title="Common Audio Codecs" icon="music">
+  <Accordion title="Common audio codecs" icon="music">
     | Codec | Description |
     |-------|-------------|
     | **Opus** | High-quality, low-latency (most common in modern devices) |
@@ -205,7 +199,7 @@ The data payload is a hexadecimal string. Your task is to figure out its structu
   </Accordion>
 </AccordionGroup>
 
-### Step 1.4: Verify Your Findings
+### Step 1.4: Verify your findings
 
 Before integrating, write a small standalone script to confirm your assumptions.
 
@@ -233,13 +227,11 @@ asyncio.run(main())
 If you can decode and play back the audio as a `.wav` file, you've cracked the code!
 </Tip>
 
----
-
-## Part 2: Integrating with the Omi App
+## Part 2: Integrating with the Omi app
 
 Now, let's integrate your device into the Omi app's modular architecture.
 
-### Understanding Omi's Device Architecture
+### Understanding Omi's device architecture
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
@@ -247,10 +239,10 @@ Now, let's integrate your device into the Omi app's modular architecture.
 | `DeviceTransport` | `.../transports/device_transport.dart` | Abstract transport interface (`NativeBleTransport` in `.../transports/native_ble_transport.dart` is the low-level BLE handler) |
 | `DeviceConnectionFactory` | `.../connectors/device_connection.dart` | Constructs the correct connection object based on DeviceType |
 
-### Implementation Steps
+### Implementation steps
 
 <Steps>
-  <Step title="Add a New DeviceType" icon="plus">
+  <Step title="Add a new DeviceType" icon="plus">
     Open `app/lib/backend/schema/bt_device/bt_device.dart` and add your device:
 
     ```dart
@@ -266,7 +258,7 @@ Now, let's integrate your device into the Omi app's modular architecture.
 
     Also update `getTypeOfBluetoothDevice` function and create a helper (e.g., `isXyzDevice`) to identify your device during Bluetooth scans.
   </Step>
-  <Step title="Create Your Device Connection Class" icon="code">
+  <Step title="Create your device connection class" icon="code">
     Create `app/lib/services/devices/connectors/xyz_connection.dart`:
 
     ```dart
@@ -309,7 +301,7 @@ Now, let's integrate your device into the Omi app's modular architecture.
     }
     ```
   </Step>
-  <Step title="Register Your Device in the Factory" icon="gear">
+  <Step title="Register your device in the factory" icon="gear">
     Open `app/lib/services/devices/connectors/device_connection.dart` and add a new case:
 
     ```dart
@@ -334,11 +326,9 @@ Now, let's integrate your device into the Omi app's modular architecture.
 Refer to `app/lib/services/devices/connectors/omi_connection.dart` for a complete example of a complex device implementation.
 </Info>
 
----
+## Part 3: Testing and contribution
 
-## Part 3: Testing and Contribution
-
-### Testing Your Integration
+### Testing your integration
 
 Test your integration thoroughly within the Omi app:
 
@@ -349,61 +339,55 @@ Test your integration thoroughly within the Omi app:
 | Battery Level | Is the battery level displayed correctly? |
 | Stability | Is the connection stable? Does it handle reconnection gracefully? |
 
-### Troubleshooting Common Issues
+### Troubleshooting common issues
 
 <AccordionGroup>
-  <Accordion title="Connection Fails" icon="plug-circle-xmark">
+  <Accordion title="Connection fails" icon="plug-circle-xmark">
     - Double-check your Service and Characteristic UUIDs
     - Ensure the device is not connected to its official app or another phone
     - Verify BLE permissions are granted in the app
   </Accordion>
-  <Accordion title="Audio is Garbled" icon="volume-xmark">
+  <Accordion title="Audio is garbled" icon="volume-xmark">
     - Your `BleAudioCodec` in `performGetAudioCodec` is likely incorrect
     - Verify the codec and its parameters (sample rate, bit depth)
     - Check if there's a header to strip from audio packets
   </Accordion>
-  <Accordion title="No Data Received" icon="signal">
+  <Accordion title="No data received" icon="signal">
     - Confirm you are subscribing to the correct characteristic for notifications
     - Check in Wireshark if the device is actually sending data after connection
     - Verify the characteristic supports notifications (check properties)
   </Accordion>
 </AccordionGroup>
 
-### Contributing Your Work
+### Contributing your work
 
-Omi is built by the community. If you've integrated a new device, we strongly encourage you to contribute it back!
+Omi is built by the community. If you've integrated a new device, we encourage you to contribute it back.
 
 <Steps>
-  <Step title="Check the Contribution Guide">
+  <Step title="Check the contribution guide">
     Review our [Contribution Guide](/doc/developer/Contribution) for code standards and PR process.
   </Step>
-  <Step title="Open a Pull Request">
+  <Step title="Open a pull request">
     Submit your integration to the [Omi GitHub repository](https://github.com/BasedHardware/omi).
   </Step>
-  <Step title="Join the Community">
+  <Step title="Join the community">
     Discuss your integration with the team and community on [Discord](http://discord.omi.me).
   </Step>
 </Steps>
 
-<Tip>
-We offer [paid bounties](https://omi.me/bounties) for specific features and integrations. Check them out!
-</Tip>
-
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="App-Device Protocol" icon="bluetooth" href="/doc/developer/Protocol">
+  <Card title="App-device protocol" icon="bluetooth" href="/doc/developer/Protocol">
     BLE protocol specification for Omi devices
   </Card>
-  <Card title="App Setup" icon="mobile" href="/doc/developer/AppSetup">
+  <Card title="App setup" icon="mobile" href="/doc/developer/AppSetup">
     Set up the Omi Flutter app for development
   </Card>
-  <Card title="SDK Overview" icon="cube" href="/doc/developer/sdk/sdk">
+  <Card title="SDK overview" icon="cube" href="/doc/developer/sdk/sdk">
     Build apps using Omi SDKs
   </Card>
-  <Card title="Contribution Guide" icon="code-branch" href="/doc/developer/Contribution">
+  <Card title="Contribution guide" icon="code-branch" href="/doc/developer/Contribution">
     How to contribute to Omi
   </Card>
 </CardGroup>

@@ -71,6 +71,7 @@ class SttSegment {
   final int speakerId;
   final bool isUser;
   final String? personId;
+  final String? sttProvider;
   final List<dynamic>? translations;
 
   SttSegment({
@@ -81,6 +82,7 @@ class SttSegment {
     this.speakerId = 0,
     this.isUser = false,
     this.personId,
+    this.sttProvider,
     this.translations,
   }) : speaker = speaker ?? 'SPEAKER_$speakerId';
 
@@ -93,16 +95,19 @@ class SttSegment {
       'start': start,
       'end': end,
       'person_id': personId,
+      if (sttProvider != null) 'stt_provider': sttProvider,
       if (translations != null) 'translations': translations,
     };
   }
 }
 
 class SttTranscriptionResult {
+  /// End of successfully consumed audio, including silence.
+  final double? audioEndSeconds;
   final List<SttSegment> segments;
   final String? rawText;
 
-  SttTranscriptionResult({this.segments = const [], this.rawText});
+  SttTranscriptionResult({this.segments = const [], this.rawText, this.audioEndSeconds});
 
   bool get isEmpty => segments.isEmpty && (rawText == null || rawText!.trim().isEmpty);
   bool get isNotEmpty => !isEmpty;
@@ -207,6 +212,7 @@ List<Map<String, dynamic>> mergeTranscriptSegmentsBySpeaker(Iterable<SttSegment>
         segments.last['speaker_id'] != segmentJson['speaker_id'] ||
         segments.last['is_user'] != segmentJson['is_user'] ||
         segments.last['person_id'] != segmentJson['person_id'] ||
+        segments.last['stt_provider'] != segmentJson['stt_provider'] ||
         lastHasTranslations ||
         hasTranslations) {
       segments.add(segmentJson);

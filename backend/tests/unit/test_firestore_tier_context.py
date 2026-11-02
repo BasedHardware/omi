@@ -68,7 +68,7 @@ async def test_real_http_auth_to_async_and_db_pool_no_leak_or_extra_reads(monkey
     assert get.call_count == 2
     monkeypatch.setattr(endpoints, 'verify_token', lambda token: token)
     monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: None)
-    for name in ('record_user_platform', 'record_client_device', 'validate_byok_request', 'enforce_jit_qa_uid'):
+    for name in ('record_user_platform', 'record_client_device', 'validate_byok_request'):
         monkeypatch.setattr(endpoints, name, lambda *a, **kw: None)
     monkeypatch.setattr(endpoints, 'cutover_enforcement_enabled', lambda: False)
 
@@ -134,7 +134,6 @@ async def test_websocket_auth_offload_and_disconnect(monkeypatch):
     tier.observe_subscription('owner', subscription('architect'))
     monkeypatch.setattr(endpoints, '_verify_ws_auth', lambda _: 'owner')
     monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda _: None)
-    monkeypatch.setattr(endpoints, 'enforce_jit_qa_uid', lambda _: None)
     monkeypatch.setattr(endpoints, 'cutover_enforcement_enabled', lambda: False)
 
     async def send(message):

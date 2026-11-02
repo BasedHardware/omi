@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-filter-control-not-seeded-from-owner-state",
+  "violated_contract": "A control that edits a filter owned by something that outlives it (an app-scoped provider or store) must show the filter's current value whenever it is built. When the control starts from its own default instead, such as an empty text controller on a page pushed again, the owner keeps applying the old filter while the control shows none: the list is narrowed for no visible reason, and the clear button, which depends on the control's own value, is not offered.",
+  "canonical_prevention": "Seed the control from the owner's current value when it mounts (for a search field, set its controller from the provider's query in initState), or reset the filter in the owner when the control's page goes away; never let the two start out of step. Prove it with a hermetic widget test that applies the filter through the real control, leaves and reopens the page against the same owner, and asserts the control shows the applied value and that clearing it brings the full list back.",
+  "canonical_prevention_artifact": [
+    "app/test/pages/memories/memories_search_field_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/memories/page.dart",
+    "app/lib/providers/memories_provider.dart"
+  ],
+  "status": "open"
+}

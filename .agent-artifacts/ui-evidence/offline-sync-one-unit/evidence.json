@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-offline-sync-downloading-from-omi.png",
+      "platform": "mobile-ios",
+      "description": "Syncing 18m of audio: downloading from the Omi, 12m of 18m, first bar segment filling",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-offline-sync-uploading.png",
+      "platform": "mobile-ios",
+      "description": "Upload step in minutes (page opened mid-upload, so the count starts from that moment)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-offline-sync-transcribing.png",
+      "platform": "mobile-ios",
+      "description": "Server processing in minutes: Turning 41m into conversations, 10m of 41m done (was Processing 0/5914)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-offline-sync-ready-to-sync.png",
+      "platform": "mobile-ios",
+      "description": "Auto-sync off: 22m ready to sync, Pending tab shows the amount, rows grouped under Today",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-offline-sync-needs-attention.png",
+      "platform": "mobile-ios",
+      "description": "A recording that needs the user is now in the Pending tab with its Delete action",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-offline-sync-all-synced.png",
+      "platform": "mobile-ios",
+      "description": "All recordings synced: one Storage group, Manage Storage moved out of the app bar menu",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-offline-sync-sync-details-sheet.png",
+      "platform": "mobile-ios",
+      "description": "Sync details sheet: where audio sits now; file and server-job counts only under For support",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-offline-sync-uploading-light.png",
+      "platform": "mobile-ios",
+      "description": "Uploading in light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

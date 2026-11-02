@@ -72,8 +72,11 @@ final class OnDeviceMeetingIdentityExtractorTests: XCTestCase {
       Set(body.keys),
       [
         "calendar_event_id", "calendar_source", "title", "start_time", "end_time", "participants", "platform",
+        "participant_sources",
       ])
     XCTAssertEqual(body["calendar_source"] as? String, "screen_activity")
+    let sources = try XCTUnwrap(body["participant_sources"] as? [String: Any])
+    XCTAssertEqual(Set(sources.keys), ["observed_screen_listing", "observed_call_tiles"])
     XCTAssertNil(body["meeting_link"])
     XCTAssertNil(body["notes"])
     XCTAssertNil(body["ocrText"])
@@ -187,6 +190,32 @@ final class OnDeviceMeetingIdentityExtractorTests: XCTestCase {
       OnDeviceMeetingIdentityExtractor.payload(
         from: [call, chat], overlapping: DateInterval(start: start, end: end)))
     XCTAssertEqual(payload.participants.compactMap(\.name), ["Alice Chen"])
+  }
+
+  func testOpenMessagingChatThroughoutInPersonConversationIsNotAMeeting() {
+    for app in ["Telegram", "Slack", "Discord", "WhatsApp"] {
+      let snapshots = (0..<8).map { index in
+        MeetingScreenActivitySnapshot(
+          timestamp: start.addingTimeInterval(TimeInterval(index * 30)),
+          appName: app,
+          windowTitle: "Jordan Rivera",
+          ocrText: "Yesterday\nPhoto\nMessage")
+      }
+      XCTAssertNil(
+        OnDeviceMeetingIdentityExtractor.payload(
+          from: snapshots, overlapping: DateInterval(start: start, end: end)), app)
+    }
+  }
+
+  func testMessagingCallChromeStillIdentifiesCallsAcrossPlatforms() throws {
+    for app in ["Telegram", "Slack", "Discord", "WhatsApp"] {
+      let snapshot = MeetingScreenActivitySnapshot(
+        timestamp: start, appName: app, windowTitle: "Jordan Rivera", ocrText: "Mute\nEnd Call")
+      let payload = try XCTUnwrap(
+        OnDeviceMeetingIdentityExtractor.payload(
+          from: [snapshot], overlapping: DateInterval(start: start, end: end)), app)
+      XCTAssertEqual(payload.participants.compactMap(\.name), ["Jordan Rivera"], app)
+    }
   }
 
   private func rows(_ texts: String...) -> [MeetingScreenActivitySnapshot] {

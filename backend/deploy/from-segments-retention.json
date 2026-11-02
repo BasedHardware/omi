@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "field": "expires_at",
+  "collection_groups": ["from_segments_chunks"],
+  "staging_retention_days": 7,
+  "requires_before_serve": "CLIENTS_FROM_SEGMENTS_CHUNKS_MODE"
+}

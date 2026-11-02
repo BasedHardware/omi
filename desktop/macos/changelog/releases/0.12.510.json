@@ -1,0 +1,7 @@
+{
+  "version": "0.12.510",
+  "date": "2026-10-20",
+  "changes": [
+    "The Claude sign-in upgrade sheet no longer shows a price"
+  ]
+}

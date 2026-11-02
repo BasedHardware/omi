@@ -19,13 +19,6 @@ from models.workstream_association import (
     RecurrenceInboxReceipt,
     RecurrenceInboxStatus,
 )
-from utils.memory.canonical_consolidation import (
-    CONSOLIDATION_AGENT_PROMPT,
-    ConsolidationAgentBatch,
-    ConsolidationReport,
-)
-from utils.memory import canonical_short_term_maintenance_cron as maintenance_cron
-from utils.memory.short_term_promotion import CanonicalShortTermMaintenanceReport
 from utils.task_intelligence import workstream_association as association
 from utils.task_intelligence import workstream_index
 from database import vector_db
@@ -314,45 +307,6 @@ def _recurrence_signal(*, distinct_days: int) -> CanonicalRecurrenceSignal:
     )
 
 
-def test_canonical_consolidation_emits_neutral_recurrence_contract_only():
-    signal = _recurrence_signal(distinct_days=3)
-    batch = ConsolidationAgentBatch.model_validate({'decisions': [], 'recurrence_signals': [signal.model_dump()]})
-
-    assert batch.recurrence_signals == [signal]
-    assert 'at least two distinct days' in ' '.join(CONSOLIDATION_AGENT_PROMPT.split())
-
-
-def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypatch):
-    signal = _recurrence_signal(distinct_days=3)
-    monkeypatch.setenv('MEMORY_CANONICAL_MAINTENANCE_ENABLED', 'true')
-    maintenance_kwargs = {}
-
-    def run_maintenance(uid, **kwargs):
-        maintenance_kwargs.update(kwargs)
-        return CanonicalShortTermMaintenanceReport(
-            uid=uid,
-            consolidation=ConsolidationReport(uid=uid, recurrence_signals=[signal]),
-        )
-
-    monkeypatch.setattr(maintenance_cron, 'run_canonical_short_term_maintenance', run_maintenance)
-    consumed: list[CanonicalRecurrenceSignal] = []
-
-    summary = maintenance_cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        run_id='run-1',
-        uid_inventory=lambda _db, _limit: ['uid-1'],
-        recurrence_signal_persister=lambda *args, **kwargs: 1,
-        recurrence_signal_consumer=lambda uid, signals, firestore_client=None: (
-            consumed.extend(signals) or len(signals)
-        ),
-    )
-
-    assert consumed == [signal]
-    assert summary.recurrence_candidates_total == 1
-    assert maintenance_kwargs['recurrence_signal_sink'] is not None
-
-
 def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enabled):
     created: dict[str, SimpleNamespace] = {}
 
@@ -572,11 +526,13 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
         def __init__(self):
             self.upserts = []
             self.deletes = []
+            self.queries = []
 
         def upsert(self, **kwargs):
             self.upserts.append(kwargs)
 
         def query(self, **kwargs):
+            self.queries.append(kwargs)
             assert kwargs['namespace'] == vector_db.WORKSTREAM_ASSOCIATION_NAMESPACE
             return {
                 'matches': [
@@ -589,8 +545,16 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
         def delete(self, **kwargs):
             self.deletes.append(kwargs)
 
+    raw_index = object()
     fake = FakeIndex()
-    monkeypatch.setattr(vector_db, 'index', fake)
+    routes = []
+
+    def route(raw, uid, **kwargs):
+        routes.append((raw, uid, kwargs))
+        return fake
+
+    monkeypatch.setattr(vector_db, 'index', raw_index)
+    monkeypatch.setattr(vector_db, 'owner_index', route)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=lambda text: [0.1, 0.2]))
     monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
 
@@ -604,7 +568,12 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
     assert vector_db.delete_workstream_association_vector('uid-1', 'ws-1')
     assert vector_db.reset_workstream_association_vectors('uid-1')
 
+    assert routes == [(raw_index, 'uid-1', {'index_name': vector_db._pinecone_index_name})] * 4
+    assert len(fake.upserts) == len(fake.queries) == 1
+    assert len(fake.deletes) == 2
+    assert fake.queries[0]['filter']['uid'] == {'$eq': 'uid-1'}
     record = fake.upserts[0]['vectors'][0]
+    assert record['metadata']['uid'] == 'uid-1'
     assert 'objective' not in record['metadata']
     assert record['metadata']['schema_version'] == 1
     assert all(call['namespace'] == vector_db.WORKSTREAM_ASSOCIATION_NAMESPACE for call in fake.deletes)

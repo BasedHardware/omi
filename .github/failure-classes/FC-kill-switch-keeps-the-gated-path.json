@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-kill-switch-keeps-the-gated-path",
+  "violated_contract": "Turning a rollout flag off must stop new work from entering the path that flag gates. Cutover code that keeps routing new work into the gated path whenever leftover state from the flag-on period exists (an active owner, a pending backlog) makes the kill switch inert for exactly the users the gated path is hurting, while the flag reads off everywhere.",
+  "canonical_prevention": "Branch on the flag before any cutover adoption decision, so flag-off work takes the ungated path unconditionally and leftover gated state only drains. Pin it with a test that turns the flag off while the leftover state is present and asserts no new work is admitted to the gated path.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/sync.py",
+    "backend/utils/sync/uid_sequencer.py"
+  ],
+  "status": "open"
+}

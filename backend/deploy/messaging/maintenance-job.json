@@ -1,0 +1,52 @@
+{
+  "name": "projects/based-hardware/locations/us-central1/jobs/messaging-maintenance-job",
+  "labels": {
+    "component": "messaging-maintenance"
+  },
+  "template": {
+    "taskCount": 1,
+    "parallelism": 1,
+    "template": {
+      "serviceAccount": "backend-runtime@based-hardware.iam.gserviceaccount.com",
+      "timeout": "600s",
+      "maxRetries": 1,
+      "containers": [
+        {
+          "image": "ADMITTED_BACKEND_IMAGE",
+          "command": [
+            "python"
+          ],
+          "args": [
+            "-m",
+            "utils.messaging.maintenance"
+          ],
+          "resources": {
+            "limits": {
+              "cpu": "1",
+              "memory": "512Mi"
+            }
+          },
+          "env": [
+            {
+              "name": "GOOGLE_CLOUD_PROJECT",
+              "value": "based-hardware"
+            },
+            {
+              "name": "OMI_MESSAGING_RETENTION_DAYS",
+              "value": "30"
+            },
+            {
+              "name": "ENCRYPTION_SECRET",
+              "valueSource": {
+                "secretKeyRef": {
+                  "secret": "ENCRYPTION_SECRET",
+                  "version": "latest"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

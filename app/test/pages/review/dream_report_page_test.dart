@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/dream.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/dream_report.dart';
 import 'package:omi/backend/schema/gen/dream_wire.g.dart' as wire;
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/dream_report_page.dart';
@@ -72,6 +73,25 @@ Widget _app(Widget home) => MaterialApp(
     );
 
 void main() {
+  testWidgets('retired item report shows the before and removed state', (tester) async {
+    final run = _runJson('synthetic-retired');
+    run['edits'] = [
+      {
+        'kind': 'retire_task',
+        'target_label': 'Invented duplicate',
+        'before': 'Invented obligation',
+        'after': '',
+        'reason': 'Synthetic duplicate',
+        'evidence_count': 1,
+        'outcome': 'applied'
+      },
+    ];
+    await tester.pumpWidget(_app(DreamReportPage(loadReport: () async => ApiSuccess(_report(runs: [run])))));
+    await tester.pumpAndSettle();
+    expect(find.text('Invented obligation → Removed from the active list'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   group('wire parsing', () {
     test('keeps well-formed runs and drops a run without an id or timestamp', () {
       final report = _report(runs: [
@@ -173,6 +193,7 @@ void main() {
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
         loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [], remainingToday: 0)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
       );
       await tester.pumpWidget(ChangeNotifierProvider<ReviewProvider>.value(
         value: provider,

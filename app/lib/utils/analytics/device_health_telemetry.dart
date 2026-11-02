@@ -103,9 +103,18 @@ class DeviceHealthTelemetry {
     return _resolveOutage(id, at: at);
   }
 
-  static Future<void> _resolveOutage(String id, {DateTime? at, num? nativeStart}) => _writeOutage(id, (record, now) {
+  static Future<void> _resolveOutage(
+    String id, {
+    DateTime? at,
+    num? nativeStart,
+    bool keepOutagesAfterRecovery = false,
+  }) =>
+      _writeOutage(id, (record, now) {
         final start = nativeStart ?? record['open_since'] as num?;
         if (start == null || (record['last_resolved_start'] as num? ?? -1) >= start) return;
+        // A live audio-bearing link closes markers from before that link.
+        // A newer gap on the same link stays open until its own recovery.
+        if (keepOutagesAfterRecovery && start > now) return;
         if (record['open_since'] == start) record.remove('open_since');
         final began = DateTime.fromMillisecondsSinceEpoch(start.toInt());
         final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
@@ -192,13 +201,13 @@ class DeviceHealthTelemetry {
   static bool hasObservation(Map<String, dynamic> diagnostics, DateTime day) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
-    final open = diagnostics['outage_open_since'] as num?;
-    if (open != null && open < end) return true;
+    final open = diagnostics['outage_open_since'];
+    if (open is int && open < end) return true;
     if ((diagnostics['outage_resolved_days'] as Map?)?.containsKey(start.toString()) == true) return true;
     for (final key in ['battery_history_v2', 'firmware_diagnostics', 'disconnect_history_v2', 'audio_packet_days']) {
       for (final point in (diagnostics[key] as List? ?? []).whereType<Map>()) {
         final ts = point['ts'] ?? point['timestamp'];
-        if (ts is num && ts >= start && ts < end) return true;
+        if (ts is int && ts >= start && ts < end) return true;
       }
     }
     return false;
@@ -214,8 +223,15 @@ class DeviceHealthTelemetry {
   static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
-    final observedAt = (diagnostics['observed_at'] as num?)?.toInt() ?? end;
+    // Writers emit integer millis; a fractional observed_at would shift both
+    // the exposure and retention bounds.
+    final observedAt = diagnostics['observed_at'] is int ? diagnostics['observed_at'] as int : end;
     final exposureEnd = observedAt.clamp(start, end);
+    // Disconnect history is age-pruned to seven days. Catch-up can replay a
+    // calendar day that starts before that horizon, so intervals which ended
+    // earlier are gone and must not widen the disconnected-time budget.
+    const historyRetentionMs = 7 * 24 * 3600 * 1000;
+    final retentionHorizon = observedAt - historyRetentionMs;
     final events = (diagnostics['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final battery = (diagnostics['battery_history_v2'] as List? ?? []).whereType<Map>().toList();
     final firmware = (diagnostics['firmware_diagnostics'] as List? ?? []).whereType<Map>().toList();
@@ -224,11 +240,12 @@ class DeviceHealthTelemetry {
     final rssiBuckets = <String, int>{};
     final resets = <String, int>{};
     var connectedMs = 0;
+    var connectedBeforeHorizonMs = 0;
     double? lostAudioSeconds;
     final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
     if (resolved != null) lostAudioSeconds = resolved.toDouble();
-    final openSince = diagnostics['outage_open_since'] as num?;
-    final unresolved =
+    final openSince = diagnostics['outage_open_since'] is int ? diagnostics['outage_open_since'] as int : null;
+    var unresolved =
         openSince == null ? null : (exposureEnd - openSince.clamp(start, exposureEnd)).clamp(0, 86400000) / 1000;
     if (unresolved != null) lostAudioSeconds = (lostAudioSeconds ?? 0) + unresolved;
     final builds = <String>{};
@@ -248,9 +265,16 @@ class DeviceHealthTelemetry {
     var expected = 0;
     for (final event in events) {
       if (event['eventType'] != 'disconnect') continue;
-      final ts = (event['timestamp'] as num?)?.toInt() ?? 0;
-      final duration = (event['connectionDurationMs'] as num?)?.toInt() ?? 0;
+      // Integer millis only: writers emit ints, and a fractional value would
+      // truncate into a shifted connected-window inside the lost-audio cap.
+      final ts = event['timestamp'] is int ? event['timestamp'] as int : 0;
+      final duration = event['connectionDurationMs'] is int ? event['connectionDurationMs'] as int : 0;
       connectedMs += (ts.clamp(start, end) - (ts - duration).clamp(start, end)).clamp(0, end - start);
+      if (retentionHorizon > start) {
+        final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
+        connectedBeforeHorizonMs +=
+            (ts.clamp(start, prefixEnd) - (ts - duration).clamp(start, prefixEnd)).clamp(0, prefixEnd - start);
+      }
       if (ts < start || ts >= end) continue;
       final reason = event['reason']?.toString() ?? 'unknown';
       reasons[reason] = (reasons[reason] ?? 0) + 1;
@@ -273,9 +297,14 @@ class DeviceHealthTelemetry {
         expected += (event['audioPacketsExpected'] as num?)?.toInt() ?? 0;
       }
     }
-    final activeSince = (diagnostics['connected_at'] as num?)?.toInt() ?? 0;
+    final activeSince = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
     if (activeSince > 0 && activeSince < exposureEnd) {
       connectedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
+      if (retentionHorizon > start) {
+        final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
+        connectedBeforeHorizonMs +=
+            (exposureEnd.clamp(start, prefixEnd) - activeSince.clamp(start, prefixEnd)).clamp(0, prefixEnd - start);
+      }
       if (!diagnostics.containsKey('audio_packet_days') && activeSince >= start) {
         received += (diagnostics['audio_packets_received'] as num?)?.toInt() ?? 0;
         expected += (diagnostics['audio_packets_expected'] as num?)?.toInt() ?? 0;
@@ -286,6 +315,28 @@ class DeviceHealthTelemetry {
       if (ts == null || ts < start || ts >= end) continue;
       received += (point['received'] as num?)?.toInt() ?? 0;
       expected += (point['expected'] as num?)?.toInt() ?? 0;
+    }
+    // Lost audio is time without a link. A stale open marker must not bill the
+    // connected part of the day. Disconnect history is pruned at seven days, so
+    // a replayed day that starts before that horizon has an unknown prefix.
+    // Exclude it from the disconnected budget whether or not a packet row
+    // survived; packets are not a precondition for the correction.
+    var disconnectedMs = (end - start) - connectedMs.clamp(0, end - start);
+    var connectionHistoryIncomplete = false;
+    if (start < retentionHorizon) {
+      final prefixMs = retentionHorizon.clamp(start, end) - start;
+      final unknownPrefix = (prefixMs - connectedBeforeHorizonMs.clamp(0, prefixMs)).clamp(0, prefixMs);
+      disconnectedMs -= unknownPrefix;
+      connectionHistoryIncomplete = true;
+    }
+    if (disconnectedMs < 0) disconnectedMs = 0;
+    final disconnectedSeconds = disconnectedMs / 1000;
+    if (unresolved != null && unresolved > disconnectedSeconds) {
+      lostAudioSeconds = (lostAudioSeconds ?? 0) - (unresolved - disconnectedSeconds);
+      unresolved = disconnectedSeconds;
+    }
+    if (lostAudioSeconds != null && lostAudioSeconds > disconnectedSeconds) {
+      lostAudioSeconds = disconnectedSeconds;
     }
     var drainLevels = 0;
     var drainHours = 0.0;
@@ -364,6 +415,7 @@ class DeviceHealthTelemetry {
       'day_app_build': builds.isEmpty ? null : (builds.toList()..sort()),
       'day_firmware': firmwares.isEmpty ? null : (firmwares.toList()..sort()),
       'lost_audio_seconds': lostAudioSeconds?.clamp(0, 86400),
+      if (connectionHistoryIncomplete) 'connection_history_incomplete': true,
       'unresolved_outage_seconds': unresolved,
       'unresolved_outage_open': openSince != null && openSince < end,
       'audio_packet_loss_ratio': expected == 0 ? null : (expected - received).clamp(0, expected) / expected,
@@ -378,6 +430,76 @@ class DeviceHealthTelemetry {
       if (socFrozenSamples != null) 'soc_frozen_samples': socFrozenSamples,
       'device_resets_by_reason': resets,
     };
+  }
+
+  /// Latest packet time that proves audio on the link that began at [connectedAt].
+  /// Day buckets are midnight, so a same-day count is proof only with `last_at`
+  /// (or a bucket that itself starts at or after the link).
+  static int? _audioEvidenceAt(Map<String, dynamic> diagnostics, int connectedAt) {
+    if (connectedAt <= 0) return null;
+    int? evidence;
+    for (final point in (diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>()) {
+      // Integer millis only: a fractional value truncating past connectedAt
+      // would fabricate (or shift) the proof boundary.
+      final received = point['received'] is int ? point['received'] as int : 0;
+      if (received <= 0) continue;
+      final lastAt = point['last_at'];
+      int? at;
+      if (lastAt is int) {
+        if (lastAt >= connectedAt) at = lastAt;
+      } else {
+        final ts = point['ts'];
+        if (ts is int && ts >= connectedAt) at = ts;
+      }
+      if (at != null && (evidence == null || at > evidence)) evidence = at;
+    }
+    return evidence;
+  }
+
+  /// Native stamps for genuine recoveries: the singular pair, plus every proof
+  /// still inside native retention. Exact `(start, at)` equality is the proof.
+  static List<({int start, int at})> _audioRecoveryStamps(Map<String, dynamic> diagnostics) {
+    final stamps = <({int start, int at})>[];
+    void add(Object? start, Object? at) {
+      // Writers emit integer millis; a fractional value would truncate to a
+      // proof it never wrote, so only int counts here.
+      if (start is! int || at is! int || start <= 0 || at <= 0) return;
+      final pair = (start: start, at: at);
+      if (stamps.any((stamp) => stamp.start == pair.start && stamp.at == pair.at)) return;
+      stamps.add(pair);
+    }
+
+    add(diagnostics['audio_outage_resolved_start'], diagnostics['audio_outage_resolved_at']);
+    for (final proof in (diagnostics['audio_outage_recovery_proofs'] as List? ?? []).whereType<Map>()) {
+      add(proof['start'], proof['at']);
+    }
+    return stamps;
+  }
+
+  static bool _stampBacksRecovery(Map event, List<({int start, int at})> stamps) {
+    final start = event['timestamp'];
+    final resolved = event['lostAudioResolvedAt'];
+    // Exact integer equality is the proof; a fractional timestamp never
+    // matches a stamp and must not truncate into one.
+    if (start is! int || resolved is! int) return false;
+    return stamps.any((stamp) => stamp.start == start && stamp.at == resolved);
+  }
+
+  /// An `audio_recovered` row is billable when a nearby disconnect records it,
+  /// or when a native recovery stamp names this exact interval. Android writes
+  /// the row alone once the disconnect row is gone; the stamp is what separates
+  /// that recovery from a session-start echo. Neither proof means drop it.
+  static bool _isUnbackedAudioRecovery(Map event, List<Map> history, List<({int start, int at})> stamps) {
+    if (event['eventType'] != 'audio_recovered') return false;
+    final start = event['timestamp'];
+    if (start is! int || event['lostAudioResolvedAt'] == null) return false;
+    if (_stampBacksRecovery(event, stamps)) return false;
+    for (final row in history) {
+      if (row['eventType'] != 'disconnect') continue;
+      final ts = row['timestamp'];
+      if (ts is int && (ts - start).abs() <= 5000) return false;
+    }
+    return true;
   }
 
   static Future<void> maybeEmit(
@@ -418,17 +540,59 @@ class DeviceHealthTelemetry {
       }
       // Import native starts/recoveries missed while Dart was suspended. Native
       // retains the first start, even across failed reconnects and process death.
-      final recoveries = (diagnostics['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList()
-        ..sort((a, b) => ((a['timestamp'] as num?) ?? 0).compareTo((b['timestamp'] as num?) ?? 0));
-      for (final event in recoveries) {
-        final recovered = event['lostAudioResolvedAt'] as num?;
-        final start = event['timestamp'] as num?;
-        if (recovered == null || start == null) continue;
-        await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered.toInt()));
+      // An `audio_recovered` row is billable when a measured disconnect backs it
+      // or a native stamp names that same interval. A row with neither is a
+      // session-start echo and is not imported.
+      // Persisted per-day totals outlive native history (Dart keeps 8 days,
+      // native 7). Absence of a history row is not proof a day was synthetic,
+      // and a summed day cannot be split after the fact. Leave those totals
+      // alone; a false day imported before this build rides out the 8-day retention.
+      final historyValue = diagnostics['disconnect_history_v2'];
+      final historyPresent = historyValue is List;
+      final history =
+          (historyValue as List? ?? []).whereType<Map>().map((event) => Map<String, dynamic>.from(event)).toList();
+      final stamps = _audioRecoveryStamps(diagnostics);
+      final keptHistory = <Map<String, dynamic>>[];
+      for (final event in history) {
+        if (_isUnbackedAudioRecovery(event, history, stamps)) continue;
+        keptHistory.add(event);
       }
-      final nativeStart = diagnostics['audio_outage_started_at'] as num?;
-      if (nativeStart != null && nativeStart > 0) {
-        await recordOutage(device.id, at: DateTime.fromMillisecondsSinceEpoch(nativeStart.toInt()));
+      if (historyPresent) diagnostics['disconnect_history_v2'] = keptHistory;
+      keptHistory.sort((a, b) => ((a['timestamp'] as num?) ?? 0).compareTo((b['timestamp'] as num?) ?? 0));
+      for (final event in keptHistory) {
+        // Writers emit integer millis. A fractional timestamp is malformed and
+        // must not truncate into a billable resolution.
+        final recovered = event['lostAudioResolvedAt'];
+        final start = event['timestamp'];
+        if (recovered is! int || start is! int) continue;
+        await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered));
+      }
+      for (final stamp in stamps) {
+        await _resolveOutage(device.id, nativeStart: stamp.start, at: DateTime.fromMillisecondsSinceEpoch(stamp.at));
+      }
+      // Writers emit integer millis; a fractional nativeStart would truncate
+      // into a billable outage boundary it never wrote.
+      final nativeStartRaw = diagnostics['audio_outage_started_at'];
+      final nativeStart = nativeStartRaw is int ? nativeStartRaw : null;
+      final connectedAt = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
+      // Cumulative session counters are not proof: Android stamps connected_at
+      // when a retry starts and keeps the previous session's packet count until
+      // GATT succeeds. Require a packet timestamp at or after the link, and
+      // ignore that link when the open marker is newer than the last packet.
+      final evidenceAt = _audioEvidenceAt(diagnostics, connectedAt);
+      if (evidenceAt != null && (nativeStart == null || nativeStart <= evidenceAt)) {
+        // This link has delivered audio. A native marker from before the link
+        // is stale (iOS keeps it across restore); close it at the link start
+        // instead of reopening a calendar-day outage. Do not import a marker
+        // that is still inside the link — packets are already flowing.
+        if (nativeStart != null && nativeStart > 0 && nativeStart <= connectedAt) {
+          await _resolveOutage(device.id,
+              nativeStart: nativeStart, at: DateTime.fromMillisecondsSinceEpoch(connectedAt));
+        }
+        await _resolveOutage(device.id,
+            at: DateTime.fromMillisecondsSinceEpoch(connectedAt), keepOutagesAfterRecovery: true);
+      } else if (nativeStart != null && nativeStart > 0) {
+        await recordOutage(device.id, at: DateTime.fromMillisecondsSinceEpoch(nativeStart));
       }
       await (_writes[outageKey(device.id)] ?? Future.value());
       final stored = jsonDecode(prefs.getString(outageKey(device.id)) ?? '{}') as Map;

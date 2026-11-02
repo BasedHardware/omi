@@ -11,6 +11,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+# INV-PERF-1 / #23400: never test a stale copy of production app wrappers.
+python3 tool/perf_shell.py --check
+python3 tool/test_perf_gate.py
+
 # Always refuse a stale .dev.env / pairing, even when generated files exist so
 # the bootstrap below is skipped. Never rewrite the file.
 bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
@@ -63,6 +67,9 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
 fi
 
 bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
+
+# Exercise the pinned native resource-error paths before Dart mocks.
+python3 scripts/test_whisper_cleanup.py
 
 # Execute registration with the real compile-time opt-in in a separate isolate.
 # Keep the ordinary suite (including the pinned fail-closed guard) unopted-in.

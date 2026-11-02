@@ -13,6 +13,7 @@ from pydantic import BaseModel, StrictInt, StrictStr
 from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from utils.executors import db_executor, run_blocking
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 from utils.llm.realtime_usage import client_reported_cost_usd, client_reported_turn
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import enforce_desktop_chat_quota
@@ -149,6 +150,8 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
     # The hub only ever mints Omi's own provider token, so a user's BYOK key
     # (Anthropic, for desktop chat) must not exempt them from the cap here.
     await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop", byok_exempt=False)
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'desktop_chat_realtime', allow_byok=False)
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:

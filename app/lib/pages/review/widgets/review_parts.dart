@@ -249,3 +249,73 @@ class ReviewSectionLabel extends StatelessWidget {
     );
   }
 }
+
+/// The bounded, server-projected speech surrounding a spelling question.
+class ReviewSpellingContext extends StatelessWidget {
+  const ReviewSpellingContext({super.key, required this.context});
+  final SpellingContext context;
+
+  @override
+  Widget build(BuildContext buildContext) {
+    final l10n = buildContext.l10n;
+    final dates = OmiDateFormat.of(buildContext);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.reviewSpellingContext, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+        const SizedBox(height: OmiSpacing.xxs),
+        Text(
+          [
+            context.conversationTitle.isEmpty ? l10n.untitledConversation : context.conversationTitle,
+            if (context.conversationDate != null) dates.dateTime(context.conversationDate!),
+          ].join(' · '),
+          key: const Key('review_spelling_source'),
+          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        Container(
+          key: const Key('review_spelling_context'),
+          padding: const EdgeInsets.all(OmiSpacing.sm),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < context.segments.length; i++) ...[
+                if (i > 0) const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  SpeakerNames.excerptLabel(
+                    isUser: context.segments[i].isUser,
+                    speakerLabel: context.segments[i].speakerLabel,
+                    l10n: l10n,
+                  ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+                const SizedBox(height: OmiSpacing.xxs),
+                _speech(context.segments[i], i == context.mainIndex),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _speech(SpellingContextSegment segment, bool main) {
+    final start = context.quoteStart;
+    final end = context.quoteEnd;
+    final highlight = main && start != null && end != null && start >= 0 && end > start && end <= segment.text.length;
+    if (!highlight) return Text(segment.text, style: OmiType.callout);
+    return Text.rich(
+      TextSpan(children: [
+        TextSpan(text: segment.text.substring(0, start)),
+        TextSpan(
+          text: segment.text.substring(start, end),
+          style: TextStyle(fontWeight: FontWeight.w600, backgroundColor: OmiColors.accent.withValues(alpha: 0.14)),
+        ),
+        TextSpan(text: segment.text.substring(end)),
+      ]),
+      key: const Key('review_spelling_highlight'),
+      style: OmiType.callout,
+    );
+  }
+}

@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import Sentry
 
 enum DesktopHealthEventName: String {
   case authTokenStorageFallback = "auth_token_storage_fallback"
@@ -77,7 +76,6 @@ extension ISO8601DateFormatter {
 /// - **Local log** (`log`): always, with `failure_class` / `recovery_action` / `recovery_result`.
 /// - **Ring buffer** (`record*` → `writeDiagnosticsAttachment`): always via this manager.
 /// - **PostHog** (`desktopHealthEvent`): prod/beta when `trackRemotely` is true (default).
-/// - **Sentry** (`logError` / `SentrySDK.capture`): only when a domain classifier marks the failure actionable.
 /// Do not call `AnalyticsManager.desktopHealthEvent` directly — it bypasses the ring buffer.
 final class DesktopDiagnosticsManager {
   nonisolated(unsafe) static let shared = DesktopDiagnosticsManager()
@@ -98,10 +96,8 @@ final class DesktopDiagnosticsManager {
   private let betaTrailSnapshotLimit = 50
   private var consecutiveNearZeroPTTTurns = 0
   private var lastPTTWatchdogIncidentAt: Date?
-  private var lastUserVisibleSentryIncidentAt: [String: Date] = [:]
   private let pttWatchdogThreshold = 3
   private let pttWatchdogDedupWindow: TimeInterval = 15 * 60
-  private let userVisibleSentryDedupWindow: TimeInterval = 60
   private let pttWatchdogMinimumAudioSeconds: Double = 0.35
 
   private init() {}
@@ -429,8 +425,7 @@ final class DesktopDiagnosticsManager {
   }
 
   /// Terminal shared-capture failure for listen, manual recording, and Quick Note.
-  /// The event intentionally carries only a bounded retry count; the incident attachment is
-  /// produced by the common privacy-redacted Sentry path.
+  /// The event intentionally carries only a bounded retry count.
   func recordTranscriptionSilentCaptureExhausted(recoveryAttempts: Int) {
     recordUserVisibleIssue(
       area: "transcription",
@@ -444,8 +439,8 @@ final class DesktopDiagnosticsManager {
       ])
   }
   /// Record one bounded PTT attempt lifecycle snapshot (see
-  /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer + Sentry
-  /// attachment path. Emitted remotely (PostHog) for EVERY terminal disposition —
+  /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer.
+  /// Emitted remotely (PostHog) for EVERY terminal disposition —
   /// including `failureClass == .committed` — so a release-health query has the
   /// full attempt denominator (success + the causally distinct excluded/failure
   /// classes), not only classified failures. Short tap / quiet discard / user
@@ -461,14 +456,12 @@ final class DesktopDiagnosticsManager {
       trackRemotely: true)
   }
 
-  /// Records a typed chat failure as a fleet-health metric. The existing bounded
-  /// `logError` path owns the matching Sentry incident to avoid duplicate capture.
+  /// Records a typed chat failure as a fleet-health metric.
   func recordChatFailure(errorClass: String) {
     recordUserVisibleIssue(
       area: "chat",
       failureClass: errorClass,
-      phase: "query",
-      captureSentry: false)
+      phase: "query")
   }
 
   /// Records a global-hotkey registration failure surfaced by Carbon
@@ -538,6 +531,8 @@ final class DesktopDiagnosticsManager {
         "intent": intent,
         "telemetry_schema_version": 1,
       ])
+    ClientTelemetryShadow.capturePhysicalVoice(
+      phase: "started", turnID: turnID, intent: intent, route: "unknown", reason: nil, durationMs: nil)
   }
 
   func recordVoiceTurnTerminal(
@@ -565,6 +560,13 @@ final class DesktopDiagnosticsManager {
       properties["duration_ms"] = max(0, durationMs)
     }
     record(.voiceTurnTerminal, properties: properties)
+    ClientTelemetryShadow.capturePhysicalVoice(
+      phase: "terminal",
+      turnID: turnID,
+      intent: intent,
+      route: route,
+      reason: reason,
+      durationMs: durationMs)
     if let outcome = AnalyticsManager.questionOutcome(forVoiceTerminalReason: reason, answerDelivered: answerDelivered)
     {
       let surface = AnalyticsManager.questionSurface(forVoiceRoute: route)
@@ -574,10 +576,6 @@ final class DesktopDiagnosticsManager {
       }
     }
 
-    let breadcrumb = Breadcrumb(level: .info, category: "voice.turn.terminal")
-    breadcrumb.message = "Voice turn reached terminal state"
-    breadcrumb.data = properties
-    SentrySDK.addBreadcrumb(breadcrumb)
   }
 
   static func voiceTurnOutcome(for reason: String) -> String {
@@ -597,17 +595,6 @@ final class DesktopDiagnosticsManager {
       return "success"
     }
     return voiceTurnOutcome(for: reason)
-  }
-
-  func recordVoiceTurnAnomaly(kind: String, phase: String, route: String) {
-    let breadcrumb = Breadcrumb(level: .warning, category: "voice.turn.anomaly")
-    breadcrumb.message = "Voice turn rejected an anomalous event"
-    breadcrumb.data = [
-      "kind": kind,
-      "phase": phase,
-      "route": route,
-    ]
-    SentrySDK.addBreadcrumb(breadcrumb)
   }
 
   func recordPTTDeviceRouteChanged(recoveryAction: String, recoveryResult: String) {
@@ -647,6 +634,12 @@ final class DesktopDiagnosticsManager {
       }
     }
     record(.fallbackTriggered, properties: properties, trackRemotely: true)
+    ClientTelemetryShadow.captureFallback(
+      area: clientTelemetryShadowArea(area),
+      from: clientTelemetryShadowEndpoint(from),
+      to: clientTelemetryShadowEndpoint(to),
+      reason: clientTelemetryShadowReason(reason),
+      outcome: outcome.rawValue)
   }
 
   /// A deterministic screen-verification failure reached the user as spoken local text.
@@ -833,14 +826,14 @@ final class DesktopDiagnosticsManager {
       ])
   }
 
-  func currentSnapshotsForSentry() -> [[String: Any]] {
+  func currentSnapshots() -> [[String: Any]] {
     lock.lock()
     let current = snapshots.map { $0.dictionary() }
     lock.unlock()
     return current
   }
 
-  private func currentCloudSnapshotsForSentry(
+  private func currentCloudSnapshots(
     includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
   ) -> [[String: Any]] {
     lock.lock()
@@ -856,7 +849,7 @@ final class DesktopDiagnosticsManager {
   }
 
   private func currentSnapshotsForLocalExport() -> [[String: Any]] {
-    currentSnapshotsForSentry()
+    currentSnapshots()
   }
 
   private func cloudSafeSnapshot(
@@ -920,7 +913,7 @@ final class DesktopDiagnosticsManager {
     let payload: [String: Any] = [
       "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
       "privacy": "safe_operational_fields_only",
-      "snapshots": currentSnapshotsForSentry(),
+      "snapshots": currentSnapshots(),
     ]
     return writeDiagnosticsPayload(payload, prefix: "omi-desktop-diagnostics")
   }
@@ -946,7 +939,7 @@ final class DesktopDiagnosticsManager {
       "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
       "privacy": "redacted_incident_context",
       "incident": incident,
-      "snapshots": currentCloudSnapshotsForSentry(includeBetaDiagnostics: includeBetaDiagnostics),
+      "snapshots": currentCloudSnapshots(includeBetaDiagnostics: includeBetaDiagnostics),
     ]
     // Beta uploads the independently assembled typed trail only. The free-form
     // local-log tail remains available exclusively to the existing non-beta path.
@@ -963,8 +956,8 @@ final class DesktopDiagnosticsManager {
 
   /// Build a redacted, offline diagnostics bundle and write it to `url`.
   ///
-  /// Unlike the Sentry path, this works with no network and without a crash
-  /// reporter — it backs the local "Save Diagnostics…" export so users can share
+  /// Unlike a cloud crash reporter, this works with no network and without a
+  /// crash-reporter daemon — it backs the local "Save Diagnostics…" export so users can share
   /// a report manually (BL-023 / SET-03). The bundle carries app/version/OS
   /// metadata, the already-sanitized health snapshots, and a redacted tail of the
   /// local log. Returns `true` on success.
@@ -1081,7 +1074,7 @@ final class DesktopDiagnosticsManager {
 
   private static let safeOperationalLogMarkers = [
     "ptt", "audio_capture", "audiocapture", "silent capture", "voiceturn", "voice turn",
-    "realtime", "sentry", "desktopdiagnostics", "app crash", "crash recovery",
+    "realtime", "desktopdiagnostics", "app crash", "crash recovery",
     "chat telemetry event=",
   ]
 
@@ -1122,32 +1115,15 @@ final class DesktopDiagnosticsManager {
     realtimeProviderCloseAttemptID = 0
     consecutiveNearZeroPTTTurns = 0
     lastPTTWatchdogIncidentAt = nil
-    lastUserVisibleSentryIncidentAt.removeAll()
     lock.unlock()
-  }
-
-  private func shouldCaptureIncident(area: String, failureClass: String) -> Bool {
-    let key = "\(area):\(failureClass)"
-    let now = Date()
-    lock.lock()
-    defer { lock.unlock() }
-    if let last = lastUserVisibleSentryIncidentAt[key],
-      now.timeIntervalSince(last) < userVisibleSentryDedupWindow
-    {
-      return false
-    }
-    lastUserVisibleSentryIncidentAt[key] = now
-    return true
   }
 
   private func recordUserVisibleIssue(
     area: String,
     failureClass: String,
     phase: String,
-    extra: [String: Any] = [:],
-    captureSentry: Bool = true
+    extra: [String: Any] = [:]
   ) {
-    let incidentID = UUID().uuidString
     var properties: [String: Any] = [
       "area": safeIncidentArea(area),
       "failure_class": safeIncidentLabel(failureClass),
@@ -1160,32 +1136,6 @@ final class DesktopDiagnosticsManager {
       properties[key] = value
     }
     record(.userVisibleIssue, properties: properties)
-
-    let sentryProperties = properties.merging(["incident_id": incidentID]) { _, new in new }
-    guard captureSentry,
-      !AppBuild.isNonProduction,
-      shouldCaptureIncident(
-        area: properties["area"] as? String ?? "other",
-        failureClass: properties["failure_class"] as? String ?? "other"),
-      let attachmentURL = writeIncidentDiagnosticsAttachment(
-        incidentID: incidentID,
-        area: area,
-        failureClass: failureClass,
-        phase: phase)
-    else { return }
-    defer { try? FileManager.default.removeItem(at: attachmentURL) }
-
-    SentrySDK.capture(message: "Desktop user-visible issue") { scope in
-      scope.setLevel(.warning)
-      scope.setTag(value: properties["area"] as? String ?? "other", key: "diagnostic_area")
-      scope.setTag(value: properties["failure_class"] as? String ?? "other", key: "failure_class")
-      scope.setContext(value: sentryProperties, key: "desktop_incident")
-      scope.addAttachment(
-        Attachment(
-          path: attachmentURL.path,
-          filename: "desktop-incident-diagnostics.json",
-          contentType: "application/json"))
-    }
   }
 
   private func incidentProperties(
@@ -1262,8 +1212,7 @@ final class DesktopDiagnosticsManager {
       "recovery_result": "not_attempted",
     ]) { _, new in new }
     record(.pttAudioCaptureWatchdogTriggered, properties: properties)
-    // The initial user-visible silent-capture incident owns the Sentry attachment.
-    // Keep this threshold event in PostHog without duplicating an incident upload.
+    // Keep this threshold event in PostHog as the terminal watchdog marker.
   }
 
   private func commonProperties() -> [String: Any] {
@@ -1440,6 +1389,11 @@ final class DesktopDiagnosticsManager {
     "account_cutover",
     "voice_typing",
     "rewind_database", "meeting_screen_evidence",
+    // The memories cache reconcile degrading to its bounded in-launch retry
+    // (and, when that exhausts, to next launch). Named so a release-health
+    // query can watch the truncated-list rate without reading it out of
+    // `other`.
+    "memories-cache",
     "other",
   ]
 
@@ -1481,6 +1435,10 @@ final class DesktopDiagnosticsManager {
     "state_divergence",
     "status_inferred",
     "engine_failed",
+    // The server returned a truncated memories list, so absence proved nothing
+    // about that pull — the signal behind the memories-cache reconcile's
+    // in-launch retry and next-launch deferral.
+    "list_truncated",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
@@ -1492,6 +1450,40 @@ final class DesktopDiagnosticsManager {
     let label = safeFallbackLabel(reason, default: "other")
     return Self.allowedFallbackReasons.contains(label) ? label : "other"
   }
+
+  /// Shadow collector area. PostHog keeps its wider area allowlist; the replacement
+  /// observation uses the frozen five-value area set.
+  func clientTelemetryShadowArea(_ area: String) -> String {
+    let label = safeFallbackLabel(area, default: "other")
+    return Self.shadowFallbackAreas.contains(label) ? label : "other"
+  }
+
+  /// Unregistered reasons become `unknown` on the shadow observation. PostHog still
+  /// buckets those same reasons to `other`.
+  func clientTelemetryShadowReason(_ reason: String) -> String {
+    let label = safeFallbackLabel(reason, default: "unknown")
+    return Self.allowedFallbackReasons.contains(label) ? label : "unknown"
+  }
+
+  func clientTelemetryShadowEndpoint(_ value: String) -> String {
+    let label = safeFallbackLabel(value, default: "unknown")
+    if Self.shadowFallbackEndpoints.contains(label) || Self.allowedFallbackReasons.contains(label)
+      || Self.shadowFallbackAreas.contains(label)
+    {
+      return label
+    }
+    return "unknown"
+  }
+
+  private static let shadowFallbackAreas: Set<String> = [
+    "realtime_hub", "ptt_cascade", "screen_task_gate", "screen_task_extraction", "other",
+  ]
+
+  private static let shadowFallbackEndpoints: Set<String> = [
+    "openai", "gemini", "gemini_3_8", "gemini_2_5_flash", "gemini_2_5_flash_lite", "legacy", "jev", "claude",
+    "local", "cloud", "primary", "secondary", "hub", "stt", "on_device", "deepgram", "disabled", "enabled",
+    "floating_voice", "none", "unknown",
+  ]
   /// Closed set for the realtime token-mint `phase` dimension (#10425): a release
   /// query can rely on `warm` (background pre-warm) vs `barge_in_replacement`
   /// (socket replacement during an active turn) instead of an open string.

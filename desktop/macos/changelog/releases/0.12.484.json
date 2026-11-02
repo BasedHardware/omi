@@ -1,0 +1,7 @@
+{
+  "version": "0.12.484",
+  "date": "2026-10-14",
+  "changes": [
+    "Added Connect an Agent in Settings → Advanced and the connect sheets, opening copy-paste setup prompts and MCP and API keys on the web, and renamed the bring-your-own model keys section to Model Provider Keys"
+  ]
+}

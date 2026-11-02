@@ -3,7 +3,6 @@ import FirebaseAuth
 import FirebaseCore
 import OmiSupport
 import OmiTheme
-import Sentry
 import Sparkle
 import SwiftUI
 
@@ -253,7 +252,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   private nonisolated(unsafe) static var mainWindowIsKey = false
   private nonisolated(unsafe) static var lastMainWindowForegroundAt: Date?
 
-  private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
   private var localHotkeyMonitor: Any?
   private var windowObservers: [NSObjectProtocol] = []
@@ -327,6 +325,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     ScreenFrameQuickLook.purgeStaleScratch()
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
+    ListenClientState.startSurfaceReporting()
     let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
     CaptureLaunchContext.setPendingRelaunch(pendingUpdateRelaunch)
     let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
@@ -395,62 +394,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
     _ = UpdaterViewModel.shared
     UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
-
-    // Initialize Sentry for crash reporting and error tracking.
-    // Non-production bundles keep explicit feedback/error APIs available, but must
-    // not install native crash/app-hang handlers: those handlers run in signal
-    // context and have caused named dogfood bundles to crash while reporting.
-    let isDev = AnalyticsManager.isDevBuild
-    SentrySDK.start { options in
-      options.dsn =
-        "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
-      options.debug = false
-      options.enableAutoSessionTracking = !isDev
-      options.enableCrashHandler = !isDev
-      options.enableAppHangTracking = !isDev
-      options.enableWatchdogTerminationTracking = !isDev
-      options.environment = isDev ? "development" : "production"
-      // Build-attributable native events (#10425): bind every native crash / app-hang /
-      // watchdog event to the exact version+build (`v{version}+{build}-macos`, the same
-      // tag Codemagic publishes) and the release channel (`stable`/`beta`). Without these,
-      // Sentry's Release/Build filters return nothing for native events and beta+stable
-      // are indistinguishable (both report environment="production").
-      if let releaseTag = AppBuild.releaseTag {
-        options.releaseName = releaseTag
-      }
-      options.dist = AppBuild.currentUpdateChannel
-      // Disable automatic HTTP client error capture — the SDK creates noisy events
-      // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
-      // App code already handles HTTP errors and reports meaningful ones explicitly.
-      options.enableCaptureFailedRequests = false
-      options.maxBreadcrumbs = 100
-      // App-hang detection fires on the main thread stalling. The default 2s threshold
-      // flags transient jank (disk/IPC stalls, GC-like dealloc storms) that dominates
-      // event volume without being individually actionable. Raise to 3s so only
-      // sustained freezes — the ones users actually feel — are reported.
-      options.appHangTimeoutInterval = isDev ? 0 : 3.0
-      options.beforeSend = { event in
-        // The drop decision is extracted to the pure `shouldDropSentryEvent` so the
-        // filter list is unit-testable without constructing Sentry events (SET-05).
-        let drop = Self.shouldDropSentryEvent(
-          isUserReport: event.message?.formatted.hasPrefix("User Report") == true,
-          isDev: isDev,
-          urlTag: event.tags?["url"],
-          messageFormatted: event.message?.formatted,
-          exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
-        return drop ? nil : event
-      }
-    }
-    // Tag every Sentry event (including native crashes, which bypass app code) with
-    // the release channel and bundle identity so a release cohort can be sliced without
-    // relying on `dist` alone (#10425).
-    SentrySDK.configureScope { scope in
-      scope.setTag(value: AppBuild.currentUpdateChannel, key: "update_channel")
-      scope.setTag(value: AppBuild.bundleIdentifier, key: "bundle_id")
-    }
-    log(
-      "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
-    )
 
     // Initialize Firebase (skipped for local harness — Firebase SDK configure can hang;
     // local dev uses Auth emulator REST + stored tokens instead).
@@ -554,11 +497,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()
-      // Set an opaque Sentry user identifier for incident correlation. Do not
-      // attach email or display name to crash/error reports.
-      if let userID = AuthState.shared.userId {
-        SentrySDK.setUser(Sentry.User(userId: userID))
-      }
       // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
       scheduleAPIKeyFetch()
 
@@ -644,7 +582,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
       }
     }
 
-    startSentryHeartbeat()
     startForegroundTracking()
 
     // Dress and place the shell once SwiftUI has created it. A freshly-reset dev profile can take
@@ -657,16 +594,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     SiriIndexLifecycle.shared.start(launchMode: OMIApp.launchMode.rawValue)
     log("AppDelegate: applicationDidFinishLaunching completed")
-  }
-
-  /// Start a timer that records Sentry session breadcrumbs every 5 minutes.
-  /// Breadcrumbs preserve observability without creating unresolved Sentry issues (#9191).
-  private func startSentryHeartbeat() {
-    guard !AnalyticsManager.isDevBuild else { return }
-    sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      SentryHeartbeatTelemetry.recordSessionHeartbeat()
-      log("Sentry: Session heartbeat breadcrumb recorded")
-    }
   }
 
   private func startForegroundTracking() {
@@ -895,10 +822,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     guard let statusBarItem = statusBarItem else {
       log("AppDelegate: [MENUBAR] ERROR - Failed to create status bar item")
-      SentrySDK.capture(message: "Failed to create NSStatusItem") { scope in
-        scope.setLevel(.error)
-        scope.setTag(value: "menu_bar", key: "component")
-      }
       return
     }
 
@@ -1417,10 +1340,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Stop push-to-talk
     PushToTalkManager.shared.cleanup()
 
-    // Stop heartbeat timer
-    sentryHeartbeatTimer?.invalidate()
-    sentryHeartbeatTimer = nil
-
     apiKeyFetchTask?.cancel()
     apiKeyFetchTask = nil
     floatingBarPlanFetchTask?.cancel()
@@ -1445,12 +1364,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")
     ResourceMonitor.shared.stop()
-
-    if !AnalyticsManager.isDevBuild {
-      let breadcrumb = Breadcrumb(level: .info, category: "lifecycle")
-      breadcrumb.message = "App Terminating"
-      SentrySDK.addBreadcrumb(breadcrumb)
-    }
   }
 
   @objc func handleGetURLEvent(

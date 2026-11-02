@@ -82,10 +82,27 @@ class Harness:
         self.http = httpx.Client(timeout=15.0, trust_env=False)
         self._resolved_topology: dict[str, Any] = {}
 
+    def _free_ports(self, count: int) -> list[int]:
+        """Reserve and return `count` distinct ephemeral ports on loopback.
+
+        Holding all probe sockets open simultaneously guarantees that the kernel
+        allocates non-conflicting, unique port numbers across the stack's services (#20933).
+        """
+        probes = []
+        ports = []
+        try:
+            for _ in range(count):
+                probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                probe.bind(("127.0.0.1", 0))
+                probes.append(probe)
+                ports.append(int(probe.getsockname()[1]))
+            return ports
+        finally:
+            for probe in probes:
+                probe.close()
+
     def _free_port(self) -> int:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.bind(("127.0.0.1", 0))
-            return int(probe.getsockname()[1])
+        return self._free_ports(1)[0]
 
     def _resolve_placeholders(self, text: str) -> str:
         result = text
@@ -164,6 +181,7 @@ class Harness:
                 "SYNC_TASKS_INVOKER_SA": LOCAL_INVOKER_SA,
                 "SYNC_TASKS_MAX_ATTEMPTS": "2",
                 "HTTP_SYNC_JOBS_RUN_TIMEOUT": "30",
+                "SYNC_JOB_HANDLER_BUDGET_SECONDS": "20",
                 "FAIR_USE_ENABLED": "true",
                 "MAX_DAILY_AUDIO_HOURS": "30",
                 "STT_PRERECORDED_MODEL": "parakeet",
@@ -297,9 +315,10 @@ class Harness:
         raise HarnessFailure(f"{name} health check failed within {timeout:.0f}s")
 
     def start(self) -> None:
-        roles = self.topology["roles"]
-        for name in roles:
-            self.ports[name] = self._free_port()
+        roles = list(self.topology["roles"])
+        allocated_ports = self._free_ports(len(roles))
+        for name, port in zip(roles, allocated_ports):
+            self.ports[name] = port
         # Start in dependency order (topology.json key order is significant).
         for name in roles:
             child = self._start_role(name)

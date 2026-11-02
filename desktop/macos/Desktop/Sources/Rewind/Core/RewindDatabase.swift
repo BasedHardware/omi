@@ -156,7 +156,7 @@ actor RewindDatabase {
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
-  /// Those paths can otherwise run repeatedly and emit the same Sentry error forever.
+  /// Those paths can otherwise run repeatedly and emit the same error forever.
   private func recoverFromMaintenanceError(_ error: Error, operation: String) async {
     guard dbQueue != nil else { return }
     guard isRecoverableDatabaseError(error) else { return }
@@ -2459,8 +2459,6 @@ actor RewindDatabase {
 
     Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
     Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
-    JITTriggerMirrorSchema.registerMigration(on: &migrator)
-    KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)
     Self.registerConversationSummarySectionsMigration(on: &migrator)
     Self.registerConversationLocalSummaryMigration(on: &migrator)
@@ -2468,7 +2466,7 @@ actor RewindDatabase {
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     ProactivityRetirementMigration.registerMigration(on: &migrator)
-    return migrator
+    return addingSpeakerLabelSourceMigration(migrator)
   }
 
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
@@ -2580,10 +2578,8 @@ actor RewindDatabase {
     }
   }
 
-  /// A dogfood or QA machine can already carry one of these columns from an earlier build of the
-  /// same branch, where the migration ran under a different identifier. A bare `ADD COLUMN` there
-  /// fails with "duplicate column name" and kills the whole ladder, so probe the table first —
-  /// the same guard `KnowledgeLedgerMirrorStagingSchema` uses.
+  /// Probe the table before adding a column so older installations that already
+  /// carry it can safely continue through the migration ladder.
   static func addMemoryColumnIfMissing(
     _ db: Database,
     name: String,

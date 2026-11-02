@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-pending-cancel-resubscribe-void",
+  "violated_contract": "A paying user whose plan is set to cancel must see that it ends, must be able to resubscribe the current price with a visible confirmation that replaces the ends line, and must be told why any other price is refused. A tap must not reactivate or 409 with no change on screen.",
+  "canonical_prevention": "Decide resubscribe versus blocked from cancel_at_period_end and the current price id before any request. Resubscribe only the current price, show the approved renew sentence, and refresh subscription state. Show \"Resubscribe first to change plans.\" for every other price and for HTTP 409. Cover reactivated, refused, and error on the legacy plans sheet.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/plans_sheet_cancel_pending_test.dart",
+    "app/test/unit/cancel_pending_purchase_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/settings/widgets/plans_sheet.dart",
+    "app/lib/pages/paywall/paywall_checkout.dart",
+    "app/lib/utils/cancel_pending_purchase.dart",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift",
+    "desktop/windows/src/renderer/src/lib/billing.ts",
+    "web/app/src/components/settings/PlansSheet.tsx"
+  ],
+  "status": "open"
+}

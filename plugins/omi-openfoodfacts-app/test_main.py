@@ -247,5 +247,63 @@ class TestOpenFoodFacts(unittest.TestCase):
         self.assertEqual(len(manifest["tools"]), 4)
 
 
+class TestUpstreamFailuresDoNotLeakExceptionText(unittest.TestCase):
+    """A failed Open Food Facts request reaches the chat as a fixed message."""
+
+    SENSITIVE = "proxy-user:hunter2@corp-proxy.internal:8080 (10.0.0.12)"
+    GENERIC_ERROR = "Open Food Facts request failed. Please try again later."
+
+    def setUp(self):
+        failure = main.requests.RequestException(f"Cannot connect to proxy {self.SENSITIVE}")
+        patcher = patch.object(main.requests, "get", side_effect=failure)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _assert_failed_without_leak(self, resp):
+        self.assertFalse(resp.success)
+        self.assertNotIn(self.SENSITIVE, f"{resp.message} {resp.data}")
+
+    def test_get_returns_fixed_error_when_request_fails(self):
+        result = main._openfoodfacts_get("/api/v2/product/737628064502.json")
+        self.assertEqual(result, {"error": self.GENERIC_ERROR})
+
+    def test_get_logs_exception_class_name_only(self):
+        with self.assertLogs(main.logger, level="WARNING") as logs:
+            main._openfoodfacts_get("/api/v2/product/737628064502.json")
+        output = "\n".join(logs.output)
+        self.assertIn(main.requests.RequestException.__name__, output)
+        self.assertNotIn(self.SENSITIVE, output)
+
+    def test_search_foods_hides_exception_text(self):
+        resp = asyncio.run(main.tool_search_foods(main.Request({"query": "oat milk"})))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+    def test_lookup_barcode_hides_exception_text(self):
+        resp = asyncio.run(main.tool_lookup_barcode(main.Request({"barcode": "737628064502"})))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+    def test_compare_foods_hides_exception_text(self):
+        resp = asyncio.run(main.tool_compare_foods(main.Request({"barcodes": ["737628064502"]})))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(
+            resp.data["errors"],
+            [{"barcode": "737628064502", "error": self.GENERIC_ERROR}],
+        )
+
+    def test_check_allergens_by_barcode_hides_exception_text(self):
+        body = {"barcode": "737628064502", "avoid": ["peanuts"]}
+        resp = asyncio.run(main.tool_check_allergens(main.Request(body)))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+    def test_check_allergens_by_query_hides_exception_text(self):
+        body = {"query": "oat milk", "avoid": ["peanuts"]}
+        resp = asyncio.run(main.tool_check_allergens(main.Request(body)))
+        self._assert_failed_without_leak(resp)
+        self.assertEqual(resp.message, self.GENERIC_ERROR)
+
+
 if __name__ == "__main__":
     unittest.main()

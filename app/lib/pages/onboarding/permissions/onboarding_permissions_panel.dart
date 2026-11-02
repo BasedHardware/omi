@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/components/omi_permission_row.dart';
 import 'package:omi/ui/omi_tokens.dart';
@@ -18,7 +19,10 @@ import 'package:omi/utils/logger.dart';
 ///
 /// "Always" location is deliberately not here: it is asked by the feature that needs it
 /// (Settings → Permissions), never during first run (docs/ux-contract.md §15).
-enum OnboardingPermission { background, location, notifications }
+///
+/// [bluetooth] is asked as the app opens; the first-run step shows it again only when it was not
+/// allowed. The returning-user interstitial does not list it.
+enum OnboardingPermission { bluetooth, background, location, notifications }
 
 /// Reads and requests [OnboardingPermission]s. The default reads the platform directly and requests
 /// through [OnboardingProvider] (which keeps its telemetry and flags); tests pass a fake.
@@ -43,6 +47,16 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async {
     switch (permission) {
+      case OnboardingPermission.bluetooth:
+        if (Platform.isIOS) return OmiPermissionStatus.fromStatus(await Permission.bluetooth.status);
+        final scan = OmiPermissionStatus.fromStatus(await Permission.bluetoothScan.status);
+        final connect = OmiPermissionStatus.fromStatus(await Permission.bluetoothConnect.status);
+        if (scan == OmiPermissionStatus.granted && connect == OmiPermissionStatus.granted) {
+          return OmiPermissionStatus.granted;
+        }
+        return scan == OmiPermissionStatus.blocked || connect == OmiPermissionStatus.blocked
+            ? OmiPermissionStatus.blocked
+            : OmiPermissionStatus.askable;
       case OnboardingPermission.background:
         final granted = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
         return granted ? OmiPermissionStatus.granted : OmiPermissionStatus.askable;
@@ -57,6 +71,8 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
   @override
   Future<void> request(OnboardingPermission permission) async {
     switch (permission) {
+      case OnboardingPermission.bluetooth:
+        await provider.askForBluetoothPermissions();
       case OnboardingPermission.background:
         await provider.askForBackgroundPermissions();
       case OnboardingPermission.location:
@@ -66,6 +82,28 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
     }
   }
 }
+
+/// The same glyphs as the Settings permission list.
+FaIconData onboardingPermissionIcon(OnboardingPermission permission) => switch (permission) {
+      OnboardingPermission.bluetooth => FontAwesomeIcons.bluetoothB,
+      OnboardingPermission.background => FontAwesomeIcons.batteryFull,
+      OnboardingPermission.location => FontAwesomeIcons.locationArrow,
+      OnboardingPermission.notifications => FontAwesomeIcons.solidBell,
+    };
+
+String onboardingPermissionTitle(AppLocalizations l10n, OnboardingPermission permission) => switch (permission) {
+      OnboardingPermission.bluetooth => l10n.bluetooth,
+      OnboardingPermission.background => l10n.backgroundActivity,
+      OnboardingPermission.location => l10n.locationAccess,
+      OnboardingPermission.notifications => l10n.notifications,
+    };
+
+String onboardingPermissionReason(AppLocalizations l10n, OnboardingPermission permission) => switch (permission) {
+      OnboardingPermission.bluetooth => l10n.onboardingBluetoothRequired,
+      OnboardingPermission.background => l10n.backgroundActivityDesc,
+      OnboardingPermission.location => l10n.locationAccessDesc,
+      OnboardingPermission.notifications => l10n.notificationsDesc,
+    };
 
 /// [source], or the platform source over the ambient [OnboardingProvider].
 OnboardingPermissionsSource resolveOnboardingPermissionsSource(
@@ -164,21 +202,9 @@ class _OnboardingPermissionsPanelState extends State<OnboardingPermissionsPanel>
           OmiPermissionRow(
             key: ValueKey('onboarding_permission_${permission.name}'),
             // The same glyphs as the Settings permission list.
-            leading: FaIcon(switch (permission) {
-              OnboardingPermission.background => FontAwesomeIcons.batteryFull,
-              OnboardingPermission.location => FontAwesomeIcons.locationArrow,
-              OnboardingPermission.notifications => FontAwesomeIcons.solidBell,
-            }),
-            title: switch (permission) {
-              OnboardingPermission.background => l10n.backgroundActivity,
-              OnboardingPermission.location => l10n.locationAccess,
-              OnboardingPermission.notifications => l10n.notifications,
-            },
-            reason: switch (permission) {
-              OnboardingPermission.background => l10n.backgroundActivityDesc,
-              OnboardingPermission.location => l10n.locationAccessDesc,
-              OnboardingPermission.notifications => l10n.notificationsDesc,
-            },
+            leading: FaIcon(onboardingPermissionIcon(permission)),
+            title: onboardingPermissionTitle(l10n, permission),
+            reason: onboardingPermissionReason(l10n, permission),
             status: _statuses[permission] ?? OmiPermissionStatus.askable,
             onAllow: () => _allow(permission),
           ),

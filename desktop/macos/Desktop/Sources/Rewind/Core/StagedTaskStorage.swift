@@ -130,7 +130,7 @@ actor StagedTaskStorage {
         throw ActionItemStorageError.recordNotFound
       }
 
-      // Sentry has seen UNIQUE constraint failures here when the same backend
+      // Production has seen UNIQUE constraint failures here when the same backend
       // task already exists locally (for example, from an API refresh racing a
       // local sync retry). Treat that as an idempotent sync completion: keep the
       // canonical backend row and remove the duplicate local row instead of
@@ -533,7 +533,7 @@ actor StagedTaskStorage {
     }
   }
 
-  func discardCanonicalOutbox(id: Int64, authorization: LocalMutationAuthorization = .unrestricted) async throws {
+  func discardCanonicalOutbox(id: Int64, authorization: LocalMutationAuthorization) async throws {
     try authorization.require()
     let db = try await ensureInitialized()
     try await Self.authorizedWrite(db, authorization: authorization) { database in
@@ -812,14 +812,19 @@ actor StagedTaskStorage {
 
   // MARK: - Embedding
 
-  func updateEmbedding(id: Int64, embedding: Data) async throws {
+  func updateEmbedding(id: Int64, embedding: Data, authorization: LocalMutationAuthorization)
+    async throws
+  {
+    try authorization.require()
     let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE staged_tasks SET embedding = ? WHERE id = ?",
-        arguments: [embedding, id]
-      )
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        try database.execute(
+          sql: "UPDATE staged_tasks SET embedding = ? WHERE id = ?",
+          arguments: [embedding, id]
+        )
+      }
     }
   }
 

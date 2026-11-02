@@ -15,7 +15,7 @@ void indexWidgetSources() {
 List<String> sourcesFor(String type) => _widgetSources[type.split('<').first] ?? const [];
 
 Map<String, Object?> scenarioScore(String name, PerfInstrumentation sample, double frameBudgetMs) {
-  // Gate the UI pipeline on host: engine callbacks are not reliably available
+  // Report the UI pipeline on host: engine callbacks are not reliably available
   // under virtual time. Never substitute synthetic zero-duration frames.
   final build = sample.uiMs;
   final top = sample.rebuilds.entries.toList()
@@ -39,7 +39,7 @@ Map<String, Object?> scenarioScore(String name, PerfInstrumentation sample, doub
   }
   return {
     'scenario': name,
-    'measurement': 'host_ui_pipeline_wall_clock',
+    'measurement': 'host_pipeline_work_counts_with_wall_clock_diagnostics',
     'frame_count': build.length,
     'idle_frames_excluded': sample.idleFrames,
     'build_ms': quantiles(build),
@@ -58,6 +58,23 @@ Map<String, Object?> scenarioScore(String name, PerfInstrumentation sample, doub
         {'widget': e.key, 'count': e.value, 'source_files': sourcesFor(e.key)}
     ],
     'rebuilders_by_widget': sample.rebuilds,
+    'semantics_enabled': sample.semanticsEnabled,
+    'ui_phase_ms': sample.phaseMs,
+    'ui_phase_counts': sample.phaseCounts,
+    'sampled_frames': sample.sampledFrames,
+    'semantics_compiles_per_frame':
+        sample.sampledFrames == 0 ? null : (sample.phaseCounts['SEMANTICS'] ?? 0) / sample.sampledFrames,
+    'work_counts': sample.workCounts,
+    'ui_phase_shares': {
+      for (final phase in sample.phaseMs.entries)
+        phase.key: sample.phaseMs.values.fold<double>(0, (a, b) => a + b) == 0
+            ? 0.0
+            : phase.value / sample.phaseMs.values.fold<double>(0, (a, b) => a + b),
+    },
+    'layer_census_max': sample.maxLayers,
+    'painted_image_decode_sizes': sample.images,
+    'save_layer_count': null,
+    'save_layer_status': 'requires device GPU trace; layer census is not a saveLayer count',
     'ticker_census': {
       'method': 'scheduler_transient_callbacks_proxy',
       'max_concurrent': sample.animationCallbacks.fold<int>(0, (a, b) => a > b ? a : b),

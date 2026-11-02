@@ -35,6 +35,11 @@ def test_transcripts_tolerate_segment_missing_start(monkeypatch):
     monkeypatch.setattr(conversations_db, 'db', fake_db)
 
     result = conversations_db.get_conversation_transcripts_by_model('u1', 'c1')
+    assert all(segment['original_text'] == segment['text'] for rows in result.values() for segment in rows)
+    result = {
+        provider: [{key: value for key, value in segment.items() if key != 'original_text'} for segment in rows]
+        for provider, rows in result.items()
+    }
 
     # Missing 'start' sorts as 0 (first); before the fix x['start'] raised KeyError here.
     assert result['deepgram'] == [{'text': 'no-start'}, {'start': 1.0, 'text': 'a'}, {'start': 2.0, 'text': 'b'}]
@@ -75,6 +80,11 @@ def test_transcripts_return_prerecorded_distinct_and_sorted(monkeypatch):
     monkeypatch.setattr(conversations_db, 'db', fake_db)
 
     result = conversations_db.get_conversation_transcripts_by_model('u1', 'c1')
+    assert all(segment['original_text'] == segment['text'] for rows in result.values() for segment in rows)
+    result = {
+        provider: [{key: value for key, value in segment.items() if key != 'original_text'} for segment in rows]
+        for provider, rows in result.items()
+    }
 
     assert result['prerecorded'] == [
         {'start': 1.0, 'text': 'first'},

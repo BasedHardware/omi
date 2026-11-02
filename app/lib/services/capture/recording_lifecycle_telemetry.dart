@@ -8,6 +8,16 @@ typedef RecordingClock = DateTime Function();
 
 /// Owns the analytics identity and timing for one mobile capture session.
 ///
+/// [RecordingLifecycleTelemetry.requestedEvent] is capture-session preparation.
+/// It is minted before audio exists, including when a session rolls, so it is
+/// not by itself the user-attempt funnel. `request_origin` records only proven
+/// caller intent:
+/// - `explicit_user` for a user start (`PhoneStartRequested`) or an explicit
+///   Transcribe Later start (`PhoneBatchStartRequested(auto: false)`).
+/// - `automatic_roll` when a batch-mode change rolls an in-progress phone session.
+/// - `unknown` for device connect, handoff resume, offline fallback, and every
+///   path that does not prove intent. Do not invent user intent.
+///
 /// Preparing a session mints the ID early enough to send it to `/v4/listen`,
 /// but does not claim that recording started until the capture source confirms
 /// it is producing audio.
@@ -105,26 +115,36 @@ class RecordingLifecycleTelemetry {
     AnalyticsManager().track(eventName, properties: properties);
   }
 
-  String prepare({required String source}) {
+  String prepare({required String source, String requestOrigin = 'unknown'}) {
     if (_recordingId != null) return _recordingId!;
     _recordingId = _idFactory();
     _ownerEpoch = _identityEpoch();
     _preparedAt = _clock();
     _source = source;
-    _emit(requestedEvent, {'recording_id': _recordingId, 'recording_source': _source});
+    _emit(requestedEvent, {
+      'recording_id': _recordingId,
+      'recording_source': _source,
+      'request_origin': _requestOrigin(requestOrigin),
+    });
     return _recordingId!;
   }
+
+  static String _requestOrigin(String origin) => switch (origin) {
+        'explicit_user' || 'automatic_roll' || 'unknown' => origin,
+        _ => 'unknown',
+      };
+
+  void subscriptionFailed() => _emit('Recording Subscription Failed', {
+        'recording_id': _recordingId,
+        'recording_source': _source,
+      });
 
   void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,
         'reason': reason,
         'phase': phase,
-        'recovery': 'wal_boundary',
       });
-
-  void subscriptionFailed() =>
-      _emit('Recording Subscription Failed', {'recording_id': _recordingId, 'recording_source': _source});
 
   bool markStarted({String? evidence}) {
     if (_recordingId == null || _source == null || _startedEmitted) return false;

@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from database import conversations, users, voice_profiles
+from models.audio_file import AudioFile, ChunkSpan
 from models.conversation import Conversation
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
@@ -189,17 +190,29 @@ def test_manual_teaching_survives_real_resolution(monkeypatch, target):
         transcript_segments=[TranscriptSegment(**s) for s in segments],
         private_cloud_sync_enabled=True,
     )
-    cache = stage.encode_cache(
-        {
-            's': (12.0, np.array([1.0, 0.0], dtype=np.float32)),
-            'other': (12.0, np.array([0.0, 1.0], dtype=np.float32)),
-        }
-    )
+    # Graduated resolution requires proven audio placement and measured
+    # cache evidence; bare sync-scoped vectors cannot authorize regrouping.
+    origin = NOW.timestamp()
+    entries = {}
+    for index, segment in enumerate(model.transcript_segments):
+        segment.audio_capture_start = origin + segment.start
+        segment.audio_capture_end = origin + segment.end
+        entries[segment.id] = (12.0, np.eye(2, dtype=np.float32)[index])
+    model.audio_files = [
+        AudioFile(
+            id='af',
+            uid='u',
+            conversation_id='c',
+            chunk_timestamps=[origin],
+            duration=27.0,
+            chunk_spans=[ChunkSpan(start=origin, end=origin + 27.0)],
+        )
+    ]
+    cache = stage.encode_cache(entries, evidence_seconds={key: 12.0 for key in entries})
     monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', lambda *a: deepcopy(receipt))
     monkeypatch.setattr(stage, 'speaker_embedding_configured', lambda: True)
     monkeypatch.setattr(stage, 'download_speaker_embedding_cache', lambda *a: cache)
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {})
-    monkeypatch.setattr(stage, '_embed_missing', lambda *a, **kw: (0, 'complete'))
     assert stage.resolve_speakers_for_processing('u', model)
     resolved = [s.model_dump() for s in model.transcript_segments]
     conv['transcript_segments'] = resolved

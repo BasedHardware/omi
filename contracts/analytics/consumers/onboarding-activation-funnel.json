@@ -13,7 +13,8 @@
     "onboardingPermissionResult",
     "devicePairingBlocked",
     "deviceScanEmpty",
-    "deviceConnectFailed"
+    "deviceConnectFailed",
+    "deviceConnectFailureShown"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

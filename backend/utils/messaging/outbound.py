@@ -32,6 +32,9 @@ class ChannelReplySink:
         self.sequence = 0
         self.last_draft = 0
         self.finished = False
+        self.delivered_ids = []
+        # A draft preview is visible to the user even though it is not a delivered message.
+        self.drafted = False
 
     def response(self, stream, *, media_type):
         return stream
@@ -55,8 +58,12 @@ class ChannelReplySink:
             send_reply_target.reset(reply_token)
             send_guard.reset(guard_token)
             send_sequence.reset(token)
-        if not draft:
+        if draft:
+            self.drafted = True
+        else:
             self.sequence += 1
+            if provider_id:
+                self.delivered_ids.append(str(provider_id))
         return provider_id
 
     async def action(self, action, value):
@@ -96,14 +103,27 @@ class ChannelReplySink:
 
     async def text(self, delta):
         self.buffer += delta
-        if self.adapter.capabilities.streaming != 'none':
+        if self.adapter.capabilities.streaming != 'none' and not getattr(self, 'drafts_disabled', False):
             if time.monotonic() - self.last_draft < 1:
                 return
             # A temporary preview is one message, never a sequence of drafts
             # overwriting each other while a long answer is streaming.
             parts = self.adapter.render(self.buffer)
             if parts:
-                await self._send(text=parts[-1], draft=True)
+                try:
+                    await self._send(text=parts[-1], draft=True)
+                except PermissionError:
+                    raise
+                except Exception as error:
+                    record_fallback(
+                        component='other',
+                        from_mode='channel_draft',
+                        to_mode='final_reply',
+                        reason='other',
+                        outcome='degraded',
+                    )
+                    logging.getLogger(__name__).warning('Messaging draft skipped error_type=%s', type(error).__name__)
+                    self.drafts_disabled = True
                 self.last_draft = time.monotonic()
 
     async def artifact(self, artifact: Artifact):
@@ -164,16 +184,9 @@ class ChannelReplySink:
         from utils.messaging.adapters.rendering import source_phrases, linked_items
         from utils.messaging.delivery_context import send_markup
 
+        # Follow-up suggestions are not rendered on channels: a one-line provider
+        # button truncates the question, and typing the next message is just as fast.
         markup = None
-        if hasattr(self.adapter, 'buttons'):
-            suggestions = response.get('follow_up_suggestions', ())
-            if not suggestions:
-                suggestions = [
-                    block.get('text', '')
-                    for block in response.get('content_blocks', ())
-                    if block.get('type') == 'followUp'
-                ]
-            markup = self.adapter.buttons(suggestions)
         items = linked_items(response)
         text = source_phrases(response['text'])
         card = None

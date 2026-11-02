@@ -49,8 +49,9 @@ class _FramesWebSocket:
 
 def _host(websocket):
     return SimpleNamespace(
-        request=SimpleNamespace(websocket=websocket, codec='opus', sample_rate=16000, source='omi'),
+        request=SimpleNamespace(websocket=websocket, uid='test-uid', codec='opus', sample_rate=16000, source='omi'),
         state=SimpleNamespace(
+            current_conversation_id=None,
             active=True,
             close_code=1001,
             last_audio_received_time=None,

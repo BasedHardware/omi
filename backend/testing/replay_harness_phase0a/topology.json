@@ -46,6 +46,7 @@
     {"name": "id_token.verify_oauth2_token", "install": "one_exact_local_token", "feasibility_only": true, "reason": "signature/issuer/expiry verification remains outside scope"},
     {"name": "vad_is_empty", "install": "deterministic_wav_reader", "feasibility_only": true, "reason": "deterministic VAD leaf, not a fidelity oracle"},
     {"name": "prerecorded", "install": "deterministic_single_word", "feasibility_only": true, "reason": "deterministic STT leaf invoked once per real pipeline run, not a fidelity oracle"},
+    {"name": "language_gate.self_detect", "install": "deterministic_unavailable", "feasibility_only": true, "reason": "replace external language-provider probe; real routing retains its unavailable-provider fallback and default-deny egress stays enforced"},
     {"name": "process_conversation", "install": "declared_finalizer_fake", "feasibility_only": true, "reason": "marks conversation completed via real lifecycle; real gateway/LLM excluded from feasibility"}
   ],
   "egress_allow_list": [

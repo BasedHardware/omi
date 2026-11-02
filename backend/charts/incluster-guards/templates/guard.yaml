@@ -1,0 +1,320 @@
+{{- if ne .Release.Namespace .Values.namespace }}
+{{- fail "release namespace must equal values.namespace" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-state
+  namespace: {{ .Values.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+# Retain the shell even on a first upgrade with enabled=false: old releases
+# have no keep annotation yet. Only the Job owns data and verdict annotations.
+{{- if .Values.enabled }}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" .Values.image) }}
+{{- fail "guard image must be pinned by sha256 digest" }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    resourceNames: [{{ .Values.hpaName }}]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [{{ .Values.hpaName }}]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ .Release.Name }}-state]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-script
+  namespace: {{ .Values.namespace }}
+data:
+  omi_logging.py: |
+{{ .Files.Get "files/omi_logging.py" | indent 4 }}
+  guard.py: |
+{{ .Files.Get "files/guard.py" | indent 4 }}
+  batch_guard.py: |
+{{ .Files.Get "files/batch_guard.py" | indent 4 }}
+{{- if .Values.floorSchedule.enabled }}
+{{- if ne (len .Values.floorSchedule.hours) 24 }}
+{{- fail "floorSchedule.hours must have exactly 24 entries" }}
+{{- end }}
+{{- range .Values.floorSchedule.hours }}
+{{- if not (regexMatch "^(?:[1-9]|1[0-2])$" (toString .)) }}
+{{- fail (printf "floorSchedule floor %v must be an integer 1..12" .) }}
+{{- end }}
+{{- end }}
+  # Presence of this file is the guard's only schedule gate: without it the
+  # guard never writes the floor. No new objects, so the prod deployer's
+  # name-scoped RBAC (which refuses new object names) still accepts the upgrade.
+  floors.json: |
+{{ .Values.floorSchedule.hours | toJson | indent 4 }}
+{{- end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ .Release.Name }}-batch
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: {{ .Values.batch.monitoringRelease }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: batch-pipeline-worker
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+  # Keep the local namespace label that the worker itself exports.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  schedule: '*/5 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 240
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: incluster-guards
+        spec:
+          serviceAccountName: {{ .Release.Name }}
+          restartPolicy: Never
+          tolerations: []
+          # Hard exclusion also protects against GPU pools with missing taints.
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: cloud.google.com/gke-accelerator
+                        operator: DoesNotExist
+                      - key: service
+                        operator: NotIn
+                        values: [parakeet, batch-pipeline]
+                      - key: cloud.google.com/gke-nodepool
+                        operator: NotIn
+                        values: [parakeet-pool, parakeet-pool-v2, batch-pipeline-pool]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: guard
+              image: {{ .Values.image | quote }}
+              command: [python3, /guard/guard.py]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 96Mi
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: DRY_RUN
+                  value: {{ .Values.dryRun | quote }}
+                - name: PROMETHEUS_URL
+                  value: {{ .Values.prometheusUrl | quote }}
+                - name: NAMESPACE
+                  value: {{ .Values.namespace | quote }}
+                - name: HPA_NAME
+                  value: {{ .Values.hpaName | quote }}
+                - name: STATE_NAME
+                  value: {{ printf "%s-state" .Release.Name | quote }}
+              volumeMounts:
+                - name: script
+                  mountPath: /guard
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: {{ .Release.Name }}-script
+{{- end }}
+{{- if and .Values.batch.enabled .Values.batch.cloudRunRollbackEnabled }}
+{{- if or (ne .Values.namespace "prod-omi-backend") (ne .Release.Namespace .Values.namespace) }}
+{{- fail "batch rollback is approved only in prod-omi-backend" }}
+{{- end }}
+{{- if ne .Values.batch.gcpServiceAccount "omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com" }}
+{{- fail "batch rollback requires the dedicated approved GSA" }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-batch-state
+  namespace: {{ .Values.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+# Pending rollback intent belongs to the Job, never to a Helm apply/rollback.
+{{- if .Values.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-batch
+  namespace: {{ .Values.namespace }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ .Values.batch.gcpServiceAccount | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-batch
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ .Release.Name }}-batch-state]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-batch
+  namespace: {{ .Values.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-batch
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-batch
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-batch
+  namespace: {{ .Values.namespace }}
+spec:
+  schedule: '*/5 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 840
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: incluster-batch-guard
+        spec:
+          serviceAccountName: {{ .Release.Name }}-batch
+          nodeSelector:
+            iam.gke.io/gke-metadata-server-enabled: "true"
+          restartPolicy: Never
+          tolerations: []
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: cloud.google.com/gke-accelerator
+                        operator: DoesNotExist
+                      - key: service
+                        operator: NotIn
+                        values: [parakeet, batch-pipeline]
+                      - key: cloud.google.com/gke-nodepool
+                        operator: NotIn
+                        values: [parakeet-pool, parakeet-pool-v2, batch-pipeline-pool]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: batch-guard
+              image: {{ .Values.image | quote }}
+              command: [python3, /guard/guard.py, --batch]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 48Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: DRY_RUN
+                  value: {{ .Values.dryRun | quote }}
+                - name: NAMESPACE
+                  value: {{ .Values.namespace | quote }}
+                - name: STATE_NAME
+                  value: {{ printf "%s-batch-state" .Release.Name | quote }}
+              volumeMounts:
+                - name: script
+                  mountPath: /guard
+                  readOnly: true
+                - name: safety
+                  mountPath: /safety
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: {{ .Release.Name }}-script
+            - name: safety
+              configMap:
+                name: {{ .Values.batch.safetyConfigMap | quote }}
+                optional: true
+{{- end }}
+{{- end }}

@@ -20,6 +20,7 @@ import WebKit
 extension SettingsContentView {
   var generalSection: some View {
     VStack(spacing: OmiSpacing.sm) {
+      storefrontFeatureEntry(.screenContext)
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {

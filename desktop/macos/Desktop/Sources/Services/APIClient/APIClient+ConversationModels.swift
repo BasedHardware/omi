@@ -232,6 +232,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.captureGroup == rhs.captureGroup
       && lhs.audioTimelineVersion == rhs.audioTimelineVersion
       && lhs.createdFromSegments == rhs.createdFromSegments
+      && lhs.meetingIdentity == rhs.meetingIdentity
   }
 
   let id: String
@@ -262,6 +263,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let audioTimelineVersion: Int?
   /// Desktop `/from-segments` conversations anchor offsets to the client session start.
   let createdFromSegments: Bool
+  /// Only explicit calendar identity can qualify a conversation as prior-meeting evidence.
+  let meetingIdentity: ConversationMeetingIdentity?
 
   let status: ConversationStatus
   let discarded: Bool
@@ -341,6 +344,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     audioTimelineVersion = wire.audioTimeline?.version
     createdFromSegments =
       (wire.externalData?["from_segments_client_session_id"]?.value as? String)?.isEmpty == false
+    meetingIdentity =
+      ConversationMeetingIdentity(calendarContext: wire.externalData?["calendar_meeting_context"]?.value)
+      ?? wire.calendarEvent.map(ConversationMeetingIdentity.init)
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
@@ -408,6 +414,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     conversationAudio: CaptureConversationAudio? = nil,
     audioTimelineVersion: Int? = nil,
     createdFromSegments: Bool = false,
+    meetingIdentity: ConversationMeetingIdentity? = nil,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
@@ -438,6 +445,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.conversationAudio = conversationAudio
     self.audioTimelineVersion = audioTimelineVersion
     self.createdFromSegments = createdFromSegments
+    self.meetingIdentity = meetingIdentity
     self.status = status
     self.discarded = discarded
     self.deleted = deleted
@@ -484,8 +492,13 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case .failed:
       return .failed
     case .completed:
-      if !structured.title.isEmpty {
-        return .titled(structured.title)
+      // Display-only citation repair (`[s01234]`, `Speaker_00` in legacy titles); rename
+      // edits `structured.title`. A title that is only debris reads as untitled.
+      let title = ConversationSummarySelection.presentableTitle(
+        structured.title, segments: transcriptSegments
+      ).trimmingCharacters(in: .whitespacesAndNewlines)
+      if !title.isEmpty {
+        return .titled(title)
       }
       // Heuristic: a "real" conversation has at least one transcript segment
       // long enough to plausibly have content (≥ 5 words). Below that, it's
@@ -521,7 +534,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     switch displayState {
     case .titled(let title): return title
     case .processing, .awaitingFirstOpen: return provisionalTitle
-    case .locked: return "Locked"
+    // Matches the badge's waiting copy; rows/header that show the badge skip
+    // the title text so the pill is not duplicated beside itself. Plain-string
+    // callers (Spine tiles, link lists, accessibility) still get honest copy.
+    case .locked: return "Saved and waiting"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
     }
@@ -903,6 +919,7 @@ struct TranscriptSegment: Codable, Identifiable {
   let id: String
   let backendId: String?
   let text: String
+  let originalText: String?
   let speaker: String?
   let isUser: Bool
   let personId: String?
@@ -921,6 +938,7 @@ struct TranscriptSegment: Codable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case id, text, speaker
+    case originalText = "original_text"
     case isUser = "is_user"
     case personId = "person_id"
     case start, end, translations
@@ -932,6 +950,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id = decodedId ?? UUID().uuidString
     backendId = decodedId
     text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+    originalText = try container.decodeIfPresent(String.self, forKey: .originalText)
     speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
     isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
     personId = try container.decodeIfPresent(String.self, forKey: .personId)
@@ -949,6 +968,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = decodedId ?? UUID().uuidString
     self.backendId = decodedId
     self.text = wire.text
+    self.originalText = wire.originalText
     self.speaker = wire.speaker
     self.isUser = wire.isUser
     self.personId = wire.personId
@@ -962,6 +982,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id: String,
     backendId: String? = nil,
     text: String,
+    originalText: String? = nil,
     speaker: String?,
     isUser: Bool,
     personId: String?,
@@ -972,6 +993,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = id
     self.backendId = backendId
     self.text = text
+    self.originalText = originalText
     self.speaker = speaker
     self.isUser = isUser
     self.personId = personId

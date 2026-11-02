@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from google.api_core import retry as api_retry
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -87,6 +88,10 @@ def _install_route_stubs(monkeypatch):
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=[])
     monkeypatch.setitem(sys.modules, 'database.vector_db', vector_db_mod)
 
+    notifications_mod = types.ModuleType('database.notifications')
+    notifications_mod.get_user_time_zone = MagicMock(return_value='UTC')
+    monkeypatch.setitem(sys.modules, 'database.notifications', notifications_mod)
+
     endpoints_mod = types.ModuleType('utils.other.endpoints')
     endpoints_mod.get_current_user_uid = MagicMock(return_value='uid-route')
     endpoints_mod.with_rate_limit = lambda dependency, policy: dependency
@@ -149,6 +154,7 @@ def _install_route_stubs(monkeypatch):
     firestore_v1_mod.FieldFilter = MagicMock()
     firestore_v1_mod.transactional = lambda fn: fn
     google_api_core_mod.exceptions = google_api_exceptions_mod
+    google_api_core_mod.retry = api_retry
     google_transport_mod.requests = google_requests_mod
     google_auth_mod.transport = google_transport_mod
     google_cloud_mod.firestore = firestore_mod
@@ -159,6 +165,7 @@ def _install_route_stubs(monkeypatch):
     monkeypatch.setitem(sys.modules, 'google', google_mod)
     monkeypatch.setitem(sys.modules, 'google.api_core', google_api_core_mod)
     monkeypatch.setitem(sys.modules, 'google.api_core.exceptions', google_api_exceptions_mod)
+    monkeypatch.setitem(sys.modules, 'google.api_core.retry', api_retry)
     monkeypatch.setitem(sys.modules, 'google.auth', google_auth_mod)
     monkeypatch.setitem(sys.modules, 'google.auth.transport', google_transport_mod)
     monkeypatch.setitem(sys.modules, 'google.auth.transport.requests', google_requests_mod)
@@ -198,7 +205,6 @@ def loaded_route_modules(monkeypatch):
     agentic_mod = types.ModuleType('utils.retrieval.agentic')
     agentic_mod.agent_config_context = types.SimpleNamespace(set=MagicMock())
     agentic_mod.CORE_TOOLS = []
-    agentic_mod.JIT_ONLY_TOOL_NAMES = frozenset()
     monkeypatch.setitem(sys.modules, 'utils.retrieval.agentic', agentic_mod)
 
     memories_service_mod = types.ModuleType('utils.retrieval.tool_services.memories')

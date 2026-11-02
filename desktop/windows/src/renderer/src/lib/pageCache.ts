@@ -55,10 +55,7 @@ export function publishConversationsCache(rows: ConversationRow[]): void {
   // the next launch paints it instantly (see hydrateConversationsFromDisk).
   // Optimistic "pending" placeholders are transient, so they're excluded.
   // Best-effort and bounded.
-  writePersistedCache(
-    CONV_SURFACE,
-    rows.filter((r) => !r.pending).slice(0, CONV_PERSIST_CAP)
-  )
+  writePersistedCache(CONV_SURFACE, rows.filter((r) => !r.pending).slice(0, CONV_PERSIST_CAP))
   cacheSubscribers.forEach((cb) => cb(rows))
 }
 
@@ -136,6 +133,8 @@ export function refreshCloudConversations(): void {
 // Pure data ops only — the client-side titling lives in pendingConversations.ts so
 // this module stays firebase-free / unit-testable.
 let pending: ConversationRow[] = []
+// Pending rows are in-memory only; a monotonic suffix keeps same-millisecond ids unique.
+let pendingIdSequence = 0
 
 export function getPendingConversations(): ConversationRow[] {
   return pending
@@ -144,7 +143,7 @@ export function getPendingConversations(): ConversationRow[] {
 // Add a placeholder row (empty title → the list renders "loading…" in italic) and
 // notify mounted lists. Returns its id so the titler can fill it in.
 export function addPendingConversation(transcript: string): string {
-  const id = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const id = `pending-${Date.now()}-${(pendingIdSequence++).toString(36)}`
   const now = Date.now()
   pending = [
     {

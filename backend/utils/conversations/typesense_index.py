@@ -103,6 +103,7 @@ _INDEXED_FIRESTORE_FIELDS = (
     "created_at",
     "discarded",
     "deleted",
+    "dream_duplicate_of",
     "started_at",
     "finished_at",
     "geolocation",
@@ -379,7 +380,7 @@ def _sync_conversation_index_after_write(
         # this sync); converge the index to absence instead of upserting stale
         # content — the race the extension's delete trigger otherwise covered.
         return delete_conversation_index_doc(uid, conversation_id)
-    if data.get("deleted"):
+    if data.get("deleted") or data.get("dream_duplicate_of"):
         # Redirect tombstones must not stay searchable, including after a later
         # discarded=True write that would otherwise upsert them again.
         return delete_conversation_index_doc(uid, conversation_id)

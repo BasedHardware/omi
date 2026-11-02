@@ -43,7 +43,7 @@ const TRIAL_INCLUDED = [
 
 /**
  * Trial card (AccountBilling): an active countdown with a progress ring, or the
- * expired variant whose "View Plans" jumps to the Operator card. Ring/clock tone
+ * expired variant whose "View Plans" jumps to the Omi Pro card. Ring/clock tone
  * shifts amber ≤1h, yellow ≤24h, else green (Mac parity; no purple).
  */
 export function TrialCard(props: {

@@ -44,6 +44,14 @@ for p in ["google", "google.api_core", "google.cloud", "models"]:
 _exc = _mod("google.api_core.exceptions")
 if not hasattr(_exc, "InvalidArgument"):
     _exc.InvalidArgument = type("InvalidArgument", (Exception,), {})
+if not hasattr(_exc, "Aborted"):
+    _exc.Aborted = type("Aborted", (Exception,), {})
+if not hasattr(_exc, "DeadlineExceeded"):
+    _exc.DeadlineExceeded = type("DeadlineExceeded", (Exception,), {})
+if not hasattr(_exc, "ResourceExhausted"):
+    _exc.ResourceExhausted = type("ResourceExhausted", (Exception,), {})
+if not hasattr(_exc, "ServiceUnavailable"):
+    _exc.ServiceUnavailable = type("ServiceUnavailable", (Exception,), {})
 
 _fs = _mod("google.cloud.firestore")
 if not hasattr(_fs, "Query"):

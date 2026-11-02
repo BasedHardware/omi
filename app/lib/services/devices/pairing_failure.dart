@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
 /// Closed reasons `OmiBleManager.startScan` reports before it scans.
@@ -59,4 +61,42 @@ DeviceConnectFailedErrorClass classifyDeviceConnectError(Object error) {
   }
   if (text.contains('not found') || text.contains('notfound')) return DeviceConnectFailedErrorClass.notFound;
   return DeviceConnectFailedErrorClass.unknown;
+}
+
+DeviceConnectFailureShownFailureReason blockedFailureReason(DevicePairingBlockedReason reason,
+    {BluetoothAdapterState? adapterState}) {
+  // Historical blocked telemetry groups unsupported/resetting/unknown with off.
+  // Only the actual off state warrants turn-on guidance in the new UI.
+  if (reason == DevicePairingBlockedReason.bluetoothOff &&
+      adapterState != null &&
+      adapterState != BluetoothAdapterState.off) {
+    return DeviceConnectFailureShownFailureReason.unknown;
+  }
+  return switch (reason) {
+    DevicePairingBlockedReason.bluetoothOff => DeviceConnectFailureShownFailureReason.bluetoothOff,
+    DevicePairingBlockedReason.bluetoothPermissionDenied =>
+      DeviceConnectFailureShownFailureReason.bluetoothPermissionDenied,
+    DevicePairingBlockedReason.nearbyDevicesDenied => DeviceConnectFailureShownFailureReason.nearbyDevicesDenied,
+    DevicePairingBlockedReason.locationPermissionMissing =>
+      DeviceConnectFailureShownFailureReason.locationPermissionMissing,
+    _ => DeviceConnectFailureShownFailureReason.unknown,
+  };
+}
+
+/// The service's null/incomplete connection result cannot distinguish a
+/// timeout, missing device or dropped link. Keep one reachability bucket and
+/// use the existing stale-bond latch for the distinct Bluetooth-settings action.
+DeviceConnectFailureShownFailureReason connectFailureReason(Object error, {bool staleBond = false}) {
+  if (error is BluetoothAdapterUnavailableException) {
+    return switch (error.state) {
+      BluetoothAdapterState.off => DeviceConnectFailureShownFailureReason.bluetoothOff,
+      BluetoothAdapterState.unauthorized => DeviceConnectFailureShownFailureReason.bluetoothPermissionDenied,
+      _ => DeviceConnectFailureShownFailureReason.unknown,
+    };
+  }
+  if (staleBond) return DeviceConnectFailureShownFailureReason.staleBond;
+  if (error is TimeoutException || (error is StateError && error.message == 'Device initialization did not complete')) {
+    return DeviceConnectFailureShownFailureReason.notFoundOrDropped;
+  }
+  return DeviceConnectFailureShownFailureReason.unknown;
 }

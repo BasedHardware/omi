@@ -303,11 +303,6 @@ class HermeticRuntime:
                 lambda **_: trusted,
                 create=True,
             ),
-            patch(
-                "utils.memory.canonical_consolidation.query_memory_vector_candidates",
-                lambda *args, **kwargs: SimpleNamespace(hits=[], rejected_count=0),
-            ),
-            patch("utils.memory.canonical_consolidation.consolidation_batch_threshold", lambda: 1),
         ]
         for patcher in patchers:
             patcher.start()
@@ -425,7 +420,12 @@ class MemoryContinuityGauntlet:
         )
 
     def run_promote_hermetic(self, state: HermeticState) -> None:
-        from utils.memory.canonical_consolidation import ConsolidationAgentBatch, ConsolidationAgentDecision
+        from utils.memory.canonical_consolidation import (
+            ConsolidationAgentDecision,
+            apply_consolidation_decision,
+            _read_control_state,
+        )
+        from models.product_memory import MemoryItem
         from utils.memory.short_term_promotion import run_canonical_short_term_maintenance
 
         if state.memory_id is None:
@@ -438,34 +438,40 @@ class MemoryContinuityGauntlet:
         promoted_text = f"{prior.get('content', '')} {promote_nonce}"
         evidence_ids = [evidence["evidence_id"] for evidence in prior.get("evidence", [])]
 
-        def scripted_llm(_prompt: str) -> str:
-            decision = ConsolidationAgentDecision(
-                source_memory_id=memory_id,
-                route="promote",
-                reconciliation="create",
-                memory_text=promoted_text,
-                evidence_ids=evidence_ids,
-                subject_entity_id="user",
-                predicate="remembered_gauntlet_probe",
-                arguments={"nonce": promote_nonce},
-                relationship_to_user="self",
-                aboutness="primary_user",
-                basis_for_memory="explicit",
-                confidence="high",
-                rationale="Hermetic promotion probe.",
-            )
-            return json.dumps(ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json"))
-
+        decision = ConsolidationAgentDecision(
+            source_memory_id=memory_id,
+            route="promote",
+            reconciliation="create",
+            memory_text=promoted_text,
+            evidence_ids=evidence_ids,
+            subject_entity_id="user",
+            predicate="remembered_gauntlet_probe",
+            arguments={"nonce": promote_nonce},
+            relationship_to_user="self",
+            aboutness="primary_user",
+            basis_for_memory="explicit",
+            confidence="high",
+            rationale="Hermetic promotion probe.",
+        )
         now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+        source = MemoryItem.model_validate(prior)
+        applied = apply_consolidation_decision(
+            state.uid,
+            decision=decision,
+            pending_by_id={memory_id: source},
+            control=_read_control_state(state.uid, db_client=state.db),
+            db_client=state.db,
+            now=now,
+            run_id=f"gauntlet-{self.run_id}",
+        )
         maintenance = run_canonical_short_term_maintenance(
             state.uid,
             db_client=state.db,
             now=now,
             run_id=f"gauntlet-{self.run_id}",
-            llm_invoke=scripted_llm,
         )
         promoted = item_ref.get().to_dict()
-        assert maintenance.promoted_count >= 1, maintenance
+        assert memory_id in applied, applied
         assert promoted["tier"] == "long_term", promoted
         assert promoted["graph_ready"] is True, promoted
         assert promote_nonce in promoted.get("content", ""), promoted

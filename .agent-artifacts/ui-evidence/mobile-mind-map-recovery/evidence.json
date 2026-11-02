@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-mind-map-catalog.png",
+      "platform": "mobile-android",
+      "description": "Saved memory catalog with no asserted relationships; synthetic Android-font widget capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-mind-map-graph.png",
+      "platform": "mobile-android",
+      "description": "Recovered graph canvas fitted to the viewport with readable labels; synthetic widget capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-mind-map-empty.png",
+      "platform": "mobile-android",
+      "description": "Genuinely empty Mind Map with a working refresh action; synthetic widget capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

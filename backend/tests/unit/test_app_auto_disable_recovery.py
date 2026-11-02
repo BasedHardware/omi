@@ -19,6 +19,8 @@ health check agreeing with delivery, and the install refusal telling the truth.
 
 from unittest.mock import MagicMock, patch
 
+import json
+
 import httpx
 import pytest
 from fastapi import HTTPException
@@ -174,6 +176,42 @@ class TestReEnableHealthCheckMatchesDelivery:
             'delivery pins the destination IP and cannot follow redirects; checking with them '
             'followed passes endpoints that fail on the first real webhook'
         )
+
+    TRANSPORT_APP = 'synthetic-pcloud'
+    TRANSPORT_BASE = 'https://backup.example.invalid'
+
+    def _transport(self, monkeypatch):
+        monkeypatch.setenv(
+            'OMI_PLUGIN_TRANSPORT_JSON',
+            json.dumps({self.TRANSPORT_APP: {'base_url': self.TRANSPORT_BASE, 'key': 'k' * 40}}),
+        )
+
+    def test_transport_app_is_probed_by_health_never_an_unsigned_delivery(self, monkeypatch):
+        self._transport(monkeypatch)
+        app = {'external_integration': {'webhook_url': self.TRANSPORT_BASE + '/conversation'}}
+        with patch('utils.apps.httpx.request', return_value=httpx.Response(200)) as request:
+            validate_app_endpoints_for_reenable(app, {}, self.TRANSPORT_APP)
+
+        (method, url), kwargs = request.call_args
+        assert (method, url) == ('GET', self.TRANSPORT_BASE + '/health')
+        assert kwargs['follow_redirects'] is False
+
+    def test_unhealthy_transport_app_stays_disabled(self, monkeypatch):
+        self._transport(monkeypatch)
+        app = {'external_integration': {'webhook_url': self.TRANSPORT_BASE + '/conversation'}}
+        with patch('utils.apps.httpx.request', return_value=httpx.Response(503)):
+            with pytest.raises(HTTPException) as exc:
+                validate_app_endpoints_for_reenable(app, {}, self.TRANSPORT_APP)
+        assert exc.value.status_code == 400
+
+    def test_transport_webhook_off_its_trusted_origin_is_rejected(self, monkeypatch):
+        self._transport(monkeypatch)
+        app = {'external_integration': {'webhook_url': 'https://elsewhere.example.invalid/conversation'}}
+        with patch('utils.apps.httpx.request', return_value=httpx.Response(200)) as request:
+            with pytest.raises(HTTPException) as exc:
+                validate_app_endpoints_for_reenable(app, {}, self.TRANSPORT_APP)
+        assert exc.value.status_code == 400
+        request.assert_not_called()
 
     def test_redirecting_webhook_is_rejected_with_an_actionable_reason(self):
         app = {'external_integration': {'webhook_url': 'https://dev.example.com/omi/webhook'}}

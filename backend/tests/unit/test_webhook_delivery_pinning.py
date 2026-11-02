@@ -178,7 +178,7 @@ async def test_redirect_is_not_followed_even_if_client_or_caller_enables_it(deli
 async def test_success_and_failure_logs_redact_userinfo_query_and_fragment(delivery, caplog, status):
     client, _, _ = delivery
     client.post.return_value = httpx.Response(status)
-    with caplog.at_level(logging.INFO, logger=webhooks.__name__):
+    with caplog.at_level(logging.DEBUG, logger=webhooks.__name__):
         await webhooks._post_dev_webhook(
             'test',
             'https://secret-user:secret-password@receiver.example/hook?token=secret-query#secret-fragment',
@@ -187,6 +187,22 @@ async def test_success_and_failure_logs_redact_userinfo_query_and_fragment(deliv
     assert 'url=https://receiver.example/hook' in caplog.text
     for secret in ('secret-user', 'secret-password', 'secret-query', 'secret-fragment'):
         assert secret not in caplog.text
+    success_at_info = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.INFO and 'delivery succeeded' in record.getMessage()
+    ]
+    if status == 200:
+        assert success_at_info == []
+        assert any(
+            record.levelno == logging.DEBUG and 'delivery succeeded' in record.getMessage() for record in caplog.records
+        )
+    else:
+        assert success_at_info == []
+        assert any(
+            record.levelno >= logging.ERROR and 'url=https://receiver.example/hook' in record.getMessage()
+            for record in caplog.records
+        )
 
 
 async def _deliver(kind):

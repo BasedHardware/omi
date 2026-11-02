@@ -1,3 +1,4 @@
+import 'package:omi/models/stt_provider.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/models/custom_stt_config.dart';
@@ -57,13 +58,13 @@ class SttModeResolver {
 
   final bool Function() flagReader;
   final TranscriptionAllowanceSnapshot? Function() allowanceReader;
-  final Future<FreemiumReadiness> Function() readinessReader;
+  final Future<FreemiumReadiness> Function({String? language}) readinessReader;
   final CustomSttConfig? Function() onDeviceConfigBuilder;
 
   SttModeResolver({
     bool Function()? flagReader,
     TranscriptionAllowanceSnapshot? Function()? allowanceReader,
-    Future<FreemiumReadiness> Function()? readinessReader,
+    Future<FreemiumReadiness> Function({String? language})? readinessReader,
     CustomSttConfig? Function()? onDeviceConfigBuilder,
   })  : flagReader = flagReader ?? _defaultFlag,
         allowanceReader = allowanceReader ?? _defaultAllowance,
@@ -79,7 +80,8 @@ class SttModeResolver {
 
   static TranscriptionAllowanceSnapshot? _defaultAllowance() => TranscriptionAllowanceCache.current;
 
-  static Future<FreemiumReadiness> _defaultReadiness() => FreemiumTranscriptionService().checkReadiness();
+  static Future<FreemiumReadiness> _defaultReadiness({String? language}) =>
+      FreemiumTranscriptionService().checkReadiness(language: language);
 
   static CustomSttConfig? _defaultOnDeviceConfig() {
     final config = FreemiumTranscriptionService().getFreemiumConfig();
@@ -91,8 +93,14 @@ class SttModeResolver {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
     final flag = flagReader();
     final allowance = allowanceReader();
-    if (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance)) {
-      readiness = await readinessReader();
+    if ((persistedCustomStt.provider == SttProvider.onDeviceWhisper &&
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.iOS) ||
+        (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance))) {
+      readiness = await readinessReader(
+          language: persistedCustomStt.isEnabled && persistedCustomStt.provider == SttProvider.onDeviceWhisper
+              ? persistedCustomStt.language
+              : null);
     }
     return resolve(
       flagEnabled: flag,
@@ -116,6 +124,10 @@ class SttModeResolver {
     required BleAudioCodec codec,
   }) {
     if (persistedCustomStt.isEnabled) {
+      if (persistedCustomStt.provider == SttProvider.onDeviceWhisper && readiness != FreemiumReadiness.ready) {
+        return const SttModeDecision(
+            path: SttResolvedPath.blocked, reason: 'on_device_not_ready', allowanceOnDevice: true);
+      }
       return SttModeDecision(
         path: SttResolvedPath.honorCustom,
         customSttConfig: persistedCustomStt,

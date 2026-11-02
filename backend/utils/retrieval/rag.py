@@ -11,6 +11,8 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
+from utils.model_text import DisplayClock
+from utils.user_clock import clock_for_uid
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
@@ -64,7 +66,11 @@ def retrieve_memories_for_topics(
 
 
 def build_conversation_context(
-    memory: Conversation, topics: List[str], people: Optional[List[Person]] = None, user_name: Optional[str] = None
+    memory: Conversation,
+    topics: List[str],
+    people: Optional[List[Person]] = None,
+    user_name: Optional[str] = None,
+    clock: Optional[DisplayClock] = None,
 ) -> str | None:
     logger.info(f'get_better_memory_chunk {memory.id} {topics}')
     people = people or []
@@ -73,7 +79,7 @@ def build_conversation_context(
         memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
     )
     if num_tokens_from_string(conversation) < 250:
-        return conversations_to_string([memory], people=people, user_name=user_name)
+        return conversations_to_string([memory], people=people, user_name=user_name, clock=clock or DisplayClock.utc())
     chunk = chunk_extraction(memory.transcript_segments, topics, people=people, user_name=user_name)
     if not chunk or len(chunk) < 10:
         return None
@@ -86,8 +92,9 @@ def get_better_conversation_chunk(
     context_data: Dict[str, str],
     people: Optional[List[Person]] = None,
     user_name: Optional[str] = None,
+    clock: Optional[DisplayClock] = None,
 ) -> None:
-    chunk = build_conversation_context(memory, topics, people=people, user_name=user_name)
+    chunk = build_conversation_context(memory, topics, people=people, user_name=user_name, clock=clock)
     if chunk:
         context_data[memory.id] = chunk
 
@@ -120,12 +127,19 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         people = [Person(**p) for p in people_data]
 
     user_name = get_user_name(uid, use_default=False) or ''
+    display_clock = clock_for_uid(uid)
 
     if memories_id_to_topics:
         context_data: Dict[str, str] = {}
         futures = [
             db_executor.submit(
-                get_better_conversation_chunk, m, memories_id_to_topics.get(m.id, []), context_data, people, user_name
+                get_better_conversation_chunk,
+                m,
+                memories_id_to_topics.get(m.id, []),
+                context_data,
+                people,
+                user_name,
+                display_clock,
             )
             for m in memories
         ]
@@ -134,6 +148,6 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         ordered_chunks = [context_data[m.id] for m in memories if m.id in context_data]
         context_str = '\n'.join(ordered_chunks).strip()
     else:
-        context_str = conversations_to_string(memories, people=people, user_name=user_name)
+        context_str = conversations_to_string(memories, people=people, user_name=user_name, clock=display_clock)
 
     return context_str, (memories if context_str else [])

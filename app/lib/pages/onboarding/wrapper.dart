@@ -1,8 +1,12 @@
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'dart:async';
+
 import 'package:omi/services/onboarding_sync_runtime.dart';
-import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'onboarding_step_telemetry.dart';
-import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,6 +25,13 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/variants/pocket/pocket_onboarding_flow.dart';
+import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
+import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
+import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
+import 'package:omi/services/experiments/onboarding_variant_gate.dart';
+import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -31,6 +42,8 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -63,6 +76,10 @@ class OnboardingWrapper extends StatefulWidget {
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
 
+  /// Debug builds with `--dart-define=OMI_ONBOARDING_RERUN=1` walk onboarding again on a
+  /// signed-in account; startup routing honours it so the reader lands in the wrapper.
+  static bool get rerunForTesting => _OnboardingWrapperState._rerunForTesting;
+
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }
@@ -88,6 +105,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// navigates to it while this is false.
   static const bool kKnowledgeGraphStepEnabled = false;
 
+  /// Debug-build override to walk first-run onboarding again on a signed-in account (for
+  /// exercising onboarding variants): `--dart-define=OMI_ONBOARDING_RERUN=1`. `kDebugMode`
+  /// excludes every store build.
+  static const _debugRerun = String.fromEnvironment('OMI_ONBOARDING_RERUN');
+  static bool get _rerunForTesting => kDebugMode && _debugRerun == '1';
+
   static const List<int> kProgressSteps = [
     kNamePage,
     kPrimaryLanguagePage,
@@ -107,6 +130,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  bool _signupPaywallShown = false;
   late final _stepTelemetry = MobileOnboardingStepTelemetry(
     emit: const TypedEvents().emit,
     platform: () => switch (Theme.of(context).platform) {
@@ -150,7 +174,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = KnowledgeGraphApi.prebuildForOnboarding().catchError((_) {});
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
@@ -186,11 +210,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // account on a fresh install — sees the consent screen at least
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
+            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
-          } else if (SharedPreferencesUtil().onboardingCompleted) {
+          } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         }
       }
@@ -227,6 +252,112 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     if (context.mounted) {
       routeToPage(context, const HomePageWrapper(), replace: true);
     }
+  }
+
+  /// Marks first-run onboarding complete and routes home. Shared by the native completion screen,
+  /// the web onboarding page and Yinka's flow, so only the wrapper ever owns completion. False when
+  /// the save failed (the step stays, so the reader can tap again). [paywallShown] skips the
+  /// end-of-onboarding paywall placement when the arm already offered a plan.
+  Future<bool> _finishOnboarding({bool paywallShown = false}) async {
+    if (_finishing) return false;
+    _finishing = true;
+    final saved = await OnboardingSyncRuntime.enqueue(completed: true);
+    _finishing = false;
+    if (!mounted || !context.mounted) return false;
+    if (!saved) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return false;
+    }
+    SharedPreferencesUtil().onboardingCompleted = true;
+    SharedPreferencesUtil().permissionsCompleted = true;
+    SharedPreferencesUtil().remove(_resumeKey);
+    _stepTelemetry.exit();
+    _completeOnboardingTelemetry();
+    PlatformManager.instance.analytics.onboardingCompleted();
+    PaintingBinding.instance.imageCache.clear();
+    if (!paywallShown) await _maybeShowOnboardingPaywall();
+    if (!mounted) return true;
+    // Sign-in happened inside onboarding, after the app shell's launch-time fetch, so Home and
+    // Settings (Upgrade row, first-tap trial paywall) would otherwise have no subscription.
+    unawaited(context.read<UsageProvider>().fetchSubscription());
+    routeToPage(context, const HomePageWrapper(), replace: true);
+    return true;
+  }
+
+  /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
+  /// control, and never when subscription UI is hidden (the router checks that). The `trial` arm
+  /// has its placement right after sign-up instead ([_maybeShowSignupPaywall]).
+  Future<void> _maybeShowOnboardingPaywall() async {
+    final config = await PaywallExperiment.resolve();
+    if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    if (config.variant == PaywallVariant.trial) return;
+    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+  }
+
+  /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
+  /// Dismissing it (close button) just continues onboarding.
+  bool _signupPaywallPurchased = false;
+
+  Future<void> _maybeShowSignupPaywall() async {
+    if (_signupPaywallShown) return;
+    final config = await PaywallExperiment.resolve();
+    if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
+    _signupPaywallShown = true;
+    // The router needs the subscription (trial eligibility) that sign-in only started fetching.
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) await usage.fetchSubscription();
+    if (!mounted) return;
+    await PaywallRouter.openVariant(
+      context,
+      source: 'onboarding',
+      config: config,
+      onResult: (result) => _signupPaywallPurchased = result == true,
+    );
+  }
+
+  /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
+  /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
+  /// falls back lands on that same native step.
+  Future<void> _enterSteps() async {
+    await _maybeShowSignupPaywall();
+    if (!mounted) return;
+    final arm = await OnboardingVariantGate.resolve();
+    if (!mounted) return;
+    PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
+      'variant': arm.variant.wireName,
+      '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
+    });
+    switch (arm.variant) {
+      case OnboardingVariant.pocket:
+        // Closing the sign-up trial paywall earns the 30-day downsell, once.
+        if (_signupPaywallShown && !_signupPaywallPurchased) {
+          await TrialUpsellSheet.show(context, source: 'onboarding');
+          if (!mounted) return;
+        }
+        // The flow offers no plan itself: skip the end placement only when sign-up already showed one.
+        await routeToPage(
+          context,
+          PocketOnboardingFlow(
+              onComplete: ({required bool paywallShown}) =>
+                  _finishOnboarding(paywallShown: paywallShown || _signupPaywallShown)),
+        );
+        return;
+      case OnboardingVariant.yinka:
+        await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));
+        return;
+      case OnboardingVariant.reid:
+        const TypedEvents().emit(const OnboardingWebviewShown());
+        final result = await routeToPage(context, WebOnboardingPage(url: arm.webUrl!));
+        if (!mounted) return;
+        if (result == WebOnboardingResult.completed) {
+          const TypedEvents().emit(const OnboardingWebviewCompleted());
+          await _finishOnboarding();
+          return;
+        }
+      case OnboardingVariant.control:
+        break;
+    }
+    _controller!.animateTo(_resumeStep());
   }
 
   void _goNext() {
@@ -364,6 +495,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
+    OnboardingVariantGate.invalidate();
     _voiceController?.dispose();
     _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -372,29 +504,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await SharedPreferencesUtil().clear();
     await AuthService.instance.signOut();
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
-  }
-
-  Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
-    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    final status = rebuildResult['status'];
-    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-    if (status == 'canonical_up_to_date') {
-      return;
-    }
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
   }
 
   void _updateBackgroundImage(int pageIndex) {
@@ -473,6 +582,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () async {
           if (!mounted) return;
+          final deletion = await context.read<AuthenticationProvider>().checkAccountDeletion();
+          if (!context.mounted) return;
+          if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) {
+            Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
+            return;
+          }
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           // Refresh subscription on sign-in: AppShell only fetches it on mount,
@@ -484,11 +599,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
+            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         },
       ),
@@ -503,7 +619,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         },
         onUseDifferentAccount: _useDifferentAccount,
@@ -570,25 +686,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       OnboardingCompleteScreen(
         onSkipped: () => _stepTelemetry.skipped = true,
-        onComplete: () async {
-          if (_finishing) return;
-          _finishing = true;
-          final saved = await OnboardingSyncRuntime.enqueue(completed: true);
-          _finishing = false;
-          if (!mounted || !context.mounted) return;
-          if (!saved) {
-            OmiFeedback.error(context, context.l10n.somethingWentWrong);
-            return;
-          }
-          SharedPreferencesUtil().onboardingCompleted = true;
-          SharedPreferencesUtil().permissionsCompleted = true;
-          SharedPreferencesUtil().remove(_resumeKey);
-          _stepTelemetry.exit();
-          _completeOnboardingTelemetry();
-          PlatformManager.instance.analytics.onboardingCompleted();
-          PaintingBinding.instance.imageCache.clear();
-          routeToPage(context, const HomePageWrapper(), replace: true);
-        },
+        onComplete: _finishOnboarding,
       ),
     ];
 

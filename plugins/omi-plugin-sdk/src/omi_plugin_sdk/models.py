@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Literal, Optional
 
+from pydantic.json_schema import SkipJsonSchema
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 MeetingType = Literal[
@@ -11,7 +12,7 @@ MeetingType = Literal[
 # Optional structured fields added for rich meeting notes are serialized only
 # when the producer actually set them: the flag-off note shape must stay
 # byte-identical in prompts, responses, and persisted documents.
-_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims')
+_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance', 'salience')
 
 
 def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
@@ -166,6 +167,9 @@ class Participant(BaseModel):
     source: Literal['roster', 'transcript'] = Field(
         description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
     )
+    evidence: Optional[str] = Field(
+        default=None, description='Short evidence that identifies this participant; agentic notes only'
+    )
 
 
 class Insight(BaseModel):
@@ -189,10 +193,13 @@ class NoteClaim(BaseModel):
     text: str = Field(description='Exact factual clause within that field')
     evidence_ids: List[str] = Field(description='Smallest sufficient episode evidence IDs')
     provenance: Literal['said', 'shown', 'written', 'inferred']
-    evidence_sources: Optional[List[NoteEvidenceRef]] = Field(default=None, description='Server-authored source metadata; model may omit')
+    evidence_sources: Optional[List[NoteEvidenceRef]] = Field(
+        default=None, description='Server-authored source metadata; model may omit'
+    )
 
 
 class Structured(BaseModel):
+    title_provenance: SkipJsonSchema[Optional[Literal['server_minimum']]] = None
     note_claims: Optional[List[NoteClaim]] = Field(
         default=None, description='Episode claim provenance; absent on legacy notes'
     )
@@ -201,7 +208,9 @@ class Structured(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default="",
     )
-    emoji: str = Field(description="An emoji to represent the conversation", default="🧠")
+    # The neutral "nothing chose" default, matching backend models.conversation_emoji.NEUTRAL_EMOJI.
+    # 🧠 is the extraction schemas' unset sentinel and must never persist by accident of a forgotten field.
+    emoji: str = Field(description="An emoji to represent the conversation", default="💬")
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     sections: List[Section] = Field(
         description='Detailed, free-form note sections in the model-chosen structure', default_factory=list
@@ -223,6 +232,12 @@ class Structured(BaseModel):
     insights: List[Insight] = Field(
         default_factory=list,
         description='Insights connecting supplied background context to this conversation; empty without background',
+    )
+    salience: Optional[Literal['highlight', 'background']] = Field(
+        default=None,
+        description=(
+            "'highlight' when the person would want this as its own entry (time with people, a meeting or call, plans, decisions, ideas, tasks); 'background' when it is worth keeping but not a highlight (media or TV playing, ambient chatter, a passing remark, a trivial errand). Absent on legacy notes"
+        ),
     )
 
     @model_serializer(mode='wrap')

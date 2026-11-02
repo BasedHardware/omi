@@ -30,15 +30,14 @@ recording/conversation-session reconciliation proxy, not extracted memory).
 
 from __future__ import annotations
 
-import importlib
 import logging
-import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from database.conversations import try_claim_conversation_memory_analytics
 from models.conversation import ConversationSource
 from utils.observability.fallback import record_fallback
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +51,6 @@ _VALID_SOURCES = frozenset({SOURCE_TRANSCRIPTION, SOURCE_EXTERNAL_INTEGRATION})
 PATH_CANONICAL = "canonical"
 PATH_LEGACY = "legacy"
 _VALID_PATHS = frozenset({PATH_CANONICAL, PATH_LEGACY})
-
-_posthog_client: Optional[Any] = None
-_posthog_disabled = False
 
 
 @dataclass(frozen=True)
@@ -82,7 +78,7 @@ def source_for_conversation(conversation: Any) -> str:
 
 
 def emit_conversation_memories_extracted(
-    uid: str, conversation_id: str, result: ConversationMemoryExtractionResult
+    uid: str, conversation_id: str, result: ConversationMemoryExtractionResult, *, source_platform: str = 'unknown'
 ) -> None:
     """Attempt the event for one successful extraction, at most once per
     ``(uid, conversation_id)``. No-op when identity is empty, nothing was
@@ -115,28 +111,9 @@ def emit_conversation_memories_extracted(
         "memory_count_bucket": _bucket_memory_count(result.count),
         "source": source,
         "path": path,
+        "source_platform": source_platform,
     }
-    try:
-        # Client construction belongs inside the fail-open boundary too: a
-        # configured-but-broken SDK must never turn durable memory extraction
-        # into a finalization failure.
-        client = _get_posthog_client()
-        if client is None:
-            return
-        client.capture(
-            distinct_id=uid,
-            event=CONVERSATION_MEMORIES_EXTRACTED,
-            properties=properties,
-        )
-    except Exception:  # noqa: BLE001 - telemetry must never break extraction
-        record_fallback(
-            component='memory_analytics',
-            from_mode='posthog_capture',
-            to_mode='telemetry_skipped',
-            reason='other',
-            outcome='degraded',
-            log=logger,
-        )
+    emit_product_event(uid=uid, event=CONVERSATION_MEMORIES_EXTRACTED, properties=properties)
 
 
 def _bucket_memory_count(count: int) -> str:
@@ -152,43 +129,3 @@ def _bucket_memory_count(count: int) -> str:
     if count <= 9:
         return "4_9"
     return "10_plus"
-
-
-def _get_posthog_client() -> Optional[Any]:
-    """Lazy PostHog client. Disabled (and remembered) when no API key is set so
-    the extraction hot path skips cheaply. Mirrors integration_telemetry."""
-    global _posthog_client, _posthog_disabled
-    if _posthog_disabled:
-        return None
-    if _posthog_client is not None:
-        return _posthog_client
-
-    api_key = os.getenv("POSTHOG_PROJECT_API_KEY") or os.getenv("POSTHOG_API_KEY")
-    if not api_key:
-        _posthog_disabled = True
-        return None
-
-    host = os.getenv("POSTHOG_HOST", "https://app.posthog.com")
-    try:
-        posthog_module = importlib.import_module("posthog")
-        posthog_client_cls = getattr(posthog_module, "Posthog")
-        _posthog_client = posthog_client_cls(project_api_key=api_key, host=host)
-    except Exception:  # noqa: BLE001 - fail open, never break extraction
-        record_fallback(
-            component='memory_analytics',
-            from_mode='posthog_client',
-            to_mode='telemetry_skipped',
-            reason='config_incomplete',
-            outcome='degraded',
-            log=logger,
-        )
-        _posthog_disabled = True
-        return None
-    return _posthog_client
-
-
-def set_posthog_client_for_tests(client: Optional[Any]) -> None:
-    """Inject a fake PostHog client (or reset to prod behaviour) for unit tests."""
-    global _posthog_client, _posthog_disabled
-    _posthog_client = client
-    _posthog_disabled = client is None

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 from dataclasses import dataclass
 
 from config.jev_decisions import percentage, uid_bucket
@@ -25,8 +27,7 @@ def configuration(uid: str) -> GroupingConfig:
     if mode not in AUTHORITATIVE_MODES:
         mode = 'incumbent'
     shadow_mode = os.getenv('SPEAKER_GROUPING_SHADOW', 'off').strip().lower()
-    allowlist = {s.strip() for s in os.getenv('SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST', '').split(',') if s.strip()}
-    detailed = bool(uid and uid in allowlist)
+    detailed = bool(shadow_mode in ('owner', 'cohort') and in_rollout_cohort(uid, 'speaker-grouping-shadow'))
     shadow = shadow_mode in ('owner', 'cohort') and detailed
     if shadow_mode == 'cohort' and uid:
         shadow = shadow or uid_bucket(uid, 'speaker-grouping-shadow-v1') < percentage(

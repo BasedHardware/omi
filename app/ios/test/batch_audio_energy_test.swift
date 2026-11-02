@@ -18,7 +18,9 @@ final class CountingDefaults: UserDefaults {
 
 @main
 struct BatchAudioEnergyTests {
-    static func check(_ condition: Bool) { precondition(condition) }
+    static func check(_ condition: Bool, file: StaticString = #file, line: UInt = #line) {
+        precondition(condition, file: file, line: line)
+    }
 
     static func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -239,8 +241,13 @@ struct BatchAudioEnergyTests {
         // Work admitted under revision 1 must be retired after mute revision 2
         // arrives, even though the BLE callback already returned to its caller.
         policy(1, muted: false)
+        // Hold the writer queue so this test deterministically exercises queued
+        // admission across a mute, rather than racing a frame written before it.
+        let pendingAdmission = DispatchSemaphore(value: 0)
+        writer.queue.async { pendingAdmission.wait() }
         enqueue(0x11)
         policy(2, muted: true)
+        pendingAdmission.signal()
         writer.queue.sync {}
         precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
         defaults.set(false, forKey: "flutter.batchModeEnabled")
@@ -261,8 +268,13 @@ struct BatchAudioEnergyTests {
         enqueue(0x22)
         writer.queue.sync {}
         policy(4, muted: false)
+        // Keep this packet pending until the revision changes. Otherwise a
+        // fast writer may legitimately commit it before policy(5).
+        let pendingRevision = DispatchSemaphore(value: 0)
+        writer.queue.async { pendingRevision.wait() }
         enqueue(0x33)
         policy(5, muted: false)
+        pendingRevision.signal()
         writer.queue.sync {}
         policy(5, muted: false)
         enqueue(0x44)

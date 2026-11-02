@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from typing import Any
@@ -10,7 +11,7 @@ from google.cloud import firestore
 import pytest
 
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, USER_DAYS_COLLECTION, record_llm_gateway_attempt
-from llm_gateway.gateway import accounting_sink
+from llm_gateway.gateway import accounting, accounting_sink
 from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.accounting import (
     AccountingContext,
@@ -20,13 +21,13 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     ProviderUsage,
     anthropic_usage_from_response,
-    aggregate_accounting_events,
     build_accounting_event,
     cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
+    estimated_provider_cost_micro_usd,
     image_usage,
-    jit_gateway_receipt_for_trace,
     openai_usage_from_response,
+    rate_card_for,
     vertex_usage_from_response,
 )
 
@@ -118,7 +119,7 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     attempt = trace.record(
         provider='openai',
         configured_model=LUNA_MODEL,
-        route_artifact_id='route.memory_conflict_flex.model_config.001',
+        route_artifact_id='route.x_memory_extraction_flex.model_config.001',
         fallback_reason=None,
         retry_ordinal=0,
         outcome='success',
@@ -127,9 +128,9 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     )
     context = AccountingContext.create(
         request_id='request-flex',
-        caller='memory-maintenance-job',
+        caller='x-sync-job',
         user_uid=None,
-        feature='memory_conflict',
+        feature='x_memory_extraction',
         api_surface='openai.chat_completions',
         payer='omi',
     )
@@ -201,53 +202,6 @@ def test_openai_receipt_normalizes_cached_and_cache_write_tokens_once() -> None:
     assert usage.cached_input_tokens == 40
     assert usage.cache_write_tokens == 10
     assert usage.uncached_input_tokens == 50
-
-
-def test_jit_aggregate_includes_retries_and_stops_on_unknown_cost() -> None:
-    context = AccountingContext.create(
-        request_id='request-jit-run',
-        caller='jit-proactivity',
-        user_uid='user-123',
-        feature='jit_proactivity',
-        api_surface='openai_chat_completions',
-        payer='omi',
-        jit_run_id='jit-run-opaque-1',
-        jit_contract_version='jit-cloud-qa-v1',
-    )
-    trace = AttemptTrace()
-    priced_attempt = trace.record(
-        provider='openai',
-        configured_model='gpt-5.4-nano',
-        route_artifact_id='route.jit.nano.001',
-        fallback_reason=None,
-        retry_ordinal=0,
-        outcome='success',
-        error_class='none',
-        metadata=ProviderResponseMetadata(
-            usage=ProviderUsage(prompt_tokens=100, uncached_input_tokens=80, cached_input_tokens=20, output_tokens=8)
-        ),
-    )
-    retry_without_receipt = trace.record(
-        provider='openai',
-        configured_model='gpt-5.4-nano',
-        route_artifact_id='route.jit.nano.001',
-        fallback_reason='provider_timeout',
-        retry_ordinal=1,
-        outcome='error',
-        error_class='timeout',
-    )
-
-    aggregate = aggregate_accounting_events(
-        [build_accounting_event(context, priced_attempt), build_accounting_event(context, retry_without_receipt)]
-    )
-
-    assert aggregate is not None
-    assert aggregate.attempt_count == 2
-    assert aggregate.normalized_uncached_input_tokens == 80
-    assert aggregate.cached_input_tokens == 20
-    assert aggregate.cost_status == CostStatus.INDETERMINATE
-    assert aggregate.estimated_cost_micro_usd is None
-    assert not aggregate.cost_is_known
 
 
 def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
@@ -377,46 +331,6 @@ def test_openai_reasoning_tokens_are_an_output_subset_not_double_charged() -> No
     assert usage.output_tokens_include_reasoning is True
     assert usage.billable_output_tokens == 100
     assert usage.total_tokens == 110
-
-
-def test_jit_aggregate_and_receipt_preserve_reasoning_tokens() -> None:
-    context = AccountingContext.create(
-        request_id='request-reasoning-jit',
-        caller='jit-proactivity',
-        user_uid='user-123',
-        feature='jit_proactivity',
-        api_surface='openai_chat_completions',
-        payer='omi',
-        jit_run_id='jit-reasoning-run',
-        jit_contract_version='jit-cloud-qa-v1',
-    )
-    trace = AttemptTrace()
-    trace.record(
-        provider='openai',
-        configured_model=LUNA_MODEL,
-        route_artifact_id='route.jit.001',
-        fallback_reason=None,
-        retry_ordinal=1,
-        outcome='success',
-        error_class='none',
-        metadata=ProviderResponseMetadata(
-            usage=ProviderUsage(
-                prompt_tokens=10,
-                uncached_input_tokens=10,
-                output_tokens=100,
-                reasoning_tokens=40,
-                output_tokens_include_reasoning=True,
-            )
-        ),
-    )
-
-    receipt = jit_gateway_receipt_for_trace(context, trace)
-
-    assert receipt is not None
-    assert receipt.aggregate.output_tokens == 100
-    assert receipt.aggregate.reasoning_tokens == 40
-    assert receipt.as_dict()['aggregate']['reasoning_tokens'] == 40
-    assert receipt.as_dict()['attempts'][0]['reasoning_tokens'] == 40
 
 
 def test_vertex_and_anthropic_usage_preserve_provider_cache_fields() -> None:
@@ -763,6 +677,50 @@ def test_user_day_rollup_survives_an_unencodable_uid() -> None:
     assert USER_DAYS_COLLECTION not in client.collections
 
 
+def test_anonymous_attempts_keep_the_ledger_row_but_skip_the_single_hot_rollup(monkeypatch) -> None:
+    monkeypatch.delenv('LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP', raising=False)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    for ordinal, uid in enumerate([None, '', '   '], start=1):
+        event = {
+            'attempt_id': f'invocation-1:{ordinal}',
+            'date': '2026-09-14',
+            'provider': 'openrouter',
+            'user_uid': uid,
+            'feature': 'jev_conversation_relevance',
+            'payer': 'omi',
+            'cost_status': 'estimated',
+            'estimated_cost_micro_usd': 10,
+        }
+        assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    # The attempts collection still carries the canonical anonymous record.
+    assert len(client.collections[ATTEMPTS_COLLECTION]) == 3
+    assert USER_DAYS_COLLECTION not in client.collections
+
+    attributed = {
+        'attempt_id': 'invocation-2:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+    }
+    assert record_llm_gateway_attempt(attributed, firestore_client=client)
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    assert list(client.collections[USER_DAYS_COLLECTION]) == [f'2026-09-14_{uid_hash}']
+
+
+@pytest.mark.parametrize('value', ['off', 'false', '0', 'no', 'disabled', ' OFF '])
+def test_anonymous_rollup_kill_switch_restores_the_legacy_document(monkeypatch, value: str) -> None:
+    monkeypatch.setenv('LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP', value)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {'attempt_id': 'invocation-1:1', 'date': '2026-09-14', 'provider': 'openai', 'user_uid': None}
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    rollup = client.collections[USER_DAYS_COLLECTION]['2026-09-14_anonymous']
+    assert rollup['attempts'] == 1
+    assert rollup['uid_hash'] == 'anonymous'
+
+
 def test_user_day_rollup_pins_every_feature_bucket_the_ledger_puller_uses() -> None:
     client = _FakeFirestoreClient(subscription_plan='pro')
     features = ['chat', 'persona_gen', 'translation', 'memory_embeddings', 'screen_summary', '']
@@ -1084,3 +1042,146 @@ def test_unknown_app_platform_is_persisted_as_unattributed() -> None:
 
     assert event.app_platform is None
     assert event.as_dict()['app_platform'] is None
+
+
+def test_vertex_2_5_flash_card_is_the_standard_tier() -> None:
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=date(2026, 10, 18))
+    assert card is not None
+    assert card.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+    assert card.effective_from == date(2026, 10, 18)
+    assert (
+        card.input_micro_usd_per_million,
+        card.cached_input_micro_usd_per_million,
+        card.output_micro_usd_per_million,
+        card.cache_write_micro_usd_per_million,
+        card.cache_storage_micro_usd_per_million_token_hours,
+    ) == (300000, 30000, 2500000, 300000, 1000000)
+
+
+@pytest.mark.parametrize(
+    'at, expected_card_id, expected_input_micro',
+    [
+        (date(2026, 10, 17), 'vertex.gemini-2.5-flash.2026-10-15', 540000),
+        (date(2026, 10, 18), 'vertex.gemini-2.5-flash.2026-10-18', 300000),
+    ],
+)
+def test_vertex_2_5_flash_card_boundary(at: date, expected_card_id: str, expected_input_micro: int) -> None:
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=at)
+    assert card is not None
+    assert card.rate_card_id == expected_card_id
+    assert card.input_micro_usd_per_million == expected_input_micro
+
+
+def test_vertex_2_5_flash_ledger_keeps_recorded_card_identity_across_reprice(monkeypatch) -> None:
+    """A ledger attempt prices under the card in effect at write time, and the
+    stored event keeps that card's identity forever."""
+
+    class FrozenDateTime(datetime):
+        _now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls._now.astimezone(tz) if tz else cls._now.replace(tzinfo=None)
+
+    monkeypatch.setattr(accounting, 'datetime', FrozenDateTime)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    trace = AttemptTrace()
+
+    def _record_one() -> Any:
+        attempt = trace.record(
+            provider='gemini',
+            configured_model='gemini-2.5-flash',
+            route_artifact_id='route.test.001',
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='success',
+            error_class='none',
+            metadata=ProviderResponseMetadata(
+                traffic_type='ON_DEMAND',
+                usage=ProviderUsage(
+                    prompt_tokens=1_000_000,
+                    uncached_input_tokens=1_000_000,
+                    output_tokens=1_000_000,
+                    total_tokens=2_000_000,
+                ),
+            ),
+        )
+        event = build_accounting_event(_context(), attempt)
+        assert record_llm_gateway_attempt(event.as_dict(), firestore_client=client)
+        return event
+
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    old_event = _record_one()
+    assert old_event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    # 1M uncached input at $0.54 + 1M output at $4.50 (Priority tier).
+    assert old_event.estimated_cost_micro_usd == 5_040_000
+    stored_old = dict(client.collections[ATTEMPTS_COLLECTION]['invocation-1:1'])
+
+    FrozenDateTime._now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    new_event = _record_one()
+    assert new_event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+    # 1M uncached input at $0.30 + 1M output at $2.50 (Standard tier).
+    assert new_event.estimated_cost_micro_usd == 2_800_000
+    current = rate_card_for('gemini', 'gemini-2.5-flash')
+    assert current is not None
+    assert current.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+
+    historical = rate_card_for(
+        stored_old['provider'],
+        stored_old['configured_model'],
+        at=date(2026, 10, 18),
+        rate_card_id=stored_old['rate_card_id'],
+    )
+    assert historical is not None
+    assert historical.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    assert (
+        historical.input_micro_usd_per_million,
+        historical.cached_input_micro_usd_per_million,
+        historical.output_micro_usd_per_million,
+        historical.cache_write_micro_usd_per_million,
+        historical.cache_storage_micro_usd_per_million_token_hours,
+    ) == (540000, 54000, 4500000, 540000, 1000000)
+
+    stored_after_new_write = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
+    assert stored_after_new_write == stored_old
+    assert stored_after_new_write['rate_card_id'] == 'vertex.gemini-2.5-flash.2026-10-15'
+
+
+def test_vertex_2_5_flash_unknown_or_foreign_card_id_never_falls_through() -> None:
+    """A recorded card ID is authoritative: unknown IDs, or an ID that belongs
+    to a different model, return None rather than repricing at the current
+    Standard card."""
+    assert rate_card_for('gemini', 'gemini-2.5-flash', rate_card_id='vertex.gemini-2.5-flash.2099-01-01') is None
+    assert rate_card_for('gemini', 'gemini-3.8-flash', rate_card_id='vertex.gemini-2.5-flash.2026-10-15') is None
+    pinned = rate_card_for(
+        'gemini', 'gemini-2.5-flash', at=date(2030, 1, 1), rate_card_id='vertex.gemini-2.5-flash.2026-10-15'
+    )
+    assert pinned is not None
+    assert pinned.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    assert pinned.input_micro_usd_per_million == 540000
+
+
+@pytest.mark.parametrize(
+    'usage, expected_micro_usd',
+    [
+        # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+        # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+        (ProviderUsage(prompt_tokens=1_000_000, uncached_input_tokens=1_000_000), 300000),
+        (ProviderUsage(prompt_tokens=1_000_000, cached_input_tokens=1_000_000), 30000),
+        (ProviderUsage(output_tokens=1_000_000), 2500000),
+        (ProviderUsage(prompt_tokens=1_000_000, cache_write_tokens=1_000_000), 300000),
+    ],
+    ids=['uncached-input', 'cached-input', 'output', 'cache-write'],
+)
+def test_vertex_2_5_flash_one_million_token_estimates(usage: ProviderUsage, expected_micro_usd: int) -> None:
+    status, cost = estimated_provider_cost_micro_usd(
+        payer='omi',
+        provider='gemini',
+        model='gemini-2.5-flash',
+        metadata=ProviderResponseMetadata(usage=usage),
+    )
+    assert status == CostStatus.ESTIMATED
+    assert cost == expected_micro_usd

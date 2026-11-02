@@ -72,7 +72,12 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
         });
         return data;
       case ApiFailure(:final problem):
-        setState(() => _problem = ChatAppsProblem.fromApi(problem));
+        final next = ChatAppsProblem.fromApi(problem);
+        if (next == ChatAppsProblem.waitlisted) {
+          closeConnectSheetOnWaitlist(context);
+          return null;
+        }
+        setState(() => _problem = next);
         return null;
     }
   }

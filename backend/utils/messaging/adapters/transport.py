@@ -27,7 +27,7 @@ class ProviderLogFilter(logging.Filter):
         # HTTPX's INFO request receipt includes Telegram tokens and signed CDN
         # URLs. Suppress receipts for the provider hosts rather than log credentials.
         message = record.getMessage()
-        return not any(host in message for host in ('api.telegram.org', 'linqapp.com'))
+        return not any(host in message for host in ('api.telegram.org', 'linqapp.com', 'onkeiki.com'))
 
 
 class Transport:
@@ -64,7 +64,7 @@ class Transport:
 
 
 async def request_json(
-    transport, method, url, *, idempotent=False, sleep=asyncio.sleep, before_request=None, **kwargs
+    transport, method, url, *, idempotent=False, sleep=asyncio.sleep, before_request=None, before_attempt=None, **kwargs
 ) -> dict[str, Any]:
     from utils.messaging.delivery_context import send_guard
 
@@ -73,6 +73,10 @@ async def request_json(
         guard = send_guard.get()
         if guard is not None:
             await guard()
+        if before_attempt is not None:
+            await before_attempt()
+            if guard is not None:
+                await guard()
         if before_request is not None and safe_to_prepare:
             await before_request()
         try:
@@ -90,6 +94,15 @@ async def request_json(
         if not isinstance(value, dict):
             raise ProviderError('Invalid provider response shape')
         status = response.status_code
+        from utils.messaging.metrics import HTTP
+
+        host = urlparse(url).hostname or ''
+        provider = (
+            'telegram'
+            if host == 'api.telegram.org'
+            else 'keiki' if host == 'onkeiki.com' or host.endswith('.onkeiki.com') else 'linq'
+        )
+        HTTP.labels(provider, str(status)).inc()
         if status == 429 or value.get('error_code') == 429:
             delay = value.get('parameters', {}).get('retry_after', response.headers.get('Retry-After', 1))
             try:

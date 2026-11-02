@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database.screen_activity import normalize_screen_activity_timestamp
+from database import notifications as notification_db
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
@@ -95,7 +96,7 @@ def _search(sa):
 def _setup(monkeypatch, sa, rows, matches):
     monkeypatch.setattr(sa, 'gemini_embed_query', lambda query: [0.1])
     monkeypatch.setattr(sa.vector_db, 'search_screen_activity_vectors', lambda **kwargs: matches, raising=False)
-    monkeypatch.setattr(sa.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
+    monkeypatch.setattr(notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(sa, 'firestore_db', _Firestore(rows))
 
 
@@ -109,7 +110,7 @@ def test_direct_config_emits_bounded_metadata_only_reference(monkeypatch, sa):
     references = []
     result = _search(sa)('budget', config={'configurable': {'user_id': 'u1', 'evidence_references': references}})
 
-    assert 'Found 1 screen activity matches' in result
+    assert "Screen activity matches for '" in result
     assert len(references) == 1
     reference = references[0]
     assert reference['id'] == 'screen:s1'
@@ -160,7 +161,7 @@ def test_malformed_ids_are_skipped_and_reference_cap_is_24(monkeypatch, sa):
     )
     references = [{'id': f'screen:existing-{index}'} for index in range(23)]
     result = _search(sa)('query', config={'configurable': {'user_id': 'u1', 'evidence_references': references}})
-    assert 'Found 1 screen activity matches' in result
+    assert "Screen activity matches for '" in result
     assert len(references) == 24
     assert references[-1]['id'] == 'screen:good'
 
@@ -320,7 +321,7 @@ def test_keyword_fallback_preserves_shape_evidence_ranking_and_window(monkeypatc
         end_date='2026-09-10T00:00:00Z',
         config={'configurable': {'user_id': 'u1', 'evidence_references': refs}},
     )
-    assert 'Found 2 screen activity matches' in result
+    assert "Screen activity matches for '" in result
     assert result.count('(relevance: keyword)') == 2
     assert [ref['frame_id'] for ref in refs] == ['both', 'title']
     assert refs[0]['captured_at_ms'] == 1_788_948_000_000

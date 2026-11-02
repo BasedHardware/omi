@@ -1,7 +1,10 @@
 # GPU services requirements — extends backend deps with torch/pyannote
 -r ../requirements.txt
-torch==2.10.0
-torchaudio==2.10.0
+# torchaudio 2.9 removed AudioMetaData. pyannote.audio 3.3.1 evaluates that
+# name while importing Pipeline (core/io.py), so 2.9+ fails the models image
+# smoke with AttributeError. 2.8 is the newest pair that still exports it.
+torch==2.8.0
+torchaudio==2.8.0
 pyannote.audio==3.3.1
 pandas==2.2.2
 matplotlib==3.9.1
