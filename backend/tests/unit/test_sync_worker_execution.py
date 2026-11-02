@@ -47,6 +47,13 @@ async def test_lease_loss_kills_job_and_its_executor_process_group(monkeypatch, 
         async def call(self, operation, body=None):
             assert operation == 'heartbeat'
             self.beats += 1
+            if self.beats > 1:
+                # Reject only after the descendant has actually started. A
+                # fixed delay can kill it before startup on a loaded runner,
+                # which proves no executor-leaf termination at all.
+                async with asyncio.timeout(3):
+                    while not (tmp_path / 'leaf-tick').exists():
+                        await asyncio.sleep(0.01)
             return {'accepted': self.beats == 1}
 
     monkeypatch.setattr(worker_runtime, 'launch_job', launch)
