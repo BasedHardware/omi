@@ -119,6 +119,10 @@ def commit_capture(
         )
         manifest_blob = bucket.blob(manifest_path)
         manifest_generation = _generation(manifest_blob)
+        # The reader bounds stored bytes before decrypting. Check the actual
+        # immutable object's size too, including any encryption envelope.
+        if framed and (manifest_blob.size is None or manifest_blob.size > MAX_MANIFEST_BYTES):
+            raise ValueError('frame manifest exceeds reader bound; producer remains unacknowledged')
         manifest_digest = hashlib.sha256(payload).hexdigest()
         if (manifest_blob.metadata or {}).get('sha256') != manifest_digest:
             raise ValueError('audio custody manifest digest mismatch')
