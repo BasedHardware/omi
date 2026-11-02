@@ -37,7 +37,7 @@ class BootstrapTests(unittest.TestCase):
         import json
         from pathlib import Path
         retained=json.loads((Path(__file__).parent/'matrix-result.json').read_text())
-        self.assertEqual(model.run(),retained)
+        self.assertEqual(json.loads(json.dumps(model.run())),retained)
 
     def test_equal_version_build_is_ignored_by_actual_c(self):
         import tempfile
