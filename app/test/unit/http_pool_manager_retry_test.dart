@@ -96,11 +96,12 @@ void main() {
 
     setUp(() async {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
+      Env.overrideApiBaseUrl('http://${server.address.host}:${server.port}/');
     });
 
     tearDown(() async {
       await server.close(force: true);
+      Env.clearApiBaseUrlOverride();
     });
 
     test('reProcessTranscriptionServer never re-posts the STT replay after a 502', () async {

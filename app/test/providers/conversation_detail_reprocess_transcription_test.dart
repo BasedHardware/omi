@@ -100,7 +100,7 @@ void main() {
   test('a re-transcription replaces the last failed summary request', () async {
     final provider = summaryProvider(
       summaryConversation(),
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async => const ReprocessBusy(),
+      reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessBusy(),
     );
     addTearDown(provider.dispose);
     expect(await provider.reprocessConversation(appId: 'pg'), isFalse);
@@ -173,7 +173,7 @@ void main() {
     final provider = _showing(
       ConversationDetailProvider(
         assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
           summaryRequests++;
           return const ReprocessFailed();
         },
@@ -198,7 +198,7 @@ void main() {
     final provider = _showing(
       ConversationDetailProvider(
         assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
           summaryRequests++;
           return const ReprocessFailed();
         },
