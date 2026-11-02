@@ -2463,8 +2463,11 @@ def merge_conversations(
     conversations = []
     for conv_id in request.conversation_ids:
         conv = conversations_db.get_conversation(uid, conv_id)
-        if conv is None:
-            raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
+        if conv is None or conv.get("deleted"):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        _heal_locked_conversations_if_eligible(uid, [conv])
+        if conv.get("is_locked", False):
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
         conversations.append(conv)
 
     is_valid, error_message, warning_message = validate_merge_compatibility(conversations)
