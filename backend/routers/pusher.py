@@ -759,20 +759,15 @@ async def _run_websocket_util_trigger(
                     await inline_finish_done.wait()
                     if conv_id not in record_close_requests:
                         continue
-                if (
-                    conv_id not in record_barrier.failed_recordings
-                    and not record_barrier.record_upload_failed
-                    and conv_id not in pending_refs
-                    and not durable_queue.has_conversation(conv_id)
-                ):
-                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
-                        continue
+                if conv_id in pending_refs or durable_queue.has_conversation(conv_id):
+                    continue
+                if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    continue
+                if conv_id not in record_barrier.failed_recordings and not record_barrier.record_upload_failed:
                     if not await record_barrier.finish_recording(conv_id):
                         continue
-                elif conv_id in pending_refs or durable_queue.has_conversation(conv_id):
-                    continue
                 retire_record_close(conv_id)
-        for conv_id in list(audio_projection.inventory):
+        for conv_id in list(audio_projection.close_debt):
             for _ in range(PROJECTION_RETRY_BUDGET + 1):
                 if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
                     break
@@ -1042,7 +1037,8 @@ async def _run_websocket_util_trigger(
                 for conv_id in list(record_close_requests):
                     retire_record_close(conv_id)
             for conv_id in record_close_requests.intersection(record_barrier.failed_recordings):
-                retire_record_close(conv_id)
+                if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    retire_record_close(conv_id)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -1124,7 +1120,7 @@ async def _run_websocket_util_trigger(
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
-        for conv_id in list(audio_projection.inventory):
+        for conv_id in list(audio_projection.close_debt):
             for _ in range(PROJECTION_RETRY_BUDGET + 1):
                 if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
                     break

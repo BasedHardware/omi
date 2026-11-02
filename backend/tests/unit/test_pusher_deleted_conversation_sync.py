@@ -68,6 +68,8 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def private_cloud_session(monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive a private-cloud sync session where each audio frame flushes immediately."""
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)

@@ -44,7 +44,9 @@ only its assigned response conversations.
 A false `update_conversation` result still latches deleted-conversation state on
 every projected flush. Both upload workers honor it, including batches already
 queued; subsequent raw custody windows also honor the gone-owner decision.
-The underlying raw write, digest ledger, replay-reconcile listing,
+Close debt is tracked separately from the metadata cache and survives terminal
+per-flush retry exhaustion; even a failed record gets projection rediscovery
+before its close request is retired. The underlying raw write, digest ledger, replay-reconcile listing,
 `safety_wal_coverage`, record seal and reconcile/repair implementations are
 unchanged. `audio_files` is a derived playback/coverage view, not a custody
 receipt; coverage consumers still require fresh projection data, which is why

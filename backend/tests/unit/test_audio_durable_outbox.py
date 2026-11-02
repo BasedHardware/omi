@@ -105,6 +105,8 @@ class Bucket:
 
 @pytest.fixture
 def remote(monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     bucket = Bucket()
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
     monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
@@ -1630,9 +1632,11 @@ async def test_failed_projection_retires_close_retry_entries_before_next_close(i
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(side_effect=OSError('metadata unavailable')))
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
     monkeypatch.setattr(pusher, 'PROJECTION_RETRY_BUDGET', 0)
-    # Reproduce the real removal path that used to leave 128 stale failures:
-    # a metadata failure followed by a terminal projection failure for that close.
-    for index in range(128):
+    # Two real drains prove removal and repeated reuse. Seed the remaining
+    # failed-recording capacity below instead of booting the same socket 128
+    # times; every removal assertion remains, and the next test separately
+    # verifies the 129-entry close-failure map boundary.
+    for index in range(2):
         cid = f'synthetic-{index}'
         row = (*path[:-1], cid)
         client.rows[row] = {'record_lane_owner': 'batch_live_v1'}
@@ -1643,6 +1647,8 @@ async def test_failed_projection_retires_close_retry_entries_before_next_close(i
         assert cid in barrier.failed_recordings
         assert client.rows[row]['record_upload_sessions'], 'failed projection retains its durable fence'
         assert not barrier.close_failures and not barrier.close_retry_at
+    barrier.failed_recordings.update(f'synthetic-{index}' for index in range(128))
+    assert len(barrier.failed_recordings) == 128
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', lambda *a, **kw: None)
     original = record_audio_db.set_record_upload_pending

@@ -264,11 +264,16 @@ REAL_UPDATE = db.update_conversation
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('durable', [False, True])
-@pytest.mark.parametrize('ending', ['disconnect', 'switch', 'deleted', 'retry'])
+@pytest.mark.parametrize(
+    'durable,ending',
+    [
+        (durable, ending)
+        for ending in ('disconnect', 'switch', 'deleted', 'retry', 'terminal')
+        for durable in (False, True)
+        if durable or ending not in {'retry', 'terminal'}
+    ],
+)
 async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monkeypatch, durable, ending):
-    if ending == 'retry' and not durable:
-        return  # Legacy errors already have their historical best-effort path.
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true' if durable else 'false')
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda _: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda _: False)
@@ -289,12 +294,14 @@ async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monke
     loop = asyncio.get_running_loop()
     handled = asyncio.Event()
     uploads = []
-    retry = [ending == 'retry']
+    retry = [3 if ending == 'terminal' else int(ending == 'retry')]
     update = db.update_conversation
 
     def apply(*args, **kwargs):
-        if retry[0] and len(uploads) == 2:
-            retry[0] = False
+        if retry[0] and len(uploads) >= 2:
+            retry[0] -= 1
+            if ending == 'terminal' and retry[0] == 0:
+                loop.call_soon_threadsafe(handled.set)
             raise OSError('synthetic metadata failure')
         result = update(*args, **kwargs)
         loop.call_soon_threadsafe(handled.set)
@@ -344,6 +351,8 @@ async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monke
                 self.round += 1
                 if ending == 'deleted' and self.round == 1:
                     world.gone[0] = True
+                if ending == 'terminal' and self.round == 2:
+                    raise WebSocketDisconnect(1000)
                 if ending == 'switch' and self.round == 2:
                     return struct.pack('<I', 103) + b'next'
                 return struct.pack('<Id', 101, 100 + self.round) + pcm
@@ -356,12 +365,13 @@ async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monke
     else:
         assert len(world.lists) >= 2  # initial plus explicit close/disconnect, even if no tail
         assert world.stored[0]['chunk_timestamps'][:2] == [100, 101]
-        assert learning.call_count >= 3
+        assert learning.call_count >= (2 if ending == 'terminal' else 3)
     assert identity.called
     assert 'c' in identity.call_args.args[1]
 
 
-def test_full_listing_race_cannot_clobber_other_pod(world, monkeypatch):
+@pytest.mark.parametrize('mode', ['eligible', 'archive', 'unknown_paths'])
+def test_full_listing_race_cannot_clobber_other_pod(world, monkeypatch, mode):
     listing = storage.list_audio_chunks
     cache = projection.PusherAudioProjection('u')
     a = world.add(100)
@@ -380,7 +390,11 @@ def test_full_listing_race_cannot_clobber_other_pod(world, monkeypatch):
         return old
 
     monkeypatch.setattr(storage, 'list_audio_chunks', racing_list)
-    assert cache.refresh('c', [a]) is True
+    monkeypatch.setattr(db, 'list_audio_chunks', racing_list)
+    if mode == 'archive':
+        monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+        monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
+    assert cache.refresh('c', None if mode == 'unknown_paths' else [a]) is True
     assert world.stored[0]['chunk_timestamps'] == [100, 101]
     assert len(world.writes) == 2  # only the peer and the successful rebuild
 
@@ -438,3 +452,33 @@ def test_empty_listing_still_observes_deleted_owner(world):
     cache = projection.PusherAudioProjection('u')
     assert cache.refresh('c', ['chunks/u/c/100.000.batch.bin']) is False
     assert not world.writes
+
+
+@pytest.mark.parametrize('mode', ['archive', 'unknown_paths', 'rollback'])
+def test_empty_fallback_listing_still_detects_gone_owner(world, monkeypatch, mode):
+    monkeypatch.setattr(db, 'get_conversation_raw_snapshot', lambda *a, **kw: None)
+    if mode == 'archive':
+        monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+    if mode == 'rollback':
+        monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    cache = projection.PusherAudioProjection('u')
+    assert cache.refresh('c', None if mode == 'unknown_paths' else ['chunks/u/c/100.batch.bin']) is False
+    assert not world.writes
+
+
+def test_terminal_projection_failure_retains_independent_close_debt(world, monkeypatch):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    update = db.update_conversation
+    monkeypatch.setattr(db, 'update_conversation', MagicMock(side_effect=OSError()))
+    with pytest.raises(OSError):
+        cache.refresh('c', [world.add(101)])
+    # The durable worker can discard an invalid cache after retry exhaustion,
+    # but its independent close obligation must survive that terminal failure.
+    cache.inventory.pop('c', None)
+    assert cache.close_debt == {'c'}
+    monkeypatch.setattr(db, 'update_conversation', update)
+    for cid in list(cache.close_debt):
+        cache.finish(cid)
+    assert not cache.close_debt
+    assert world.stored[0]['chunk_timestamps'] == [100, 101]

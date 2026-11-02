@@ -109,6 +109,8 @@ RATE = 16000
 
 @pytest.fixture
 def env(monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     # Preserve timeline v2's historical emergency-rollback contract. The
     # default durable path is exercised by test_audio_durable_outbox.py.
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')

@@ -96,6 +96,7 @@ class PusherAudioProjection:
     def __init__(self, uid: str):
         self.uid = uid
         self.has_uploaded_paths = False
+        self.close_debt: set[str] = set()
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
 
@@ -104,6 +105,8 @@ class PusherAudioProjection:
         # A failed refresh keeps a close-time full rebuild due, but cannot
         # lend an old inventory to the next flush.
         self.has_uploaded_paths = self.has_uploaded_paths or bool(paths)
+        if enabled() and len(self.close_debt) < MAX_CONVERSATIONS:
+            self.close_debt.add(conversation_id)
         incremental = enabled() and (bool(paths) or force) and not audio_archive.admitted(self.uid, 'READ')
         if incremental and paths and (conversation_id in self.inventory or len(self.inventory) < MAX_CONVERSATIONS):
             self.inventory[conversation_id] = None
@@ -131,7 +134,7 @@ class PusherAudioProjection:
         # the document. No cache TTL is advanced by an incremental append.
         for _ in range(2):
             if chunks is None:
-                if incremental:
+                if enabled():
                     # Snapshot before discovery: a full rebuild must not
                     # overwrite a projection another pod publishes during LIST.
                     owner = conversations_db.get_conversation_raw_snapshot(
@@ -158,6 +161,12 @@ class PusherAudioProjection:
                 mode = 'incremental'
             PROJECTIONS.labels(mode=mode).inc()
             if not files:
+                if not enabled():
+                    owner = conversations_db.get_conversation_raw_snapshot(
+                        self.uid, conversation_id, field_paths=['deleted']
+                    )
+                    if owner is None or owner.get('deleted'):
+                        return False
                 return None
             payload = [af.model_dump() for af in files]
             try:
@@ -191,11 +200,13 @@ class PusherAudioProjection:
             return None  # Rollback/unknown writer retains per-flush-only behavior.
         result = self.refresh(conversation_id, force=True)
         self.inventory.pop(conversation_id, None)
+        self.close_debt.discard(conversation_id)
         return result
 
     async def finish_pending(self, conv_id: str, deleted_conversations: set[str], identity_refreshed: set[str]) -> bool:
         if conv_id in deleted_conversations:
             self.inventory.pop(conv_id, None)
+            self.close_debt.discard(conv_id)
             return True
         try:
             applied = await run_blocking(storage_executor, self.finish, conv_id)
@@ -210,6 +221,7 @@ class PusherAudioProjection:
                 return False
             self.close_retries.pop(conv_id, None)
             self.inventory.pop(conv_id, None)
+            self.close_debt.discard(conv_id)
             record_failure('projection', reason='invalid_argument' if isinstance(exc, InvalidArgument) else 'transient')
             record_fallback(
                 component='pusher',
