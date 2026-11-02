@@ -2,8 +2,10 @@
 
 from dataclasses import replace
 import hashlib
+import io
 import logging
 import time
+import wave
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -62,6 +64,39 @@ JOB_PREFIX = 'bp_'
 # Every failed unit settled its one paid recovery without words and waits for a
 # reviewed operator decision server-side. Released apps ACK `completed`.
 HELD_REASON_CODE = 'batch_unit_held'
+
+
+SAMPLE_SCAN_SECONDS = 600  # strict-VAD scan per unit and silent audio held before a sampled upload decides
+
+
+def _speech_probe(wav: bytes) -> bytes | None:
+    """Up to 30 s of strict-VAD speech from a unit's first SAMPLE_SCAN_SECONDS as WAV; None when silent."""
+    from utils.stt.local_vad import offline_pcm_speech_segments
+
+    with wave.open(io.BytesIO(wav), 'rb') as source:
+        if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (1, 2, 16000):
+            raise ValueError('speech sample requires 16kHz mono PCM16')
+        pcm = source.readframes(SAMPLE_SCAN_SECONDS * 16000)
+    speech = b''.join(
+        pcm[int(span['start'] * 16000) * 2 : int(span['end'] * 16000) * 2] for span in offline_pcm_speech_segments(pcm)
+    )[: 30 * 32000]
+    if not speech:
+        return None
+    output = io.BytesIO()
+    with wave.open(output, 'wb') as target:
+        target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        target.writeframes(speech)
+    return output.getvalue()
+
+
+def _sampled_refusal(target: dict, user: dict, evidence) -> None:
+    """An unsafe, silent, refused-to-legacy or unclassified sample keeps today's legacy route."""
+    record_admission_exclusion(
+        target.get('language') or user.get('language'), 'unknown_multilingual_conversation', legacy_available=True
+    )
+    if evidence is not None:
+        evidence.language_excluded = True
+    return None
 
 
 def _next_unit(iterator):
@@ -592,12 +627,48 @@ async def accept_upload(
             )
         )
         items = []
-        while unit := await run_blocking(sync_executor, _next_unit, iterator):
+        # A sampled upload is decided by its first strict-VAD speech; silent leading units wait
+        # unstaged (bounded) and are replayed in order once the sample admits the upload.
+        held, queue, sample = [], [], None
+        while unit := (queue.pop(0) if queue else await run_blocking(sync_executor, _next_unit, iterator)):
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
             from utils.stt.batch_language import resolve_language
             from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 
+            if sampled and sample is None:
+                try:
+                    speech = await run_blocking(sync_executor, _speech_probe, unit.wav)
+                except Exception:
+                    speech = False  # a VAD failure is not silence: keep the legacy route
+                held.append(unit)
+                if speech is None and sum(u.duration_seconds for u in held) <= SAMPLE_SCAN_SECONDS:
+                    continue
+                probe_item = replace(
+                    seed, segment_id=hashlib.sha256(f'{content_id}:{len(held) - 1}'.encode()).hexdigest()
+                )
+                probe_guard = ServingLanguageProbeGuard(store, probe_item, authorize=batch_artifact_authorize)
+                decision = (
+                    await run_blocking(
+                        sync_executor,
+                        resolve_language,
+                        input_language,
+                        speech,
+                        surface='batch',
+                        cohort_key=uid,
+                        before_probe=probe_guard,
+                        before_self_probe=probe_guard,
+                    )
+                    if speech
+                    else None
+                )
+                probe_guard.raise_if_denied()
+                # Only vendor audio LID admits: worker self-LID evidence is bound to the unit's first 30 s.
+                if decision is None or not decision.parakeet_safe or decision.evidence != 'audio_lid':
+                    return _sampled_refusal(target, user, evidence)
+                record_route('intake', decision.language, 'parakeet')
+                sample, queue, held = (unit, decision), held, []
+                continue
             item = replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{len(items)}'.encode()).hexdigest(),
@@ -608,33 +679,24 @@ async def accept_upload(
                 or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
                 privacy_generation=context.generation,
             )
-            probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
-            # Every self/vendor classification gets fresh dispatch authority on CPU.
-            language_decision = await run_blocking(
-                sync_executor,
-                resolve_language,
-                input_language,
-                unit.wav,
-                surface='batch',
-                cohort_key=uid,
-                before_probe=probe_guard,
-                before_self_probe=probe_guard,
-            )
-            # Refusal preserves the caller's source; never acknowledge or admit it.
-            probe_guard.raise_if_denied()
-            if sampled and not items and not language_decision.parakeet_safe:
-                # Nothing is staged yet. An unsafe sample, or a cap-skipped probe
-                # (which resolves 'und'), keeps today's legacy route for the whole upload.
-                record_admission_exclusion(
-                    target.get('language') or user.get('language'),
-                    'unknown_multilingual_conversation',
-                    legacy_available=True,
+            if sample is not None and unit is sample[0]:
+                # The admitting sample already classified this unit's speech under fresh authority.
+                language_decision = sample[1]
+            else:
+                probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+                # Every self/vendor classification gets fresh dispatch authority on CPU.
+                language_decision = await run_blocking(
+                    sync_executor,
+                    resolve_language,
+                    input_language,
+                    unit.wav,
+                    surface='batch',
+                    cohort_key=uid,
+                    before_probe=probe_guard,
+                    before_self_probe=probe_guard,
                 )
-                if evidence is not None:
-                    evidence.language_excluded = True
-                return None
-            if sampled and not items:
-                record_route('intake', language_decision.language, 'parakeet')
+                # Refusal preserves the caller's source; never acknowledge or admit it.
+                probe_guard.raise_if_denied()
             frozen_language = (
                 language_decision.language
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
@@ -666,6 +728,9 @@ async def accept_upload(
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
             # Provider units are funded by the provider stage, not GPU compute admission.
             items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+        if sampled and sample is None:
+            # No strict-VAD speech to sample: nothing was staged, so the upload keeps legacy.
+            return _sampled_refusal(target, user, evidence)
         if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
             return covered_response()
         binding = ProjectionBinding(
