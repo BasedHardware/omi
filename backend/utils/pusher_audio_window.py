@@ -8,7 +8,7 @@ from utils.pusher_protocol import ByteBudget, extend_bounded
 AUDIO_TIMELINE_CONTINUITY_TOLERANCE = 0.001
 
 
-def _append_window_run(
+def append_window_run(
     *,
     durable: bool,
     sequence: int,
@@ -44,7 +44,7 @@ def _append_window_run(
     return checkpoint, stored
 
 
-def _v2_overlap_conflict(
+def v2_overlap_conflict(
     run_start: float,
     overlap_bytes: int,
     audio: bytes,
@@ -81,9 +81,8 @@ def _v2_overlap_conflict(
             source_offset = round((lo - run_start) * bps)
             buffer_offset = frame['byte_offset'] + round((lo - frame['start']) * bps)
             count = round((hi - lo) * bps)
-            if (
-                audio[source_offset : source_offset + count]
-                != private_cloud_sync_buffer[buffer_offset : buffer_offset + count]
+            if audio[source_offset : source_offset + count] != bytes(
+                private_cloud_sync_buffer[buffer_offset : buffer_offset + count]
             ):
                 return True
             cursor = hi

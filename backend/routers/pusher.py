@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from grpc import StatusCode
 from collections import deque
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple, cast
-from utils.pusher_audio_window import _append_window_run, _v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
+from utils.pusher_audio_window import append_window_run, v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 from config.audio_custody import framed_pack
 from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_record_barrier import PusherRecordBarrier
@@ -1553,7 +1553,7 @@ async def _run_websocket_util_trigger(
                             # an accepted range are never re-stored; the
                             # frame's genuinely new tail past the accepted
                             # end still continues the run from there.
-                            if _v2_overlap_conflict(
+                            if v2_overlap_conflict(
                                 run_start,
                                 overlap_bytes,
                                 audio_data,
@@ -1608,7 +1608,7 @@ async def _run_websocket_util_trigger(
                         private_cloud_chunk_start_time = buffer_start_timestamp
                         private_cloud_window_opened_at = time.monotonic()
 
-                    frame_checkpoint, stored_capture = _append_window_run(
+                    frame_checkpoint, stored_capture = append_window_run(
                         durable=durable_audio,
                         sequence=custody_sequence,
                         buffer=private_cloud_sync_buffer,
