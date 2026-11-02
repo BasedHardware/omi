@@ -32,7 +32,7 @@ custom MCUboot entry point before sysbuild to ensure SD card deinit releases the
 
 ```bash
 cp ../omi/omi.conf ../omi/prj.conf
-cp ../bootloader/mcuboot_boot_zephyr.c bootloader/mcuboot/boot/zephyr/main.c
+cp ../omi/src/mcuboot_boot_zephyr.c bootloader/mcuboot/boot/zephyr/main.c
 
 west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT=..

@@ -5,9 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && cp src/patched-acp-entry.mjs dist/patched-acp-entry.mjs",
+    "build": "node init && tsc && cp src/patched-acp-entry.mjs dist/patched-acp-entry.mjs",
     "eval:realtime-routing": "npm run build --silent && node scripts/eval-realtime-routing.mjs",
-    "start": "node dist/index.js",
+    "start": "node init && node dist/index.js",
     "test": "vitest run"
   },
   "dependencies": {
