@@ -977,7 +977,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     if funded_processing_enabled(uid):
                         from utils.processing_backlog_worker import plan_changed
 
-                        plan_changed(uid, request.price_id, current_subscription, new_subscription)
+                        plan_changed(
+                            uid,
+                            request.price_id,
+                            current_subscription,
+                            new_subscription,
+                            updated_sub_dict.get('status'),
+                        )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 

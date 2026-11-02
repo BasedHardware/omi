@@ -205,11 +205,46 @@ async def test_a_trial_checkout_never_converts_and_a_paid_one_does(release_hooks
 def test_a_plan_change_while_trialing_never_converts(release_hooks):
     release_hooks.increased['value'] = True
     release_hooks.statuses['sub_synthetic'] = 'trialing'
-    worker.plan_changed(UID, 'price_synthetic', release_hooks.basic, release_hooks.paid)
+    worker.plan_changed(UID, 'price_synthetic', release_hooks.basic, release_hooks.paid, 'trialing')
     assert release_hooks.calls == []
-    release_hooks.statuses['sub_synthetic'] = 'active'
-    worker.plan_changed(UID, 'price_synthetic', release_hooks.basic, release_hooks.paid)
+    # The modified subscription's own status decides; no second Stripe lookup can fail.
+    release_hooks.statuses['sub_synthetic'] = None
+    worker.plan_changed(UID, 'price_synthetic', release_hooks.basic, release_hooks.paid, 'active')
     assert release_hooks.calls == [('conversion', 'plan-change:sub_synthetic:price_synthetic:9')]
+
+
+def test_a_stripe_outage_is_retried_then_counted_not_silent(monkeypatch):
+    import stripe
+
+    attempts, errors = [], []
+
+    def retrieve(subscription_id):
+        attempts.append(subscription_id)
+        raise RuntimeError('synthetic outage')
+
+    monkeypatch.setattr(stripe.Subscription, 'retrieve', retrieve)
+    monkeypatch.setattr(worker.time, 'sleep', lambda seconds: None)
+    monkeypatch.setattr(worker, 'record_backlog_choice', lambda source, outcome: errors.append((source, outcome)))
+    assert worker._stripe_status('sub_synthetic') is None
+    assert len(attempts) == 3
+    assert errors == [('conversion', worker.BacklogChoiceOutcome.ERROR)]
+
+
+async def test_a_resumed_release_rereads_the_hold_and_passes_over_legacy_spend(monkeypatch):
+    hold = SimpleNamespace(exists=True, to_dict=lambda: {'state': 'held', 'piece_receipts': {'p': {}}})
+    holds = SimpleNamespace(document=lambda identity: SimpleNamespace(get=lambda: hold))
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: holds)
+    monkeypatch.setattr(worker.cap_hold_recovery, 'recover_selected', AsyncMock(side_effect=AssertionError('legacy')))
+
+    async def immediate(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'run_blocking', immediate)
+    token = worker.backlog_release.source.set('conversion')
+    try:
+        assert await worker._process(UID, {'kind': 'audio', 'id': 'hold'}) is worker.AttemptOutcome.DEFERRED
+    finally:
+        worker.backlog_release.source.reset(token)
 
 
 def test_trial_grant_is_a_plain_config_value():

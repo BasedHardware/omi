@@ -22,8 +22,8 @@ from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_w
 from config.backlog_release import enabled as release_enabled
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import hold_lane, recovery_admission_enabled, recovery_cohort_admits
-from utils.observability.held_content import record_recovery_skipped, record_release
-from utils.observability.reasons import HeldRecoverySkipOutcome
+from utils.observability.held_content import record_backlog_choice, record_recovery_skipped, record_release
+from utils.observability.reasons import BacklogChoiceOutcome, HeldRecoverySkipOutcome
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -98,6 +98,11 @@ def _timestamp(value):
     return float(value or 0)
 
 
+def _legacy_started(row) -> bool:
+    """Legacy recovery already spent on this hold, so it can only finish on the legacy route."""
+    return bool(row.get('piece_receipts') or row.get('processed_paths'))
+
+
 def _candidate(kind, snap) -> dict[str, Any]:
     row = snap.to_dict() or {}
     at = row.get('listed_at' if kind == 'audio' else 'started_at', 0)
@@ -112,8 +117,7 @@ def _candidate(kind, snap) -> dict[str, Any]:
         'at': at,
         'units': max(0, units),
         'state': row.get('state'),
-        # Legacy recovery already spent on this hold, so it can only finish on the legacy route.
-        'legacy_started': kind == 'audio' and bool(row.get('piece_receipts') or row.get('processed_paths')),
+        'legacy_started': kind == 'audio' and _legacy_started(row),
         'queued_at': row.get('created_at' if kind == 'audio' else 'queued_at', 0),
     }
 
@@ -181,6 +185,11 @@ async def _process(uid, item) -> AttemptOutcome:
     snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
     if not snap.exists or (snap.to_dict() or {}).get('state') == 'purged':
         return AttemptOutcome.COMPLETE
+    if backlog_release.source.get() is not None and _legacy_started(snap.to_dict() or {}):
+        # Rechecked on this fresh read, resumed reservations included: an automatic release
+        # never takes the legacy route. The hold stays held for a manual choice.
+        record_release('legacy_started')
+        return AttemptOutcome.DEFERRED
     recovered = await cap_hold_recovery.recover_selected(uid, snap)
     return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
@@ -418,19 +427,28 @@ async def run(
     return continuation
 
 
-def _stripe_status(subscription_id) -> str | None:
-    """The subscription's live Stripe status; None when Stripe can't say."""
+def _stripe_status(subscription_id, *, attempts: int = 3) -> str | None:
+    """The subscription's live Stripe status; None when Stripe can't say after a short retry.
+
+    A persistent failure is counted as a conversion error, so a skipped release is visible.
+    """
     if not subscription_id:
         return None
-    try:
-        import stripe
+    for attempt in range(attempts):
+        try:
+            import stripe
 
-        return (stripe.Subscription.retrieve(subscription_id).to_dict() or {}).get('status')
-    except Exception as error:
-        logger.warning(
-            'event=processing_backlog outcome=conversion_status_unavailable exception_type=%s', type(error).__name__
-        )
-        return None
+            return (stripe.Subscription.retrieve(subscription_id).to_dict() or {}).get('status')
+        except Exception as error:
+            logger.warning(
+                'event=processing_backlog outcome=conversion_status_unavailable attempt=%d exception_type=%s',
+                attempt + 1,
+                type(error).__name__,
+            )
+            if attempt + 1 < attempts:
+                time.sleep(0.5 * (attempt + 1))
+    record_backlog_choice('conversion', BacklogChoiceOutcome.ERROR)
+    return None
 
 
 def upgrade(uid: str, request_key: str, *, intent_at, subscription_id=None, status=None):
@@ -452,13 +470,16 @@ async def upgrade_async(uid: str, request_key: str, *, intent_at, subscription_i
     )
 
 
-def plan_changed(uid: str, price_id: str, previous, current) -> None:
-    """An immediate plan change that raises the allowance releases within it."""
+def plan_changed(uid: str, price_id: str, previous, current, status: str | None) -> None:
+    """An immediate plan change that raises the allowance releases within it.
+
+    status is the modified subscription's own Stripe status, so no second lookup can fail.
+    """
     from utils.processing_backlog import allowance_increased
 
     if allowance_increased(previous, current):
         key = f'plan-change:{current.stripe_subscription_id}:{price_id}:{current.current_period_end}'
-        upgrade(uid, key, intent_at=time.time(), subscription_id=current.stripe_subscription_id)
+        upgrade(uid, key, intent_at=time.time(), status=status or '')
 
 
 async def checkout_completed_async(uid: str, event: dict, session: dict, previous, current) -> None:

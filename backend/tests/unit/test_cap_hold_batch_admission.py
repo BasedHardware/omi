@@ -229,6 +229,19 @@ async def test_on_keeps_the_legacy_recovery_path(hook, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_an_automatic_release_never_falls_back_to_legacy_recovery(hook, monkeypatch):
+    from utils import backlog_release
+
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: False)
+    token = backlog_release.source.set('trial')
+    try:
+        assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
+    finally:
+        backlog_release.source.reset(token)
+    assert hook.events == [('release', 'lease')]
+
+
+@pytest.mark.asyncio
 async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch):
     monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: True)
     monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: False)

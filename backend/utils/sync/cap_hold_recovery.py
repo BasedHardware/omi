@@ -562,6 +562,12 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
                 return False
             # The hold keeps its audio until batch projects it: finish_handoff erases it then.
             return True
+        from utils import backlog_release
+
+        if backlog_release.source.get() is not None:
+            # An automatic release never falls back to legacy STT, outside the idle gate and the
+            # vendor table. Its worker rereads the hold and passes over legacy-started audio.
+            return False
         if not await _recover_row(uid, snapshot, row):
             return False
         if not await _save(uid, snapshot, row, {'state': 'completed'}):
