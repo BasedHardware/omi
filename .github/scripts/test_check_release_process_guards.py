@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -324,6 +325,31 @@ def test_reviewed_parent_accepts_preview_alias_without_early_exit(tmp_path):
 
 def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
+
+
+def _module_bool_constant(path: Path, name: str) -> bool:
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool), name
+            return node.value.value
+    raise AssertionError(f"{name} not found in {path}")
+
+
+def test_play_held_changes_flags_agree():
+    # 2026-10-28 -> 11-01: the Play commit flag and both Codemagic blocks were
+    # held, but the dispatcher's ANDROID_HELD_CHANGES_MODE stayed False, so the
+    # held Android distribution stalled with no reminder. All four move together.
+    promote = _module_bool_constant(REPO_ROOT / "app/scripts/mobile_store_promote.py", "CHANGES_NOT_SENT_FOR_REVIEW")
+    dispatcher = _module_bool_constant(
+        REPO_ROOT / ".github/scripts/mobile_distribution.py", "ANDROID_HELD_CHANGES_MODE"
+    )
+    workflows = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))["workflows"]
+    codemagic = {
+        name: bool(workflows[name]["publishing"]["google_play"].get("changes_not_sent_for_review", False))
+        for name in ("android-internal-auto", "android-prod-internal")
+    }
+    assert dispatcher == promote, (dispatcher, promote)
+    assert set(codemagic.values()) == {promote}, (codemagic, promote)
 
 
 def test_android_internal_publishers_hold_changes_for_console_review():

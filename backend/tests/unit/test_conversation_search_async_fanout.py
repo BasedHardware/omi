@@ -275,6 +275,7 @@ def test_search_transcript_chunks_passes_pinecone_request_timeout(monkeypatch):
         raise AssertionError('embed_query must not run when query_vector is supplied')
 
     monkeypatch.setattr(vector_db, 'index', FakeIndex())
+    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=forbidden_embed))
 
     rows = vector_db.search_transcript_chunks('u1', 'budget', limit=10, query_vector=[0.1, 0.2], timeout_seconds=5.0)

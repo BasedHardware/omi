@@ -1,5 +1,6 @@
 """Synthetic record ownership, raw-reference and annotation contracts."""
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -18,6 +19,108 @@ from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
 from utils.sync.assignment_errors import SyncAssignmentConflict
+
+
+@pytest.mark.asyncio
+async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    for i in range(10):
+        store.rows['jobs', str(i)] = {
+            'state': 'record_pending',
+            'available_at': 0,
+            'partial_coordinator': i == 0,
+        }
+    slow, full, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    active, peak, completed = 0, 0, []
+
+    async def admit(store, pending):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            if pending.get('partial_coordinator'):
+                slow.set()
+                await release.wait()
+            else:
+                if active == live.RECORD_DRAIN_CONCURRENCY:
+                    full.set()
+                await slow.wait()
+                await full.wait()
+                completed.append(1)
+        finally:
+            active -= 1
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    with caplog.at_level('INFO', logger=live.__name__):
+        task = asyncio.create_task(live.drain_recordings(store))
+        try:
+            await asyncio.wait_for(full.wait(), timeout=1)
+            for _ in range(50):
+                if len(completed) == 9:
+                    break
+                await asyncio.sleep(0.001)
+            assert len(completed) == 9
+            assert not task.done()
+            assert peak == live.RECORD_DRAIN_CONCURRENCY
+        finally:
+            release.set()
+            await task
+    events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
+    assert len(events) == 1
+    assert 'row_count=10 partial_count=1 seconds=' in events[0]
+    assert all(row['state'] == 'record_pending' and 'expires_at' not in row for row in store.rows.values())
+
+
+@pytest.mark.asyncio
+async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
+    original_run = store.run
+    slow, release = asyncio.Event(), asyncio.Event()
+
+    def run(body):
+        result = original_run(body)
+        if result.get('broken'):
+            raise RuntimeError('synthetic store failure')
+        return result
+
+    store.rows['jobs', 'bad']['broken'] = True
+    monkeypatch.setattr(store, 'run', run)
+
+    async def admit(store, pending):
+        slow.set()
+        await release.wait()
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    task = asyncio.create_task(live.drain_recordings(store))
+    try:
+        await asyncio.wait_for(slow.wait(), timeout=1)
+        assert not task.done()
+    finally:
+        release.set()
+        with pytest.raises(RuntimeError, match='synthetic store failure'):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_drain_emits_one_identifier_free_pass_on_query_failure(monkeypatch, caplog):
+    from utils.batch_pipeline import live
+
+    def unavailable(*args):
+        raise RuntimeError('synthetic-private-message')
+
+    store = MemoryStore()
+    monkeypatch.setattr(store, 'due', unavailable)
+    with caplog.at_level('INFO', logger=live.__name__), pytest.raises(RuntimeError):
+        await live.drain_recordings(store)
+    assert len(caplog.records) == 1
+    assert 'row_count=0 partial_count=0 seconds=' in caplog.text
+    assert 'synthetic-private-message' not in caplog.text
 
 
 @pytest.fixture(autouse=True)
@@ -147,13 +250,74 @@ def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypa
     assert len([v for (t, _), v in store.rows.items() if t == 'jobs']) == 1
 
 
-def test_projection_replaces_provisional_instead_of_appending_and_keeps_id():
-    result, survivors = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+@pytest.mark.parametrize('visible_restore', [False, True])
+def test_projection_replaces_provisional_instead_of_appending_and_keeps_id(visible_restore):
+    provisional = recording()
+    if visible_restore:
+        provisional['external_data'] = {'server_batch_only': True}
+        provisional['transcript_segments'][0].update(text='Synthetic Modulate preview.', stt_provider='modulate')
+    result, survivors = replace_record(provisional, incoming(), {'start': 100, 'end': 102})
     assert result['id'] == 'record'
     assert len(result['transcript_segments']) == 1
     assert result['transcript_segments'][0]['id'] == 'new'
     assert result['sync_content_revision'] == result['record_projection_revision'] == 1
     assert survivors[0]['speaker_id_scope'] == 'final:batch:unit'
+    assert result['record_lane_owner'] == 'batch_live_v1'
+    if visible_restore:
+        assert result['external_data']['server_batch_only'] is True
+        assert result['transcript_segments'][0]['text'] == 'Synthetic speech.'
+
+
+def test_final_batch_projection_fences_a_delayed_modulate_preview_flush():
+    from database import conversations
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    provisional = recording(external_data={'server_batch_only': True})
+    final, _ = replace_record(provisional, incoming(), {'start': 100, 'end': 102})
+    key = ('users', 'synthetic', 'conversations', 'record')
+    db = StrictFirestore({key: final})
+    assert (
+        conversations.update_conversation_segments(
+            'synthetic',
+            'record',
+            provisional['transcript_segments'],
+            live_segments=provisional['transcript_segments'],
+            firestore_client=db,
+        )
+        is False
+    )
+    assert db.rows[key] == final
+
+
+RULE_DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'}
+
+
+def test_projection_text_supersedes_an_automatic_discard():
+    original = recording(transcript_segments=[], discarded=True, relevance_decision=dict(RULE_DISCARD))
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
+    assert result['discarded'] is False and result['relevance_decision'] is None
+    assert [s['id'] for s in result['transcript_segments']] == ['new']
+    assert original['discarded'] is True
+
+
+def test_projection_without_new_text_keeps_the_automatic_discard():
+    original = recording(discarded=True, relevance_decision=dict(RULE_DISCARD))
+    result, new = replace_record(original, incoming(), {'start': 100, 'end': 102, 'preserve_existing': True})
+    assert not new
+    assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
+
+
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'discarded': True},
+        {'discarded': True, 'relevance_decision': dict(RULE_DISCARD), 'sync_relevance_user_kept': False},
+        {'discarded': True, 'relevance_decision': {**RULE_DISCARD, 'verdict': 'keep'}},
+    ],
+)
+def test_projection_never_overrides_a_user_discard(changes):
+    with pytest.raises(SyncAssignmentConflict, match='discarded'):
+        replace_record(recording(**changes), incoming(), {'start': 100, 'end': 102})
 
 
 def test_projection_waits_for_finalize_without_mutating_provisional():
@@ -225,7 +389,10 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 @pytest.mark.parametrize('server_only', [False, True])
 @pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
-async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only, barrier_change):
+@pytest.mark.parametrize('language', ['en', 'multi'])
+async def test_native_admission_stages_references_and_drains_after_rollback(
+    monkeypatch, server_only, barrier_change, language
+):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
@@ -233,6 +400,22 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
+    current['language'] = language
+    proofs = []
+
+    async def prove(store, artifacts, item, manifest):
+        proofs.append(manifest)
+        return {
+            **manifest,
+            'context': {
+                **manifest['context'],
+                'stt_language': 'en',
+                'stt_language_evidence': 'audio_lid',
+                'stt_language_confidence': 0.99,
+            },
+        }
+
+    monkeypatch.setattr(live, 'prove_manifest', prove)
     if server_only:
         current['external_data'] = {**(current.get('external_data') or {}), 'server_batch_only': True}
         current.update(
@@ -321,6 +504,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     assert store.rows['jobs', segment]['state'] == 'ready'
     assert manifests[0]['references'][0]['generation'] == 1
+    assert bool(proofs) is server_only
+    assert manifests[0]['context']['stt_language'] == ('en' if server_only else language)
     assert store.rows['jobs', segment]['projection_binding']['native_record']
     assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.

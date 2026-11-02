@@ -4489,12 +4489,11 @@
     "episodeNotesStartWithTranscript": "Notatki pojawią się, gdy przyjdzie ostateczna transkrypcja.",
     "episodeOnDeviceNotesFootnote": "Tworzone na Twoim telefonie w trakcie rozmowy. Pełne notatki pojawią się wraz z ostateczną transkrypcją.",
     "episodeOnThisPhone": "Na tym telefonie",
-    "liveCardTitle": "Na żywo",
     "livePreviewBehind": "Ostateczna transkrypcja z opóźnieniem około {duration}",
     "livePreviewCatchingUp": "Ostateczna transkrypcja nadąża",
     "livePreviewNoEngineBody": "Twoje słowa pojawią się tutaj minutę lub dwie po wypowiedzeniu.",
     "livePreviewNoEngineTitle": "Bezpiecznie nagrywa",
-    "livePreviewOnPhoneDivider": "Na żywo na tym telefonie",
+    "livePreviewOnPhoneDivider": "Przed chwilą, na tym telefonie",
     "livePreviewTurnOnLiveText": "Włącz tekst na żywo",
     "deviceCatchUpOnItsWay": "w drodze",
     "deviceCatchUpWhenOnline": "gdy będziesz online",
@@ -4551,7 +4550,12 @@
     "yearlySwitchUnavailable": "Płatność roczna nie jest teraz dostępna dla Twojego planu.",
     "yearlySwitchDoneTitle": "Płacisz teraz rocznie",
     "yearlySwitchDoneBody": "Dziś pobrano {amount}. Odnowienie {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} części} one{{count} część} two{{count} części} few{{count} części} many{{count} części} other{{count} części}}",
     "chatAppsWaitingMessageIn": "Wyślij wiadomość w aplikacji {app}. Ten ekran odświeży się, gdy tylko Omi ją odbierze.",
-    "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}."
+    "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}.",
+    "episodeWritingNotes": "Piszemy notatki…",
+    "episodeWritingNotesDetail": "Najpierw kończymy transkrypcję. Możesz opuścić tę stronę.",
+    "episodeCoversUpTo": "Obejmuje do {time} · pełne notatki na końcu",
+    "liveTranscribedUpTo": "Transkrypcja do {time}",
+    "liveAudioSaved": "Zapisano {duration}",
+    "liveAudioSavedDetail": "Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania."
 }

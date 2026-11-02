@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
@@ -55,6 +56,133 @@ void main() {
     expect(provider.homeEpisodes.single.id, 'ep1');
     await provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
     expect(cursorCalls.length, 2, reason: 'rebuilds coalesce within the poll interval');
+  });
+
+  test('Home re-reads on its own while an episode waits for its summary, and stops once settled', () {
+    fakeAsync((async) {
+      var reads = 0;
+      var composed = false;
+      final waiting = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+      );
+      final done = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+        moments: [
+          EpisodeMoment(
+              id: 'm', conversationId: 'a', startedAt: _t0, endedAt: _t0, points: const [EpisodePoint('Point')])
+        ],
+      );
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async {
+          reads++;
+          return ApiSuccess(EpisodePageRead(enabled: true, episodes: [composed ? done : waiting]));
+        },
+      )..debugSetLive(null);
+      unawaited(provider.refreshHome(_t0, _t0));
+      async.flushMicrotasks();
+      expect(reads, 1);
+      async.elapse(EpisodeProvider.pollInterval);
+      expect(reads, 2);
+      composed = true;
+      async.elapse(EpisodeProvider.pollInterval);
+      expect(reads, 3);
+      expect(provider.homeEpisodes.single.composed, isTrue);
+      async.elapse(EpisodeProvider.pollInterval * 3);
+      expect(reads, 3, reason: 'a settled Home stops re-reading');
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  group('Home hold', () {
+    final waiting = Episode(
+      id: 'ep1',
+      live: false,
+      startedAt: _t0,
+      lastActivityAt: _t0,
+      closedAt: _t0,
+      conversationIds: const ['a', 'b'],
+    );
+
+    test('stops re-reading once the summary wait runs out', () {
+      fakeAsync((async) {
+        var reads = 0;
+        var now = _t0;
+        final provider = EpisodeProvider(
+          clock: () => now,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting]));
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        now = _t0.add(Episode.summaryWait);
+        async.elapse(EpisodeProvider.pollInterval);
+        expect(reads, 2);
+        async.elapse(EpisodeProvider.pollInterval * 3);
+        expect(reads, 2, reason: 'past the wait Home shows plain conversations and stops');
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a failed read keeps re-reading', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            if (reads == 2) return const ApiFailure<EpisodePageRead>(ApiProblem(ApiProblemKind.transport));
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting]));
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(EpisodeProvider.pollInterval * 2);
+        expect(reads, 3);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a timer from an old range does not read it again', () {
+      fakeAsync((async) {
+        final froms = <DateTime>[];
+        final later = _t0.add(const Duration(days: 1));
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            froms.add(from);
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: from == _t0 ? [waiting] : const []));
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        unawaited(provider.refreshHome(later, later));
+        async.flushMicrotasks();
+        async.elapse(EpisodeProvider.pollInterval * 2);
+        expect(froms, [_t0, later]);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a device clock far behind does not wait forever', () {
+      expect(waiting.awaitingSummary(_t0.subtract(const Duration(hours: 1))), isFalse);
+    });
   });
 
   for (final close in ['poll', 'finalize', 'wrapUp']) {

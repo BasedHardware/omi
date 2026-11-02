@@ -15,6 +15,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
 import 'package:omi/pages/episodes/episode_sections.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -180,7 +182,40 @@ Future<void> _capture(WidgetTester tester, String name) async {
   });
 }
 
-Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness) async {
+/// The same episode a moment after it ended: the notes aren't written yet.
+Episode _writing() {
+  final done = _fictional();
+  final now = DateTime.now();
+  return Episode(
+    id: done.id,
+    live: false,
+    startedAt: now.subtract(const Duration(hours: 1, minutes: 36)),
+    lastActivityAt: now,
+    closedAt: now,
+    title: done.title,
+    bullets: done.bullets,
+    members: done.members,
+    conversationIds: done.conversationIds,
+    items: [
+      EpisodeItem(
+        id: 'i1',
+        text: 'Send the updated checklist to Priya',
+        createdAt: now,
+        conversationId: 'standup',
+        status: EpisodeItemStatus.kept,
+      ),
+    ],
+  );
+}
+
+ServerConversation _rowFor(Episode episode) => ServerConversation(
+    id: 'episode:${episode.id}',
+    createdAt: episode.startedAt,
+    startedAt: episode.startedAt,
+    finishedAt: episode.lastActivityAt,
+    structured: Structured(episode.title, '', emoji: '🚀'));
+
+Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness, {Widget? home}) async {
   OmiColors.active = OmiColors.forBrightness(brightness);
   final history = ConversationProvider(isSignedIn: () => true)..conversations = [...episode.members];
   final episodes = EpisodeProvider()
@@ -203,11 +238,13 @@ Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness) 
         theme: buildOmiTheme(brightness: brightness),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: EpisodePage(episode: episode),
+        home: home ?? EpisodePage(episode: episode),
       ),
     ),
   ));
-  await tester.pumpAndSettle();
+  await tester.pump();
+  // The processing ring turns forever, so settling would never end.
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 void main() {
@@ -246,6 +283,88 @@ void main() {
       OmiColors.active = OmiColors.forBrightness(Brightness.dark);
     });
   }
+
+  for (final brightness in [Brightness.light, Brightness.dark]) {
+    testWidgets('Home shows one row per stage, with no parts count (${brightness.name})', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      tester.view.physicalSize = const Size(393, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final writing = _writing();
+      final done = _fictional();
+      await _pump(tester, done, brightness,
+          home: Scaffold(
+              body: Column(children: [
+            ProcessingConversationRow(conversation: _rowFor(writing), episode: writing),
+            ConversationListItem(
+                key: const ValueKey('finished'),
+                conversation: _rowFor(done),
+                date: done.startedAt,
+                conversationIdx: -1,
+                homeEpisode: done),
+          ])));
+      expect(find.textContaining('Writing notes…'), findsOneWidget);
+      expect(find.textContaining('1h 36m'), findsOneWidget);
+      expect(find.textContaining('parts'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await _capture(tester, '00${brightness == Brightness.light ? 3 : 4}-mobile-ios-home-rows-${brightness.name}.png');
+      debugDefaultTargetPlatformOverride = null;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+    });
+
+    testWidgets('the page reads Writing notes while the notes are written (${brightness.name})', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester, _writing(), brightness);
+      expect(find.byKey(const Key('episode_writing_notes')), findsOneWidget);
+      expect(find.text('Summary'), findsOneWidget);
+      expect(find.text('Transcript'), findsOneWidget);
+      expect(find.text('Send the updated checklist to Priya'), findsOneWidget);
+      expect(find.text('Alex and Priya walked the launch checklist and moved the release to Thursday.'), findsNothing,
+          reason: 'draft notes wait for the summary');
+      expect(tester.takeException(), isNull);
+      await _capture(
+          tester, '00${brightness == Brightness.light ? 5 : 6}-mobile-ios-episode-writing-${brightness.name}.png');
+      debugDefaultTargetPlatformOverride = null;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+    });
+  }
+
+  testWidgets('a processing row opens the same page, which turns into the notes when they land', (tester) async {
+    OmiColors.active = OmiColors.forBrightness(Brightness.light);
+    final writing = _writing();
+    await _pump(tester, writing, Brightness.light,
+        home: Scaffold(body: ProcessingConversationRow(conversation: _rowFor(writing), episode: writing)));
+    await tester.tap(find.byKey(const Key('home_processing_row')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('episode_page')), findsOneWidget);
+    expect(find.byKey(const Key('episode_writing_notes')), findsOneWidget);
+    Provider.of<EpisodeProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false)
+        .debugSetHomeEpisodes([_fictional()]);
+    await tester.pump();
+    expect(find.byKey(const Key('episode_writing_notes')), findsNothing);
+    expect(find.byKey(const Key('episode_lede')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a row with no episode yet opens a page that still finds the notes when they land', (tester) async {
+    OmiColors.active = OmiColors.forBrightness(Brightness.light);
+    final writing = _writing();
+    await _pump(tester, writing, Brightness.light,
+        home: Scaffold(body: ProcessingConversationRow(conversation: writing.members.first)));
+    await tester.tap(find.byKey(const Key('home_processing_row')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('episode_writing_notes')), findsOneWidget);
+    Provider.of<EpisodeProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false)
+        .debugSetHomeEpisodes([_fictional()]);
+    await tester.pump();
+    expect(find.byKey(const Key('episode_lede')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('a section opens its moment in the transcript', (tester) async {
     OmiColors.active = OmiColors.forBrightness(Brightness.light);

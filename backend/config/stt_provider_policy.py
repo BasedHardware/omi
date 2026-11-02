@@ -12,6 +12,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Final, Mapping
 
+from config.live_stt_gpu_fleet import gpu_fleet_off
+
 
 class STTServingSurface(str, Enum):
     STREAMING = 'streaming'
@@ -121,9 +123,14 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
             STTServingSurface.PTT,
         }
     ),
-    # Async is admitted only for fenced held recovery; general
-    # prerecorded/PTT selection continues to use its existing providers.
-    SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY}),
+    # Async is admitted for fenced held recovery and, on the prerecorded surface,
+    # only as batch provider-STT failover capacity: no prerecorded model token maps
+    # to Soniox (config.prerecorded_stt.provider_for_model_token) and it is absent
+    # from DEFAULT_MODELS_BY_SURFACE, so general prerecorded/PTT selection keeps
+    # its existing providers; the batch route table marks it failover_only.
+    SONIOX_PROVIDER: frozenset(
+        {STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY, STTServingSurface.PRERECORDED}
+    ),
 }
 
 # One independent call after a validated Modulate-empty held recovery, inside
@@ -332,6 +339,10 @@ def deepgram_provider_for_runtime(self_hosted: bool) -> str:
 
 def provider_is_enabled(provider: str, surface: STTServingSurface) -> bool:
     """Return whether a provider may serve the specified product surface."""
+    if gpu_fleet_off() and (
+        provider == PARAKEET_PROVIDER or (provider == MODULATE_PROVIDER and surface == STTServingSurface.STREAMING)
+    ):
+        return False
     return surface in PROVIDER_SERVING_SURFACES.get(provider, frozenset())
 
 

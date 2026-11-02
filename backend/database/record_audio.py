@@ -35,6 +35,10 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             return 'upload_failed'
         if row.get('record_upload_sessions'):
             return 'producer_pending'
+        if row.get('record_audio_partial'):
+            # A clean late producer certifies its drain, never an earlier
+            # missing tail. Repair refreshes the separate partial barrier.
+            return None
         if not row.get('record_audio_closed'):
             tx.update(ref, {'record_audio_closed': True})
         return None

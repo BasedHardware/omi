@@ -81,6 +81,9 @@ FINALS = Counter(
 )
 PLAYBACK_WRITES = Counter('omi_playback_writes_total', 'Playback write decisions', ['outcome'])
 PLAYBACK_BUILDS = Counter('omi_playback_artifacts_total', 'Playback artifact work', ['representation', 'outcome'])
+PLAYBACK_LOCK_CONTENTION = Counter(
+    'omi_sync_playback_lock_contention_total', 'Conversation merge freshness checks while locked', ['outcome']
+)
 PLAYBACK_BUILD_SECONDS = Histogram(
     'omi_playback_build_seconds',
     'Cold playback build duration',

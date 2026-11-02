@@ -9604,6 +9604,16 @@
               }
             ]
           },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recorded_end": {
             "anyOf": [
               {
@@ -10994,6 +11004,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
               },
               {
                 "type": "null"
@@ -27691,6 +27711,41 @@
         ],
         "title": "RecommendationSubjectKind",
         "type": "string"
+      },
+      "RecordAudioPartial": {
+        "description": "Available transcript is incomplete; this never certifies a complete seal.",
+        "properties": {
+          "applied_generation": {
+            "default": 0,
+            "title": "Applied Generation",
+            "type": "integer"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "tail_lagging",
+              "budget_limit",
+              "tail_lost_or_unproven"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RecordAudioPartial",
+        "type": "object"
       },
       "RecordLlmUsageBucketRequest": {
         "properties": {

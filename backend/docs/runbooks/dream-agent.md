@@ -294,7 +294,10 @@ and compliance stay with their owning pipelines. See
 ## Operations and evidence
 
 Internal OIDC routes are `POST /v2/dream-agent/sweep` and
-`POST /v2/dream-agent/canary`. Owner-authenticated routes are
+`POST /v2/dream-agent/canary`. The production sweep scheduler targets
+`backend-sync-backfill` with that service's sync-jobs OIDC audience; its
+half-hour cadence, drain and Dream behavior are unchanged. The canary keeps
+its existing target. Owner-authenticated routes are
 `GET /v1/dream/runs` and `POST /v1/dream/runs`; they never accept another UID.
 Count metrics cover outcomes, size buckets, turns, tools, rejection reasons,
 successful resubmits, verifier outcomes, applied/undone kinds, cache usage and

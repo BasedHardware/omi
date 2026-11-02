@@ -14683,9 +14683,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get episodeOnThisPhone => 'या फोनवर';
 
   @override
-  String get liveCardTitle => 'लाइव्ह';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'अंतिम ट्रान्स्क्रिप्ट सुमारे $duration मागे आहे';
   }
@@ -14700,7 +14697,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'सुरक्षित रेकॉर्ड होत आहे';
 
   @override
-  String get livePreviewOnPhoneDivider => 'या फोनवर लाइव्ह';
+  String get livePreviewOnPhoneDivider => 'आत्ताच, या फोनवर';
 
   @override
   String get livePreviewTurnOnLiveText => 'लाइव्ह मजकूर सुरू करा';
@@ -14943,21 +14940,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count भाग',
-      many: '$count भाग',
-      few: '$count भाग',
-      two: '$count भाग',
-      one: '$count भाग',
-      zero: '$count भाग',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return '$app अॅपमध्ये मेसेज पाठवा. Omi ला तो मिळताच ही स्क्रीन अपडेट होईल.';
   }
@@ -14966,4 +14948,28 @@ class AppLocalizationsMr extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'नवीन कोड मिळवा आणि तो $app अॅपमधून पाठवा.';
   }
+
+  @override
+  String get episodeWritingNotes => 'नोट्स लिहीत आहे…';
+
+  @override
+  String get episodeWritingNotesDetail => 'आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time पर्यंत · संपल्यावर पूर्ण नोट्स';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time पर्यंत ट्रान्सक्राइब झाले';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration जतन केले';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.';
 }

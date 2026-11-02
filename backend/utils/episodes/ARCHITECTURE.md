@@ -269,6 +269,11 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
   Runs on a small background pool, one run per episode at a time; never raises.
+- `project_episodes` leaves out a member that closed in under a minute with no notes
+  because it fell under the notes floor, unless the user curated it. Lookups and
+  search still reach it. Kill switch `HOME_HIDE_BELOW_FLOOR_ROWS` (on unless set off, read
+  per request; changing it takes a new backend revision). Telemetry:
+  `omi_episode_home_members_total{outcome}`.
 - Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
   notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
   `omi_episode_compose_seconds`; usage adds `composer_*` counters.

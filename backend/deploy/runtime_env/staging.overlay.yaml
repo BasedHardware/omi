@@ -91,6 +91,10 @@ cloud_run:
     ENRICHMENT_TASKS_QUEUE: staging-enrichment
     ENRICHMENT_TASKS_HANDLER_URL: '{run_url:backend-sync}/v2/enrichment/run'
     ENRICHMENT_TASKS_OIDC_AUDIENCE: '{run_url:backend-sync}/v2/enrichment/run'
+    # Plan C8 provider-STT wakes: prod's handler is backend-integration; staging's own twin serves them here
+    # (the queue name maps through queue_map).
+    PROVIDER_STT_TASKS_HANDLER_URL: '{run_url:backend-integration}'
+    PROVIDER_STT_TASKS_OIDC_AUDIENCE: '{run_url:backend-integration}'
     FIREBASE_SIGNER_SERVICE_ACCOUNT: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
     # Vendor spend caps (staging uses dev's test keys).
     SONIOX_MONTHLY_CEILING_USD: '50'

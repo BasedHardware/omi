@@ -57,6 +57,7 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_CARRY_ON_SESSION_END',
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
+    'HOME_HIDE_BELOW_FLOOR_ROWS',
 }
 
 SCOPE = (
@@ -69,6 +70,7 @@ SCOPE = (
     'config/prerecorded_*.py',
     'config/live_stt_*.py',
     'config/transcription_final_pass.py',
+    'utils/pusher_audio_projection.py',
 )
 
 

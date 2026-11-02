@@ -249,7 +249,12 @@ async def test_batch_drains_workers_on_failure_deadline_or_caller_cancel(monkeyp
             assert error.value.failure_class == expected
             assert error.value.upstream_http_status == (503 if failure == 'http' else None)
     assert active == 0
-    assert len(calls) == 8  # No queued work started after a terminal failure.
+    # The shared deadline may expire during startup, before eight requests
+    # reach the handler. In every case terminal failure starts no queued work.
+    if failure == 'deadline':
+        assert 0 <= len(calls) <= 8
+    else:
+        assert len(calls) == 8
 
 
 @pytest.mark.asyncio

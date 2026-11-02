@@ -160,9 +160,28 @@ def test_sweep_rotates_exhausted_task_name(state, monkeypatch):
     assert reprocess.run(key, old, Mock(), now=2400) == 'stale'
 
 
-def test_flags_default_off(monkeypatch):
+def test_flags_default_to_serving_truth(monkeypatch):
     monkeypatch.delenv('SYNC_REPROCESS_COALESCE_ENABLED', raising=False)
     monkeypatch.delenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', raising=False)
+    monkeypatch.delenv('REPEAT_WORK_REVISION_ENABLED', raising=False)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    # Exact-input reuse is the resolved default everywhere (2026-11-01); the
+    # outbox coalesce default follows the host runtime like outbox.owns_runtime.
+    assert flags.dedupe_enabled()
+    assert not flags.coalesce_enabled()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert flags.coalesce_enabled()
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8080')
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    assert flags.coalesce_enabled()
+
+
+def test_explicit_env_is_the_kill_switch(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     assert not flags.coalesce_enabled() and not flags.dedupe_enabled()
 
 
@@ -269,50 +288,61 @@ def runtime_manifest():
     return yaml.load(path.read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
 
 
-def test_exact_input_dedupe_and_coalesce_host_pinning(runtime_manifest):
-    prod_on = {
-        # C5 2026-10-26: byte-identical exact-input reuse extends past the sync
-        # pair; time-window coalescing stays sync-only, revision reuse stays off.
-        'SYNC_REPROCESS_COALESCE_ENABLED': {'backend-sync', 'backend-sync-backfill'},
-        'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED': {
-            'backend',
-            'backend-sync',
-            'backend-sync-backfill',
-            'backend-integration',
-        },
-    }
+def test_exact_input_dedupe_and_coalesce_own_their_defaults(runtime_manifest):
+    # 2026-11-01 (repeatflags): serving truth moved into the code defaults, so no
+    # deploy surface restates the switches. Before: dedupe=true pinned on 4 Cloud Run
+    # services + both prod charts, coalesce=true on the sync pair, revision=false
+    # everywhere. After: absent everywhere; config.sync_reprocess resolves the same
+    # values (dedupe on; coalesce on prod/emulator hosts; revision off) and an
+    # explicit env var remains the kill switch.
+    switches = (
+        'SYNC_REPROCESS_COALESCE_ENABLED',
+        'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED',
+        'REPEAT_WORK_REVISION_ENABLED',
+    )
     for stage, environment in runtime_manifest['environments'].items():
         for name, service in environment['cloud_run']['services'].items():
-            env = service.get('env', {})
-            for switch, selected in prod_on.items():
-                enabled = str(env.get(switch, {}).get('value', 'false')).lower() == 'true'
-                assert enabled == (stage == 'prod' and name in selected), (stage, name, switch)
-            if name in prod_on['SYNC_REPROCESS_COALESCE_ENABLED']:
-                assert env['SYNC_REPROCESS_SETTLE_SECONDS']['value'] == '600'
+            for switch in switches:
+                assert switch not in service.get('env', {}), (stage, name, switch)
+            if name in ('backend-sync', 'backend-sync-backfill'):
+                assert service['env']['SYNC_REPROCESS_SETTLE_SECONDS']['value'] == '600'
         for name, service in environment['gke'].items():
-            for switch in prod_on:
-                assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
+            for switch in switches:
+                assert switch not in service.get('env', {}), (stage, name, switch)
     import yaml
     from pathlib import Path
 
-    listen_values = yaml.load(
-        (Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(),
-        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
-    )
-    listen_env = {entry['name']: entry.get('value') for entry in listen_values['env']}
-    assert listen_env['CONVERSATION_LLM_INPUT_DEDUPE_ENABLED'] == 'true'
-    assert listen_env['REPEAT_WORK_REVISION_ENABLED'] == 'false'
-    assert 'SYNC_REPROCESS_COALESCE_ENABLED' not in listen_env
-    # Pusher co-hosts conversation finalization with backend-listen; the
-    # co-host env-diff gate requires the reuse switch to move with it.
-    pusher_values = yaml.load(
-        (Path(__file__).resolve().parents[2] / 'charts/pusher/prod_omi_pusher_values.yaml').read_text(),
-        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
-    )
-    pusher_env = {entry['name']: entry.get('value') for entry in pusher_values['env']}
-    assert pusher_env['CONVERSATION_LLM_INPUT_DEDUPE_ENABLED'] == 'true'
-    assert pusher_env['REPEAT_WORK_REVISION_ENABLED'] == 'false'
-    assert 'SYNC_REPROCESS_COALESCE_ENABLED' not in pusher_env
+    charts = Path(__file__).resolve().parents[2] / 'charts'
+    for relative in (
+        'backend-listen/prod_omi_backend_listen_values.yaml',
+        'backend-listen/dev_omi_backend_listen_values.yaml',
+        'pusher/prod_omi_pusher_values.yaml',
+        'pusher/dev_omi_pusher_values.yaml',
+    ):
+        values = yaml.load((charts / relative).read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
+        chart_env = {entry['name'] for entry in values['env']}
+        for switch in switches:
+            assert switch not in chart_env, (relative, switch)
+
+
+def test_resolved_prod_env_is_unchanged(runtime_manifest, monkeypatch):
+    """The rendered prod env resolves to the same values the serving hosts ran.
+
+    Live baseline (ro-prod, 2026-11-01 ~17:50Z): dedupe true on backend,
+    backend-sync, backend-sync-backfill, backend-integration, backend-listen and
+    pusher; coalesce true on the sync pair (and everywhere via the default-on
+    SYNC_PROCESSING_HOLD path); revision false everywhere. Those values now come
+    from the code defaults instead of env entries.
+    """
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.delenv('REPEAT_WORK_REVISION_ENABLED', raising=False)
+    monkeypatch.delenv('SYNC_REPROCESS_COALESCE_ENABLED', raising=False)
+    monkeypatch.delenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', raising=False)
+    assert flags.dedupe_enabled() and flags.coalesce_enabled()
+    from config.repeat_work import revision_reuse
+
+    assert not revision_reuse()
 
 
 def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_manifest):

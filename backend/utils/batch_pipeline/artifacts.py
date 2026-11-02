@@ -252,6 +252,18 @@ class ArtifactStore:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""
         return self._write(item, 'audio', wav, AUDIO_LIMIT)
 
+    def stage_record_plan(self, item: WorkItem, plan: dict) -> str:
+        """Small encrypted continuation, attached to the record coordinator.
+
+        Uses the normal owner/privacy-fenced staging outbox. It contains only
+        immutable source slices and is never sent to a compute worker.
+        """
+        body = json.dumps(plan, allow_nan=False, separators=(',', ':')).encode()
+        return self._write(item, 'audio', body, RESULT_LIMIT)
+
+    def load_record_plan(self, item: WorkItem, uri: str) -> dict:
+        return json.loads(self._read(item, uri, 'audio', RESULT_LIMIT))
+
     def fetch_audio(self, item: WorkItem) -> bytes:
         body = self._read(item, item.audio_uri, 'audio', AUDIO_LIMIT)
         if body.startswith(RECORD_MAGIC):

@@ -82,6 +82,18 @@ _DEMAND_LISTEN_ONLY = frozenset(
 # Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
 # admitted jobs; this kill switch must not disable their finalization/retries.
 _RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
+# main.py owns the singleton replay pass. Pusher consumes finalizations but
+# never schedules that pass; copying this binding there would imply ownership
+# it does not have. Live admission's dispatch mode remains unchanged.
+_FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
+    {
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+    }
+)
 # main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
@@ -223,6 +235,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
             "SERVER_BATCH_ONLY_MOBILE_PERCENT",
+            # Only listen opens visibility-gated Modulate previews; pusher
+            # retains raw custody/finalization and never evaluates this cohort.
+            "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -292,7 +307,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "GCP_LOCATION",
             "GEMINI_API_KEY",
             "HOSTED_PUSHER_API_URL",
-            "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
@@ -331,7 +345,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
-    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
+    | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -356,6 +371,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
+            # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).
+            "AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT",
             "REDIS_DB_HOST",
             "TYPESENSE_HOST",
             # Process-local final-pass shadow is admitted only on the prod pusher.

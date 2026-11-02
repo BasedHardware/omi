@@ -20,10 +20,18 @@ spec:
       policies:
         - {type: Pods, value: 2, periodSeconds: 60}
     scaleDown:
-      stabilizationWindowSeconds: 300
+      # L4 stockouts run weekly-to-biweekly (vendor-routing runbook): a node
+      # released by a scale-down may be unobtainable for hours. Shed slowly and
+      # hold the warm fleet; the minReplicas floor stays standing regardless.
+      stabilizationWindowSeconds: {{ .instance.scaleDownStabilizationSeconds }}
       policies:
-        - {type: Pods, value: 1, periodSeconds: 120}
+        - {type: Pods, value: 1, periodSeconds: 600}
   metrics:
+    # HPA v2 takes the highest recommendation across metrics (max-of-two,
+    # batchdesign 2026-11-01 PR-2): the ready backlog keeps capacity through
+    # claim-chain wedges (occupancy alone sheds lanes whenever claims bind
+    # rather than flights), and GPU-chain occupancy keeps capacity through
+    # healthy drains where the backlog reads low but flights are real.
     - type: External
       external:
         metric:
@@ -37,6 +45,25 @@ spec:
           # balanced mode divides demand, instead of buying it twice.
           type: AverageValue
           averageValue: {{ .instance.capacityTarget | quote }}
+    - type: External
+      external:
+        metric:
+          name: omi_batch_pipeline_gpu_chain_busy_seconds
+          selector:
+            # Stage timers carry only the stage label (no worker_release), so
+            # the rule scopes by namespace and gates freshness per pod; a
+            # release label here would match zero series and pin the floor.
+            matchLabels:
+              namespace: {{ .Release.Namespace }}
+        target:
+          # Fleet worker_flight busy seconds per second, i.e. demand for the
+          # exclusive GPU chain each replica exists to hold. The 0.5 average
+          # is ~89% of the measured healthy per-worker chain ceiling (0.56,
+          # hpafit 2026-11-01 replay: 0 starved minutes over 24h; the prior
+          # ready-backlog metric thrashed 10-16 replicas during a stockout
+          # while GPU demand stayed under 3 GPU-equivalents).
+          type: AverageValue
+          averageValue: {{ .instance.chainTarget | quote }}
 {{- end }}
 {{- end }}
 {{- if and .Values.enabled .Values.autoscaling.enabled }}

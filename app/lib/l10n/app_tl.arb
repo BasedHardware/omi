@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "Nagsisimula ang tala kapag dumarating ang panghuling transcript.",
     "episodeOnDeviceNotesFootnote": "Nakasulat sa phone mo habang nagsasalita ka. Dumarating ang kumpletong tala kasama ng panghuling transcript.",
     "episodeOnThisPhone": "Sa phone na ito",
-    "liveCardTitle": "Live",
     "livePreviewBehind": "Naiwan ng mga {duration} ang panghuling transcript",
     "livePreviewCatchingUp": "Sumusunod na ang panghuling transcript",
     "livePreviewNoEngineBody": "Lalabas ang mga salita mo dito isa hanggang dalawang minuto pagkatapos mong sabihin.",
     "livePreviewNoEngineTitle": "Ligtas na nagre-record",
-    "livePreviewOnPhoneDivider": "Live sa phone na ito",
+    "livePreviewOnPhoneDivider": "Ngayon lang, sa teleponong ito",
     "livePreviewTurnOnLiveText": "I-on ang live text",
     "deviceCatchUpOnItsWay": "paparating na",
     "deviceCatchUpWhenOnline": "kapag online na",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "Hindi pa available ang taunang bayad para sa plan mo ngayon.",
     "yearlySwitchDoneTitle": "Taunan ka na",
     "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} bahagi} one{{count} bahagi} two{{count} bahagi} few{{count} bahagi} many{{count} bahagi} other{{count} bahagi}}",
     "chatAppsWaitingMessageIn": "Ipadala ang mensahe sa {app}. Mag-a-update ang screen na ito pagkatanggap ni Omi.",
-    "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}."
+    "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}.",
+    "episodeWritingNotes": "Isinusulat ang mga tala…",
+    "episodeWritingNotesDetail": "Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.",
+    "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",
+    "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
+    "liveAudioSaved": "{duration} na-save",
+    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload."
 }

@@ -69,6 +69,7 @@ GEOMETRY = {"Growth": (0, 5), "Activation": (5, 5), "Retention": (10, 5), "Reven
 STAT_H = 3
 STRIP_H = 1
 WALL_H = 27
+FUNNEL_H = 9
 # One value size and label size on every stat; sized so the widest value
 # ("10,287", "$72.4K") fits a three-value column at 1440 px.
 STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
@@ -357,7 +358,7 @@ def columns():
                   f"rate × 30.44). Dashed green = the cost level where margin is {MARGIN_GOAL_PCT:g}%. Same scope as "
                   "the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents "
                   "included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run "
-                  "rate and the excluded prepaid reserved dollars. Settled D−2; a day without a book snapshot "
+                  "rate and the excluded prepaid reserved dollars. Settled through D−2; D−1 and today are live estimates (est.); a day without a book snapshot "
                   "gaps the MRR line, never borrows a neighbour's.",
                   [target("health", "variableMargin", [DATE, ("costPerMonth", "Cost run rate", "number"),
                                                        ("mrr", "MRR (book)", "number"),
@@ -379,9 +380,10 @@ def columns():
         (1, margin_status()),
     ]
     health = [
-        stat("Health", ALL_IN + "Cost / day is the settled day D−2; cost / user is the 30-day all-in cost ÷ monthly users. " + QUALIFIED_MAU + "Relative % change; up is bad.",
-             [("headline", "netCost", "Cost / day", "currencyUSD", 2),
-              ("headline", "costPerMau", "Cost / user", "currencyUSD", 2)]),
+        stat("Health", ALL_IN + "All-in/day: the settled day D−2, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone). "
+                       "All-in/user: the 30-day all-in cost ÷ the window's average daily cost-active users (any cost in the 30 days; not qualified MAU). Relative % change; up is bad.",
+             [("headline", "netCost", "All-in/day", "currencyUSD", 2),
+              ("headline", "costPerMau", "All-in/user", "currencyUSD", 2)]),
         (12, chart("Cost vs revenue",
                    ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys: STT measured is the Soniox prepaid-balance delta plus measured Deepgram usage only; STT cash is Mercury vendor cash; measured SaaS (Mercury) is the daily SaaS aggregate. Modulate modelled (measured volume × committed price), STT est. (Soniox console) and SaaS est. (fixed) are sand-colored because they are not measured. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
                    [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
@@ -403,11 +405,11 @@ def columns():
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
         (10, chart("Unit economics",
-                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D−2 ÷ the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. " + QUALIFIED_MAU,
-                   [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / user", "number")], "A"),
-                    target("health", "costPerMau", [DATE, ("costPerMau", "Cost / user", "number")], "B")],
+                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). TWO DENOMINATORS, NOT A MARGIN: revenue per qualified user (Revenue / qualified user, ÷ qualified MAU) and all-in cost per cost-active user (All-in cost / cost-active user, ÷ the 30-day average of users with any cost). The users differ, so the gap between the lines is not a per-user margin. Cost = all-in 30-day cost through D−2; a day with no book snapshot breaks the revenue line rather than being drawn.",
+                   [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / qualified user", "number")], "A"),
+                    target("health", "costPerMau", [DATE, ("costPerMau", "All-in cost / cost-active user", "number")], "B")],
                    unit="currencyUSD", decimals=2, time_from="35d", soft_min=None,  # the crossover is the story
-                   overrides=[color("Revenue / user", REVENUE), color("Cost / user", COST["OpenAI"])],
+                   overrides=[color("Revenue / qualified user", REVENUE), color("All-in cost / cost-active user", COST["OpenAI"])],
                    extra=disconnect_after(1.5))),  # any missing book day is a gap
         (1, data_through()),
     ]
@@ -475,10 +477,13 @@ def margin_status():
 VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR − real monthly cost) ÷ MRR. "
                    "Real monthly cost = the trailing-7-day run rate (× 30.44) of GCP net of credits with only the "
                    "prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, "
-                   "Soniox, Modulate and Stripe fees. It excludes marketing, hardware, SaaS tooling and non-GCP "
-                   "infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: "
-                   "non-USD paying subscriptions are excluded from the figure and named with their count on the "
-                   "line below. Settled through D−2; the sparkline is the daily trailing-7d series over 60 days. "
+                   "Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe "
+                   "fees. The development project's GCP is excluded and shown on the status line. It excludes "
+                   "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
+                   "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
+                   "and named with their count on the status line. The headline is the live estimate (est.) for "
+                   "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
+                   "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
                    "headline shows no value (no MRR book), never the previous day's margin. The line below names "
                    "each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
@@ -490,9 +495,9 @@ def variable_margin_stat():
     The reducer is `last`, NOT `lastNotNull`: a day without an MRR book
     snapshot nulls that day's margin, and the headline must show that absence
     (the explicit no-value marker) rather than an older non-null margin."""
-    panel = {"type": "stat", "title": "Variable margin", "description": VARIABLE_MARGIN, "datasource": DS,
+    panel = {"type": "stat", "title": "Variable margin (live est.)", "description": VARIABLE_MARGIN, "datasource": DS,
              "targets": [target("health", "variableMargin", [("marginPct", "Variable margin", "number")])],
-             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no MRR book",
+             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no live est.",
                                           # Below the goal is red; at/above is green.
                                           "color": {"mode": "thresholds"},
                                           "thresholds": {"mode": "absolute", "steps": [
@@ -514,9 +519,11 @@ def variable_margin_status():
     Mercury cash / dated estimate), with missing or stale lines named — e.g.
     "Soniox: n/a since …" — never a silent undercount."""
     panel = data_through()
-    panel["description"] = ("Variable margin's data-through day, the MRR book's source (FinOps plan book, USD-only, "
+    panel["description"] = ("First line: the live estimate through today (est.) and the settled D−2 margin with the "
+                            "variance of the stored live days against it (live − settled, 7-day window). Then the "
+                            "variable margin's data-through day, the MRR book's source (FinOps plan book, USD-only, "
                             "non-USD paying subscriptions excluded with their count) and the source of each "
-                            "in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, Stripe fees. "
+                            "in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, OpenRouter, Pinecone, Stripe fees. "
                             "Soniox coverage is aggregated over the whole 7-day window (measured / est. / "
                             "gap-spread day counts). A line with no source is named (n/a), a dated estimate "
                             "carries its read date and goes stale by its own threshold.")
@@ -588,6 +595,36 @@ def curve_options(panel):
     d["noValue"] = "Cohorts still filling"  # an empty frame, not "Cannot visualize data"
 
 
+def funnel_row():
+    """Below the TV's fixed wall: a full-width row reached by scrolling."""
+    proxy = ("Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as "
+             "organic, and pairing is itself an early success, so the gap between the two is overstated. ")
+    series_colors = [color("Device", MAGENTA), color("Organic", NEUTRAL)]
+    funnel = chart("Funnel · device vs organic",
+                   proxy + "Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old "
+                   "enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the "
+                   "clients that report it. Install is not shown because PostHog sees nobody before sign-up; first "
+                   "summary is not shown because it has no event.",
+                   [target("activation", "funnel", [("step", "Step", "string"), ("Device", "Device", "number"),
+                                                    ("Organic", "Organic", "number")])],
+                   unit="percent", decimals=0, kind="barchart", overrides=series_colors,
+                   extra=barchart_options(max_value=100, value_size=13))
+    weekly = chart("Activated · device vs organic",
+                   proxy + "Week-one activation for each matured weekly cohort, dated by its last day.",
+                   [target("activation", "funnelWeekly", [DATE, ("Device", "Device", "number"),
+                                                          ("Organic", "Organic", "number")])],
+                   unit="percent", decimals=0, soft_min=0, time_from="60d", overrides=series_colors)
+    platforms = chart("Funnel by platform",
+                      proxy + "Week-one activation in the latest matured weekly new-user cohort, by the platform users "
+                      "first arrived on, with its size in the label. Small platforms move a lot week to week.",
+                      [target("activation", "funnelPlatforms", [("platform", "Platform", "string"),
+                                                                ("Device", "Device", "number"),
+                                                                ("Organic", "Organic", "number")])],
+                      unit="percent", decimals=0, kind="barchart", overrides=series_colors,
+                      extra=barchart_options(horizontal=True, max_value=100, value_size=13))
+    return [(11, funnel), (7, weekly), (6, platforms)]
+
+
 def build_wall_board():
     panels = []
     for name, items in columns().items():
@@ -602,6 +639,11 @@ def build_wall_board():
             panels.append({**panel, "gridPos": {"x": x, "y": y, "w": w, "h": h}})
             y += h
         assert y == WALL_H, (name, y)  # every column fills the TV exactly, no scroll
+    x = 0
+    for w, panel in funnel_row():
+        panels.append({**panel, "gridPos": {"x": x, "y": WALL_H, "w": w, "h": FUNNEL_H}})
+        x += w
+    assert x == 24
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
     return {"uid": "omi-tv-v2", "title": "Omi TV · v3", "schemaVersion": 39, "version": 1, "timezone": "utc",

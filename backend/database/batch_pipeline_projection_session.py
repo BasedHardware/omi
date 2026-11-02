@@ -219,6 +219,8 @@ class ProjectionSession:
             or not (
                 self.entry.get('protocol_version') == 1
                 or self.entry.get('protocol_version') == 2
+                and self.entry.get('projection_release_version') == 1
+                or self.entry.get('protocol_version') == 2
                 and checkpoint(self.entry)
                 or self.entry.get('protocol_version') == 2
                 and self.entry.get('lineage_quarantine_version') == 1
@@ -387,11 +389,11 @@ class ProjectionSession:
                     self.store.ref('jobs', self.segment_id),
                     {'conversation_ids': firestore.ArrayUnion(output_ids)},
                 )
-            if self.part_index != self.part_count - 1:
+            if len(parts) != self.part_count:
                 transaction.update(self.result_ref, changes)
                 return receipt
             summary = {
-                **receipt,
+                **parts[str(self.part_count - 1)],
                 'state': 'ready' if all(part['state'] == 'ready' for part in parts.values()) else 'persisted',
                 'speech_seconds': max(
                     0.0,
@@ -424,6 +426,8 @@ class ProjectionSession:
                 ),
             )
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
+            if not held and self.entry.get('projection_redriven_at'):
+                changes['projection_release_attempts'] = 0
             transaction.update(self.result_ref, changes)
         else:
             transaction.update(
@@ -433,6 +437,11 @@ class ProjectionSession:
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
+                    **(
+                        {'projection_release_attempts': 0}
+                        if not held and self.entry.get('projection_redriven_at')
+                        else {}
+                    ),
                 },
             )
         # A released held unit re-enters projection behind the watermark;

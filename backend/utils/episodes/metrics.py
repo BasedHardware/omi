@@ -14,6 +14,8 @@
   (``omi_episode_client_requests_total``)
 - closed-episode composer runs by outcome and their latency
   (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
+- Home list members shown and hidden as below the notes floor
+  (``omi_episode_home_members_total``)
 """
 
 from __future__ import annotations
@@ -167,6 +169,13 @@ EPISODE_COMPOSE_SECONDS = _reuse_or_create(
     ['outcome'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
 )
+HOME_MEMBER_OUTCOMES = frozenset({'shown', 'hidden_below_floor'})
+EPISODE_HOME_MEMBERS_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_episode_home_members_total',
+    'Conversations considered for Home list rows by outcome. Never labeled by uid.',
+    ['outcome'],
+)
 CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
 CLIENT_REQUEST_OUTCOMES = frozenset({'admitted', 'channel_closed', 'not_admitted'})
 EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
@@ -211,6 +220,8 @@ def _prime() -> None:
         for outcome in COMPOSE_OUTCOMES:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+        for outcome in HOME_MEMBER_OUTCOMES:
+            EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label(outcome, HOME_MEMBER_OUTCOMES))
         for channel in CLIENT_CHANNELS:
             for outcome in CLIENT_REQUEST_OUTCOMES:
                 EPISODE_CLIENT_REQUESTS_TOTAL.labels(channel=channel, outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES))
@@ -302,5 +313,16 @@ def record_compose(outcome: str, seconds: float) -> None:
     try:
         EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
         EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
+    except Exception:
+        pass
+
+
+def record_home_members(*, shown: int, hidden: int) -> None:
+    """Aggregate only, so the fleet effect of the below-floor hide stays visible."""
+    try:
+        if shown:
+            EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('shown', HOME_MEMBER_OUTCOMES)).inc(shown)
+        if hidden:
+            EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('hidden_below_floor', HOME_MEMBER_OUTCOMES)).inc(hidden)
     except Exception:
         pass

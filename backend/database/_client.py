@@ -119,6 +119,23 @@ def _install_document_read_probe() -> None:
 _install_document_read_probe()
 
 
+def _install_document_write_probe() -> None:
+    """Count every committed Firestore write by collection, caller and origin.
+
+    Installed before the commit-boundary patches below, so the transport wrapper
+    sees each request as sent, including the writes those patches append.
+    """
+    try:
+        from database.firestore_write_probe import install_document_write_probe
+    except ImportError:
+        return
+
+    install_document_write_probe()
+
+
+_install_document_write_probe()
+
+
 def _install_action_item_write_fences() -> None:
     # Match the SDK read probe's import-isolation seam. No clients or IO here.
     try:
@@ -151,6 +168,21 @@ def _install_list_projection_writer() -> None:
 
 
 _install_list_projection_writer()
+
+
+def _install_batch_privacy_write_fence() -> None:
+    # Legacy bare-Python hygiene runners replace Firestore with a file-less
+    # ModuleType stub (there is no real SDK/write surface to fence there).
+    if not getattr(firestore, '__file__', None):
+        return
+    # This fence is mandatory for memo-enabled readers. Do not silently skip an
+    # ImportError and leave a process capable of unfenced customer-data writes.
+    from database.batch_privacy_write_fence import install_write_fence
+
+    install_write_fence()
+
+
+_install_batch_privacy_write_fence()
 
 
 _firestore_client = None

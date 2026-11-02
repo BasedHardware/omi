@@ -400,6 +400,7 @@ def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
 
     monkeypatch.setattr(service.jobs_db, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(service, '_publish_job_metrics', lambda **kw: None)
     monkeypatch.setattr(
         service.jobs_db,

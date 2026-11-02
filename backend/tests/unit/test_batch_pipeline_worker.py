@@ -117,6 +117,55 @@ def test_vad_silence_skips_models_but_persists_result():
     assert saved['a']['speech_spans'] == []
 
 
+@pytest.mark.parametrize('language,route', [('en', 'parakeet'), ('vi', 'blocked'), (None, 'blocked')])
+@pytest.mark.parametrize('failure', ['vad_call', 'vad_windows'])
+def test_route_precedes_vad_failure_without_claiming_asr(monkeypatch, caplog, language, route, failure):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
+    caplog.set_level(logging.INFO)
+
+    def vad(_):
+        routes = [r.message for r in caplog.records if 'event=batch_language_route' in r.message]
+        assert len(routes) == 1 and f'route={route}' in routes[0]
+        if failure == 'vad_call':
+            raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+        return [(3, 4)]  # speech_windows rejects bounds on a two-second buffer.
+
+    worker, words, saved, *_ = setup_worker(language_of=lambda _: language, vad=vad)
+    result = worker.process_batch([item()])
+    assert len(result) == 1 and isinstance(result[0], ValidationFailureWork)
+    assert result[0].reason == 'vad_bounds'
+    assert not words.calls and not saved
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+
+
+@pytest.mark.parametrize('shadow', [False, True])
+def test_route_once_on_success_and_no_route_for_shadow(caplog, shadow):
+    caplog.set_level(logging.INFO)
+    worker, words, *_ = setup_worker()
+    assert worker.process_batch([replace(item(), shadow=shadow)])[0].outcome == 'success'
+    assert words.calls
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == int(not shadow)
+
+
+def test_route_precedes_packed_segmentation_and_vad_failure(caplog):
+    caplog.set_level(logging.INFO)
+
+    def segment(samples):
+        assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+        return ['features']
+
+    def vad(samples, features):
+        raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+
+    flight = SimpleNamespace(segment=segment, vad_spans=vad)
+    worker, words, saved, *_ = setup_worker(flight_models=flight)
+    result = worker.process_batch([item()])
+    assert len(result) == 1 and isinstance(result[0], ValidationFailureWork)
+    assert result[0].reason == 'vad_bounds'
+    assert not words.calls and not saved
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+
+
 def test_failure_is_not_silence_and_siblings_survive():
     worker, _, _, _, _, failures = setup_worker(decode=lambda i: Samples(99) if i.segment_id == 'bad' else Samples(2))
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('ok')])] == ['ok']
@@ -676,6 +725,16 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
     assert not words.calls and failures == [('a', 'ValueError')]
 
 
+def test_unit_ceiling_ignores_admission_clock_noise_below_one_frame():
+    # Admitted record durations are epoch-clock differences; the decoded
+    # sample count, not float noise, decides whether a unit fits the pool.
+    worker, _, saved, _, _, failures = setup_worker(config=ProviderConfig(max_unit_seconds=2))
+    assert worker.process_batch([item(duration=2 + 4.76837158203125e-07)])
+    assert 'a' in saved and not failures
+    with pytest.raises(ValueError, match='dedicated batch'):
+        worker.process_batch([item('b', duration=2 + 1 / 16000)])
+
+
 def test_pool_defaults_and_unsafe_config(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'shared_live')
     monkeypatch.delenv('BATCH_PIPELINE_UNIT_SECONDS', raising=False)
@@ -923,6 +982,8 @@ async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     strict = Mock(return_value=[{'start': 0.25, 'end': 0.5}] if speech else [])
     monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    # Full shadow sampling keeps the record-only inspection in the expected count.
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
     provider = Mock()
     provider.transcribe_batch.side_effect = lambda samples: [[] for _ in samples]
     retry = Mock(return_value=[])
@@ -940,7 +1001,7 @@ async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch
     await pump.run_once()
     provider.transcribe_batch.assert_called_once()
     retry.assert_called_once()
-    assert strict.call_count == int(enabled)
+    assert strict.call_count == 1 + int(enabled)  # one record-only shadow inspection
     if enabled and not speech:
         assert store.rows['jobs', 'a']['state'] == 'committed'
         assert store.rows['results', 'a']['result']['outcome'] == 'silence'

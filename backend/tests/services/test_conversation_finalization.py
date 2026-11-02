@@ -28,6 +28,7 @@ def mock_dependencies(monkeypatch):
     )
     mocks = {
         "is_enabled": mock.Mock(return_value=True),
+        "is_configured": mock.Mock(return_value=True),
         "publish_metrics": mock.Mock(),
         "get_stale_after": mock.Mock(return_value="stale_after"),
         "get_candidates": mock.Mock(return_value=[]),
@@ -38,6 +39,7 @@ def mock_dependencies(monkeypatch):
         "inc_retries": mock.Mock(),
     }
     monkeypatch.setattr(conversation_finalization, "is_listen_finalization_dispatch_enabled", mocks["is_enabled"])
+    monkeypatch.setattr(conversation_finalization, "is_listen_finalization_tasks_configured", mocks["is_configured"])
     monkeypatch.setattr(conversation_finalization, "_publish_job_metrics", mocks["publish_metrics"])
     monkeypatch.setattr(
         conversation_finalization.jobs_db, "get_finalization_reconcile_stale_after", mocks["get_stale_after"]
@@ -58,6 +60,7 @@ def mock_dependencies(monkeypatch):
 
 def test_reconcile_listen_finalization_jobs_disabled(mock_dependencies):
     mock_dependencies["is_enabled"].return_value = False
+    mock_dependencies["is_configured"].return_value = False
 
     result = reconcile_listen_finalization_jobs()
 
@@ -70,6 +73,7 @@ def test_reconcile_listen_finalization_jobs_disabled(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
     mock_dependencies["get_candidates"].assert_not_called()
@@ -89,6 +93,7 @@ def test_reconcile_listen_finalization_jobs_query_fails(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 1,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
 
@@ -107,6 +112,7 @@ def test_reconcile_listen_finalization_jobs_skips_invalid_job_id(mock_dependenci
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies["claim_replay"].assert_not_called()
     mock_dependencies["publish_metrics"].assert_called_once()
@@ -127,6 +133,7 @@ def test_reconcile_listen_finalization_jobs_claim_fails(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
 
@@ -149,6 +156,7 @@ def test_reconcile_listen_finalization_jobs_claim_not_queued(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     assert mock_dependencies["claim_replay"].call_count == 2
     mock_dependencies["enqueue_job"].assert_not_called()
@@ -171,6 +179,7 @@ def test_reconcile_listen_finalization_jobs_enqueue_fails(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies["record_reconciliation"].assert_called_once_with('enqueue_failed')
     mock_dependencies["record_fallback"].assert_called_once()
@@ -192,6 +201,7 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies["claim_replay"].assert_called_once_with(
         "job1", stale_after="stale_after", firestore_client=None, max_attempts=5
@@ -221,6 +231,7 @@ def test_reconcile_skips_generation_already_dispatched_by_another_tick(mock_depe
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
     }
     mock_dependencies['enqueue_job'].assert_not_called()
 

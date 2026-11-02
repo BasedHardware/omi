@@ -1,10 +1,11 @@
-"""Durable live/desktop admission, drained on the existing CPU reconciliation loop.
+"""Durable live/desktop admission, drained independently of reconciliation.
 
 Capture reserves its route in the existing conversation create. Finalization
 registers a privacy-fenced pending job before closing its own durable job. No
 Firestore reads are added to audio frames, provisional segments or pusher flush.
 """
 
+import asyncio
 from dataclasses import replace
 from collections.abc import Generator
 from typing import Any
@@ -15,7 +16,9 @@ import os
 import time
 
 from config.policy import resolve_batch_policy
-from config.record_audio import require_record_audio_barrier
+from config.audio_archive import derived_audio_bucket
+from config.record_audio import require_record_audio_barrier, record_identity
+from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -29,6 +32,8 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
 from utils.batch_pipeline.record_barrier import validate_record_tail
+from utils.batch_pipeline.record_language import prove_manifest
+from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.local_storage import create_storage_client
@@ -39,11 +44,8 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-
-
-def record_identity(uid: str, conversation_id: str) -> tuple[str, str]:
-    content = hashlib.sha256(f'record-v1:{uid}:{conversation_id}'.encode()).hexdigest()
-    return content, hashlib.sha256(f'{content}:0'.encode()).hexdigest()
+# Leave headroom in the shared sync (16), DB (32) and storage (128) pools.
+RECORD_DRAIN_CONCURRENCY = 4
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -140,11 +142,13 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key, *, diagnostics=None
+    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units; earlier retained objects own overlapping frames."""
     trim_divergent = overlap_trim_enabled()
-    allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    unit_frames = (UNIT_SECONDS if partial else 3600) * 16000
+    reference_limit = UNIT_REFERENCES if partial else MAX_REFERENCES
+    allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
     references, start, end, previous_pcm = [], None, None, b''
     capture_origin = None
     for chunk in chunks:
@@ -199,13 +203,13 @@ def retained_record_units(
             if start is None:
                 start = capture + offset / 32000
             position = round((capture + offset / 32000 - start) * 16000)
-            if position >= 3600 * 16000:
+            if position >= unit_frames or partial and len(references) >= reference_limit:
                 if end is None:
                     raise ValueError('unit has no capture end')
                 yield start, end - start, references
                 references, start = [], None
                 continue
-            frames = min(len(pcm[offset:]) // 2, 3600 * 16000 - position)
+            frames = min((len(pcm) - offset) // 2, unit_frames - position)
             references.append(
                 {
                     **ref,
@@ -219,7 +223,7 @@ def retained_record_units(
                 raise ValueError('retained capture reference budget exceeded')
             offset += frames * 2
             end = capture + offset / 32000
-            if position + frames == 3600 * 16000:
+            if position + frames == unit_frames:
                 yield start, end - start, references
                 references, start = [], None
         previous_pcm = comparison_pcm
@@ -252,6 +256,8 @@ async def admit_recording(store, pending, *, now=None):
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
+    if current.get('record_audio_partial'):
+        return await drain_partial(store, pending, current, client, artifacts, retained_record_units, now=now)
     # A failed raw-archive listing raises (drain retries in 60 s) rather than
     # admitting a recording whose later packs are silently missing.
     chunks = await run_blocking(
@@ -327,8 +333,8 @@ async def admit_recording(store, pending, *, now=None):
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': conversation_id,
-            # Native record admission already requires a fully supported
-            # declared language profile. Preserve that proof in its manifest.
+            # Declared profiles preserve their proof. Auto capture must replace
+            # these fields with independent whole-unit audio proof below.
             'stt_language': binding.language or '',
             'stt_language_evidence': 'declared',
             'stt_language_confidence': 1.0,
@@ -340,6 +346,8 @@ async def admit_recording(store, pending, *, now=None):
             'references': refs,
             'context': context,
         }
+        if row.get('server_batch_only') is True:
+            manifest = await prove_manifest(store, artifacts, item, manifest)
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
@@ -371,23 +379,59 @@ async def admit_recording(store, pending, *, now=None):
 
 
 async def drain_recordings(store):
-    segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
-    for segment in segments:
+    started = time.monotonic()
+    segments, partial_count = [], 0
+
+    async def drain_one(segment):
+        nonlocal partial_count
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
-            continue
+            return
+        partial_count += bool(pending.get('partial_coordinator'))
         try:
             await admit_recording(store, pending)
-        except BatchPrivacyBlocked:
+            if not pending.get('partial_coordinator'):
+                return
+        except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
-            continue
+            if pending.get('partial_coordinator'):
+                record_partial_failure(error, privacy=True, run=pending.get('partial_run'))
+            return
         except Exception as error:
+            if pending.get('partial_coordinator'):
+                record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
 
-            def defer(tx):
-                latest = tx.get('jobs', segment)
-                if latest.get('state') == 'record_pending':
-                    latest['available_at'] = time.time() + 60
-                    tx.put('jobs', segment, latest)
+        def defer(tx):
+            latest = tx.get('jobs', segment)
+            if latest.get('state') == 'record_pending':
+                delay = INVENTORY_POLL_SECONDS if (latest.get('partial_run') or {}).get('complete') else 60
+                latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
+                tx.put('jobs', segment, latest)
 
-            await run_blocking(db_executor, store.run, defer)
+        await run_blocking(db_executor, store.run, defer)
+
+    async def worker():
+        # next() has no await: each selected row belongs to one local worker.
+        for segment in remaining:
+            await drain_one(segment)
+
+    try:
+        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
+        remaining = iter(segments)
+        # Join every worker even on failure; a retry must not overlap unfinished
+        # work from this pass. Across replicas the existing intake/partial CAS
+        # still decides admission; selection itself never claims or expires rows.
+        results = await asyncio.gather(
+            *(worker() for _ in range(min(RECORD_DRAIN_CONCURRENCY, len(segments)))), return_exceptions=True
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+    finally:
+        logger.info(
+            'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
+            len(segments),
+            partial_count,
+            time.monotonic() - started,
+        )

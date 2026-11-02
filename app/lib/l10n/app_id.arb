@@ -4489,12 +4489,11 @@
     "episodeNotesStartWithTranscript": "Catatan dimulai saat transkrip final tiba.",
     "episodeOnDeviceNotesFootnote": "Disusun di ponselmu sementara kamu bicara. Catatan lengkap tiba bersama transkrip final.",
     "episodeOnThisPhone": "Di ponsel ini",
-    "liveCardTitle": "Langsung",
     "livePreviewBehind": "Transkrip final tertunda sekitar {duration}",
     "livePreviewCatchingUp": "Transkrip final sedang menyusul",
     "livePreviewNoEngineBody": "Kata-katamu muncul di sini satu hingga dua menit setelah kamu mengucapkannya.",
     "livePreviewNoEngineTitle": "Merekam dengan aman",
-    "livePreviewOnPhoneDivider": "Langsung di ponsel ini",
+    "livePreviewOnPhoneDivider": "Baru saja, di ponsel ini",
     "livePreviewTurnOnLiveText": "Aktifkan teks langsung",
     "deviceCatchUpOnItsWay": "dalam perjalanan",
     "deviceCatchUpWhenOnline": "saat online",
@@ -4551,7 +4550,12 @@
     "yearlySwitchUnavailable": "Pembayaran tahunan belum tersedia untuk paket Anda saat ini.",
     "yearlySwitchDoneTitle": "Anda sekarang bayar tahunan",
     "yearlySwitchDoneBody": "{amount} ditagih hari ini. Diperpanjang {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} bagian} one{{count} bagian} two{{count} bagian} few{{count} bagian} many{{count} bagian} other{{count} bagian}}",
     "chatAppsWaitingMessageIn": "Kirim pesan di {app}. Layar ini akan diperbarui segera setelah Omi menerimanya.",
-    "chatAppsCodeExpiredMessageIn": "Dapatkan kode baru lalu kirim dari {app}."
+    "chatAppsCodeExpiredMessageIn": "Dapatkan kode baru lalu kirim dari {app}.",
+    "episodeWritingNotes": "Menulis catatan…",
+    "episodeWritingNotesDetail": "Menyelesaikan transkrip dulu. Anda boleh meninggalkan halaman ini.",
+    "episodeCoversUpTo": "Mencakup hingga {time} · catatan lengkap saat selesai",
+    "liveTranscribedUpTo": "Ditranskripsi hingga {time}",
+    "liveAudioSaved": "{duration} tersimpan",
+    "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah."
 }

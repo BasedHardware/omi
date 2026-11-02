@@ -14,6 +14,7 @@ from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline import provider_stt
 from unittest.mock import Mock
 
+from config.batch_pipeline import allowance_hold_retry_seconds
 from config.policy import BatchUnitPolicy
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS
 from utils.batch_pipeline import admission  # warm its fair-use/backfill imports outside the call budget
@@ -32,6 +33,7 @@ OWNER = 'synthetic-owner'
 # Traces of the C8 simulation configs (testing/pipeline_sim/trace.py GOLDEN_CONFIGS).
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens'
 PROVIDER_GOLDENS = ('provider_stt_ja', 'provider_stt_unsupported', 'provider_stt_byok')
+RETIREMENT_GOLDENS = (*PROVIDER_GOLDENS, 'legacy_retirement_multi', 'legacy_retirement_und')
 JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
 POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100.0)
 
@@ -246,6 +248,9 @@ def test_one_paid_call_then_result_ready_and_merge_in_capture_order(world, monke
     row = job(store, 'p1')
     assert row['state'] == 'result_ready' and row['result']['outcome'] == 'success'
     assert row['provider_intent']['service'] == 'modulate' and row['provider_intent']['settled_at'] == 200.0
+    # Route proof the rollout observer reads from the job doc (no worker route log on this path).
+    assert row['stt_route']['stt_route'] == 'provider' and row['stt_route']['provider_service'] == 'modulate'
+    assert row['provider_intent']['token'] and 'failure' not in row['provider_intent']
     provider_entry = merge.commit_next(OWNER, 201.0)
     # Vendor speaker labels are used directly, so projection needs the recovered-result marker.
     assert provider_entry['segment_id'] == 'p1' and provider_entry['recovery_version'] == 1
@@ -300,18 +305,112 @@ def test_crash_after_paid_call_reconciles_without_a_second_call(world, monkeypat
     assert vendor.calls == 1 and job(store, 'p1')['state'] == 'result_ready'
 
 
-def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch):
+@pytest.mark.parametrize('stored_speech', [None, 0.0, 0.5])
+def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch, stored_speech):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
     artifacts, vendor = Artifacts(), Vendor()
     artifacts.fail_persist = True
     stage(store, artifacts, vendor).run('p1')
-    outcome = stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 0.5
+
+    def legacy_or_silence(tx):
+        row = tx.get('jobs', 'p1')
+        if stored_speech is None:
+            row['provider_intent'].pop('measured_vad_speech_seconds')
+        else:
+            row['provider_intent']['measured_vad_speech_seconds'] = stored_speech
+        tx.put('jobs', 'p1', row)
+
+    store.run(legacy_or_silence)
+    inspect = Mock(side_effect=AssertionError('reconciliation must not inspect audio'))
+    replay = stage(store, artifacts, vendor, inspect=inspect, now=200.0 + ABANDON_SECONDS + 1)
+    outcome = replay.run('p1')
     assert (outcome.outcome, outcome.provider_reason) == ('done', 'provider_failed')
     row = job(store, 'p1')
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == {'stage': 'provider', 'reason': 'abandoned_running'}
-    assert vendor.calls == 1
+    if stored_speech is None:
+        assert 'measured_held_vad_speech_seconds' not in row
+    else:
+        assert row['measured_held_vad_speech_seconds'] == stored_speech
+    # The builtin route's terminal hold stays outside recovery; duplicate
+    # deliveries neither re-download audio nor reopen a paid intent.
+    assert replay.protocol.fence.prepare('p1', OWNER, 1200.0) is None
+    assert replay.run('p1').reason == 'superseded'
+    assert vendor.calls == 1 and artifacts.fetches == 1
+    inspect.assert_not_called()
+
+
+def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+
+    def vendor(work, language, inspected, *, service):
+        row = job(store, 'p1')
+        assert row['provider_intent']['measured_vad_speech_seconds'] == 0.5
+        # A concurrent delivery cannot overwrite the winning intent's evidence.
+        losing = provider_stt.ProviderSttStore(store).start(
+            'p1', 'loser', 201.0, service, measured_vad_speech_seconds=0.0
+        )
+        assert losing['provider_intent'] == row['provider_intent']
+        return Vendor()(work, language, inspected, service=service)
+
+    assert stage(store, Artifacts(), vendor).run('p1').reason == 'processed'
+    # The stage catches vendor exceptions, including assertions in this fake.
+    # Require success so a failed pre-call assertion cannot pass as failed_held.
+    assert job(store, 'p1')['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('incoming,expected', [(None, 0.5), (0.0, 0.5), (1.0, 1.0)])
+def test_every_terminal_hold_reuses_intent_vad(world, monkeypatch, terminal, incoming, expected):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    protocol = provider_stt.ProviderSttStore(store)
+    protocol.start('p1', 'paid-once', 200.0, 'modulate', measured_vad_speech_seconds=0.5)
+    failure = {'stage': 'provider', 'reason': 'provider_failed'}
+    if terminal:
+        # Exhausted failover returns to pending with the prior intent intact.
+        def pending(tx):
+            row = tx.get('jobs', 'p1')
+            row['state'] = PENDING
+            tx.put('jobs', 'p1', row)
+
+        store.run(pending)
+        assert protocol.terminal('p1', 202.0, failure, measured_held_vad_speech_seconds=incoming)
+    else:
+        assert (
+            protocol.settle('p1', 'paid-once', 202.0, failure=failure, measured_held_vad_speech_seconds=incoming)
+            == 'settled'
+        )
+    assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
+
+
+@pytest.mark.parametrize('next_measurement,expected', [(None, 0.5), (0.0, 0.5), (1.0, 1.0)])
+def test_failover_intent_keeps_prior_vad_if_next_inspection_is_missing_or_lower(
+    world, monkeypatch, next_measurement, expected
+):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    protocol = provider_stt.ProviderSttStore(store)
+    protocol.start('p1', 'first', 200.0, 'modulate', measured_vad_speech_seconds=0.5)
+    failure = {'stage': 'provider', 'reason': 'abandoned_running'}
+    assert (
+        protocol.settle(
+            'p1',
+            'first',
+            1101.0,
+            failure=failure,
+            attempt_outcome=provider_stt.VendorAttemptOutcome.ABANDONED,
+            failover_to=('soniox',),
+        )
+        == 'failover'
+    )
+    started = protocol.start('p1', 'alternate', 1102.0, 'soniox', measured_vad_speech_seconds=next_measurement)
+    assert started['provider_intent']['measured_vad_speech_seconds'] == expected
+    assert protocol.settle('p1', 'alternate', 2003.0, failure=failure) == 'settled'
+    assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
 
 
 @pytest.mark.parametrize(
@@ -332,6 +431,8 @@ def test_vendor_failure_is_terminal_failed_held_and_never_re_enters_recovery(wor
     # Not 'held': quarantine recovery's candidate query (held/prepared/running) must not spend a second call.
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == expected
+    # Held VAD evidence from the CPU Silero inspection (SPEECH: 0.5s), as quarantine recovery records it.
+    assert row['measured_held_vad_speech_seconds'] == 0.5
     assert vendor.calls == 1
 
 
@@ -355,6 +456,8 @@ def test_invalid_audio_settles_failed_held_without_a_vendor_call(world, monkeypa
     stage(store, artifacts, vendor, inspect=broken).run('p1')
     assert vendor.calls == 0
     assert job(store, 'p1')['provider_intent']['failure'] == {'stage': 'audio_validation', 'reason': 'invalid_audio'}
+    # No inspection, no measurement: the held VAD census stays unknown rather than claiming silence.
+    assert 'measured_held_vad_speech_seconds' not in job(store, 'p1')
 
 
 def test_privacy_fence_discards_before_any_spend(world, monkeypatch):
@@ -482,6 +585,37 @@ def test_byok_golden_pins_the_ordinary_gpu_route_and_no_vendor_spend():
 def test_provider_golden_is_pinned_by_the_simulation(name):
     # test_pipeline_characterization re-runs every GOLDEN_CONFIGS entry and requires a byte-identical trace.
     assert name in GOLDEN_CONFIGS and (GOLDEN_DIR / f'{name}.json').exists()
+
+
+@pytest.fixture(scope='module')
+def retirement_traces():
+    from dataclasses import replace
+    from testing.pipeline_sim.trace import trace
+
+    return {
+        (name, mode): trace(replace(GOLDEN_CONFIGS[name](), legacy_sync=mode))
+        for name in RETIREMENT_GOLDENS
+        for mode in ('draining', 'dark')
+    }
+
+
+@pytest.mark.parametrize('name', RETIREMENT_GOLDENS)
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+def test_retirement_modes_match_the_c8_characterization_goldens(name, mode, retirement_traces):
+    assert retirement_traces[name, mode] == _golden(name)
+
+
+@pytest.mark.parametrize('name', ['legacy_retirement_multi', 'legacy_retirement_und'])
+def test_unknown_language_goldens_pin_worker_barrier_and_retained_recovery(name):
+    golden = _golden(name)
+    assert golden['segments']
+    for segment in golden['segments'].values():
+        states = [entry.split(' ')[1] for entry in segment['job_transitions']]
+        assert 'quarantined' in states
+        assert segment['paid_calls'] == 1
+        assert segment['final_job']['state'] == 'committed'
+        assert segment['final_job']['recovery_state'] == 'recovered'
+    assert all(upload['intake'] == 'admitted' and upload['conversation']['projected'] for upload in golden['uploads'])
 
 
 @pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
@@ -689,7 +823,7 @@ def dark_intake(world, monkeypatch):
 
     customer, store = world
     mode = {'value': LegacySyncMode.DRAINING}
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: mode['value'])
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: mode['value'])
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **k: store)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     user = {'language': 'en'}
@@ -705,7 +839,8 @@ def dark_intake(world, monkeypatch):
         intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
     )
     monkeypatch.setattr(intake, 'decode_units', lambda paths, max_seconds: (u for u in [unit]))
-    monkeypatch.setattr(intake, 'with_context', lambda wav, context: wav)
+    contexts = []
+    monkeypatch.setattr(intake, 'with_context', lambda wav, context: contexts.append(context) or wav)
     monkeypatch.setattr(
         intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda i, w: 'gs://synthetic/a')
     )
@@ -731,7 +866,9 @@ def dark_intake(world, monkeypatch):
     woken = []
     outbox = SimpleNamespace(wake=lambda row_id, token: woken.append((row_id, token)))
     monkeypatch.setattr(intake, 'outbox_for', lambda kind: outbox)
-    return SimpleNamespace(intake=intake, store=store, mode=mode, user=user, calls=calls, woken=woken)
+    return SimpleNamespace(
+        intake=intake, store=store, mode=mode, user=user, calls=calls, woken=woken, contexts=contexts
+    )
 
 
 @pytest.mark.asyncio
@@ -828,6 +965,47 @@ async def test_on_mode_keeps_todays_routes(dark_intake, monkeypatch):
 ROUTE_FIELDS = ('stt_route', 'provider_reason', 'provider_service')
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize('language,byok', [('en', True), ('ja', False), ('multi', False), ('und', False)])
+async def test_no_upload_class_is_refused_by_both_lanes_at_any_percent(dark_intake, monkeypatch, mode, language, byok):
+    from types import SimpleNamespace
+    from utils.rollout import runtime_percent
+    from utils.sync import legacy_dark
+
+    # Leave the deployed exclusion ON deliberately: the runtime safety backstop
+    # must work even while revisions are receiving the coupled env update.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true')
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'true')
+    monkeypatch.setattr(runtime_percent, 'cohort_bucket', lambda uid, salt: 0)
+    monkeypatch.setattr(
+        legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode(runtime_percent.legacy_sync_mode(uid))
+    )
+    dark_intake.user['language'] = language
+    for percent in range(101):
+        snapshot = SimpleNamespace(
+            legacy_sync=mode, percents={'legacy-sync': percent, 'batch-pipeline': percent}, source='firestore'
+        )
+        monkeypatch.setattr(runtime_percent, 'ramp_snapshot', lambda: snapshot)
+        dark_intake.calls.clear()
+        response = await dark_intake.intake.accept_upload(
+            **{**UPLOAD, 'byok_enabled': byok, 'policy': BatchUnitPolicy(batch_enabled=False)}
+        )
+        served = legacy_dark.current_mode(OWNER)
+        if response is None:
+            assert legacy_dark.legacy_admission_allowed(served)
+            assert percent == 0
+        else:
+            assert response.status_code == 202
+            ((items, kwargs),) = dark_intake.calls
+            assert kwargs['policy'].batch_enabled
+            assert kwargs['policy'].stt_route == ('provider' if language == 'ja' else 'parakeet')
+            assert items[0].requires_compute_admission is (language != 'ja')
+            if language in {'multi', 'und'}:
+                assert dark_intake.contexts[-1]['stt_language'] == 'und'
+
+
 def test_policy_route_fields_default_validate_and_fail_closed_on_read():
     from dataclasses import replace
 
@@ -906,14 +1084,15 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
-    receipt = admission.authorize(store, [{'segment_id': lease.item.segment_id, 'token': lease.token}], now=201.0)
+    receipt = await admission.authorize(store, [{'segment_id': lease.item.segment_id, 'token': lease.token}], now=201.0)
     if byok:
         assert receipt['allowed'] == [lease.item.segment_id]
         gate.assert_not_called()
     else:
         assert receipt == {
             'allowed': [],
-            'retry_after': {lease.item.segment_id: 60},
+            # #24271: an exhausted allowance parks for the allowance hold window, not the 60 s retry.
+            'retry_after': {lease.item.segment_id: allowance_hold_retry_seconds()},
             'held_reason': {lease.item.segment_id: 'allowance_exhausted'},
         }
 

@@ -25,8 +25,9 @@ from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, supp
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
-from routers.listen.local_preview import admit_local_preview
+from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed
 from routers.listen.demand_routing import attach_live_demand
+from routers.listen.visible_restore import attach_visible_restore
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
 from utils.observability.demand_cohort import host_cohort, telemetry_call
@@ -1201,6 +1202,9 @@ class ListenReceiver(ReplayFilterMixin):
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
     async def _drain_stt_sockets(self) -> None:
+        restore = getattr(self, 'visible_restore', None)
+        if restore is not None:
+            await restore.shutdown()
         self._resilient_closing = True
         if (recovery := getattr(self, 'recovery', None)) is not None:
             recovery.mark_client_leaving()
@@ -1316,6 +1320,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.host.server_batch_initialized = True
         if self.host.server_batch_only:
             self.cloud_live_suppressed = True
+            attach_visible_restore(self)
             if not getattr(self, '_server_batch_logged', False):
                 logger.info('event=server_batch_only_admission mode=enabled')
                 self._server_batch_logged = True
@@ -1488,6 +1493,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not getattr(self, '_cloud_live_opening', False) or getattr(self, '_deferred_open_counted', False):
             return
         self._deferred_open_counted = True
+        self._deferred_open_at = time.monotonic()  # Teardown observes the open duration.
         try:
             OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
                 deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
@@ -1499,6 +1505,9 @@ class ListenReceiver(ReplayFilterMixin):
         """Audio reached a deferred session: open the provider stream it would have had."""
 
         if getattr(self.host, 'server_batch_only', False) is True:
+            restore = getattr(self, 'visible_restore', None)
+            if restore is not None:
+                return await restore.open()
             return True
         self._cloud_live_opening = True
         self.cloud_live_suppressed = False
@@ -2062,6 +2071,10 @@ class ListenReceiver(ReplayFilterMixin):
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
         if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
+            restore = getattr(self, 'visible_restore', None)
+            if restore is not None:
+                await restore.flush(buffer)
+                return
             buffer.clear()  # PCM forwarding and raw custody run independently below.
             self._stt_buffer_start_sample = None
             return
@@ -2072,6 +2085,8 @@ class ListenReceiver(ReplayFilterMixin):
         if admission is not None and getattr(self, 'cap_paused', False) and admission.allowed(self.host.stt_service):
             if not await self.initialize_stt():
                 return
+            if not getattr(self, 'cap_paused', False):
+                self.note_deferred_stream_opened()  # No-op unless a deferred open was waiting on the cap.
         if admission is not None and not admission.packet_allowed(
             buffer, self.host.stt_service, self.host.request.sample_rate
         ):
@@ -2450,7 +2465,10 @@ class ListenReceiver(ReplayFilterMixin):
                 )
             telemetry_call(self.host, 'demand_telemetry', 'observe_visibility', payload)
             demand = getattr(self, 'live_demand', None)
-            if demand is not None:
+            restore = getattr(self, 'visible_restore', None)
+            if restore is not None:
+                restore.observe(payload)
+            elif demand is not None:
                 demand.observe(payload)
             if payload.get('mobile_batch_capability_v1') is True:
                 # Client renews its bounded authorization lease. No audio is
@@ -2799,6 +2817,7 @@ class ListenReceiver(ReplayFilterMixin):
             except Exception as error:
                 logger.warning('shutdown transport abort failed: %s', type(error).__name__)
         self._release_drained_sockets()
+        note_deferred_stream_closed(self)
 
     async def _teardown_body(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
         request = self.host.request
@@ -2886,6 +2905,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.use_custom_stt:
             await self._flush_stt_buffer(buffer, force=True)
         await self._drain_stt_sockets()
+        note_deferred_stream_closed(self)  # After the final flush, which can itself open the stream.
         if self.recovery is not None and self._replay_tail_bytes:
             REPLAY_SKIPPED.labels(source=provider_family(self._serving_provider()), successor='unknown').inc(
                 self._replay_tail_bytes / (2 * request.sample_rate)
@@ -2917,6 +2937,9 @@ class ListenReceiver(ReplayFilterMixin):
             buffer.clear()
 
     def finish(self) -> None:
+        restore = getattr(self, 'visible_restore', None)
+        if restore is not None:
+            restore.close()
         if self.recovery is not None:
             self.recovery.mark_client_leaving()
         demand = getattr(self, 'translation_demand', None)
