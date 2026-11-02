@@ -281,7 +281,24 @@ class UsageProvider with ChangeNotifier {
     await fetchSubscription(); // Sync with backend
   }
 
-  Future<void> fetchSubscription() async {
+  Future<void>? _subscriptionFetch;
+
+  /// Fetches the subscription; concurrent callers share the request in flight instead of
+  /// returning before it lands (the after-sign-up paywall gate awaits this right after sign-in,
+  /// while AppShell's own fetch is usually still running).
+  Future<void> fetchSubscription() {
+    final inflight = _subscriptionFetch;
+    if (inflight != null) return inflight;
+    final completer = Completer<void>();
+    _subscriptionFetch = completer.future;
+    _fetchSubscription().whenComplete(() {
+      _subscriptionFetch = null;
+      completer.complete();
+    });
+    return completer.future;
+  }
+
+  Future<void> _fetchSubscription() async {
     if (_isSubscriptionLoading) return;
 
     final generation = _sessionGeneration;

@@ -9,7 +9,6 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
-import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -95,6 +94,7 @@ class NotificationUtil {
   static const String captureRecoveryPushType = 'capture_recovery';
   static const String captureRecoveryRepairAction = 'repair_device';
   static const String captureRecoveryRoute = '/settings/device';
+  static const String chatAnswerPushType = 'chat_answer';
 
   static String? routeFromFcmData(Map<String, dynamic> data) {
     final pushType = data['push_type'];
@@ -102,13 +102,17 @@ class NotificationUtil {
       if (pushType == captureRecoveryPushType && data['action'] == captureRecoveryRepairAction) {
         return captureRecoveryRoute;
       }
+      // A chat answer opens the chat that sent it (#5126); its navigate_to may only name a chat.
+      if (pushType == chatAnswerPushType) {
+        final route = navigateToFromFcmData(data);
+        return route != null && route.startsWith('/chat/') ? route : null;
+      }
       return null;
     }
     return navigateToFromFcmData(data);
   }
 
   static Future<bool> handleFcmDataTap(Map<String, dynamic> data, {RecordReference? objectId}) async {
-    if (ProactivityPush.matches(data)) return ProactivityPush.handle(data);
     final route = routeFromFcmData(data);
     if (route == null) return false;
     if (data['push_type'] == captureRecoveryPushType) {

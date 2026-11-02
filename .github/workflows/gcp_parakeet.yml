@@ -19,13 +19,26 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
 # Serialize Helm writers to this environment's Parakeet release.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: deploy-gke-parakeet-${{ github.event.inputs.environment }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-gke-parakeet-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: parakeet
   REGION: us-central1
 

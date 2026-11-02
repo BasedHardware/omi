@@ -4,24 +4,52 @@ from dataclasses import asdict
 import hashlib
 import math
 import logging
+import random
+from threading import Lock
 import uuid
+from time import monotonic
 
-from database.batch_pipeline_store import Store, Transaction
+from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts, head_priority_enabled
+from database.firestore_transaction_retry import FirestoreContentionExhausted
+from config.batch_pipeline import (
+    FRESH_CAPTURE_LAG_SECONDS,
+    pull_multi_lease_enabled,
+    scheduler_control_key,
+    shard_spread_enabled,
+)
+from config.policy import resolve_batch_policy
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
+from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
+from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
-from utils.batch_pipeline.errors import validate_worker_failure
+from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
+from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+# The walk visits another queue only below this many buffered writes (flush
+# refuses 450); a stop commits the rotations so far and the next pull resumes.
+PULL_WRITE_HEADROOM = 300
 HEAD_OWNER_BUDGET = 64
+CONTENTION_BACKOFF_CAP_SECONDS = 30.0
+PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
+
+
+def _admission_retry_delay(value: object, streak: int) -> float:
+    minimum = min(300, 30 * 2 ** (streak - 1))
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return minimum
+    if isinstance(value, float) and not math.isfinite(value):
+        return minimum
+    return max(minimum, min(86400, value))
 
 
 def owner_key(owner_id: str) -> str:
@@ -52,9 +80,66 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
-    return job['duration_seconds'] <= max_seconds and not (
+    return within_unit_ceiling(job['duration_seconds'], max_seconds) and not (
         shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
     )
+
+
+def _park_reason(job: dict, max_seconds: float, shared_gpu: bool) -> str:
+    """Bounded label for a head this pull cannot lease; privacy is labeled by the caller."""
+    if not within_unit_ceiling(job['duration_seconds'], max_seconds):
+        return 'pool_duration'
+    if shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span':
+        return 'pool_unit_kind'
+    return 'shared_live_policy'
+
+
+class _OwnWrites:
+    """A pull transaction whose index queries see the jobs it already wrote.
+
+    Firestore and Postgres transactions buffer writes until commit, and their
+    index queries read the snapshot. Once one transaction leases or splices
+    several units, a later query must not return those units as still ready.
+    """
+
+    def __init__(self, tx: Transaction):
+        self._tx, self._jobs, self._written = tx, set(), set()
+
+    def __getattr__(self, name):
+        return getattr(self._tx, name)  # Store-specific helpers pass through unchanged.
+
+    def get(self, table: str, key: str) -> dict:
+        return self._tx.get(table, key)
+
+    def put(self, table: str, key: str, value: dict) -> None:
+        if table == 'jobs':
+            self._jobs.add(key)
+        self._written.add((table, key))
+        self._tx.put(table, key, value)
+
+    def buffered_writes(self) -> int:
+        return len(self._written)
+
+    def patch(self, table: str, key: str, fields: dict) -> None:
+        self._tx.patch(table, key, fields)
+
+    def _own(self, job: dict | None) -> dict | None:
+        return self._tx.get('jobs', job['segment_id']) if job and job['segment_id'] in self._jobs else job
+
+    def first_pending(self, owner_key: str) -> dict | None:
+        return self._own(self._tx.first_pending(owner_key))
+
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._own(self._tx.first_ready_pending(owner_key))
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        return self._own(self._tx.ready_predecessor(owner_key, priority, segment_id))
+
+    def service_frontier(self, priority: int) -> float:
+        return self._tx.service_frontier(priority)
+
+    def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        return self._tx.check_privacy(uid, conversation_ids, expected_generation)
 
 
 def _prefer_merge_head(
@@ -67,6 +152,7 @@ def _prefer_merge_head(
     now: float,
     max_seconds: float,
     shared_gpu: bool,
+    candidates=None,
 ) -> dict:
     """Promote an indexed capture head with O(1) queries, independent of FIFO depth.
 
@@ -92,7 +178,7 @@ def _prefer_merge_head(
     ):
         return job
     previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
-    if not previous or previous.get('next') != head['segment_id']:
+    if not previous or previous.get('state') != 'ready' or previous.get('next') != head['segment_id']:
         observations.append(('head_not_found', None))
         return job
     try:
@@ -103,6 +189,8 @@ def _prefer_merge_head(
                 linked.get('privacy_generation'),
             )
     except BatchPrivacyBlocked:
+        return job
+    if not stage_in_transaction(tx, head, 'scheduler', observations=observations, candidates=candidates).head_priority:
         return job
     previous['next'] = head['next']
     tx.put('jobs', previous['segment_id'], previous)
@@ -131,21 +219,29 @@ def _defer(job: dict, now: float, reason: str) -> None:
 
 
 class Scheduler:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch'):
+    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch', worker_id: str = ''):
         if pool not in {'batch', 'live'}:
             raise ValueError('pool must be batch or live')
         self.store = store
         self.metrics = metrics
         self.pool = pool
-        self.max_attempts = max_worker_attempts()
+        self.worker_id = worker_id or uuid.uuid4().hex
+        self._contention_failures = 0
+        self._contention_backoff_until = 0.0
+        self._contention_generation = 0
+        self._contention_lock = Lock()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
 
     @staticmethod
-    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float) -> bool:
+    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
+        if item.shadow:
+            raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
-        immutable = {**asdict(item), 'priority': int(item.priority)}
+        # Live jobs are never shadow; keep their documents free of the field.
+        immutable = {key: value for key, value in asdict(item).items() if key != 'shadow'}
+        immutable['priority'] = int(item.priority)
         if previous.get('state') == 'record_pending' and (
             previous.get('owner_id') != item.owner_id
             or previous.get('conversation_id') != item.conversation_id
@@ -160,16 +256,23 @@ class Scheduler:
             ):
                 raise ValueError('segment ID reused with different immutable work')
             return False
+        policy = policy or resolve_batch_policy(item.owner_id)
         key = owner_key(item.owner_id)
         owner = tx.get('owners', key)
         watermark = owner.get('watermark')
         control = read_control(tx, scheduler_control_key(key))
         job = {
             **immutable,
+            'policy': policy.to_dict(),
+            'policy_source': 'admission',
             'protocol_version': 1,
             'owner_key': key,
             'enqueued_at': now,
             'state': 'ready',
+            # Capacity may follow a newly admitted first attempt. This is not
+            # paid permission: per-lease admission replaces it with allowed or
+            # held, or removes it on an unevaluated refusal (also on old workers).
+            'compute_decision': {'outcome': 'unattempted'},
             'attempt': 0,
             'token': '',
             'lease_until': 0.0,
@@ -178,6 +281,8 @@ class Scheduler:
             'late_capture': bool(
                 watermark and (item.capture_at, item.segment_id) <= (watermark['capture_at'], watermark['segment_id'])
             ),
+            # Merge class only: fresh rows commit ahead of the owner's catch-up backlog.
+            'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         }
         _append(tx, control, job)
         tx.put('jobs', item.segment_id, job)
@@ -189,6 +294,10 @@ class Scheduler:
     def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
+        with self._contention_lock:
+            if self._contention_backoff_until > monotonic():
+                return []
+            contention_generation = self._contention_generation
         if self.pool == 'live' and (capacity is None or not capacity.shared_with_live):
             return []
         if self.pool == 'batch' and capacity is not None and capacity.shared_with_live:
@@ -197,56 +306,155 @@ class Scheduler:
         # callers must supply a fresh exclusive-admission snapshot every pull.
         allow_backfill, max_seconds, backfill_budget = True, 7200.0, limit
         if capacity is not None:
-            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=shared_live_enabled())
+            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=True)
             limit = min(limit, slots)
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
-        for _ in range(limit):
-            lease = self._pull_one(
-                now,
-                allow_backfill=allow_backfill and backfill_budget > 0,
-                max_seconds=max_seconds,
-                shared_gpu_id=capacity.gpu_id if capacity is not None and capacity.shared_with_live else None,
-            )
-            if lease is None:
+        contention_deferred = False
+        shared_gpu_id = capacity.gpu_id if capacity is not None and capacity.shared_with_live else None
+        # One shard transaction may lease several units from the ring it has
+        # already read; the kill switch restores one lease per transaction.
+        multi = pull_multi_lease_enabled() and shared_gpu_id is None
+        while len(result) < limit:
+            remaining = limit - len(result) if multi else 1
+            try:
+                leases = self._pull_one(
+                    now,
+                    allow_backfill=allow_backfill and backfill_budget > 0,
+                    max_seconds=max_seconds,
+                    shared_gpu_id=shared_gpu_id,
+                    max_fresh=remaining,
+                    max_backfill=min(remaining, backfill_budget),
+                )
+            except Exception as error:
+                if isinstance(error, FirestoreContentionExhausted):
+                    with self._contention_lock:
+                        self._contention_failures += 1
+                        maximum = min(
+                            CONTENTION_BACKOFF_CAP_SECONDS,
+                            2.0 ** min(self._contention_failures - 1, 5),
+                        )
+                        delay = maximum * (0.5 + 0.5 * random.random())
+                        failed_at = monotonic()
+                        self._contention_backoff_until = max(
+                            self._contention_backoff_until,
+                            failed_at + delay,
+                        )
+                        retry_after_ms = round((self._contention_backoff_until - failed_at) * 1000)
+                        self._contention_generation += 1
+                        contention_failures = self._contention_failures
+                    contention_deferred = True
+                    logger.error(
+                        'event=batch_pull outcome=backoff failures=%d retry_after_ms=%d%s',
+                        contention_failures,
+                        retry_after_ms,
+                        error_site_field(error),
+                    )
+                    break
+                if not result:
+                    raise
+                # Each earlier lease is its own committed transaction. Raising
+                # would strand them leased until LEASE_SECONDS expiry and
+                # charge a retry; hand them to the caller instead.
+                logger.error(
+                    'event=batch_pull outcome=partial leased=%d exception_type=%s%s',
+                    len(result),
+                    type(error).__name__,
+                    error_site_field(error),
+                )
                 break
-            result.append(lease)
-            if lease.item.priority != Priority.FRESH:
-                backfill_budget -= 1
+            if not leases:
+                break
+            result.extend(leases)
+            backfill_budget -= sum(lease.item.priority != Priority.FRESH for lease in leases)
             if capacity is not None and capacity.shared_with_live:
                 break  # One non-preemptible short item, never a mixed long batch.
+        if not contention_deferred:
+            with self._contention_lock:
+                if self._contention_generation == contention_generation:
+                    self._contention_failures = 0
+                    self._contention_backoff_until = 0.0
         return result
 
     def _pull_one(
-        self, now: float, *, allow_backfill: bool, max_seconds: float, shared_gpu_id: str | None = None
-    ) -> LeasedWork | None:
+        self,
+        now: float,
+        *,
+        allow_backfill: bool,
+        max_seconds: float,
+        shared_gpu_id: str | None = None,
+        max_fresh: int = 1,
+        max_backfill: int = 1,
+    ) -> list[LeasedWork]:
         for priority in Priority:
             if priority != Priority.FRESH and not allow_backfill:
                 break
+            max_leases = max_fresh if priority == Priority.FRESH else max_backfill
+            if max_leases < 1:
+                break
+            spread = shard_spread_enabled()
+            excluded = set()
+            busy = False
             for _ in range(128):
-                shard = self.store.control_candidate(int(priority), self.pool, now)
+                if spread:
+                    shard = self.store.control_candidate(
+                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
+                    )
+                else:
+                    shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
                     break
-                receipt, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id)
-                if receipt:
-                    lease, enqueued_at = receipt
-                    if self.metrics:
-                        self.metrics.record('leased', wait_seconds=now - enqueued_at)
-                    return lease
+                receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
+                if receipts:
+                    for _, enqueued_at, relet in receipts:
+                        if self.metrics:
+                            try:
+                                self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
+                            except Exception:
+                                pass  # Metrics cannot turn an issued lease into a failed pull.
+                    return [lease for lease, _, _ in receipts]
                 if eligible == 'reserved':
-                    return None
+                    return []
+                if eligible == 'busy':
+                    excluded.add(shard)
+                    busy = True
+                    continue
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.
                     continue
             else:
-                return None
-        return None
+                return []
+            if busy:
+                # Busy higher-priority work is still pending. Do not borrow
+                # backfill capacity while another puller owns its shard.
+                return []
+        return []
 
-    def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id):
-        token = uuid.uuid4().hex
+    def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):
+        candidates = {}
+        started = monotonic()
+        spread = shard_spread_enabled()
+        claim_token = uuid.uuid4().hex
+
+        def current_time():
+            return now + max(0.0, monotonic() - started)
+
+        if spread:
+            # Hint reads take no transaction locks and never authorize writes.
+            # A loser does not join the expensive control/queue/job read set.
+            if not self.store.acquire_pull_claim(shard, claim_token, current_time(), PULL_CLAIM_SECONDS):
+                return None, 'busy'
 
         def commit(tx):
-            observations = []
+            tx = _OwnWrites(tx)
+            observations, receipts = [], []
+            if spread:
+                claim = tx.get('pull_claims', shard)
+                if claim.get('token') != claim_token or claim.get('expires_at', 0) <= current_time():
+                    return None, 'busy', observations
+                # Buffered release commits atomically with the pull. Reading
+                # this fence also invalidates a paused holder after takeover.
+                tx.put('pull_claims', shard, {'token': '', 'expires_at': 0.0})
             gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
             gpu = tx.get('gpus', gpu_key) if gpu_key else {}
             if gpu.get('token'):
@@ -256,7 +464,14 @@ class Scheduler:
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
             head_budget = [HEAD_OWNER_BUDGET]
-            for _ in range(MAX_VISITS):
+            visits, write_stop = 0, False
+            # MAX_VISITS still bounds the whole walk, and with it the queue
+            # writes; later leases spend what the first left, from cached reads.
+            while visits < MAX_VISITS and len(receipts) < max_leases:
+                if tx.buffered_writes() >= PULL_WRITE_HEADROOM:
+                    write_stop = True
+                    break
+                visits += 1
                 if not ring:
                     break
                 queue_key = ring[0]
@@ -267,31 +482,54 @@ class Scheduler:
                     continue
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
-                    if head_priority_enabled():
-                        job = _prefer_merge_head(
-                            tx,
-                            queue,
-                            job,
-                            head_budget,
-                            observations,
-                            now=now,
-                            max_seconds=max_seconds,
-                            shared_gpu=bool(gpu_key),
-                        )
-                    job.setdefault('unit_kind', 'conversation')
                     try:
                         tx.check_privacy(
                             job['owner_id'],
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
                         )
-                        allowed = _pool_allows(job, max_seconds, bool(gpu_key))
                     except BatchPrivacyBlocked:
-                        allowed = False
-                    if allowed:
-                        eligible_queues[queue_key] = job['duration_seconds']
-                    else:
                         blocked.add(queue_key)
+                        observations.append(('parked_privacy', None))
+                    else:
+                        privacy_checked_segment = job['segment_id']
+                        policy = stage_in_transaction(
+                            tx, job, 'scheduler', observations=observations, candidates=candidates
+                        )
+                        if policy.head_priority:
+                            job = _prefer_merge_head(
+                                tx,
+                                queue,
+                                job,
+                                head_budget,
+                                observations,
+                                now=now,
+                                max_seconds=max_seconds,
+                                shared_gpu=bool(gpu_key),
+                                candidates=candidates,
+                            )
+                        job.setdefault('unit_kind', 'conversation')
+                        park = None
+                        try:
+                            if job['segment_id'] != privacy_checked_segment:
+                                tx.check_privacy(
+                                    job['owner_id'],
+                                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                                    job.get('privacy_generation'),
+                                )
+                            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates)
+                            allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (
+                                not gpu_key or policy.shared_live
+                            )
+                        except BatchPrivacyBlocked:
+                            allowed, park = False, 'privacy'
+                        if allowed:
+                            eligible_queues[queue_key] = job['duration_seconds']
+                        else:
+                            blocked.add(queue_key)
+                            # Parking is otherwise silent: the owner's whole FIFO waits behind this head.
+                            park = park or _park_reason(job, max_seconds, bool(gpu_key))
+                            observations.append((f'parked_{park}', None))
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
                     if len(blocked) == len(ring):
@@ -322,6 +560,7 @@ class Scheduler:
                 if not queue['head']:
                     queue.update(tail='', deficit=0.0, continuing=False)
                     ring.pop(0)
+                token = uuid.uuid4().hex
                 job.update(
                     state='leased',
                     token=token,
@@ -329,6 +568,10 @@ class Scheduler:
                     lease_until=now + LEASE_SECONDS,
                     shared_gpu_key=gpu_key,
                 )
+                if not job.get('requires_compute_admission') and not cap_dispatch_enabled(job['owner_id'], 'batch'):
+                    # The pump dispatches this lease without admission, so it
+                    # is a real commitment: a parked hold must not hide it.
+                    job.pop('last_policy_hold', None)
                 if gpu_key:
                     tx.put(
                         'gpus',
@@ -337,30 +580,44 @@ class Scheduler:
                     )
                 tx.put('queues', queue_key, queue)
                 tx.put('jobs', job['segment_id'], job)
-                control[field(int(priority), 'active')] = bool(ring)
                 control[field(int(priority), 'service')] += cost / owner_count
-                tx.put('control', shard, control)
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-                return (
-                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']),
-                    True,
-                    observations,
+                # defer() refunds the attempt, so an admission-deferred re-lease
+                # is a relet only through its admission_refusals streak; a
+                # charged attempt (> 1 after this lease's increment) marks every
+                # other re-lease.
+                relet = job.get('admission_refusals', 0) > 0 or job['attempt'] > 1
+                receipts.append(
+                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at'], relet)
                 )
+                # The owner's next head is a different unit: it gets its own
+                # privacy, policy and pool checks before it can be leased.
+                eligible_queues.pop(queue_key, None)
+                owner_count = max(1, len(ring))
+            # Ring rotations after the last lease commit with their deficits.
             control[field(int(priority), 'active')] = bool(ring)
-            if not eligible_queues:
+            if not receipts and not eligible_queues and not write_stop:
                 control[field(int(priority), self.pool + '_available_at')] = now + 30
             tx.put('control', shard, control)
-            return None, bool(eligible_queues), observations
+            # A write stop proved nothing about the unvisited queues: no backoff.
+            return receipts or None, bool(receipts or eligible_queues or write_stop), observations
 
-        receipt, eligible, observations = self.store.run(commit)
+        with pull_operation('pull', shard):
+            receipts, eligible, observations = self.store.run(commit)
+        try:
+            record_policy_observations(observations)
+        except Exception:
+            pass  # Telemetry after commit cannot drop the lease it just issued.
         # Only committed attempts emit telemetry; Firestore may retry callbacks.
         if self.metrics:
             for event, age in observations:
+                if event in {'policy_fallback', 'policy_stage'}:
+                    continue
                 try:
                     self.metrics.record_head(event, priority, age=age)
                 except Exception:
                     pass  # Metrics cannot turn an issued lease into a failed pull.
-        return receipt, eligible
+        return receipts, eligible
 
     def heartbeat(self, segment_id: str, token: str, now: float) -> bool:
         def commit(tx):
@@ -384,19 +641,24 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False
+                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
-                return False, False
+                return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
-                return False, False
-            job.update(state='result_ready', result=asdict(result))
+                return False, False, 0
+            job.update(state='result_ready', result=asdict(result), ready_at=now)
             job.pop('retry_started_at', None)
+            job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
-            return True, True
+            return True, True, job['duration_seconds']
 
-        accepted, changed = self.store.run(commit)
+        accepted, changed, seconds = self.store.run(commit)
         if changed and self.metrics:
             self.metrics.record('completed')
+            try:
+                self.metrics.record_completed_audio(result.outcome, seconds)
+            except Exception:
+                pass  # Duration telemetry cannot undo a fenced completion.
         return accepted
 
     def fail(
@@ -409,6 +671,8 @@ class Scheduler:
         padded_retry_empty: bool = False,
         padded_retry: str | None = None,
         worker_failure: dict | None = None,
+        measured_held_vad_speech_seconds: float | None = None,
+        worker_vad_receipt: dict | None = None,
     ) -> bool:
         if worker_failure is not None:
             validate_worker_failure(worker_failure)
@@ -416,44 +680,43 @@ class Scheduler:
             padded_retry = 'empty'
         elif padded_retry == 'empty' and not padded_retry_empty:
             padded_retry_empty = True
-        if padded_retry not in {None, 'empty', 'skipped_oversize'} or (padded_retry_empty and padded_retry != 'empty'):
+        if padded_retry not in {None, 'empty', 'skipped_oversize', 'skipped_long_speech'} or (
+            padded_retry_empty and padded_retry != 'empty'
+        ):
             raise ValueError('invalid padded retry evidence')
 
+        candidates = {}
+        observations = []
+
         def commit(tx):
+            observations.clear()
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if quarantine or worker_failure is not None or job['attempt'] >= self.max_attempts:
-                # Serialize removal from the ordered pending set against merge
-                # and admission. No success/silence result or cursor is invented.
-                owner = tx.get('owners', job['owner_key'])
-                owner['revision'] = owner.get('revision', 0) + 1
-                job.update(
-                    state='quarantined',
-                    merge_pending=False,
-                    token='',
-                    lease_until=0.0,
-                    failure='worker_failed',
-                    quarantine_reason='worker_failed',
-                    quarantined_at=now,
-                    recovery_state='held',
-                )
-                if quarantine and padded_retry in {'empty', 'skipped_oversize'}:
+            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
+            attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
+            if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
+                quarantine_job(tx, job, now, 'worker_failed')
+                if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
                 if worker_failure is not None:
                     job['worker_failure'] = dict(worker_failure)
-                job.pop('retry_started_at', None)
-                tx.put('owners', job['owner_key'], owner)
             else:
                 _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)
             return job['state'], job['attempt'], job['duration_seconds']
 
         outcome = self.store.run(commit)
+        record_policy_observations(observations)
         if outcome:
             state, attempt, seconds = outcome
             if state == 'quarantined':
                 record_correctness('failed', seconds=seconds)
+            else:
+                try:
+                    logger.info('event=batch_retry reason=worker_failed outcome=deferred attempt=%d', attempt)
+                except Exception:
+                    pass
             # Best effort AFTER the transaction/exception scope: telemetry may
             # neither fail a sibling nor reveal a worker exception via handleError.
             if self.metrics:
@@ -476,20 +739,81 @@ class Scheduler:
                     pass
         return bool(outcome)
 
-    def defer(self, segment_id: str, token: str, now: float, retry_after: float = 30) -> bool:
-        """Policy/capacity refusal is waiting, not a provider failure attempt."""
+    def defer(
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        retry_after: float = 30,
+        *,
+        held_reason: str | None = None,
+        admission_refused: bool = False,
+    ) -> bool:
+        """Policy/capacity refusal is waiting, not a provider failure attempt.
+
+        ``held_reason`` carries the bounded machine reason from the admission
+        decision that caused the defer; it records the latest decision in the
+        same transaction, so an outside reader can classify the wait without
+        a second round-trip. Refund defers (shutdown, GPU abort) pass none and
+        preserve the previously recorded decision. ``last_policy_hold`` keeps
+        the latest hold across an unevaluated re-evaluation (which clears the
+        decision to BLIND) until an allow is sealed or another hold replaces
+        it, so the uncommitted-age proxy does not flap on a parked job.
+        """
 
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return False
+            delay = retry_after
+            if admission_refused:
+                previous = job.get('admission_refusals', 0)
+                previous = previous if type(previous) is int and 0 <= previous <= 5 else 0
+                streak = min(previous + 1, 5)
+                job['admission_refusals'] = streak
+                # Bad/missing authority stays deferred; it never grants compute.
+                delay = _admission_retry_delay(delay, streak)
+                if not held_reason:
+                    # A prior allow is not the latest decision when this RPC
+                    # was unevaluated. Preserve BLIND instead of a false hold.
+                    job.pop('compute_decision', None)
             job.update(
                 state='retry',
-                available_at=now + max(1, min(86400, retry_after)),
+                available_at=now + max(1, min(86400, delay)),
                 attempt=max(0, job['attempt'] - 1),
                 token='',
                 lease_until=0.0,
             )
+            if held_reason:
+                job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
+                job['last_policy_hold'] = {'reason': held_reason, 'at': now}
+            tx.put('jobs', segment_id, job)
+            return True
+
+        deferred = self.store.run(commit)
+        if deferred and admission_refused and self.metrics:
+            try:
+                self.metrics.record(
+                    'admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred',
+                    reason=held_reason,
+                )
+            except Exception:
+                pass  # Metrics cannot turn a committed defer into a retry.
+        return deferred
+
+    def release(self, segment_id: str, token: str, now: float) -> bool:
+        """Expire a held lease now: the lease-expiry transition without the wait.
+
+        For a holder that can no longer publish. The attempt stays charged and
+        the retry backoff applies, exactly as ``recover`` would after expiry;
+        a stale token is fenced like every other transition.
+        """
+
+        def commit(tx):
+            job = tx.get('jobs', segment_id)
+            if not owns_lease(job, token, now):
+                return False
+            _defer(job, now, 'lease_released')
             tx.put('jobs', segment_id, job)
             return True
 
@@ -498,33 +822,42 @@ class Scheduler:
     def recover(self, now: float, limit: int = 100) -> int:
         self.store.run(lambda tx: migrate_legacy(tx, now))
         recovered = 0
+        candidates, observations = {}, []
         for state in ('leased', 'retry'):
             for segment_id in self.store.due(state, now, limit):
 
-                def commit(tx: Transaction) -> str | None:
+                def commit(tx: Transaction):
+                    observations.clear()
                     job = tx.get('jobs', segment_id)
                     if job.get('state') == 'leased' and job['lease_until'] <= now:
-                        _defer(job, now, 'lease_expired')
-                        event = 'lease_expired'
+                        outcome = expire_lease(
+                            tx,
+                            job,
+                            now,
+                            stage_policy=stage_in_transaction,
+                            candidates=candidates,
+                            observations=observations,
+                            defer=_defer,
+                        )
                     elif job.get('state') == 'retry' and job['available_at'] <= now:
                         control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
-                        event = 'retry'
+                        outcome = ('requeued', 0, None)
                     else:
                         return None
                     tx.put('jobs', segment_id, job)
-                    return event
+                    return outcome
 
                 try:
-                    event = self.store.run(commit)
+                    outcome = self.store.run(commit)
+                    record_policy_observations(observations)
                 except BatchPrivacyBlocked:
                     self.store.quarantine_fenced(segment_id, now)
                     continue
-                if event:
+                if outcome:
                     recovered += 1
-                    if self.metrics:
-                        self.metrics.record(event)
+                    observe_recovery(outcome, self.metrics)
         return recovered
 
     @staticmethod

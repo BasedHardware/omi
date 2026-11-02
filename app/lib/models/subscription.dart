@@ -86,7 +86,9 @@ class PlanType {
 
   /// Mirrors backend DESKTOP_ENTITLED_PLAN_TYPES.
   bool get grantsDesktop =>
-      _canonicalWireName == PlanType.operator.wireName || _canonicalWireName == PlanType.architect.wireName;
+      _canonicalWireName == PlanType.operator.wireName ||
+      _canonicalWireName == PlanType.architect.wireName ||
+      _canonicalWireName == PlanType.unlimitedV2.wireName;
 
   @override
   bool operator ==(Object other) {

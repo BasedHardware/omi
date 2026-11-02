@@ -43,12 +43,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$EVIDENCE_DIR" ]]; then
-  EVIDENCE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/journeys_XXXXXX")"
-fi
-mkdir -p "$EVIDENCE_DIR"
-readonly EVIDENCE_DIR
-
 # Mechanical discovery (SCA-490 / C4): every j<N>_<behavior>_test.dart in
 # this directory is a journey. A new definition joins the suite by existing;
 # there is no handwritten list to forget to update.
@@ -74,6 +68,14 @@ if [[ -n "$FILTER" ]]; then
   fi
   JOURNEYS=("${MATCHING[@]}")
 fi
+
+# Created only once journeys will run: --list and selection drift exit above and
+# would otherwise leave an empty dir behind on every call.
+if [[ -z "$EVIDENCE_DIR" ]]; then
+  EVIDENCE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/journeys_XXXXXX")"
+fi
+mkdir -p "$EVIDENCE_DIR"
+readonly EVIDENCE_DIR
 
 failures=0
 for run in $(seq 1 "$RUNS"); do

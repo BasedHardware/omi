@@ -17,6 +17,20 @@ PROVIDER_AUTH_REJECTED = 'provider_auth_rejected'
 PROVIDER_RATE_LIMITED = 'provider_rate_limited'
 ACCOUNT_REJECTION_REASONS = frozenset({PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED})
 
+# Velma's budget refusals are free text (in-stream error frames, batch error
+# bodies, refused-upgrade reason phrases). Both the live paths (streaming.py)
+# and the batch path (pre_recorded.py) match these markers and map any hit to
+# PROVIDER_BUDGET_EXHAUSTED — the token the budget page alerts on. "insufficient
+# credits" is the 429 Velma-2 answers when the account is out of credits
+# (2026-10-22: it flowed as an untyped provider error for ~1h because no path
+# matched it). Matched, never logged or labeled.
+MODULATE_BUDGET_MARKERS = (
+    'monthly usage limit',
+    'usage limit reached',
+    'quota exceeded',
+    'insufficient credits',
+)
+
 STT_STREAM_CLOSE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 STT_STREAM_CLOSE_REASONS = frozenset(
     {

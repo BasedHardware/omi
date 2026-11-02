@@ -57,6 +57,9 @@ class _HistorySyncProvider extends InertSyncProvider {
 
   late final List<Wal> _wals;
 
+  /// Every file in this history is a phone copy, so each recording can be shared.
+  @override
+  bool canPlayOrShareWal(Wal wal) => true;
   @override
   List<Wal> get allWals => _wals;
   @override

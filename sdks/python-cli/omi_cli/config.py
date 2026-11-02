@@ -14,6 +14,7 @@ holds bearer credentials.
 
 from __future__ import annotations
 
+import errno
 import math
 import os
 import secrets
@@ -40,6 +41,15 @@ ENV_API_BASE = "OMI_API_BASE"
 ENV_LOCAL_API_URL = "OMI_LOCAL_API_URL"
 ENV_LOCAL_TOKEN = "OMI_LOCAL_TOKEN"
 ENV_PROFILE = "OMI_PROFILE"
+
+
+class ConfigWriteRefused(PermissionError):
+    """:func:`save` refused to overwrite a config that failed to parse on load.
+
+    A deliberate refusal, not an unexpected fault, so the CLI's error ladder
+    can report it as such. Still a ``PermissionError`` so existing callers
+    that catch that keep working.
+    """
 
 
 def default_config_path() -> Path:
@@ -183,6 +193,18 @@ def load(path: Optional[Path] = None) -> Config:
         with p.open("rb") as fh:
             data = tomllib.load(fh)
     except FileNotFoundError:
+        if _has_non_directory_parent(p):
+            # A regular file where a parent directory should be. POSIX raises
+            # NotADirectoryError for it; Windows reports the path as not found.
+            # Record it the POSIX way on every OS, so the path is not mistaken
+            # for a config that was never written and save() refuses it.
+            not_a_dir = NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), str(p))
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=f"config file could not be read: {not_a_dir}",
+            )
         return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
     except tomllib.TOMLDecodeError as exc:
         return Config(
@@ -290,6 +312,15 @@ def load(path: Optional[Path] = None) -> Config:
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
 
 
+def _has_non_directory_parent(path: Path) -> bool:
+    """True when a parent of ``path`` exists but is not a directory."""
+    for parent in path.parents:
+        if os.path.exists(parent):
+            # Everything above the nearest existing parent is a directory.
+            return not os.path.isdir(parent)
+    return False
+
+
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
@@ -297,13 +328,15 @@ def save(config: Config) -> None:
     written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
     DACL supplied directly to ``CreateFileW``.
 
-    Raises PermissionError when the on-disk file failed to parse on load:
-    overwriting it would silently destroy profiles/credentials the user could
-    still repair by hand. The caller (a write command) surfaces that error
-    instead of clobbering the corrupt file.
+    Raises :class:`ConfigWriteRefused` (a ``PermissionError``) when the on-disk
+    file failed to parse on load: overwriting it would silently destroy
+    profiles/credentials the user could still repair by hand. ``main()``
+    surfaces that refusal as a normal CLI error rather than letting it reach
+    the last-chance handler, which would report a deliberate safety stop as an
+    unexpected one.
     """
     if config.load_error is not None:
-        raise PermissionError(
+        raise ConfigWriteRefused(
             f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
     parent = config.path.parent

@@ -33,17 +33,20 @@ SPEC.loader.exec_module(renderer)
 IMAGE = 'gcr.io/based-hardware-dev/backend@sha256:' + 'a' * 64
 
 
-@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
-def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_source):
-    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
-    # Use the equivalent safe C parser for the large committed manifest so
-    # this scope contract fits the fast-unit CPU budget on CI runners.
+@pytest.fixture(scope='module', params=['committed', 'composed'])
+def runtime_manifest(request):
     loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     manifest = (
         yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
-        if runtime_source == 'committed'
+        if request.param == 'committed'
         else compose_manifest()
     )
+    return loader, manifest
+
+
+def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_manifest):
+    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
+    loader, manifest = runtime_manifest
 
     def declarations(node, path=()):
         if isinstance(node, dict):
@@ -85,15 +88,9 @@ def test_stable_recovery_code_default_remains_off(monkeypatch, value):
         current_recovery_enabled.reset(token)
 
 
-@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
-def test_idle_close_uses_code_default_in_every_environment(runtime_source):
+def test_idle_close_uses_code_default_in_every_environment(runtime_manifest):
     flag = 'SONIOX_IDLE_CLOSE_SECONDS'
-    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
-    manifest = (
-        yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
-        if runtime_source == 'committed'
-        else compose_manifest()
-    )
+    loader, manifest = runtime_manifest
 
     def declarations(node, path=()):
         if isinstance(node, dict):

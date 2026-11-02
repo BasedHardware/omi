@@ -30,7 +30,8 @@ String? resolvedDefaultSummaryTemplateId(ConversationDetailProvider provider) {
   return id;
 }
 
-/// Starts a summary with [appId]'s template (null: Omi), remembering a template as last used.
+/// Starts a summary with [appId]'s template, remembering a template as last used. Null is Omi:
+/// the request forces Omi's own notes, so a server preferred template never runs in its place.
 Future<void> startSummary(ConversationDetailProvider provider, String? appId) async {
   if (provider.loadingReprocessConversation) return;
   if (appId != null) {
@@ -38,7 +39,7 @@ Future<void> startSummary(ConversationDetailProvider provider, String? appId) as
     if (app != null) provider.setSelectedAppForReprocessing(app);
     provider.trackLastUsedSummarizationApp(appId);
   }
-  await provider.reprocessConversation(appId: appId);
+  await provider.reprocessConversation(appId: appId, forceOmi: appId == null);
 }
 
 /// The Omi mark drawn on the primary pill, in the pill's label colour.

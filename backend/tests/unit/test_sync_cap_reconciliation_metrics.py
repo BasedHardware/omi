@@ -1,12 +1,16 @@
 import logging
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from utils.observability.stt_cap_dispatch import RECONCILIATION, record_reconciliation
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-@pytest.mark.parametrize('outcome', ['cleared_noncall', 'reconciled_ingested', 'redispatched', 'failed'])
+@pytest.mark.parametrize(
+    'outcome', ['cleared_noncall', 'reconciled_ingested', 'redispatched', 'failed', 'settled_empty']
+)
 def test_reconciliation_counter_and_log_are_additive_bounded_and_identifiable(monkeypatch, caplog, enabled, outcome):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enabled))
     metric = RECONCILIATION.labels(outcome=outcome)

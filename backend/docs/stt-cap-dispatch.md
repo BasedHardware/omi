@@ -1,12 +1,343 @@
 # Transcription cap at provider dispatch
 
-`STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. This PR
-adds no deployment binding and does not enable it. Enabling changes the policy
-for existing capped paid plans: exhausted sync uploads wait as audio rather than
-being transcribed into locked conversations. Product approval is required before
-activation. Ladder budget composition and its independent default-off execution
-admission are documented in [the listen pipeline](listen_pusher_pipeline.mdx#ladder-budget-refresh-and-execution-admission-default-off).
-No prices or deployment switches change.
+`STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. Its
+approved activation is a small cohort and live only. The shared cohort/lane
+scope below also applies when only ladder budget execution is enabled. Outside
+that scope live behavior stays unchanged. Sync/batch allowance refusal instead
+ships on by default under the kill switch described next.
+
+## Offline allowance enforcement (default on)
+
+`STT_CAP_OFFLINE_ENFORCEMENT` is a kill switch, default **true**. Sync v1/v2,
+ordinary sync segments, language probes, confirmation retries and multilingual
+recovery check the existing funded allowance before cloud spend. A denial uses
+the existing encrypted cap-hold path, preserves raw intake and excludes held audio
+from usage. A late multilingual denial is a custody outcome, not a provider error.
+No allowance, pricing, entitlement or paid-through rule changes.
+
+Batch vendor STT explicitly uses `lane=batch`, including its recheck after audio
+inspection. GPU queue admission and every worker ASR microbatch/recovery require
+backend allowance authorization even when the legacy batch readiness fence is
+closed or batch is absent from the legacy lane/cohort selection. A refusal leaves
+the lease/intent retryable without a provider-failure attempt. Immutable
+admission-time `policy.provider_reason=byok` / provider-route BYOK snapshots remain
+exempt from keyless rechecks; a request key never exempts an Omi-funded alternative.
+Reviewers and valid paid-through accounts retain the existing resolver decision.
+Offline admission uses non-provisioning subscription and desktop-trial lookups:
+an allowance check must not create a default subscription or restore a missing
+user root. Existing usage-publication erasure fences remain authoritative.
+
+This audio-only predicate does **not** widen live listen, generic LLM/generated
+processing, held-backlog consent, or recovery rollout membership. Existing holds
+outside the recovery cohort stay in custody until their recovery scope is enabled.
+PTT voice-message allowance enforcement is a separate follow-up.
+
+Release owner: subscription session merges; deployment lead deploys. Offline
+refusal ships at 100% on the first approved release, independently of the existing
+`rollout_cohorts/stt-cap-dispatch` ramp. No new default-off cohort is introduced.
+Keep live cohort/lane configuration unchanged. Deploy the same switch value to
+sync/API policy hosts and GPU workers so both queued and per-microbatch checks agree.
+
+Rollback: set `STT_CAP_OFFLINE_ENFORCEMENT=false` on those hosts and drain the
+previous revision. This restores the prior lane/cohort behavior; legacy-selected
+admission remains enforced. Preserve all holds/receipts and keep custody cleanup
+running. Accepted in-flight work may finish. This is a configuration plan, not a
+production change made by the implementation PR.
+
+Watch `omi_stt_cap_dispatch_decisions_total{path,outcome,reason}`. The closed paths
+are `sync_v1`, `sync_v2`, `sync_segment`, `sync_language_probe`, `sync_empty_retry`,
+`sync_multilingual`, `batch_gpu`, `batch_provider`, `batch_speech_redrive`, and
+`batch_quarantine`. Outcomes are `allowed|held`; reasons are `scope_disabled`,
+`consent_denied`, `allowance_exhausted`, `budget_exhausted`,
+`allowance_unavailable`, `access_denied`, `entitled`, and `byok`. These count
+boundary decisions, not unique uploads, saved dollars or additional usage.
+No owner, session, content or raw error labels are accepted.
+
+At the first release, the lead checks a complete 15-minute post-revision window:
+held decisions should be visible per exercised path; a capped synthetic canary
+must make zero provider calls; entitled/BYOK canaries must still complete.
+Watch the held/decision ratio, existing `omi_stt_cap_provider_audio_seconds_total`,
+sync/provider errors and queue age against the preceding comparable window.
+Unexpected entitlement denials, lost custody, a stuck funded backlog or elevated
+errors trigger rollback and investigation before the release is accepted.
+
+## Cohort and lane rollout (David 2026-10-18)
+
+Legacy live/recovery execution admission requires **both** an admission switch and a selected owner /
+original lane. `STT_CAP_DISPATCH_ENFORCEMENT` remains default false.
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` alone uses the same scope; it cannot widen
+STT execution to the fleet. `STT_CAP_DISPATCH_COHORT` unset or empty admits nobody.
+Use `uid:<COORDINATOR_TEST_UID>` (replace the placeholder before deployment),
+comma-separated UID tokens, `pct:1`, or a union such as `uid:<UID>,pct:5`.
+`all` is the explicit universal cohort. The token grammar and stable
+`sha256("free-tier-cohort:" + uid)[:8] % 100` bucket come from the retired free-tier
+parser, now shared in pure `config/rollout_cohorts.py`. The runtime token
+document below replaces the env cohort when present; no per-user membership
+read is added for this rollout. Malformed tokens invalidate the whole cohort.
+
+`STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset, empty
+or whitespace-only values select **live only**. Unknown tokens or empty tokens
+inside a list (for example `live,` or `live,,sync`) disable the whole selection.
+Unknown call-site lanes are never mapped to a permitted lane.
+
+Legacy batch rollout selection is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
+for both admission switches and every cohort, even with explicit `batch` and
+`all`. Before that constant can change, lane8 must write `provider_reason=byok`
+into `binding.policy` at batch admission. This is a source readiness condition,
+not an environment flag. The default-on offline spend boundary above bypasses
+this selection fence to refuse exhausted allowance, retaining the recorded BYOK
+funding exception. A valid lane list containing batch emits one static
+warning per process; it does not prevent explicit live/sync selection. Thus
+`live,batch` selects only live and `batch` selects nothing while the fence is
+closed. No UID or configuration data is included in the warning.
+Live receiver and provider constructors pass the authenticated UID and `live`;
+v1 intake, v2 coordinator and ordinary segment retries pass `sync`; queued GPU
+jobs, quarantine/speech retries and generated/text processing pass `batch`.
+Every GPU microbatch checks each owner separately. Generic generated work belongs
+to `batch`, so a live-only rollout does not enable its budget denial paths.
+Owner-facing summaries, consent and worker entrypoints require membership in at
+least one selected lane, then each paid audio dispatch checks the original lane.
+
+Listen checks the raw admission switches and custom-STT bypass before reading
+request identity. Active non-custom admission still requires the authenticated
+UID and live-lane scope; there is no missing-UID fallback.
+
+Managed compute uses the same batch selection before treating shared admission
+as a completed ladder budget check. An excluded UID, empty cohort or live-only
+scope falls through the existing paid-plan/free-feature policy without reading
+budget snapshots or allowance. Independent Pro feature gates still apply.
+
+### Original held-audio provenance
+
+Encrypted hold metadata owns `origin`. New sync intake and late-segment holds
+write `origin=sync`; the live writer already writes `origin=live`. Recovery reads
+that value before audio download/claim and propagates it as `cap_dispatch_lane`
+through the shared segment processor, per-call allowance and empty-result retry.
+It never replaces origin with the execution method (`batch`), device `source`, or
+sync freshness (`sync_lane=fresh|backfill`). Legacy metadata **without** `origin`
+is sync: all pre-origin hold producers were sync; every live custody version
+already supplied `origin=live`: the first live writer in `f6a358902db1` (#21488)
+wrote that marker, and the durability rewrite preserved it. An explicit
+unknown/null origin pauses recovery
+and retains the manifest/audio. No historical rewrite or new index is needed.
+Excluded backlog items spend no chosen allowance. The worker scans past disabled
+lanes for selected work and rewinds its cursors before stopping, retaining the
+choice for widening. A reserved excluded item can yield to later selected work
+only when a transaction proves it never started: the active choice token/lease,
+current month and exact debit must match; an audio manifest must still match the
+decrypted provenance and have `state=held`, zero lease, `next_attempt_at=0`,
+and no `lease_token` or `piece_plan` key at all. Key presence records claim/plan
+history even when its value is empty or null; the real release writer leaves an
+empty token and retry timestamp. Missing/nonzero retry timestamps also retain
+the reservation. There must be no dispatch receipts, ingest proofs or completion
+markers. Text must have no claim history. The same
+transaction refunds the chosen estimate once (preserving unlimited remaining),
+clears the reservation and records `scope_skipped`. It does not refund metered
+usage or remove the source; cursor rewind keeps excluded work discoverable.
+Any intent/receipt (including ambiguous dispatch), audio lease/token, text claim
+(even expired), missing legacy lease proof, unknown origin or failed read retains
+the reservation. Such ambiguous reservations conservatively block that choice
+until their lane is restored and normal recovery resolves them. A lost refund
+response leaves the choice active for a fresh read, never a second refund.
+At page completion the store refuses any actual reservation first, then consumes
+an already-authorized current-month pending upgrade into a fresh token, allowance
+and cutoff. Excluded rows do not block that upgrade. Without an eligible upgrade,
+skipped scope keeps the choice processing and atomically rewinds its cursors;
+it never finishes to waiting-choice solely because excluded rows remain.
+Custody sealing/cleanup stays active during rollback because it is
+owed persistence, not permission to dispatch STT.
+
+### Shared recovery pacing
+
+Every new provider intent in `utils/sync/cap_hold_recovery.py` spends a shared
+audio-second token budget and an intent token, including the second persisted
+application attempt. Cached provider results and settlement spend no tokens.
+`held_single_attempt` continues to suppress adapter-local retries on recovery.
+The intent ceiling conservatively counts pieces/retries, so a multi-piece hold
+spends more than one token. Denials create no provider receipt or metered charge;
+the worker retains its existing chosen-allowance reservation for the same item.
+
+Plain env config, read per intent (no new rollout flag):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `CAP_HOLD_RECOVERY_AUDIO_HOURS_PER_HOUR` | `60` | 60 audio seconds per wall second |
+| `CAP_HOLD_RECOVERY_HOLDS_PER_HOUR` | `12000` | Maximum sustained provider intents/hour |
+
+Both must be finite and positive. Invalid/zero config refuses new work. Apply
+identical values and the same `REDIS_DB_*` endpoint to every API/sync recovery
+host before activation; different settings sharing a bucket are unsupported.
+No deployment/activation is performed by this change.
+
+The repo already uses Redis Lua for cross-pod rate limiting (`redis_db`), rather
+than a hot Firestore counter. Recovery uses one atomic script/key
+`rl:cap-hold-recovery:v1:global` and a dedicated lazy client with two-second
+connect/read timeouts, with no fail-open fallback. Redis's clock owns refill.
+Both dimensions must fit before either is spent. Capacity is one minute of
+refill (default 3,600 audio seconds and 200 intents); a token bucket bounds
+traffic over interval T by rate*T plus that burst, rather than enforcing a
+calendar-hour window. Missing/evicted state starts **empty**. The fixed key has
+no TTL and cannot grow with users. Ambiguous Redis replies or failed intent
+writes may waste tokens; never refund uncertain capacity.
+
+On capacity denial, the fenced hold checkpoint writes `next_attempt_at` from
+the larger deficit/refill interval and retains `pacing_deferred_since`. Redis
+unavailability, invalid config/cost or a piece exceeding the burst envelope
+refuses and defers for 60 seconds. Release preserves the deadline; claim will
+not take the hold early. Normal VAD pieces cap at 300 seconds by default.
+Oversized legacy frozen pieces need operator diagnosis/replanning; they stay
+held, without silently overriding the rate or issuing a paid call.
+
+The sweep's existing persisted owner cursor advances before awaited work,
+including past blocked owners. Five selected owners now take one newest-first
+candidate each per round, up to 100 candidates/owner and 900 seconds total,
+instead of letting a fast owner consume 100 before peers get another turn.
+Deferred owners stop for that sweep; other owners proceed. A hold's pieces
+remain one fenced application unit, so rotation is by candidate, not equal
+audio shares. Request-triggered wakes keep their existing UID leases/cooldown.
+Sealing and cleanup run before recovery and never acquire pacing tokens.
+
+Metrics use only `outcome=granted|deferred|refused`:
+`omi_held_recovery_pacing_intents_total` counts decisions and
+`omi_held_recovery_pacing_audio_seconds_total` counts requested audio tokens by
+decision. Only `granted` represents spent tokens. The histogram
+`omi_held_recovery_pacing_deferred_age_seconds` samples time since the first
+durable pacing deferral on each subsequent deferral. It measures observed
+deferred backlog age, not a fleet maximum or an unvisited population; use it
+with the existing authoritative fleet pending/oldest-age gauges. No user,
+hold, provider or free-form reason labels are emitted.
+
+Pacing is shipped on whenever recovery admission is active. Rollback is the
+existing execution-admission kill switch/cohort rollback; do not bypass this
+limiter to recover throughput. Deployment acceptance still requires API/sync
+activation, explicit-consent/restart and unsupported-language checks, and
+measured recovery throughput under ordinary peak live load before widening
+the STT cap to 100%.
+
+### Controlled expansion and rollback
+
+Both dev and prod runtime manifests bind enforcement `false`, cohort `''`, lanes
+`live`. These are inert configuration declarations, not activation. The first
+cohort requires the same env defaults on listen and the CPU recovery/sync hosts:
+
+```text
+STT_CAP_DISPATCH_ENFORCEMENT=true
+STT_CAP_DISPATCH_COHORT=uid:<COORDINATOR_TEST_UID>
+STT_CAP_DISPATCH_LANES=live
+```
+
+No authorized coordinator-test UID was identified in local project docs; the
+placeholder is intentionally unresolved and must never be deployed literally.
+Keep the ladder switch at its separately approved value; setting it true still
+cannot bypass these cohort/lane controls. Apply the scope consistently to all
+serving hosts/readers before enrolling any UID. The dedicated GPU chart exposes
+`worker.capDispatchEnforcement`, `capDispatchCohort`, `capDispatchLanes` and
+`ladderBudgetEnforcement` with the same dark/live-only defaults; future approved
+batch widening must configure it and the CPU policy host together.
+
+Ramp owner **dazheng**: coordinator test accounts -> `pct:1` -> `pct:5` held for
+**3 hours** -> `pct:25` -> `all` (100%). At each expansion, record held-audio count,
+backlog stalls, live STT error rate and client 5xx against the pre-ramp baseline;
+advance only with no unexplained regression and a synthetic consented live hold
+recovering across instance replacement. Dazheng owns each expansion and the
+**2026-10-27** completion checkpoint (runtime ramp brief, 2026-10-20); a missed checkpoint or an incomplete
+three-hour soak is a blocker to report, never authority to skip a stage. Keep
+`STT_CAP_DISPATCH_LANES=live` throughout. The original sync/batch rollout required the separate
+batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
+approved widening. Batch also requires the lane8 binding-policy readiness change
+above before its code-owned fence can open; configuration alone cannot enable
+it. This change does not relocate that authorization.
+
+Rollback: set **both** admission switches false (or clear the cohort to stop only
+this execution rollout), preserving audio, processing choice and receipts. Keep
+the current reader and custody redrive running to seal/clean owed fragments;
+excluded recovery dispatch stays paused until scope is restored. Existing live
+sessions use their admitted state until reconnect/revision drain; roll the same
+configuration to all hosts and drain old sessions when changing scope. No new
+Scheduler jobs or Firestore indexes are introduced here; the existing durability
+job/index prerequisites below remain independently owned.
+
+### Runtime cohort (no restart)
+
+Once this code rides the next listen deploy (Nemotron owns listen deployment),
+**dazheng** owns runtime ramp writes through the **prod-operator** tier with
+Firestore write permission. No deployment or production write is performed by
+this PR. All serving hosts must run the resolver before expanding the doc.
+
+The existing independent ladder-only activation is preserved: setting
+`STT_CAP_DISPATCH_ENFORCEMENT=false` blocks legacy cap admission but does not
+turn off `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`. Both use this same cohort.
+This is a deliberate deviation from making the legacy switch a new master kill
+switch, which would disable the separately ratified ladder-only path. To stop
+both immediately for new admissions, use an empty runtime cohort; the deploy
+rollback still sets both admission switches false.
+
+The data-plane Firestore document is
+`projects/based-hardware/databases/(default)/documents/rollout_cohorts/stt-cap-dispatch`:
+
+```json
+{"environment": "prod", "tokens": "pct:1"}
+```
+
+`environment` is required and must exactly match `OMI_ENV_STAGE` (`prod`, `dev`,
+`local`, or `offline`). This is a control document, separate from the existing
+`rollout_cohorts/{uid}` membership schema. Do not write it with the per-user
+`rollout_cohort.py` command. A mismatched environment is a denial, never an
+activation. Dev experiments should use the dev data project so they cannot
+replace this prod control document. No query or new index is needed.
+
+A present valid document overrides `STT_CAP_DISPATCH_COHORT`. A missing document
+uses the env tokens, retaining the private-secret test cohort. An empty token
+string explicitly denies. Missing/wrong-type fields, malformed tokens, or an
+environment mismatch explicitly deny and log once per invalid episode. They do
+**not** fall back to env: doing so could undo an intentional runtime rollback.
+Read/scheduling errors retain the last snapshot (including denial); without a
+snapshot they retain today's env behavior. A successful deletion restores env,
+so **do not delete the doc as a rollback** unless that fallback is intended.
+
+The process cache uses a 60-second TTL and one in-flight read, with a one-second
+Firestore deadline and SDK retries disabled, on the bounded rollout executor.
+Listen and pusher poll in startup-owned background tasks; other configured hosts
+refresh lazily on scope checks. Cold and expired checks return env/last snapshot
+immediately while the read runs. The existing auth warm path schedules the same
+refresh without an extra await. There is no Firestore IO at session admission or
+per audio frame. Read errors also back off for 60 seconds. Expect roughly one
+read per active process per minute (40 single-worker pods: ~57,600 reads/day;
+multiple processes multiply that), independent of users and frame rate. Idle
+lazy hosts refresh at their next scope check. Existing live sessions retain
+their admitted state until reconnect; this does not force a reconnect or drain.
+
+Run from the repository root, after owner approval of the ramp step:
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+backend/.venv/bin/python backend/scripts/stt_cap_cohort.py \
+  --project based-hardware --environment prod --pct 5 --apply
+```
+
+Omit `--apply` for a hermetic validation-only dry run. Use `--pct 1`, then
+`--pct 5` for **3 hours**, then `--pct 25`, then `--all` by **2026-10-27**, with
+all earlier health/consent gates. Keep lanes `live`. Tokens use the unchanged
+stable UID hash, so percentage membership is identical between doc and env.
+For a private test cohort use `--tokens-file /private/path/to/tokens`; the file
+contains token grammar, never commit it or include its content in a PR/command.
+The writer prints neither tokens nor SDK exceptions.
+
+Runtime rollback uses the same command with `--deny` (empty tokens), or
+`--tokens-file` containing only the private test cohort. Do not roll forward if
+any pod's refresh-failure counter is rising: stale pods retain their previous
+cohort, so a Firestore outage can delay rollback. The existing deployment kill
+switches remain the emergency path; setting env enforcement false requires a
+deploy. Retain the existing custody/redrive processes during rollback.
+
+Verify per-pod `omi_stt_cap_cohort_source{source="doc|env|none"}` (one hot),
+`omi_stt_cap_cohort_percent` (0 for explicit-UID-only or denied cohorts, 100 for
+`all`), and `omi_stt_cap_cohort_refresh_failures_total{reason="read|schedule"}`.
+Source `doc` with pct 0 can be an intentional or invalid denial. Source `none`
+means no valid env cohort or no admission switch enabled. Changes emit
+`event=stt_cap_cohort_changed source=... pct=...`; invalid documents emit
+`event=stt_cap_cohort_invalid outcome=denied`. No tokens, UIDs, hashes or raw SDK
+errors are logged. The shared fallback metric also records refresh failures.
 
 ## Boundaries
 
@@ -16,7 +347,15 @@ that state, including direct registry endpoints and fallback/recovery legs.
 The state debits accepted PCM seconds across channels, replay and successors.
 The existing 60-second usage flush refreshes legacy funded allowance; ladder
 units use the bounded cadence below.
-Root counters retain their received-audio semantics. Timestamp adapters suppress
+Root counters retain their received-audio semantics, except for held audio. The
+receiver records the wall-clock receipt span of every frame it denies at receipt
+(merged, so channels and bursts count arrival time once). The usage flush
+subtracts the overlap of those spans with its billable window from
+`transcription_seconds`, and so from the shadow units derived from it. Held audio
+is metered once, when recovery transcribes it. Provider-pump suppression of audio
+the receiver already admitted is not subtracted: its receipt window may already be
+billed, so that bounded race bills as before rather than undercounting a later
+window. Sessions without an admission, or that never hold, meter unchanged. Timestamp adapters suppress
 before recording accepted-provider spans. Denial is a policy pause, not provider
 death: receiving, pusher audio and existing private-cloud/raw archive paths
 continue. Accepted provider queues drain. When dispatch enforcement pauses managed live audio, the server retains that
@@ -61,8 +400,10 @@ sole provider attempt; a denied prepared intent remains recoverable.
 
 Encrypted source audio lives under the existing private-cloud bucket's
 `chunks/{uid}/cap-held/` owner prefix; encrypted metadata and progress live under
-`users/{uid}/stt_cap_holds`. The checkpoint has no application TTL. Existing
-account deletion recursively removes the manifest and purges this chunk prefix.
+`users/{uid}/stt_cap_holds`. The checkpoint has no application TTL. Account
+deletion retains the manifest and this chunk prefix through its default 14-day
+grace window, then the existing recursive wipe removes both; `erase_now=true`
+and the grace kill switch preserve immediate erasure.
 A failed object upload cannot publish a successful manifest or acknowledgment.
 Concurrent identical uploads cannot overwrite a recovery checkpoint.
 
@@ -103,7 +444,21 @@ The original full audio remains retained throughout.
 `process_segment` explicitly reports `provider_called`, set immediately before
 `prerecorded`, never inferred from an error class. A known non-call atomically
 removes its intent (or reverts an unspent second attempt). The next claim retries
-normally. If a call may have happened, the piece waits 30 minutes. Then:
+normally. A reply the provider completed with **no words** is fenced into the
+receipt as `provider_empty` with `provider_completed_at`; recovery settles that
+piece as `transcribed` with no content, zero seconds and no usage charge
+(`settled_empty`), whether the same pass observes the checkpoint or a later pass
+resumes a `dispatched` receipt that carries it. It is never re-dispatched. A hold
+whose pieces all settle empty finalizes, settles its content ledger and purges
+like any fully successful recovery. Only a validated success-shaped reply earns
+that checkpoint: the prerecorded adapters raise on a 2xx body that is not the
+provider's success shape (Parakeet without both `text` and `segments`; Modulate
+without an `utterances` list, or with an empty one and neither `text` as a
+string nor `duration_ms` as a number beside it), so a JSON error envelope or
+partial payload is a provider failure with no completion checkpoint, and the
+dispatch stays ambiguous.
+If a call may have happened but no completion
+checkpoint exists, the piece waits 30 minutes. Then:
 
 1. A proof written in the **same transaction as conversation ingestion** identifies
    the hold, piece and deterministic conversation lineage. Recovery marks that
@@ -112,7 +467,10 @@ normally. If a call may have happened, the piece waits 30 minutes. Then:
 2. Without a proof, current allowance/abuse admission permits **one** additional
    application dispatch, persisted as `attempt=2`. Recovery owns retries; the
    ordinary segment's local empty-result retry is disabled for these checkpointed
-   recovery attempts. Provider-internal SDK retries remain outside this ledger.
+   recovery attempts. Nested URL/provider retries are disabled for held recovery. Nonempty provider
+   results are encrypted and fenced before ingest, so a restart reuses them; the
+   vendor-acceptance-to-checkpoint crash window remains irreducible. See the
+   [durability runbook](runbooks/cap-hold-durability.md) for bounds and rollout.
 3. A second ambiguous attempt gets the same cooldown/proof check, then becomes
    `failed_reconciliation`. Its audio and manifest remain retained. Successful
    siblings still settle usage and finalize independently; their paths checkpoint
@@ -127,11 +485,11 @@ application TTL or is silently erased. Ordinary fully successful recovery delete
 source and frozen pieces only after content/usage settlement.
 
 `omi_stt_cap_recovery_reconciliation_total{outcome}` counts `cleared_noncall`,
-`reconciled_ingested`, `redispatched`, and `failed`. Structured
+`reconciled_ingested`, `redispatched`, `failed`, and `settled_empty`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
-accounts wait for their next authenticated HTTP request; there is no new cron.
+accounts can also resume through the existing durable-redrive sweep after an explicit processing choice.
 Turning both admission switches off pauses recovery, preserving its audio.
 
 ## Launch configuration and measurement
@@ -209,7 +567,7 @@ activation decision for David; default-off deployment preserves today's policy.
 
 ## Ladder-v1 admission in #21488
 
-`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` independently installs the live provider
+Within the selected cohort/lanes, `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` installs the live provider
 suppression and sync hold/recovery paths. Ladder allowance comes from units;
 legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds
@@ -270,104 +628,25 @@ spans. Paid prefixes and replay spans never become holds; the capture observer
 and client WAL behavior are unchanged. Owner, rate, channel, UTC capture month
 and real clock-gap boundaries remain separate. Source timestamps and conversation
 ownership follow the existing recovery/ingestion path. Funded resume publishes
-the final tail before forwarding new audio, then schedules recovery after its
-existing cooldown. Close and cancellation use supervised, shielded publication.
+the final tail before forwarding new audio, then the periodic server sweep re-drives existing processing consent. Close and cancellation use supervised, shielded publication.
 
-A contiguous mono minute now produces **one immutable Ogg Opus object**, at
-16 kbit/s constrained VBR. The existing Docker FFmpeg/libopus dependency encodes
-and decodes it; no dependency was added. CBR fallback enforces a **128 KiB encoded
-ceiling**, plus one 32-byte authenticated encryption frame. Explicit source-frame
-metadata trims padded short tails back to the exact capture clock. Opus is lossy;
-FLAC cannot bound noisy microphone input to this storage footprint. Recovery still
-runs VAD with short segments enabled; silence makes no STT call.
+The default writer now stages at-most-15-second encrypted Opus fragments and
+seals/composes them into **one immutable retained source per contiguous minute**.
+The sample-duration memory bound is 15 seconds; SIGKILL can still lose its current
+unpublished fragment. Expired writer staging is independently sealed by the
+periodic server sweep, including when no processing consent exists. Publication
+and capacity replies are reconciled before consuming slots or refunding capacity;
+privacy/deletion and immutable published-source authority remain unchanged.
 
-Each minute is born sealed in one transaction: two account-deletion/destructive-
-operation authority reads, the existing encrypted owner-prefix upload, one hold
-create and one summary increment. Transaction read locks span the bounded GCS
-upload (`timeout=10`, no automatic GCS retry) and manifest commit. Nested storage
-fences reuse only the exact synchronous uid/client/transaction scope; there is no
-TTL authority cache. A deleter either precedes those reads and blocks publication,
-or serializes after publication and purges the existing prefix/subcollections.
-Recovery retains its existing 30-minute claim/renew/checkpoint lease. Live writers
-never append to a published group, so no stream lease-release write is needed.
-
-Capacity is reserved in idempotent blocks of 64 minute slots (four reads/two
-writes per block, including both authorities). Unused slots are refunded once on
-clean close or month switch (four reads/two writes). An ambiguous acquisition
-retains its identity, and an ambiguous publication retains its consumed slot.
-Crashes conservatively strand unused reservations. The new source ceiling is
-**8 GiB / 100,000 slots per user/capture UTC month**, shared by sessions/channels;
-failed reservations cannot bypass it. Legacy v3 captures retain their old-format
-recovery/reservation handling. Capacity/backpressure failures close with an error,
-never a successful custody receipt. No flag or retention policy changed.
-
-Accepted custody is bounded to 60 seconds across all channels/rates. Async receive
-entry points split a straddling ingress packet at the exact remaining sample,
-await publication, then accept its tail. They preserve full minute objects without
-accepting a 61st second or flushing an unnecessary short object. Synchronous
-capture callbacks retain the strict aggregate guard. The one-second updater
-flushes aged partial buffers; minute rollover starts a new tail timer.
-SIGKILL/pod loss can lose buffered/in-flight accepted audio; only published seconds
-are reported. There is no client acknowledgement protocol.
-
-Each pending source owns a fresh, opaque server UUID publication token. Callers
-cannot provide/reconstruct its identity or reset a `retry=False` flag. The token
-serializes attempts, consumes its fresh grant before IO, and every later attempt
-checks the durable hold before any upload. A failed commit cleans its uncommitted
-object with an exact generation precondition; a lost successful commit reply is
-protected by the durable receipt. Unknown upload replies use an exceptional
-metadata lookup before guarded cleanup. These failure reads do not affect the
-steady count. Pessimistic server transactions also block non-transactional
-writers; cleanup covers unsuccessful/optimistic publication as well.
-
-Successful recovery keeps a compact purged receipt, so a lost writer reply cannot
-recreate a source after deletion/recovery. Its frozen piece plan stores source
-pointer, exact sample offset/count and decoded PCM hash. Retries decode one local
-cached source and reconstruct those slices without rerunning VAD. **Recovery
-uploads no second audio copy for v4**; hash mismatch fails closed. Local decoded
-PCM is bounded to one minute and removed with the recovery directory. Existing
-account deletion removes all generations under `chunks/{uid}/` and recursively
-purges holds, receipts, summary and reservations.
-
-The real loopback Firestore emulator instruments every DocumentReference.get and
-transaction write, with the real nested privacy fence and a deterministic GCS
-adapter. For 64 continuous mono minutes including ready-summary startup and quota
-acquisition: **133 reads / 130 writes / 64 uploads**, or **2.078125 reads /
-2.03125 writes / 1 upload per capped minute**. A 60-minute socket including partial
-block refund is 129 reads / 124 writes / 60 uploads. A one-minute cold socket is
-11 reads / 6 writes / 1 upload; setup cannot be amortized over very short sockets.
-Summary migration, retries/contention and ownership/gap/seal/close/month boundary
-fragments are additional; steady-state figures do not claim otherwise. Existing
-allowance refresh and downstream conversation/usage work are separate.
-
-At illustrative colocated us-central1 Standard rates, capture operations cost
-$0.0004503/capped hour including hourly socket setup/refund. With a full billing
-month of retention, an 8 KiB per-hold document/index allowance plus quota receipts
-adds $0.00006974/hour. GCS source storage adds at most $0.00014652/hour at the
-object ceiling: **$0.00066656/capped hour for capture custody operations and
-storage**, excluding STT and subsequent recovery operations. This is a model,
-not a cloud invoice; no bucket settings or production data were read. Free tiers,
-discounts and network egress are not credited. Regional Standard/flat namespace,
-no cross-region transfer, backup/PITR or noncurrent copies are assumed. Soft-delete
-retention adds proportional byte-days after purge. Repeated retained months and
-compact receipts accumulate; there is no lifetime retention bound.
-
-A 31-day 24/7 mono month has 44,640 uploads and at most **5.45055 GiB** encrypted
-source audio (8 GiB is the conservative reservation ceiling). A local existing
-voice-fixture/silence experiment at the previously documented ~32% speech share
-measured 59,039 encoded bytes/minute: **2.45583 GiB** for 24/7, or **0.81861 GiB**
-for an explicit planning scenario of 8 capped hours/day for 31 days. The respective
-hard bounds are 5.45055 / 1.81685 GiB. This retains quiet audio, so upload counts
-are never multiplied by speech share. Ambient noise can approach the hard bound;
-these fixture bytes are not a measured fleet average. The rate-card evidence's
-32% proxy is incomplete for paths without accepted-speech metering.
-
-Sources: [Firestore pricing](https://cloud.google.com/firestore/pricing),
-[GCS pricing](https://cloud.google.com/storage/pricing),
-[transaction lock semantics](https://docs.cloud.google.com/firestore/native/docs/transaction-data-contention),
-[document/index accounting](https://docs.cloud.google.com/firestore/native/docs/storage-size).
-The workspace evidence/report records the speech-share citations, operation
-counting recipe, recovery overhead and retention sensitivity.
+The existing 8 GiB monthly quota reserves 64 source slots plus one overlap slot
+per writer block. New collection-group indexes and Scheduler reconciliation are
+deployment prerequisites. The [durability runbook](runbooks/cap-hold-durability.md)
+owns exact retry/shutdown behavior, kill switches, unavoidable vendor-spend window,
+measured operation counts and costs. Current 64-minute emulator custody counts are
+1221 reads / 514 writes / 256 fragment PUTs / 64 composes, leaving 64 retained
+sources. This replaces v4's one-PUT/two-write economics: the explicit modeled
+custody increase is roughly $0.00183/capped hour for the smaller volatile window.
+The original 60-second path remains available via the fragment kill switch.
 
 Summary v2 lazily rebuilds older/missing totals under a short initializer lease
 in transactions of at most 400 rows. Each page fences the cursor and listing
@@ -389,3 +668,48 @@ Local migration verification (loopback Firestore only):
 firebase emulators:exec --only firestore --project demo-held-audio \
   'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
 ```
+
+
+## Recovery-only probe narrowing
+
+`STT_CAP_RECOVERY_COHORT` optionally intersects **effective** dispatch membership
+(including the runtime `rollout_cohorts/stt-cap-dispatch` resolver), enforcement
+and original execution lane. It uses the same `uid:`, `pct:N`, and sole `all`
+token grammar. It cannot admit an owner outside dispatch scope. **Absent** means
+no extra restriction; empty, whitespace or malformed values deny all recovery,
+with one process-local warning that contains neither tokens nor owner identity.
+Listen-side hold admission and backlog display stay unchanged.
+
+The intersection gates manual/upgrade consent creation, the backlog process API,
+redrive owner visits, worker entry, direct recovery wakes, selected manifests and
+each new provider dispatch (including sync pipeline retries). Excluded owners'
+persisted consent and holds are preserved. Staging seal/cleanup and fleet metrics
+continue independently of recovery membership. The one-hot gauge
+`omi_stt_cap_recovery_cohort_narrowed{state="unset|set|malformed"}` reports only
+configuration state; it does not prove which private owner is configured.
+
+For qualification, the deploy lead sets `uid:<test>` through the **private-values
+path**, never a committed manifest, on every API/sync recovery executor. Verify
+all serving revisions and scheduler targets carry the restriction **before**
+activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
+in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in
+`database/_client.py`), so on staging the restriction is defence in depth; in
+prod it is the guard that keeps other consented owners asleep. Keep the
+shared dispatch document and listen configuration unchanged, and verify the
+test account is already in the effective dispatch cohort. First qualify staging
+(`backend-staging`, `backend-sync-staging`), then one separately authorized prod
+receipt. Record running release SHA, fresh `state="set"` metric, held-to-published
+receipt, exactly-once usage/replay, source cleanup and normal-load error/backlog
+metrics. Use only the agent-owned test account; no other owners' data reads or
+consent changes. A stale qualification driver that insists the shared dispatch
+cohort itself is probe-only must be updated to attest this intersection before
+execution; do not alter the shared document to satisfy it.
+
+Owner: dazheng / subscription rollout lead. Ramp: staging probe, single prod
+receipt, then **remove the variable** to reach the full existing dispatch cohort
+by **2026-10-23**, after clean capture-integrity/reconciliation, no backlog stalls
+or sync 5xx regression, and reviewed receipts. Emptying it is a fail-closed stop,
+not widening. A missed deadline is a blocker; no automatic expansion. Widening
+can resume other owners' already-consented holds. To stop new recovery, set the narrowing to `pct:0` on every API/sync executor
+while keeping custody redrive on and listen admission unchanged; accepted provider
+calls can still finish.

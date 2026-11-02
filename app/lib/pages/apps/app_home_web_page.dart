@@ -1,14 +1,11 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/widgets/omi_web_page.dart';
+import 'package:omi/pages/apps/widgets/omi_external_browser_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/browser.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 /// An enabled app's own home page (its settings and dashboard), pushed from the app's detail page.
@@ -29,10 +26,9 @@ class AppHomeWebPage extends StatelessWidget {
         body: OmiErrorState(message: context.l10n.couldNotLoadPage),
       );
     }
-    return OmiWebPage(
+    return OmiExternalBrowserPage(
       title: app.name.decodeString,
       url: url,
-      userAgent: topUserAgents[Random().nextInt(topUserAgents.length)],
     );
   }
 }

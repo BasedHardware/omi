@@ -26,7 +26,7 @@ from utils.conversations.episode_selection import (
 from models.episode_extraction import EpisodeStructuredExtraction
 from utils.conversations.episode_evidence import restore_episode_claim_ids
 from utils.conversations.episode_vacuity import is_vacuous_note
-from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
+from testing.episode_notes.policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 
 REFERENCE_PROMPT = (
     '''Describe what happened during this episode and what matters to its owner using ALL supplied

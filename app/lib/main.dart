@@ -2,7 +2,6 @@ import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
-import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/telemetry/client_telemetry_transport.dart';
@@ -21,6 +20,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
@@ -70,6 +70,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -110,6 +111,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -325,6 +327,10 @@ Future _init() async {
   );
   OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
+  // The sync health watchdog's periodic loop: app bootstrap owns the timer
+  // (DeviceProvider only wires its evaluation callback, so tests that
+  // construct the provider directly never see a pending timer).
+  SyncHealthWatchdog.instance.startWatchdog();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
@@ -618,7 +624,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // legacy/allow projection cannot admit one offline upload.
     final resumeUser = FirebaseAuth.instance.currentUser;
     final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
-    await ProactivityRuntime.outbox.bindOwner(resumeOwner);
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
@@ -630,19 +635,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     if (state == AppLifecycleState.resumed) {
       OnboardingSyncRuntime.setActive(true);
-      unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
-        _performanceTelemetry.setForeground(true);
+        _performanceTelemetry.onLifecycleState(state);
         PlatformManager.instance.analytics.recordTelemetryHealth();
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
+    } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+      // Dart timers are throttled before `paused` arrives, so the lag
+      // watchdog must already be stopped here or the background gap reads as
+      // UI stalls on the last visible surface.
+      if (!PhysicalQualification.enabled) {
+        _performanceTelemetry.onLifecycleState(state);
+      }
     } else if (state == AppLifecycleState.paused) {
       OnboardingSyncRuntime.setActive(false);
       ClientTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
-        _performanceTelemetry.setForeground(false);
+        _performanceTelemetry.onLifecycleState(state);
       }
       SyncReconciler.instance.onBackground();
       _onAppPaused();
@@ -668,21 +679,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => ReviewProvider()),
+        // Live episodes overlay; reads the server capability on first use (Home's live row).
+        ChangeNotifierProvider(create: (context) => EpisodeProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider5<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            EpisodeProvider, CaptureProvider>(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
-          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
+          update: (BuildContext context, conversation, message, people, usage, episodes, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
               messageProvider: message,
               peopleProvider: people,
               usageProvider: usage,
+              episodeProvider: episodes,
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(
@@ -771,9 +785,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 child: KeyedSubtree(key: ValueKey(brightness), child: child!),
               );
               final guidedContent = BluetoothGuidanceListener(child: content);
-              return PlatformService.isIOS && Env.posthogApiKey != null
-                  ? RageClickContextTracker(child: guidedContent)
-                  : guidedContent;
+              return SessionReplayScope(
+                child: PlatformService.isIOS && Env.posthogApiKey != null
+                    ? RageClickContextTracker(child: guidedContent)
+                    : guidedContent,
+              );
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

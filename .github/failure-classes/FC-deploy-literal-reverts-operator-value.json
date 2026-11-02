@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-deploy-literal-reverts-operator-value",
+  "violated_contract": "A value an operator changed in production to resolve an incident (a Cloud Tasks queue rate, a queue re-point) must be declared in reviewed config that every deploy reads; a deploy action must never re-assert an older literal over it. On 2026-10-19 the 07:07Z train reset batch-quarantine-recovery from the 01:27Z 16/8 back to the action literal 4/4, recovery backed up (quarantine to projection p95 383s, later 1,285s) and the 5% record-lane re-qualification failed; the same train re-pointed backend-sync-backfill at the sync-backfill queue retired after the 04:52Z stall.",
+  "canonical_prevention": "Declare operator-owned values in the runtime manifest or the B4 ops file and have deploy actions read them, keeping a hard-coded value only as the default when nothing is declared. Until the ops file reaches main, any remaining action literal must equal the live operator value and be pinned by a contract test that names the incident.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/runtime_env_validation/workflows.py",
+    "backend/tests/unit/test_batch_pipeline_recovery_runtime_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/actions/deploy-backend-stack/action.yml",
+    ".github/actions/sync-backfill-lifecycle/action.yml",
+    "backend/deploy/runtime_env/prod.overlay.yaml",
+    "backend/tests/unit/test_batch_pipeline_recovery_runtime_contract.py",
+    "backend/tests/unit/test_sync_two_lane.py"
+  ],
+  "status": "open"
+}

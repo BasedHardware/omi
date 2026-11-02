@@ -3,6 +3,10 @@ set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:-${ENV:-}}"
 IMAGE_TAG="${IMAGE_TAG:-}"
+# Optional role-image opt-in (plan B B2): deploy <IMAGE_REPOSITORY>@<IMAGE_DIGEST>.
+# IMAGE_TAG still names the build identity the gateway reports.
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-}"
+IMAGE_DIGEST="${IMAGE_DIGEST:-}"
 CHART_DIR="${CHART_DIR:-backend/charts/llm-gateway}"
 VALUES_FILE="${VALUES_FILE:-}"
 NAMESPACE="${NAMESPACE:-}"
@@ -22,6 +26,12 @@ fi
 if [[ -z "$IMAGE_TAG" ]]; then
   echo "ERROR: IMAGE_TAG is required" >&2
   exit 2
+fi
+if [[ -n "$IMAGE_DIGEST" || -n "$IMAGE_REPOSITORY" ]]; then
+  if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ || -z "$IMAGE_REPOSITORY" ]]; then
+    echo "ERROR: IMAGE_REPOSITORY and IMAGE_DIGEST=sha256:<64 hex> must be set together" >&2
+    exit 2
+  fi
 fi
 if [[ -z "$LLM_GATEWAY_GSA" ]]; then
   echo "ERROR: LLM_GATEWAY_GSA is required for Vertex Workload Identity" >&2
@@ -95,6 +105,9 @@ HELM_ARGS=(
   --set-string "image.tag=${IMAGE_TAG}"
   --set-string "serviceAccount.annotations.iam\\.gke\\.io/gcp-service-account=${LLM_GATEWAY_GSA}"
 )
+if [[ -n "$IMAGE_DIGEST" ]]; then
+  HELM_ARGS+=(--set "image.repository=${IMAGE_REPOSITORY}" --set-string "image.digest=${IMAGE_DIGEST}")
+fi
 
 helm template "${HELM_ARGS[@]}" >/dev/null
 

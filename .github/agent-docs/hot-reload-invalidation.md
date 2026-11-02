@@ -5,7 +5,7 @@ Workstream C. Static import-graph analysis of `package:omi` (`app/lib`) on
 
 Harness trigger: signed-out **Get Started** button colour
 (`backgroundColor: Colors.black` on the `ElevatedButton` in
-`app/lib/pages/onboarding/device_selection.dart`). Measured warm reload:
+onboarding `device_selection.dart` at `b0f8455e35`; the file was removed in #23352). Measured warm reload:
 **387 of 4032** libraries, every save after the first. First save is 469;
 that extra 82 is lazy libraries entering the isolate once and is not this
 graph.

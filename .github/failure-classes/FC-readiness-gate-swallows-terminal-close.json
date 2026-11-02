@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-readiness-gate-swallows-terminal-close",
+  "violated_contract": "A streaming client that holds back writes until the server's ready handshake must report a close that arrives before that handshake. The Go device SDK's Parakeet transcriber returned nil from AppendPCM whenever ready had not arrived and never checked whether its read loop had already ended. When the server accepted the WebSocket and then closed it with 1013 capacity_full or service_not_ready (backend/parakeet/main.py), every PCM chunk of the session was dropped while AppendPCM and Stop both returned nil.",
+  "canonical_prevention": "The read loop records the error that ended it before signalling completion, and the pre-ready write path checks that signal. A stream whose read loop ended without ready returns the recorded close, with its code still unwrappable, from every write and from Stop. A stream still waiting for ready keeps the documented drop-until-ready behaviour. A loopback test closes the stream before ready and asserts that both calls return that close.",
+  "canonical_prevention_artifact": [
+    "sdks/device/go/omidevice/stt/parakeet_test.go"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/device/go/omidevice/stt/"
+  ],
+  "status": "open"
+}

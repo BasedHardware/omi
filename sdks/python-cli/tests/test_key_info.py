@@ -32,6 +32,18 @@ class CredentialVerificationTests(unittest.TestCase):
         self.assertEqual(verify_key(client), (None, None))
         client.get.assert_called_once_with("/v1/dev/key")
 
+    def test_non_mapping_body_is_unknown_not_crash(self):
+        # OmiClient.get returns None for 204 and the raw text of a 2xx body
+        # that is not JSON, so the response is not guaranteed to be a dict.
+        # Each of these must read as "scopes unknown", exactly like a dict
+        # with no scopes field, rather than raising out of the login flow.
+        for body in ["service temporarily degraded", None, [], 42]:
+            with self.subTest(body=type(body).__name__):
+                client = Mock()
+                client.get.return_value = body
+                self.assertEqual(verify_key(client), (None, None))
+                client.get.assert_called_once_with("/v1/dev/key")
+
     def test_older_backend(self):
         client = Mock()
         client.get.side_effect = [NotFoundError("Not found"), []]

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import BinaryIO
 from unittest.mock import patch
@@ -13,7 +15,7 @@ import pytest
 
 from omi_cli import _secure_file
 from omi_cli import config as cfg
-from omi_cli.main import app
+from omi_cli.main import app, main
 
 
 def _assert_owner_only_descriptor(handle: BinaryIO) -> None:
@@ -184,6 +186,36 @@ def test_load_file_as_parent_directory_records_error_and_arms_save_guard(
         cfg.save(config)
 
 
+def test_load_records_a_file_parent_the_os_reports_as_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows reports a file in the parent path as not found (ERROR_PATH_NOT_FOUND,
+    raised as ``FileNotFoundError``) where POSIX raises ``NotADirectoryError``.
+    ``open`` raises what Windows raises here, so every runner checks that load()
+    still records the path as unreadable instead of as a config never written."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    bad_cfg_path = blocker / "omi" / "config.toml"
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(bad_cfg_path))
+    original_open = Path.open
+
+    def windows_open(self: Path, *args, **kwargs):
+        if self == bad_cfg_path:
+            raise FileNotFoundError(2, "The system cannot find the path specified", str(self))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", windows_open)
+
+    config = cfg.load()
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+    assert os.strerror(errno.ENOTDIR) in config.load_error
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+    assert blocker.read_text(encoding="utf-8") == "file"
+
+    # A config directory that does not exist yet is still a clean first run.
+    assert cfg.load(tmp_path / "fresh" / "config.toml").load_error is None
+
+
 def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
     """save() must refuse to overwrite a file that failed to parse on load:
     a write command would otherwise silently destroy profiles/credentials the
@@ -198,6 +230,50 @@ def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
 
     # The corrupt file is left untouched.
     assert config_path.read_bytes() == original
+
+
+def test_write_command_reports_refusal_as_a_normal_error(config_path: Path, monkeypatch, capsys) -> None:
+    """A refusal to clobber an unparseable config is deliberate, so it must be
+    reported like any other CLI error rather than reaching main()'s
+    last-chance handler, which labels it 'unexpected error'."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    original = config_path.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["omi", "config", "set", "api_base", "https://x.test"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "refusing to overwrite" in err
+    assert "unexpected error" not in err
+    assert config_path.read_bytes() == original
+
+
+def test_write_command_refusal_is_structured_in_json_mode(config_path: Path, monkeypatch, capsys) -> None:
+    """JSON mode is the agent contract: the refusal has to arrive as a parseable
+    error object on stderr, not as a message about an unexpected fault."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "config", "profile", "use", "work"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().err)
+    assert "refusing to overwrite" in payload["error"]
+    assert "unexpected error" not in payload["error"]
+
+
+def test_refusal_is_still_a_permission_error_for_library_callers(config_path: Path) -> None:
+    """The typed class must stay a PermissionError so code catching that
+    keeps working."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    config = cfg.load()
+    with pytest.raises(cfg.ConfigWriteRefused):
+        cfg.save(config)
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
 
 
 def test_version_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
@@ -791,6 +867,32 @@ def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str
         assert profile.local_api_url is None
 
 
+@pytest.mark.parametrize("key", ["api_base", "local_api_url"])
+@pytest.mark.parametrize(
+    "malformed_url",
+    [
+        # urlsplit raises eagerly on an unterminated IPv6 bracket...
+        "http://[",
+        # ...and lazily on a non-numeric or out-of-range port:
+        "http://example.test:abc",
+        "https://example.test:65536",
+        # authority present but no hostname:
+        "http://:47778",
+    ],
+)
+def test_config_set_rejects_malformed_urls(config_path: Path, cli_runner, key: str, malformed_url: str) -> None:
+    """Malformed URLs must produce a clean UsageError (no traceback) and must not be persisted."""
+    result = cli_runner.invoke(app, ["config", "set", key, malformed_url])
+    assert result.exit_code != 0
+    assert "Invalid URL" in result.output
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == cfg.DEFAULT_API_BASE
+    else:
+        assert profile.local_api_url is None
+
+
 @pytest.mark.parametrize(
     "key,valid_url,expected_saved",
     [
@@ -798,6 +900,7 @@ def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str
         ("api_base", "https://api.staging.omi.me/", "https://api.staging.omi.me"),
         ("local_api_url", "http://localhost:8000/", "http://localhost:8000"),
         ("local_api_url", "http://127.0.0.1:47778", "http://127.0.0.1:47778"),
+        ("local_api_url", "http://[::1]:8000", "http://[::1]:8000"),
     ],
 )
 def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
@@ -816,6 +919,28 @@ def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
         assert profile.api_base == expected_saved
     else:
         assert profile.local_api_url == expected_saved
+
+
+@pytest.mark.parametrize("source", ["flag", "env", "saved"])
+@pytest.mark.parametrize("bad_base", ["localhost:8000", "ftp://api.omi.me", "http://example.test:abc"])
+def test_a_malformed_api_base_is_refused_before_any_request(
+    config_path: Path, cli_runner, monkeypatch: pytest.MonkeyPatch, source: str, bad_base: str
+) -> None:
+    """A write must not report "outcome unknown" for a request that could never be sent."""
+    from omi_cli.auth.store import store_api_key
+    from tests.conftest import FAKE_API_BASE, FAKE_API_KEY
+
+    store_api_key("default", FAKE_API_KEY, api_base=bad_base if source == "saved" else FAKE_API_BASE)
+    if source == "env":
+        monkeypatch.setenv(cfg.ENV_API_BASE, bad_base)
+    flag = ["--api-base", bad_base] if source == "flag" else []
+
+    result = cli_runner.invoke(app, ["--json", *flag, "memory", "create", "hello"])
+
+    assert result.exit_code == 1, result.output
+    assert result.stdout == ""
+    assert "Invalid URL for 'api_base'" in result.stderr
+    assert "outcome unknown" not in result.stderr
 
 
 @pytest.mark.parametrize("empty_token", ["", "   "])

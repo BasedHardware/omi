@@ -6,6 +6,7 @@ import {
   createWhisperTranscriber,
   deepgramWsUrl,
   parakeetWsUrl,
+  SttStreamClosedError,
 } from './index.ts';
 
 describe('deepgramWsUrl', () => {
@@ -569,5 +570,62 @@ describe('createParakeetTranscriber', () => {
     transcriber.stop();
 
     expect(events).toEqual(['send', 'close']);
+  });
+
+  test('reports a stream the server closed before ready', () => {
+    const sent: unknown[] = [];
+    let closeCount = 0;
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      constructor(_url: string) {}
+      send(data: unknown) {
+        sent.push(data);
+      }
+      close() {
+        closeCount += 1;
+      }
+      serverClose(code: number, reason: string) {
+        this.readyState = 3;
+        this.onclose?.({ code, reason } as CloseEvent);
+      }
+    }
+
+    const socketHolder: { socket?: FakeWebSocket } = {};
+    class CapturingSocket extends FakeWebSocket {
+      constructor(url: string) {
+        super(url);
+        socketHolder.socket = this;
+      }
+    }
+
+    const transcriber = createParakeetTranscriber({
+      apiUrl: 'https://parakeet.example',
+      onTranscript: () => {},
+      WebSocketImpl: CapturingSocket as any,
+    });
+    const pcm = new Uint8Array([1, 0, 2, 0]);
+
+    // While ready is pending, PCM is dropped without an error.
+    transcriber.appendPcm(pcm);
+
+    // The server accepts the socket, then refuses it before ready (backend/parakeet/main.py).
+    socketHolder.socket?.serverClose(1013, 'capacity_full');
+
+    let refused: unknown;
+    try {
+      transcriber.appendPcm(pcm);
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toBeInstanceOf(SttStreamClosedError);
+    const { closeCode, closeReason, message } = refused as SttStreamClosedError;
+    expect({ closeCode, closeReason }).toEqual({ closeCode: 1013, closeReason: 'capacity_full' });
+    expect(message).toBe('stream closed before ready: 1013 capacity_full');
+    expect(() => transcriber.stop()).toThrow(SttStreamClosedError);
+    expect(sent).toEqual([]);
+    expect(closeCount).toBe(1);
   });
 });

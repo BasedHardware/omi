@@ -1,4 +1,4 @@
-from utils.generated_compute import require_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
 import hashlib
 import hmac
@@ -11,6 +11,7 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
+from config import firestore_read_levers
 import database._client as db_client_module
 from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
@@ -448,7 +449,7 @@ async def extract_memory_log(
     Does not write Firestore. Desktop onboarding/import should call this instead of inventing
     memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
     """
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     # Deferred with the LLM helper: this router is covered by a module-isolation test
     # that stubs a minimal dependency graph, and utils.subscription pulls database.users
@@ -780,6 +781,36 @@ def get_memories(
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
     cursor = _normalize_memory_list_cursor(cursor)
+    if cursor is not None and firestore_read_levers.lever_enabled('memory_list_index_window', uid):
+        try:
+            page = MemoryService(db_client=db_client).read_page(
+                uid,
+                limit=bounded_limit,
+                cursor=cursor,
+                device_scope_request=scope_request,
+                include_pending_processing=True,
+                include_archive=include_archive,
+                request_budget=budget,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 400 or not str(exc.detail).startswith('invalid_or_stale_cursor:'):
+                raise
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='cursor_page' if bounded_offset == 0 else 'offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            cursor = None
+        else:
+            if bounded_offset != 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Memory cursor pagination cannot be combined with offset",
+                )
+            return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,

@@ -71,20 +71,19 @@ Future<void> _pumpSummary(
 }
 
 void main() {
-  testWidgets('timestamps use real starts and expand independently per section', (tester) async {
+  TranscriptSegment segment(String id, double start, [String text = 'Evidence']) => TranscriptSegment(
+      id: id, text: text, speaker: null, isUser: false, personId: null, start: start, end: start + 1, translations: []);
+
+  Future<void> openSources(WidgetTester tester, {int index = 0}) async {
+    await tester.tap(find.byKey(const ValueKey('section-sources')).at(index));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('sources stay out of the prose and open per section in a sheet', (tester) async {
     final semantics = tester.ensureSemantics();
     final starts = [42.9, 312.0, 460.0, 3912.0, 3600.0];
     final conversation = _conversationWithSections(transcriptSegments: [
-      for (var i = 0; i < starts.length; i++)
-        TranscriptSegment(
-            id: 's$i',
-            text: 'Source $i',
-            speaker: null,
-            isUser: false,
-            personId: null,
-            start: starts[i],
-            end: starts[i] + 1,
-            translations: []),
+      for (var i = 0; i < starts.length; i++) segment('s$i', starts[i], 'Source $i'),
     ]);
     conversation.structured.sections = [
       for (final heading in ['Main', 'Other'])
@@ -93,70 +92,92 @@ void main() {
     ];
     final opened = <String>[];
     await _pumpSummary(tester, conversation, onOpenSource: opened.add);
-    expect(find.text('0:42'), findsNWidgets(2));
-    expect(find.text('5:12'), findsNWidgets(2));
-    expect(find.text('7:40'), findsNWidgets(2));
-    expect(find.text('1:05:12'), findsNothing);
-    expect(find.text('+2 more'), findsNWidgets(2));
-    await tester.tap(find.text('+2 more').first);
-    await tester.pump();
-    expect(find.text('+2 more'), findsOneWidget);
-    expect(find.text('1:00:00'), findsOneWidget);
-    expect(find.text('1:05:12'), findsOneWidget);
+    expect(find.text('0:42'), findsNothing);
+    expect(find.byKey(const ValueKey('section-sources')), findsNWidgets(2));
+    expect(find.bySemanticsLabel('Show sources'), findsNWidgets(2));
+
+    await openSources(tester, index: 1);
+    expect(find.text('Other'), findsNWidgets(2));
+    for (final time in ['0:42', '5:12', '7:40', '1:05:12', '1:00:00']) {
+      expect(find.text(time), findsOneWidget);
+    }
+    expect(find.text('Source 3'), findsOneWidget);
+    expect(find.byKey(const ValueKey('section-source-missing')), findsNothing);
+    expect(find.bySemanticsLabel('Jump to 5 mins 12 secs'), findsOneWidget);
     await tester.tap(find.text('1:05:12'));
+    await tester.pumpAndSettle();
     expect(opened, ['s3']);
-    expect(find.bySemanticsLabel('Jump to 5 mins 12 secs'), findsNWidgets(2));
+    expect(find.text('Source 3'), findsNothing);
     semantics.dispose();
   });
 
-  testWidgets('unresolvable sources render no timestamp row', (tester) async {
+  testWidgets('a heading-less section with sources still gets its control', (tester) async {
+    final conversation = _conversationWithSections(transcriptSegments: [segment('s1', 42)]);
+    conversation.structured.sections = [
+      const Section(heading: '', bodyMarkdown: 'Body only', sourceSegmentIds: ['s1']),
+      const Section(heading: '', bodyMarkdown: 'Unsourced body'),
+    ];
+    final opened = <String>[];
+    await _pumpSummary(tester, conversation, onOpenSource: opened.add);
+    expect(find.byKey(const ValueKey('section-sources')), findsOneWidget);
+    await openSources(tester);
+    await tester.tap(find.byKey(const ValueKey('section-source-s1')));
+    await tester.pumpAndSettle();
+    expect(opened, ['s1']);
+  });
+
+  testWidgets('the sources control answers a single tap at once on an editable summary', (tester) async {
+    final conversation = _conversationWithSections(transcriptSegments: [segment('s1', 42)]);
+    conversation.structured.sections = [
+      const Section(heading: 'Decisions', bodyMarkdown: 'Body', sourceSegmentIds: ['s1']),
+    ];
+    await _pumpSummary(tester, conversation, onOpenSource: (_) {}, onSaveSummarySelection: (_, __) {});
+    await tester.tap(find.byKey(const ValueKey('section-sources')));
+    // Well inside the 300ms double-tap timeout: a double-tap ancestor would still hold the tap.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const ValueKey('section-source-s1')), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('unresolvable sources render no sources control', (tester) async {
     final conversation = _conversationWithSections();
     conversation.structured.sections = [
       const Section(heading: 'Missing', bodyMarkdown: 'Body', sourceSegmentIds: ['missing']),
     ];
     await _pumpSummary(tester, conversation, onOpenSource: (_) => fail('No source should open'));
-    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-    expect(find.byKey(const ValueKey('quote-times-more')), findsNothing);
+    expect(find.text('Missing'), findsOneWidget);
+    expect(find.byKey(const ValueKey('section-sources')), findsNothing);
   });
 
   testWidgets('an absent transcript ID cannot resolve an empty source ID', (tester) async {
-    final segment = TranscriptSegment.fromJson({
+    final empty = TranscriptSegment.fromJson({
       'text': 'Missing identity',
       'is_user': false,
       'start': 42.0,
       'end': 43.0,
     });
-    expect(segment.id, '');
-    final conversation = _conversationWithSections(transcriptSegments: [segment]);
+    expect(empty.id, '');
+    final conversation = _conversationWithSections(transcriptSegments: [empty]);
     conversation.structured.sections = [
       const Section(heading: 'Missing', bodyMarkdown: 'Body', sourceSegmentIds: ['']),
     ];
     await _pumpSummary(tester, conversation, onOpenSource: (_) => fail('No source should open'));
-    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    expect(find.byKey(const ValueKey('section-sources')), findsNothing);
     expect(find.text('0:42'), findsNothing);
-    expect(find.byKey(const ValueKey('quote-time-')), findsNothing);
-    expect(find.byKey(const ValueKey('quote-times-more')), findsNothing);
   });
 
   testWidgets('hour timestamps speak singular hours and seconds precisely', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
       final conversation = _conversationWithSections(transcriptSegments: [
-        for (final start in [3600.0, 3601.0])
-          TranscriptSegment(
-              id: '$start',
-              text: 'Evidence',
-              speaker: null,
-              isUser: false,
-              personId: null,
-              start: start,
-              end: start + 1,
-              translations: []),
+        for (final start in [3600.0, 3601.0]) segment('$start', start),
       ]);
       conversation.structured.sections = [
         const Section(heading: 'Hour', bodyMarkdown: 'Body', sourceSegmentIds: ['3600.0', '3601.0']),
       ];
       await _pumpSummary(tester, conversation, onOpenSource: (_) {});
+      await openSources(tester);
       expect(find.text('1:00:00'), findsOneWidget);
       expect(find.text('1:00:01'), findsOneWidget);
       expect(find.bySemanticsLabel('Jump to 1 hour, 0 mins, 0 secs'), findsOneWidget);
@@ -166,29 +187,29 @@ void main() {
     }
   });
 
-  testWidgets('typed section timestamps navigate and highlight through the existing transcript controller',
+  testWidgets('typed section sources navigate and highlight through the existing transcript controller',
       (tester) async {
-    final conversation = _conversationWithSections(transcriptSegments: [
-      TranscriptSegment(
-          id: 's1', text: 'Approved', speaker: null, isUser: false, personId: null, start: 3, end: 5, translations: [])
-    ]);
+    final conversation = _conversationWithSections(transcriptSegments: [segment('s1', 3, 'Approved')]);
     conversation.structured.sections = [
       const Section(heading: 'Decision []', bodyMarkdown: 'Approved. [s1]', sourceSegmentIds: ['missing', 's1', 's1']),
       const Section(heading: 'Legacy', bodyMarkdown: 'No typed sources. [s1] []'),
     ];
     final selection = ConversationSummarySelection.select(conversation);
     expect(selection.sections[0].sourceSegmentIds, ['s1']);
-    expect(selection.sections[1].sourceSegmentIds, isEmpty);
+    // The legacy section's only evidence was the inline citation the repair removed; it stays its source.
+    expect(selection.sections[1].sourceSegmentIds, ['s1']);
     final controller = ConversationPlaybackController(segments: conversation.transcriptSegments);
     addTearDown(controller.dispose);
     await _pumpSummary(tester, conversation, onOpenSource: (id) {
       final segment = conversation.transcriptSegments.singleWhere((segment) => segment.id == id);
       controller.seek(segment.start, strict: true);
     });
-    expect(find.byKey(const ValueKey('quote-time-s1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('quote-time-missing')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('quote-time-s1')));
-    await tester.pump();
+    expect(find.byKey(const ValueKey('section-sources')), findsNWidgets(2));
+    await openSources(tester);
+    expect(find.byKey(const ValueKey('section-source-s1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('section-source-missing')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('section-source-s1')));
+    await tester.pumpAndSettle();
     expect(controller.highlightedSegment.value, 's1');
     expect(controller.followTargetSegmentId, 's1');
     expect(controller.followRequest, 1);

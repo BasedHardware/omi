@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,6 +17,13 @@ from models.transcript_segment import TranscriptSegment
 from models.users import ProcessingBacklog, Subscription, UserSubscriptionResponse
 from utils.conversations import process_conversation as pipeline
 from routers import users as route
+
+
+@pytest.fixture(autouse=True)
+def no_cap_hold_reservations(monkeypatch):
+    # Cap-hold batch reservations (lane 6) are covered by test_cap_hold_batch_debit.py; here none are open.
+    monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 def allowance(remaining=130, managed=True):
@@ -44,12 +53,28 @@ def test_flags_off_add_no_reads_or_wire_fields(monkeypatch):
     assert data['phone_call_quota'] is None
 
 
+async def test_pending_deletion_owner_is_skipped_before_backlog_reads(monkeypatch):
+    calls = []
+
+    async def blocking(_executor, function, *args, **kwargs):
+        calls.append(function.__name__)
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: True)
+    monkeypatch.setattr(worker, 'recovery_cohort_admits', lambda _uid: True)
+    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda _uid: True)
+    monkeypatch.setattr(worker, 'run_blocking', blocking)
+
+    assert await worker.run('uid-pending') is None
+    assert calls == ['<lambda>']
+
+
 @pytest.mark.parametrize(
     'managed,period,expected',
     [(False, '2026-10', 'capped'), (True, '2026-09', 'waiting_choice'), (True, '2026-10', 'processing')],
 )
 def test_reset_keeps_backlog_waiting_and_estimates_from_totals(monkeypatch, managed, period, expected):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-10')
     monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
     result = backlog.snapshot(
@@ -65,7 +90,7 @@ def test_reset_keeps_backlog_waiting_and_estimates_from_totals(monkeypatch, mana
 
 
 def test_estimated_percent_rounds_half_up_to_a_whole_number(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-10')
     allowance = SimpleNamespace(managed=True, remaining_units=1000, budget_units=1000)
     summary = {'count': 1, 'units': 125, 'seconds': 0, 'state': 'waiting_choice', 'period': '2026-09'}
@@ -78,7 +103,7 @@ def test_estimated_percent_rounds_half_up_to_a_whole_number(monkeypatch):
 
 
 def test_upgrade_over_estimate_asks_but_explicit_choice_accepts_partial(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
     monkeypatch.setattr(
         backlog,
@@ -99,7 +124,7 @@ def test_upgrade_over_estimate_asks_but_explicit_choice_accepts_partial(monkeypa
 @pytest.mark.parametrize('source', [ConversationSource.phone, ConversationSource.desktop, ConversationSource.omi])
 @pytest.mark.parametrize('custom', [False, True])
 def test_all_sources_store_transcript_without_paid_pipeline(monkeypatch, source, custom):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'processing_allowed', lambda uid: False)
     now = datetime.now(timezone.utc)
     raw = CreateConversation(
@@ -167,7 +192,7 @@ def test_waiting_projection_stays_display_only_and_never_overwrites_an_existing_
 
 
 def test_opening_existing_waiting_transcript_after_reset_does_not_process(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'processing_allowed', lambda uid: True)
     monkeypatch.setattr(pipeline, '_enrich_meeting_context', Mock(side_effect=AssertionError('automatic processing')))
     monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', Mock(return_value=True))
@@ -185,7 +210,7 @@ def test_opening_existing_waiting_transcript_after_reset_does_not_process(monkey
 
 
 async def test_explicit_worker_selects_newest_first_and_leaves_unfitting_rows(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-10')
     monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance(10))
@@ -239,7 +264,7 @@ async def test_explicit_worker_selects_newest_first_and_leaves_unfitting_rows(mo
 async def test_finishing_choice_schedules_an_already_accepted_upgrade(monkeypatch):
     import asyncio
 
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-10')
     monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
     monkeypatch.setattr(
@@ -257,23 +282,13 @@ async def test_finishing_choice_schedules_an_already_accepted_upgrade(monkeypatc
     finished = Mock(return_value=True)
     monkeypatch.setattr(worker.store, 'finish', finished)
     monkeypatch.setattr(worker, '_page', lambda *args: [])
-    scheduled = []
-
-    def schedule(coroutine, *, name):
-        scheduled.append(name)
-        if name == 'processing_backlog_continuation':
-            coroutine.close()
-            return None
-        return asyncio.create_task(coroutine)
-
-    monkeypatch.setattr(worker, 'start_background_task', schedule)
     await worker.run('synthetic')
     finished.assert_called_once_with('synthetic', 'choice', 'lease', '2026-10')
-    assert scheduled == ['processing_backlog_lease', 'processing_backlog_continuation']
+    # The accepted upgrade remains durable for the next scheduler sweep.
 
 
 async def test_previous_month_intent_cannot_spend_the_new_month(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-11')
     monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
     monkeypatch.setattr(worker.store, 'read', lambda uid: {'state': 'processing', 'period': '2026-10'})
@@ -285,15 +300,13 @@ async def test_previous_month_intent_cannot_spend_the_new_month(monkeypatch):
 
 def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     choice = Mock(return_value={'token': 'run'})
     monkeypatch.setattr(backlog, 'choose', choice)
     snapshot = ProcessingBacklog(
         state='processing', estimated_units=130, estimated_hours=1, estimated_percent=10, exceeds_remaining=True
     )
     monkeypatch.setattr(backlog, 'snapshot', lambda uid: snapshot)
-    kicked = Mock()
-    monkeypatch.setattr(worker, 'kick', kicked)
     app = FastAPI()
     app.include_router(route.router)
     app.dependency_overrides[route.auth.get_current_user_uid] = lambda: 'synthetic'
@@ -306,7 +319,6 @@ def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backen
     assert response.json()['estimated_percent'] == 10
     assert response.json()['exceeds_remaining'] is True
     choice.assert_called_once_with('synthetic', request_key='synthetic-choice-uuid')
-    kicked.assert_called_once_with('synthetic')
 
 
 def test_renewals_and_downgrades_do_not_create_upgrade_intent():
@@ -321,13 +333,13 @@ def test_renewals_and_downgrades_do_not_create_upgrade_intent():
 
 
 def test_capped_empty_backlog_still_publishes_pause_state(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     result = backlog.snapshot('synthetic', allowance=allowance(0, False), audio={'count': 0, 'seconds': 0}, summary={})
     assert result.state == 'capped' and result.held_audio_count == 0
 
 
 def test_unavailable_allowance_never_claims_monthly_limit_exhaustion(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     result = backlog.snapshot(
         'synthetic',
         allowance=SimpleNamespace(managed=False, reason='allowance_unavailable', remaining_seconds=0, limit_seconds=0),
@@ -339,7 +351,7 @@ def test_unavailable_allowance_never_claims_monthly_limit_exhaustion(monkeypatch
 
 @pytest.mark.parametrize('trigger', list(pipeline.ProcessingTrigger))
 def test_cap_denial_preserves_existing_enrichment_and_discard_state(monkeypatch, trigger):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'processing_allowed', lambda uid: False)
     now = datetime.now(timezone.utc)
     conv = Conversation(
@@ -356,6 +368,29 @@ def test_cap_denial_preserves_existing_enrichment_and_discard_state(monkeypatch,
     monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
     monkeypatch.setattr(pipeline, '_enrich_meeting_context', Mock(side_effect=AssertionError('funded work')))
     dispositions, persistence = [], []
+    if trigger is pipeline.ProcessingTrigger.SILENT_BACKFILL:
+        # Silent backfill is the one trigger whose cap denial must not return
+        # the preserved row: its caller is a leased historical finalization
+        # job, and a quiet return (or the budget-waiting store the generic
+        # path takes for a raw row) would let the finalizer close the job as a
+        # successful backfill. It raises the recovery failure before any
+        # persistence instead (#23260), so the same preservation invariant is
+        # asserted through the raise: no funded work, no write, no observer
+        # events, and the row's enrichment and discard state untouched.
+        with pytest.raises(pipeline.RecoveryStructureUnavailableError):
+            pipeline.process_conversation(
+                'synthetic',
+                'en',
+                conv,
+                trigger=trigger,
+                persistence_observer=persistence.append,
+                derived_effects_disposition_observer=dispositions.append,
+            )
+        assert conv.model_dump() == before
+        assert persistence == []
+        assert dispositions == []
+        persist.assert_not_called()
+        return
     result = pipeline.process_conversation(
         'synthetic',
         'en',
@@ -380,7 +415,7 @@ def test_cap_denial_preserves_existing_enrichment_and_discard_state(monkeypatch,
     ],
 )
 def test_late_first_upgrade_delivery_cannot_spend_new_month(monkeypatch, intent_at, accepted):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-02')
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
     monkeypatch.setattr(
@@ -399,7 +434,7 @@ def test_late_first_upgrade_delivery_cannot_spend_new_month(monkeypatch, intent_
 
 
 def test_precreated_on_device_ingress_still_becomes_waiting(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'processing_allowed', lambda uid: False)
     now = datetime.now(timezone.utc)
     conv = Conversation(
@@ -423,7 +458,7 @@ def test_precreated_on_device_ingress_still_becomes_waiting(monkeypatch):
 def test_later_dispatch_denial_keeps_capture_instead_of_ingress_cleanup(monkeypatch, existing):
     from fastapi import HTTPException
 
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     now = datetime.now(timezone.utc)
     fields = dict(
         started_at=now,
@@ -458,7 +493,7 @@ def test_later_dispatch_denial_keeps_capture_instead_of_ingress_cleanup(monkeypa
 
 
 def test_rollover_during_choice_never_stamps_old_intent_with_new_month(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     month = Mock(side_effect=['2026-01', '2026-02'])
     monkeypatch.setattr(funded, 'period_id', month)
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
@@ -483,7 +518,7 @@ def test_rollover_during_choice_never_stamps_old_intent_with_new_month(monkeypat
 
 
 async def test_reserved_attempt_does_not_dispatch_if_month_rolls_during_claim(monkeypatch):
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', Mock(side_effect=['2026-01', '2026-01', '2026-02']))
     monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
     monkeypatch.setattr(
@@ -505,7 +540,7 @@ async def test_worker_dispatch_carries_expiring_month_consent(monkeypatch):
     from unittest.mock import AsyncMock
 
     month = ['2026-10']
-    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: month[0])
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
     monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)

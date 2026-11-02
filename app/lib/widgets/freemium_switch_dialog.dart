@@ -71,16 +71,7 @@ class FreemiumSwitchHandler {
         if (!promptContext.mounted) return;
         if (await PaywallRouter.openVariant(promptContext, source: 'freemium_switch')) return;
         if (!promptContext.mounted) return;
-        final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
-        PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
-        final title = await plansSheetTitle(promptContext);
-        if (!promptContext.mounted) return;
-        return showOmiSheet<void>(
-          context: promptContext,
-          title: title,
-          padding: EdgeInsets.zero,
-          builder: (_) => const _PlansSheetWrapper(),
-        );
+        return showPlansSheetPrompt(promptContext, source: 'freemium_switch');
       },
     );
   }
@@ -111,16 +102,32 @@ class FreemiumSwitchHandler {
       return true;
     }
     var dontAskAgain = false;
-    final choice = await showOnDeviceAtCapSheet(context,
-        liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
-        copy: copy,
-        onDontAskAgain: (value) => dontAskAgain = value);
-    if (!context.mounted || choice == null) return true;
-    if (copy != null && record is ApiSuccess<GeneratedBudgetChoiceResponse>) {
+    var current = record;
+    OnDeviceAtCapChoice? choice;
+    for (var ask = 0; ask < 2; ask++) {
+      dontAskAgain = false;
+      choice = await showOnDeviceAtCapSheet(context,
+          liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
+          copy: copy,
+          onDontAskAgain: (value) => dontAskAgain = value);
+      if (!context.mounted || choice == null) return true;
+      if (copy == null || current is! ApiSuccess<GeneratedBudgetChoiceResponse>) break;
       final saved = await api.save(
-          record.data.period, choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device', dontAskAgain);
-      if (saved is! ApiSuccess || !context.mounted) return true;
+          current.data.period, choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device', dontAskAgain);
+      if (!context.mounted) return true;
+      if (saved is ApiSuccess) break;
+      if (!budgetPeriodChanged(saved) || ask == 1) return true;
+      final reloaded = await api.load();
+      if (!context.mounted || reloaded is! ApiSuccess<GeneratedBudgetChoiceResponse>) return true;
+      current = reloaded;
+      if (!reloaded.data.ask) {
+        if (reloaded.data.state == 'on_device') {
+          await controller.updateSettings(controller.settings.copyWith(enabled: true));
+        }
+        return true;
+      }
     }
+    if (choice == null) return true;
     switch (choice) {
       case OnDeviceAtCapChoice.transcribeOnPhone:
         await controller.updateSettings(controller.settings.copyWith(enabled: true));
@@ -160,9 +167,26 @@ class FreemiumSwitchHandler {
   }
 }
 
+/// The shipped plans sheet for an opener outside Settings, once [PaywallRouter] has declined (the
+/// control arm, or a reader the trial page can't serve). Emits `Paywall Opened` with [source].
+Future<void> showPlansSheetPrompt(BuildContext context, {required String source}) async {
+  final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
+  PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
+  final title = await plansSheetTitle(context);
+  if (!context.mounted) return;
+  return showOmiSheet<void>(
+    context: context,
+    title: title,
+    padding: EdgeInsets.zero,
+    builder: (_) => _PlansSheetWrapper(source: source),
+  );
+}
+
 /// Wrapper widget to create animation controllers for PlansSheet
 class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
+  const _PlansSheetWrapper({required this.source});
+
+  final String source;
 
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
@@ -201,7 +225,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _waveController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
-      analyticsSource: 'freemium_switch',
+      analyticsSource: widget.source,
     );
   }
 }

@@ -823,10 +823,6 @@ sign_app_bundle() {
             substep "Signing Sparkle framework"
             omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
         fi
-        if [ -d "$bundle/Contents/Frameworks/Sentry.framework" ]; then
-            substep "Signing Sentry framework"
-            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sentry.framework"
-        fi
         if [ -d "$bundle/Contents/Frameworks/onnxruntime.framework" ]; then
             substep "Signing onnxruntime framework"
             omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/onnxruntime.framework"
@@ -1338,14 +1334,6 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
     substep "Copying Sparkle framework ($(du -sh "$SPARKLE_FRAMEWORK" 2>/dev/null | cut -f1))"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
     cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
-fi
-
-# Copy Sentry framework
-SENTRY_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sentry.framework"
-if [ -d "$SENTRY_FRAMEWORK" ]; then
-    substep "Copying Sentry framework"
-    rm -rf "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
-    cp -R "$SENTRY_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
 
 # Copy onnxruntime framework

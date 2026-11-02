@@ -7,6 +7,8 @@ precede import" case: see backend/docs/test_isolation.md and
 testing/import_isolation.load_module_fresh / stub_modules.
 """
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import importlib
 import os
 from datetime import datetime, timezone

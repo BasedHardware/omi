@@ -398,6 +398,43 @@ def test_ledger_history_page_sentinel_row_is_not_skipped_by_continuation(service
     assert second.truncated is False
 
 
+def test_ledger_history_small_pages_walk_every_history_row_once(service_mod, monkeypatch):
+    """A page smaller than the 500-row provider window must resume after its
+    last returned row. Resuming after the scanned window skipped the window's
+    remaining history rows, and a page cut inside the last, complete window
+    ended the walk with no continuation."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    # Every third provider row is current (not history), so provider keys and
+    # history positions differ.
+    rows = [
+        _ledger_item(service_mod, f"row-{index:04d}", updated_at=now, user_review=None if index % 3 == 0 else False)
+        for index in range(1200)
+    ]
+
+    def provider(uid, *, limit, **kwargs):
+        start_after = kwargs.get("start_after")
+        start = 0
+        if start_after is not None:
+            start = int(start_after[1].split("-")[1]) + 1
+        return iter(rows[start : start + limit])
+
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items_newest_first", provider)
+    service = service_mod.MemoryService(db_client=_Db())
+
+    # Walk like a client of GET /v3/memories/ledger-history at its default
+    # limit: the router signs ``next_start_after`` only for truncated pages.
+    pages = [service.read_ledger_history_page("uid-test", limit=100)]
+    while pages[-1].truncated and len(pages) < 20:
+        pages.append(service.read_ledger_history_page("uid-test", limit=100, start_after=pages[-1].next_start_after))
+
+    walked = [memory.id for page in pages for memory in page.memories]
+    assert len(walked) == len(set(walked)), "a history row was returned twice"
+    assert walked == [f"row-{index:04d}" for index in range(1200) if index % 3 != 0]
+    assert all(len(page.memories) <= 100 for page in pages)
+    assert pages[0].next_start_after == (now, "row-0149")
+    assert pages[-1].truncated is False
+
+
 def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
     now = datetime(2026, 8, 23, tzinfo=timezone.utc)
     locked = _ledger_item(service_mod, "locked", updated_at=now, user_review=False)
@@ -911,6 +948,36 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
         now=None,
     )
     service._canonical.write.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_ids"),
+    [
+        ("AI", ["ai"]),
+        ("ux", ["ux"]),
+        ("中文", ["chinese"]),
+        ("...", []),
+        ("", ["ai", "ux", "chinese"]),
+    ],
+)
+def test_default_product_search_filters_queries_made_only_of_short_words(service_mod, query, expected_ids):
+    from models.product_memory import MemoryAccessPolicy
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service.read = MagicMock(
+        return_value=[
+            _memory(service_mod, "ai", content="Works on AI agents"),
+            _memory(service_mod, "ux", content="Reviews UX copy every Friday"),
+            _memory(service_mod, "chinese", content="正在学习中文"),
+        ]
+    )
+
+    result = service.default_product_search("uid-test", query, policy=MemoryAccessPolicy.for_omi_chat())
+
+    # Only a blank query lists every memory; short words still filter and a query
+    # with no searchable word matches nothing.
+    assert [item["memory_id"] for item in result["items"]] == expected_ids
+    assert result["total_count"] == len(expected_ids)
 
 
 def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):

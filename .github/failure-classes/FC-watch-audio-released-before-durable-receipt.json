@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-watch-audio-released-before-durable-receipt",
+  "violated_contract": "Watch audio must remain recoverable through Stop, receiver restart and asynchronous transfer; a transport callback or empty phone WAL inventory is not a durable custody receipt.",
+  "canonical_prevention": "Persist session-scoped audio before live routing, validate and durably publish an account-owned iPhone copy, then acknowledge its digest. Keep idempotent receipts after processing/deletion and retain Watch sources until that receipt and OS transfer completion.",
+  "canonical_prevention_artifact": ["app/ios/test/watch_recording_recovery_test.rb", "app/ios/test/fixtures/watch_recording_store_harness.swift", "app/test/unit/local_recordings_owner_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/ios/Runner/WatchRecordingStore.swift", "app/ios/omiWatchApp/", "app/lib/services/capture/watch_recording_receipt.dart"],
+  "status": "open"
+}

@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/apple_speech_readiness.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
@@ -76,6 +77,82 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+  test('Apple runtime asset failure pauses retry, preserves saved audio and resumes the retained frames', () async {
+    final temp = await Directory.systemTemp.createTemp('speech-runtime-assets');
+    final recognitionTemp = await Directory('${temp.path}/recognition').create();
+    final savedAudio = File('${temp.path}/saved-recording.bin');
+    final pcm = Uint8List(32000);
+    for (var i = 0; i < pcm.length; i += 2) {
+      ByteData.sublistView(pcm).setInt16(i, i % 4 == 0 ? 9000 : -9000, Endian.little);
+    }
+    await savedAudio.writeAsBytes(pcm);
+    const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+    const speechChannel = MethodChannel('com.omi.ios/speech');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var ready = true;
+    final submittedPcm = <List<int>>[];
+    messenger.setMockMethodCallHandler(pathChannel, (_) async => recognitionTemp.path);
+    messenger.setMockMethodCallHandler(speechChannel, (call) async {
+      if (call.method == 'readiness') return {'engine': 'sfspeech', 'status': ready ? 'ready' : 'unavailable'};
+      expect(call.method, 'transcribe');
+      final args = call.arguments as Map;
+      expect(args['useSpeechAnalyzer'], isFalse);
+      final wav = await File(args['filePath'] as String).readAsBytes();
+      submittedPcm.add(wav.sublist(44));
+      if (submittedPcm.length == 1) {
+        ready = false; // The real request fails after the initial ready probe.
+        throw PlatformException(code: 'UNAVAILABLE', details: {
+          'engine': 'sfspeech',
+          'status': 'unavailable',
+          'nativeErrorDomain': 'kLSRErrorDomain',
+          'nativeErrorCode': 102,
+        });
+      }
+      return 'Local speech is working again.';
+    });
+    final provider = OnDeviceAppleProvider(useSpeechAnalyzer: () async => false);
+    final socket = PurePollingSocket(
+        config: AudioPollingConfig(minBufferSizeBytes: 1, transcoder: PcmToWavTranscoder()), sttProvider: provider);
+    final listener = Listener();
+    socket.setListener(listener);
+    CustomSttLogService.instance.clear();
+    try {
+      expect(await provider.isReadyToRetry(), isTrue);
+      await socket.connect();
+      socket.send(pcm);
+      await socket.flushNow();
+      expect(socket.localFailure!.code, 'unavailable');
+      expect(socket.status, PureSocketStatus.connected);
+      expect(socket.bufferedBytes, pcm.length);
+      expect(socket.audioOffset, 0);
+      expect(listener.messages, isEmpty);
+      expect(listener.errors.single, isA<LocalSttFailure>());
+      expect(CustomSttLogService.instance.logsAsText, contains('kLSRErrorDomain'));
+      expect(CustomSttLogService.instance.logsAsText, contains('102'));
+      expect(await recognitionTemp.list().toList(), isEmpty);
+      socket.send(pcm);
+      await socket.retryLocalTranscription();
+      expect(submittedPcm, hasLength(1), reason: 'unavailable recognizer is probed, not repeatedly allocated');
+      expect(socket.bufferedBytes, pcm.length * 2);
+      ready = true;
+      await socket.retryLocalTranscription();
+      expect(submittedPcm, [
+        pcm,
+        [...pcm, ...pcm]
+      ]);
+      expect(socket.localFailure, isNull);
+      expect(socket.bufferedBytes, 0);
+      expect(socket.audioOffset, 2);
+      expect(listener.messages, hasLength(1));
+      expect(await recognitionTemp.list().toList(), isEmpty);
+      expect(await savedAudio.readAsBytes(), pcm, reason: 'only disposable recognition WAVs may be deleted');
+    } finally {
+      await socket.stop();
+      messenger.setMockMethodCallHandler(pathChannel, null);
+      messenger.setMockMethodCallHandler(speechChannel, null);
+      await temp.delete(recursive: true);
+    }
   });
   test('real polling consumes speech then 35 seconds silence, then more silence', () async {
     final provider = SpeechThenSilence();

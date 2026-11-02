@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
 import {
   desktopReleaseLifecycle,
@@ -54,7 +54,7 @@ async function fetchGithubReleases(): Promise<any[]> {
   }
   const res = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`,
-    { headers, cache: "no-store" },
+    { headers, cache: "no-store" }
   );
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
   return res.json();
@@ -63,9 +63,10 @@ async function fetchGithubReleases(): Promise<any[]> {
 async function fetchBetaAppcast(): Promise<string> {
   const res = await fetch(
     "https://api.omi.me/v2/desktop/appcast.xml?identity=beta",
-    { cache: "no-store" },
+    { cache: "no-store" }
   );
-  if (!res.ok) throw new Error(`Beta appcast ${res.status}: ${await res.text()}`);
+  if (!res.ok)
+    throw new Error(`Beta appcast ${res.status}: ${await res.text()}`);
   return res.text();
 }
 
@@ -75,7 +76,7 @@ function parseVersion(tag: string): string | null {
 }
 
 function parseReleaseMetadata(
-  body: string | null | undefined,
+  body: string | null | undefined
 ): Record<string, string> {
   if (!body) return {};
   const metadata: Record<string, string> = {};
@@ -122,7 +123,7 @@ async function posthogQuery(query: string): Promise<any> {
         query: { kind: "HogQLQuery", query: withRowLimit(query) },
       }),
       cache: "no-store",
-    },
+    }
   );
   if (!res.ok) {
     const text = await res.text();
@@ -141,7 +142,7 @@ interface VersionMetrics {
 }
 
 async function fetchPostHogMetrics(
-  versions: string[],
+  versions: string[]
 ): Promise<Map<string, VersionMetrics>> {
   const results = new Map<string, VersionMetrics>();
   if (!POSTHOG_API_KEY || versions.length === 0) return results;
@@ -277,7 +278,7 @@ function computeRatingAndSummary(m: VersionMetrics): {
 // --- Handler ---
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:read");
   if (authResult instanceof NextResponse) return authResult;
 
   let github_error: string | null = null;
@@ -294,9 +295,9 @@ export async function GET(request: NextRequest) {
     githubReleases = githubResult.value;
   } else {
     github_error = githubResult.reason?.message || String(githubResult.reason);
-    return NextResponse.json(
+    return authResult.json(
       { releases: [], github_error, posthog_error: null, partial: true },
-      { status: 502 },
+      { status: 502 }
     );
   }
 
@@ -304,14 +305,15 @@ export async function GET(request: NextRequest) {
   if (appcastResult.status === "fulfilled") {
     liveBetaBuild = newestSparkleVersion(appcastResult.value);
   } else {
-    appcast_error = appcastResult.reason?.message || String(appcastResult.reason);
+    appcast_error =
+      appcastResult.reason?.message || String(appcastResult.reason);
   }
 
   const desktopReleases = githubReleases
     .filter(
       (r) =>
         typeof r.tag_name === "string" &&
-        r.tag_name.endsWith(RELEASE_TAG_SUFFIX),
+        r.tag_name.endsWith(RELEASE_TAG_SUFFIX)
     )
     .filter((r) => parseVersion(r.tag_name) !== null)
     .slice(0, RELEASE_LIMIT);
@@ -367,13 +369,13 @@ export async function GET(request: NextRequest) {
       lifecycle_state: desktopReleaseLifecycle(
         channel,
         betaLive,
-        stableCandidate,
+        stableCandidate
       ),
       channel,
     };
   });
 
-  return NextResponse.json({
+  return authResult.json({
     releases: rows,
     github_error: null,
     posthog_error,

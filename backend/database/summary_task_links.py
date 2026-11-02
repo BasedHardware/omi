@@ -36,7 +36,13 @@ class SummaryTaskRow:
 
     def linked_patch(self, task_id: str) -> dict[str, Any]:
         structured = deepcopy(self.structured)
-        structured['action_items'][self.index]['target_task_id'] = task_id
+        selected = structured['action_items'][self.index]
+        if isinstance(selected, str):
+            # Released summaries also stored plain-text rows. Upgrade only the
+            # selected row when acceptance commits its durable task identity.
+            selected = {'description': selected}
+            structured['action_items'][self.index] = selected
+        selected['target_task_id'] = task_id
         return {'structured': structured}
 
     def proposal(self) -> CandidateCreate:
@@ -89,6 +95,8 @@ def read_summary_task_row(
     if not isinstance(items, list) or selected.action_item_index >= len(items):
         raise SummaryTaskNotFoundError('Summary action item not found')
     raw_item = items[selected.action_item_index]
+    if isinstance(raw_item, str):
+        raw_item = {'description': raw_item}
     if not isinstance(raw_item, dict) or raw_item.get('deleted'):
         raise SummaryTaskNotFoundError('Summary action item not found')
     try:

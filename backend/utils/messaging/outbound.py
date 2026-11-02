@@ -33,6 +33,8 @@ class ChannelReplySink:
         self.last_draft = 0
         self.finished = False
         self.delivered_ids = []
+        # A draft preview is visible to the user even though it is not a delivered message.
+        self.drafted = False
 
     def response(self, stream, *, media_type):
         return stream
@@ -56,7 +58,9 @@ class ChannelReplySink:
             send_reply_target.reset(reply_token)
             send_guard.reset(guard_token)
             send_sequence.reset(token)
-        if not draft:
+        if draft:
+            self.drafted = True
+        else:
             self.sequence += 1
             if provider_id:
                 self.delivered_ids.append(str(provider_id))

@@ -16,7 +16,7 @@ import Foundation
 /// Privacy boundary: every field is a low-cardinality bucket, boolean, or
 /// opaque per-attempt UUID. No transcript text, audio, sample counts, device
 /// names, file paths, or error strings — detail stays in the local log,
-/// `Desktop Recording Error`, and Sentry.
+/// `Desktop Recording Error`, and the error log.
 struct CaptureAttemptOutcomeState {
   /// How the attempt was armed. Only intents already distinguished by the
   /// arming code are modeled; there is no third "armed" producer today.

@@ -588,7 +588,7 @@ def test_registered_runtime_env_on_four_services_both_envs(runtime_env_manifest)
 
 def test_opus_fs320_claim_maps_320_sample_frames(monkeypatch, tmp_path):
     """An `opus` claim on an `_opus_fs320_` basename maps decoded frames to ordinals."""
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     stem = 'audio_pendant1_opus_fs320_16000_1_fs320_1700000000'
     wav_path = tmp_path / f'{stem}.wav'
     with wave.open(str(wav_path), 'wb') as wav:

@@ -13,7 +13,7 @@ interface ConversationGalleryProps {
   selectedId: string | null;
   onConversationClick: (conversation: Conversation) => void;
   onRecapClick: (recap: DailySummary) => void;
-  onStarToggle?: (id: string, starred: boolean) => void;
+  onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
   isSelectionMode?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;

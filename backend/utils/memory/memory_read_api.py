@@ -28,15 +28,17 @@ MemoryResult = Dict[str, Any]
 
 
 def _tokens(query: str) -> set[str]:
-    return {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2}
+    words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+    # Words of two characters or fewer drop only beside a longer word, so "AI" alone still filters.
+    return {token for token in words if len(token) > 2} or words
 
 
 def _matches(query: str, content: str) -> bool:
-    query_tokens = _tokens(query)
-    if not query_tokens:
+    # Only a blank query matches everything; a query with no searchable word matches nothing.
+    if not (query or "").strip():
         return True
     content_lower = (content or "").lower()
-    return any(token in content_lower for token in query_tokens)
+    return any(token in content_lower for token in _tokens(query))
 
 
 def _risk_flags(raw: Any) -> List[str]:

@@ -2,7 +2,9 @@
 
 Code and dev defaults keep both gates false. Production config enables the
 first-summary deadline for 100% of owners on all six producing/processing
-hosts and enables debt repair on the scheduled backend-sync owner. These
+hosts. Debt repair on the scheduled backend-sync owner is held off in
+production (`SUMMARY_DEBT_REPAIR_ENABLED=false`, deferred by David 2026-10-20
+until the Nemotron migration completes). These
 settings take effect only when the corresponding artifacts are deployed.
 `first_pending_at` is recorded in each outbox obligation even before rollout.
 No account content enters scheduling metadata or metrics.
@@ -120,9 +122,10 @@ emission can lose a Prometheus observation; the durable metadata remains truth.
 The checked-in production policy is ship-on. Keep the six hosts aligned:
 backend-listen, pusher, backend, backend-sync, backend-sync-backfill and
 backend-integration use `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
-`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The existing scheduled backend-sync
-owner also uses `SUMMARY_DEBT_REPAIR_ENABLED=true`. The bounded repair cost
-above is unchanged. No new index, scheduler, provider or capacity is required.
+`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The scheduled backend-sync owner keeps
+`SUMMARY_DEBT_REPAIR_ENABLED=false` until the deferral above is lifted; turning
+it on is a prod overlay change, not a hand edit, so the next deploy keeps it.
+The bounded repair cost above is unchanged. No new index, scheduler, provider or capacity is required.
 
 The master flag also routes summary enrichment on both HTTP adapters through
 the existing `postprocess_executor` rather than the STT `sync_executor`.

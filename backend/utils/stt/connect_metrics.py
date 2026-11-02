@@ -59,11 +59,17 @@ _REASON_ERROR_CLASS = {
     'provider_5xx': ERROR_CLASS_SERVER_ERROR,
     'server_error': ERROR_CLASS_SERVER_ERROR,
     'provider_429': ERROR_CLASS_RATE_LIMITED,
+    'provider_rate_limited': ERROR_CLASS_RATE_LIMITED,
     'modulate_serve_error': ERROR_CLASS_SERVER_ERROR,
     'config_incomplete': ERROR_CLASS_CAPABILITY,
     'capability_mismatch': ERROR_CLASS_CAPABILITY,
     'capacity_full': ERROR_CLASS_CAPABILITY,
     'allocation_rejected': ERROR_CLASS_CAPABILITY,
+    # Local delivery bounds surfaced at the liveness grace keep the same class
+    # capacity_full had before the split.
+    'send_queue_full': ERROR_CLASS_CAPABILITY,
+    'replay_send_stalled': ERROR_CLASS_CAPABILITY,
+    'delivery_expired': ERROR_CLASS_CAPABILITY,
 }
 
 

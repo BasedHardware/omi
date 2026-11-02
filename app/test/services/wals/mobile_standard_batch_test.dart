@@ -377,6 +377,29 @@ void main() {
     }
   });
 
+  test('local-preview grant ignores transcript visibility; ordinary grant keeps the visibility rule', () async {
+    lane.authorize(true, localPreview: true);
+    expect(lane.warmingUp, true);
+    await lane.pendingInitialization;
+    expect(lane.warmingUp, false);
+    state.capturePageOpened();
+    expect(state.value.transcriptVisible, true);
+    expect(route(1), true, reason: 'visible audio still journals in local-preview mode');
+    await lane.pendingInference;
+    lane.visibilityChanged();
+    expect(route(2), true);
+    await lane.pendingInference;
+    lane.authorize(true);
+    expect(lane.localPreview, false);
+    expect(route(3), false, reason: 'ordinary Standard batch hands visible audio back to live');
+    lane.authorize(false, localPreview: true);
+    expect(lane.localPreview, false, reason: 'a revoked grant is never a local-preview grant');
+    clock = clock.add(const Duration(minutes: 3));
+    lane.authorize(true, localPreview: true);
+    clock = clock.add(const Duration(minutes: 2));
+    expect(route(4), false, reason: 'same two-minute expiry as any authorization');
+  });
+
   testWidgets('existing visibility signal drives foreground/background routing', (tester) async {
     await tester.runAsync(() async {
       await enable();

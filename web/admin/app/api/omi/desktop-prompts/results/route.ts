@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
 export const dynamic = "force-dynamic";
 
@@ -7,17 +7,17 @@ export const dynamic = "force-dynamic";
 // (Desktop Prompt Shown / Answered / Dismissed), grouped by answer value so
 // stars/NPS averages and per-option counts render on the Prompts page.
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    "",
+    ""
   );
   if (!apiKey || !projectId) {
-    return NextResponse.json({ available: false, results: [] });
+    return authResult.json({ available: false, results: [] });
   }
 
   const days = parseInt(request.nextUrl.searchParams.get("days") || "90", 10);
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
           AND timestamp >= now() - INTERVAL ${days} DAY
         GROUP BY prompt_id, event, value
         ORDER BY prompt_id
-      `,
+      `
     )) as any[];
     const byPrompt: Record<
       string,
@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
         if (value) entry.answers[value] = (entry.answers[value] ?? 0) + count;
       }
     }
-    return NextResponse.json({ available: true, results: byPrompt });
+    return authResult.json({ available: true, results: byPrompt });
   } catch (error) {
     console.error("Prompt results error:", error);
-    return NextResponse.json({ available: false, results: {} });
+    return authResult.json({ available: false, results: {} });
   }
 }

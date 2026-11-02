@@ -37,6 +37,8 @@ def row(cid, source='omi', device='pendant', offset=0):
         'discarded': False,
         'started_at': T0 + timedelta(seconds=offset),
         'finished_at': T0 + timedelta(seconds=300),
+        'recorded_start': T0 + timedelta(seconds=offset),
+        'recorded_end': T0 + timedelta(seconds=300),
         'external_data': {},
         'transcript_segments': [
             {'start': start - offset, 'end': start - offset + 8, 'text': text}
@@ -115,6 +117,7 @@ def test_same_full_text_outside_overlap_cannot_authorize_new_fold(store, monkeyp
     first, second = row('a'), row('b', 'desktop', 'mac')
     second['started_at'] = T0 + timedelta(seconds=150)
     second['finished_at'] = T0 + timedelta(seconds=320)
+    second.update(recorded_start=second['started_at'], recorded_end=second['finished_at'])
     # Full-transcript trigrams agree, but speech occurred before/after shared time.
     second['transcript_segments'] = deepcopy(first['transcript_segments'])
     store.rows.update({path('a'): first, path('b'): second})

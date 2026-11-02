@@ -9,7 +9,11 @@ from utils.sync import recording_lineage
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
 from utils.sync.pipeline import retrieve_vad_segments, cleanup_recovered_sync_files
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
-from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
+from utils.capture.sync_coverage import (
+    apply_sync_coverage as apply_sync_wal_audio_coverage,
+    held_segment,
+    legacy_audio_trim,
+)
 
 
 async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dict]:
@@ -29,8 +33,7 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
             raise RuntimeError('held live VAD failed')
         return segments, offsets, {}, {}
     if not meta.get('full_capture'):
-        position = meta.get('source_position_map')
-        return {path}, {path: tuple(position) if position else None}, {}, {}
+        return await run_blocking(db_executor, held_segment, uid, path, meta)
     mapping = meta.get('source_frame_map') or {}
     offsets = mapping.get('offsets') or []
     frames = [end - start for start, end in zip(offsets, offsets[1:])]
@@ -49,7 +52,8 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
         storage_executor=storage_executor,
         cleanup_files=cleanup_recovered_sync_files,
     )
-    if sync_safety_wal_enabled():
+    # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve
+    if sync_safety_wal_enabled() and legacy_audio_trim(uid):
         inputs = list(paths)
         paths, _ = await apply_safety_wal_coverage(
             uid,

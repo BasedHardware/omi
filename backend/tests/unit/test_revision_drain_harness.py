@@ -199,7 +199,7 @@ async def test_real_recover_quarantine_handler_keeps_paid_call_inside_the_draine
     assert executor_work and all(u.scope == REQUEST_SCOPED and u.outcome == COMPLETED for u in executor_work)
     assert row(client)['recovery_state'] == 'recovered'
     stt.assert_called_once()
-    service.reconcile_async.assert_awaited_once_with()
+    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad')
 
 
 async def test_pre_22149_inline_fire_and_forget_recovery_is_flagged_lost(setup, monkeypatch):

@@ -5,6 +5,13 @@ and background processing.
 
 ## Boundaries
 
+- Manual merge admission allocates a new target before dispatch and returns
+  `merged_conversation_id` to clients. All manual admissions use durable jobs
+  regardless of the wider lifecycle canary; consumed-source receipts fence new
+  admission and worker rereads. The target keeps one identity; the optional response remains decodable by released clients. Mobile
+  completion/restart/cache ownership is documented in
+  `app/docs/conversation-merge-recovery.md`.
+
 - `live_continuation.py` coordinates durable reconnect admission through
   `database/listen_continuations.py`. The original recording binding remains
   immutable; its continuation metadata is adopted transactionally. Resume
@@ -23,6 +30,7 @@ and background processing.
   structuring, summary, and memory work (#7690). That gate sits after the
   unpaid desktop on-device / `store_projection` path (#14513) so it cannot
   strip a local summary.
+- `minimum_derived.py` owns intelligence admission and audited short-clip summary-debt waivers; creation delivery stays independent. See [short-recording floor](../../docs/short-recording-floor.md).
 - `processing_trigger.py` owns *why* a conversation is processed. Every caller
   of `process_conversation` (and every finalization job) names a
   `ProcessingTrigger`; its `PROCESSING_MODES` row fixes run-now, reprocess,
@@ -174,7 +182,7 @@ redirects preserve late audio. `merge_conversations.delete_conversation_with_syn
 owns retained-source purging for user/source deletion, called by the frame-evidence
 service and developer delete endpoint. Raw DB deletion and new-target rollback do
 not orchestrate external cleanup. The shared gap
-predicate lives in `utils/conversation_continuity.py`; both paths supply speech
+predicate lives in `models/conversation_continuity.py`; both paths supply speech
 silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.
 
 EXP-004 closed under David's 2026-10-18 rulings. Owner flip and owner

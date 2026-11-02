@@ -21,9 +21,13 @@ Keep immutable served images; never use `latest` for a chart-only installation.
 - Current request p99 was 3.25s. No higher per-pod throughput is qualified by this
   snapshot. Ratified scaling targets remain **2 requests/pod and 35% GPU**;
   `PARAKEET_MAX_INFLIGHT=1` is unchanged. A target is not a throughput receipt.
-- Idle Deepgram is not unused Deepgram: prod pusher has self-hosting enabled;
-  serving Cloud Run `backend` and `backend-integration` retain the retired URL.
-  Their caller bindings must be removed before any resource teardown.
+- Deepgram (cloud and self-hosted) retired 2026-08-27. 2026-10-22 audit (P69):
+  30 days of `omi_stt_provider_connect_total{provider="deepgram"}` are zero on
+  every service, no `deepgram` log entries cluster-wide, no deepgram pods or
+  node pools, `DEEPGRAM_SELF_HOSTED_ENABLED=false` on listen and pusher, and the
+  deploy strips both self-hosted env keys. The self-hosted chart is deleted;
+  remaining cloud residue is the Secret Manager key plus one orphan subnet
+  (`omi-deepgram-gke-us-central1-prod-vpc-1-subnet-1`) for the lead.
 
 Read-only refresh (the kubectl default context is prod; never rely on it):
 
@@ -64,7 +68,7 @@ zones still needs Ready probes and the existing load/health qualification. Use
 fallback only for the N4 shortfall; floors are fleet totals, not additive floors
 for primary and fallback. Capacity planning uses requests and allocatable nodes:
 listen requests 1 CPU/1.5Gi (about three pods/N4 node before other workloads),
-pusher 0.7 CPU/4.5Gi (about two pods/node). Include the LLM gateway sharing listen
+pusher 0.45 CPU/2Gi (about three pods/node after DaemonSet requests; memory limits must keep co-located limit sums under allocatable). Include the LLM gateway sharing listen
 labels, kube/system overhead, HPA maxima (listen 60), and one-node loss. Confirm
 actual bin-packing with Pending events before evacuation.
 
@@ -335,6 +339,13 @@ hard prerequisite, so a fully automated zero-drop n2rescue exit is **not qualifi
 by this chart PR**. The lead must not mark evacuation complete from preStop alone.
 
 ## Self-hosted Deepgram retirement
+
+**Closed 2026-10-22 (P69):** the post-deploy caller audit came back clean (zero
+traffic 30d, no pods, no node pools), so this runbook's precondition is met and
+the `backend/charts/deepgram-self-hosted` chart is deleted from the repo.
+Cloud Deepgram is retired the same day at the policy layer
+(`config/stt_provider_policy.py`): no surface admits it, `dg-*` slots are
+refused, and the pre-recorded client raises.
 
 Source audit: streaming chooses the self-hosted endpoint only when
 `DEEPGRAM_SELF_HOSTED_ENABLED` is true; default is false. The prerecorded SDK and

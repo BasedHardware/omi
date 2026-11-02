@@ -59,7 +59,7 @@ def _structure(**overrides) -> dict:
     payload = {
         'title': 'Standup',
         'overview': 'We talked about tests.',
-        'emoji': '🧠',
+        'emoji': '📌',
         'category': 'work',
         'sections': [_section()],
         'events': [_event()],
@@ -194,7 +194,7 @@ def test_empty_after_strip_rejected(model, payload, field) -> None:
         (ProjectedEvent, _event(), 'description', '  Sync next week  ', 'Sync next week'),
         (ProjectedStructure, _structure(), 'title', '  Standup  ', 'Standup'),
         (ProjectedStructure, _structure(), 'overview', '  We talked about tests.  ', 'We talked about tests.'),
-        (ProjectedStructure, _structure(), 'emoji', '  🧠  ', '🧠'),
+        (ProjectedStructure, _structure(), 'emoji', '  📌  ', '📌'),
         (ProjectionProvenance, _provenance(), 'model_id', '  local-summarizer-v1  ', 'local-summarizer-v1'),
         (ProjectionProvenance, _provenance(), 'runtime', '  mlx  ', 'mlx'),
         (ProjectionProvenance, _provenance(), 'device_class', '  apple_silicon  ', 'apple_silicon'),
@@ -344,6 +344,41 @@ def test_invalid_category_is_rejected_not_coerced_to_other() -> None:
     assert parsed.category is CategoryEnum.work
     omitted = ProjectedStructure.model_validate({'title': 'T'})
     assert omitted.category is CategoryEnum.other
+
+
+# --- emoji fallback policy ----------------------------------------------------------------------
+
+
+def test_unset_sentinel_emoji_is_never_stored() -> None:
+    # red-proof: drop _emoji_through_shared_fallback (a client's pre-fix 🧠
+    # "no emoji" sentinel would be stored as if a model had chosen it)
+    parsed = ProjectedStructure.model_validate(_structure(emoji='🧠'))
+    assert parsed.emoji == '🧑‍💻'  # work
+    neutral = ProjectedStructure.model_validate(_structure(emoji='🧠', category='other'))
+    assert neutral.emoji == '💬'
+
+
+def test_empty_or_omitted_emoji_falls_back_to_category() -> None:
+    # red-proof: default emoji '💬' instead of '' (omission would stay neutral
+    # even when the category carries its own emoji)
+    assert ProjectedStructure.model_validate(_structure(emoji='')).emoji == '🧑‍💻'
+    assert ProjectedStructure.model_validate(_structure(emoji='   ')).emoji == '🧑‍💻'
+    without_emoji = {key: value for key, value in _structure().items() if key != 'emoji'}
+    assert ProjectedStructure.model_validate(without_emoji).emoji == '🧑‍💻'
+
+
+def test_chosen_emoji_is_kept() -> None:
+    # red-proof: route every emoji through CATEGORY_EMOJI (a model's actual
+    # choice would be overwritten with the category default)
+    assert ProjectedStructure.model_validate(_structure(emoji='📌')).emoji == '📌'
+    assert ProjectedStructure.model_validate(_structure(emoji='💬')).emoji == '💬'
+
+
+def test_intake_payload_never_stores_the_sentinel() -> None:
+    # The full intake shape the router validates: the fallback binds on the
+    # embedded structure, so no client can store 🧠 as an unset value.
+    parsed = ClientProcessing.model_validate(_processing(structure=_structure(emoji='🧠')))
+    assert parsed.structure.emoji == '🧑‍💻'
 
 
 def test_schema_version_must_be_literal_1() -> None:

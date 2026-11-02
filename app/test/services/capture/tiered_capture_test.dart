@@ -152,7 +152,7 @@ void main() {
           },
           autoUploadEnabled: () => true,
         )..setForeground(foreground);
-        final wake = coordinator.wake(WakeTrigger.deviceConnected);
+        final wake = coordinator.wake(WakeTrigger.periodic);
         await draining.future;
         Future<void>? resume;
         try {

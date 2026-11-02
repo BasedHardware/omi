@@ -118,7 +118,7 @@ struct ConversationSummaryEmptyStateView: View {
 ///
 /// This is used only when `ConversationSummarySelection` has selected the sections projection, so
 /// it must never be mounted in addition to the selected overview/app body. Source ids are filtered
-/// against the loaded transcript before an affordance is shown; stale or unknown ids remain hidden.
+/// against the loaded transcript before the sources control is shown; stale or unknown ids remain hidden.
 struct ConversationSummarySections: View {
   let sections: [SummarySection]
   let transcriptSegments: [TranscriptSegment]
@@ -147,7 +147,9 @@ struct ConversationSummarySections: View {
         // heading — or have none at all, which this view explicitly allows below — and identical
         // `ForEach` ids make SwiftUI drop or duplicate rows rather than render both.
         ForEach(Array(visibleSections.enumerated()), id: \.offset) { _, section in
-          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          // The sources control sits at the section's top trailing corner, beside its heading,
+          // instead of a row of timestamps under the prose.
+          ZStack(alignment: .topTrailing) {
             // Markdown, not `Text`: these bodies carry lists and emphasis, and a plain `Text`
             // renders their syntax as literal characters. Selection is AppKit prose — the same
             // contract as chat — because a SwiftUI native-selection modifier on an ancestor of
@@ -159,13 +161,16 @@ struct ConversationSummarySections: View {
               appKitProseSelection: true,
               documentProse: true
             )
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if let onOpenSources {
-              ConversationQuoteTimestamps(
-                sources: ConversationQuoteTimestamp.resolve(section.sourceSegmentIDs, segments: transcriptSegments),
-                onOpenSource: { onOpenSources([$0]) }
+              ConversationSectionSources(
+                sourceIDs: ConversationSectionSources.resolve(section.sourceSegmentIDs, segments: transcriptSegments),
+                onOpenSources: onOpenSources
               )
-              .id(section.sourceSegmentIDs)
+              // Mostly into the side margin ConversationSummaryBody pads this view with, so it
+              // overlaps at most the column's last few points rather than a heading's last word.
+              .offset(x: OmiSpacing.lg - 2)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)

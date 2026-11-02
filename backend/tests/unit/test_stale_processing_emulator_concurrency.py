@@ -21,6 +21,8 @@ Run: cd backend && FIRESTORE_EMULATOR_HOST=localhost:8080 \
     .venv/bin/python -m pytest tests/unit/test_stale_processing_emulator_concurrency.py
 """
 
+from database import conversation_processing_recovery as processing_recovery
+
 import os
 import threading
 from datetime import datetime, timedelta, timezone
@@ -338,7 +340,9 @@ def test_production_finalizer_vs_orphan_race_exactly_one_wins():
     def orphan_terminalize():
         barrier.wait()
         try:
-            results['orphan'] = jobs_db.complete_orphan_conversation(uid, cid, expected_admitted_at=old_admitted)
+            results['orphan'] = processing_recovery.complete_orphan_conversation(
+                uid, cid, expected_admitted_at=old_admitted
+            )
         except _CONTENTION:
             results['orphan'] = False
         except Exception as error:
@@ -421,7 +425,9 @@ def test_deferred_reacquire_prevents_orphan_terminalization():
     def orphan_terminalize():
         barrier.wait()
         try:
-            results['orphan'] = jobs_db.complete_orphan_conversation(uid, cid, expected_admitted_at=old_admitted)
+            results['orphan'] = processing_recovery.complete_orphan_conversation(
+                uid, cid, expected_admitted_at=old_admitted
+            )
         except _CONTENTION:
             results['orphan'] = False
         except Exception as error:
@@ -532,23 +538,34 @@ def test_unstampable_orphan_is_fenced_by_the_server_owned_update_time():
     conv_ref.set({'id': cid, 'status': 'processing', 'has_content': True})
 
     # Just written: inside the staleness window, so it is fenced out.
-    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=900)) is False
+    assert (
+        processing_recovery.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=900))
+        is False
+    )
     assert (conv_ref.get().to_dict() or {}).get('status') == 'processing'
 
     # A durable finalization owner fences it out even once stale.
     conv_ref.update({'finalization_job_id': 'job-1'})
-    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is False
+    assert (
+        processing_recovery.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0))
+        is False
+    )
     assert (conv_ref.get().to_dict() or {}).get('status') == 'processing'
 
     # Unowned and untouched for the window: exactly one terminal, transcript intact.
     conv_ref.update({'finalization_job_id': firestore.DELETE_FIELD})
-    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is True
+    assert (
+        processing_recovery.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is True
+    )
     final_data = conv_ref.get().to_dict() or {}
     assert final_data.get('status') == 'completed'
     assert final_data.get('has_content') is True
 
     # A terminalized row is never terminalized twice.
-    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is False
+    assert (
+        processing_recovery.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0))
+        is False
+    )
 
     _cleanup_conversation(uid, cid)
 

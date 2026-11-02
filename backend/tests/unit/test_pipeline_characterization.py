@@ -15,10 +15,11 @@ import os
 from pathlib import Path
 
 import pytest
+from unittest.mock import Mock
 
 from diarizer import batch_pipeline as worker_module
+from config import batch_pipeline_empty_asr as empty_safety
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS, describe_diff, dumps, golden_trace
-from utils.batch_pipeline import quarantine_recovery as recovery_module
 
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens'
 UPDATE = os.environ.get('PIPELINE_GOLDEN_UPDATE') == '1'
@@ -28,20 +29,16 @@ def _never_fits(samples, max_padded_seconds):
     return False
 
 
-def _terminal_empty_disabled():
-    return False
-
-
 # Deliberate behavior changes in REAL product modules; each must change its golden.
 PERTURBATIONS = {
     # The worker never attempts the padded retry, so a padded-retry rescue becomes a paid quarantine.
     'skip_padded_retry': ('empty_asr_padded_retry', worker_module, 'padded_retry_fits', _never_fits),
-    # Paid recovery that hears nothing no longer settles as terminal empty.
-    'no_terminal_empty': (
+    # The explicit safety rollback may dispose speech; shipping retains it held.
+    'allow_terminal_empty': (
         'empty_asr_terminal',
-        recovery_module,
-        'terminal_empty_disposition_enabled',
-        _terminal_empty_disabled,
+        empty_safety,
+        'safety_net_enabled',
+        lambda: False,
     ),
 }
 
@@ -100,6 +97,24 @@ def test_trace_has_no_raw_synthetic_identifiers_or_tokens(traces):
         assert '"token"' not in text and '<hex64>' not in text, name
 
 
+@pytest.fixture(scope='module')
+def trace_with_unmodeled_provider_key():
+    from utils.stt import soniox_batch
+
+    client = Mock(side_effect=AssertionError('simulation must not invoke a real provider client'))
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
+        patch.setattr(soniox_batch, 'transcribe', client)
+        actual = dumps(golden_trace('empty_asr_terminal'))
+    return actual, client
+
+
+def test_unmodeled_provider_cannot_spend_even_with_host_credentials(traces, trace_with_unmodeled_provider_key):
+    actual, client = trace_with_unmodeled_provider_key
+    assert actual == traces['empty_asr_terminal']
+    client.assert_not_called()
+
+
 @pytest.mark.parametrize('key', sorted(PERTURBATIONS))
 def test_a_deliberate_behavior_change_breaks_the_golden(key, traces, perturbed):
     name = PERTURBATIONS[key][0]
@@ -109,7 +124,31 @@ def test_a_deliberate_behavior_change_breaks_the_golden(key, traces, perturbed):
         # A segment the padded retry rescued now spends a paid recovery call.
         assert changed['totals']['paid_calls'] > baseline['totals']['paid_calls']
     else:
-        assert 'failed_held' in changed['totals']['recovery_states']
-        assert 'failed_held' not in baseline['totals']['recovery_states']
+        assert 'failed_held' in baseline['totals']['recovery_states']
+        assert 'failed_held' not in changed['totals']['recovery_states']
     summary = describe_diff(traces[name], perturbed[key], label=name).splitlines()[0]
     assert not summary.startswith('0 changed'), summary
+
+
+@pytest.fixture(scope='module')
+def wrong_role_traces():
+    from testing.pipeline_sim.trace import trace
+
+    out = {}
+    for stage in ('projection', 'recovery'):
+        config = GOLDEN_CONFIGS['role_policy']()
+        config.stage_roles[stage] = 'sync'
+        out[stage] = dumps(trace(config))
+    return out
+
+
+@pytest.mark.parametrize('stage', ['projection', 'recovery'])
+def test_wrong_role_breaks_the_policy_golden(stage, traces, wrong_role_traces):
+    assert wrong_role_traces[stage] != traces['role_policy']
+    baseline = json.loads(traces['role_policy'])
+    changed = json.loads(wrong_role_traces[stage])
+    field = 'authoritative_labels' if stage == 'projection' else 'recovery_enabled'
+    before = [s['final_job']['policy_parts'].get(stage) for s in baseline['segments'].values()]
+    after = [s['final_job']['policy_parts'].get(stage) for s in changed['segments'].values()]
+    assert any(part and part[field] and part['source_role'] == 'integration' for part in before)
+    assert any(part and not part[field] and part['source_role'] == 'sync' for part in after)

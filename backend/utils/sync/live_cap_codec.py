@@ -5,24 +5,26 @@ from pathlib import Path
 import subprocess
 import wave
 
+from utils.observability.held_content import record_capture
+
 MAX_OBJECT_BYTES = 128 * 1024
 
 
-def _ffmpeg(args: list[str], *, pcm: bytes | None = None) -> bytes:
+def _ffmpeg(args: list[str], *, pcm: bytes | None = None, timeout: float = 20) -> bytes:
     try:
         result = subprocess.run(
             ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', *args],
             input=pcm,
             capture_output=True,
             check=True,
-            timeout=20,
+            timeout=timeout,
         )
     except (subprocess.SubprocessError, OSError) as error:
         raise RuntimeError('held audio codec failed') from error
     return result.stdout
 
 
-def encode(path: str, pcm: bytes, rate: int) -> None:
+def encode(path: str, pcm: bytes, rate: int, *, max_bytes: int = MAX_OBJECT_BYTES) -> None:
     args = [
         '-f',
         's16le',
@@ -45,9 +47,9 @@ def encode(path: str, pcm: bytes, rate: int) -> None:
     _ffmpeg([*args, '-vbr', 'constrained', '-f', 'opus', path], pcm=pcm)
     # Constrained VBR saves silence without assuming a speech detector's recall.
     # A hard CBR fallback bounds unusual/noisy input, including container framing.
-    if Path(path).stat().st_size > MAX_OBJECT_BYTES:
+    if Path(path).stat().st_size > max_bytes:
         _ffmpeg([*args, '-vbr', 'off', '-f', 'opus', path], pcm=pcm)
-    if Path(path).stat().st_size > MAX_OBJECT_BYTES:
+    if Path(path).stat().st_size > max_bytes:
         raise ValueError('held Opus object exceeds minute bound')
 
 
@@ -56,6 +58,7 @@ def decode(source: str, destination: str, rate: int, frames: int) -> None:
         _ffmpeg(['-i', source, '-ac', '1', '-ar', str(rate), '-f', 'wav', destination])
         with wave.open(destination, 'rb') as audio:
             if frames <= 0 or frames > 60 * rate or audio.getnframes() < frames:
+                record_capture('frame_mismatch')
                 raise ValueError('held Opus source clock mismatch')
             params, pcm = audio.getparams(), audio.readframes(frames)
         with wave.open(destination, 'wb') as audio:

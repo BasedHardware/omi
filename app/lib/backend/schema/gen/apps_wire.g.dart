@@ -222,6 +222,26 @@ class GeneratedMcpAddServerResponse {
   }
 }
 
+class GeneratedMcpAuthorizeResponse {
+  final String authUrl;
+
+  const GeneratedMcpAuthorizeResponse({
+    required this.authUrl,
+  });
+
+  factory GeneratedMcpAuthorizeResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMcpAuthorizeResponse(
+      authUrl: _required(_readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: true, nullable: false), "auth_url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'auth_url': authUrl,
+    };
+  }
+}
+
 class GeneratedAppDescriptionGenerationResponse {
   final String description;
 

@@ -6,6 +6,7 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
@@ -58,6 +59,10 @@ class Ref:
 
 
 def function(path, name, namespace):
+    if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['nullcontext'] = nullcontext
+        namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
         for n in ast.walk(ast.parse((ROOT / path).read_text()))
@@ -184,7 +189,11 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     tombstones.record_deletion('u', 'c')
     data_plane = Store()
     data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
+    # Global quiet-job pagination is covered by the real Firestore emulator.
+    quiet_cleanup = MagicMock()
+    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', quiet_cleanup)
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -201,6 +210,7 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         },
     )
     wipe('u')
+    quiet_cleanup.assert_called_once_with('u', firestore_client=store)
     assert data_plane.rows == {}
     assert store.rows == {}
     assert not tombstones.is_deleted('u', 'c')
@@ -237,14 +247,19 @@ def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registrati
     assert calls == [tombstones.is_deleted]
 
 
-def test_developer_delete_commits_tombstone_before_cleanup_failure(store, monkeypatch):
-    helper = AutoMockModule('utils.conversations.merge_conversations')
+def test_developer_delete_purges_prompt_evidence_screen_frames_and_vectors(store):
+    """#22997: the Developer API delete must not leave photos, screen frames,
+    and vectors behind the way a raw ``delete_conversation_with_sync_sources``
+    call does."""
+    storage = AutoMockModule('utils.other.storage')
+    screen_frames = AutoMockModule('utils.screen_frames.store')
+    frame_evidence = AutoMockModule('services.conversation_frame_evidence')
 
-    def fail(*args):
-        assert tombstones.is_deleted('u', 'c')
-        raise RuntimeError('cleanup failed')
+    storage.delete_owner_prompt_embedding_cache = MagicMock()
+    screen_frames.delete_conversation_screen_frames = MagicMock()
+    frame_evidence.delete_conversation_and_frame_evidence = MagicMock()
+    vector_db = SimpleNamespace(delete_vector=MagicMock(), delete_transcript_chunk_vectors=MagicMock())
 
-    helper.delete_conversation_with_sync_sources = fail
     delete = function(
         'routers/developer.py',
         'delete_conversation_endpoint',
@@ -252,9 +267,53 @@ def test_developer_delete_commits_tombstone_before_cleanup_failure(store, monkey
             'conversation_tombstones': tombstones,
             'HTTPException': HTTPException,
             'conversations_db': SimpleNamespace(get_conversation=lambda *a: {'id': 'c'}),
+            'vector_db': vector_db,
         },
     )
-    with stub_modules({'utils.conversations.merge_conversations': helper}):
+    with stub_modules(
+        {
+            'utils.other.storage': storage,
+            'utils.screen_frames.store': screen_frames,
+            'services.conversation_frame_evidence': frame_evidence,
+        }
+    ):
+        result = delete('c', 'u')
+
+    assert result == {"success": True}
+    storage.delete_owner_prompt_embedding_cache.assert_called_once_with('u', 'c')
+    screen_frames.delete_conversation_screen_frames.assert_called_once_with('u', 'c')
+    frame_evidence.delete_conversation_and_frame_evidence.assert_called_once_with('u', 'c')
+    vector_db.delete_vector.assert_called_once_with('u', 'c')
+    vector_db.delete_transcript_chunk_vectors.assert_called_once_with('u', 'c')
+
+
+def test_developer_delete_commits_tombstone_before_cleanup_failure(store, monkeypatch):
+    storage = AutoMockModule('utils.other.storage')
+    screen_frames = AutoMockModule('utils.screen_frames.store')
+    frame_evidence = AutoMockModule('services.conversation_frame_evidence')
+
+    def fail(*args):
+        assert tombstones.is_deleted('u', 'c')
+        raise RuntimeError('cleanup failed')
+
+    storage.delete_owner_prompt_embedding_cache = fail
+    delete = function(
+        'routers/developer.py',
+        'delete_conversation_endpoint',
+        {
+            'conversation_tombstones': tombstones,
+            'HTTPException': HTTPException,
+            'conversations_db': SimpleNamespace(get_conversation=lambda *a: {'id': 'c'}),
+            'vector_db': SimpleNamespace(delete_vector=MagicMock(), delete_transcript_chunk_vectors=MagicMock()),
+        },
+    )
+    with stub_modules(
+        {
+            'utils.other.storage': storage,
+            'utils.screen_frames.store': screen_frames,
+            'services.conversation_frame_evidence': frame_evidence,
+        }
+    ):
         with pytest.raises(RuntimeError, match='cleanup failed'):
             delete('c', 'u')
     assert tombstones.is_deleted('u', 'c')
@@ -266,3 +325,32 @@ def test_repeated_delete_after_hard_cleanup_preserves_original_metadata(store):
     store.rows.pop('users/u/conversations/c')
     tombstones.record_deletion('u', 'c')
     assert store.rows['users/u/deleted_conversations/c'] == original
+
+
+@pytest.mark.parametrize('parent_exists', [True, False])
+def test_deletion_purges_all_staged_chunks_after_durable_intent_even_without_parent(store, parent_exists):
+    if not parent_exists:
+        store.rows.pop('users/u/conversations/c')
+    for index in (0, 17, 127):
+        store.rows[f'users/u/from_segments_chunks/c-{index:03d}'] = {'payload': 'encrypted'}
+    store.rows['users/u/from_segments_chunks/another-000'] = {'payload': 'encrypted'}
+    tombstones.record_deletion('u', 'c')
+    assert tombstones.is_deleted('u', 'c')
+    assert not any(path.startswith('users/u/from_segments_chunks/c-') for path in store.rows)
+    assert 'users/u/from_segments_chunks/another-000' in store.rows
+
+
+def test_staging_cleanup_failure_leaves_deletion_intent_durable_and_retryable(store, monkeypatch):
+    from database import from_segments_chunks
+
+    calls = []
+
+    def fail(owner, cid, **kwargs):
+        calls.append(tombstones.is_deleted(owner, cid))
+        raise RuntimeError('synthetic storage failure')
+
+    monkeypatch.setattr(from_segments_chunks, 'purge_chunks', fail)
+    with pytest.raises(RuntimeError, match='synthetic storage failure'):
+        tombstones.record_deletion('u', 'c')
+    assert calls == [True]
+    assert tombstones.is_deleted('u', 'c')

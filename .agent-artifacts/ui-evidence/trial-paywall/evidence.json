@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-trial-paywall-after-signup.png",
       "platform": "mobile-ios",
-      "description": "Trial paywall opened by the after-sign-up placement (trial arm): headline, first carousel card, timeline, Start for $0.00 enabled with the real catalog loaded",
+      "description": "After-sign-up placement on prod (api.omi.me), eligibility from the real /v1/users/me/subscription, no injected state: Omi Pro trial paywall opens right after sign-in",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -26,6 +26,13 @@
       "file": "004-mobile-ios-trial-paywall-dismiss-to-name.png",
       "platform": "mobile-ios",
       "description": "Continue with the free plan returns to the next onboarding step (What's your name?)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-trial-paywall-stripe-checkout.png",
+      "platform": "mobile-ios",
+      "description": "Start for $0.00 on prod opens the live Stripe Checkout: 7 days free, then $269.91 per year starting Oct 26, 2026 (Stripe session amount_total 0)",
       "captured_by": "agent",
       "source": "visual-audit"
     }

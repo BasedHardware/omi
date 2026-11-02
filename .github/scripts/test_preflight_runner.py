@@ -718,6 +718,7 @@ class PythonFloorTests(unittest.TestCase):
     def test_main_rejects_a_below_floor_runner_without_spawning_children(self) -> None:
         env = os.environ.copy()
         env["OMI_PREFLIGHT_STATE_DIR"] = tempfile.mkdtemp(prefix="omi-floor-test-")
+        self.addCleanup(shutil.rmtree, env["OMI_PREFLIGHT_STATE_DIR"], ignore_errors=True)
         fake_version = collections.namedtuple("version_info", "major minor micro releaselevel serial")(3, 9, 6, "final", 0)
         with (
             mock.patch.object(runner.sys, "version_info", fake_version),
@@ -734,6 +735,7 @@ class PythonFloorTests(unittest.TestCase):
             self.skipTest("the running interpreter itself is below the floor")
         env = os.environ.copy()
         env["OMI_PREFLIGHT_STATE_DIR"] = tempfile.mkdtemp(prefix="omi-floor-test-")
+        self.addCleanup(shutil.rmtree, env["OMI_PREFLIGHT_STATE_DIR"], ignore_errors=True)
         with mock.patch.object(runner.sys, "argv", ["preflight_runner.py"]):
             exit_code = runner.main()
         # No command after `--` is its own guard, reached only past the floor gate.

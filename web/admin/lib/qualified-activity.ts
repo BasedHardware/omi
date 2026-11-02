@@ -1,4 +1,8 @@
-/** Qualified activity v2, audited 2026-10-15. These are telemetry proxies, not signup truth. */
+/** Qualified activity v2, audited 2026-10-15. These are telemetry proxies, not signup truth.
+ * The version string MUST move with any allowlist change: the 2026-10-15
+ * evidence snapshot (09:27 UTC) was generated from the six wire events hours
+ * before this fuller allowlist shipped (12:19 UTC), and its MAU (7,163) no
+ * longer reproduces under the shipped definition (same window: 9,665). */
 export const DEFINITION_VERSION = "qualified-v2-2026-10-15";
 export const DAY_MS = 86_400_000;
 export const PLATFORM_ORDER = [

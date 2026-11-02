@@ -5,6 +5,6 @@
   "reset_at": 1793491200,
   "reset_line": "Chat is back on Nov 1.",
   "trigger": "usage_budget",
-  "upgrade_plan": "operator",
-  "upgrade_label": "Upgrade to Pro"
+  "upgrade_plan": "unlimited_v2",
+  "upgrade_label": "Upgrade to Omi Pro"
 }

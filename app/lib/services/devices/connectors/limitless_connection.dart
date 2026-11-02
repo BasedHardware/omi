@@ -14,6 +14,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
   static const Duration _defaultStreamHealthWindow = Duration(seconds: 8);
   static const Duration _defaultStorageStatusTimeout = Duration(seconds: 3);
 
+  /// Firmware settle windows between the setup writes. Injected shorter by
+  /// tests over an in-memory transport, where the window is only an
+  /// event-loop yield; the defaults match the real pendant's needs.
+  static const Duration _defaultSetupSettleDelay = Duration(seconds: 1);
+  static const Duration _defaultReconnectSettleDelay = Duration(milliseconds: 400);
+  final Duration _setupSettleDelay;
+  final Duration _reconnectSettleDelay;
+
   int _messageIndex = 0;
   int _requestId = 0;
 
@@ -70,8 +78,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
     super.transport, {
     Duration streamHealthWindow = _defaultStreamHealthWindow,
     Duration storageStatusTimeout = _defaultStorageStatusTimeout,
+    Duration setupSettleDelay = _defaultSetupSettleDelay,
+    Duration reconnectSettleDelay = _defaultReconnectSettleDelay,
   })  : _streamHealthWindow = streamHealthWindow,
-        _storageStatusTimeout = storageStatusTimeout;
+        _storageStatusTimeout = storageStatusTimeout,
+        _setupSettleDelay = setupSettleDelay,
+        _reconnectSettleDelay = reconnectSettleDelay;
 
   /// Injected in main.dart; true while Transcribe Later keeps the pendant recording to flash.
   static bool Function()? realtimeSuppressionPolicy;
@@ -119,14 +131,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _completeInitialSetup(int epoch) async {
-    await Future.delayed(const Duration(seconds: 1));
+    await Future.delayed(_setupSettleDelay);
     if (!_isCurrentSession(epoch)) return;
 
     _attachRxSubscription();
 
     // Wait the same 1s settle window as before, but return early if a Type-8
     // clock arrives so we measure drift before SetCurrentTime (#5734).
-    await _awaitPreSyncClock(const Duration(seconds: 1));
+    await _awaitPreSyncClock(_setupSettleDelay);
     if (!_isCurrentSession(epoch)) return;
 
     await _initialize(epoch);
@@ -211,7 +223,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       if (!_isCurrentSession(epoch)) return;
-      await Future.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(_reconnectSettleDelay);
       if (!_isCurrentSession(epoch) || _isBatchMode) return;
 
       if (!_realtimeSuppressed) {
@@ -320,7 +332,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       if (!_isCurrentSession(epoch)) return;
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(_setupSettleDelay);
       if (!_isCurrentSession(epoch)) return;
 
       // Command 2: Enable data streaming (skipped in Transcribe Later — pendant records to flash)
@@ -328,7 +340,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
         if (!_isCurrentSession(epoch)) return;
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(_setupSettleDelay);
         if (!_isCurrentSession(epoch)) return;
         // A mode change during setup must win even before _isInitialized admits
         // ordinary mode writes. Reconcile changes arriving during the write too.

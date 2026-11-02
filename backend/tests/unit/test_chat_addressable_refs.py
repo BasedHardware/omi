@@ -3,6 +3,9 @@
 import asyncio
 import copy
 import json
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -13,6 +16,7 @@ from models.conversation import Conversation
 from models.other import Person
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
+from utils.chat_citations import resolve_conversation_citations
 from utils.conversations.render import conversations_to_string
 from utils.conversations.mcp_transcript_search import ChatTranscriptSearch, chat_transcript_excerpts
 from utils.retrieval import agentic
@@ -111,6 +115,51 @@ def test_oversized_conversation_does_not_advertise_partial_refs(monkeypatch):
     assert cfg['conversations_collected'] == []
     assert ('conversations', 'read-big') not in cfg['turn_refs'].seen
     assert ('people', 'person-1') not in cfg['turn_refs'].seen
+
+
+def test_reread_conversation_keeps_its_citation_number():
+    cfg = _config()
+    first = conversation_tools._render_addressable_conversations([_conversation('read-1')], configurable=cfg)
+    second = conversation_tools._render_addressable_conversations(
+        [_conversation('read-2'), _conversation('read-1')], configurable=cfg
+    )
+    assert 'Conversation #1\nref: conversations/read-1' in first
+    assert 'Conversation #2\nref: conversations/read-2' in second
+    assert 'Conversation #1\nref: conversations/read-1' in second
+    assert [card['id'] for card in cfg['conversations_collected']] == ['read-1', 'read-2']
+    # Citing every number the model was shown attaches each source card once.
+    cited = ' '.join(f'[{number}]' for number in re.findall(r'Conversation #(\d+)', first + second))
+    _, cards = resolve_conversation_citations(cited, cfg['conversations_collected'])
+    assert [card['id'] for card in cards] == ['read-1', 'read-2']
+
+
+def test_parallel_conversation_reads_cite_their_own_cards(monkeypatch):
+    cfg = _config()
+    render = conversation_tools.conversations_to_string
+    overlap = threading.Barrier(2, timeout=1)
+
+    def render_then_overlap(*args, **kwargs):
+        text = render(*args, **kwargs)
+        try:
+            # Unserialized reads both number their record here before either appends its card.
+            overlap.wait()
+        except threading.BrokenBarrierError:
+            pass  # Serialized reads never meet here.
+        return text
+
+    monkeypatch.setattr(conversation_tools, 'conversations_to_string', render_then_overlap)
+    conversations = [_conversation('read-1'), _conversation('read-2')]
+
+    def read(conversation):
+        return conversation_tools._render_addressable_conversations([conversation], configurable=cfg)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        texts = list(executor.map(read, conversations))
+    collected = cfg['conversations_collected']
+    assert sorted(card['id'] for card in collected) == ['read-1', 'read-2']
+    for conversation, text in zip(conversations, texts):
+        number = int(re.search(r'Conversation #(\d+)', text).group(1))
+        assert collected[number - 1]['id'] == conversation.id
 
 
 def test_search_excerpts_include_segment_ids_without_changing_chunk_positions():

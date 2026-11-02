@@ -122,21 +122,20 @@ void main() {
     }
   });
 
-  testWidgets('the transcription-outage sentence wraps in the header instead of clipping', (tester) async {
-    // A phone-sized surface: the full sentence cannot fit one title line, so
-    // the header must wrap it rather than ellipsize away the promise that
-    // recording continues and will be processed later.
+  testWidgets('the transcription-outage header is the short state name, never the sentence', (tester) async {
+    // A phone-sized surface: the outage is a heading ("Not transcribing ·
+    // Pendant"), not the full sentence — the recovery banner owns the whole
+    // statement, so the header keeps the one-line treatment of every state.
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-        _app(const Scaffold(appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable))));
+    await tester.pumpWidget(_app(const Scaffold(
+        appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable, sourceLabel: 'Pendant'))));
     await tester.pump();
 
-    final text = tester.widget<Text>(find.textContaining('recording continues on device'));
-    expect(text.maxLines, greaterThan(1));
-    expect(find.textContaining('will process later'), findsOneWidget);
+    expect(find.text('Not transcribing · Pendant'), findsOneWidget);
+    expect(find.textContaining('recording continues on device'), findsNothing);
     expect(tester.getSize(find.byType(ConversationStateAppBar)).height, kToolbarHeight);
   });
 

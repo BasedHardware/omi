@@ -1,4 +1,4 @@
-from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_enabled
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import importlib
 import sys
 from enum import Enum
@@ -238,7 +238,11 @@ def get_canonical_knowledge_graph(
     except canonical_graph_service.CanonicalGraphCursorError as exc:
         raise HTTPException(status_code=400, detail='invalid_or_stale_cursor') from exc
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
-        raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
+        # Positive absence is different from an unreadable/corrupt revision.
+        # Keep the released status/body contract; new clients may use this
+        # additive signal to distinguish a genuinely new account from outage.
+        headers = {'X-Omi-Knowledge-Graph-State': 'unestablished'} if str(exc) == 'missing_state_head' else None
+        raise HTTPException(status_code=503, detail='canonical_graph_unavailable', headers=headers) from exc
     return CanonicalKnowledgeGraphResponse(
         nodes=page.nodes,
         edges=page.edges,
@@ -298,7 +302,7 @@ async def extract_knowledge_graph(
     closed (502) instead of returning 200 with an empty graph, which a client cannot
     tell apart from a genuine "no entities" answer.
     """
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'knowledge_graph')
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')

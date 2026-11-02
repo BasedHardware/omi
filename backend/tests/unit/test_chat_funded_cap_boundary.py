@@ -3,6 +3,8 @@
 Execute the actual quota/turn functions against narrow fakes; no cloud/provider IO.
 """
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import ast
 from pathlib import Path
 from types import ModuleType, SimpleNamespace

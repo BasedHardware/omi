@@ -73,4 +73,34 @@ final class AppSetupURLTests: XCTestCase {
   func testInvalidBaseResolvesNil() {
     XCTAssertNil(AppSetupURL.withUID("", uid: "u1"))
   }
+
+  @MainActor
+  func testEachLaunchFetchesFreshDetails() async {
+    var reads = 0
+    for expected in 1...2 {
+      let value = await AppSetupURL.freshDetails(currentUID: { "u1" }) {
+        reads += 1
+        return "signed.\(reads)"
+      }
+      XCTAssertEqual(value, "signed.\(expected)")
+    }
+  }
+
+  @MainActor
+  func testFailedRefreshCannotReturnCachedCredentials() async {
+    let value: String? = await AppSetupURL.freshDetails(currentUID: { "u1" }) {
+      throw URLError(.notConnectedToInternet)
+    }
+    XCTAssertNil(value)
+  }
+
+  @MainActor
+  func testAccountReplacementDiscardsFreshCredentials() async {
+    var uid: String? = "u1"
+    let value = await AppSetupURL.freshDetails(currentUID: { uid }) {
+      uid = "u2"
+      return "signed.for.u1"
+    }
+    XCTAssertNil(value)
+  }
 }

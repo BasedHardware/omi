@@ -53,4 +53,30 @@ void main() {
     await tester.pump();
     expect(result, isFalse);
   });
+  testWidgets('leaving an authorization owner prevents a late URL from launching', (tester) async {
+    var current = true;
+    final pending = Completer<String?>();
+    final result = launchIntegrationOAuth(() => pending.future, isCurrent: () => current);
+    current = false;
+    pending.complete('https://vendor.test/oauth');
+    await tester.pump();
+    expect(await result, isFalse);
+    expect(browser.launches, isEmpty);
+  });
+
+  test('a late browser receipt cannot start completion for a departed owner', () async {
+    var current = true;
+    final opened = Completer<bool>();
+    final launching = Completer<void>();
+    final result = launchIntegrationOAuth(() async => 'https://vendor.test/oauth',
+        openBrowser: (_) {
+          launching.complete();
+          return opened.future;
+        },
+        isCurrent: () => current);
+    await launching.future;
+    current = false;
+    opened.complete(true);
+    expect(await result, isFalse);
+  });
 }

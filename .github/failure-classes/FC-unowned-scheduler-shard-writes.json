@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-unowned-scheduler-shard-writes",
+  "violated_contract": "Concurrent queue pullers must not all mutate the same selected control shard, including empty or blocked visits, without exclusive fenced pull ownership. Globally identical minimum-service selection concentrates Firestore transaction read sets and writes even when no job can be leased, so adding workers amplifies contention and delays durable work.",
+  "canonical_prevention": "Acquire a bounded token-fenced pull claim per control shard before reading queues/jobs, verify and release it atomically in the pull transaction, keep losing selection read-only, and use worker affinity among equal-service candidates with bounded fallback. Preserve service fairness, strict priority, privacy, capacity and job-token fences. Exercise sparse and multi-shard pulls with three real emulator clients and concurrent admission.",
+  "canonical_prevention_artifact": [
+    "backend/tests/integration/test_batch_pipeline_shard_spread_firestore.py",
+    "backend/tests/unit/test_batch_pipeline_shard_spread.py",
+    "backend/testing/sync_cloud_tasks_stack/run.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/batch_pipeline/**", "backend/database/batch_pipeline_store.py"],
+  "status": "open"
+}
