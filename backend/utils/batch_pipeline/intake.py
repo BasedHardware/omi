@@ -4,6 +4,9 @@ from dataclasses import replace
 import hashlib
 import io
 import logging
+import os
+import shutil
+import tempfile
 import time
 import wave
 
@@ -110,6 +113,28 @@ def _sampled_refusal(target: dict, user: dict, evidence) -> None:
 def _next_unit(iterator):
     # StopIteration cannot cross asyncio Future boundaries.
     return next(iterator, None)
+
+
+def _private_sample_paths(paths: list[str]) -> tuple[str, list[str]]:
+    """Link the caller's uploads under their own names for a decode that may refuse.
+
+    WAL decode deletes its inputs; a sampled refusal hands the upload back to legacy,
+    which must still stage these exact files (else FileNotFoundError -> 503 loop).
+    """
+    directory = tempfile.mkdtemp(prefix='omi-batch-sample-')
+    try:
+        linked = []
+        for path in paths:
+            target = os.path.join(directory, os.path.basename(path))
+            try:
+                os.link(path, target)
+            except OSError:
+                shutil.copy2(path, target)
+            linked.append(target)
+        return directory, linked
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
 
 
 def _open_operator_intent(job: dict) -> bool:
@@ -351,6 +376,7 @@ async def accept_upload(
     policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
+    sample_directory = None
     try:
         # A2 seam: the sync upload admission (intakes, jobs, owners, queues, control) is mirrored in shadow mode.
         store = await run_blocking(
@@ -625,11 +651,14 @@ async def accept_upload(
             raise ValueError('serving intake requires a dedicated batch GPU pool')
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
         max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
+        decode_paths = paths
+        if sampled and decode is None:
+            sample_directory, decode_paths = await run_blocking(sync_executor, _private_sample_paths, paths)
         iterator = (
             decode(max_unit_seconds)
             if decode is not None
             else decode_for_intake(
-                paths,
+                decode_paths,
                 max_unit_seconds,
                 uid,
                 {**(intake_context or {}), 'client_device_id': client_device_id},
@@ -847,6 +876,8 @@ async def accept_upload(
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
+        if sample_directory is not None:
+            await run_blocking(sync_executor, shutil.rmtree, sample_directory, True)
 
 
 def stranded_adopter(observed: dict, *, owner_job_present: bool | None = None):
