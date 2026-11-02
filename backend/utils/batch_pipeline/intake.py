@@ -149,14 +149,15 @@ def _held_status(jobs: list[dict]) -> tuple[str, str | None] | None:
         job.get('state') != 'committed' and not _terminally_held(job) for job in jobs
     ):
         return 'processing', None
-    return 'completed', HELD_REASON_CODE
+    # Retained server audio is not a successful transcription receipt. Keep
+    # the phone's only independent copy until every unit actually completes.
+    return 'processing', HELD_REASON_CODE
 
 
 def _deleted_conversation_status(ledger: dict, intake: dict, job_id: str) -> dict | None:
     result = ledger.get('result')
     if not isinstance(result, dict) or not (
-        (ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result))
-        or (ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result))
+        ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
     ):
         return None
     total = result['total_segments']
@@ -223,13 +224,12 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             for job in jobs:
                 Scheduler.redrive_in_transaction(tx, job, time.time())
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
-            # Terminal for the phone: projected siblings are published, the held
-            # units' audio stays server-side, and a later recovery upgrades the
-            # ledger. Released apps ACK `completed`.
+            # Siblings are already visible independently. A partial ledger must
+            # never ACK custody of unresolved units, including after 30 minutes.
             held_count, total = result['held_segments'], result['total_segments']
             return {
                 'job_id': job_id,
-                'status': 'completed',
+                'status': 'processing',
                 'lane': intake['lane'],
                 'total_files': intake['total_files'],
                 'total_segments': total,
@@ -239,7 +239,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
                 'errors': [],
                 'result': result,
                 'reason_code': HELD_REASON_CODE,
-                'poll_after_ms': 0,
+                'poll_after_ms': 300000,
             }
         recovering = any(
             job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared', 'running'}
@@ -276,7 +276,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
                     if reason_code
                     else None
                 ),
-                'poll_after_ms': 0 if reason_code else 3000,
+                'poll_after_ms': 300000 if reason_code else 3000,
             }
             if reason_code:
                 status['reason_code'] = reason_code
