@@ -18,6 +18,9 @@ SAMPLE_WINDOWS = Counter(
     "Speech after a vendor-admitted sample, by the self gate's top-1 capability (unavailable: no verdict)",
     ['language_class'],
 )
+# Pre-initialise every class so an idle sample window reads 0, not an absent series.
+for _capability in ('supported', 'unsupported', 'unknown', 'unavailable'):
+    SAMPLE_WINDOWS.labels(_capability).inc(0)
 
 
 def record_sample_window(capability: str) -> None:

@@ -124,7 +124,9 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert 'or vector(0)' not in query
     assert chain == [BATCH_PIPELINE_CHAIN_RULE]
     chain_query = chain[0]['metricsQuery']
-    assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[2m])' in chain_query
+    assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[10m])' in chain_query
+    # Two scrape jobs read every worker pod: one series per pod, or demand doubles.
+    assert 'max by (namespace, pod) (' in chain_query
     assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
     assert 'or vector(0)' not in chain_query
     # Stage timers export only the stage label; requiring worker_release here
