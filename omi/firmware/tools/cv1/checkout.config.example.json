@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "checkout_root": "/path/to/prepared/omi-task-checkout",
+  "compiler": "cc",
+  "sdk_root": "/path/to/existing/ncs-2.9.0-workspace",
+  "toolchain_root": "/path/to/existing/nordic-b8efef2ad5-toolchain"
+}
