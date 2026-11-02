@@ -31,7 +31,9 @@
       "deadline": null,
       "decided_by": "David",
       "ruling": "bus:6be2e1 2026-11-02T06:09Z",
-      "note": "David: no 21-day deadline; most audio within 30 min of finalization, alarm at 2 h (lane alarm2h owns the alarm). failed_held/quarantined units still have no TTL in code (utils/batch_pipeline/retention.py: accepted audio must not silently expire). The floor counts this hold until a human is alarmed (days = finalization_alarm_seconds) plus margin_days for the response, so a 30-day staging Delete leaves ~30 days after the alarm."
+      "control_verified": false,
+      "control": "A 2 h alarm by age since enqueue that also covers units that never finalize (failed_held, quarantined, stuck before transcript), installed and verified (lane alarm2h). Until then this hold is unbounded.",
+      "note": "David: no 21-day deadline; most audio within 30 min of finalization, alarm at 2 h (lane alarm2h owns the alarm). failed_held/quarantined units still have no TTL in code (utils/batch_pipeline/retention.py: accepted audio must not silently expire) and never finalize, so only an age-since-enqueue alarm reaches them. Once that control is verified, the floor counts this hold until a human is alarmed (days = finalization_alarm_seconds) plus margin_days for the response, so a 30-day staging Delete leaves ~30 days after the alarm."
     },
     "staging_custody": {
       "days": null,

@@ -5,9 +5,10 @@ Pure functions over bucket metadata; no cloud access. The release prerequisite
 same JSON, so a threshold changes in one reviewed place.
 
 Floor: every lifecycle Delete that can reach a protected prefix has
-age >= max(hold days) + margin_days. A hold with days=null, or a pending
-ruling, is unbounded: no age Delete may reach that prefix. Deletes that only
-remove noncurrent generations keep the live object and are allowed.
+age >= max(hold days) + margin_days. A hold with days=null, a pending ruling,
+or a bound that depends on a control not yet verified (control_verified false)
+is unbounded: no age Delete may reach that prefix. Deletes that only remove
+noncurrent generations keep the live object and are allowed.
 
 Ceiling: soft delete, versioning, noncurrent cleanup and cache max ages a
 bucket may not exceed. A ceiling whose ruling is pending reports with a
@@ -25,9 +26,14 @@ def load(path: Path = CONTRACT_PATH) -> dict[str, Any]:
     return json.loads(Path(path).read_text())
 
 
+def _pending(hold: dict[str, Any]) -> bool:
+    """Not yet a bound: the ruling is pending, or the control the bound relies on is not verified."""
+    return hold.get('ruling') == 'pending' or hold.get('control_verified') is False
+
+
 def required_days(contract: dict[str, Any], bucket: str, accept_pending: bool = False) -> float | None:
     holds = [contract['holds'][name] for name in contract['buckets'][bucket]['holds']]
-    if any(h['days'] is None or (h.get('ruling') == 'pending' and not accept_pending) for h in holds):
+    if any(h['days'] is None or (_pending(h) and not accept_pending) for h in holds):
         return None
     return max(h['days'] for h in holds) + contract['margin_days']
 
@@ -65,7 +71,7 @@ def floor_violations(
     """Live-object Delete rules that can reach a protected prefix sooner than the longest hold allows."""
     need = required_days(contract, bucket, accept_pending)
     spec = contract['buckets'][bucket]
-    pending = [] if accept_pending else [h for h in spec['holds'] if contract['holds'][h].get('ruling') == 'pending']
+    pending = [] if accept_pending else [h for h in spec['holds'] if _pending(contract['holds'][h])]
     out = []
     for rule in _rules(lifecycle):
         condition = rule.get('condition') or {}
