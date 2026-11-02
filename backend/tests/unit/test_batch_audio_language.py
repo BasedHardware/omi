@@ -406,13 +406,16 @@ def test_language_metrics_survive_the_actual_sync_export_allowlist():
     import re
     from pathlib import Path
     import yaml
-    from utils.batch_pipeline.language_metrics import ROUTES
+    from utils.batch_pipeline.language_metrics import ROUTES, SAMPLE_WINDOWS
 
     source = Path(__file__).parents[3] / 'backend/deploy/cloud_run_gmp_sync.yaml'
     relabeling = yaml.safe_load(source.read_text())['spec']['endpoints'][0]['metricRelabeling']
     keep = next(rule['regex'] for rule in relabeling if rule['action'] == 'keep')
-    for collector in (ROUTES, lid.DETECTIONS, lid.PROBE_SECONDS):
+    for collector in (ROUTES, SAMPLE_WINDOWS, lid.DETECTIONS, lid.PROBE_SECONDS):
         assert re.fullmatch(keep, collector._name + '_total')
+    # An idle sample window must export 0 per class, not an absent series.
+    exported = {s.labels['language_class'] for s in SAMPLE_WINDOWS.collect()[0].samples if s.name.endswith('_total')}
+    assert exported >= {'supported', 'unsupported', 'unknown', 'unavailable'}
 
 
 def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlist():
