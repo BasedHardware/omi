@@ -59,6 +59,35 @@ it already is across replicas and the serving reconciler. `1` restores the seria
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh
 arrivals, so fresh work can wait up to one extra chain.
 
+### Worker processes per GPU
+
+`BATCH_PIPELINE_WORKER_PROCESSES` (Helm `worker.processes`, default `2`, range
+1-3) runs that many independent pump processes on the pod's one GPU. Much of a
+chain's GPU-lock time is CPU, Python and IO work; a sibling's kernels fill those
+gaps (T4 bench, unchanged chain: 33.8 audio-h/GPU-h with one process, 45.4 with
+two, identical words and speakers). `1` is the kill switch: no supervisor, the
+process above runs exactly as before. Malformed or out-of-range values run one.
+
+The container's process becomes a supervisor that loads no models and touches
+no cloud client. Each child re-executes this module as the unchanged
+single-process runtime with its own models, leases, fences, pump depth and
+7200-audio-second decoded bound, exactly like another replica; its scheduler
+and leader identities are per process. Children serve probes and metrics on
+loopback ports 8081+. The supervisor's pod port answers `/ready` only once every
+child is ready, `/health` only while every running child's event loop ticks,
+and `/metrics` with every child's series labelled `worker_process`. Only child
+0 samples queue gauges, so Firestore sampling and the HPA's per-pod series stay
+as with one process; the adapter's chain-occupancy rule already takes the max
+per pod, so occupancy never adds across siblings. SIGTERM reaches every child
+and the supervisor waits for each drain. Any child that exits unrequested,
+including a fatal-CUDA quarantine, drains its siblings and the supervisor exits
+non-zero so Kubernetes replaces the pod and its GPU state.
+
+Host memory scales with the count: the chart takes pod resources from
+`processResources.<count>` and refuses a count without an entry. Two processes
+double the one-process sizing (24Gi request / 27Gi limit, 6 / 8 CPU) inside
+`g2-standard-8` allocatable; three do not fit that machine shape.
+
 ## Encrypted staging and results
 
 `utils.batch_pipeline.artifact_policy.create_artifact_store(store, storage_client,

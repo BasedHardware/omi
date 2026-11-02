@@ -69,6 +69,11 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  # Ship-on independent pump processes sharing the pod's GPU (1-3), each with
+  # its own model chain, leases and pump depth; 1 is the kill switch (one
+  # process, no supervisor). Counts above 1 take pod resources from
+  # processResources. Two lifted the T4 bench 33.8 -> 45.4 audio-h/GPU-h.
+  processes: 2
   # Shared artifact IO pool, including first decode before the GPU lock.
   # 1 disables preparation and restores serial artifact IO.
   ioConcurrency: 5
@@ -110,6 +115,21 @@ resources:
     cpu: "8"
     memory: 14Gi
     nvidia.com/gpu: "1"
+# Pod resources per worker.processes above 1; a count without an entry fails
+# the render. Each process repeats the one-process host peak (models, CUDA
+# context, decoded audio), so the sizing is the single-process rule times the
+# count, held inside g2-standard-8 allocatable (~28Gi, ~7.9 vCPU) minus daemons.
+# Three processes (~29Gi of host peak) do not fit this machine shape.
+processResources:
+  "2":
+    requests:
+      cpu: "6"
+      memory: 24Gi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "8"
+      memory: 27Gi
+      nvidia.com/gpu: "1"
 autoscaling:
   # Enable only after scoped admissible-count series/adapter and target qualify.
   enabled: false

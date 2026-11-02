@@ -551,6 +551,25 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
+WORKER_PROCESSES_DEFAULT = 2
+WORKER_PROCESSES_MAX = 3
+
+
+def worker_processes() -> int:
+    """Ship-on independent pump processes sharing the pod's one GPU; ``1`` is the kill switch.
+
+    Each process loads its own model chain and keeps its own pump depth and
+    decoded-audio bound, so host and device memory scale with the count; the
+    chart sizes pod resources per count. Malformed or out-of-range values run
+    one process: a typo must never multiply the pod's memory.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PROCESSES', str(WORKER_PROCESSES_DEFAULT)))
+    except ValueError:
+        return 1
+    return value if 1 <= value <= WORKER_PROCESSES_MAX else 1
+
+
 WORKER_IO_CONCURRENCY_DEFAULT = 5
 WORKER_IO_CONCURRENCY_MAX = 8
 
