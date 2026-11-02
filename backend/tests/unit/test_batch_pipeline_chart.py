@@ -782,6 +782,27 @@ def test_t4_fallback_refuses_the_primary_pool_or_negative_replicas(setting):
     assert result.returncode != 0
 
 
+@pytest.mark.parametrize('pool,accepted', [('primary-od', False), ('primary-spot', False), ('fallback-t4', True)])
+def test_t4_fallback_is_distinct_from_every_resolved_balanced_pool(pool, accepted):
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,'
+        'autoscaling.minReplicas=4,autoscaling.maxReplicas=16,'
+        'autoscaling.balancedPools.onDemandNodePool=primary-od,'
+        'autoscaling.balancedPools.spotNodePool=primary-spot,'
+        f't4Fallback.enabled=true,t4Fallback.nodePool={pool}',
+    )
+    if accepted:
+        assert result.returncode == 0, result.stderr
+        docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+        pod = by_name(docs, 'Deployment')['synthetic-worker-t4']['spec']['template']['spec']
+        assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == pool
+    else:
+        assert result.returncode != 0
+        assert 'must differ from all primary pools' in result.stderr
+
+
 def test_t4_fallback_is_off_outside_production_values():
     result = render(*enabled_arguments())
     assert result.returncode == 0, result.stderr
