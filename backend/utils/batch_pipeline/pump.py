@@ -45,7 +45,7 @@ HEARTBEAT_TIMEOUT_SECONDS = 8
 # unevaluated and wait out the admission backoff (32% of leases at 25%,
 # 2026-11-02). Each call gets its own wait, above the client HTTP timeout.
 ADMISSION_LEASES_PER_CALL = 4
-ADMISSION_CALL_TIMEOUT_SECONDS = 12
+ADMISSION_CALL_TIMEOUT_SECONDS = 10
 
 
 async def _drain_task(task):

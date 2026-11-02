@@ -17,7 +17,7 @@ from utils.batch_pipeline.contracts import LeasedWork
 # The server deadline this worker asks for, and the HTTP timeout that covers it
 # with transport headroom. A server that predates the header keeps its own 4s.
 ADMISSION_DEADLINE_SECONDS = 8.0
-AUTHORIZE_TIMEOUT_SECONDS = 10
+AUTHORIZE_TIMEOUT_SECONDS = 9
 
 
 class InvalidReceipt(ValueError):
