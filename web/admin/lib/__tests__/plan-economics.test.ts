@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BigQueryDate } from "@google-cloud/bigquery";
 import {
   buildPlanEconomics,
+  PLAN_ECONOMICS_QUERY,
   type EconomicsSnapshot,
 } from "@/lib/services/plan-economics";
 import { testIdentity } from "./support/test-identity";
@@ -165,6 +166,27 @@ describe("plan economics snapshot", () => {
     expect(result.rows.every((r) => r.estimatedCostMonthly === null)).toBe(
       true
     );
+  });
+
+  it("does not fail-close on a measured STT row with no allocation delta", () => {
+    const s = fixture();
+    s.reconciliation.push({
+      day: "2026-09-16",
+      pool: "stt_soniox_measured",
+      delta_pct: Number.NaN,
+      run_id: "other-run",
+      inputs_settled: false,
+    });
+    const result = buildPlanEconomics(s, "2026-09-18");
+    expect(result.partial).toBe(false);
+    expect(result.rows[0].estimatedCostMonthly).toBe(330);
+    for (const pool of [
+      "llm_openai_ledger_coverage",
+      "stt_soniox_measured",
+      "stt_deepgram_measured",
+    ]) {
+      expect(PLAN_ECONOMICS_QUERY).toContain(pool);
+    }
   });
 
   it("retains valid cost but never fabricates revenue or margin from a missing/stale revenue book", () => {
