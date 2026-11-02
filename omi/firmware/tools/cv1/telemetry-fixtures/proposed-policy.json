@@ -1,0 +1,18 @@
+{
+ "schema_version":1,
+ "provenance":"engineering_proposal_not_observed_device_behavior",
+ "purpose":"Offline regression policy illustration only; thresholds are synthetic test values, not shipping requirements or validated clinical/device health.",
+ "progress_timeout_ms":60000,
+ "retry_base_ms":1000,
+ "retry_cap_ms":30000,
+ "retry_limit":3,
+ "rules":[
+  "Separate link, service, subscriptions, recovery marker and observed progress.",
+  "Connected or audio_recovered with absent/null counters never implies healthy audio.",
+  "Only a positive same-session counter delta is progress evidence; reset/unknown counters cannot fabricate it.",
+  "A progress timeout means policy concern between sampled snapshots; never proof of continuous outage or root cause.",
+  "Keep recorded disconnect reason, RSSI age and lost_audio_seconds without packet arithmetic substitution.",
+  "Coalesce retry scheduling, bound backoff/attempts under injected virtual time; emit proposals, perform no reconnects.",
+  "No RSSI threshold or Android timeout rule is inferred from the three weak samples."
+ ]
+}

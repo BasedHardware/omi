@@ -1,0 +1,19 @@
+{
+  "local_files": [
+    {
+      "sha256": "224820920fd0d320e5c5efd21a8a3b7a23e798ab1b59973ccd7e806e77031843",
+      "size_bytes": 13418,
+      "snapshot": "sanitized-telemetry.json"
+    },
+    {
+      "sha256": "2cdd6a886ab93d2cbe73a9b2a7b272dc39d2e41d1e49c692d3ef600bf70acfb0",
+      "size_bytes": 1086,
+      "snapshot": "proposed-policy.json"
+    }
+  ],
+  "original_export_byte_hashes": null,
+  "original_exports_locally_available": false,
+  "provenance": "local sanitized excerpts relayed by authorized coordinating research task",
+  "schema_version": 1,
+  "scope": "Portable sanitized derivative; private source URLs and phone model removed; hashes bind included excerpts only. Original raw-export hashes unavailable."
+}

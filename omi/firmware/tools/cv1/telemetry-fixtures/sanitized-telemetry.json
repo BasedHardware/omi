@@ -1,0 +1,394 @@
+{
+  "schema_version": 1,
+  "title": "CV1 sanitized diagnostic replay evidence",
+  "prepared_at": "2026-10-28",
+  "provenance": "actual_sanitized_app_telemetry_excerpt",
+  "fixture_label": "customer-observed telemetry; root cause unresolved",
+  "lineage": "cv1-android-diagnostics-20261023",
+  "delivery": "Sanitized excerpts supplied by coordinating research task; original exports not fetched by this task. Hashes of original export bytes are unknown. Portable derivative removes private source URLs and phone model; record values unchanged.",
+  "sources": {
+    "diag1840": {
+      "title": "Omi-Device-Diagnostics-2026-10-23-1840Z.json",
+      "exported_at": "2026-10-23T18:39:54.979380Z",
+      "size_bytes": 103984
+    },
+    "diag1845": {
+      "title": "Omi-Device-Diagnostics-2026-10-23-1845Z.json",
+      "exported_at": "2026-10-23T18:45:40.604286Z",
+      "size_bytes": 104156
+    },
+    "audit": {
+      "title": "Omi-Ground-Truth-Audit-and-Telemetry-2026-10-27.md",
+      "status": "Customer narrative, not root-cause proof; conflicts with raw diagnostics in several places"
+    }
+  },
+  "metadata": {
+    "schema_version": 2,
+    "app_version": "1.0.573",
+    "app_build": "1500",
+    "platform": "android",
+    "phone_model": "Android phone (model removed for portable kit)",
+    "device_model": "Omi CV 1",
+    "hardware_revision": "5.0",
+    "firmware": "3.0.21"
+  },
+  "cumulative_snapshot_contract": {
+    "collections_verified_identical": [
+      "disconnect_history",
+      "lifecycle_events"
+    ],
+    "snapshot_gap_ms_rounded": 345625,
+    "dedup_scope": "Only same lineage, schema, collection and index with identical record contents; conflicts retained. Export roots remain separate snapshots."
+  },
+  "source_limitations": [
+    "App-exported telemetry, not BLE HCI/GATT payload traces. No raw audio or transcript content.",
+    "Two cumulative snapshots; identical disconnect_history and lifecycle_events must not be concatenated as independent events.",
+    "Firmware diagnostics empty. No firmware PC/register/interrupt logs, packet payloads, notification timing trace, audio samples or flash contents.",
+    "Current firmware is not a label for every historical event. First recorded 3.0.21 battery snapshot is 1792407798000; several code-19 events predate it.",
+    "Zero counters may reflect absent capture or absent/broken instrumentation; unresolved.",
+    "Unchanged backlog counters do not prove the offline-sync worker never ran.",
+    "No firmware correctness, release readiness, bootloader/flash/USB behavior proven."
+  ],
+  "scenarios": [
+    {
+      "id": "connected_zero_progress_backlog",
+      "evidence": [
+        {
+          "source": "diag1840",
+          "json_pointer": "/",
+          "record": {
+            "schema_version": 2,
+            "exported_at": "2026-10-23T18:39:54.979380Z",
+            "app_version": "1.0.573",
+            "app_build": "1500",
+            "platform": "android",
+            "phone_model": "SM-S928U",
+            "device_model": "Omi CV 1",
+            "hardware_revision": "5.0",
+            "firmware": "3.0.21",
+            "battery": 95,
+            "charging": false,
+            "connected_at": 1792769723801,
+            "audio_packets_received_current": 0,
+            "audio_packets_expected_current": 0,
+            "offline_storage_used_bytes": 68376,
+            "offline_storage_backlog_bytes": 68376,
+            "offline_storage_unread_packets": 154
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/",
+          "record": {
+            "schema_version": 2,
+            "exported_at": "2026-10-23T18:45:40.604286Z",
+            "app_version": "1.0.573",
+            "app_build": "1500",
+            "platform": "android",
+            "phone_model": "SM-S928U",
+            "device_model": "Omi CV 1",
+            "hardware_revision": "5.0",
+            "firmware": "3.0.21",
+            "battery": 94,
+            "charging": false,
+            "connected_at": 1792769723801,
+            "audio_packets_received_current": 0,
+            "audio_packets_expected_current": 0,
+            "offline_storage_used_bytes": 68376,
+            "offline_storage_backlog_bytes": 68376,
+            "offline_storage_unread_packets": 154
+          }
+        }
+      ],
+      "supplied_derived": {
+        "snapshot_delta_ms": 345625,
+        "reported_connection_age_at_second_export_ms": 11416803
+      },
+      "not_proven": [
+        "Continuous packet absence over reported connection age",
+        "Firmware or app root cause",
+        "Offline sync never attempted"
+      ]
+    },
+    {
+      "id": "foreground_code19_reconnect",
+      "evidence": [
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/65",
+          "record": {
+            "ts": 1792704410826,
+            "reason": "remote_device_terminated",
+            "code": 19,
+            "manual": false,
+            "event_type": "disconnect",
+            "last_rssi": -63,
+            "last_rssi_age_ms": 8775,
+            "connection_duration_ms": 18788,
+            "app_state": "foreground",
+            "time_to_reconnect_ms": 18224,
+            "rssi_trend": "unknown",
+            "lost_audio_seconds": 20.865,
+            "audio_packets_received": 714,
+            "audio_packets_expected": 714
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/ble_log/5",
+          "record": {
+            "ts": 1792704410834,
+            "event": "disconnect",
+            "detail": "remote_device_terminated",
+            "identity_epoch": 1
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/ble_log/6",
+          "record": {
+            "ts": 1792704429054,
+            "event": "connected",
+            "detail": "",
+            "identity_epoch": 1
+          }
+        }
+      ],
+      "not_proven": [
+        "Physical proximity at disconnect; RSSI age is 8775 ms",
+        "Firmware fault versus host/protocol state cause",
+        "Audit 1792/1882 packet counts; raw excerpt has 714/714"
+      ]
+    },
+    {
+      "id": "weak_signal_timeout_burst",
+      "evidence": [
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/55",
+          "record": {
+            "ts": 1792669754466,
+            "reason": "connection_timeout",
+            "code": 8,
+            "manual": false,
+            "event_type": "disconnect",
+            "last_rssi": -98,
+            "last_rssi_age_ms": 639,
+            "connection_duration_ms": 2821894,
+            "app_state": "background",
+            "time_to_reconnect_ms": 0,
+            "rssi_trend": "sudden",
+            "lost_audio_seconds": null,
+            "audio_packets_received": 138720,
+            "audio_packets_expected": 138720
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/57",
+          "record": {
+            "ts": 1792669782535,
+            "reason": "connection_timeout",
+            "code": 8,
+            "manual": false,
+            "event_type": "disconnect",
+            "last_rssi": -102,
+            "last_rssi_age_ms": 5780,
+            "connection_duration_ms": 15803,
+            "app_state": "background",
+            "time_to_reconnect_ms": 0,
+            "rssi_trend": "unknown",
+            "lost_audio_seconds": null,
+            "audio_packets_received": 9,
+            "audio_packets_expected": 9
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/59",
+          "record": {
+            "ts": 1792669805149,
+            "reason": "connection_timeout",
+            "code": 8,
+            "manual": false,
+            "event_type": "disconnect",
+            "last_rssi": -102,
+            "last_rssi_age_ms": 1298,
+            "connection_duration_ms": 11333,
+            "app_state": "background",
+            "time_to_reconnect_ms": 0,
+            "rssi_trend": "sudden",
+            "lost_audio_seconds": null,
+            "audio_packets_received": 1,
+            "audio_packets_expected": 1
+          }
+        }
+      ],
+      "supplied_derived": {
+        "relative_event_ms": [
+          0,
+          28069,
+          50683
+        ]
+      },
+      "not_proven": [
+        "Hard Android RSSI timeout threshold",
+        "Exact intervening GATT requests or notification timings"
+      ]
+    },
+    {
+      "id": "low_level_connected_vs_recovery_gap",
+      "evidence": [
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/66",
+          "record": {
+            "ts": 1792745998271,
+            "reason": "connection_timeout",
+            "code": 8,
+            "manual": false,
+            "event_type": "disconnect",
+            "last_rssi": -102,
+            "last_rssi_age_ms": 7596,
+            "connection_duration_ms": 2725576,
+            "app_state": "background",
+            "time_to_reconnect_ms": 23725530,
+            "rssi_trend": "unknown",
+            "lost_audio_seconds": null,
+            "audio_packets_received": 0,
+            "audio_packets_expected": 0
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/ble_log/8",
+          "record": {
+            "ts": 1792745998276,
+            "event": "disconnect",
+            "detail": "connection_timeout",
+            "identity_epoch": 1
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/ble_log/9",
+          "record": {
+            "ts": 1792746004316,
+            "event": "connected",
+            "detail": "",
+            "identity_epoch": 1
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/lifecycle_events/31",
+          "record": {
+            "ts": 1792769720004,
+            "event": "previous_run_unclean"
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/lifecycle_events/33",
+          "record": {
+            "ts": 1792769723371,
+            "event": "service_start",
+            "identity_epoch": 1
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/ble_log/10",
+          "record": {
+            "ts": 1792769723804,
+            "event": "connected",
+            "detail": "",
+            "identity_epoch": 1
+          }
+        }
+      ],
+      "supplied_derived": {
+        "low_level_connected_delay_ms": 6045,
+        "recorded_reconnect_delay_ms": 23725530
+      },
+      "not_proven": [
+        "Manual user relaunch",
+        "Android killed process for battery optimization",
+        "Continuous outage duration; telemetry sources differ"
+      ]
+    },
+    {
+      "id": "recovery_marker_ordering_and_schema",
+      "evidence": [
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/30",
+          "record": {
+            "ts": 1792442260199,
+            "reason": "connection_timeout",
+            "code": 8,
+            "manual": false,
+            "event_type": "disconnect",
+            "last_rssi": -102,
+            "last_rssi_age_ms": 510,
+            "connection_duration_ms": 10544,
+            "app_state": "background",
+            "time_to_reconnect_ms": 0,
+            "rssi_trend": "sudden",
+            "lost_audio_seconds": null,
+            "audio_packets_received": 28,
+            "audio_packets_expected": 28
+          }
+        },
+        {
+          "source": "diag1845",
+          "json_pointer": "/disconnect_history/31",
+          "record": {
+            "ts": 1792442260164,
+            "reason": "unknown",
+            "code": 0,
+            "manual": false,
+            "event_type": "audio_recovered",
+            "last_rssi": null,
+            "last_rssi_age_ms": null,
+            "connection_duration_ms": 0,
+            "app_state": "unknown",
+            "time_to_reconnect_ms": 0,
+            "rssi_trend": null,
+            "lost_audio_seconds": null,
+            "audio_packets_received": null,
+            "audio_packets_expected": null
+          }
+        }
+      ],
+      "supplied_derived": {
+        "audio_recovered_timestamp_minus_disconnect_ms": -35
+      },
+      "not_proven": [
+        "All recovery markers precede corresponding disconnects",
+        "Negative outage duration inferred from timestamp offset"
+      ]
+    }
+  ],
+  "externally_verified_full_export_counts_not_recomputed_from_excerpt": {
+    "disconnect_history_total": 67,
+    "event_type": {
+      "disconnect": 32,
+      "audio_recovered": 31,
+      "fail_to_connect": 4
+    },
+    "code19": 11,
+    "code8": 18,
+    "lifecycle_previous_run_unclean": 8,
+    "ble_log_records": 11,
+    "rssi_samples": 120
+  },
+  "narrative_corrections": [
+    "Raw exports have 67 history records/32 disconnects/4 failed connects, not audit 65/31/3.",
+    "connection_count and disconnect_count keys are absent; actual keys reconnection_count=31 and fail_to_connect_count=4.",
+    "offline_sync_events and offline_storage_total_bytes keys are absent; do not substitute [] or 3981534.",
+    "Blanket 3\u201318 ms recovery-marker offset is unsupported; example is -35 ms, with unpaired/non-near markers elsewhere.",
+    "Second export RSSI sample span is 1180653 ms (~19m41s), not the whole connection.",
+    "Historical code19 events cannot all be assigned current FW3.0.21."
+  ]
+}
