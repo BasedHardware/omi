@@ -228,7 +228,8 @@ def test_bounded_replay_fails_closed_on_raw_listing_error(remote, monkeypatch):
 
 @pytest.mark.parametrize('rate', [8000, 22050, 44100, 48000])
 @pytest.mark.parametrize('gap', [False, True])
-def test_resampled_frame_fragments_partition_whole_pack(remote, rate, gap):
+def test_resampled_frame_fragments_partition_whole_pack(remote, monkeypatch, rate, gap):
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *args: True)
     first, second = b'\x01\x02' * 1024, b'\x03\x04' * 1024
     frames = [frame(first, 1000), frame(second, 1000 + 1024 / rate + (3 if gap else 0), 1, len(first), gap)]
     receipt = audio_outbox.commit_pcm_window(
@@ -236,11 +237,14 @@ def test_resampled_frame_fragments_partition_whole_pack(remote, rate, gap):
     )
     assert audio_outbox.read_pcm('owner', receipt) == first + second
     listed = raw_audio_read.list_packs(remote, 'owner', 'conversation')
+    assert len(listed) == (2 if gap else 1)
     for output_rate in (16000, rate):
         decoded = raw_audio_read.read_pack(remote, receipt.path, 'owner', sample_rate=output_rate)
         assert decoded == decode_capture(first + second, remote.blob(receipt.path).metadata, output_rate)
         fragments = [raw_audio_read.select_raw_pcm(decoded, row, output_rate) for row in listed]
         assert b''.join(fragments) == decoded
+        played = list(iter_audio_chunk_pcm('owner', 'conversation', lambda *args: True, sample_rate=output_rate))
+        assert b''.join(data for _, data in played) == decoded
 
 
 def test_replay_counts_objects_once_for_many_disjoint_spans(remote, monkeypatch):
