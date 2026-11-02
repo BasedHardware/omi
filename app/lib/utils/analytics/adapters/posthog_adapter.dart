@@ -46,6 +46,9 @@ class PostHogAnalyticsAdapter
     _omi = const {};
   }
 
+  // Pinned by posthog_adapter_flags_test against pubspec.lock on dependency upgrades.
+  static const flutterSdkVersion = '5.28.0';
+
   final String apiKey;
   final String host;
   final bool captureLifecycleEvents;
@@ -88,6 +91,7 @@ class PostHogAnalyticsAdapter
     if (PlatformService.isMobile) {
       await const MethodChannel('com.omi/posthog_setup').invokeMethod<void>('setup', {
         'projectToken': apiKey,
+        'sdkVersion': flutterSdkVersion,
         'host': host,
         'captureApplicationLifecycleEvents': captureLifecycleEvents,
         'optOut': config.optOut,

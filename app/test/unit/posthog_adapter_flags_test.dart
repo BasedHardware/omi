@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,14 @@ import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('first native setup attribution matches the resolved Flutter SDK', () {
+    final lock = File('pubspec.lock').readAsStringSync();
+    final block = RegExp(r'^  posthog_flutter:\n((?: {4}.*\n)+)', multiLine: true).firstMatch(lock)?.group(1);
+    expect(block, isNotNull);
+    final version = RegExp(r'^    version: "([^"]+)"$', multiLine: true).firstMatch(block!)?.group(1);
+    expect(PostHogAnalyticsAdapter.flutterSdkVersion, version);
+  });
 
   test('setup disables preloads; reload and every read use only Omi; capture still delivers', () async {
     SharedPreferences.setMockInitialValues({});

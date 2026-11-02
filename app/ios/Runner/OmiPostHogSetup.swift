@@ -7,8 +7,12 @@ enum OmiPostHogSetup {
   static func register(messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: "com.omi/posthog_setup", binaryMessenger: messenger).setMethodCallHandler { call, result in
       guard call.method == "setup", let args = call.arguments as? [String: Any],
-        let token = args["projectToken"] as? String, let host = args["host"] as? String
+        let token = args["projectToken"] as? String, let host = args["host"] as? String,
+        let sdkVersion = args["sdkVersion"] as? String
       else { result(FlutterMethodNotImplemented); return }
+      // setup snapshots SDK context before Flutter's later idempotent setup.
+      postHogSdkName = "posthog-flutter"
+      postHogVersion = sdkVersion
       let config = PostHogConfig(projectToken: token, host: host)
       config.captureApplicationLifecycleEvents = args["captureApplicationLifecycleEvents"] as? Bool ?? false
       config.captureScreenViews = false
