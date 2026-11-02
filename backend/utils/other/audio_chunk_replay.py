@@ -98,6 +98,48 @@ def _span_candidate_offset(chunk: Mapping[str, Any], position: float, sample_rat
     return offset
 
 
+def verify_frame_overlaps(uid, conversation_id, pcm, frames, sample_rate, *, bucket, list_chunks, bucket_for):
+    """Fresh bounded proof listing: a rebatched frame cannot replace conflicting committed spans."""
+    deadline = time.monotonic() + RECONCILE_MAX_SECONDS
+    chunks = list_chunks(uid, conversation_id, timeout=5, deadline=deadline, max_count=10000)
+    decoded = {}
+    charged = 0
+    offset = 0
+    for frame in frames:
+        start, end = frame['start'], frame['start'] + frame['samples'] / sample_rate
+        for chunk in chunks:
+            span = chunk.get('span')
+            if not span:
+                continue  # Spanless sources provide no replay inference, as on the legacy path.
+            old_start = span['start']
+            old_end = old_start + span['samples'] / span['sample_rate']
+            lo, hi = max(start, old_start), min(end, old_end)
+            if hi <= lo:
+                continue
+            if span['sample_rate'] != sample_rate:
+                raise ValueError('framed replay rate cannot be verified')
+            key = (chunk.get('bucket'), chunk['path'], chunk.get('raw_offset_samples'))
+            if key not in decoded:
+                if (
+                    len(decoded) >= RECONCILE_MAX_OBJECTS
+                    or charged >= RECONCILE_MAX_BYTES
+                    or time.monotonic() >= deadline
+                ):
+                    raise TimeoutError('framed replay proof budget exhausted')
+                source = bucket_for(chunk.get('bucket')) if chunk.get('bucket') else bucket
+                data, size = _raw_chunk_object_pcm(source, chunk, uid, deadline, RECONCILE_MAX_BYTES - charged)
+                charged += size
+                if data is None or len(data) != span['samples'] * 2:
+                    raise ValueError('framed replay source cannot be verified')
+                decoded[key] = data
+            left = round((lo - old_start) * sample_rate) * 2
+            right = offset + round((lo - start) * sample_rate) * 2
+            count = round((hi - lo) * sample_rate) * 2
+            if decoded[key][left : left + count] != pcm[right : right + count]:
+                raise AudioChunkContentConflict('framed replay conflicts with committed PCM')
+        offset += frame['samples'] * 2
+
+
 def reconcile_committed_prefix(
     uid: str,
     conversation_id: str,

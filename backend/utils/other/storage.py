@@ -63,7 +63,12 @@ from database.audio_timeline import (
     strip_extension as _strip_extension,
 )
 from utils.observability.fallback import record_fallback
-from utils.other.audio_chunk_replay import AudioChunkContentConflict, RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
+from utils.other.audio_chunk_replay import (
+    AudioChunkContentConflict,
+    RECONCILE_MAX_ATTEMPTS,
+    reconcile_committed_prefix,
+    verify_frame_overlaps,
+)
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
 from database import users as users_db, conversation_tombstones
@@ -967,6 +972,22 @@ def upload_audio_chunks_batch(
             sample_rate,
             owner_storage_write_gate,
             archive_capture=_archive_pusher_capture if audio_packs.enabled() else None,
+            verify_overlap=(
+                (
+                    lambda pcm, frames: verify_frame_overlaps(
+                        uid,
+                        conversation_id,
+                        pcm,
+                        frames,
+                        sample_rate,
+                        bucket=private_bucket,
+                        list_chunks=list_audio_chunks,
+                        bucket_for=lambda name: _get_storage_client().bucket(name),
+                    )
+                )
+                if reconcile_prefix
+                else None
+            ),
         )
 
     if audio_archive.admitted(uid, 'STOP_PCM') and audio_archive.admitted(uid, 'READ'):

@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 from utils.other import audio_outbox, raw_audio_read, storage
 from utils.other.audio_raw_read_metrics import RAW_READ
 from utils.other.audio_chunks import iter_audio_chunk_pcm
+from utils.other.audio_frame_table import entries
+import pytest
 from tests.unit.test_audio_custody_frames import frame, remote
 
 
@@ -81,3 +83,41 @@ def test_optional_forward_archive_keeps_captured_ranges_instead_of_a_synthetic_s
     archived = archive.call_args.args[0]
     assert [item['data'] for item in archived] == [first, second]
     assert [item['span']['start'] for item in archived] == [1000, 1003.01]
+
+
+def test_contiguous_frame_table_stays_bounded_without_changing_original_frames():
+    frames = [frame(b'\x01\x02' * 160, 1800000000 + number * 0.01, number, number * 320) for number in range(500)]
+    original = [dict(item) for item in frames]
+    listed = entries(frames, 16000, {'path': 'source'})
+    assert len(listed) == 1 and listed[0]['span']['samples'] == 80000
+    assert frames == original
+
+
+@pytest.mark.parametrize('conflict', [False, True])
+def test_rebatched_projection_preserves_independent_replay_proof(remote, conflict):
+    first = b'\x01\x02' * 160
+    old = audio_outbox.commit_pcm_window(
+        'owner', first, 'conversation', 1000, 16000, 'old', 0, [frame(first, 1000)], framed=True
+    )
+    storage.upload_audio_chunks_batch(
+        [{'data': first, 'timestamp': 1000, 'custody_receipt': old.to_dict()}],
+        'owner',
+        'conversation',
+        'standard',
+        sample_rate=16000,
+    )
+    replay = b'\x05\x06' * 160 if conflict else first
+    tail = b'\x03\x04' * 160
+    frames = [frame(replay, 1000), frame(tail, 1003.01, 1, len(replay), True)]
+    new = audio_outbox.commit_pcm_window(
+        'owner', replay + tail, 'conversation', 1000, 16000, 'new', 0, frames, framed=True
+    )
+    chunks = [{'data': replay + tail, 'timestamp': 1000, 'custody_receipt': new.to_dict()}]
+    if conflict:
+        with pytest.raises(storage.AudioChunkContentConflict):
+            storage.upload_audio_chunks_batch(chunks, 'owner', 'conversation', 'standard', sample_rate=16000)
+        assert len(remote.list_blobs('chunks/')) == 1
+    else:
+        storage.upload_audio_chunks_batch(chunks, 'owner', 'conversation', 'standard', sample_rate=16000)
+        assert len(remote.list_blobs('chunks/')) == 2
+    assert audio_outbox.read_pcm('owner', new) == replay + tail
