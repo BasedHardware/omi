@@ -56,6 +56,9 @@ def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
 
 
 async def startup_event() -> None:
+    from database.pinecone_partition_state import start_mutations
+
+    start_mutations()
     _validate_static_capabilities()
     start_background_task(refresh_stt_cap_cohort_forever(), name='pusher:stt_cap_cohort_refresh')
     start_background_task(log_executor_health(), name='pusher:executor_health')
@@ -66,6 +69,10 @@ async def shutdown_event() -> None:
     # even if the chart preStop hook did not run. Existing in-flight sessions are
     # then drained by drain_background_tasks within the bounded grace period.
     ReadinessGate.begin_drain()
+    from database.pinecone_partition_state import drain_mutations
+    from utils.executors import db_executor, run_blocking
+
+    await run_blocking(db_executor, drain_mutations)
     await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()

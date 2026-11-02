@@ -226,7 +226,9 @@ install_drain_signal_marker()
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
+    from database.pinecone_partition_state import start_mutations
 
+    start_mutations()
     app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
@@ -484,6 +486,11 @@ async def shutdown_event():
     import logging
 
     from utils.executors import db_executor, run_blocking
+    from database.pinecone_partition_state import drain_mutations
+
+    # Run before other bounded drains consume the platform shutdown grace.
+    # Firestore IO belongs off the event loop; late admissions settle themselves.
+    await run_blocking(db_executor, drain_mutations)
 
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:
