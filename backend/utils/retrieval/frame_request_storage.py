@@ -12,7 +12,7 @@ import hashlib
 import os
 from typing import Any
 
-from utils.other.storage import _get_storage_client, owner_storage_write_gate
+from utils.other.storage import _delete_owner_bucket_prefix, _get_storage_client, owner_storage_write_gate
 
 TEMPORARY_STORAGE_PREFIX = "temporary-"
 PERMANENT_STORAGE_PREFIX = "permanent-"
@@ -98,7 +98,15 @@ def delete_frame_request_pixels_for_user(uid: str, storage_ids: list[str]) -> in
 
 
 def delete_all_frame_request_pixels_for_user(uid: str) -> int:
-    """Enumerate both frame-request tiers so orphaned IDs cannot survive a wipe."""
+    """Enumerate both frame-request tiers so orphaned IDs cannot survive a wipe.
+
+    Both tiers run through the shared owner-purge verifier: the same
+    read-after-write echo that can fail the owner-prefix sweep arms answers
+    these re-lists too, a 404-answered delete (a concurrent purge of the same
+    tier, or one torn delete) is settled by a fresh re-attack, and the residue
+    verdict fails closed under the shared ``owner storage purge left``
+    identity instead of this arm's private spelling.
+    """
 
     if not uid:
         return 0
@@ -110,14 +118,7 @@ def delete_all_frame_request_pixels_for_user(uid: str) -> int:
             # deployment; preserve the existing local/offline no-op behavior.
             continue
         bucket = _bucket(permanent=permanent)
-        prefix = f'frame-requests/{uid}/'
-        blobs = list(bucket.list_blobs(prefix=prefix))
-        for blob in blobs:
-            blob.delete()
-            deleted += 1
-        remaining = list(bucket.list_blobs(prefix=prefix))
-        if remaining:
-            raise RuntimeError(f'frame-request purge left {len(remaining)} objects under {prefix}')
+        deleted += _delete_owner_bucket_prefix(bucket, f'frame-requests/{uid}/')
     return deleted
 
 

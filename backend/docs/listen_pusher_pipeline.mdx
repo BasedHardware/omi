@@ -770,6 +770,20 @@ under the prefix. One residual observation therefore proves nothing, so the
 verifier re-attacks the residue once before its fail-closed verdict
 (`owner storage purge left N objects`) — an account-wipe caller still gets a
 torn-purge refusal, but a converged race no longer produces one. That verdict
+is identity-based, not presence-based: the delete loop records the
+`(name, generation)` pair of every delete it applies and the final re-list
+ignores *versioned* entries at those identities — the read side's echo of
+this very call's deletes (the just-deleted version answers one more read, or
+stays listed as noncurrent under a soft-delete policy). A generation-less
+entry is never masked by the echo rule, and a never-deleted name, a name at
+a newer generation (the late writer's upload) or a delete that never applied
+still fails closed: an echo must not hide the residue it raced. The same
+verifier is the only purge implementation the family keeps — the dedicated
+recordings bucket sweep and both frame-request tiers run through it (the
+shared `owner storage purge left` message replaces the arm-private
+`frame-request purge left` spelling), and the account wipe's diagnostics
+ticket lookups absorb the same concurrent-wipe 404 their owner bundles
+already do. The verdict
 arrives at `_discard_unreferenced_audio` after the conversation row is already
 gone, so it cannot retroactively fail the delete: a residual signal keeps the
 retained-audio classification (`Retained unreferenced audio behind a late
