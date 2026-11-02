@@ -8,10 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/settings/device/device_button_gesture_rows.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -78,6 +78,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
   CaptureProvider? _captureProvider;
+
+  // One cached instance, so page rebuilds skip the gesture rows (see DeviceButtonGestureRows).
+  int _buttonGestureRevision = 0;
+  Widget _buttonGestureRows = const DeviceButtonGestureRows();
 
   PendingWorkStore get _pendingWork => widget.pendingWork ?? PendingWorkStore.instance;
 
@@ -204,59 +208,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         _updateMicGain(value);
       },
     );
-  }
-
-  String _gestureTitle(OmiButtonGesture gesture) {
-    return switch (gesture) {
-      OmiButtonGesture.singleTap => context.l10n.singleTap,
-      OmiButtonGesture.doubleTap => context.l10n.doubleTap,
-      OmiButtonGesture.tripleTap => context.l10n.tripleTap,
-    };
-  }
-
-  String _buttonActionLabel(OmiButtonAction action) {
-    return switch (action) {
-      OmiButtonAction.endConversation => context.l10n.endConversation,
-      OmiButtonAction.muteUnmute => context.l10n.deviceOnboardingMuteUnmute,
-      OmiButtonAction.starConversation => context.l10n.starConversation,
-      OmiButtonAction.askQuestion => context.l10n.deviceOnboardingAskQuestionTitle,
-      OmiButtonAction.none => context.l10n.doNothing,
-    };
-  }
-
-  Future<void> _pickButtonAction(OmiButtonGesture gesture) async {
-    final action = await showButtonActionSheet(
-      context,
-      gesture: gesture,
-      current: SharedPreferencesUtil().buttonActionFor(gesture),
-    );
-    if (action == null || !mounted) return;
-    // Persist first: setButtonActionFor returns a Future, which setState must not see.
-    await SharedPreferencesUtil().setButtonActionFor(gesture, action);
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  List<Widget> _remappableButtonGestureRows() {
-    return [
-      for (final gesture in OmiButtonGesture.values)
-        OmiSettingsRow(
-          key: Key('button_gesture_${gesture.name}'),
-          leading: const FaIcon(FontAwesomeIcons.handPointer),
-          title: _gestureTitle(gesture),
-          value: _buttonActionLabel(SharedPreferencesUtil().buttonActionFor(gesture)),
-          onTap: () => _pickButtonAction(gesture),
-          showChevron: true,
-        ),
-      OmiSettingsRow(
-        key: const Key('button_gesture_longPress'),
-        leading: const FaIcon(FontAwesomeIcons.powerOff),
-        title: context.l10n.longPress,
-        subtitle: context.l10n.longPressFixedSubtitle,
-        value: context.l10n.powerOnOff,
-        showChevron: false,
-      ),
-    ];
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -480,9 +431,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          if (_omiButtonActionsEnabled) ..._remappableButtonGestureRows(),
+          if (_omiButtonActionsEnabled) _buttonGestureRows,
         ] else
-          ..._remappableButtonGestureRows(),
+          _buttonGestureRows,
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.lightbulb),
@@ -524,7 +475,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.graduationCap),
             title: l10n.deviceTutorial,
-            onTap: () => routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true)),
+            onTap: () async {
+              await routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
+              // The tutorial can save a double-tap action; show it.
+              if (!mounted) return;
+              setState(() => _buttonGestureRows = DeviceButtonGestureRows(revision: ++_buttonGestureRevision));
+            },
           ),
         // Ray-Ban Meta: on-demand photo capture. The Meta AI app manages its firmware, so the
         // update rows are hidden for it.
