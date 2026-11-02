@@ -189,6 +189,23 @@ async def test_a_trial_converting_on_real_payment_releases_as_a_conversion(relea
     assert release_hooks.calls == []
 
 
+async def test_a_paid_subscription_created_active_releases_even_after_checkout_stored_it(release_hooks):
+    """The retry for a checkout whose Stripe lookup failed: the payload carries the status."""
+    created = _subscription_event('customer.subscription.created')
+    # The checkout handler already stored the plan, so no allowance increase is visible here.
+    await worker.subscription_changed_async(
+        UID, created, trialing(status='active'), release_hooks.paid, release_hooks.paid
+    )
+    # The real trial_started_async declines an active subscription (test_purchases_and_charges_start_nothing).
+    assert release_hooks.calls == [('conversion', 'subscription-upgrade:evt'), ('trial', trialing()['id'])]
+    release_hooks.calls.clear()
+    renewal = _subscription_event('customer.subscription.updated')
+    await worker.subscription_changed_async(
+        UID, renewal, trialing(status='active'), release_hooks.paid, release_hooks.paid
+    )
+    assert release_hooks.calls == []
+
+
 async def test_a_trial_checkout_never_converts_and_a_paid_one_does(release_hooks):
     release_hooks.increased['value'] = True
     event = {'id': 'evt', 'created': TRIAL_START}

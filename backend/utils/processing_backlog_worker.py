@@ -499,19 +499,23 @@ async def subscription_changed_async(uid: str, event: dict, stripe_subscription:
     """A Stripe subscription event's automatic releases, for an owner whose funded processing is on.
 
     A trial's conversion to a real charge, or an allowance increase on an active subscription,
-    releases within the plan's allowance. Only the subscription's creation (the trial start)
-    grants; a later update such as a plan change while trialing never does.
+    releases within the plan's allowance. So does a new paid subscription created active (a
+    purchase): its status rides in the payload, so this retries a checkout whose Stripe lookup
+    failed, and creation happens once per subscription, never at renewal. Only the creation of a
+    trialing subscription grants the trial; a later update such as a plan change never does.
     """
     from utils.processing_backlog import allowance_increased
     from utils.subscription import is_paid_plan
 
     status = stripe_subscription.get('status')
     previous_status = ((event.get('data') or {}).get('previous_attributes') or {}).get('status')
-    if previous_status == 'trialing' or allowance_increased(previous, current):
+    created = event.get('type') == 'customer.subscription.created'
+    purchased = created and is_paid_plan(current.plan)
+    if previous_status == 'trialing' or purchased or allowance_increased(previous, current):
         await upgrade_async(
             uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'), status=status or ''
         )
-    if event.get('type') == 'customer.subscription.created' and is_paid_plan(current.plan):
+    if purchased:
         await trial_started_async(uid, stripe_subscription)
 
 

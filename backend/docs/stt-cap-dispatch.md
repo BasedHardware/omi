@@ -474,7 +474,10 @@ grant's cutoff is outside it. A trial's conversion, a purchase or an allowance
 increase starts a release (source `conversion`) newest first within the plan's
 remaining allowance, all of it at idle, but only once the Stripe subscription is
 `active`: a trialing subscription is covered by its grant and converts on
-trialing->active, and an unknown status waits. A hold whose legacy recovery
+trialing->active, and an unknown status waits. A paid subscription created `active`
+(a purchase) releases from `customer.subscription.created`, whose payload carries
+the status, so a checkout whose status lookup failed is still released; creation
+happens once per subscription, never at renewal. A hold whose legacy recovery
 already spent can only finish on the legacy route, so an automatic release passes
 over it (`legacy_started`) and it stays held for a manual choice.
 
