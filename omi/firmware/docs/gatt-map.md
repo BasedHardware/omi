@@ -27,3 +27,11 @@ Base UUID suffix: `-E8F2-537E-4F6C-D104768A1214`. Decided by the firmware lead o
 | UUID | Use | Waiting on |
 |---|---|---|
 | `19B10004` | Connected retention | #20838, only if the retention decision picks it over #20450, which adds no UUID |
+
+Power control advertises feature bit 11. Bit 9 remains reserved for device name,
+and bit 10 remains capture mute. On `19B10016`, byte 0 resumes capture, 1 queues
+orderly power-off, and 2 pauses capture through the same persistent mute owner as
+`19B10015`. Disconnect and hardware AAD wake do not clear pause. Sampling may
+continue while paused; TX and offline storage stay gated. Pending shutdown reads
+as 1 and rejects pause/resume writes. Shutdown uses a dedicated thread after a
+50 ms grace period; the write ACK promises queued shutdown, not completed shutdown.

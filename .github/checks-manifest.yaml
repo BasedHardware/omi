@@ -14,6 +14,12 @@ checks:
     triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14293: a failed NVS write must not receive a successful mute ACK or change the confirmed runtime mute"
+  - id: cv1-power-control
+    command: ["bash", "omi/firmware/omi/tests/run_power_control_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/power_control_gatt.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/tests/test_power*", "omi/firmware/omi/tests/test_capture_mute_settings.c", "omi/firmware/omi/tests/run_power_control_test.sh", "omi/firmware/omi/tests/settings_stubs/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23735: share the persistent mute owner instead of resuming on disconnect; queue orderly shutdown outside the system workqueue"
   - id: pcloud-backup-contract-tests
     command: ["bash", "scripts/run-plugin-pcloud-tests.sh"]
     triggers: ["plugins/omi-pcloud-app/**", "plugins/omi-plugin-sdk/**", "backend/utils/plugin_transport.py", "backend/utils/plugin_backup_audio.py", "scripts/run-plugin-pcloud-tests.sh", ".github/checks-manifest.yaml"]
