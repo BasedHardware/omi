@@ -1,3 +1,4 @@
+import os
 """Hermetic regression tests for issue #13911.
 
 Drives the real chat-tool handlers in main.py and the real GitHubClient in
@@ -42,8 +43,9 @@ class _HTTPException(Exception):
 
 
 class _Request:
-    def __init__(self, payload=None):
+    def __init__(self, payload=None, cookies=None):
         self._payload = payload or {}
+        self.cookies = cookies or {}
 
     async def json(self):
         return self._payload
@@ -191,14 +193,19 @@ with patch.dict(sys.modules, STUBS):
     github_client = _load("github_client")
     agent_providers = _load("agent_providers")
     github_tools_auth = _load("github_tools_auth")
+    github_settings_auth = _load("github_settings_auth")
     _real = {
         "models": models,
         "github_client": github_client,
         "agent_providers": agent_providers,
         "github_tools_auth": github_tools_auth,
+        "github_settings_auth": github_settings_auth,
     }
     with patch.dict(sys.modules, _real):
         main = _load("main")
+
+# Expose under importable name for test methods and references
+sys.modules["github_settings_auth"] = github_settings_auth
 
 
 # ---- Fakes and helpers --------------------------------------------------
@@ -1100,9 +1107,35 @@ class JsonEndpointErrorHandlingTests(unittest.TestCase):
             self.assertEqual(resp, {"success": False, "error": "Failed to delete agent key"})
 
     def test_test_agent_exception_returns_stable_error(self):
-        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
-            resp = asyncio.run(main.test_agent(_Request({"uid": "u1", "prompt": "hello"})))
-            self.assertEqual(resp, {"success": False, "error": "Failed to execute agent test"})
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
+            valid_cookie = github_settings_auth.session_value("u1")
+            req = _Request({"uid": "u1", "prompt": "hello"}, {github_settings_auth.COOKIE_NAME: valid_cookie})
+            with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+                resp = asyncio.run(main.test_agent(req))
+                self.assertEqual(resp, {"success": False, "error": "Failed to execute agent test"})
+
+    def test_test_agent_with_body_uid_and_valid_cookie_executes_past_auth(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
+            valid_cookie = github_settings_auth.session_value("u1")
+            req = _Request({"uid": "u1", "prompt": "hello"}, {github_settings_auth.COOKIE_NAME: valid_cookie})
+            with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
+                resp = asyncio.run(main.test_agent(req))
+                self.assertEqual(resp, {"success": False, "error": "User not authenticated"})
+
+    def test_test_agent_missing_cookie_raises_401(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
+            req = _Request({"uid": "u1", "prompt": "hello"}, {})
+            with self.assertRaises(Exception) as ctx:
+                asyncio.run(main.test_agent(req))
+            self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_test_agent_mismatched_cookie_raises_401(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": "test-sec"}, clear=True):
+            attacker_cookie = github_settings_auth.session_value("attacker")
+            req = _Request({"uid": "victim", "prompt": "hello"}, {github_settings_auth.COOKIE_NAME: attacker_cookie})
+            with self.assertRaises(Exception) as ctx:
+                asyncio.run(main.test_agent(req))
+            self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
 
 
 if __name__ == "__main__":
