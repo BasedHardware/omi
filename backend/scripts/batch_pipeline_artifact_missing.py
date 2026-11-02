@@ -22,6 +22,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
+from google.api_core.exceptions import GoogleAPICallError
 from google.cloud.firestore_v1.base_query import FieldFilter
 from database.batch_pipeline_artifact_missing import ArtifactMissingStore, fingerprint
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -58,6 +59,15 @@ def inspect(store, artifacts, sid):
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     proof = artifacts.missing_audio_evidence(item, now=time.time())
     return snapshot, proof
+
+
+def inspect_candidate(store, artifacts, sid):
+    """A permission/transport error is unknown, never evidence for disposition."""
+    try:
+        snapshot, proof = inspect(store, artifacts, sid)
+    except GoogleAPICallError:
+        return None, None, 'unknown'
+    return snapshot, proof, 'missing' if proof is not None else 'not_missing'
 
 
 def plan_digest(units, cutoff, bucket):
@@ -140,6 +150,7 @@ def main():
     )
     require(len(docs) <= args.read_budget, 'read_budget_exceeded')
     units = []
+    unknown = 0
     for doc in docs:
         job = doc.to_dict() or {}
         if (
@@ -148,7 +159,8 @@ def main():
             or not held_without_recovery(job)
         ):
             continue
-        snapshot, proof = inspect(store, artifacts, doc.id)
+        snapshot, proof, outcome = inspect_candidate(store, artifacts, doc.id)
+        unknown += outcome == 'unknown'
         if proof is not None:
             units.append((doc.id, snapshot, proof))
     require(len(units) == args.expect_count, 'missing_cohort_count_changed')
@@ -158,6 +170,7 @@ def main():
         'operation': OPERATION,
         'mode': 'apply' if args.apply else 'dry_run',
         'missing_units': len(units),
+        'metadata_unknown_units': unknown,
         'plan_sha256': digest,
         'audio_media_reads': 0,
         'job_completions': 0,
