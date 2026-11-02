@@ -295,6 +295,72 @@ def test_search_parity_accepts_only_tie_level_differences():
             migration.search_parity(old, new)
 
 
+def _proof_queries(provider, namespace):
+    return [
+        p for path, p in provider.calls if path == 'query' and p.get('includeValues') and p['namespace'] == namespace
+    ]
+
+
+def test_payload_proof_packs_small_records_into_fewer_queries(setup):
+    key, db, provider, runner = setup
+    for i in range(70):
+        provider.records[key.family][f'm{i:02d}'] = record(f'm{i:02d}', values=[1.0, i / 100])
+    receipt = runner.qualify('run', dimension=2)
+    assert receipt['records'] == 73
+    # 73 small records fit one query per namespace; 30-record groups needed three.
+    assert len(_proof_queries(provider, key.family)) == 1
+    assert len(_proof_queries(provider, key.partition_namespace)) == 1
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def _groups(provider, namespace, n):
+    for i in range(n):
+        provider.records[namespace][f'g{i}'] = record(f'g{i}')
+    provider.indexed[namespace] = provider.lsns[namespace] = 1
+    digests = {f'g{i}': migration.record_digest(record(f'g{i}')) for i in range(n)}
+    return {json.dumps({'memory_id': {'$eq': f'g{i}'}}, sort_keys=True): {f'g{i}': digests[f'g{i}']} for i in range(n)}
+
+
+def test_payload_proof_respects_the_response_byte_budget_and_old_default():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 70)
+    big = {f'g{i}': 1_200_000 for i in range(70)}
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, big)
+    assert len(_proof_queries(provider, 'ns2')) == 35  # two 1.2 MB records per 3.5 MB query
+    provider.calls.clear()
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups)
+    assert len(_proof_queries(provider, 'ns2')) == 3  # without sizes: the original 30-record groups
+
+
+def test_over_budget_identity_group_is_proven_alone():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 10)
+    big = {}
+    for i in range(30):
+        row = record(f'big{i}')
+        row['metadata']['memory_id'] = 'big-source'
+        provider.records['ns2'][f'big{i}'] = row
+        big[f'big{i}'] = migration.record_digest(row)
+    groups[json.dumps({'memory_id': {'$eq': 'big-source'}}, sort_keys=True)] = big
+    sizes = {**{f'g{i}': 100 for i in range(10)}, **{f'big{i}': 150_000 for i in range(30)}}
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, sizes)
+    per_query = [
+        {selector['memory_id']['$eq'] for selector in proof['filter']['$and'][1]['$or']}
+        for proof in _proof_queries(provider, 'ns2')
+    ]
+    # 30 x 150 KB = 4.5 MB > budget: proven in its own query, nothing packed with it.
+    assert {'big-source'} in per_query
+    assert sum(len(query) for query in per_query) == 11
+
+
+def test_packed_payload_proof_still_detects_a_changed_record():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 70)
+    provider.records['ns2']['g42']['metadata']['revision'] = 2
+    with pytest.raises(migration.MigrationNotReady, match='differ from the copied snapshot'):
+        provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, {f'g{i}': 100 for i in range(70)})
+
+
 def test_indexing_lag_times_out_without_false_success(setup, monkeypatch):
     key, db, provider, runner = setup
     provider.lag_namespace = key.partition_namespace
@@ -479,7 +545,9 @@ def test_large_owner_qualifies_complete_inventory_and_every_payload_group(setup)
             for path, payload in provider.calls
             if path == 'query' and payload['namespace'] == namespace and payload.get('includeValues')
         ]
-        assert len(proofs) == 334
+        # 10,001 small records pack 100 per proof query (byte budget not reached).
+        assert len(proofs) == 101
+        assert all(payload['topK'] <= migration.PAYLOAD_PROOF_MAX_RECORDS + 1 for payload in proofs)
         identities = {
             selector['memory_id']['$eq'] for payload in proofs for selector in payload['filter']['$and'][1]['$or']
         }
@@ -643,8 +711,8 @@ def test_payload_queries_are_bounded_and_cover_every_record(setup):
     provider.records[key.family] = {str(i): record(str(i)) for i in range(65)}
     receipt = runner.qualify('run', dimension=2)
     payload_proofs = [payload for path, payload in provider.calls if path == 'query' and payload.get('includeValues')]
-    assert len(payload_proofs) == 6
-    assert all(payload['topK'] <= 31 for payload in payload_proofs)
+    assert len(payload_proofs) == 2  # 65 small records: one packed proof per namespace
+    assert all(payload['topK'] <= migration.PAYLOAD_PROOF_MAX_RECORDS + 1 for payload in payload_proofs)
     for namespace in (key.family, key.partition_namespace):
         selectors = [
             selector

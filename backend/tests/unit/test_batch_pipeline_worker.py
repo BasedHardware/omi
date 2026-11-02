@@ -117,6 +117,55 @@ def test_vad_silence_skips_models_but_persists_result():
     assert saved['a']['speech_spans'] == []
 
 
+@pytest.mark.parametrize('language,route', [('en', 'parakeet'), ('vi', 'blocked'), (None, 'blocked')])
+@pytest.mark.parametrize('failure', ['vad_call', 'vad_windows'])
+def test_route_precedes_vad_failure_without_claiming_asr(monkeypatch, caplog, language, route, failure):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
+    caplog.set_level(logging.INFO)
+
+    def vad(_):
+        routes = [r.message for r in caplog.records if 'event=batch_language_route' in r.message]
+        assert len(routes) == 1 and f'route={route}' in routes[0]
+        if failure == 'vad_call':
+            raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+        return [(3, 4)]  # speech_windows rejects bounds on a two-second buffer.
+
+    worker, words, saved, *_ = setup_worker(language_of=lambda _: language, vad=vad)
+    result = worker.process_batch([item()])
+    assert len(result) == 1 and isinstance(result[0], ValidationFailureWork)
+    assert result[0].reason == 'vad_bounds'
+    assert not words.calls and not saved
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+
+
+@pytest.mark.parametrize('shadow', [False, True])
+def test_route_once_on_success_and_no_route_for_shadow(caplog, shadow):
+    caplog.set_level(logging.INFO)
+    worker, words, *_ = setup_worker()
+    assert worker.process_batch([replace(item(), shadow=shadow)])[0].outcome == 'success'
+    assert words.calls
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == int(not shadow)
+
+
+def test_route_precedes_packed_segmentation_and_vad_failure(caplog):
+    caplog.set_level(logging.INFO)
+
+    def segment(samples):
+        assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+        return ['features']
+
+    def vad(samples, features):
+        raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+
+    flight = SimpleNamespace(segment=segment, vad_spans=vad)
+    worker, words, saved, *_ = setup_worker(flight_models=flight)
+    result = worker.process_batch([item()])
+    assert len(result) == 1 and isinstance(result[0], ValidationFailureWork)
+    assert result[0].reason == 'vad_bounds'
+    assert not words.calls and not saved
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+
+
 def test_failure_is_not_silence_and_siblings_survive():
     worker, _, _, _, _, failures = setup_worker(decode=lambda i: Samples(99) if i.segment_id == 'bad' else Samples(2))
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('ok')])] == ['ok']

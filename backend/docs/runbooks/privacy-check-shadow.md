@@ -42,7 +42,15 @@ Token read failures propagate on enforcement; shadow failures are counted and
 leave the original live result/exception intact.
 
 Batch memo entries belong to one sync/pump attempt, including inline sync, and
-close on every exit. Transactions reusing a batch memo read the token in their
+close on every exit. The pull worker opens its attempt before its first await,
+including preflight/convergence/cleanup; the shared coordinator opens a nested
+attempt for both Cloud Tasks and pull execution. The worker supervisor exposes
+all seven privacy counter families at `/metrics`, preserving child counters
+across exit/SIGKILL via Prometheus mmap files and removing each child's files
+only after the process group is reaped. The worker chart enables PodMonitoring
+by default. Include that installed worker target in all-plane coverage before
+starting the 14-day window; a missing scrape or denominator blocks qualification.
+Transactions reusing a batch memo read the token in their
 conflict set. Existing transactional legal-hold fences retain both live authority
 reads and do not add a privacy-token read. Nontransactional
 provider-STT checks remain live (the deferred admission-write fix in

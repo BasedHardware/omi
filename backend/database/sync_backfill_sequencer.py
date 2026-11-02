@@ -11,7 +11,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -22,6 +22,7 @@ from database._client import get_firestore_client
 from database import sync_redrive, sync_jobs
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
+from config import sync_backfill_worker as worker_policy
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
@@ -193,6 +194,15 @@ def register_job(
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     pending = _pending_ref(client, uid, job_id)
+    # Registration is the durable admission boundary. Never trust a supplied
+    # marker, migrate old jobs, or change batch admission to fill this fleet.
+    payload = dict(payload)
+    payload.pop('worker_eligible', None)
+    if worker_policy.selected(uid) and worker_policy.eligible_payload(payload) and enabled():
+        from utils.sync.legacy_dark import sequencer_registration_allowed
+
+        if sequencer_registration_allowed(uid=uid):
+            payload['worker_eligible'] = True
     accepted_at = now or _now()
     try:
         sort_at = (
@@ -489,6 +499,11 @@ def claim_next(
             'dispatch_attempt': 0,
             'active_state': 'dispatching',
             'worker_available': job['payload'].get('worker_eligible') is True,
+            'worker_fallback_at': (
+                int(current.timestamp()) + DISPATCH_RETRY_SECONDS
+                if job['payload'].get('worker_eligible') is True
+                else None
+            ),
             'active_accepted_at': job['accepted_at'],
             'active_since': current,
             'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
@@ -504,6 +519,7 @@ def claim_next(
             'payload': job['payload'],
             'epoch': epoch,
             'accepted_at': job['accepted_at'],
+            'worker_fallback_at': active['worker_fallback_at'],
         }
 
     return commit(client.transaction())
@@ -628,17 +644,33 @@ def _execution_matches(owner: dict, job_id: str, epoch: int, token: Optional[str
     )
 
 
-def worker_candidates(*, limit: int = 100, firestore_client: Any = None) -> list[dict[str, Any]]:
-    """One equality index; never scan non-cohort owners or the pending backlog."""
+def worker_candidates(
+    *, limit: int = 100, after_uid: Optional[str] = None, firestore_client: Any = None
+) -> Iterator[dict[str, Any]]:
+    """Page available owners lazily, including past a filtered first page.
+
+    Cohort/legacy policy can change after admission, leaving available owners
+    that claim must skip. A fixed prefix would permanently hide later owners.
+    Stop fetching as soon as the caller claims one; never scan pending jobs.
+    """
     _require_production()
     client = firestore_client or get_firestore_client()
-    docs = (
+    page_size = max(1, min(limit, 100))
+    query = (
         client.collection(COLLECTION)
         .where(filter=FieldFilter('worker_available', '==', True))
-        .limit(max(1, min(limit, 100)))
-        .stream()
+        .order_by('__name__')
+        .limit(page_size)
     )
-    return [{'uid': doc.id, **_data(doc)} for doc in docs]
+    if after_uid is not None:
+        query = query.start_after({'__name__': client.collection(COLLECTION).document(after_uid)})
+    while True:
+        docs = list(query.stream())
+        for doc in docs:
+            yield {'uid': doc.id, **_data(doc)}
+        if len(docs) < page_size:
+            return
+        query = query.start_after(docs[-1])
 
 
 def claim_worker(

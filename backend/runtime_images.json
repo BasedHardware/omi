@@ -217,7 +217,10 @@
       "build_context": ".",
       "source_root": "backend",
       "workdir": "/app",
-      "entrypoints": ["utils.sync.worker_runtime"],
+      "entrypoints": ["utils.sync.worker_runtime", "utils.sync.worker_job"],
+      "smoke_environment": {
+        "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
+      },
       "image_import_smoke": true,
       "dependency_probe_smoke": true,
       "pull_request_smoke": true,

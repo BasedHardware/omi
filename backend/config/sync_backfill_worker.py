@@ -16,3 +16,7 @@ def percent() -> float:
 
 def selected(uid: str) -> bool:
     return bool(uid) and cohort_bucket(uid, '') < percent()
+
+
+def eligible_payload(payload: dict) -> bool:
+    return payload.get('lane') == 'backfill' and payload.get('ledger_fence_mode') == 'active'
