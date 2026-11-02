@@ -11,6 +11,7 @@ import time
 
 from prometheus_client import Counter, Histogram
 from database.batch_privacy_attempt import PrivacyAttempt
+from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
 
 logger = logging.getLogger(__name__)
 FAMILIES = frozenset({'batch', 'external', 'tombstone', 'deletion_marker'})
@@ -220,15 +221,19 @@ def session_memo():
     return session.memo if session is not None and not session.closed else None
 
 
-async def _pusher_census_ticks(holder):
+async def _pusher_census_ticks(holder, stopped):
     from utils.executors import db_executor, run_blocking
 
-    while True:
-        await asyncio.sleep(60)
+    while not await wait_for_event(stopped, 60):
         try:
             await run_blocking(db_executor, holder.flush)
         except Exception:
-            pass  # Telemetry must not end an otherwise healthy socket.
+            logger.warning('privacy pusher census flush failed')
+
+
+def _pusher_census_done(task):
+    if not task.cancelled() and task.exception() is not None:
+        logger.warning('privacy pusher census ticker stopped unexpectedly')
 
 
 def with_session_census(plane):
@@ -237,18 +242,21 @@ def with_session_census(plane):
         async def wrapped(*args, **kwargs):
             holder = SessionCensus(plane)
             token = _SESSION.set(holder)
+            stopped = asyncio.Event()
             ticker = (
-                asyncio.create_task(_pusher_census_ticks(holder), name='privacy:pusher:census')
+                create_named_task(_pusher_census_ticks(holder, stopped), name='privacy:pusher:census')
                 if holder.plane == 'pusher'
                 else None
             )
+            if ticker is not None:
+                ticker.add_done_callback(_pusher_census_done)
             try:
                 return await function(*args, **kwargs)
             finally:
                 try:
                     if ticker is not None:
-                        ticker.cancel()
-                        await asyncio.gather(ticker, return_exceptions=True)
+                        stopped.set()
+                        await drain_tasks([ticker], timeout=5.0, label='privacy:pusher:census')
                 finally:
                     with holder.lock:
                         holder.closed = True

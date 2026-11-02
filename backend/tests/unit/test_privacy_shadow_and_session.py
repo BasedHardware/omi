@@ -273,26 +273,24 @@ def test_metric_and_log_labels_cannot_contain_identifiers(caplog):
 @pytest.mark.parametrize('cancelled', [False, True])
 async def test_pusher_censuses_full_minute_and_collects_ticker_on_exit(world, monkeypatch, cancelled):
     import asyncio
-    from types import SimpleNamespace
     from utils.executors import db_executor, run_blocking
 
     db, _, _, _ = world
     waiting, tick, flushed, never = (asyncio.Event() for _ in range(4))
     tickers, holders = [], []
 
-    async def sleep(seconds):
+    async def wait_for_tick(event, seconds):
         assert seconds == 60
         if not tickers:
             tickers.append(asyncio.current_task())
             waiting.set()
             await tick.wait()
+            return False
         else:
             flushed.set()  # A full flush completed before the next interval.
             await never.wait()
 
-    monkeypatch.setattr(
-        metrics, 'asyncio', SimpleNamespace(sleep=sleep, create_task=asyncio.create_task, gather=asyncio.gather)
-    )
+    monkeypatch.setattr(metrics, 'wait_for_event', wait_for_tick)
     histogram = metrics.CENSUS.labels('pusher', 'external', 'live', 'reads')
     before = histogram._sum.get()
 
@@ -317,3 +315,28 @@ async def test_pusher_censuses_full_minute_and_collects_ticker_on_exit(world, mo
     assert metrics.session_memo() is None
     assert holders[0]._closed
     assert tickers[0].cancelled()
+
+
+@pytest.mark.asyncio
+async def test_pusher_ticker_failure_is_observable_without_ending_socket(world, monkeypatch, caplog):
+    import asyncio
+
+    failed = asyncio.Event()
+
+    async def failed_wait(event, seconds):
+        failed.set()
+        raise RuntimeError('synthetic private exception detail')
+
+    monkeypatch.setattr(metrics, 'wait_for_event', failed_wait)
+
+    @metrics.with_session_census('pusher')
+    async def socket():
+        await asyncio.wait_for(failed.wait(), timeout=10)
+        await asyncio.sleep(0)  # Allow the task's done callback to run.
+        return 'healthy'
+
+    with caplog.at_level('WARNING'):
+        assert await socket() == 'healthy'
+    assert 'privacy pusher census ticker stopped unexpectedly' in caplog.text
+    assert 'synthetic private exception detail' not in caplog.text
+    assert metrics.session_memo() is None

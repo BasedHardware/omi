@@ -84,7 +84,7 @@ use the separate live/shadow counters when measuring the live decision path.
 | `privacy_checks_total{family,mode,reason}` | Allow/block/error decisions |
 | `privacy_check_reads_total{family,mode,result}` | Issued point reads, hit/miss/error |
 | `privacy_conversations_walked_total{mode}` | Distinct conversation nodes walked per check |
-| `privacy_session_cycle_operations{plane,family,mode,kind}` | Listen census over each completed 60-second interval after bootstrap |
+| `privacy_session_cycle_operations{plane,family,mode,kind}` | Completed 60-second intervals: listen after bootstrap; pusher from websocket entry, including bootstrap |
 | `privacy_shadow_checks_total{family,result}` | Match/mismatch/error denominator |
 | `privacy_memo_requests_total{family,result}` | Hit/miss/ineligible repeat-key denominator |
 | `privacy_decision_mismatch_total{family,reason}` | Decision disagreement; never a read-count comparison |
@@ -95,6 +95,8 @@ they do not inflate the live baseline. Qualification needs actual eligible memo
 hits on each candidate family/plane and a match-plus-mismatch denominator;
 ineligible live fallbacks or shadow errors do not prove cache correctness.
 Unresolved shadow errors or missing candidate coverage block qualification.
+Compare each plane against its own lifecycle baseline; pusher's first complete
+interval includes setup checks, while listen resets its census after bootstrap.
 
 ## Deploy and ramp
 
