@@ -21,6 +21,7 @@ from google.api_core.exceptions import InvalidArgument
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
+from database.privacy_check_metrics import with_session_census
 from database import users as users_db
 from database._client import get_firestore_client
 from database.legal_holds import DestructiveOperationInProgress
@@ -1880,6 +1881,7 @@ async def _run_websocket_util_trigger(
 
 
 @router.websocket("/v1/trigger/listen")
+@with_session_census('pusher')
 async def websocket_endpoint_trigger(
     websocket: WebSocket,
     uid: str,

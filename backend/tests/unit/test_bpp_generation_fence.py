@@ -51,12 +51,25 @@ def test_all_authority_shapes_share_one_atomic_commit(authority, operation):
         )
     else:
         write = Write(update=Document(name=path, fields={'dynamic': {'boolean_value': True}}))
+        if authority.startswith('batch_pipeline_privacy/') and operation == 'set':
+            write.update.fields.update(
+                {
+                    'generation': {'integer_value': 7},
+                    'blocked': {'boolean_value': False},
+                    'purging': {'boolean_value': False},
+                }
+            )
         if operation in {'merge', 'update'}:
             write.update_mask = {'field_paths': ['dynamic']}
         if operation == 'update':
             write.current_document = {'update_time': {'seconds': 42}}
     request = CommitRequest(database='db', transaction=b'attempt', writes=[write])
     before = CommitRequest.serialize(request)
+    if authority.startswith('batch_pipeline_privacy/') and operation == 'delete':
+        with pytest.raises(ValueError, match='authority must survive deletion'):
+            fence.augment_commit(request)
+        assert CommitRequest.serialize(request) == before
+        return
     prepared, count = fence.augment_commit(request)
     assert count == 1 and len(prepared.writes) == 2
     assert prepared.writes[0] == write
@@ -80,6 +93,92 @@ def test_one_token_per_plane_and_owner_and_random_on_every_retry():
     assert count == 12 and len(first.writes) == 15
     assert len({w.update.name for w in first.writes[-3:]}) == 3
     assert first.writes[-1] != second.writes[-1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.parametrize('bulk', [False, True])
+async def test_authority_delete_refuses_whole_request_before_transport(asynchronous, bulk):
+    called = []
+
+    def transport(*args, **kwargs):
+        called.append(True)
+        raise AssertionError('destructive authority request reached transport')
+
+    async def async_transport(*args, **kwargs):
+        return transport(*args, **kwargs)
+
+    wrap = fence._wrap_bulk if bulk else fence._wrap_commit
+    wrapped = wrap(async_transport if asynchronous else transport)
+    request = {
+        'database': 'db',
+        'writes': [Write(delete=f'{ROOT}/users/u/conversations/source'), Write(delete=TOKEN)],
+    }
+    with pytest.raises(ValueError, match='authority must survive deletion'):
+        if asynchronous:
+            await wrapped(None, request=request)
+        else:
+            wrapped(None, request=request)
+    assert called == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.parametrize('bulk', [False, True])
+@pytest.mark.parametrize(
+    'mutation',
+    [
+        'masked_delete',
+        'quoted_delete',
+        'replacement',
+        'nested_state',
+        'null_state',
+        'wrong_generation',
+        'negative_generation',
+        'state_transform',
+        'update_transform',
+    ],
+)
+async def test_authority_state_loss_refuses_whole_request_before_transport(asynchronous, bulk, mutation):
+    write = Write(update=Document(name=TOKEN), update_mask={'field_paths': ['generation', 'blocked', 'purging']})
+    if mutation == 'quoted_delete':
+        write.update_mask.field_paths = ['`generation`', '`blocked`', '`purging`']
+    elif mutation == 'replacement':
+        write = Write(update=Document(name=TOKEN, fields={'dynamic': {'boolean_value': True}}))
+    elif mutation == 'nested_state':
+        write.update_mask.field_paths = ['blocked.nested']
+    elif mutation == 'null_state':
+        write.update_mask.field_paths = ['blocked']
+        write.update.fields['blocked'] = {'null_value': 0}
+    elif mutation in {'wrong_generation', 'negative_generation'}:
+        write.update_mask.field_paths = ['generation']
+        write.update.fields['generation'] = (
+            {'string_value': '7'} if mutation == 'wrong_generation' else {'integer_value': -1}
+        )
+    elif mutation in {'state_transform', 'update_transform'}:
+        transform = {'field_path': 'generation', 'increment': {'integer_value': 1}}
+        if mutation == 'state_transform':
+            write = Write(transform={'document': TOKEN, 'field_transforms': [transform]})
+        else:
+            write.update_mask.field_paths = []
+            write.update_transforms = [transform]
+    called = []
+
+    def transport(*args, **kwargs):
+        called.append(True)
+        raise AssertionError('state-loss request reached transport')
+
+    async def async_transport(*args, **kwargs):
+        return transport(*args, **kwargs)
+
+    wrapped = (fence._wrap_bulk if bulk else fence._wrap_commit)(async_transport if asynchronous else transport)
+    request = {'database': 'db', 'writes': [Write(delete=f'{ROOT}/users/u/conversations/source'), write]}
+    with pytest.raises(ValueError, match='batch privacy authority'):
+        if asynchronous:
+            await wrapped(None, request=request)
+        else:
+            wrapped(None, request=request)
+    assert called == []
 
 
 def test_unrelated_writes_are_byte_identical_and_expanded_batches_never_drop_fence():
@@ -243,6 +342,38 @@ def test_unrelated_bulk_labels_are_preserved_byte_for_byte():
     request = {'database': 'db', 'labels': {'owner': 'test'}, 'writes': [Write(delete=f'{ROOT}/unrelated/a')]}
     fence._wrap_bulk(lambda client, request=None, **kw: seen.append(request))(None, request=request)
     assert seen == [request] and seen[0] is request
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+async def test_flattened_bulk_authorities_cannot_bypass_atomic_token(monkeypatch, asynchronous):
+    captured = []
+
+    def commit(client, request=None, **kwargs):
+        captured.append(CommitRequest(request))
+        return CommitResponse(write_results=[WriteResult(), WriteResult()])
+
+    def bulk(client, request=None, **kwargs):
+        raise AssertionError('authority must use atomic Commit, never raw BatchWrite')
+
+    client = SimpleNamespace()
+    if asynchronous:
+
+        async def acommit(client, request=None, **kwargs):
+            return commit(client, request, **kwargs)
+
+        async def abulk(client, request=None, **kwargs):
+            return bulk(client, request, **kwargs)
+
+        client.commit = lambda **kwargs: fence._wrap_commit(acommit)(client, **kwargs)
+        call = fence._wrap_bulk(abulk)(client, database='db', writes=[Write(delete=f'{ROOT}/users/u')])
+        result = await call
+    else:
+        client.commit = lambda **kwargs: fence._wrap_commit(commit)(client, **kwargs)
+        result = fence._wrap_bulk(bulk)(client, database='db', writes=[Write(delete=f'{ROOT}/users/u')])
+    assert len(captured) == 1 and len(captured[0].writes) == 2
+    assert captured[0].writes[-1].update.name == TOKEN
+    assert len(result.status) == 1 and result.status[0].code == 0
 
 
 def test_installer_only_skips_fileless_sdk_stubs_and_propagates_real_import_failure(monkeypatch):
