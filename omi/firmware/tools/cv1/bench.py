@@ -116,7 +116,9 @@ def hex_ranges(path):
         raise ValueError('missing Intel HEX EOF')
     merged = []
     for lo, hi in sorted(ranges):
-        if merged and lo <= merged[-1][1]:
+        if merged and lo < merged[-1][1]:
+            raise ValueError('overlapping Intel HEX data')
+        if merged and lo == merged[-1][1]:
             merged[-1][1] = max(hi, merged[-1][1])
         else:
             merged.append([lo, hi])

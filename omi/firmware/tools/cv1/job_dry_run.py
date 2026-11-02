@@ -3,10 +3,10 @@ A plan never grants permission; live reconciliation remains mandatory.
 """
 from pathlib import Path
 import argparse,hashlib,json,math,re
-from artifact_preflight import evaluate,digest
+from artifact_preflight import evaluate,digest,strict_json
 
 def plan(job_path,profile_path,contract_path):
-    j=Path(job_path);p=Path(profile_path);job_bytes=j.read_bytes();profile_bytes=p.read_bytes();job=json.loads(job_bytes);profile=json.loads(profile_bytes);errors=[]
+    j=Path(job_path);p=Path(profile_path);job_bytes=j.read_bytes();profile_bytes=p.read_bytes();job=strict_json(job_bytes);profile=strict_json(profile_bytes);errors=[]
     if type(job) is not dict or type(profile) is not dict:raise ValueError('job and profile must be objects')
     def need(condition,code):
         if not condition:errors.append(code)
@@ -42,6 +42,6 @@ def plan(job_path,profile_path,contract_path):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('job');p.add_argument('--profile',required=True);p.add_argument('--contract',required=True);a=p.parse_args()
     try:r=plan(a.job,a.profile,a.contract)
-    except (OSError,ValueError,KeyError,TypeError) as ex:r=dict(plan_valid=False,execution_enabled=False,hardware_authorized=False,errors=[str(ex)])
+    except (OSError,ValueError,KeyError,TypeError,OverflowError,RecursionError) as ex:r=dict(plan_valid=False,execution_enabled=False,hardware_authorized=False,errors=[str(ex)])
     print(json.dumps(r,indent=2));return 0 if r['plan_valid'] else 2
 if __name__=='__main__':raise SystemExit(main())

@@ -49,6 +49,8 @@ class PreflightTests(unittest.TestCase):
  def test_wrong_board(self):self.m['board']='other';self.assertIn('board',self.codes())
  def test_wrong_layout(self):self.m['layout_sha256']='wrong';self.assertIn('layout',self.codes())
  def test_missing_installed_evidence(self):self.c['installed_provision']={};self.assertIn('trust_unknown',self.codes())
+ def test_non_object_installed_provision_structured_rejection(self):
+  for value in [[],'false',3,True]:self.c['installed_provision']=value;self.assertIn('trust_unknown',self.codes())
  def test_missing_key_evidence(self):im=self.network();del im['public_key'];self.assertIn('network_trust_unknown',self.codes())
  def test_ambiguous_roles(self):self.m['images'].append(copy.deepcopy(self.m['images'][0]));self.assertIn('roles',self.codes())
  def test_unknown_operation(self):self.m['operation']='flash';self.assertIn('roles',self.codes())

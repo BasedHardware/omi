@@ -41,6 +41,12 @@ class BenchTests(unittest.TestCase):
   self.assertEqual(bench.hex_ranges(p),[{'start':'0x0','end_exclusive':'0x4'}])
   p.write_text(':0400000001020304F3\n:00000001FF\n')
   with self.assertRaises(ValueError):bench.hex_ranges(p)
+ def test_hex_ranges_rejects_overlap(self):
+  p=self.root/'image.hex';p.write_text(':020000040000FA\n:0400000001020304F2\n:020000000102FB\n:00000001FF\n')
+  with self.assertRaises(ValueError):bench.hex_ranges(p)
+ def test_hex_ranges_adjacent_records_merge_without_overlap(self):
+  p=self.root/'image.hex';p.write_text(':0400000001020304F2\n:020004000507EE\n:00000001FF\n')
+  self.assertEqual(bench.hex_ranges(p),[{'start':'0x0','end_exclusive':'0x6'}])
  def test_actual_payload_and_hash(self):
   receipt=self.root/'receipt.json';receipt.write_text(json.dumps({'state':'completed','error':None,'results':[]}))
   index=bench.corpus(self.root/'corpus',[receipt]);record=json.loads(index.read_text())[0]

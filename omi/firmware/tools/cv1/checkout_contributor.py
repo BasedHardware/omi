@@ -61,7 +61,10 @@ def source_check(root,expected=BASELINE):
  if code!=0:return dict(state='unavailable',reason='Git checkout unavailable; no clone/fetch attempted')
  if head!=expected:
   code,_=metadata_git(p,['merge-base','--is-ancestor',expected,head])
-  if code!=0:return dict(state='failed',reason='unsupported baseline ancestry',expected=expected,observed=head)
+  if code!=0:
+   code,shallow=metadata_git(p,['rev-parse','--is-shallow-repository'])
+   if code==0 and shallow=='true':return dict(state='failed',reason='shallow clone: baseline ancestry unreachable until git fetch --unshallow (run outside this tool; no fetch attempted)',expected=expected,observed=head)
+   return dict(state='failed',reason='unsupported baseline ancestry',expected=expected,observed=head)
  code,_=metadata_git(p,['diff','--quiet','--no-ext-diff','--no-textconv','HEAD','--','omi/firmware']+EXCLUDES)
  return dict(state='passed' if code in (0,1) else 'unavailable',revision=head,tracked_firmware_changes=code==1,reason='supported baseline ancestry; active non-key firmware changes are test inputs, not rejected; untracked config untouched')
 def sdk_check(root,lock):
@@ -72,7 +75,14 @@ def sdk_check(root,lock):
   if code!=0:return dict(project=item['name'],state='unavailable')
   if head!=item['commit']:return dict(project=item['name'],state='failed',reason='SDK commit mismatch')
   code,_=metadata_git(base/item['path'],['diff','--quiet','--no-ext-diff','--no-textconv','HEAD','--','.']+EXCLUDES)
-  return dict(project=item['name'],state='passed' if code==0 else 'failed' if code==1 else 'unavailable')
+  if code not in (0,1):return dict(project=item['name'],state='unavailable')
+  if code==1:return dict(project=item['name'],state='failed',reason='SDK tracked source mismatch')
+  for label,extra in (('untracked',[]),('ignored',['--ignored'])):
+   code,out=metadata_git(base/item['path'],['ls-files','-z','--others','--exclude-standard']+extra+['--','.']+EXCLUDES)
+   if code!=0:return dict(project=item['name'],state='unavailable')
+   stray=[x for x in out.split('\0') if x and not (x.endswith('.pyc') and '__pycache__' in x.split('/'))]
+   if stray:return dict(project=item['name'],state='failed',reason='SDK project has '+label+' files; pinned projects must match the reference checkout exactly')
+  return dict(project=item['name'],state='passed')
  with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:rows=list(pool.map(one,lock['sdk_projects']))
  state='passed' if all(x['state']=='passed' for x in rows) else 'failed' if any(x['state']=='failed' for x in rows) else 'unavailable'
  return dict(state=state,projects=rows,declared_but_absent_reference_projects=dict(state='skipped',count=len(lock['not_cloned_in_reference']),reason='not in prior successful CV1 workspace; not a complete hermetic SDK freeze'),key_files_inspected=False)
@@ -84,7 +94,11 @@ def toolchain_check(root,lock):
   for item in lock['toolchain_files']:
    if digest(tc/item['public_path'])!=item['sha256']:return dict(state='failed',reason='public tool binary/script hash mismatch:'+item['public_path'])
  except OSError:return dict(state='unavailable',reason='required public tool file unavailable')
- return dict(state='passed',toolchain_id=lock['toolchain_id'],reason='existing public tool files match pinned profile; no key/package installation probe')
+ for tool in ('bin/cmake','bin/ninja'):
+  try:q=subprocess.run([str(tc/tool),'--version'],capture_output=True,text=True,timeout=10)
+  except (OSError,subprocess.TimeoutExpired):return dict(state='failed',reason='pinned tool executable failed to launch:'+tool)
+  if q.returncode!=0:return dict(state='failed',reason='pinned tool executable failed self-check:'+tool)
+ return dict(state='passed',toolchain_id=lock['toolchain_id'],reason='existing public tool files match pinned profile and pinned CMake/Ninja executables launch; no key/package installation probe')
 def host_prerequisite():
  if sys.version_info<(3,9):return dict(state='unavailable',reason='Python3.9 or newer required; no install attempted')
  if sys.platform=='darwin':

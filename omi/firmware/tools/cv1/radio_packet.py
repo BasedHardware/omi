@@ -5,7 +5,7 @@ def decode(data,pcnf0):
         raise ValueError('unsupported radio RAM header format')
     start=2+bool(pcnf0&(1<<20))
     if len(data)<start:raise ValueError('truncated header')
-    length=data[1]&63
+    length=data[1]
     if data[0]&15!=0 or length<6 or length>37:raise ValueError('not a valid bounded ADV_IND')
     if len(data)<start+length:raise ValueError('truncated payload')
     ad=data[start+6:start+length];fields=[];i=0

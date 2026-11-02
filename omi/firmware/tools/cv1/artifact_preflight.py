@@ -110,6 +110,7 @@ def evaluate(manifest_path, contract_path):
         if validation[role]['mode']=='unknown': reject(role+'_validation_unknown','Missing or unsupported '+role+' enforcement mode/configuration/installed-image evidence. Compatibility remains unknown.')
     observations=[]
     installed=c.get('installed_provision',{})
+    if type(installed) is not dict:installed={}
     if not installed.get('verified_readback_sha256') or not installed.get('public_records') or not installed.get('receipt_sha256'): reject('trust_unknown','Installed public provision evidence is missing; obtain verified readback evidence.')
     mode=m.get('operation'); images=m.get('images',[]); roles=[i.get('role') for i in images]
     expected={'reviewed_swd_app_only':['application'], 'reviewed_swd_baseline_restore':['application_full','network_full'], 'proposed_ota_pair':['application','network']}

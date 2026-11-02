@@ -33,6 +33,11 @@ class OtaDesignTests(unittest.TestCase):
         for value in [4095, True]:
             with self.assertRaises(Rejected): check_regions([["a", 0, 4096], ["b", value, 8192]], 0, 8192)
 
+    def test_zero_alignment_and_unaligned_budget_rejected(self):
+        with self.assertRaises(Rejected): check_regions([["a", 0, 4096]], 0, 4096, alignment=0)
+        with self.assertRaises(Rejected): check_regions([["a", 0, 8192]], 0, 8192, alignment=True)
+        with self.assertRaises(Rejected): check_regions([], 4097, 4097, alignment=4096)
+
     def test_existing_data_addresses_preserved(self):
         for option in self.plan["options"].values():
             regions = {r[0]: r[1:] for r in option["internal"]}
@@ -77,6 +82,10 @@ class OtaDesignTests(unittest.TestCase):
         for changes in [dict(role="network"), dict(size=393217), dict(size=True)]:
             with self.assertRaises(Rejected): self.upload(**changes)
 
+    def test_non_string_digest_rejected(self):
+        for value in [5, True, ["candidate"]]:
+            with self.assertRaises(Rejected): self.upload(digest=value)
+
     def test_candidate_cannot_self_confirm(self):
         state = self.trial()
         self.assertEqual(step(state, "candidate_self_confirm"), state)
@@ -91,9 +100,10 @@ class OtaDesignTests(unittest.TestCase):
 
     def test_power_cut_at_each_copy_stage_never_boots_partial_candidate(self):
         for phase in ["copy_candidate", "copy_previous"]:
-            state = replace(self.owner, phase=phase)
+            before = replace(self.owner, phase=phase)
+            state = before
             for _ in range(8): state = step(state, "power_cut")
-            self.assertEqual(state.phase, phase)
+            self.assertEqual(state, before)
 
     def test_trial_reset_and_watchdog_revert(self):
         for event in ["power_cut", "watchdog", "trial_timeout"]:
@@ -114,9 +124,18 @@ class OtaDesignTests(unittest.TestCase):
 
     def test_stock_restore_after_lost_phone_without_old_owner_key(self):
         state = step(step(self.owner, "gesture", physical=True), "owner_reset", physical=True)
-        state = step(state, "stock_restore_verified", maintainer_signature=True, board=True, abi=True)
+        state = step(state, "stock_restore_verified", maintainer_signature=True, board=True, abi=True, size=248516)
         state = step(step(state, "power_cut"), "copy_complete")
         self.assertEqual((state.phase, state.active, state.owner), ("stock", "stock", False))
+
+    def test_stock_restore_is_bounded_app_role_and_size(self):
+        state = step(self.owner, "gesture", physical=True)
+        args = dict(maintainer_signature=True, board=True, abi=True, size=248516)
+        with self.assertRaises(Rejected): step(state, "stock_restore_verified", **dict(args, size=393217))
+        with self.assertRaises(Rejected): step(state, "stock_restore_verified", **dict(args, size=0))
+        with self.assertRaises(Rejected): step(state, "stock_restore_verified", **dict(args, size=True))
+        with self.assertRaises(Rejected): step(state, "stock_restore_verified", **dict(args, role="network"))
+        self.assertEqual(step(state, "stock_restore_verified", **args).phase, "copy_stock")
 
     def test_owner_signature_cannot_authorize_stock_recovery_role(self):
         state = step(self.owner, "gesture", physical=True)

@@ -69,7 +69,7 @@ legacy bootstrap problem by assertion.
 
 ## Erase-aligned external bank alternatives
 
-App NOR driver advertises64KiB layout pages, but pinned spi_nor.c:900–982
+App NOR driver advertises 64KiB layout pages, but pinned spi_nor.c:900–982
 requires4KiB-aligned ranges and chooses an erase no larger than the remaining
 range, falling back to4KiB. It does NOT round a400KiB caller request upward.
 Use64KiB boundaries as a conservative layout policy, not a driver requirement. Both alternatives

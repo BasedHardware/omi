@@ -3,7 +3,7 @@
 Checked public `BasedHardware/omi` task checkout and already-fetched `origin/main`, both `e86cda5abb0ea7ff942ac1bcd07261140953812c`. No fetch, package download or install was performed.
 
 * App wrapper: `app/lib/pages/home/firmware_mixin.dart`. It imports `package:mcumgr_flutter/mcumgr_flutter.dart`; configuration at lines165–169 sets swap estimate0, eraseAppSettings true and pipelineDepth1, without an explicit update mode. Success callback lines195–204 marks firmware installed. This alone does not establish the native manager's confirmation timing.
-* Declaration: `app/pubspec.yaml:87`, `mcumgr_flutter: ^0.4.2`.
+* Declaration: `app/pubspec.yaml:88`, `mcumgr_flutter: ^0.4.2`.
 * Exact lock: `app/pubspec.lock:1344–1351`, hosted package `mcumgr_flutter` version `0.4.2`, repository URL `https://pub.dev`, package SHA-256 `e19a5c420bdc20c831ffc4673a01b8fb1825fb3f42524cfc454a9862b20453f2`. This is hosted-package metadata, not evidence that the package source bytes have been retrieved or verified here. It is not a Git/path dependency.
 * Native iOS lock: `app/ios/Podfile.lock:212,219` resolves `iOSMcuManagerLibrary`1.6. The plugin pod reports0.0.2; that is a distinct pod version, not the Dart package version. The lock refers to `.symlinks/plugins/mcumgr_flutter/ios`.
 

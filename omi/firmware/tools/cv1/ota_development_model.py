@@ -10,7 +10,12 @@ class Rejected(ValueError):
     pass
 
 
+STOCK_IMAGE_CAP_BYTES = 393216  # 384KiB whole NS stock container, same bound as upload
+
+
 def check_regions(regions, start, end, alignment=4096):
+    if type(alignment) is not int or alignment < 1 or start % alignment or end % alignment:
+        raise Rejected("alignment or budget endpoints unaligned")
     cursor = start
     for name, low, high in regions:
         if not isinstance(name, str) or type(low) is not int or type(high) is not int:
@@ -53,7 +58,7 @@ def step(state, event, *, physical=False, authorized=False, digest="",
             raise Rejected("owner/image compatibility assumptions not satisfied")
         if role != "app" or type(size) is not int or not 0 < size <= cap:
             raise Rejected("first stage is bounded app-only")
-        if state.phase not in ("stock", "personal", "recovery") or not digest:
+        if state.phase not in ("stock", "personal", "recovery") or type(digest) is not str or not digest:
             raise Rejected("wrong phase or missing digest")
         return replace(state, phase="staged", candidate=digest, previous=state.active)
     if event == "activate":
@@ -96,6 +101,8 @@ def step(state, event, *, physical=False, authorized=False, digest="",
     if event == "stock_restore_verified":
         if state.phase != "recovery" or not maintainer_signature or not board or not abi:
             raise Rejected("stock restore needs protected recovery and compatible maintainer image")
+        if role != "app" or type(size) is not int or not 0 < size <= STOCK_IMAGE_CAP_BYTES:
+            raise Rejected("stock restore is bounded app-only")
         return replace(state, phase="copy_stock", candidate="")
     if event in ("write_supervisor", "write_owner_journal", "write_uicr", "stop_secure_watchdog"):
         raise Rejected("required isolation contract; denial is assumed, not hardware-proven")

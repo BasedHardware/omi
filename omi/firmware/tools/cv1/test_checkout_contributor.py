@@ -1,5 +1,5 @@
 """No-jig entrypoint regressions. SDK and hardware operations are never executed."""
-import json,tempfile,unittest
+import json,subprocess,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import checkout_contributor as entry
@@ -34,7 +34,7 @@ class CheckoutTests(unittest.TestCase):
    result=entry.source_check(self.root/'checkout');self.assertEqual(result['state'],'passed');self.assertTrue(result['tracked_firmware_changes'])
  def test_unrelated_baseline_ancestry_is_rejected(self):
   self.source.stop()
-  with patch.object(entry,'metadata_git',side_effect=[(0,'b'*40),(1,'')]):self.assertEqual(entry.source_check(self.root/'checkout')['state'],'failed')
+  with patch.object(entry,'metadata_git',side_effect=[(0,'b'*40),(1,''),(0,'false')]):self.assertEqual(entry.source_check(self.root/'checkout')['state'],'failed')
  def test_malformed_config_writes_failed_stage(self):self.path.write_text('{');r=entry.run('quick-host',self.path,self.kit);self.assertFalse(r['required_stages_passed']);self.assertEqual(self.stage(r,'configuration')['state'],'failed')
  def test_deep_config_is_bounded(self):self.path.write_text('['*10000+'0'+']'*10000);r=entry.run('quick-host',self.path,self.kit);self.assertFalse(r['required_stages_passed'])
  def test_unknown_signing_field_rejected(self):self.c['signing_key']='NEVER_OPEN';r=self.runstage();self.assertEqual(self.stage(r,'configuration')['state'],'failed');self.assertFalse(r['signing_keys_accessed'])
@@ -45,7 +45,8 @@ class CheckoutTests(unittest.TestCase):
    r=self.runstage('firmware-build');self.assertEqual(self.stage(r,'toolchain')['state'],'unavailable');self.assertEqual(self.stage(r,'Nordic_SDK')['state'],'unavailable');self.assertEqual(self.stage(r,'firmware_build')['state'],'blocked');self.assertFalse(r['build_executed'])
  def test_full_ready_prerequisites_never_sign_or_build(self):
   self.c.update(sdk_root='SDK',toolchain_root='TC')
-  with patch.object(entry,'kit_integrity',return_value=dict(state='passed')),patch.object(entry,'sdk_check',return_value=dict(state='passed')),patch.object(entry,'toolchain_check',return_value=dict(state='passed')),patch('contributor.verify') as verify:
+  with patch.object(entry,'kit_integrity',return_value=dict(state='passed')),patch.object(entry,'sdk_check',return_value=dict(state='passed')),patch.object(entry,'toolchain_check',return_value=dict(state='passed')),patch('contributor.verify') as verify,\
+   patch.object(entry.subprocess,'run',side_effect=AssertionError('no signing/build subprocess allowed')),patch.object(entry.subprocess,'Popen',side_effect=AssertionError('no signing/build subprocess allowed')),patch.object(entry.subprocess,'check_call',side_effect=AssertionError('no signing/build subprocess allowed')),patch.object(entry.subprocess,'check_output',side_effect=AssertionError('no signing/build subprocess allowed')):
    r=self.runstage('firmware-build');self.assertFalse(r['required_stages_passed']);self.assertFalse(r['signing_keys_accessed']);self.assertFalse(r['build_executed']);verify.assert_not_called()
  def test_unavailable_host_stops_before_git(self):
   with patch.object(entry,'host_prerequisite',return_value=dict(state='unavailable')),patch.object(entry,'source_check') as source:
@@ -60,4 +61,46 @@ class CheckoutTests(unittest.TestCase):
  def test_supported_descendant_revision_real_logic(self):
   self.source.stop()
   with patch.object(entry,'metadata_git',return_value=(0,'f'*40)):self.assertEqual(entry.source_check(self.root)['state'],'passed')
+ def test_shallow_clone_reported_distinctly(self):
+  self.source.stop()
+  with patch.object(entry,'metadata_git',side_effect=[(0,'b'*40),(1,''),(0,'true')]):
+   result=entry.source_check(self.root/'checkout');self.assertEqual(result['state'],'failed');self.assertIn('unshallow',result['reason']);self.assertIn('shallow',result['reason'])
+ def test_real_shallow_clone_reported_distinctly(self):
+  self.source.stop()
+  origin=self.root/'origin';origin.mkdir()
+  def git(cwd,*args):return subprocess.run(['git','-c','user.name=t','-c','user.email=t@example.com','-C',str(cwd)]+list(args),check=True,capture_output=True,text=True).stdout.strip()
+  git(origin,'init','-q');(origin/'a').write_text('1');git(origin,'add','a');git(origin,'commit','-qm','1');base=git(origin,'rev-parse','HEAD')
+  (origin/'a').write_text('2');git(origin,'commit','-qam','2')
+  git(self.root,'clone','-q','--depth','1','file://'+str(origin),'shallow')
+  result=entry.source_check(self.root/'shallow',base);self.assertEqual(result['state'],'failed');self.assertIn('unshallow',result['reason'])
+  git(self.root,'clone','-q','file://'+str(origin),'full')
+  self.assertEqual(entry.source_check(self.root/'full',base)['state'],'passed')
+ def lock(self):
+  return {'sdk_projects':[{'name':'nrf','path':'nrf','commit':'c'*40}],'not_cloned_in_reference':[]}
+ def test_sdk_untracked_files_rejected(self):
+  with patch.object(entry,'metadata_git',side_effect=[(0,'c'*40),(0,''),(0,'edited.c\0'),(0,'')]):
+   result=entry.sdk_check(self.root,self.lock());self.assertEqual(result['state'],'failed');self.assertIn('untracked',result['projects'][0]['reason'])
+ def test_sdk_tracked_modification_still_rejected(self):
+  with patch.object(entry,'metadata_git',side_effect=[(0,'c'*40),(1,'')]):
+   result=entry.sdk_check(self.root,self.lock());self.assertEqual(result['state'],'failed');self.assertIn('tracked',result['projects'][0]['reason'])
+ def test_sdk_ignored_files_rejected(self):
+  with patch.object(entry,'metadata_git',side_effect=[(0,'c'*40),(0,''),(0,''),(0,'build/app.o\0')]):
+   result=entry.sdk_check(self.root,self.lock());self.assertEqual(result['state'],'failed');self.assertIn('ignored',result['projects'][0]['reason'])
+ def test_sdk_ignored_python_bytecode_allowed(self):
+  with patch.object(entry,'metadata_git',side_effect=[(0,'c'*40),(0,''),(0,''),(0,'scripts/__pycache__/a.cpython-312.pyc\0')]):
+   self.assertEqual(entry.sdk_check(self.root,self.lock())['state'],'passed')
+ def test_sdk_ignored_pyc_outside_pycache_rejected(self):
+  with patch.object(entry,'metadata_git',side_effect=[(0,'c'*40),(0,''),(0,''),(0,'scripts/a.pyc\0')]):
+   self.assertEqual(entry.sdk_check(self.root,self.lock())['state'],'failed')
+ def test_sdk_exact_project_passes_all_tree_states(self):
+  with patch.object(entry,'metadata_git',side_effect=[(0,'c'*40),(0,''),(0,''),(0,'')]) as git:
+   self.assertEqual(entry.sdk_check(self.root,self.lock())['state'],'passed');self.assertEqual(git.call_count,4)
+ def test_toolchain_executables_must_launch(self):
+  toolchain={'toolchain_environment_sha256':'e'*64,'toolchain_files':[{'public_path':'environment.json','sha256':'e'*64}],'toolchain_id':'synthetic'}
+  with patch.object(entry,'digest',return_value='e'*64),patch.object(entry.subprocess,'run',return_value=entry.subprocess.CompletedProcess([],1)) as launch:
+   result=entry.toolchain_check(self.root,toolchain);self.assertEqual(result['state'],'failed');launch.assert_called_once_with([str(self.root/'bin/cmake'),'--version'],capture_output=True,text=True,timeout=10)
+ def test_toolchain_launch_verified_for_pinned_cmake_and_ninja(self):
+  toolchain={'toolchain_environment_sha256':'e'*64,'toolchain_files':[{'public_path':'environment.json','sha256':'e'*64}],'toolchain_id':'synthetic'}
+  with patch.object(entry,'digest',return_value='e'*64),patch.object(entry.subprocess,'run',return_value=entry.subprocess.CompletedProcess([],0)) as launch:
+   result=entry.toolchain_check(self.root,toolchain);self.assertEqual(result['state'],'passed');self.assertEqual([c.args[0][0] for c in launch.call_args_list],[str(self.root/'bin/cmake'),str(self.root/'bin/ninja')])
 if __name__=='__main__':unittest.main()

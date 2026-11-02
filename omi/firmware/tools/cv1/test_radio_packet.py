@@ -15,6 +15,8 @@ class TestRadioPacket(unittest.TestCase):
   with self.assertRaises(ValueError):decode(self.b,self.p^1)
  def test_invalid_length(self):
   with self.assertRaises(ValueError):decode(self.b[:1]+bytes([38])+self.b[2:],self.p)
+ def test_length_byte_read_in_full_not_masked_to_six_bits(self):
+  with self.assertRaises(ValueError):decode(self.b[:1]+bytes([0x60])+self.b[2:],self.p)
  def test_corrupt_ad_length(self):
   b=bytearray(self.b);b[9]=255
   with self.assertRaises(ValueError):decode(b,self.p)

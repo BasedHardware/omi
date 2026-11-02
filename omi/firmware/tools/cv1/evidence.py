@@ -12,11 +12,11 @@ def import_capture(output,kind,metadata,raw=None):
  if kind=='uart_capture':
   for field in ('start','end','bytes','status','errors','port_closed','transmitted_bytes'):
    if field not in value:raise ValueError('missing UART metadata '+field)
-  if not value['end'] or not value['port_closed']:raise ValueError('capture not finalized/closed')
+  if not value['end'] or value['port_closed'] is not True:raise ValueError('capture not finalized/closed')
  else:
   for field in ('started_at','completed_at','target','operations','status','cleanup_verified'):
    if field not in value:raise ValueError('missing debug receipt field '+field)
-  if not value['completed_at'] or not value['cleanup_verified']:raise ValueError('debug capture not finalized/cleaned up')
+  if not value['completed_at'] or value['cleanup_verified'] is not True:raise ValueError('debug capture not finalized/cleaned up')
  sources=[]
  for name,source in [('metadata.json',original),('raw.bin',Path(raw) if raw else None)]:
   if source is None:continue
@@ -35,10 +35,14 @@ def import_capture(output,kind,metadata,raw=None):
 def validate_capture(path):
  path=Path(path);record=json.loads(path.read_text())
  if record.get('schema_version')!=1 or record.get('provenance')!='operator_supplied' or record.get('evidence_type') not in ('uart_capture','debug_capture'):raise ValueError('not an actual capture envelope')
+ if not any(source['snapshot']=='metadata.json' for source in record['sources']):raise ValueError('metadata.json must be a listed hashed capture source')
  for source in record['sources']:
   file=(path.parent/source['snapshot']).resolve(strict=True)
   if file.parent!=path.parent.resolve() or bench.digest(file)!=source['sha256'] or file.stat().st_size!=source['size_bytes']:raise ValueError('capture file hash/path mismatch')
  if json.loads((path.parent/'metadata.json').read_text())!=record['metadata']:raise ValueError('capture metadata changed')
+ if record['evidence_type']=='uart_capture' and any(source['snapshot']=='raw.bin' for source in record['sources']):
+  declared=record['metadata'].get('bytes') if type(record['metadata']) is dict else None
+  if (path.parent/'raw.bin').stat().st_size!=declared:raise ValueError('UART raw/metadata byte count mismatch')
  return record
 
 
@@ -100,10 +104,14 @@ def replay_ble(index):
   bench.validate_corpus(record,path.parent)
   if record['provenance']=='synthetic':continue
   value=record['observation']
+  results=value.get('results',[])
+  if type(results) is not list or any(type(x) is not dict or type(x.get('peripheral_id')) is not str or not x['peripheral_id'] for x in results):raise ValueError('receipt results require non-empty string peripheral_id entries')
+  count=value.get('match_count')
+  if type(count) is not int or count!=len(results):raise ValueError('match_count inconsistent with listed results')
   summaries.append({'provenance':'operator_supplied','run_id':value.get('run_id'),'scan_started_at':value.get('scan_started_at'),
    'completed_at':value.get('completed_at'),'authorization':value.get('authorization'),'state':value.get('state'),
-   'matching_ids':sorted(x['peripheral_id'] for x in value.get('results',[])),
-   'match_count':value.get('match_count'),'source_sha256':record['source']['sha256']})
+   'matching_ids':sorted(x['peripheral_id'] for x in results),
+   'match_count':count,'source_sha256':record['source']['sha256']})
  return {'schema_version':1,'layer':'offline receipt replay','device_emulation':False,'observations':summaries,
          'limitations':['receipts are supplied by the operator; this tool cannot prove a device produced them','no packet timing reconstruction','no GATT/audio/UART behavior inferred','power-state labels come from operator history, not radio data']}
 

@@ -13,7 +13,7 @@ OMI_NCS_ROOT=/path/to/ncs python3 -m unittest discover -s omi/firmware/tools/cv1
 
 `matrix-result.json` is retained output bound to source hashes. The comparator
 is extracted from actual pinned C and compiled on the host; other control flow
-is a faithful Python characterization using an authentication oracle.104
-representative state classes per reachable version case are not104 device tests
+is a faithful Python characterization using an authentication oracle. 104
+representative state classes per reachable version case are not 104 device tests
 or exhaustive physical cut coverage. See ../../../docs/ota-bootstrap-contract.md
 for assumptions, counterexample, proposed maps and implementation hold.

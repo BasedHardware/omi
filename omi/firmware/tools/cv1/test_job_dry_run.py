@@ -1,4 +1,4 @@
-import json,unittest
+import json,subprocess,sys,unittest
 from pathlib import Path
 import test_artifact_preflight as fixtures
 from artifact_preflight import digest
@@ -14,7 +14,10 @@ class JobTests(unittest.TestCase):
  def test_wrong_probe(self):self.job['probe_serial']='wrong';self.assertIn('probe_mismatch',self.check()['errors'])
  def test_probe_alone_is_not_target_identity(self):del self.job['external_target_identity_sha256'];self.assertIn('external_identity_missing_or_mismatch',self.check()['errors'])
  def test_timeout_unbounded(self):
-  for x in [None,0,301,float('inf'),float('nan'),True]:self.job['deadline_seconds']=x;self.assertIn('unbounded_deadline',self.check()['errors'])
+  for x in [None,0,301,True]:self.job['deadline_seconds']=x;self.assertIn('unbounded_deadline',self.check()['errors'])
+  for x in [float('inf'),float('nan')]:
+   self.job['deadline_seconds']=x
+   with self.assertRaises(ValueError):self.check()
  def test_no_automatic_retry(self):self.job['retries']=1;self.assertIn('automatic_retries_forbidden',self.check()['errors'])
  def test_no_power_cycle(self):self.job['power_cycle']=True;self.assertIn('power_cycle_not_qualified',self.check()['errors'])
  def test_no_arbitrary_commands(self):self.job['shell']='echo forbidden';self.assertIn('arbitrary_or_irreversible_action',self.check()['errors'])
@@ -23,4 +26,12 @@ class JobTests(unittest.TestCase):
  def test_whole_bench_exclusivity(self):self.job['lease_scope']='uart_only';self.assertIn('exclusive_scope_required',self.check()['errors'])
  def test_no_hidden_reset(self):self.job['reset_after_verify']=True;self.assertIn('reset_requires_separate_reviewed_step',self.check()['errors'])
  def test_manifest_escape(self):self.job['artifact_manifest']='../outside';self.assertIn('artifact_manifest_path_escape',self.check()['errors'])
+ def test_duplicate_policy_fields_rejected(self):
+  (self.root/'profile.json').write_text(json.dumps(self.profile))
+  (self.root/'job.json').write_text('{"schema":1,"schema":1}')
+  with self.assertRaises(ValueError):plan(self.root/'job.json',self.root/'profile.json',self.root/'contract.json')
+ def test_deep_policy_json_fails_closed_without_traceback(self):
+  self.check();(self.root/'job.json').write_text('['*10000+'0'+']'*10000)
+  q=subprocess.run([sys.executable,str(Path(__file__).parent/'job_dry_run.py'),str(self.root/'job.json'),'--profile',str(self.root/'profile.json'),'--contract',str(self.root/'contract.json')],capture_output=True,text=True,timeout=10)
+  self.assertEqual(q.returncode,2);self.assertNotIn('Traceback',q.stderr);self.assertFalse(json.loads(q.stdout)['plan_valid'])
 if __name__=='__main__':unittest.main()

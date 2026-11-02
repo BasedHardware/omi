@@ -4,7 +4,7 @@ import bootstrap_matrix as model
 class BootstrapTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not model.LOADER.exists(): raise unittest.SkipTest('pinned NCS source not found; set OMI_NCS_ROOT')
+        if not (model.LOADER.exists() and model.PUBLIC.exists()): raise unittest.SkipTest('pinned NCS loader/trailer source not found; set OMI_NCS_ROOT')
         cls.report = model.run()
 
     def test_conventional_and_equal_versions_lose_retry_image(self):
@@ -26,9 +26,18 @@ class BootstrapTests(unittest.TestCase):
         for phase, version, erased, pv, sv, sm, so in model.snapshots((1,0,0,0),(0,0,0,0)):
             if phase.startswith('request_'): self.assertTrue(pv)
 
-    def test_cleanup_requires_complete_primary(self):
-        for row in model.snapshots(model.MAX,(0,0,0,0)):
-            if row[0]=='secondary_cleanup': self.assertTrue(row[3])
+    def test_cleanup_with_torn_primary_is_rejected(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            compare,_=model.comparator_library(directory)
+            self.assertEqual(model.reboot(compare,model.MAX,model.MAX,primary_valid=False,secondary_valid=False,secondary_magic='good',secondary_ok='unset'),'no_boot_source_erased')
+            self.assertEqual(model.reboot(compare,model.MAX,model.MAX,primary_valid=True,secondary_valid=False,secondary_magic='good',secondary_ok='unset'),'primary_source_erased')
+
+    def test_retained_matrix_result_matches_regenerated_output(self):
+        import json
+        from pathlib import Path
+        retained=json.loads((Path(__file__).parent/'matrix-result.json').read_text())
+        self.assertEqual(model.run(),retained)
 
     def test_equal_version_build_is_ignored_by_actual_c(self):
         import tempfile
@@ -53,6 +62,35 @@ class BootstrapTests(unittest.TestCase):
     def test_never_claims_whole_loader_or_crypto_execution(self):
         self.assertIn('NOT whole loader execution',self.report['kind'])
         self.assertIn('No cryptographic',self.report['limits'][1])
+
+
+class ComparatorBuildTests(unittest.TestCase):
+    def test_comparator_build_honors_cc_and_platform(self):
+        import sys,tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            loader=Path(directory)/'loader.c'
+            loader.write_text('int\nboot_version_cmp(const struct image_version *ver1,\n                   const struct image_version *ver2)\n{\n return 0;\n}\n')
+            calls=[]
+            with patch.dict('os.environ',{'CC':'/synthetic/cc'}),patch.object(model,'LOADER',loader),\
+                 patch.object(model,'sha',return_value='c7fd7916441262e0f5acba84c9d5b400dc38d812a8afeb9ad78956a0473b7fc9'),\
+                 patch.object(model.subprocess,'run',side_effect=lambda cmd,check:calls.append(cmd)),\
+                 patch.object(model.ctypes,'CDLL'):
+                model.comparator_library(directory)
+            self.assertEqual(calls[0][0],'/synthetic/cc')
+            self.assertIn('-dynamiclib' if sys.platform=='darwin' else '-shared',calls[0])
+
+
+class SkipGuardTests(unittest.TestCase):
+    def test_missing_public_source_skips_rather_than_errors(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            loader=Path(directory)/'loader.c';loader.write_text('x')
+            with patch.object(model,'LOADER',loader),patch.object(model,'PUBLIC',Path(directory)/'missing.c'):
+                self.assertRaises(unittest.SkipTest,BootstrapTests.setUpClass)
 
 
 class BankContractTests(unittest.TestCase):

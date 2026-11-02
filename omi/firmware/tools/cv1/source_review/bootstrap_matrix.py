@@ -9,6 +9,7 @@ import json
 import os
 import struct
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -32,10 +33,11 @@ def comparator_library(directory):
     end = source.index('\n}\n', start) + 3
     snippet = source[start:end]
     c = '#include <stdint.h>\nstruct image_version { uint8_t iv_major, iv_minor; uint16_t iv_revision; uint32_t iv_build_num; };\nint\n' + snippet
-    output = Path(directory) / 'cmp.dylib'
+    output = Path(directory) / ('cmp.dylib' if sys.platform == 'darwin' else 'cmp.so')
     path = Path(directory) / 'cmp.c'
     path.write_text(c)
-    subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-dynamiclib', str(path), '-o', str(output)], check=True)
+    shared = ['-dynamiclib'] if sys.platform == 'darwin' else ['-shared', '-fPIC']
+    subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror'] + shared + [str(path), '-o', str(output)], check=True)
     class Version(ctypes.Structure):
         _fields_ = [('major', ctypes.c_uint8), ('minor', ctypes.c_uint8), ('revision', ctypes.c_uint16), ('build', ctypes.c_uint32)]
     library = ctypes.CDLL(str(output))

@@ -38,4 +38,27 @@ class EvidenceTests(unittest.TestCase):
   p=self.root/'receipt.json';p.write_text(json.dumps({'state':'completed','error':None,'run_id':'synthetic-test-receipt','results':[],'match_count':0}));index=bench.corpus(self.root/'corpus',[p]);report=evidence.replay_ble(index)
   self.assertEqual(len(report['observations']),1);self.assertFalse(report['device_emulation'])
   self.assertEqual(report['observations'][0]['provenance'],'operator_supplied');self.assertIn('cannot prove',report['limitations'][0])
+ def test_string_false_cannot_finalize_capture(self):
+  m,r=self.uart(b'abc');metadata=json.loads(m.read_text());metadata['port_closed']='false';m.write_text(json.dumps(metadata))
+  with self.assertRaises(ValueError):evidence.import_capture(self.root/'import','uart_capture',m,r)
+ def test_string_true_cannot_finalize_debug_receipt(self):
+  m=self.root/'debug.json';m.write_text(json.dumps({'started_at':'synthetic-test','completed_at':'synthetic-test-end','target':{'id':'synthetic-target'},'operations':['synthetic-reset-observation'],'status':'completed','cleanup_verified':'false'}))
+  with self.assertRaises(ValueError):evidence.import_capture(self.root/'debug','debug_capture',m)
+ def test_unlisted_metadata_source_refused(self):
+  m,r=self.uart(b'abc');p=evidence.import_capture(self.root/'import','uart_capture',m,r)
+  record=json.loads(p.read_text());record['sources']=[s for s in record['sources'] if s['snapshot']!='metadata.json'];p.write_text(json.dumps(record))
+  with self.assertRaises(ValueError):evidence.validate_capture(p)
+ def test_validate_capture_enforces_raw_size_relationship(self):
+  m,r=self.uart(b'abc');p=evidence.import_capture(self.root/'import','uart_capture',m,r)
+  record=json.loads(p.read_text());record['metadata']['bytes']=99;m.write_text(json.dumps(record['metadata']))
+  for s in record['sources']:
+   if s['snapshot']=='metadata.json':s.update(sha256=bench.digest(m),size_bytes=m.stat().st_size)
+  (p.parent/'metadata.json').write_text(json.dumps(record['metadata']));p.write_text(json.dumps(record))
+  with self.assertRaises(ValueError):evidence.validate_capture(p)
+ def test_replay_ble_rejects_result_without_peripheral_id(self):
+  p=self.root/'receipt.json';p.write_text(json.dumps({'state':'completed','error':None,'results':[{'rssi':-70}],'match_count':1}));index=bench.corpus(self.root/'corpus',[p])
+  with self.assertRaises(ValueError):evidence.replay_ble(index)
+ def test_replay_ble_rejects_inconsistent_match_count(self):
+  p=self.root/'receipt.json';p.write_text(json.dumps({'state':'completed','error':None,'results':[{'peripheral_id':'aa'},{'peripheral_id':'cc'}],'match_count':1}));index=bench.corpus(self.root/'corpus',[p])
+  with self.assertRaises(ValueError):evidence.replay_ble(index)
 if __name__=='__main__':unittest.main()

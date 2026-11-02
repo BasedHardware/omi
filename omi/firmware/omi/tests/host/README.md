@@ -25,7 +25,8 @@ and boundary assertions. Case count is not a count of independent tests.
 It exercises ATT/application-header capacity, all packing offsets for a 440-byte
 block and codec lengths 0–160, rejected/short/full enqueue results, and repeated
 failures. A literal legacy packer is a byte-compatibility oracle only; the tested
-implementation is the same C helper used by firmware.
+implementation is that shared C helper, which is not compiled into the firmware
+until the `transport.c` switch above lands.
 
 Packing keeps the existing lossy policy: rejected blocks are not retried, and an
 incoming frame survives in the next block on overflow. `ENQUEUED` means the
