@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import threading
 import time
 from bisect import bisect_right
@@ -38,6 +39,7 @@ _indexes: dict[tuple, tuple[float, list]] = {}
 # list over the ~6-60 s flush cadence instead of listing once per flush.
 _INDEX_TTL = 120
 _MAX_INDEXES = 128
+logger = logging.getLogger(__name__)
 
 
 def invalidate_pack_index(bucket, uid: str, conversation_id: str):
@@ -104,6 +106,61 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
             _indexes.pop(next(iter(_indexes)))
         _indexes[key] = (time.monotonic() + _INDEX_TTL, result)
     return result
+
+
+def raw_chunks_for_listing(
+    bucket,
+    uid,
+    conversation_id,
+    chunks,
+    *,
+    enabled,
+    include_raw=False,
+    timeout=None,
+    deadline=None,
+    max_count=None,
+    require_archive=False,
+    list_raw=list_packs,
+):
+    """Playback may fall back; independent replay proof requires a fresh complete inventory."""
+    if not enabled:
+        return []
+    try:
+        packs = (
+            list_raw(
+                bucket,
+                uid,
+                conversation_id,
+                fresh=True,
+                deadline=deadline,
+                timeout=timeout or 10,
+                max_count=max_count or 10000,
+            )
+            if include_raw
+            else list_raw(bucket, uid, conversation_id)
+        )
+        raw_chunks = packs if include_raw else uncovered_raw_packs(packs, chunks)
+        if max_count is not None and len(chunks) + len(raw_chunks) > max_count:
+            raise TimeoutError('speaker audio listing budget exhausted')
+        return raw_chunks
+    except Exception:
+        if require_archive or include_raw:
+            raise
+        logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
+        return []
+
+
+def finish_audio_listing(chunks, raw_chunks, source_identity):
+    chunks.extend(raw_chunks)
+    if source_identity or raw_chunks:
+        for chunk in chunks:
+            span = chunk.get('span')
+            if span and span['start'] != chunk['timestamp']:
+                # Preserve the sample clock after encoded coverage replaces raw
+                # fragments and across archive kill-switch changes.
+                chunk['legacy_timestamp'] = chunk['timestamp']
+                chunk['timestamp'] = span['start']
+    return sorted(chunks, key=lambda item: item['timestamp'])
 
 
 def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
