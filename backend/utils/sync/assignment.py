@@ -344,14 +344,19 @@ def assign_in_transaction(
     if record_span is not None:
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
-        result, survivors = replace_record(decode(target), incoming, record_span)
+        current = decode(target)
+        result, survivors = replace_record(current, incoming, record_span)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
         remember_size_payload(target_id, result)
         if not survivors and is_automatic_discard(target):
-            # No text landed, so the automatic verdict stands: skip the relevance rerun.
-            result['_sync_lineage_repeat_only'] = True
+            if target_id in full_ids or estimated > SYNC_CONVERSATION_BYTE_BUDGET:
+                # Rollover would replan an empty set beside the hidden row; keep the hold.
+                raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+            if len(result.get('transcript_segments') or []) == len(current.get('transcript_segments') or []):
+                # No text landed or left, so the automatic verdict stands: skip the relevance rerun.
+                result['_sync_lineage_repeat_only'] = True
         if target_id not in full_ids and estimated <= SYNC_CONVERSATION_BYTE_BUDGET:
             transaction.update(collection.document(target_id), encoded)
             result['_sync_projected_size_bucket'] = projected_size_bucket(estimated)

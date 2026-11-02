@@ -455,6 +455,38 @@ def test_silent_pass_keeps_an_automatic_discard_without_reassessment(real_projec
     assert not any(key.startswith('_sync_') for key in target)
 
 
+def test_silent_pass_that_removes_provisional_text_still_reassesses(real_projection):
+    lane = real_projection
+    for table in ('jobs', 'results'):
+        lane.client.rows[(lane.namespace + '_' + table, 'unit')]['result'] = {'outcome': 'silence'}
+    target = _automatically_discarded(lane, AUTOMATIC_DISCARDS[3])
+    target['transcript_segments'] = [
+        {'id': 'old', 'text': 'Synthetic speech.', 'start': 1, 'end': 3, 'speaker_id': 0, 'is_user': False}
+    ]
+    lane.client.rows[lane.target_key] = target
+    lane.assign()
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection']['state'] == 'persisted'
+    assert not _projected_segments(lane)
+    # The transcript changed, so the summary must be rebuilt.
+    assert row['projection']['enrichment_required'] is True
+
+
+def test_oversized_silent_pass_keeps_the_hold_instead_of_rolling_over(real_projection, monkeypatch):
+    from utils.sync import assignment
+
+    lane = real_projection
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 0)
+    for table in ('jobs', 'results'):
+        lane.client.rows[(lane.namespace + '_' + table, 'unit')]['result'] = {'outcome': 'silence'}
+    target = _automatically_discarded(lane, AUTOMATIC_DISCARDS[0])
+    lane.client.rows[lane.target_key] = target
+    before = {k: deepcopy(v) for k, v in lane.client.rows.items() if k[:3] == lane.target_key[:3]}
+    lane.assign()
+    assert lane.client.rows[(lane.namespace + '_results', 'unit')]['projection_state'] == 'quarantine_held'
+    assert {k: v for k, v in lane.client.rows.items() if k[:3] == lane.target_key[:3]} == before
+
+
 @pytest.mark.parametrize('decision', AUTOMATIC_DISCARDS)
 def test_release_frees_units_held_behind_an_automatic_record_discard(real_projection, decision):
     lane = real_projection
