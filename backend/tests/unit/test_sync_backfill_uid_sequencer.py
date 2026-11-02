@@ -248,6 +248,32 @@ def test_no_claim_worker_keeps_named_task_as_five_minute_fallback(db, monkeypatc
     assert registry.claim_worker('a', 'job', claim['epoch'], 'late-worker', now=NOW + timedelta(seconds=300)) is None
 
 
+def test_worker_completion_immediately_dispatches_next_head_once(db, monkeypatch):
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'false')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for offset, job_id in enumerate(('first', 'next')):
+        payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+        payload.update(uid='a', job_id=job_id, lane='backfill', ledger_fence_mode='active')
+        registry.register_job('a', job_id, payload, None, now=NOW + timedelta(seconds=offset - 1))
+    first = registry.claim_next('a')
+    assert registry.claim_worker('a', 'first', first['epoch'], 'worker-token')
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'uid': 'a', 'status': 'completed'})
+    enqueues = []
+    monkeypatch.setattr(uid_sequencer, 'enqueue_sync_job', lambda payload, **kwargs: enqueues.append(payload))
+    assert worker_control.complete('a', 'first', first['epoch'], 'worker-token')
+    assert not worker_control.complete('a', 'first', first['epoch'], 'worker-token')
+    assert len(enqueues) == 1
+    assert enqueues[0]['job_id'] == 'next'
+    assert enqueues[0]['sequencer_epoch'] > first['epoch']
+    assert registry.get_owner('a')['active_job_id'] == 'next'
+
+
 def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(

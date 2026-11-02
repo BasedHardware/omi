@@ -117,7 +117,9 @@ Ordinary retry preserves staged custody, resets the nonterminal job under its
 Redis token, then hands it back through `/fail`. Cancellation or unknown leaf
 state preserves Redis until TTL; `/fail` refuses early release while that lock
 exists. Completion verifies terminal state after the normal custody/slot
-cleanup. The parent stops intake at shutdown, drains for 1450s within the
+cleanup and immediately kicks the next queued UID head, just like Cloud Tasks;
+duplicate completion cannot enqueue it again. The parent stops intake at
+shutdown, drains for 1450s within the
 1500s pod grace, then kills its owned group. No global pattern-based kill.
 
 Google identity is attached Workload Identity only; the chart masks legacy

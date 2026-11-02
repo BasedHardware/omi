@@ -115,6 +115,7 @@ def test_terminal_completion_drains_after_percent_rollback(store, monkeypatch):
     monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '0')
     monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'uid': 'synthetic', 'status': 'completed'})
     monkeypatch.setattr(registry, '_has_pending', lambda *args, **kwargs: False)
+    monkeypatch.setattr(worker_control.uid_sequencer, 'kick', lambda _: False)
     assert worker_control.heartbeat('synthetic', 'job', 7, TOKEN)
     assert not worker_control.complete('synthetic', 'job', 7, 'wrong' * 10)
     assert worker_control.complete('synthetic', 'job', 7, TOKEN)
