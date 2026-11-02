@@ -29,7 +29,8 @@ def main(executable):
             ('scan', expected), ('session', ['--expect-serial', 'bad\nvalue']),
         ]:
             result = run([command, '--seconds', '1', '--output', str(fresh)] + serial_flags, 2)
-            assert '--expect-serial' in result.stderr and not fresh.exists()
+            # Later lines repeat the usage text, which always names this flag.
+            assert '--expect-serial' in result.stderr.splitlines()[0] and not fresh.exists()
         run(['session', '--seconds', 'nan', '--output', str(fresh)], 2)
         assert not fresh.exists()
         existing = root / 'existing.json'
@@ -51,7 +52,7 @@ def main(executable):
         assert receipt['identity'] == {'expectedSerial': 'synthetic-bench', 'checked': False, 'status': 'pending'}
         assert existing.read_text() == 'preserve me'
         assert fresh.stat().st_mode & 0o777 == 0o600
-    print(f'PASS: {cases} pre-Bluetooth refusal cases; no manager or application initialized')
+    print(f'PASS: {cases} pre-Bluetooth refusal cases')
 
 
 if __name__ == '__main__':

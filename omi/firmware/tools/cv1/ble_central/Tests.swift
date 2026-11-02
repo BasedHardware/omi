@@ -138,7 +138,7 @@ enum Tests {
         check(capture.outcome(.complete) == .passed, "Complete capture")
         capture.audio.consume(Data([9, 0, 0, 1]))
         check(capture.outcome(.complete) == .audioFailed, "Sequence breaks fail receipt")
-        check(Set(Outcome.allCases.map { $0.rawValue }) == Set(["permission_denied", "bluetooth_off", "no_advertisement", "connect_failed", "gatt_failed", "audio_failed", "passed"]), "Exact outcome vocabulary")
+        check(Set(Outcome.allCases.map { $0.rawValue }) == Set(["permission_denied", "bluetooth_off", "no_advertisement", "connect_failed", "gatt_failed", "interrupted", "audio_failed", "passed"]), "Exact outcome vocabulary")
         let receipt = Receipt(startedAt: "synthetic", requestedSeconds: 1, deadlineSeconds: 1, progress: session)
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(receipt)) as! [String: Any]
         check(json["schema"] as? Int == 1 && json["limitations"] != nil, "Receipt serializes with limitations")

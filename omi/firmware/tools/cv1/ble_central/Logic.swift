@@ -5,7 +5,7 @@ enum Command: String, Codable { case scan, session, audio }
 enum Outcome: String, Codable, CaseIterable {
     case permissionDenied = "permission_denied", bluetoothOff = "bluetooth_off"
     case noAdvertisement = "no_advertisement", connectFailed = "connect_failed"
-    case gattFailed = "gatt_failed", audioFailed = "audio_failed", passed
+    case gattFailed = "gatt_failed", audioFailed = "audio_failed", interrupted, passed
 }
 enum InputError: Error, CustomStringConvertible {
     case invalid(String)
@@ -181,6 +181,7 @@ struct Progress: Codable {
     var audio = AudioStats()
     var permissionPending = false
     func outcome(_ reason: StopReason) -> Outcome {
+        if reason == .interrupted { return .interrupted }
         if reason == .permission || (reason == .deadline && permissionPending) { return .permissionDenied }
         if reason == .bluetooth { return .bluetoothOff }
         if reason == .connection { return .connectFailed }
