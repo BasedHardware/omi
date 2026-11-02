@@ -581,7 +581,7 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
         {
             "plan_type": PlanType.unlimited_v2,
             "plan_id": "unlimited_v2",
-            "title": "Unlimited",
+            "title": "Omi Pro",
             "subtitle": "Unlimited transcription",
             "description": "Unlimited transcription — record all day.",
             "eyebrow": "Most popular",

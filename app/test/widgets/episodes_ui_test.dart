@@ -570,7 +570,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(tester.takeException(), isNull);
     });
-    testWidgets('with episodes on it shows the running notes, captured tasks, moments and Wrap Up Now', (tester) async {
+    testWidgets('with episodes on it shows the running notes, captured tasks and Wrap Up Now', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       capture.segments = [
@@ -588,8 +588,7 @@ void main() {
       expect(find.byKey(const Key('live_episode_so_far')), findsOneWidget);
       expect(find.textContaining('Picking a place near the office'), findsOneWidget);
       expect(find.textContaining('Book a table for Friday'), findsOneWidget);
-      expect(find.text('Where to eat'), findsOneWidget);
-      expect(find.text('Booking'), findsOneWidget);
+      expect(find.text('Where to eat'), findsNothing);
       expect(find.byKey(const Key('episode_wrap_up_button')), findsOneWidget);
       expect(find.text('Omi wraps this up when you move on'), findsOneWidget);
       expect(find.byKey(const Key('process_now_button')), findsNothing);
@@ -791,146 +790,15 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('a cloud live row shows new transcript words before the clock ticks', (tester) async {
+    testWidgets('line two says Listening and who is in it, never the transcript words', (tester) async {
       final capture = _LiveCapture()..segments = [_segment('cloud', 'First live words', 0)];
       addTearDown(capture.dispose);
       final episodes = _episodes(live: _liveEpisode());
       addTearDown(episodes.dispose);
       await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      String subtitle() => tester
-          .widget<Text>(
-              find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)))
-          .textSpan!
-          .toPlainText();
-      expect(subtitle(), 'First live words');
-      capture.onSegmentReceived([_segment('cloud', 'These are the latest live words', 0)]);
-      await tester.pump();
-      expect(subtitle(), 'These are the latest live words');
-      expect(_rowLabel(tester), contains('These are the latest live words'));
-      await _unmount(tester);
-    });
-
-    testWidgets('a local-preview row reads its newest preview line in the subtitle', (tester) async {
-      final engine = FakeLivePreviewEngine();
-      final preview = LivePreviewController(
-        engine: engine,
-        telemetry: LivePreviewTelemetry(emit: (_) {}),
-        platform: LivePreviewPlatform.ios,
-        osMajor: 26,
-      );
-      preview.admit(language: 'en');
-      final clock = tester.binding.clock;
-      var disposed = false;
-      await tester.runAsync(() async {
-        await pumpEventQueue();
-        engine.emit('a0', 'Okay, so the plan for Thursday is to ship the pendant update first.', true);
-        engine.emit('a1', 'and if the overnight run looks clean we can', false);
-        await pumpEventQueue();
-      });
-      addTearDown(() {
-        if (!disposed) preview.dispose();
-      });
-      final capture = _LiveCapture()
-        ..preview = preview
-        ..previewAdmitted = true
-        ..startedAt = clock.now().subtract(const Duration(minutes: 8, seconds: 24));
-      addTearDown(capture.dispose);
-      final episodes = _episodes(live: null, clock: clock.now);
-      addTearDown(episodes.dispose);
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      // The tile carries the length; line two the newest preview words, trimmed at the start.
-      expect(find.text('8m'), findsOneWidget);
-      final line = tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(line.textSpan!.toPlainText(), endsWith('and if the overnight run looks clean we can'));
-      expect(line.maxLines, 1);
-      expect(_rowLabel(tester), contains('Capturing · 8m 24s,'));
-      // The cadence timer lives in runAsync's real zone; dispose it there.
-      await tester.runAsync(() async {
-        preview.dispose();
-        disposed = true;
-      });
-      await _unmount(tester);
-    });
-
-    testWidgets('the row keeps the newest preview words after final lines arrive', (tester) async {
-      final engine = FakeLivePreviewEngine();
-      final preview = LivePreviewController(
-        engine: engine,
-        telemetry: LivePreviewTelemetry(emit: (_) {}),
-        platform: LivePreviewPlatform.ios,
-        osMajor: 26,
-      );
-      preview.admit(language: 'en');
-      final clock = tester.binding.clock;
-      var disposed = false;
-      await tester.runAsync(() async {
-        await pumpEventQueue();
-        engine.emit('a0', 'and if the overnight run looks clean we can', false);
-        await pumpEventQueue();
-      });
-      addTearDown(() {
-        if (!disposed) preview.dispose();
-      });
-      final capture = _LiveCapture()
-        ..preview = preview
-        ..previewAdmitted = true
-        ..startedAt = clock.now().subtract(const Duration(minutes: 2));
-      // The batch transcript has landed for earlier audio; the preview is still ahead of it.
-      capture.segments = [_segment('s1', 'Testing live transcription.', 0)];
-      addTearDown(capture.dispose);
-      final episodes = _episodes(live: null, clock: clock.now);
-      addTearDown(episodes.dispose);
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      final line = tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(line.textSpan!.toPlainText(), endsWith('and if the overnight run looks clean we can'));
-      // New words land without waiting for the clock's tick.
-      await tester.runAsync(() async {
-        engine.emit('a0', 'and if the overnight run looks clean we can ship', false);
-        await pumpEventQueue();
-      });
-      await tester.pump();
-      final updated = tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(updated.textSpan!.toPlainText(), endsWith('we can ship'));
-      expect(_rowLabel(tester), contains('we can ship'), reason: 'visible and spoken snippets update together');
-      await tester.runAsync(() async {
-        preview.dispose();
-        disposed = true;
-      });
-      await _unmount(tester);
-    });
-
-    testWidgets('a covered local preview keeps the final transcript snippet on Home', (tester) async {
-      final engine = FakeLivePreviewEngine();
-      final preview = LivePreviewController(
-        engine: engine,
-        telemetry: LivePreviewTelemetry(emit: (_) {}),
-        platform: LivePreviewPlatform.ios,
-        osMajor: 26,
-      );
-      preview.admit(language: 'en');
-      final origin = DateTime(2026, 10, 20, 12);
-      await tester.runAsync(() async {
-        await pumpEventQueue();
-        engine.emit('covered', 'Provisional words', true,
-            startedAt: origin, endedAt: origin.add(const Duration(seconds: 5)));
-        await pumpEventQueue();
-      });
-      final capture = _LiveCapture()
-        ..preview = preview
-        ..previewAdmitted = true
-        ..transcriptOrigin = origin
-        ..segments = [_segment('final', 'The finished words stay live', 0)];
-      addTearDown(capture.dispose);
-      final episodes = _episodes(live: null);
-      addTearDown(episodes.dispose);
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      final line = tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(line.textSpan!.toPlainText(), 'The finished words stay live');
-      await tester.runAsync(() async => preview.dispose());
+      expect(find.textContaining('Listening'), findsOneWidget);
+      expect(find.textContaining('First live words'), findsNothing);
+      expect(_rowLabel(tester), isNot(contains('First live words')));
       await _unmount(tester);
     });
 

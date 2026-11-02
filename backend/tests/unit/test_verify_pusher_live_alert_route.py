@@ -38,6 +38,10 @@ def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dic
                 for name in verifier.REQUIRED_METRICS
                 for job in verifier.REQUIRED_JOBS
             ]
+            + [
+                {"metric": {"__name__": name, "job": "pusher-metrics"}, "value": [1, "1"]}
+                for name in verifier.PUSHER_RECEIVE_METRICS
+            ]
         },
     }
     receiver = next(iter(rules.values()))["notification_settings"]["receiver"]
@@ -200,6 +204,33 @@ def test_prepublish_does_not_deadlock_on_a_not_yet_deployed_metric_family(verifi
         )
         == []
     )
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'omi_pusher_record_close_abandoned_outstanding',
+        'omi_pusher_record_close_outstanding_refusals_total',
+        'pusher_socket_frames_total',
+        'pusher_receive_work_stalls_total',
+        'pusher_receive_work_stalled_handlers',
+        'pusher_receive_work_duration_seconds_count',
+        'pusher_socket_closed_total',
+    ],
+)
+def test_postrollout_requires_every_receive_metric_from_pusher_not_listen(verifier, missing):
+    rules, datasource, up, telemetry, points = _inputs(verifier)
+    telemetry['data']['result'] = [
+        item for item in telemetry['data']['result'] if item['metric']['__name__'] != missing
+    ]
+    telemetry['data']['result'].append(
+        {'metric': {'__name__': missing, 'job': 'backend-listen-metrics'}, 'value': [1, '1']}
+    )
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='postrollout') == [
+        'live Prometheus pusher receive-work telemetry sources are missing or incomplete'
+    ]
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='prepublish') == []
+    assert missing in verifier.METRIC_COVERAGE_QUERY
 
 
 def test_serving_check_keeps_min_over_non_deleting_targets_and_does_not_use_max() -> None:

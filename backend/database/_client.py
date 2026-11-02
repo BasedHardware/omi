@@ -119,6 +119,23 @@ def _install_document_read_probe() -> None:
 _install_document_read_probe()
 
 
+def _install_document_write_probe() -> None:
+    """Count every committed Firestore write by collection, caller and origin.
+
+    Installed before the commit-boundary patches below, so the transport wrapper
+    sees each request as sent, including the writes those patches append.
+    """
+    try:
+        from database.firestore_write_probe import install_document_write_probe
+    except ImportError:
+        return
+
+    install_document_write_probe()
+
+
+_install_document_write_probe()
+
+
 def _install_action_item_write_fences() -> None:
     # Match the SDK read probe's import-isolation seam. No clients or IO here.
     try:

@@ -37,13 +37,26 @@ HUNT_BACKOFF_SERVE_PERCENT_ENV = 'DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT'
 PRESCAN_MODE_ENV = 'DREAM_PRESCAN_MODE'
 PRESCAN_SERVE_PERCENT_ENV = 'DREAM_PRESCAN_MODE_SERVE_PERCENT'
 
+# Hold the two verifier calls' token reserve out of the main loop so staged work is
+# verified (10-30/31: 171 of 252 daily verifier_unverified items had zero verifier calls).
+VERIFY_HOLD_MODE_ENV = 'DREAM_VERIFY_HOLD_MODE'
+VERIFY_HOLD_SERVE_PERCENT_ENV = 'DREAM_VERIFY_HOLD_MODE_SERVE_PERCENT'
+# Apply trivially reversible auto kinds left unverified by budget or transport, never
+# when a verifier disagreed or the evidence was oversized or answered with invalid ids.
+LIBERAL_VERIFIER_MODE_ENV = 'DREAM_LIBERAL_VERIFIER_MODE'
+LIBERAL_VERIFIER_SERVE_PERCENT_ENV = 'DREAM_LIBERAL_VERIFIER_MODE_SERVE_PERCENT'
+LIBERAL_VERIFIER_KINDS = frozenset({'dismiss_person', 'spelling', 'title', 'overview', 'set_language', 'vocabulary'})
+LIBERAL_VERIFIER_REASONS = frozenset({'call_failed', 'single_vote', 'budget_tokens', 'budget_deadline'})
+
 # Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
 # applied edits and the no-progress stop 31%, so both are retired (off); payoff ordering
-# serves (David 2026-10-30: payoff first). Every other lever measures in shadow.
+# serves (David 2026-10-30: payoff first). The verify hold serves: it only moves budget
+# from searching to verifying what was found. Every other lever measures in shadow.
 DEFAULT_MODES: dict[str, Arm] = {
     IDLE_SKIP_MODE_ENV: 'off',
     NO_PROGRESS_STOP_MODE_ENV: 'off',
     PAYOFF_ORDER_MODE_ENV: 'serve',
+    VERIFY_HOLD_MODE_ENV: 'serve',
 }
 
 PER_OWNER = (
@@ -53,6 +66,8 @@ PER_OWNER = (
     HISTORY_COMPACT_MODE_ENV,
     HUNT_BACKOFF_MODE_ENV,
     PRESCAN_MODE_ENV,
+    VERIFY_HOLD_MODE_ENV,
+    LIBERAL_VERIFIER_MODE_ENV,
 )
 SHORT_NAMES = {
     IDLE_SKIP_MODE_ENV: 'idle_skip',
@@ -62,6 +77,8 @@ SHORT_NAMES = {
     PAYOFF_ORDER_MODE_ENV: 'payoff_order',
     HUNT_BACKOFF_MODE_ENV: 'hunt_backoff',
     PRESCAN_MODE_ENV: 'prescan',
+    VERIFY_HOLD_MODE_ENV: 'verify_hold',
+    LIBERAL_VERIFIER_MODE_ENV: 'liberal_verifier',
 }
 
 

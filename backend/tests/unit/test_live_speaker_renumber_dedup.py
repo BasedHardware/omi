@@ -218,7 +218,7 @@ async def test_new_window_socket_axis_not_contaminated_by_session_last_end(monke
         def finish(self):
             pass
 
-    def mock_connect_window(callback, sample_rate):
+    def mock_connect_window(callback, sample_rate, **_kwargs):
         sock = MockWindowSocket()
         created_sockets.append(sock)
         return sock
@@ -234,7 +234,7 @@ async def test_new_window_socket_axis_not_contaminated_by_session_last_end(monke
 
     monkeypatch.setenv("HOSTED_PARAKEET_API_URL", "http://fake-parakeet")
     monkeypatch.setattr(live_session, "window_allocation", lambda uid: True)
-    monkeypatch.setattr(live_session, "window_language_supported", lambda h, l: True)
+    monkeypatch.setattr(live_session, "window_language_supported", lambda h, l, uid=None: True)
     monkeypatch.setattr(live_session, "VADStreamingGate", lambda **kwargs: MagicMock())
 
     async def fake_pick_window(**kwargs):

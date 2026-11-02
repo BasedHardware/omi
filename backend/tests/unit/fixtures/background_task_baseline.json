@@ -16,13 +16,6 @@
     },
     {
       "path": "routers/sync.py",
-      "function": "sync_local_files",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; deprecated v1: fair-use soft-cap classifier (advisory LLM) may be lost at SIGKILL"
-    },
-    {
-      "path": "routers/sync.py",
       "function": "sync_local_files_v2",
       "kind": "start_background_task",
       "count": 1,
@@ -111,6 +104,13 @@
       "kind": "start_background_task",
       "count": 3,
       "why": "reviewed safe (#23003): shadow idle take, late-take drop and at-most-once recovery RPC; shadow work never projects, publishes or charges a user, so a loss at SIGKILL drops one sample. The reaper settles stale shadow jobs by created_at (active recovery by recovery_started_at) and paid reservations are counted before the call, so the spend cap stays conservative"
+    },
+    {
+      "path": "utils/batch_pipeline/vendor_health.py",
+      "function": "VendorHealthService._maybe_refresh",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: refreshes only a cached health snapshot so allows() never blocks on Redis; no paid call, no unit state. Its one write is an atomic WATCH/MULTI breaker update that the next refresh or settle recomputes from the shared buckets; if killed, allows() answers from the process-local twin until a later refresh succeeds"
     },
     {
       "path": "utils/conversations/action_item_refresh.py",

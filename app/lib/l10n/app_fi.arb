@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Muistiinpanot alkavat, kun lopullinen litterointi saapuu.",
     "episodeOnDeviceNotesFootnote": "Laadittu puhelimessasi puhuessasi. Täydelliset muistiinpanot saapuvat lopullisen litteroinnin mukana.",
     "episodeOnThisPhone": "Tässä puhelimessa",
-    "liveCardTitle": "Live",
     "livePreviewBehind": "Lopullinen litterointi noin {duration} jäljessä",
     "livePreviewCatchingUp": "Lopullinen litterointi saavuttaa",
     "livePreviewNoEngineBody": "Sanasi näkyvät tässä yhdestä kahteen minuuttia sen jälkeen, kun olet sanonut ne.",
     "livePreviewNoEngineTitle": "Tallentaa turvallisesti",
-    "livePreviewOnPhoneDivider": "Live tässä puhelimessa",
+    "livePreviewOnPhoneDivider": "Juuri nyt, tässä puhelimessa",
     "livePreviewTurnOnLiveText": "Ota live-teksti käyttöön",
     "deviceCatchUpOnItsWay": "matkalla",
     "deviceCatchUpWhenOnline": "verkon palattua",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.",
     "yearlySwitchDoneTitle": "Maksat nyt vuosittain",
     "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} osaa} one{{count} osa} two{{count} osaa} few{{count} osaa} many{{count} osaa} other{{count} osaa}}",
     "chatAppsWaitingMessageIn": "Lähetä viesti {app}-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.",
-    "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta."
+    "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta.",
+    "episodeWritingNotes": "Kirjoitetaan muistiinpanoja…",
+    "episodeWritingNotesDetail": "Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.",
+    "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
+    "liveTranscribedUpTo": "Litteroitu klo {time} asti",
+    "liveAudioSaved": "{duration} tallennettu",
+    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä."
 }

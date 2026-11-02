@@ -59,6 +59,10 @@ async def upload(
     seconds=1,
     stop_after_staging=True,
     store=None,
+    decision=None,
+    evidence=None,
+    unit_count=1,
+    paths=(),
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -67,6 +71,8 @@ async def upload(
             language='en', parakeet_safe=True, evidence='audio_lid', confidence=0.99, probe_seconds=6.0
         )
     )
+    if decision is not None:
+        probe = Mock(side_effect=decision) if callable(decision) else Mock(return_value=decision)
     if real_language:
         probe = Mock(wraps=batch_language.resolve_language)
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
@@ -91,9 +97,10 @@ async def upload(
         return 'synthetic://staged-audio'
 
     def units(*args, **kwargs):
-        yield audio_unit(100, b'\x01\x00' * int(seconds * 16000))
+        for index in range(unit_count):
+            yield audio_unit(100 + index * seconds, b'\x01\x00' * int(seconds * 16000))
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store if store is not None else MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
@@ -104,7 +111,7 @@ async def upload(
         uid='synthetic-owner',
         job_id='new',
         content_id='new',
-        paths=[],
+        paths=list(paths),
         lane='fresh',
         recording_age_seconds=0,
         source='omi',
@@ -113,6 +120,7 @@ async def upload(
         client_device_id=None,
         client_platform='ios',
         policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+        evidence=evidence,
     )
     return response, staged, probe
 

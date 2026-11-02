@@ -37,6 +37,9 @@ def test_levers_default_to_shadow_and_serve_only_a_cohort(monkeypatch):
         'history_compact': 'shadow',
         'hunt_backoff': 'shadow',
         'prescan': 'shadow',
+        # The verify hold only moves budget from searching to verifying, so it serves.
+        'verify_hold': 'serve',
+        'liberal_verifier': 'shadow',
     }
     monkeypatch.setenv(dream_levers.IDLE_SKIP_MODE_ENV, 'shadow')
     monkeypatch.setenv(dream_levers.IDLE_SKIP_SERVE_PERCENT_ENV, '100')

@@ -4454,12 +4454,11 @@
     "episodeNotesStartWithTranscript": "Las notas comienzan cuando llega la transcripción final.",
     "episodeOnDeviceNotesFootnote": "Se redactan en tu teléfono mientras hablas. Las notas completas llegan con la transcripción final.",
     "episodeOnThisPhone": "En este teléfono",
-    "liveCardTitle": "En vivo",
     "livePreviewBehind": "Transcripción final con unos {duration} de retraso",
     "livePreviewCatchingUp": "La transcripción final se está poniendo al día",
     "livePreviewNoEngineBody": "Tus palabras aparecen aquí uno o dos minutos después de decirlas.",
     "livePreviewNoEngineTitle": "Grabando de forma segura",
-    "livePreviewOnPhoneDivider": "En vivo en este teléfono",
+    "livePreviewOnPhoneDivider": "Ahora mismo, en este teléfono",
     "livePreviewTurnOnLiveText": "Activar texto en vivo",
     "deviceCatchUpOnItsWay": "en camino",
     "deviceCatchUpWhenOnline": "cuando haya conexión",
@@ -4516,7 +4515,12 @@
     "yearlySwitchUnavailable": "El pago anual no está disponible para tu plan ahora mismo.",
     "yearlySwitchDoneTitle": "Ya pagas al año",
     "yearlySwitchDoneBody": "Hoy se cobraron {amount}. Se renueva el {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} partes} one{{count} parte} two{{count} partes} few{{count} partes} many{{count} partes} other{{count} partes}}",
     "chatAppsWaitingMessageIn": "Envía el mensaje desde {app}. Esta pantalla se actualiza en cuanto Omi lo recibe.",
-    "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}."
+    "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}.",
+    "episodeWritingNotes": "Escribiendo notas…",
+    "episodeWritingNotesDetail": "Primero terminamos la transcripción. Puedes salir de esta página.",
+    "episodeCoversUpTo": "Cubre hasta las {time} · notas completas al terminar",
+    "liveTranscribedUpTo": "Transcrito hasta las {time}",
+    "liveAudioSaved": "{duration} guardados",
+    "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba."
 }

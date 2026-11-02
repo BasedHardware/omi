@@ -150,3 +150,60 @@ def test_owns_closed_notes_requires_every_other_member_done(composer_on, monkeyp
     rows['c2']['status'] = 'completed'
     assert composer.owns_closed_notes(UID, episode, 'c1', None) is True
     assert composer.owns_closed_notes(UID, {**episode, 'compose_failures': 4}, 'c1', None) is False
+
+
+def _live_episode(store, model):
+    service.record_moment(UID, _moment('c1'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    return episodes_db.get_current_episode(UID, firestore_client=store)
+
+
+def test_recovered_audio_into_a_live_episode_pays_once_per_interval(composer_on):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['A', 'B']}, {'bullets': ['A', 'B', 'C']})
+    live = _live_episode(store, model)
+    row = _replay_row()
+    assert len(list(service.recovery.moments('c1', row, now=T0, calendar_identity=None))) > 2
+    at = T0 + timedelta(minutes=config.RECOVERY_NOTES_MIN_INTERVAL_SECONDS / 60 + 2)
+    c = _collaborators(model, now=at, store=store)
+    assert service._record_recovered(UID, live['id'], 'c1', row, c) == 'rate_limited'
+    assert len(model.calls) == 2  # the live moment and one batch; the rest wait
+    assert service._record_recovered(UID, live['id'], 'c1', row, c) == 'rate_limited'
+    assert len(model.calls) == 2, 'inside the interval nothing is spent'
+    later = _collaborators(model, now=at + timedelta(seconds=config.RECOVERY_NOTES_MIN_INTERVAL_SECONDS), store=store)
+    assert service._record_recovered(UID, live['id'], 'c1', row, later) == 'rate_limited'
+    assert len(model.calls) == 3, 'the walk resumes at the next unconsumed batch'
+
+
+def test_recovery_keeps_every_batch_without_a_composer(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'off')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, *[{'bullets': ['A', str(i)]} for i in range(12)])
+    live = _live_episode(store, model)
+    row = _replay_row()
+    batches = len(list(service.recovery.moments('c1', row, now=T0, calendar_identity=None)))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert service._record_recovered(UID, live['id'], 'c1', row, c) == 'applied'
+    assert len(model.calls) == 1 + batches
+
+
+def test_a_finished_walk_reads_receipts_once_and_touches_nothing(composer_on, monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['A', 'B']})
+    first, _closed = _closed_after_tail(store, model)
+    c = _collaborators(model, now=T0 + timedelta(hours=3), store=store)
+    row = _replay_row()
+    assert service._record_recovered(UID, first['id'], 'c1', row, c) == 'applied'
+    moments = []
+    real = service.record_moment
+    monkeypatch.setattr(service, 'record_moment', lambda *a, **k: moments.append(a) or real(*a, **k))
+    assert service._record_recovered(UID, first['id'], 'c1', row, c) == 'skipped_applied'
+    assert not moments, 'consumed batches never reach the per-moment path'
+
+
+def test_an_unreadable_receipt_still_walks(composer_on, monkeypatch):
+    def boom(*_a, **_k):
+        raise RuntimeError('down')
+
+    monkeypatch.setattr(service.episode_receipts, 'get_consumed_ids', boom)
+    moments = [object(), object()]
+    assert list(service.unconsumed_moments(UID, 'c1', moments, _collaborators(FakeModel(), now=T0))) == moments

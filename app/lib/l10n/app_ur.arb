@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "نوٹس حتمی نقل کے پہنچنے پر شروع ہوں گے۔",
     "episodeOnDeviceNotesFootnote": "آپ بولتے وقت آپ کے فون پر تیار ہوتی ہیں۔ مکمل نوٹس حتمی نقل کے ساتھ آئیں گے۔",
     "episodeOnThisPhone": "اس فون پر",
-    "liveCardTitle": "براہِ راست",
     "livePreviewBehind": "حتمی نقل تقریباً {duration} پیچھے ہے",
     "livePreviewCatchingUp": "حتمی نقل پہنچ رہا ہے",
     "livePreviewNoEngineBody": "آپ کے الفاظ کہنے کے ایک دو منٹ بعد یہاں ظاہر ہوتے ہیں۔",
     "livePreviewNoEngineTitle": "محفوظ طریقے سے ریکارڈ ہو رہا ہے",
-    "livePreviewOnPhoneDivider": "اس فون پر براہِ راست",
+    "livePreviewOnPhoneDivider": "ابھی، اس فون پر",
     "livePreviewTurnOnLiveText": "براہِ راست متن آن کریں",
     "deviceCatchUpOnItsWay": "راستے میں ہے",
     "deviceCatchUpWhenOnline": "آن لائن ہونے پر",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "اس وقت آپ کے پلان کے لیے سالانہ بلنگ دستیاب نہیں ہے۔",
     "yearlySwitchDoneTitle": "اب آپ سالانہ پلان پر ہیں",
     "yearlySwitchDoneBody": "آج {amount} وصول کیے گئے۔ تجدید {date} کو۔",
-    "episodePartsCount": "{count, plural, zero{{count} حصے} one{{count} حصے} two{{count} حصے} few{{count} حصے} many{{count} حصے} other{{count} حصے}}",
     "chatAppsWaitingMessageIn": "پیغام کو {app} میں بھیجیں۔ Omi کو ملتے ہی یہ اسکرین اپ ڈیٹ ہو جائے گی۔",
-    "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔"
+    "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔",
+    "episodeWritingNotes": "نوٹس لکھے جا رہے ہیں…",
+    "episodeWritingNotesDetail": "پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔",
+    "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
+    "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
+    "liveAudioSaved": "{duration} محفوظ",
+    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔"
 }

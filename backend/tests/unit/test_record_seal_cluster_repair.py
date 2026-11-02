@@ -75,12 +75,12 @@ def test_each_row_gets_its_own_inventory(source, proof):
     assert read.call_count == 2
 
 
-def test_stale_proof_skips_before_any_read(source, proof):
+def test_stale_proof_skips_before_planning_or_writes(source, proof):
     value = proof()
     value['captured_at'] = 699
     with pytest.raises(ValueError):
         settle(source, lambda: value)
-    assert not source[1].transactions
+    assert all(not tx.updates and not tx.sets for tx in source[1].transactions)
 
 
 def test_partial_pod_list_cannot_prove_absence(source):
@@ -93,7 +93,7 @@ def test_partial_pod_list_cannot_prove_absence(source):
 
     with pytest.raises(ValueError):
         settle(source, partial)
-    assert not source[1].transactions
+    assert all(not tx.updates and not tx.sets for tx in source[1].transactions)
 
 
 def test_proof_expiring_during_tail_read_never_applies(source, proof, monkeypatch):
@@ -331,7 +331,7 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
             return self
 
         def select(self, fields):
-            assert fields == ('finished_at', 'record_audio_closed')
+            assert fields == ('finished_at', 'record_audio_closed', 'record_audio_partial')
             return self
 
         def limit(self, _):

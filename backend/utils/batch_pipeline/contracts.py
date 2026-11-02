@@ -373,6 +373,7 @@ class ProjectionBinding:
     language: str | None = None
     record_origin: bool = False
     native_record: bool = False
+    partial_record: bool = False
 
     def __post_init__(self):
         # Firestore caps transaction writes at 500; completion reads all siblings.

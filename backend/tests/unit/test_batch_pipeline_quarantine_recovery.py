@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+import logging
 from unittest.mock import Mock
 
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery, log_failure
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 
@@ -230,6 +231,13 @@ def test_deletion_or_protection_change_cancels_mid_recovery(setup, change, phase
     if phase == 'download':
         stt.assert_not_called()
     assert ('batch_pipeline_prod_results', 'bad') not in client.rows
+
+
+def test_log_failure_preserves_terminal_event(caplog):
+    with caplog.at_level(logging.WARNING):
+        log_failure({'stage': 'provider', 'reason': 'provider_failed'})
+    assert caplog.messages == ['event=batch_recovery_failure stage=provider reason=provider_failed']
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_failed_stt_is_permanently_held_without_loop_or_sensitive_logs(setup, caplog):
@@ -1308,7 +1316,9 @@ def test_partial_refuses_a_completed_or_foreign_ledger(setup):
     assert client.rows == before
 
 
-def test_partial_status_answers_completed_with_held_span(setup):
+def test_partial_status_preserves_custody_with_held_span(setup):
+    import json
+    from pathlib import Path
     from utils.batch_pipeline.intake import durable_status
 
     client, store, binding, _, _, _ = setup
@@ -1322,9 +1332,25 @@ def test_partial_status_answers_completed_with_held_span(setup):
     }
     result, _ = ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
     status = durable_status(store, binding.owner_id, binding.job_id)
-    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+    assert status['status'] == 'processing' and status['reason_code'] == 'batch_unit_held'
     assert status['failed_segments'] == 1 and status['successful_segments'] == 1
-    assert status['result'] == result and status['poll_after_ms'] == 0 and status['errors'] == []
+    assert status['result'] == result and status['poll_after_ms'] == 300000 and status['errors'] == []
+    golden = json.loads((Path(__file__).parents[1] / 'fixtures/held_partial_status.json').read_text())
+    assert status == golden
+
+
+def test_deleting_a_projected_sibling_cannot_ack_unresolved_partial_custody(setup):
+    from utils.batch_pipeline.intake import _deleted_conversation_status
+
+    client, store, binding, *_ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert (
+        _deleted_conversation_status(
+            ledger_row(client, binding), {'lane': 'backfill', 'total_files': 1}, binding.job_id
+        )
+        is None
+    )
 
 
 def test_recovery_disabled_unit_completes_partial_then_upgrades_after_recovery(setup, monkeypatch):
@@ -1764,3 +1790,52 @@ def test_default_on_quarantine_allowance_preserves_custody_and_funding(setup, mo
         assert result == 'held' and row(client)['recovery_state'] == 'prepared'
     if access in {'byok', 'kill_off'}:
         resolver.assert_not_called()
+
+
+class _CandidateQuery:
+    """Evaluates the ==/in filters, __name__ order, cursor and limit recovery_candidates uses."""
+
+    def __init__(self, docs, filters=(), after=None, count=None):
+        self.docs, self.filters, self.after, self.count = docs, filters, after, count
+
+    def where(self, field, op, value):
+        assert op in {'==', 'in'}
+        return _CandidateQuery(self.docs, (*self.filters, (field, op, value)), self.after, self.count)
+
+    def order_by(self, field):
+        assert field == '__name__'
+        return self
+
+    def document(self, doc_id):
+        return doc_id
+
+    def start_after(self, cursor):
+        return _CandidateQuery(self.docs, self.filters, cursor['__name__'], self.count)
+
+    def limit(self, count):
+        return _CandidateQuery(self.docs, self.filters, self.after, count)
+
+    def stream(self):
+        rows = [
+            SimpleNamespace(id=doc_id, to_dict=lambda data=data: dict(data))
+            for doc_id, data in sorted(self.docs.items())
+            if (self.after is None or doc_id > self.after)
+            and all(data.get(f) == v if op == '==' else data.get(f) in v for f, op, v in self.filters)
+        ]
+        return iter(rows[: self.count])
+
+
+def test_recovery_candidates_skip_committed_units_held_by_projection():
+    """A quarantine-held projection marks its committed job recovery_state=held for the
+    held-partial scan. prepare() refuses any job that is not quarantined, so such jobs
+    must not fill the recovery dispatch page ahead of real quarantined units."""
+    from database.batch_pipeline_quarantine_recovery import recovery_candidates
+
+    docs = {f'c-{index:03d}': {'owner_id': 'o', 'state': 'committed', 'recovery_state': 'held'} for index in range(80)}
+    docs['q-held'] = {'owner_id': 'o', 'state': 'quarantined', 'recovery_state': 'held'}
+    docs['q-prepared'] = {'owner_id': 'o', 'state': 'quarantined', 'recovery_state': 'prepared'}
+    docs['q-failed'] = {'owner_id': 'o', 'state': 'quarantined', 'recovery_state': 'failed_held'}
+    client = SimpleNamespace(collection=lambda name: _CandidateQuery(docs))
+    assert recovery_candidates(client, 'test', None, limit=64) == [('q-held', 'o'), ('q-prepared', 'o')]
+    assert recovery_candidates(client, 'test', 'o', limit=64) == [('q-held', 'o'), ('q-prepared', 'o')]
+    assert recovery_candidates(client, 'test', None, limit=64, after_id='q-held') == [('q-prepared', 'o')]

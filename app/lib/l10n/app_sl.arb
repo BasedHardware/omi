@@ -11880,12 +11880,11 @@
     "episodeNotesStartWithTranscript": "Opombe se začnejo, ko prispe končni prepis.",
     "episodeOnDeviceNotesFootnote": "Nastajajo na tvojem telefonu, medtem ko govoriš. Popolne opombe pridejo s končnim prepisom.",
     "episodeOnThisPhone": "V tem telefonu",
-    "liveCardTitle": "V živo",
     "livePreviewBehind": "Končni prepis za približno {duration} zadaj",
     "livePreviewCatchingUp": "Končni prepis dohiteva",
     "livePreviewNoEngineBody": "Tvoje besede se tu pokažejo eno do dve minuti po izreku.",
     "livePreviewNoEngineTitle": "Varno snema",
-    "livePreviewOnPhoneDivider": "V živo v tem telefonu",
+    "livePreviewOnPhoneDivider": "Pravkar, na tem telefonu",
     "livePreviewTurnOnLiveText": "Vklopi besedilo v živo",
     "deviceCatchUpOnItsWay": "na poti",
     "deviceCatchUpWhenOnline": "ko boste povezani",
@@ -11942,7 +11941,12 @@
     "yearlySwitchUnavailable": "Letno plačilo za vaš paket trenutno ni na voljo.",
     "yearlySwitchDoneTitle": "Zdaj plačujete letno",
     "yearlySwitchDoneBody": "Danes zaračunano {amount}. Podaljšanje {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} delov} one{{count} del} two{{count} dela} few{{count} deli} many{{count} delov} other{{count} delov}}",
     "chatAppsWaitingMessageIn": "Pošljite sporočilo v aplikaciji {app}. Ta zaslon se posodobi, takoj ko ga Omi prejme.",
-    "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}."
+    "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}.",
+    "episodeWritingNotes": "Pišemo zapiske…",
+    "episodeWritingNotesDetail": "Najprej dokončujemo prepis. To stran lahko zapustite.",
+    "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
+    "liveTranscribedUpTo": "Prepisano do {time}",
+    "liveAudioSaved": "Shranjeno {duration}",
+    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem."
 }

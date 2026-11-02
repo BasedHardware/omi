@@ -14701,9 +14701,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get episodeOnThisPhone => 'Na ovom telefonu';
 
   @override
-  String get liveCardTitle => 'Uživo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konačni transkript kasni oko $duration';
   }
@@ -14718,7 +14715,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Sigurno snima';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Uživo na ovom telefonu';
+  String get livePreviewOnPhoneDivider => 'Upravo sada, na ovom telefonu';
 
   @override
   String get livePreviewTurnOnLiveText => 'Uključi tekst uživo';
@@ -14963,21 +14960,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String episodePartsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count dijelova',
-      many: '$count dijelova',
-      few: '$count dijela',
-      two: '$count dijelova',
-      one: '$count dio',
-      zero: '$count dijelova',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String chatAppsWaitingMessageIn(String app) {
     return 'Pošalji poruku u aplikaciji $app. Ovaj ekran će se ažurirati čim je Omi primi.';
   }
@@ -14986,4 +14968,28 @@ class AppLocalizationsBs extends AppLocalizations {
   String chatAppsCodeExpiredMessageIn(String app) {
     return 'Uzmi novi kod i pošalji ga iz aplikacije $app.';
   }
+
+  @override
+  String get episodeWritingNotes => 'Pišemo bilješke…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Prvo završavamo transkript. Možete napustiti ovu stranicu.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Pokriva do $time · potpune bilješke po završetku';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkribovano do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Sačuvano $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.';
 }

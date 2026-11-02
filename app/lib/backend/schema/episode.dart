@@ -168,6 +168,14 @@ class Episode {
   /// Composed by the closed-episode composer: the page reads as sections rather than notes.
   bool get composed => moments.any((m) => m.points.isNotEmpty);
 
+  /// Closed but its summary hasn't landed yet: the notes are drafts, so Home keeps showing processing.
+  /// Past [summaryWait] the summary is treated as failed, and Home shows the plain conversations.
+  /// A device clock far behind the server counts as past the wait, so it can't re-read forever.
+  bool awaitingSummary(DateTime now) =>
+      !live && !composed && now.difference(closedAt ?? lastActivityAt).abs() < summaryWait;
+
+  static const summaryWait = Duration(minutes: 15);
+
   List<EpisodeItem> get visibleItems => [
         for (final item in items)
           if (item.visible) item

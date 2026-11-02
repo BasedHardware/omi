@@ -76,6 +76,9 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
   /// Set when a connect sheet just finished, for the success banner and the open button.
   ChatChannel? _justConnected;
 
+  /// The line the connect sheet texted. Omi has several, so the flag's address may be another one.
+  String? _connectedAddress;
+
   @override
   void initState() {
     super.initState();
@@ -108,7 +111,12 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
       ChatChannel.whatsapp => showCodeConnectSheet(context, ChatChannel.whatsapp),
     };
     final link = await sheet;
-    if (link != null && mounted) setState(() => _justConnected = channel);
+    if (link != null && mounted) {
+      setState(() {
+        _justConnected = channel;
+        _connectedAddress = link.address;
+      });
+    }
   }
 
   /// Channels whose waitlist request is in flight.
@@ -143,7 +151,10 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
 
   Future<void> _openChannel(ChatChannel channel) async {
     final endpoint = context.read<MessagingChannelsProvider>().config.endpoint(channel);
-    final opened = endpoint != null && await openChatApp(channel, endpoint);
+    final line = _connectedAddress;
+    final target =
+        endpoint == null || line == null ? endpoint : ChatChannelEndpoint(provider: endpoint.provider, address: line);
+    final opened = target != null && await openChatApp(channel, target);
     if (opened || !mounted) return;
     final l10n = context.l10n;
     OmiFeedback.error(

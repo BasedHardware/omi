@@ -53,6 +53,11 @@ def admit(
         raise ValueError('work identity must match projection binding')
     policy = policy or resolve_batch_policy(binding.owner_id)
     content_key = f'{binding.owner_id}/{binding.content_id}'
+    serialized_binding = asdict(binding)
+    # Ordinary work must remain readable by pre-partial projection hosts
+    # throughout the roll. Only partial work requires the new field/readers.
+    if not binding.partial_record:
+        serialized_binding.pop('partial_record')
 
     def commit(tx):
         existing = tx.get('content', content_key)
@@ -65,11 +70,24 @@ def admit(
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
         pending = tx.get('jobs', binding.segment_ids[0])
+        partial_metadata = intake or {}
+        partial_parent = partial_metadata.get('record_partial_parent')
+        if partial_parent:
+            pending = tx.get('jobs', partial_parent)
+            run = pending.get('partial_run') or {}
+            if (
+                not pending.get('partial_coordinator')
+                or run.get('complete')
+                or run.get('generation') != partial_metadata.get('record_partial_generation')
+                or run.get('page') != partial_metadata.get('record_partial_page')
+                or binding.content_id != partial_metadata.get('record_partial_content')
+            ):
+                raise ValueError('partial continuation ownership changed')
         reserved_recording = (
             pending.get('state') == 'record_pending'
             and pending.get('owner_id') == binding.owner_id
             and pending.get('conversation_id') == binding.target_conversation_id
-            and pending.get('record_content_id') == binding.content_id
+            and (partial_parent or pending.get('record_content_id') == binding.content_id)
         )
         admission = policy
         if reserved_recording:
@@ -83,15 +101,21 @@ def admit(
             )
         if not admission.batch_enabled:
             raise AdmissionDisabled('recorded admission policy does not enable batch')
+        if partial_parent and admission.provider_reason == 'byok':
+            raise ValueError('partial BYOK excluded')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
             row = tx.get('conversations', key)
-            if not row or row.get('deleted') or row.get('uses_custom_stt'):
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
                 raise ValueError('registered record target unavailable')
             if binding.native_record:
                 require_record_protocol_ready()
                 require_record_audio_barrier(row, expected=record_barrier)
-            expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            expected = (
+                row.get('record_lane_owner')
+                if partial_parent and reserved_recording
+                else 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            )
             if row.get('record_lane_owner') not in {None, expected}:
                 raise ValueError('record owner is immutable')
             if row.get('record_lane_owner') != expected:
@@ -112,9 +136,12 @@ def admit(
                 tx.put('artifacts', key, artifact)
             created = enqueue_item(tx, item, now, policy=admission)
             job = tx.get('jobs', item.segment_id)
-            if not created and job.get('projection_binding') != asdict(binding):
+            previous_binding = dict(job.get('projection_binding') or {})
+            if previous_binding.get('partial_record') is False:
+                previous_binding.pop('partial_record')
+            if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
-            job['projection_binding'] = asdict(binding)
+            job['projection_binding'] = serialized_binding
             tx.put('jobs', item.segment_id, job)
         if intake is not None:
             tx.put('intakes', binding.job_id, {**intake, 'accepted_at': now})

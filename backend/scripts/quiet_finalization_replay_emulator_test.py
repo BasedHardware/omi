@@ -283,11 +283,57 @@ def exercise_lifecycle_retirement(client):
     )
 
 
+def exercise_transport_hold(client):
+    """Real commit deletion removes the due index; delayed tasks remain valid."""
+    ref = client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('synthetic-transport-hold')
+    clock = datetime.now(timezone.utc)
+    ref.set({'status': 'queued', 'dispatch_generation': 1, 'lease_epoch': 0, 'worker_claim_count': 0})
+    with patch.object(jobs, '_now', side_effect=lambda: clock):
+        for expected in range(1, jobs.MAX_UNCLAIMED_REPLAY_DISPATCHES + 1):
+            intent = jobs.claim_finalization_replay(ref.id, stale_after=timedelta(minutes=5), firestore_client=client)
+            assert intent['created']
+            assert ref.get().to_dict()['replay_dispatches_without_claim'] == expected
+            clock += timedelta(minutes=6)
+        before = ref.get().to_dict()
+        intent = jobs.claim_finalization_replay(ref.id, stale_after=timedelta(minutes=5), firestore_client=client)
+        held = ref.get().to_dict()
+        assert intent['replay_dispatch_exhausted'] is True
+        assert 'reconcile_after_at' not in held
+        assert held['dispatch_generation'] == before['dispatch_generation']
+        assert held['status'] == 'queued' and held['worker_claim_count'] == 0
+        assert not list(ref.parent.where('reconcile_after_at', '<=', clock).stream())
+        again = jobs.claim_finalization_replay(ref.id, stale_after=timedelta(minutes=5), firestore_client=client)
+        assert not again.get('replay_dispatch_exhausted')
+        assert ref.get().to_dict() == held
+        claim = jobs.claim_finalization_job(
+            ref.id, held['dispatch_generation'], count_worker_claim=True, firestore_client=client
+        )
+        assert claim['status'] == 'claimed'
+        leased = ref.get().to_dict()
+        assert leased['reconcile_after_at'] == leased['lease_expires_at']
+        clock = leased['lease_expires_at'] + timedelta(seconds=1)
+        assert jobs.claim_finalization_replay(ref.id, stale_after=timedelta(minutes=5), firestore_client=client)[
+            'created'
+        ]
+        resumed = ref.get().to_dict()
+        assert resumed['replay_dispatches_without_claim'] == 1
+        assert 'replay_dispatch_suspended_at' not in resumed
+        # Complete the synthetic job so it contributes no due index to the
+        # cursor scenarios below. No real account or conversation is involved.
+        ref.update({'fanout_status': 'completed'})
+        claim = jobs.claim_finalization_job(ref.id, resumed['dispatch_generation'], firestore_client=client)
+        assert jobs.mark_finalization_completed(
+            ref.id, resumed['dispatch_generation'], claim['lease_epoch'], firestore_client=client
+        )
+    print('PASS: transport hold deletes due index, preserves delayed task claim, resets on lease progress')
+
+
 def main():
     assert os.environ.get('FIRESTORE_EMULATOR_HOST'), 'emulator required'
     project = os.environ.get('GOOGLE_CLOUD_PROJECT', 'demo-quiet-replay')
     assert project.startswith('demo-'), 'isolated demo project required'
     client = firestore.Client(project=project)
+    exercise_transport_hold(client)
     exercise_lifecycle_retirement(client)
     col = client.collection(jobs.FINALIZATION_JOBS_COLLECTION)
     now = datetime.now(timezone.utc)
@@ -317,8 +363,10 @@ def main():
         return 'stale'
 
     with patch.object(service, 'is_listen_finalization_dispatch_enabled', return_value=True), patch.object(
-        jobs, 'recover_stranded_byok_jobs', return_value={'blocked': 0, 'errors': 0}
-    ), patch.object(service, '_publish_job_metrics'), patch.object(
+        service, 'is_listen_finalization_tasks_configured', return_value=True
+    ), patch.object(jobs, 'recover_stranded_byok_jobs', return_value={'blocked': 0, 'errors': 0}), patch.object(
+        service, '_publish_job_metrics'
+    ), patch.object(
         service.quiet_finalization, 'run', side_effect=run
     ), patch.object(
         jobs, 'defer_finalization_replay', return_value=False

@@ -100,10 +100,17 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         raise ValueError('retained audio manifest binding mismatch')
     pcm = bytearray(round(item.duration_seconds * 16000) * 2)
     previous = 0
+    previous_key, previous_source = None, b''
     for ref in manifest['references']:
-        source = fetch(ref)
-        if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
-            raise ValueError('retained PCM digest changed')
+        source_key = tuple(ref.get(name) for name in ('bucket', 'path', 'generation', 'pcm_sha256'))
+        pinned = all(value is not None for value in source_key)
+        if pinned and source_key == previous_key:
+            source = previous_source
+        else:
+            source = fetch(ref)
+            if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
+                raise ValueError('retained PCM digest changed')
+            previous_key, previous_source = source_key if pinned else None, source
         start, offset, frames = ref['start_frame'], ref['offset_frame'], ref['frames']
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:
             raise ValueError('invalid retained audio slice')

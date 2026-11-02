@@ -674,3 +674,36 @@ def test_fresh_capture_after_user_close_opens_a_new_occasion(timeline_store):
     assert service._attach_once('u', 'fresh', 'omi', T0 + timedelta(minutes=21), c) == 'opened'
     assert episodes.get_current_episode('u', firestore_client=store)['id'] != old['id']
     assert episodes.get_episode('u', old['id'], firestore_client=store)['status'] == 'closed'
+
+
+def test_late_words_become_one_line_across_batches_and_a_retry_adds_nothing(monkeypatch):
+    store = StrictFirestore()
+    monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
+    monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **k: None)
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: None)
+    row = {
+        'id': 'live',
+        'source': 'omi',
+        'started_at': T0,
+        'client_device_id': 'pendant',
+        'data_protection_level': 'standard',
+    }
+
+    def word(id_, text, start):
+        return {
+            'id': id_,
+            'text': text,
+            'start': start,
+            'end': start + 0.2,
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 1,
+            'stt_provider': 'soniox',
+            'speaker_id_scope': 'sock:1',
+        }
+
+    first = [word('a', 'some', 0.0), word('b', 'orange', 0.5)]
+    late_audio.ingest_late_transcript('u', row, first)
+    assigned = late_audio.ingest_late_transcript('u', row, [word('c', 'spot.', 1.0)])
+    assert [s['text'] for s in assigned['transcript_segments']] == ['some orange spot.']
+    retried = late_audio.ingest_late_transcript('u', row, first)
+    assert [s['text'] for s in retried['transcript_segments']] == ['some orange spot.']

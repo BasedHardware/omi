@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from typing import Any
 
-from config.messaging import channel_policy
+from config.messaging import channel_lines, channel_policy
 from utils.messaging.access import SeatFull, AccessDenied
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from google.cloud import firestore
@@ -20,6 +20,7 @@ from prometheus_client import Counter
 from google.api_core.exceptions import AlreadyExists
 
 from database.messaging_albums import read_album, append_album, seal_album
+from database.messaging_lines import assign_line, read_line, record_link, release_link
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -31,7 +32,9 @@ from utils.observability.fallback import record_fallback
 TURN_TIMEOUT_SECONDS = 180
 STALE_SECONDS = 300
 PENDING_MAX_SECONDS = 1800
+PROOF_LIFETIME = timedelta(minutes=10)
 _QUEUE_EVENTS = Counter('omi_messaging_queue_events_total', 'Messaging queue decisions', ['reason'])
+_LINE_ASSIGNMENTS = Counter('omi_messaging_line_assignments_total', 'New-link line decisions', ['channel', 'result'])
 
 
 def _queue_event(reason, path, age):
@@ -87,16 +90,31 @@ class MessagingStore:
         if kind not in ('token', 'code'):
             raise ValueError('Unknown proof kind')
         self.check_capacity(uid, channel, now=now)
+        line = self._assign_line(uid, channel, now)
         # Both have >100 bits of entropy. Codes are human copy/pasteable, not short PINs.
         proof = secrets.token_urlsafe(24) if kind == 'token' else secrets.token_hex(16).upper()
         proof_id = key(proof)
-        expires = now + timedelta(minutes=10)
+        expires = now + PROOF_LIFETIME
         payload = dict(uid=uid, channel=channel, provider=provider, kind=kind, expires_at=expires)
+        if line:
+            payload['line'] = line
         batch = self.db.batch()
         batch.create(self.db.collection('channel_link_proofs').document(proof_id), payload)
         batch.set(self.user(uid).collection('channel_link_proofs').document(proof_id), {'expires_at': expires})
         batch.commit()
-        return {'proof': proof, 'kind': kind, 'expires_at': expires}
+        return {'proof': proof, 'kind': kind, 'expires_at': expires, **({'address': line} if line else {})}
+
+    def _assign_line(self, uid, channel, now):
+        lines = channel_lines(channel)
+        if lines is None:
+            return None
+        line = assign_line(self.db, uid, channel, lines, now=now, hold=PROOF_LIFETIME) if lines else None
+        _LINE_ASSIGNMENTS.labels(channel=channel, result='assigned' if line else 'full').inc()
+        if line is None:
+            logging.getLogger(__name__).warning('Messaging lines full channel=%s lines=%d', channel, len(lines))
+            self.waitlist(uid, channel, now=now)
+            raise SeatFull()
+        return line
 
     def capacity(self, channel):
         return self.db.collection('channel_capacity').document(channel)
@@ -180,6 +198,10 @@ class MessagingStore:
                         raise PermissionError('Seat counter needs reconciliation')
                     if seats.get('count', 0) >= cap:
                         raise SeatFull()
+            # A live link stays counted on its own line, whatever line this proof named.
+            kept_line = existing.get('line') if existing.get('active') else None
+            new_line = None if kept_line else token.get('line')
+            line_state = read_line(self.db, tx, message.channel, new_line) if new_line else None
             link = dict(
                 uid=uid,
                 channel=message.channel,
@@ -193,6 +215,10 @@ class MessagingStore:
             )
             for name, default in _SETTING_DEFAULTS.items():
                 link[name] = existing.get(name, default)
+            if kept_line or new_line:
+                link['line'] = kept_line or new_line
+            if line_state:
+                record_link(self.db, tx, uid, message.channel, new_line, *line_state, now)
             if capacity is not None and member_ref is not None:
                 if identity.id not in link_ids:
                     tx.set(member_ref, {'link_ids': [*link_ids, identity.id]})
@@ -245,6 +271,11 @@ class MessagingStore:
             link = identity.get(transaction=tx).to_dict() or {}
             if link.get('uid') != uid:
                 raise PermissionError('Link not found')
+            line_state = (
+                read_line(self.db, tx, link['channel'], link['line'])
+                if link.get('line') and link.get('active')
+                else None
+            )
             if channel_policy(link.get('channel', 'unknown')).get('seat_cap') is not None:
                 capacity = self.capacity(link.get('channel', 'unknown'))
                 member_ref = capacity.collection('members').document(uid)
@@ -258,6 +289,8 @@ class MessagingStore:
                     else:
                         tx.delete(member_ref)
                         tx.set(capacity, {'count': max(0, seats.get('count', 0) - 1)}, merge=True)
+            if line_state:
+                release_link(tx, *line_state)
             tx.update(identity, {'active': False, 'generation': str(uuid4())})
             return link
 
@@ -275,6 +308,8 @@ class MessagingStore:
             self.unlink(uid, link['id'])
         for entry in self.user(uid).collection('channel_waitlist').stream():
             entry.reference.delete()
+        for placement in self.user(uid).collection('channel_lines').stream():
+            placement.reference.delete()
         for proof in self.user(uid).collection('channel_link_proofs').stream():
             self.db.collection('channel_link_proofs').document(proof.id).delete()
             proof.reference.delete()
