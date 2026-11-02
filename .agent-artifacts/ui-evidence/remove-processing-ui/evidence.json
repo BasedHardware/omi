@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-before.png",
+      "platform": "mobile-ios",
+      "description": "home-before",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-home-after.png",
+      "platform": "mobile-ios",
+      "description": "home-after",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-usage-after.png",
+      "platform": "mobile-ios",
+      "description": "usage-after",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-live-after.png",
+      "platform": "mobile-ios",
+      "description": "live-after",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
