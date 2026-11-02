@@ -39,10 +39,18 @@ legacy provider clients into the GPU image is unnecessary.
 `2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
 admission, completion and ordered merge of one lane overlap another lane's GPU
 chain; the model chain (VAD, ASR, diarization and CUDA quiescence) stays
-exclusive behind one asyncio lock. Each waiting lane can prepare its first
-decode within one shared 1800-audio-second budget, using the same artifact IO
-pool (default five). Final persist settlement runs after releasing the GPU lock,
-before publication, with renewal still active. A pull admits at most 32 units,
+exclusive behind one asyncio lock. Each waiting lane prepares the leading
+units of its flight that fit one shared 1800-audio-second decode budget, using
+the same artifact IO pool (default five), so the GPU section does not wait on
+fetches (`BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED`, Helm
+`worker.prepareFlightEnabled`, default on; `false` prepares only the first
+decode). If any prepared lease is lost, or the lane stops while waiting, the
+whole prepared prefix is cancelled and those units are refunded without an
+attempt charge. The chain returns the reservations (and drops the decoded
+buffers) of finished prepared decodes as soon as its GPU section returns, not
+after settlement and publication, so the next waiting lane can prepare its
+whole flight; the lane's final close still drains any fetch left running.
+Final persist settlement runs after releasing the GPU lock, before publication, with renewal still active. A pull admits at most 32 units,
 so each lane retains at most 32 persist payloads/receipts; the IO pool bounds
 simultaneous uploads rather than waiting for a free upload slot under the GPU
 lock. Even a slow first upload cannot stall the sixth short unit's GPU work.

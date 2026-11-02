@@ -37,7 +37,13 @@ from diarizer.batch_pipeline import (
     validate_words,
 )
 from diarizer.batch_pipeline_context import capture_stream
-from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload, install_shared_trunk
+from diarizer.batch_pipeline_flight import (
+    VAD_SEGMENTATION_KEY,
+    FlightPyannote,
+    VadSegmentationReuse,
+    diarization_payload,
+    install_shared_trunk,
+)
 from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
 from utils.batch_pipeline import leaf_timings
 
@@ -136,30 +142,42 @@ class ParakeetWords:
 
 
 class PyannoteDiarizer:
-    def __init__(self, model, *, timings_of: Callable[[], Any] | None = None):
+    def __init__(self, model, *, timings_of: Callable[[], Any] | None = None, segmentation_reuse=None):
         self.model = model
         self.timings_of = timings_of or (lambda: None)
+        self.segmentation_reuse = segmentation_reuse
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
+        file = {'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000}
+        if self.segmentation_reuse is not None:
+            # Full-unit diarization of the waveform VAD just scored: same forwards.
+            scores = self.segmentation_reuse.take(samples)
+            if scores is not None:
+                file[VAD_SEGMENTATION_KEY] = scores
         with leaf_timings.active(self.timings_of()), leaf_timings.embedding_hook(self.model), torch.inference_mode():
-            output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
+            output = self.model(file)
         return diarization_payload(output)
 
 
 class PyannoteVAD:
-    def __init__(self, model):
+    def __init__(self, model, *, segmentation_reuse=None):
         self.model = model
+        self.segmentation_reuse = segmentation_reuse
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
-        with torch.inference_mode():
+        reuse = self.segmentation_reuse
+        with reuse.capturing(samples) if reuse is not None else nullcontext(), torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        return crop_model_vad_spans(
+        spans = crop_model_vad_spans(
             [(float(t.start), float(t.end)) for t in output.get_timeline().support()], len(samples) / 16000
         )
+        if reuse is not None and not spans:
+            reuse.forget(samples)  # Silence is never diarized.
+        return spans
 
 
 class StagedAudio:
@@ -362,6 +380,13 @@ def create_local_worker(
     )
     if flight is None and config.shared_embedding_trunk:
         install_shared_trunk(pyannote_model)
+    # Flight batching shares segmentation its own way; the serial chain hands
+    # VAD's raw scores to full-unit diarization instead of a second forward.
+    reuse = (
+        VadSegmentationReuse.install(pyannote_model, vad_model)
+        if flight is None and config.vad_segmentation_reuse
+        else None
+    )
     # Resolve dynamically: run_process binds its private registry after loading.
     staged = StagedAudio(fetch_audio, timings_of=lambda: worker.timings)
 
@@ -371,10 +396,12 @@ def create_local_worker(
 
     worker = PipelineWorker(
         decode=staged.decode,
-        vad=PyannoteVAD(vad_model),
+        vad=PyannoteVAD(vad_model, segmentation_reuse=reuse),
         words_providers={'parakeet': words},
         recover_words=words.recover_empty,
-        diarizers={'pyannote': PyannoteDiarizer(pyannote_model, timings_of=lambda: worker.timings)},
+        diarizers={
+            'pyannote': PyannoteDiarizer(pyannote_model, timings_of=lambda: worker.timings, segmentation_reuse=reuse)
+        },
         persist=persist,
         config=config,
         live_words=live_words,

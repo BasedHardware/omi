@@ -35,6 +35,12 @@ class ProviderConfig:
     # per local speaker, instead of one per (chunk, speaker) pair. Never packs
     # across units. Kill switch; the flight path always shares the trunk.
     shared_embedding_trunk: bool = True
+    # Serial chain: a full-unit diarization takes the raw segmentation scores
+    # its own VAD pass computed instead of a second forward. Kill switch.
+    vad_segmentation_reuse: bool = True
+    # A waiting lane prepares every leading unit of its flight that fits the
+    # shared decode budget, not only the first. Kill switch.
+    prepare_flight: bool = True
 
     def __post_init__(self):
         if self.pool_kind not in {'dedicated_batch', 'shared_live'}:
@@ -95,5 +101,15 @@ def provider_config() -> ProviderConfig:
         shared_embedding_trunk=rollout_default_on(
             'BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED',
             os.getenv('BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED', 'true').strip().lower() != 'false',
+        ),
+        # Ship-on: only an explicit 'false' restores the second segmentation forward.
+        vad_segmentation_reuse=rollout_default_on(
+            'BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED',
+            os.getenv('BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED', 'true').strip().lower() != 'false',
+        ),
+        # Ship-on: only an explicit 'false' restores first-decode-only preparation.
+        prepare_flight=rollout_default_on(
+            'BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED',
+            os.getenv('BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED', 'true').strip().lower() != 'false',
         ),
     )
