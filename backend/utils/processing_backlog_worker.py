@@ -417,6 +417,24 @@ async def upgrade_async(uid: str, request_key: str, *, intent_at):
     await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
 
 
+async def subscription_changed_async(uid: str, event: dict, stripe_subscription: dict, previous, current) -> None:
+    """A Stripe subscription event's automatic releases, for an owner whose funded processing is on.
+
+    A trial's conversion to a real charge, or an allowance increase, releases within the plan's
+    allowance. Only the subscription's creation (the trial start) grants; a later update such as
+    a plan change while trialing never does.
+    """
+    from utils.processing_backlog import allowance_increased
+    from utils.subscription import is_paid_plan
+
+    previous_status = ((event.get('data') or {}).get('previous_attributes') or {}).get('status')
+    converted = previous_status == 'trialing' and stripe_subscription.get('status') == 'active'
+    if converted or allowance_increased(previous, current):
+        await upgrade_async(uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'))
+    if event.get('type') == 'customer.subscription.created' and is_paid_plan(current.plan):
+        await trial_started_async(uid, stripe_subscription)
+
+
 async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
     """One grant per account, from the trial's start (David, 2026-11-02).
 

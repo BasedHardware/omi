@@ -115,15 +115,62 @@ async def test_purchases_and_charges_start_nothing(monkeypatch, subscription):
     await worker.trial_started_async(UID, subscription)
 
 
-def test_payment_grants_a_trial_only_from_its_start_and_converts_on_real_payment():
+def test_payment_hands_every_subscription_event_to_the_release_hook_once():
     source = (Path(__file__).resolve().parents[2] / 'routers' / 'payment.py').read_text(encoding='utf-8')
-    assert "previous_status == 'trialing' and subscription_obj.get('status') == 'active'" in source
-    assert source.count('await trial_started_async(uid, subscription_obj)') == 1
-    # Only the subscription's creation (the trial start) may grant; an update such as a plan
-    # change while trialing never does, even when no earlier grant receipt exists.
-    call = source.index('await trial_started_async(uid, subscription_obj)')
-    gate = source.rindex('if (', 0, call)
-    assert "event['type'] == 'customer.subscription.created'" in source[gate:call]
+    assert source.count('await subscription_changed_async(') == 1
+    call = source.index('await subscription_changed_async(')
+    gate = source.rindex('if ', 0, call)
+    assert 'funded_processing_enabled(uid) and not adopted_active_paid' in source[gate:call]
+
+
+def _subscription_event(kind, previous_status=None):
+    previous = {'status': previous_status} if previous_status else {}
+    return {'id': 'evt', 'type': kind, 'created': TRIAL_START, 'data': {'previous_attributes': previous}}
+
+
+@pytest.fixture
+def release_hooks(monkeypatch):
+    from models.users import PlanType
+    import utils.processing_backlog as backlog
+
+    calls = []
+
+    async def upgrade(uid, request_key, *, intent_at):
+        calls.append(('conversion', request_key))
+
+    async def trial(uid, stripe_subscription):
+        calls.append(('trial', stripe_subscription['id']))
+
+    monkeypatch.setattr(worker, 'upgrade_async', upgrade)
+    monkeypatch.setattr(worker, 'trial_started_async', trial)
+    monkeypatch.setattr(backlog, 'allowance_increased', lambda previous, current: False)
+    paid = SimpleNamespace(plan=PlanType.unlimited_v2)
+    return SimpleNamespace(calls=calls, paid=paid, basic=SimpleNamespace(plan=PlanType.basic))
+
+
+async def test_only_the_subscription_creation_grants_a_trial(release_hooks):
+    created = _subscription_event('customer.subscription.created')
+    await worker.subscription_changed_async(UID, created, trialing(), None, release_hooks.paid)
+    # A plan change while trialing is an update: it never grants, even with no earlier receipt.
+    updated = _subscription_event('customer.subscription.updated')
+    await worker.subscription_changed_async(UID, updated, trialing(), release_hooks.paid, release_hooks.paid)
+    created_free = _subscription_event('customer.subscription.created')
+    await worker.subscription_changed_async(UID, created_free, trialing(), None, release_hooks.basic)
+    assert release_hooks.calls == [('trial', trialing()['id'])]
+
+
+async def test_a_trial_converting_on_real_payment_releases_as_a_conversion(release_hooks):
+    event = _subscription_event('customer.subscription.updated', previous_status='trialing')
+    await worker.subscription_changed_async(
+        UID, event, trialing(status='active'), release_hooks.paid, release_hooks.paid
+    )
+    assert release_hooks.calls == [('conversion', 'subscription-upgrade:evt')]
+    release_hooks.calls.clear()
+    past_due = _subscription_event('customer.subscription.updated', previous_status='trialing')
+    await worker.subscription_changed_async(
+        UID, past_due, trialing(status='past_due'), release_hooks.paid, release_hooks.paid
+    )
+    assert release_hooks.calls == []
 
 
 def test_trial_grant_is_a_plain_config_value():

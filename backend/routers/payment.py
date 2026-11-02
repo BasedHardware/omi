@@ -1478,25 +1478,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     if funded_processing_enabled(uid) and not adopted_active_paid:
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade_async
+                        from utils.processing_backlog_worker import subscription_changed_async
 
-                        previous_status = (event.get('data', {}).get('previous_attributes') or {}).get('status')
-                        converted = previous_status == 'trialing' and subscription_obj.get('status') == 'active'
-                        if converted or allowance_increased(current_subscription, new_subscription):
-                            await upgrade_async(
-                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
-                            )
-                    # Created is the trial start; a later update (a plan change) never grants.
-                    if (
-                        event['type'] == 'customer.subscription.created'
-                        and funded_processing_enabled(uid)
-                        and not adopted_active_paid
-                        and is_paid_plan(new_subscription.plan)
-                    ):
-                        from utils.processing_backlog_worker import trial_started_async
-
-                        await trial_started_async(uid, subscription_obj)
+                        await subscription_changed_async(
+                            uid, event, subscription_obj, current_subscription, new_subscription
+                        )
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(
