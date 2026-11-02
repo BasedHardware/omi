@@ -74,4 +74,32 @@ class OfflineProcessingDisplay {
     final processed = (total - stillWaiting).clamp(0, total);
     return (processed: processed, total: total);
   }
+
+  /// [serverJobCounts] weighed by audio length, for the status card.
+  ///
+  /// [tracked] is false when no upload batch is being followed (the app
+  /// restarted with recordings still processing): the total is known, how
+  /// much of it finished is not, so callers show the amount without a count.
+  static ({int doneSeconds, int totalSeconds, bool tracked}) serverJobSeconds({
+    required Set<String> trackedUploadedWalIds,
+    required Iterable<Wal> wals,
+  }) {
+    int seconds(Wal w) => w.seconds > 0 ? w.seconds : 0;
+    if (trackedUploadedWalIds.isEmpty) {
+      final pending = wals.where((w) => w.status == WalStatus.uploaded).fold(0, (sum, w) => sum + seconds(w));
+      return (doneSeconds: 0, totalSeconds: pending, tracked: false);
+    }
+    // Only phone copies are uploaded. A device copy shares the id
+    // (device_timerStart) and can still read `miss` after its phone twin was
+    // uploaded, so it must not stand in for the copy the server is processing.
+    var done = 0, total = 0;
+    final seen = <String>{};
+    for (final w in wals) {
+      if (w.storage == WalStorage.sdcard || w.storage == WalStorage.flashPage) continue;
+      if (!trackedUploadedWalIds.contains(w.id) || !seen.add(w.id)) continue;
+      total += seconds(w);
+      if (w.status != WalStatus.uploaded) done += seconds(w);
+    }
+    return (doneSeconds: done, totalSeconds: total, tracked: true);
+  }
 }

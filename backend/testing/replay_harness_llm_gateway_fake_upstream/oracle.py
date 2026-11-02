@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import threading
-import warnings
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -34,7 +33,7 @@ from llm_gateway.routers import dependencies
 GATEWAY_PATH = "/v1/chat/completions"
 ROUND_TRIP_DEADLINE_SECONDS = 5.0
 MAX_LOOPBACK_REQUEST_BYTES = 16 * 1024
-EXPECTED_PROVIDER_REQUEST_KEYS = ("messages", "model", "reasoning_effort", "stream")
+EXPECTED_PROVIDER_REQUEST_KEYS = ("messages", "model", "prompt_cache_options", "reasoning_effort", "stream")
 EXPECTED_GATEWAY_RESPONSE_KEYS = ("choices", "created", "id", "model", "object")
 
 
@@ -82,6 +81,8 @@ class _LoopbackOpenAI:
                     upstream.request_schema_keys = tuple(sorted(request_body))
                     if upstream.request_schema_keys != EXPECTED_PROVIDER_REQUEST_KEYS:
                         raise OracleFailure("provider request schema changed unexpectedly")
+                    if request_body["prompt_cache_options"] != {"mode": "explicit", "ttl": "30m"}:
+                        raise OracleFailure("provider cache policy changed unexpectedly")
 
                     response_body = {
                         "id": "loopback",
@@ -102,7 +103,7 @@ class _LoopbackOpenAI:
                     self.send_response(500)
                     self.end_headers()
 
-            def log_message(self, _format: str, *_args: object) -> None:
+            def log_message(self, format: str, *args: Any) -> None:
                 # BaseHTTPRequestHandler would otherwise print request details.
                 return None
 

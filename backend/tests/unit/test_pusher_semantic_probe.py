@@ -5,10 +5,109 @@ import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'pusher_semantic_probe.py'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('api_url', ['https://api.omiapi.com', 'https://api.omi.me', 'http://127.0.0.1:18080'])
+async def test_dev_probe_rejects_unproven_environment_before_reading_token(monkeypatch, probe, tmp_path, api_url):
+    deployment = tmp_path / 'deployment.json'
+    deployment.write_text(json.dumps({'source_sha': 'a' * 40}))
+    read_token = Mock(side_effect=OSError('token must remain unread'))
+    monkeypatch.setattr(probe, '_read_token', read_token)
+    monkeypatch.setattr(
+        probe.subprocess,
+        'run',
+        Mock(return_value=SimpleNamespace(returncode=0, stdout='gke_based-hardware_us-central1_prod-omi-gke')),
+    )
+    args = SimpleNamespace(
+        run_id='123',
+        api_url=api_url,
+        allow_local_http=True,
+        project='based-hardware-dev',
+        namespace='dev-omi-backend',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment,
+    )
+
+    receipt, passed = await probe.run_probe(args)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'producer_environment_mismatch'
+    read_token.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('api_url', 'allow_local', 'context', 'passed'),
+    [
+        ('http://127.0.0.1:18080', True, 'gke_based-hardware-dev_us-central1_dev-omi-gke', True),
+        ('http://127.0.0.1:18080/', True, 'gke_based-hardware-dev_us-central1_dev-omi-gke', True),
+        ('https://api.omiapi.com', False, 'gke_based-hardware-dev_us-central1_dev-omi-gke', False),
+        ('https://api.omi.me', False, 'gke_based-hardware-dev_us-central1_dev-omi-gke', False),
+        ('http://127.0.0.1:18080', False, 'gke_based-hardware-dev_us-central1_dev-omi-gke', False),
+        ('http://127.0.0.1:18080', True, 'gke_based-hardware_us-central1_prod-omi-gke', False),
+        ('http://user@127.0.0.1:18080', True, 'gke_based-hardware-dev_us-central1_dev-omi-gke', False),
+        ('http://127.0.0.1:18080/path', True, 'gke_based-hardware-dev_us-central1_dev-omi-gke', False),
+        ('http://127.0.0.1:18080?redirect=prod', True, 'gke_based-hardware-dev_us-central1_dev-omi-gke', False),
+    ],
+)
+def test_dev_producer_requires_loopback_and_authenticated_dev_context(
+    monkeypatch, probe, api_url, allow_local, context, passed
+):
+    monkeypatch.setattr(probe.subprocess, 'run', Mock(return_value=SimpleNamespace(returncode=0, stdout=context)))
+    args = SimpleNamespace(
+        api_url=api_url, allow_local_http=allow_local, project='based-hardware-dev', namespace='dev-omi-backend'
+    )
+    if passed:
+        probe._verify_producer_environment(args)
+    else:
+        with pytest.raises(probe.ProbeError, match='^producer_environment_mismatch$'):
+            probe._verify_producer_environment(args)
+
+
+@pytest.mark.asyncio
+async def test_dev_stream_and_terminal_readback_share_verified_tunnel(monkeypatch, probe, tmp_path):
+    endpoint = 'http://127.0.0.1:18080'
+    calls = []
+    phrase = probe.load_fixture().expected_phrase
+    monkeypatch.setattr(probe, '_read_token', lambda _path: 'synthetic-token')
+    monkeypatch.setattr(
+        probe.subprocess,
+        'run',
+        Mock(return_value=SimpleNamespace(returncode=0, stdout='gke_based-hardware-dev_us-central1_dev-omi-gke')),
+    )
+
+    async def listen(base_url, *_args, hold_open, **_kwargs):
+        calls.append(('listen', base_url))
+        await hold_open.wait()
+        return True, ''
+
+    async def readback(base_url, *_args):
+        calls.append(('readback', base_url))
+        return {'transcript_segments': [{'text': phrase}] * probe.DISCARD_KEEP_AUDIO_PASSES}
+
+    monkeypatch.setattr(probe, '_listen_sample', listen)
+    monkeypatch.setattr(probe, '_terminal_readback', readback)
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', lambda *_a, **_k: asyncio.sleep(0, result=1))
+    deployment = tmp_path / 'deployment.json'
+    deployment.write_text(json.dumps({'source_sha': 'a' * 40}))
+    args = SimpleNamespace(
+        run_id='123',
+        api_url=endpoint,
+        allow_local_http=True,
+        project='based-hardware-dev',
+        namespace='dev-omi-backend',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment,
+        finalization_timeout_seconds=1,
+    )
+    receipt, passed = await probe.run_probe(args)
+    assert passed and receipt['producer_observation']['status'] == 'PASS'
+    assert calls == [('listen', endpoint), ('readback', endpoint)]
 
 
 def test_alignment_probe_rejects_repeated_live_fixture(probe):
@@ -269,6 +368,7 @@ def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, pr
     assert 'failure_stage=transcript_word_count' in line
     assert 'word_counts_live=17 word_counts_expected=136' in line
     assert 'consumer_readback=PASS candidate_pod_count=0' in line
+    assert 'listen_close_code=none' in line
     assert 'secret' not in line
     assert 'transcript token endpoint uid' not in line
 
@@ -495,6 +595,7 @@ async def test_pre_audio_connection_close_is_listen_bootstrap_error(monkeypatch,
     assert not passed
     assert receipt['failure_stage'] == 'listen_bootstrap_error'
     assert socket.sent == 0
+    assert receipt['listen_close_code'] == 1006
     assert reason not in json.dumps(receipt)
 
 
@@ -516,6 +617,8 @@ async def test_post_ready_connection_close_stays_listen_closed_early(monkeypatch
     assert not passed
     assert receipt['failure_stage'] == 'listen_closed_early'
     assert socket.sent == 1
+    # The close code is what tells a pod drain (1001/1006) from a server-side close.
+    assert receipt['listen_close_code'] == 1006
     assert reason not in json.dumps(receipt)
 
 
@@ -727,6 +830,7 @@ async def test_alignment_probe_requires_private_cloud_flag_on_finalized_conversa
     deployment_receipt = tmp_path / 'deployment.json'
     deployment_receipt.write_text('{"source_sha":"synthetic"}', encoding='utf-8')
     monkeypatch.setattr(probe, '_read_token', lambda _path: 'synthetic-token')
+    monkeypatch.setattr(probe, '_verify_producer_environment', lambda _args: None)
     monkeypatch.setattr(probe, 'load_fixture', lambda: SimpleNamespace(expected_phrase='synthetic'))
     monkeypatch.setattr(
         probe,

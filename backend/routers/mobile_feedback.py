@@ -70,7 +70,7 @@ def submit_mobile_feedback(
     provenance: dict[str, Any] = {}
     if payload.kind is MobileFeedbackKind.summary_helpfulness or payload.target_kind == 'conversation':
         conversation = conversations_db.get_conversation(uid, payload.target_id)
-        if not conversation:
+        if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail='Conversation not found')
         related_conversation_id = payload.target_id
         provenance = _provenance_from_conversation(conversation)
@@ -83,7 +83,7 @@ def submit_mobile_feedback(
         if binding:
             related_conversation_id = binding['conversation_id']
             conversation = conversations_db.get_conversation(uid, related_conversation_id)
-            if conversation:
+            if conversation and not conversations_db.is_soft_deleted(conversation):
                 provenance = _provenance_from_conversation(conversation)
             resolved_target_kind = FeedbackTargetKind.recording
         elif payload.target_kind is None:
@@ -92,7 +92,7 @@ def submit_mobile_feedback(
             # while new callers can make this coordinate explicit with
             # target_kind=conversation.
             conversation = conversations_db.get_conversation(uid, payload.target_id)
-            if not conversation:
+            if not conversation or conversations_db.is_soft_deleted(conversation):
                 raise HTTPException(status_code=404, detail='Recording not found')
             related_conversation_id = payload.target_id
             provenance = _provenance_from_conversation(conversation)

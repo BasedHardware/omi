@@ -3,13 +3,15 @@
 import { useState } from 'react';
 import { Check, Copy, Plus, Server, Terminal, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buildMcpKeyPrompt, configuredApiBase } from '@/lib/agentPrompts';
+import { KeyHandoff } from '@/components/developers/KeyHandoff';
 import { hostedMcpConfigJson, hostedMcpUrl } from '@/lib/mcpConfig';
 import { CLAUDE_CONNECTOR_OAUTH } from '@/lib/settingsSections';
 import type { McpApiKey } from '@/types/user';
 import { Card } from './SettingsCard';
 
 // Create MCP Key Dialog
-function CreateMcpKeyDialog({
+export function CreateMcpKeyDialog({
   isOpen,
   onClose,
   onCreateKey,
@@ -21,7 +23,6 @@ function CreateMcpKeyDialog({
   const [keyName, setKeyName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<McpApiKey | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const handleCreate = async () => {
     if (!keyName.trim()) return;
@@ -33,18 +34,9 @@ function CreateMcpKeyDialog({
     setIsCreating(false);
   };
 
-  const handleCopy = () => {
-    if (createdKey?.key) {
-      navigator.clipboard.writeText(createdKey.key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
   const handleClose = () => {
     setKeyName('');
     setCreatedKey(null);
-    setCopied(false);
     onClose();
   };
 
@@ -56,51 +48,16 @@ function CreateMcpKeyDialog({
       onClick={handleClose}
     >
       <div
-        className="mx-4 w-full max-w-md overflow-hidden rounded-2xl bg-bg-secondary"
+        className="mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-bg-secondary"
         onClick={(e) => e.stopPropagation()}
       >
-        {createdKey ? (
-          <div className="p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-green-500/20 p-3">
-                <Check className="h-6 w-6 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  MCP Key Created
-                </h3>
-                <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
-                </p>
-              </div>
-            </div>
-            <div className="mb-4 rounded-xl bg-bg-tertiary p-4">
-              <p className="mb-2 text-xs text-text-tertiary">Your MCP Key</p>
-              <code className="break-all font-mono text-sm text-text-primary">
-                {createdKey.key}
-              </code>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-colors',
-                  copied
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                )}
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
-              </button>
-              <button
-                onClick={handleClose}
-                className="rounded-xl bg-bg-tertiary px-4 py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
-              >
-                Done
-              </button>
-            </div>
-          </div>
+        {createdKey?.key ? (
+          <KeyHandoff
+            secret={createdKey.key}
+            keyLabel="MCP Key"
+            buildPrompt={(source) => buildMcpKeyPrompt(configuredApiBase(), source)}
+            onDone={handleClose}
+          />
         ) : (
           <div className="p-6">
             <div className="mb-6 flex items-center justify-between">

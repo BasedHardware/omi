@@ -48,6 +48,7 @@ class BleCompanionService : CompanionDeviceService() {
         if (prefs.getBoolean("user_disconnected", false)) return
 
         val saved = prefs.getString("managed_device", null)
+        if (!matchesManagedDevice(address, saved)) return
         val requiresBond = if (saved != null) {
             val parts = saved.split("|")
             parts.size == 2 && parts[0].equals(address, ignoreCase = true) && parts[1].toBoolean()

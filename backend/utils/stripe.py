@@ -43,11 +43,22 @@ def create_subscription_checkout_session(
     idempotency_key: Optional[str] = None,
     customer_id: Optional[str] = None,
     promotion_code_id: Optional[str] = None,
+    trial_period_days: Optional[int] = None,
 ):
-    """Create a Stripe Checkout session for a subscription."""
+    """Create a Stripe Checkout session for a subscription.
+
+    `trial_period_days` starts the subscription with a free trial; Checkout still collects the
+    card, and Stripe charges the first period when the trial ends unless the subscriber cancels.
+    """
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
         cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime
+
+        # Pin the selected price's original currency as well as disabling FX.
+        # Multi-currency Prices can otherwise select a presentment currency by IP.
+        # Existing non-USD management/reactivation stays outside new Checkout.
+        price = stripe.Price.retrieve(price_id)
+        currency = price.currency.lower()
 
         # session creation parameters
         session_params: Dict[str, Any] = {
@@ -60,6 +71,9 @@ def create_subscription_checkout_session(
                 },
             ],
             'mode': 'subscription',
+            'currency': currency,
+            # Language only; this does not choose or convert the currency.
+            'locale': 'auto',
             'success_url': success_url,
             'cancel_url': cancel_url,
             'metadata': {
@@ -72,7 +86,21 @@ def create_subscription_checkout_session(
                     'sub_type': 'unlimited',
                 }
             },
+            # Charge in the price's own currency, the one every paywall shows. With the
+            # account's Adaptive Pricing on, a non-US buyer who saw a USD price card was
+            # charged a converted local-currency amount; Google Play rejected Android
+            # release 1504 for that mismatch. It also keeps a promotion code's
+            # minimum_amount evaluated against the USD-authored price (issue #23299).
+            'adaptive_pricing': {'enabled': False},
         }
+
+        if currency == 'usd':
+            # Stripe owns its currency glyphs. Keep USD explicit even where its
+            # hosted template uses a dollar glyph rather than the app's US$.
+            session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
+
+        if trial_period_days:
+            session_params['subscription_data']['trial_period_days'] = trial_period_days
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]

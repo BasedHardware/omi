@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-review-speaker-sheet.png",
+      "platform": "mobile-ios",
+      "description": "Review speaker sheet: candidate chips, Me, and the Someone Else… button that now opens the shared picker",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-review-speaker-picker.png",
+      "platform": "mobile-ios",
+      "description": "The Who Is It? picker over the Review speaker sheet: search, New Person…, closest voices, everyone A–Z",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

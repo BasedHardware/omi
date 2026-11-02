@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, List, Optional
 
 from pydantic import ValidationError
@@ -34,9 +35,29 @@ def read_developer_memories(
     logger: Any,
 ) -> list:
     """Fetch the developer memory page, honoring the request's list-read budget."""
+    read_options = {}
+    if os.getenv('OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED', '').strip().lower() != 'false':
+        read_options['reuse_compatibility_reads'] = True
     if allowed is None:
         try:
-            memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True, budget=budget)
+            memories = service.read(
+                uid, limit=limit, offset=offset, include_pending_processing=True, budget=budget, **read_options
+            )
+        except ListReadBudgetExhausted as exc:
+            budget.mark_exhausted(exc.reason)
+            memories = []
+        return _validated_memories(memories, response_model, logger)
+    if os.getenv('OMI_DEV_MEMORY_ADAPTIVE_CATEGORY_SCAN_ENABLED', '').strip().lower() != 'false':
+        try:
+            memories = service.read(
+                uid,
+                limit=limit,
+                offset=offset,
+                **read_options,
+                category_filter=allowed,
+                include_pending_processing=True,
+                budget=budget,
+            )
         except ListReadBudgetExhausted as exc:
             budget.mark_exhausted(exc.reason)
             memories = []
@@ -54,7 +75,12 @@ def read_developer_memories(
         try:
             budget.check()
             batch = service.read(
-                uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True, budget=budget
+                uid,
+                limit=batch_limit,
+                offset=scan_offset,
+                include_pending_processing=True,
+                budget=budget,
+                **read_options,
             )
         except ListReadBudgetExhausted as exc:
             budget.mark_exhausted(exc.reason)

@@ -6,6 +6,8 @@ Messages are persistence-only writes (no LLM streaming) — they use
 streams AI responses.
 """
 
+from utils.generated_compute import require_generated_compute
+
 import logging
 from typing import Any, Callable, List, cast
 
@@ -206,18 +208,6 @@ def save_message(
     except chat_db.ClientMessageIdPayloadConflict as exc:
         record_product_event('chat_message_sent', request=http_request, uid=uid, outcome='error')
         raise HTTPException(status_code=409, detail='client_message_id payload conflict') from exc
-    if request.sender == 'human' and request.message_source == 'desktop_chat':
-        try:
-            llm_usage_db.record_chat_quota_question(
-                uid,
-                idempotency_key=f'desktop_messages:{saved["id"]}',
-                source='desktop_messages',
-                message_id=saved['id'],
-                chat_session_id=saved.get('session_id'),
-                platform=x_app_platform,
-            )
-        except Exception:
-            logger.exception('Failed to record desktop chat quota question uid=%s message_id=%s', uid, saved['id'])
     record_product_event('chat_message_sent', request=http_request, uid=uid, outcome='ok')
     return saved
 
@@ -264,8 +254,19 @@ def reconcile_messages(
         )
     except chat_db.MessageReconcileCursorError as exc:
         raise HTTPException(status_code=400, detail='invalid message reconciliation cursor') from exc
+    # One malformed/legacy stored row must not 500 the reconcile page — guard it
+    # the same way the sibling /v2/desktop/messages list does, so the desktop can
+    # resume syncing past a poisoned row on the next page.
     return {
-        'messages': messages,
+        'messages': Message.deserialize_many_safe(
+            messages,
+            on_error=lambda record, exc: logger.warning(
+                'Skipping malformed desktop reconcile message %s for uid=%s: %s',
+                record.get('id') if isinstance(record, dict) else None,
+                uid,
+                type(exc).__name__,
+            ),
+        ),
         'next_cursor': next_cursor,
         'has_more': has_more,
     }
@@ -349,6 +350,7 @@ def generate_session_title(
     ),
 ):
     """Generate a title for a chat session based on its messages."""
+    require_generated_compute(uid, 'session_titles')
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
     prompt = (
         "Generate a short, descriptive title (max 6 words) for this chat conversation. "

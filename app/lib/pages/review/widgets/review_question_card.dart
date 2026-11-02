@@ -26,6 +26,7 @@ class ReviewQuestionCard extends StatelessWidget {
     final question = reviewQuestion(context, item);
     // Suggestions show Dream's reason so they can be answered from the list; questions show the quote.
     final quote = item.quote;
+    final snippet = item.spelling?.context?.main.text;
     final subtitle = switch (item.kind) {
       ReviewItemKind.task => null,
       ReviewItemKind.agentProposal => item.agentProposal!.reason,
@@ -53,7 +54,7 @@ class ReviewQuestionCard extends StatelessWidget {
                 Expanded(
                   child: Semantics(
                     button: true,
-                    label: question,
+                    label: [question, if (subtitle != null) subtitle, if (snippet != null) snippet].join('\n'),
                     hint: context.l10n.reviewOpenDetailsHint,
                     excludeSemantics: true,
                     child: InkWell(
@@ -77,6 +78,16 @@ class ReviewQuestionCard extends StatelessWidget {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                                    ),
+                                  ],
+                                  if (snippet != null) ...[
+                                    const SizedBox(height: OmiSpacing.xxs),
+                                    Text(
+                                      snippet,
+                                      key: const Key('review_spelling_snippet'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                                     ),
                                   ],
                                 ],
@@ -160,7 +171,7 @@ Future<bool> answerReviewItem(BuildContext context, ReviewItem item, ReviewAnswe
   // A sheet may close before the answer settles; the root navigator outlives it.
   final host = Navigator.of(context, rootNavigator: true).context;
   final failedMessage = context.l10n.reviewAnswerFailed;
-  final conflictMessage = context.l10n.reviewProposalConflict;
+  final conflictMessage = context.l10n.reviewQuestionOutOfDate;
   OmiHaptics.light();
   final saved = await provider.answer(item, answer);
   if (!saved) {

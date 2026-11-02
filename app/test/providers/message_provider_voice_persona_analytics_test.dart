@@ -130,7 +130,7 @@ void main() {
 
     final provider = MessageProvider(
       voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
-      voiceReplyStreamer: (_, {language}) async* {
+      voiceReplyStreamer: (_, {language, abort}) async* {
         yield ServerMessageChunk(
           'voice-message-id',
           'No speech was detected.',

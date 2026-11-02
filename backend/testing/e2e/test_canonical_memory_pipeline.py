@@ -29,7 +29,11 @@ from tests.unit.fixtures.memory_adapter_fakes import (
     stored_item,
 )
 from tests.unit.fixtures.canonical_memory_fakes import _sample_memory_payload
-from utils.memory.canonical_consolidation import ConsolidationAgentBatch, ConsolidationAgentDecision
+from utils.memory.canonical_consolidation import (
+    ConsolidationAgentDecision,
+    apply_consolidation_decision,
+    _read_control_state,
+)
 from utils.memory.canonical_memory_adapter import (
     delete_canonical_memory,
     extraction_memory_id,
@@ -67,11 +71,6 @@ def _trusted_generation_patch(monkeypatch) -> None:
 
 
 def _consolidation_side_effect_patches(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "utils.memory.canonical_consolidation.query_memory_vector_candidates",
-        lambda *args, **kwargs: SimpleNamespace(hits=[], rejected_count=0),
-        raising=False,
-    )
     # Typesense has focused provider tests; this E2E keeps that network boundary
     # hermetic while exercising the normal canonical outbox and vector path.
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", lambda *_, **__: True)
@@ -112,7 +111,7 @@ def _read_memory_item(db, uid: str, memory_id: str) -> dict:
     return snapshot.to_dict()
 
 
-def _scripted_consolidation_llm(_prompt: str) -> str:
+def _fixture_intake_decision():
     source_memory_id = extraction_memory_id(
         uid=PIPELINE_UID,
         source_id=CONV_ID,
@@ -133,13 +132,11 @@ def _scripted_consolidation_llm(_prompt: str) -> str:
         confidence="high",
         rationale="Explicit user-authored preference.",
     )
-    return json.dumps(ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json"))
+    return decision
 
 
 def _configure_universal_pipeline(monkeypatch, uid: str = PIPELINE_UID) -> None:
     configure_universal_memory(monkeypatch, uid)
-    monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", "1")
-    monkeypatch.setattr("utils.memory.canonical_consolidation.consolidation_batch_threshold", lambda: 1)
     monkeypatch.setattr("utils.other.endpoints._enforce_rate_limit", lambda *args, **kwargs: None)
     _trusted_generation_patch(monkeypatch)
     _consolidation_side_effect_patches(monkeypatch)
@@ -236,17 +233,25 @@ class TestCanonicalMemoryPipelineE2E:
         assert short_term["tier"] == MemoryTier.short_term.value
         assert short_term["status"] == MemoryItemStatus.active.value
 
+        source = MemoryItem.model_validate(short_term)
+        applied = apply_consolidation_decision(
+            PIPELINE_UID,
+            decision=_fixture_intake_decision(),
+            pending_by_id={memory_id: source},
+            control=_read_control_state(PIPELINE_UID, db_client=db),
+            db_client=db,
+            now=NOW,
+            run_id="e2e-canonical-pipeline",
+        )
         maintenance = run_canonical_short_term_maintenance(
             PIPELINE_UID,
             db_client=db,
             now=NOW,
             run_id="e2e-canonical-pipeline",
-            llm_invoke=_scripted_consolidation_llm,
         )
         assert maintenance.skipped_reason is None
-        assert maintenance.consolidation.skipped_reason is None
-        assert maintenance.promoted_count == 1
-        assert maintenance.routed_count == 1
+        assert memory_id in applied
+        assert maintenance.promoted_count == 0
 
         promoted = _read_memory_item(db, PIPELINE_UID, memory_id)
         assert promoted["memory_id"] == memory_id

@@ -1,9 +1,13 @@
-# Screen task extraction: default-off Jev gate
+# Screen task extraction: default-on Jev gate
 
-`screen_task_jev_gate` defaults off for every bundle. Enabling it is separate
-from merging this code. OCR and bounded local task/profile context go to
-TypeSafe/Jev when enabled; enablement requires privacy approval. This PR does
-not change live flags, deploy anything or use personal screen frames.
+`screen_task_jev_gate` is on by default for every bundle. Only an explicit
+Boolean `false` disables it; an absent or unknown value, a quota-limited flag
+read, or a flag-read error keeps it on. David approved sending OCR text to Jev
+for all users on 2026-10-18. OCR and bounded local task/profile context go to
+TypeSafe/Jev when the gate runs. Existing backend screen-task admission still
+enforces its plan, quota and stop policies. A Jev gate failure continues to
+fail open to screenshot extraction. This change does not alter live flags,
+deploy anything or use personal screen frames.
 
 Capture binds the original owner and authorization generation plus the app's
 exclusion generation before capture suspends. The immutable frame carries that
@@ -56,10 +60,13 @@ terminal. Rejection uploads no screenshot unless audited.
 
 A fresh admission read every 30 seconds grants a 55-second lease measured from
 request start and bound to the owner/session that fetched it. An account or
-same-UID session transition revokes the lease immediately. SDK cached reload
-notifications cannot renew that lease. The
-client reads the public flag-evaluation endpoint and authenticated
-`GET /v1/screen-task/admission`; a failed refresh leaves existing leases to expire.
+same-UID session transition revokes the lease immediately. The client reads
+authenticated `GET /v1/screen-task/admission`; a failed refresh leaves existing
+leases to expire. The same tick renews the flag lease from the PostHog SDK's
+cached `screen_task_jev_gate` value without a network call; the SDK reloads
+flags every 30 minutes, because every PostHog flag request is billed. An explicit
+`false` therefore reaches running clients within about 30 minutes; the fast stop
+is `SCREEN_TASK_STOP`.
 `SCREEN_TASK_STOP=true` is a backend ops stop read at each gate and flagged
 screenshot dispatch. The admission endpoint reports it; gate/proxy return typed
 409 `screen_task_stopped`, never an ordinary provider error. Identified macOS

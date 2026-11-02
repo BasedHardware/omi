@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-poisoned-cursor-strands-drain-owner",
+  "violated_contract": "A persisted queue cursor that the backing store rejects, or that compares outside the ordered field's domain, must never be rebuilt verbatim on every visit. Production evidence for #23827 includes recurring InvalidArgument deferrals and 78 paid owners with state=processing and old holds, but does not tie a particular owner or cursor value to those deferrals. The reproducible candidate mechanism is that an empty id makes the SDK build a document name with a trailing slash, which Firestore rejects with InvalidArgument; a null at compares below every number, so the page can silently look empty and finish a choice whose audio is still held. Add the failing call site and stored cursor shape to deferrals, validate before start_after, and rewind malformed cursors using the same widening-preserving rule finish() already uses for skipped scope.",
+  "canonical_prevention": "Validate the stored cursor before seeding start_after: accept only finite non-bool numbers or datetimes for at and a non-empty slash-free string id; anything else logs event=processing_backlog outcome=cursor_invalid with the uid, kind, reason and value types, then rewinds to newest. The worker and sweep catch-alls log exc_info with the uid so the next deferral is typable from one log line. The guard matrix pins every rejected shape, a loopback-SDK test proves the rewound page is the cursorless wire shape and that a poisoned owner still drains and leaves valid cursors behind, and a loopback Firestore emulator proof reproduces the server's InvalidArgument for the empty-id cursor so the mechanism stays anchored to real behavior.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_processing_backlog_worker_review.py",
+    "backend/scripts/processing_backlog_cursor_emulator_test.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/processing_backlog_worker.py",
+    "backend/utils/sync/cap_hold_redrive.py"
+  ],
+  "status": "open"
+}

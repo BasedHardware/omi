@@ -13,6 +13,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_AUTO_SYNC_ERROR = 'Auto-sync failed'
+
 # Closed outcomes for a single cloud create. The sweeper retries only the first two.
 # ``in_doubt`` means the provider may already have the task (timeout after POST, or
 # the create succeeded and the local ``exported`` write failed).
@@ -133,7 +135,7 @@ async def auto_sync_action_item_with_outcome(
 
     except Exception as e:
         logger.error(f"Auto-sync failed for user {uid}: {e}")
-        return {"synced": False, "error": str(e)}, attempt.outcome, attempt.external_task_id
+        return {"synced": False, "error": _AUTO_SYNC_ERROR}, attempt.outcome, attempt.external_task_id
 
 
 async def _sync_to_cloud_service(
@@ -266,10 +268,10 @@ async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, An
                     reason='other',
                     outcome='degraded',
                 )
-                result = {'synced': False, 'platform': default_app, 'error': 'Auto-sync failed'}
+                result = {'synced': False, 'platform': default_app, 'error': _AUTO_SYNC_ERROR}
             results.append(result)
         return results
 
     except Exception as e:
         logger.error(f"Auto-sync batch failed for user {uid}: {e}")
-        return [{"synced": False, "error": str(e)}] * len(action_items)
+        return [{"synced": False, "error": _AUTO_SYNC_ERROR}] * len(action_items)

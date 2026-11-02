@@ -1,4 +1,7 @@
 from enum import Enum
+from typing import Literal
+
+ContentKind = Literal['conversation', 'media', 'noise']
 
 
 class CategoryEnum(str, Enum):

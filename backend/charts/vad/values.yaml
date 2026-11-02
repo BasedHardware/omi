@@ -121,3 +121,13 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /vad
+  healthCheckPath: /health
+  timeoutSeconds: 30
+  connectionDrainingSeconds: 0

@@ -8,11 +8,12 @@ without importing the FastAPI router.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, NamedTuple, Optional
 
+from config.policy.listen import ListenSessionPolicy
 from routers.listen.realtime_demand import RealtimeDemandTracker
 from utils.client_device import ClientDeviceContext
 from models.geolocation import Geolocation
@@ -41,12 +42,14 @@ def persisted_started_seconds(started_at: Any) -> Optional[float]:
         return None
     if hasattr(started_at, 'timestamp'):
         try:
+            if isinstance(started_at, datetime) and started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
             return float(started_at.timestamp())
         except (TypeError, ValueError, OverflowError):
             return None
     if isinstance(started_at, str):
         try:
-            return datetime.fromisoformat(started_at).timestamp()
+            return persisted_started_seconds(datetime.fromisoformat(started_at))
         except ValueError:
             return None
     # bool is an int subclass in Python; a stray True/False must not be read
@@ -94,13 +97,23 @@ class ListenRequest:
     # The client (desktop, meeting role only) declared it runs a pre-notes
     # screen-evidence pass; persisted to external_data['screen_evidence_pass'].
     screen_evidence_pass: bool = False
+    # The client can render an on-device live transcript preview by itself, so
+    # it accepts a server session with no cloud streaming STT. Telemetry/capability
+    # handshake only: the server never verifies the engine from here.
+    local_preview: bool = False
 
 
 @dataclass
 class ListenSessionState:
     active: bool = True
     close_code: int = 1001
+    # First close the server observed (utils.observability.listen_close.note_ws_close):
+    # who initiated it, its code and when (monotonic). Read once at teardown.
+    ws_close_initiator: Optional[str] = None
+    ws_close_code: Optional[int] = None
+    ws_close_observed_at: Optional[float] = None
     stt_terminal_failure: bool = False
+    stt_cap_admission: Any = None
     shutdown_event: asyncio.Event = field(default_factory=asyncio.Event)
     audio_ring_buffer: Any = None
     speaker_id_enabled: bool = False
@@ -155,6 +168,8 @@ class ListenSessionState:
     finalization_reason: Optional[str] = None
     # Who could watch this session live; see routers/listen/realtime_demand.py.
     realtime_demand: RealtimeDemandTracker = field(default_factory=RealtimeDemandTracker)
+    listen_policy: ListenSessionPolicy | None = None
+    policy_source: str | None = None
 
 
 @dataclass(frozen=True)

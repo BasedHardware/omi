@@ -11,8 +11,10 @@ An inherited ancestor is safe to re-point only when it is a plain sync bridge
 tombstone: deleted and discarded, redirecting exactly at the donor that
 declared it, carrying a positive integer ``sync_content_revision``, holding no
 ``smart_merge`` state, and passing the same user-managed guards the pair check
-applies. Anything else rejects the whole absorb; validation happens before any
-write, so a rejection commits nothing.
+applies. With chain repair, a tombstone redirecting at another ancestor of the
+same lineage is also accepted when its chain ends at that donor (see
+``flatten_updates``). Anything else rejects the whole absorb; validation
+happens before any write, so a rejection commits nothing.
 
 Pure module: no I/O, no env reads.
 """
@@ -73,6 +75,12 @@ def _plain_tombstone(row: Mapping[str, Any], merged_into: str) -> bool:
         and row.get('sync_merged_into') == merged_into
         and _positive_revision(row)
     )
+
+
+def plain_chain_hop(row: Mapping[str, Any]) -> bool:
+    """A tombstone that may sit mid-chain: plain, redirecting somewhere, no smart-merge state."""
+    target = row.get('sync_merged_into')
+    return isinstance(target, str) and _plain_tombstone(row, target) and not _smart_state(row)
 
 
 def _declared_cycle(edges: Mapping[str, list[str]]) -> bool:
@@ -139,6 +147,7 @@ def flatten_updates(
     ancestor_rows: Mapping[str, Optional[Mapping[str, Any]]],
     *,
     user_managed: Callable[[Mapping[str, Any]], bool],
+    chain_repair: bool = False,
 ) -> tuple[Optional[str], list[str], dict[str, dict[str, Any]]]:
     """Plan the ancestor flatten for one absorb.
 
@@ -148,7 +157,15 @@ def flatten_updates(
     is missing). Returns ``(reason, union_ids, updates)`` where ``union_ids`` is
     the sorted full ancestry the survivor should store and ``updates`` maps each
     newly inherited ancestor id to its re-point patch. A reason rejects
-    everything; existing survivor ancestors are validated but never rewritten.
+    everything; existing survivor ancestors that already redirect at the
+    survivor are validated but never rewritten.
+
+    ``chain_repair`` accepts an ancestor whose redirect names another ancestor of
+    the same lineage, provided following redirects stays inside that lineage and
+    reaches its root (the declaring donor, or the survivor for its own
+    ancestry). Ordinary sync absorbs leave exactly that shape: they re-point
+    only the rows they match while ``sync_merged_from`` stays cumulative. Every
+    such hop is re-pointed at the survivor, so the result is one hop again.
     """
     survivor_id = str(survivor.get('id'))
     reason, union = ancestry_union(survivor, donors)
@@ -159,6 +176,24 @@ def flatten_updates(
     donor_id_of = {aid: donor_id for donor_id, ids in donor_ancestry.items() for aid in ids}
     updates: dict[str, dict[str, Any]] = {}
     declared: dict[str, list[str]] = {}
+
+    def resolves(ancestor_id: str, root: str, members: set[str]) -> bool:
+        """The redirect names ``root``, or (repairing) walks only ``members`` to it."""
+        current = ancestor_id
+        for _ in range(len(members) + 1 if chain_repair else 1):
+            target = (ancestor_rows.get(current) or {}).get('sync_merged_into')
+            if target == root:
+                return True
+            if target not in members:
+                return False
+            current = target
+        return False
+
+    def lineage_tombstone(ancestor_id: str, root: str, members: set[str]) -> bool:
+        row = ancestor_rows.get(ancestor_id) or {}
+        target = row.get('sync_merged_into')
+        return isinstance(target, str) and _plain_tombstone(row, target) and resolves(ancestor_id, root, members)
+
     for ancestor_id in sorted(set(union) - set(donor_ancestry)):
         row = ancestor_rows.get(ancestor_id)
         if row is None:
@@ -167,42 +202,49 @@ def flatten_updates(
             # Already the survivor's own tombstone: keep it untouched, but a
             # foreign or malformed row must not ride the union invisibly.
             state = _smart_state(row)
-            if not _plain_tombstone(row, survivor_id):
+            if not lineage_tombstone(ancestor_id, survivor_id, survivor_set):
                 return INVALID, [], {}
             if state and (state.get('role') != 'donor' or state.get('survivor_id') != survivor_id):
                 return INVALID, [], {}
             reason, nested = ancestry_ids(row)
             if reason is not None or any(
-                nested_id not in survivor_set
-                or (ancestor_rows.get(nested_id) or {}).get('sync_merged_into') != survivor_id
+                nested_id not in survivor_set or not resolves(nested_id, survivor_id, survivor_set)
                 for nested_id in nested
             ):
                 return INVALID, [], {}
             if nested:
                 declared[ancestor_id] = nested
+            if row.get('sync_merged_into') != survivor_id:
+                # A legacy intermediate hop of the survivor's own lineage.
+                if user_managed(row):
+                    return USER_MANAGED, [], {}
+                updates[ancestor_id] = _repoint(row, survivor_id)
             continue
         declared_by = donor_id_of[ancestor_id]
-        if not _plain_tombstone(row, declared_by) or _smart_state(row):
+        members = set(donor_ancestry[declared_by])
+        if not lineage_tombstone(ancestor_id, declared_by, members) or _smart_state(row):
             return INVALID, [], {}
         reason, nested = ancestry_ids(row)
         if reason is not None or any(
-            nested_id not in donor_ancestry[declared_by]
-            or (ancestor_rows.get(nested_id) or {}).get('sync_merged_into') != declared_by
-            for nested_id in nested
+            nested_id not in members or not resolves(nested_id, declared_by, members) for nested_id in nested
         ):
             return INVALID, [], {}
         if nested:
             declared[ancestor_id] = nested
         if user_managed(row):
             return USER_MANAGED, [], {}
-        revision = int(row['sync_content_revision'])
-        patch: dict[str, Any] = {
-            'sync_merged_into': survivor_id,
-            'sync_content_revision': revision + 1,
-        }
-        if row.get('sync_bridge_cleaned_revision') == revision:
-            patch['sync_bridge_cleaned_revision'] = revision + 1
-        updates[ancestor_id] = patch
+        updates[ancestor_id] = _repoint(row, survivor_id)
     if _declared_cycle(declared):
         return INVALID, [], {}
     return None, sorted(union), updates
+
+
+def _repoint(row: Mapping[str, Any], survivor_id: str) -> dict[str, Any]:
+    revision = int(row['sync_content_revision'])
+    patch: dict[str, Any] = {
+        'sync_merged_into': survivor_id,
+        'sync_content_revision': revision + 1,
+    }
+    if row.get('sync_bridge_cleaned_revision') == revision:
+        patch['sync_bridge_cleaned_revision'] = revision + 1
+    return patch

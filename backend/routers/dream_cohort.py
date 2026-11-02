@@ -1,4 +1,4 @@
-"""Minimal authenticated release-channel record for the default-off cohort."""
+"""Released client metadata hint; Dream eligibility is independent of channel."""
 
 from typing import Literal
 

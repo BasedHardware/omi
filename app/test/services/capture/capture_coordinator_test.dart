@@ -68,6 +68,7 @@ class HarnessPorts {
   int opens = 0;
   int nextId = 0;
   String? recordingId;
+  final requestOrigins = <String>[];
   Completer<void>? hold;
   bool failNextOpen = false;
   bool failNextSnapshot = false;
@@ -138,8 +139,9 @@ class HarnessPorts {
         setNativeWriterGate: (source, admitted) => _record('gate:${source.name}:$admitted'),
         finalizeWal: () => _record('wal:finalize'),
         rollSession: (identity) => _record('wal:roll'),
-        mintRecordingId: (key, source) {
+        mintRecordingId: (key, source, origin) {
           final minted = recordingId = '${source}_${++nextId}';
+          requestOrigins.add(origin);
           log.add('mint:$key:$minted');
           return minted;
         },
@@ -917,6 +919,19 @@ void main() {
     expect(model.state.suspended, hasLength(1));
     model.step(const ScriptStep(2));
     expect(model.state.suspended, hasLength(1));
+  });
+
+  test('phone start is an explicit user request and a mode change is an automatic roll', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted, batch: fake.batch),
+    );
+    await coordinator.dispatch(const PhoneStartRequested());
+    expect(fake.requestOrigins, ['explicit_user']);
+    await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
+    expect(fake.requestOrigins, ['explicit_user', 'automatic_roll']);
   });
 
   test('call end cannot consume the speech-profile pendant hold', () async {

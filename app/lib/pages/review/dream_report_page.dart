@@ -354,7 +354,10 @@ class _EditRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final change = edit.before.isNotEmpty && edit.after.isNotEmpty ? '${edit.before} → ${edit.after}' : edit.after;
+    final after = edit.after.isEmpty && {'dismiss_person', 'retire_task'}.contains(edit.kind)
+        ? l10n.reviewChangeRemoved
+        : edit.after;
+    final change = edit.before.isNotEmpty ? '${edit.before} → $after' : after;
     return Container(
       margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
       padding: const EdgeInsets.all(OmiSpacing.sm),

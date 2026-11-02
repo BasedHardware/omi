@@ -86,3 +86,19 @@ kubectl -n prod-omi-backend get secret prod-omi-backend-secrets -o json \
 ```
 
 This checks only key names. It must not decode, log, or store secret values.
+
+## Check live Cloud Run env drift against the manifest
+
+`google-github-actions/deploy-cloudrun@v3` merges `env_vars` and `secrets` onto existing Cloud Run services rather than replacing the full environment map. To list live environment variable keys on each Cloud Run service (`backend`, `backend-sync`, `backend-sync-backfill`, `backend-integration`) that are absent from `backend/deploy/runtime_env.yaml`, run the read-only operator drift check:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+python3 backend/scripts/check_cloud_run_env_drift.py --env prod --project based-hardware
+```
+
+Interpretation:
+
+- Output contains **key names only**; literal values and Secret Manager payloads are never read, stored, or printed.
+- `Allowlisted live-managed keys` (`LIVE_MANAGED_ENV_ALLOWLIST` in `backend/scripts/check_cloud_run_env_drift.py`) covers keys intentionally managed outside `runtime_env.yaml`: per-revision provenance (`OMI_BACKEND_RELEASE_SHA`) and live-managed canary UID allowlists (`BATCH_PIPELINE_UID_ALLOWLIST`, `FIRST_SUMMARY_UID_ALLOWLIST`, `SYNC_BACKFILL_ORDER_UID_ALLOWLIST`, `FAIR_USE_EXEMPT_UIDS`, `DREAM_AGENT_FULL_CONTEXT_UIDS`). Any feature flag whose allowlist is live-managed must fail safe (deny all at `*_PERCENT=0` when the allowlist key is absent) so a service recreate cannot widen rollout.
+- `Unallowlisted live keys missing from manifest` lists keys surviving on the live service only because Cloud Run deploys merge env vars. Promote active runtime config into `backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml` (and regenerate `backend/deploy/runtime_env.yaml` with `python3 backend/deploy/compose_runtime_env.py`), or retire dead keys via `forbidden_env` / `--remove-env-vars`.
+- `.github/actions/deploy-backend-stack/action.yml` runs `check_cloud_run_env_drift.py` as a non-blocking report step after post-deploy runtime env validation and appends the table to `$GITHUB_STEP_SUMMARY`. Pass `--strict` when running as an enforcing gate.

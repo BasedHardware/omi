@@ -25,6 +25,15 @@ from utils.conversations.relevance_rules import RULES_VERSION
 LONG = [' '.join(f'topic{i}' for i in range(101))]
 
 
+@pytest.fixture(autouse=True)
+def isolated_relevance_circuits():
+    from utils.conversations.relevance_circuit import get_relevance_circuit
+
+    get_relevance_circuit.cache_clear()
+    yield
+    get_relevance_circuit.cache_clear()
+
+
 def _decide(
     *,
     trigger=ProcessingTrigger.CAPTURE_END,
@@ -61,14 +70,24 @@ def test_only_user_actions_skip_assessment():
     keep = {trigger for trigger, mode in PROCESSING_MODES.items() if mode.relevance is RelevancePolicy.KEEP}
     # SERVER_RECOVERY is not a user action, but it repairs a stale row the
     # pipeline never successfully finished; letting relevance discard the only
-    # recovered copy would defeat the recovery itself. SMART_MERGE refreshes a
-    # survivor whose fragments were each already assessed and kept.
+    # recovered copy would defeat the recovery itself. SILENT_BACKFILL is the
+    # same repair for stuck historical rows, admitted as substantive by a
+    # separately approved threshold before any paid work; a post-hoc discard
+    # would spend the finalization and drop the only recovered copy. SMART_MERGE
+    # refreshes a survivor whose fragments were each already assessed and kept.
+    # BACKLOG_CHOICE carries an explicit user/upgrade choice to process a
+    # retained recording. CAPTURE_GROUP regenerates a primary whose transcript
+    # is unchanged — only confirmed same-event meeting context is new — so
+    # grouping must never re-judge (and possibly hide) the rendered row.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,
+        ProcessingTrigger.CAPTURE_GROUP,
         ProcessingTrigger.SERVER_RECOVERY,
+        ProcessingTrigger.BACKLOG_CHOICE,
+        ProcessingTrigger.SILENT_BACKFILL,
     }
 
 
@@ -117,7 +136,11 @@ def test_long_speech_is_kept_by_rule_without_a_model_call():
 
 
 def test_rule_discard_still_yields_to_a_calendar_meeting():
-    decision, model, calendar = _decide(texts=('hmm',), calendar=MagicMock(return_value=True))
+    # Filler-only but above the short-clip floor: below the floor a meeting no
+    # longer stands a scrap up as a standalone conversation.
+    filler = ('yeah okay sure right alright yeah okay sure right alright yeah okay',)
+
+    decision, model, calendar = _decide(texts=filler, speech_seconds=60.0, calendar=MagicMock(return_value=True))
 
     assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'override', 'calendar_overlap')
     model.assert_not_called()
@@ -159,7 +182,11 @@ def test_model_failure_keeps_and_says_so():
 
     decision, _, calendar = _decide(model=failing)
 
-    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'model', 'model_error')
+    assert (decision.verdict, decision.decided_by, decision.reason) == (
+        'keep',
+        'deterministic',
+        'model_fallback_deterministic',
+    )
     calendar.assert_not_called()
 
 
@@ -274,12 +301,12 @@ def test_a_model_discard_next_to_a_kept_conversation_links_to_it():
         neighbor=lambda: adjacent,
     )
     assert decision == RelevanceDecision(
-        'discard', 'model', 'neighbor_fragment', ProcessingTrigger.SYNC_UPDATE, 'meeting'
+        'keep', 'policy', 'occasion_neighbor', ProcessingTrigger.SYNC_UPDATE, 'meeting'
     )
     assert decision.as_record()['neighbor_id'] == 'meeting'
 
 
-def test_neighbor_is_never_looked_up_when_the_rules_settle():
+def test_neighbor_is_checked_before_a_rule_can_discard():
     lookup = MagicMock(return_value=None)
     decision = decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,
@@ -294,4 +321,4 @@ def test_neighbor_is_never_looked_up_when_the_rules_settle():
         neighbor=lookup,
     )
     assert decision.reason == 'filler_only'
-    lookup.assert_not_called()
+    lookup.assert_called_once()

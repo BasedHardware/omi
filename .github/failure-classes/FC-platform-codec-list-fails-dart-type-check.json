@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-platform-codec-list-fails-dart-type-check",
+  "violated_contract": "A runtime type check on a value read back from platform storage must accept the form the platform delivers it in. On iOS and macOS, shared_preferences_foundation returns every stored list as the codec's untyped List<Object?> and SharedPreferences.get does not convert it (Android's plugin decodes current-format lists to List<String>; only lists in its legacy encoding arrive untyped). SharedPreferencesUtil._readOrDefault tested `value is List<String>`, so every valid list saved before the app last started was judged a type mismatch, archived as corrupt, deleted and read as empty: people, chat messages, transcription vocabulary and paired device ids were cleared on each launch, the boot schema check did the same to the legacy Limitless upload queue before its migration could read it, and every launch left a new '<key>.corrupt-<micros>' archive that nothing ever removed.",
+  "canonical_prevention": "A stored string list is a List whose every element is a String (SharedPreferencesUtil._isStoredStringList), checked by getStringList before the generic type test and by the boot schema check; a list holding any non-string is still quarantined. Tests load lists as untyped <Object?> values in setMockInitialValues, the form iOS delivers, and assert they read back, survive the boot check and leave no archive. PreferenceQuarantine restores lists that were archived only for being untyped, once per install and re-opening the Limitless migration that consumed its queue, then bounds archives at startup and on write; a copy that cannot be written never costs the previous archive.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/preferences_string_list_restart_test.dart",
+    "app/test/unit/preferences_quarantine_restore_test.dart",
+    "app/test/unit/preferences_quarantine_prune_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/preferences.dart",
+    "app/lib/backend/preferences_quarantine.dart"
+  ],
+  "status": "open"
+}

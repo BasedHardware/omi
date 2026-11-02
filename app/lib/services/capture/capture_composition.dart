@@ -1,5 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:disk_space_2/disk_space_2.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/mobile_batch_vad.dart';
+import 'package:omi/services/wals/mobile_standard_batch.dart';
+import 'package:omi/services/live_preview/live_preview_composition.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -12,6 +19,9 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/capture_continuity_monitor.dart';
+import 'package:omi/env/env.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:omi/services/capture/capture_system_surface.dart';
 import 'package:omi/services/bridges/live_activity_bridge.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
@@ -20,6 +30,7 @@ import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -50,8 +61,12 @@ class CaptureDependencies {
     required this.refreshConversation,
     required this.telemetry,
     required this.ensureDeviceConnection,
+    this.pendantReconnect,
+    this.pendantReconnectBlocked,
   });
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
+  final Future<void> Function(String deviceId)? pendantReconnect;
+  final bool Function(String deviceId)? pendantReconnectBlocked;
   final RecordingLifecycleTelemetry telemetry;
   final IWalService wal;
   final IMicRecorderService phoneMic;
@@ -114,6 +129,8 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       recordingTelemetry: dependencies.telemetry,
       localSegmentStore: dependencies.localSegments,
       deviceConnectionLoader: dependencies.ensureDeviceConnection,
+      pendantReconnect: dependencies.pendantReconnect,
+      pendantReconnectBlocked: dependencies.pendantReconnectBlocked,
     );
 
 /// Composition entry signature for main.dart. Builder must resolve defaults
@@ -154,6 +171,9 @@ CaptureProvider composeProductionCaptureProvider({
     // An Omi phone call pauses a streaming pendant and gives it back when it ends.
     omiCallState: PhoneCallProvider.callStateListenable,
   );
+  unawaited(_installMobileStandardBatch(provider));
+  final livePreview = composeLivePreview();
+  if (livePreview != null) provider.installLivePreview(livePreview);
   final lifecycle = AppLifecycleListener(onStateChange: provider.onAppLifecycleChanged);
   provider.lifetime.own(lifecycle.dispose);
   final initialLifecycle = WidgetsBinding.instance.lifecycleState;
@@ -171,17 +191,65 @@ CaptureWedgeMonitor composeCaptureWedgeMonitor() {
   late final CaptureWedgeMonitor monitor;
   monitor = CaptureWedgeMonitor(
     featureGate: () => AnalyticsManager().isFeatureEnabled(captureRecoveryFeatureFlag),
-    track: (event, properties) => PlatformManager.instance.analytics.track(event, properties: properties),
+    track: (event, properties) {
+      final moved = event == 'Capture Ingress Health' || event == 'Capture Wedge Detected';
+      if (moved && ClientTelemetryFlags.posthogRetirementEnabled) return;
+      PlatformManager.instance.analytics.track(event, properties: properties);
+    },
     bleRetry: (deviceId) async {
       final deviceService = ServiceManager.instance().device;
-      await deviceService.disconnectDevice(deviceId);
-      if (!monitor.hasActiveEpisode(deviceId)) return;
-      if (SharedPreferencesUtil().btDevice.id != deviceId) return;
-      await deviceService.ensureConnection(deviceId, force: true);
+      await deviceService.recoverConnection(deviceId, shouldRetry: () => monitor.hasActiveEpisode(deviceId));
     },
     transferRetry: () => RecordingTransferCoordinator.instance.wake(WakeTrigger.dataStalled),
     appBuild: () => AnalyticsManager.appBuild,
     platform: () => AnalyticsManager.mobilePlatform,
   );
   return monitor;
+}
+
+/// Wires [CaptureContinuityMonitor] to the same analytics sink as the wedge
+/// monitor. Its banner shows only in debug and TestFlight builds.
+CaptureContinuityMonitor composeCaptureContinuityMonitor() {
+  return CaptureContinuityMonitor(
+    now: DateTime.now,
+    track: (event, properties) {
+      if (ClientTelemetryFlags.posthogRetirementEnabled) return;
+      PlatformManager.instance.analytics.track(event, properties: properties);
+    },
+    dogfood: () => kDebugMode || Env.isTestFlight,
+    appBuild: () => AnalyticsManager.appBuild,
+    platform: () => AnalyticsManager.mobilePlatform,
+  );
+}
+
+Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
+  try {
+    final directory = await getApplicationDocumentsDirectory();
+    final phone = ServiceManager.instance().wal.getSyncs().phone;
+    await phone.walReady;
+    final lane = MobileStandardBatch(
+      buffer: MobileBatchBuffer(
+          directory: directory,
+          publish: (wal) async {
+            if (wal.ownerUid != SharedPreferencesUtil().uid) throw StateError('Batch owner retired');
+            await phone.addExternalWal(wal, admittedGeneration: phone.sessionGeneration);
+            if (wal.ownerUid != SharedPreferencesUtil().uid ||
+                !await phone.hasDurableWal(wal, admittedGeneration: phone.sessionGeneration)) {
+              throw StateError('Batch WAL index was not committed');
+            }
+            unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic));
+          }),
+      loadVad: SileroMobileBatchVad.load,
+      freeDiskBytes: () async {
+        final mb = await DiskSpace.getFreeDiskSpaceForPath(directory.path);
+        return mb == null ? null : (mb * 1024 * 1024).round();
+      },
+      visibility: ListenClientState.instance,
+      ownerUid: () => SharedPreferencesUtil().uid,
+      now: DateTime.now,
+    );
+    provider.installMobileStandardBatch(lane);
+  } catch (_) {
+    // Directory/plugin availability cannot interrupt the existing live path.
+  }
 }

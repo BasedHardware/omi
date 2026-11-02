@@ -30,7 +30,10 @@
     "People keeps known counts when a refresh is incomplete and lets you know when counts may be incomplete.",
     "Follow the transcript while audio plays, scrub to jump between moments, and pick up playback from where you are reading",
     "Conversation transcripts group each speaker's turn and show speaker counts only when voices can be reliably separated.",
-    "Fixed an Android startup crash when recording sync finishes or is cancelled immediately.",
+    {
+      "platforms": ["android"],
+      "change": "Fixed an Android startup crash when recording sync finishes or is cancelled immediately."
+    },
     "Offline Sync storage labels and counts are readable in light and dark appearance.",
     "Voice introduction titles no longer overlap the onboarding back button.",
     "Closing a voice suggestion card preserves its Undo window before saving the answer.",

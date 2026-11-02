@@ -1,3 +1,4 @@
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:io';
@@ -251,6 +252,7 @@ class _FCMNotificationService implements NotificationInterface {
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
+          if (notificationType == 'daily_summary') announceRecapArrived();
         }
 
         // Click-to-talk / chat answers: BigText + navigate_to payload (#4375).

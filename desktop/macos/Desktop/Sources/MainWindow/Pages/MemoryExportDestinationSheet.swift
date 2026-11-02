@@ -576,6 +576,8 @@ struct MemoryExportDestinationSheet: View {
 
           content
 
+          DeveloperHomeLink()
+
           if let statusMessage = model.statusMessage {
             Text(statusMessage)
               .scaledFont(size: OmiType.caption, weight: .medium)

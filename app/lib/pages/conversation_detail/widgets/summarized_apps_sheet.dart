@@ -13,14 +13,18 @@ import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_template_sheet.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// Opens the summary-template picker for the conversation on screen.
+/// Opens the summary-template picker for the conversation on screen: the "Summarize with" sheet
+/// when [SummaryGenerationV2Gate] is on, otherwise the template list.
 Future<void> showSummarizedAppsSheet(BuildContext context) {
+  if (SummaryGenerationV2Gate.isEnabled) return showSummaryTemplateSheet(context);
   return showOmiSheet<void>(
     context: context,
     title: context.l10n.summaryTemplate,
@@ -37,40 +41,38 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.7,
-      child: Consumer<ConversationDetailProvider>(
-        builder: (context, provider, _) {
-          final currentSelection = provider.getSummarySelection();
-          final currentAppId = currentSelection.isApp ? currentSelection.appId : null;
-
-          PlatformManager.instance.analytics.summarizedAppSheetViewed(
-            conversationId: provider.conversation.id,
-            currentSummarizedAppId: currentAppId,
-          );
-
-          return _AppsList(provider: provider, currentAppId: currentAppId);
-        },
-      ),
+      // The list listens to the provider itself; a Consumer here rebuilt it twice per change.
+      child: _AppsList(provider: context.read<ConversationDetailProvider>()),
     );
   }
 }
 
 class _AppsList extends StatefulWidget {
   final ConversationDetailProvider provider;
-  final String? currentAppId;
 
-  const _AppsList({required this.provider, required this.currentAppId});
+  const _AppsList({required this.provider});
 
   @override
   State<_AppsList> createState() => _AppsListState();
 }
 
 class _AppsListState extends State<_AppsList> {
-  // Track app installation state
-  static final Map<String, bool> _installingApps = {};
+  // Installs started from this sheet; a new sheet starts with none.
+  final Map<String, bool> _installingApps = {};
+
+  String? get _currentAppId {
+    final selection = widget.provider.getSummarySelection();
+    return selection.isApp ? selection.appId : null;
+  }
 
   @override
   void initState() {
     super.initState();
+    // Once per sheet, not once per rebuild.
+    PlatformManager.instance.analytics.summarizedAppSheetViewed(
+      conversationId: widget.provider.conversation.id,
+      currentSummarizedAppId: _currentAppId,
+    );
     _fetchApps();
     // Listen to provider changes to rebuild when apps are fetched
     widget.provider.addListener(_onProviderUpdate);
@@ -185,6 +187,7 @@ class _AppsListState extends State<_AppsList> {
 
   @override
   Widget build(BuildContext context) {
+    final currentAppId = _currentAppId;
     final enabledApps = widget.provider.cachedEnabledConversationApps;
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
@@ -239,10 +242,10 @@ class _AppsListState extends State<_AppsList> {
           ),
           ...suggestedApps.map((app) {
             final isAvailable = widget.provider.isSuggestedAppAvailable(app.id);
-            final isInstalling = _AppsListState._installingApps[app.id] == true;
+            final isInstalling = _installingApps[app.id] == true;
             return _AppListItem(
               app: app,
-              isSelected: app.id == widget.currentAppId,
+              isSelected: app.id == currentAppId,
               onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
               isSuggested: true,
               isDefault: app.id == preferredAppId && preferredAppId?.isNotEmpty == true,
@@ -265,7 +268,7 @@ class _AppsListState extends State<_AppsList> {
           if (preferredApp != null && !suggestedAppIds.contains(preferredApp.id))
             _AppListItem(
               app: preferredApp,
-              isSelected: preferredApp.id == widget.currentAppId,
+              isSelected: preferredApp.id == currentAppId,
               onTap: () => _handleAppTap(context, preferredApp),
               isDefault: true,
               provider: widget.provider,
@@ -274,7 +277,7 @@ class _AppsListState extends State<_AppsList> {
           if (lastUsedApp != null && lastUsedApp.id != preferredAppId)
             _AppListItem(
               app: lastUsedApp,
-              isSelected: lastUsedApp.id == widget.currentAppId,
+              isSelected: lastUsedApp.id == currentAppId,
               onTap: () => _handleAppTap(context, lastUsedApp),
               isLastUsed: true,
               isDefault: false,
@@ -284,7 +287,7 @@ class _AppsListState extends State<_AppsList> {
           ...otherApps.map(
             (app) => _AppListItem(
               app: app,
-              isSelected: app.id == widget.currentAppId,
+              isSelected: app.id == currentAppId,
               onTap: () => _handleAppTap(context, app),
               isDefault: false,
               provider: widget.provider,
@@ -313,6 +316,8 @@ class _AppsListState extends State<_AppsList> {
   void _handleAppTap(BuildContext context, App app) async {
     // Reprocess with the selected app
     final provider = context.read<ConversationDetailProvider>();
+    // A reprocess is already running: the tap does nothing (no analytics, no close, no last-used).
+    if (provider.loadingReprocessConversation) return;
     final previousSelection = provider.getSummarySelection();
     final previousAppId = previousSelection.isApp ? previousSelection.appId : null;
     final conversationId = provider.conversation.id;
@@ -334,13 +339,13 @@ class _AppsListState extends State<_AppsList> {
 
   void _handleUnavailableAppTap(BuildContext context, App app) async {
     // Check if app is already being installed
-    if (_AppsListState._installingApps[app.id] == true) {
+    if (_installingApps[app.id] == true) {
       return;
     }
 
     // Set installing state
     setState(() {
-      _AppsListState._installingApps[app.id] = true;
+      _installingApps[app.id] = true;
     });
 
     try {
@@ -382,7 +387,7 @@ class _AppsListState extends State<_AppsList> {
       // Clear installing state
       if (mounted) {
         setState(() {
-          _AppsListState._installingApps[app.id] = false;
+          _installingApps[app.id] = false;
         });
       }
     }
@@ -631,21 +636,36 @@ class _CreateTemplateListItem extends StatelessWidget {
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
           trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
-          onTap: () {
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
-
-            // Close the current bottom sheet first
-            Navigator.pop(context);
-
-            // Show the quick create template bottom sheet
-            showCreateTemplateBottomSheet(context, conversationId: conversationId);
-          },
+          onTap: () => openCreateSummaryTemplate(context),
         ),
         Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
+}
+
+/// Closes the sheet and opens the catalog of summary templates. Everything read from the sheet's
+/// context is read before it closes.
+void openSummaryTemplateCatalog(BuildContext context) {
+  final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+  final memoriesApps = context.read<AppProvider>().apps.where((app) => app.worksWithMemories()).toList();
+  final capability = AppCapability(title: context.l10n.summary, id: 'memories');
+  final navigator = Navigator.of(context);
+  final pageContext = navigator.context;
+  navigator.pop();
+  PlatformManager.instance.analytics.summarizedAppEnableAppsClicked(conversationId: conversationId);
+  routeToPage(pageContext, CapabilityAppsPage(capability: capability, apps: memoriesApps));
+  PlatformManager.instance.analytics.pageOpened('Summary Apps');
+}
+
+/// Closes the sheet and opens the quick template creator for the open conversation.
+void openCreateSummaryTemplate(BuildContext context) {
+  final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+  PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
+  final navigator = Navigator.of(context);
+  final pageContext = navigator.context;
+  navigator.pop();
+  showCreateTemplateBottomSheet(pageContext, conversationId: conversationId);
 }
 
 class _EnableAppsListItem extends StatelessWidget {
@@ -668,24 +688,7 @@ class _EnableAppsListItem extends StatelessWidget {
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
           trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
-          onTap: () {
-            Navigator.pop(context);
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            PlatformManager.instance.analytics.summarizedAppEnableAppsClicked(conversationId: conversationId);
-
-            // Navigate to Summary (memories) capability apps page
-            final appProvider = context.read<AppProvider>();
-            final memoriesApps = appProvider.apps.where((app) => app.worksWithMemories()).toList();
-
-            routeToPage(
-              context,
-              CapabilityAppsPage(
-                capability: AppCapability(title: context.l10n.summary, id: 'memories'),
-                apps: memoriesApps,
-              ),
-            );
-            PlatformManager.instance.analytics.pageOpened('Summary Apps');
-          },
+          onTap: () => openSummaryTemplateCatalog(context),
         ),
         Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],

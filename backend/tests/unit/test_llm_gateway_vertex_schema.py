@@ -1,6 +1,7 @@
 """Vertex JSON Schema wire contract for real structured-output consumers."""
 
 from copy import deepcopy
+from contextvars import ContextVar
 import json
 
 import pytest
@@ -11,7 +12,7 @@ from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.gateway.vertex_pt_policy import VertexPTPolicyMixin
 from llm_gateway.gateway.vertex_wire import _vertex_request
 from llm_gateway.gateway.vertex_schema import vertex_response_json_schema
-from models.dream_agent import Plan, Triage
+from models.agent_tools import ProposeEdit as Plan, Read as Triage
 from utils.llm import vertex_pt_routing as ptr
 from utils.translation_core.providers import LunaTranslationBatch
 
@@ -51,7 +52,8 @@ def test_real_consumer_schema_uses_vertex_json_schema_subset(model):
     converted = config.get('responseJsonSchema', config.get('responseSchema'))
     assert_vertex_subset(converted)
     assert 'responseSchema' not in config
-    assert '$defs' in converted
+    if '$defs' in schema:
+        assert '$defs' in converted
     assert schema == original
 
 
@@ -179,6 +181,7 @@ def test_optional_recursive_ref_remains_compact():
 def test_vertex_4xx_log_only_emits_sanitized_reason_class(capsys, message, reason):
 
     provider = VertexPTPolicyMixin()
+    provider._cache_context = ContextVar('schema_log_cache_context', default=None)
     provider._observe_attempt(
         ptr.PT_MODEL_CURRENT, 'dedicated', 400, json.dumps({'error': {'message': message}}).encode()
     )

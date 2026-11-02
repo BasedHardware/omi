@@ -101,22 +101,24 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
             child: Text(context.l10n.whereDidYouHearAboutOmi, style: OmiType.title1, textAlign: TextAlign.center),
           ),
           const SizedBox(height: OmiSpacing.xl),
-          for (final source in sources) ...[
-            _SourceTile(
-              option: source,
-              selected: _selectedSource == source.label,
-              onTap: () {
-                OmiHaptics.light();
-                setState(() {
-                  _selectedSource = _selectedSource == source.label ? null : source.label;
-                  if (_selectedSource != context.l10n.otherSource) {
-                    _otherController.clear();
-                  }
-                });
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
+          LayoutBuilder(builder: (context, constraints) {
+            final columns = MediaQuery.textScalerOf(context).scale(1) > 1.3 || constraints.maxWidth < 280 ? 1 : 2;
+            return Wrap(spacing: OmiSpacing.sm, runSpacing: OmiSpacing.sm, children: [
+              for (final source in sources)
+                SizedBox(
+                    width: (constraints.maxWidth - OmiSpacing.sm * (columns - 1)) / columns,
+                    child: _SourceTile(
+                        option: source,
+                        selected: _selectedSource == source.label,
+                        onTap: () {
+                          OmiHaptics.light();
+                          setState(() {
+                            _selectedSource = _selectedSource == source.label ? null : source.label;
+                            if (_selectedSource != context.l10n.otherSource) _otherController.clear();
+                          });
+                        })),
+            ]);
+          }),
           if (_selectedSource == context.l10n.otherSource) ...[
             const SizedBox(height: OmiSpacing.xxs),
             Container(
@@ -144,12 +146,17 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
           const SizedBox(height: OmiSpacing.sm),
           OmiButton(
             key: const Key('found_omi_continue'),
+            labelStyle: OmiType.callout
+                .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
             label: context.l10n.continueButton,
             expand: true,
             onPressed: _canContinue && !_saving ? _submit : null,
             isLoading: _saving,
           ),
-          OmiButton.tertiary(
+          OmiButton(
+            variant: OmiButtonVariant.tertiary,
+            labelStyle: OmiType.callout
+                .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
             key: const Key('found_omi_skip'),
             label: context.l10n.skip,
             expand: true,
@@ -186,11 +193,11 @@ class _SourceTile extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.sm),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
               child: Row(
                 children: [
                   ExcludeSemantics(child: FaIcon(option.icon, size: 18, color: foreground)),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: OmiSpacing.sm),
                   Expanded(
                     child: Text(
                       option.label,

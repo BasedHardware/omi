@@ -8,6 +8,7 @@ import WebKit
 extension SettingsContentView {
   var notificationsSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      storefrontFeatureEntry(.proactiveAgent)
       // Notifications
       settingsCard(settingId: "notifications.settings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
@@ -202,6 +203,13 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
 
+          if let dailySummaryEnabledError {
+            Text(dailySummaryEnabledError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("notifications-dailysummary-save-error")
+          }
+
           if dailySummaryEnabled {
             GlassSeparator()
 
@@ -337,7 +345,8 @@ extension SettingsContentView {
             icon: "mic.fill",
             title: "Store Recordings",
             subtitle: "Allow Omi to store audio recordings of your conversations",
-            isOn: $recordingPermissionEnabled
+            isOn: $recordingPermissionEnabled,
+            errorText: recordingPermissionError
           ) { newValue in
             updateRecordingPermission(newValue)
           }
@@ -348,7 +357,8 @@ extension SettingsContentView {
             icon: "cloud.fill",
             title: "Private Cloud Sync",
             subtitle: "Upload your recordings to your own cloud storage",
-            isOn: $privateCloudSyncEnabled
+            isOn: $privateCloudSyncEnabled,
+            errorText: privateCloudSyncError
           ) { newValue in
             updatePrivateCloudSync(newValue)
           }

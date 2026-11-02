@@ -183,4 +183,22 @@ final class SubscriptionInfoDecoderTests: XCTestCase {
     let encoded = try JSONEncoder().encode(plan)
     XCTAssertEqual(String(data: encoded, encoding: .utf8), #""future_plan_123""#)
   }
+  func testUnknownPlanInSubscriptionResponseIgnoresAdditiveFields() throws {
+    let json = Data(
+      #"""
+      {
+        "subscription": {
+          "plan": "future_plan_123", "status": "active", "features": [],
+          "cancel_at_period_end": false, "limits": {"future_allowance": 42},
+          "future_subscription_field": {"enabled": true}
+        },
+        "future_response_field": ["safe"]
+      }
+      """#.utf8)
+    let response = try JSONDecoder().decode(UserSubscriptionResponse.self, from: json)
+    XCTAssertEqual(response.subscription.plan, .unknown("future_plan_123"))
+    XCTAssertEqual(response.subscription.plan.displayName, "Plan unavailable")
+    XCTAssertFalse(response.subscription.plan.hasPaidCapability)
+  }
+
 }

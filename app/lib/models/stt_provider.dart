@@ -75,6 +75,7 @@ class SttLanguages {
     'bs': 'Bosnian',
     'hr': 'Croatian',
     'fa': 'Persian',
+    'pa': 'Punjabi',
     'he': 'Hebrew',
     'kn': 'Kannada',
     'mk': 'Macedonian',

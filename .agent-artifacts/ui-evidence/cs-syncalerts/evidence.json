@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-activity-sync-stall.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention: the sustained sync stall row (Omi isn't syncing, 26h silent)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-device-stall-toggle.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings: Sync Health Alerts toggle showing the stall duration subtitle",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-activity-capture-attention.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention unchanged: link stall, storage and upload rows (regression check)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

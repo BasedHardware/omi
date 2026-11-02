@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-architect-settings.png",
+      "platform": "mobile-ios",
+      "description": "Architect current card shows only the yearly price and Switch to yearly · save $398.00, with no bullets",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-cancel-scheduled-plus.png",
+      "platform": "mobile-ios",
+      "description": "Cancel scheduled: no interval toggle, Resubscribe on Plus with no bullets, blocked_line on other tiers",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-free-budget-80.png",
+      "platform": "mobile-ios",
+      "description": "Free 80% header, compact Free card, Get Plus on the recommended card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-free-mcp-cap.png",
+      "platform": "mobile-ios",
+      "description": "MCP cap header, MCP bullet first on Plus, compact Free card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-free-pro-gate-proactive.png",
+      "platform": "mobile-ios",
+      "description": "Reminders header, reminder bullet first on Pro, compact Free card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-free-pro-gate-screen.png",
+      "platform": "mobile-ios",
+      "description": "Screen help header, screen bullet first on Pro, compact Free card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-free-settings.png",
+      "platform": "mobile-ios",
+      "description": "Free settings: Get Plus, compact Free card at $0.00 with hours and no bullets",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-legacy-unlimited.png",
+      "platform": "mobile-ios",
+      "description": "Legacy Unlimited line, the legacy note, and Manage billing. No checkout",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-plus-annual-current.png",
+      "platform": "mobile-ios",
+      "description": "Annual Plus opens on yearly. Current card shows the yearly price and hours, no bullets and no button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-plus-budget-80.png",
+      "platform": "mobile-ios",
+      "description": "Plus 80% header. Monthly stays selected. Current Plus shows only the yearly switch and no bullets",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-plus-monthly-yearly-toggle.png",
+      "platform": "mobile-ios",
+      "description": "Yearly toggle. Current Plus shows Switch to yearly · save $39.98 from the price label and no bullets",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-pro-settings.png",
+      "platform": "mobile-ios",
+      "description": "Pro current card shows only the yearly price and Switch to yearly · save $99.98, with no bullets",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-banner.png",
+      "platform": "mobile-ios",
+      "description": "Usage banner is one nudge line plus See plans and Not now",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-meter.png",
+      "platform": "mobile-ios",
+      "description": "Usage meter hugs the backend line and progress bar, with no title row",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-ios-small-phone-light.png",
+      "platform": "mobile-ios",
+      "description": "Small light phone keeps Get Plus on screen; the renewal line wraps instead of truncating",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-ios-empty.png",
+      "platform": "mobile-ios",
+      "description": "Empty catalog copy, with no Try again button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-ios-error.png",
+      "platform": "mobile-ios",
+      "description": "Load error copy with a Try again button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-legacy-neo.png",
+      "platform": "mobile-ios",
+      "description": "Legacy Neo line, the legacy note, and Manage billing. No checkout, same shape as Unlimited",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

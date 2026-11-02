@@ -192,8 +192,10 @@ maximum 2 replicas), while checked-in prod NLLB values set `requestsPerPod: 4`
 and render an External metric on the next deploy. This is **known repo-versus-live
 HPA drift**; do not change the NLLB chart in this adapter PR. A rule with no
 matching series is harmless and protects that future deploy. The only allowed
-rule differences are the two listen canary selectors and the exact added NLLB
-rule. Reconcile any further drift in a reviewed PR first.
+rule differences are the two listen canary selectors, the exact added NLLB and
+batch-queue rules, and the reviewed Parakeet GPU query transition from namespace-wide
+DCGM to `container="parakeet"` in both `seriesQuery` and `metricsQuery`. Already
+reconciled queries are accepted; other live queries must be reviewed first.
 
 The scrape must copy `track` to `listen_track`, and the adapter must exclude
 `listen_track="canary"` in **both** listen queries. A listen Helm upgrade does
@@ -215,7 +217,7 @@ gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
 
 Use a checkout at the reviewed merged monitoring revision. `helm template` is
 local; never substitute a cluster dry-run/apply for it. The comparator normalizes
-YAML and rule ordering and allows only the two reviewed differences above.
+YAML and rule ordering and allows only the reviewed rule differences listed above.
 Deployment arguments and **both** APIService specs must match (omitted service
 port defaults to 443). Upgrade comparison also requires Helm ownership; rollback
 comparison (`--require-live-config`) requires exact live rules and both specs,

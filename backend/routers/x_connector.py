@@ -13,6 +13,8 @@ The desktop passes its own URL scheme as success_redirect_url, so dev
 themselves without the backend needing to know which is calling.
 """
 
+import html
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -83,25 +85,35 @@ def x_oauth_url(
     try:
         url = x_connector.build_authorize_url(uid, success_redirect_url=success_redirect_url)
         return OAuthUrlResponse(success=True, auth_url=url)
+    except ValueError:
+        # A rejected redirect target is a client error, not an internal one.
+        return OAuthUrlResponse(success=False, error='invalid_redirect_url')
     except Exception as e:
-        logger.error(f'x_oauth_url failed for uid={uid}: {e}')
+        logger.error(f'x_oauth_url failed for uid={uid} error_class={type(e).__name__}')
         return OAuthUrlResponse(success=False, error='internal_error')
 
 
 def _redirect_html(deep_link: str, ok: bool, message: str) -> HTMLResponse:
     icon = '✓' if ok else '⚠️'
-    safe_link = deep_link.replace('"', '%22')
-    html = f"""<!doctype html><html><head><meta charset="utf-8">
+    # Escape for two distinct injection contexts, not just `"`:
+    #  - meta content attribute: HTML-attribute-escape so a `"`/`<`/`&` in the
+    #    link cannot break out of the tag or inject markup.
+    #  - window.location JS string: json.dumps produces a properly quoted,
+    #    escaped JS literal; the trailing < and > escapes keep a `</script>`
+    #    inside the URL from closing the script block early.
+    meta_link = html.escape(deep_link, quote=True)
+    js_link = json.dumps(deep_link, ensure_ascii=False).replace('<', '\\u003c').replace('>', '\\u003e')
+    body = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>X · Omi</title>
-<meta http-equiv="refresh" content="0;url={safe_link}">
+<meta http-equiv="refresh" content="0;url={meta_link}">
 <style>body{{font-family:-apple-system,system-ui,sans-serif;background:#0b0b0f;color:#eaeaea;
 display:flex;height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}}
 .c{{max-width:360px}}.i{{font-size:42px}}</style></head>
 <body><div class="c"><div class="i">{icon}</div><h2>{message}</h2>
 <p>Returning to Omi…</p></div>
-<script>setTimeout(function(){{window.location.href="{safe_link}";}},150);</script>
+<script>setTimeout(function(){{window.location.href={js_link};}},150);</script>
 </body></html>"""
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=body)
 
 
 @router.get('/v1/x/oauth/callback', response_class=HTMLResponse, tags=['x'])
@@ -130,13 +142,13 @@ async def x_oauth_callback(
             handle = me.get('username')
             x_user_id = str(me.get('id')) if me.get('id') else None
         except Exception as e:
-            logger.info(f'x callback: fetch_me failed (non-fatal): {e}')
+            logger.info(f'x callback: fetch_me failed (non-fatal) error_class={type(e).__name__}')
         await run_blocking(db_executor, x_connector._store_tokens, uid, token_resp, handle=handle, x_user_id=x_user_id)
         # First ingest in the background so the browser redirect is instant.
         start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')
         return _redirect_html(f'{deep_link}?status=success', True, 'X connected')
     except Exception as e:
-        logger.error(f'x callback failed for uid={uid}: {e}')
+        logger.error(f'x callback failed for uid={uid} error_class={type(e).__name__}')
         return _redirect_html(f'{deep_link}?error=exchange_failed', False, 'Connection failed')
 
 

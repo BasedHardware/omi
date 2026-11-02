@@ -1,0 +1,2 @@
+gatewayClassName: gke-l7-rilb
+addressName: dev-ml-gateway-ilb-ip

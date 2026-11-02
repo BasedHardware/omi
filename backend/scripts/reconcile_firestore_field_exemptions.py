@@ -7,6 +7,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -90,6 +91,7 @@ def gcloud_disable_command(*, project: str, database: str, exemption: FieldExemp
         f'--database={database}',
         f'--collection-group={exemption.collection_group}',
         '--disable-indexes',
+        '--async',
         '--quiet',
     ]
 
@@ -160,12 +162,65 @@ def find_missing_exemptions(
     ]
 
 
+def in_flight_fields(*, project: str, database: str, runner: CommandRunner = subprocess.run) -> set[str]:
+    """List all admin operations, then match pending UpdateField metadata locally.
+
+    Protobuf JSON omits done=false, so do not filter done in gcloud.
+    Remove gcloud's default 100-operation
+    limit so an older pending field update cannot disappear behind other work.
+    """
+    result = runner(
+        [
+            'gcloud',
+            'firestore',
+            'operations',
+            'list',
+            f'--project={project}',
+            f'--database={database}',
+            '--limit=unlimited',
+            '--format=json',
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError('Firestore operations lookup failed')
+    try:
+        operations = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError('Firestore operations lookup returned invalid JSON') from exc
+    if not isinstance(operations, list) or any(not isinstance(op, Mapping) for op in operations):
+        raise RuntimeError('Firestore operations lookup returned a non-object list')
+    fields = set()
+    for operation in operations:
+        metadata = operation.get('metadata', {})
+        if (
+            operation.get('done', False) is False
+            and 'error' not in operation
+            and isinstance(metadata, Mapping)
+            and metadata.get('@type') == 'type.googleapis.com/google.firestore.admin.v1.FieldOperationMetadata'
+            and isinstance(metadata.get('field'), str)
+        ):
+            fields.add(metadata['field'])
+    return fields
+
+
+def field_resource(*, project: str, database: str, exemption: FieldExemption) -> str:
+    return (
+        f'projects/{project}/databases/{database}/collectionGroups/'
+        f'{exemption.collection_group}/fields/{exemption.field_path}'
+    )
+
+
 def apply_field_exemptions(
     *,
     project: str,
     database: str,
     exemptions: tuple[FieldExemption, ...],
     runner: CommandRunner = subprocess.run,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> None:
     missing = find_missing_exemptions(
         project=project,
@@ -173,7 +228,12 @@ def apply_field_exemptions(
         exemptions=exemptions,
         runner=runner,
     )
+    submitted = set()
+    errors = []
     for exemption in missing:
+        resource = field_resource(project=project, database=database, exemption=exemption)
+        if resource in in_flight_fields(project=project, database=database, runner=runner):
+            continue
         result = runner(
             gcloud_disable_command(project=project, database=database, exemption=exemption),
             cwd=ROOT,
@@ -182,19 +242,47 @@ def apply_field_exemptions(
             text=True,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f'Firestore field exemption failed for {exemption.collection_group}.{exemption.field_path}'
-            )
+            # Another dispatcher can win between the lookup and submission.
+            # Accept the race only when the server confirms an active field op.
+            if resource not in in_flight_fields(project=project, database=database, runner=runner):
+                errors.append(
+                    f'Firestore field exemption failed for {exemption.collection_group}.{exemption.field_path}'
+                )
+        else:
+            submitted.add(exemption)
 
-    remaining = find_missing_exemptions(
-        project=project,
-        database=database,
-        exemptions=exemptions,
-        runner=runner,
-    )
-    if remaining:
-        formatted = ', '.join(f'{item.collection_group}.{item.field_path}' for item in remaining)
-        raise RuntimeError(f'Firestore field exemptions did not converge: {formatted}')
+    # A newly accepted async operation can take a moment to appear in list.
+    # Re-read both operation and field state, with at most two short waits.
+    for attempt in range(3):
+        pending = in_flight_fields(project=project, database=database, runner=runner)
+        remaining = set(
+            find_missing_exemptions(
+                project=project,
+                database=database,
+                exemptions=exemptions,
+                runner=runner,
+            )
+        )
+        unaccounted = {
+            exemption
+            for exemption in remaining
+            if field_resource(project=project, database=database, exemption=exemption) not in pending
+        }
+        if not unaccounted or attempt == 2:
+            break
+        sleeper(2)
+    for exemption in exemptions:
+        label = f'{exemption.collection_group}.{exemption.field_path}'
+        if exemption not in remaining:
+            status = 'disabled'
+        elif field_resource(project=project, database=database, exemption=exemption) in pending:
+            status = 'submitted' if exemption in submitted else 'in-flight'
+        else:
+            errors.append(f'Firestore field exemption is neither disabled nor in flight: {label}')
+            continue
+        print(f'{label}: {status}')
+    if errors:
+        raise RuntimeError('; '.join(errors))
 
 
 def reconcile(
@@ -253,7 +341,7 @@ def reconcile(
         exemptions=exemptions,
         runner=runner,
     )
-    print('All declared Firestore field exemptions are applied')
+    print('All declared Firestore field exemptions are disabled or in flight')
 
 
 def main() -> int:

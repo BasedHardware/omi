@@ -69,6 +69,20 @@ describe('collapsed desktop sidebar alignment', () => {
   });
 });
 
+describe('developers destination', () => {
+  it('gives connecting an agent its own rail entry instead of a settings row', async () => {
+    localStorage.setItem('sidebar-expanded', 'true');
+    render(<Sidebar isOpen onClose={vi.fn()} />);
+
+    expect(await screen.findByRole('link', { name: 'Developers' })).toHaveAttribute(
+      'href',
+      '/developers',
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Omi User/ }));
+    expect(screen.queryByRole('link', { name: 'Developer' })).toBeNull();
+  });
+});
+
 describe('profile menu row shape', () => {
   it('matches every item radius to the outer menu container', async () => {
     localStorage.setItem('sidebar-expanded', 'true');
@@ -79,7 +93,6 @@ describe('profile menu row shape', () => {
     const items = [
       'Connectors',
       'Privacy',
-      'Developer',
       'Account',
       'Download',
       'Help',

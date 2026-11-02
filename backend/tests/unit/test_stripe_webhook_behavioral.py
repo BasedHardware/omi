@@ -230,11 +230,15 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         return self.PAYMENT_SOURCE_FILE.read_text(encoding="utf-8")
 
     def test_checkout_duplicate_return_only_applies_to_paid_existing_subscription(self):
-        source = self._read_source()
-        duplicate_idx = source.find('Duplicate webhook event for existing subscription')
-        assert duplicate_idx != -1, "duplicate checkout guard not found"
-        guard_block = source[max(0, duplicate_idx - 600) : duplicate_idx]
-        assert 'checkout_decision.outcome' in guard_block
+        from utils.subscription_state_machine import ResolvedStripeEvent, transition
+
+        same = ResolvedStripeEvent('checkout.session.completed', 'sub_same', None, 1_700_000_000)
+        paid = Subscription(plan=PlanType.plus, stripe_subscription_id='sub_same', status=SubscriptionStatus.active)
+        basic = Subscription(plan=PlanType.basic, stripe_subscription_id='sub_same', status=SubscriptionStatus.active)
+        assert transition(paid, same).outcome == 'duplicate_checkout'
+        assert transition(basic, same).outcome == 'new_checkout'
+        other = ResolvedStripeEvent('checkout.session.completed', 'sub_other', None, 1_700_000_000)
+        assert transition(paid, other).outcome == 'replacement_checkout'
 
     def test_subscription_events_persist_customer_id_for_uid_metadata_path(self):
         source = self._read_source()

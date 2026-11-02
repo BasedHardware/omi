@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb } from "@/lib/firebase/admin";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { posthogResults, POSTHOG_SERVED_MAX_ROWS } from "@/lib/posthog";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
@@ -215,7 +215,7 @@ export async function computeMacosVersions(platform: PlatformScope = "macos") {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
       Awaited<ReturnType<typeof computeMacosVersions>>
     >(key);
     if (cached) {
-      return NextResponse.json(
+      return authResult.json(
         withFreshness(
           { ...cached.data, date: formatDateLabel(cached.freshAt) },
           cached.freshAt
@@ -239,12 +239,12 @@ export async function GET(request: NextRequest) {
     const payload = await computeMacosVersions(platform);
     await setPayload(key, payload);
     const freshAt = Date.now();
-    return NextResponse.json(
+    return authResult.json(
       withFreshness({ ...payload, date: formatDateLabel(freshAt) }, freshAt)
     );
   } catch (error: any) {
     console.error("macOS version stats error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch macOS version stats" },
       { status: 500 }
     );

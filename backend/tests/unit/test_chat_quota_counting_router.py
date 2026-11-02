@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from starlette.responses import Response
 
 from tests.unit import _chat_router_test_harness as harness
 from tests.unit._chat_router_test_harness import BACKEND_DIR
@@ -170,10 +171,45 @@ def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded(chat
         assert len(module.JourneyAttempt.instances) == 1
         assert module.JourneyAttempt.instances[0].journey == 'chat_response'
         assert module.JourneyAttempt.instances[0].outcomes == ['success']
+        assert len(module.JourneyAttempt.instances[0].outcomes) == 1
         assert len(module.ClientJourneyAttempt.instances) == 1
         attempt = module.ClientJourneyAttempt.instances[0]
         assert (attempt.journey, attempt.client_kind, attempt.outcome) == ('mobile_chat', 'mobile_ios', 'success')
         assert attempt.issue_class is None
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_does_not_accept_an_unconsumed_chat_response_stream(chat_environment, monkeypatch):
+    client, module, saved = chat_environment
+    captured_streams = []
+    run_chat_turn = module.run_chat_turn
+
+    def capture_without_consuming(*args, **kwargs):
+        captured_streams.append(run_chat_turn(*args, **kwargs))
+        return Response(status_code=204)
+
+    monkeypatch.setattr(module, 'run_chat_turn', capture_without_consuming)
+    try:
+        response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+        assert response.status_code == 204
+        assert len(captured_streams) == 1
+        assert module.JourneyAttempt.instances == []
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_pairs_chat_response_when_timezone_setup_raises(chat_environment):
+    client, module, saved = chat_environment
+    module.notification_db.sync_user_time_zone_from_client.side_effect = RuntimeError('timezone lookup failed')
+    try:
+        with pytest.raises(RuntimeError, match='timezone lookup failed'):
+            client.post('/v2/messages', json={'text': 'hello', 'file_ids': [], 'time_zone': 'UTC'})
+
+        assert len(module.JourneyAttempt.instances) == 1
+        attempt = module.JourneyAttempt.instances[0]
+        assert attempt.journey == 'chat_response'
+        assert attempt.outcomes == ['failure']
     finally:
         _cleanup(saved)
 

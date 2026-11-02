@@ -136,6 +136,7 @@ async def rebuild_stt_socket_locked(self: Any) -> bool:
     owner.record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
     owner.logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
     if previous is not None:
+        owner.note_stream_close_intent(previous, owner.US_FAILOVER)
         try:
             previous.finish()
         except Exception:
@@ -156,12 +157,19 @@ async def monitor_stt_death(self: Any) -> None:
     (``stt_failed`` + WebSocket 1011) as soon as the death latch flips (#10028).
     """
     while self.host.state.active and not self.host.state.stt_terminal_failure:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.funded_paused is True:
+            if await self.host.wait(owner.STT_DEATH_POLL_INTERVAL_SECONDS):
+                return
+            continue
         socket = self.stt_socket
         outcome = getattr(socket, 'leg_outcome', None)
         if outcome is not None and outcome.owner_closing:
             return
         if socket is not None and owner.live_stt_socket_is_dead(socket):
             if await self._failover_stt_socket():
+                continue
+            if admission is not None and admission.funded_paused is True:
                 continue
             if outcome is not None and outcome.owner_closing:
                 return

@@ -13,6 +13,8 @@ in the hermetic listen_pusher_stack gauntlet.
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -40,7 +42,7 @@ def _candidate(uid: str, cid: str, *, legacy: bool = False) -> dict:
 def _install(monkeypatch, candidates) -> tuple[MagicMock, MagicMock]:
     """Wire the service to a fixed candidate window and a fake fenced completion.
 
-    ``complete`` mocks ``jobs_db.complete_orphan_conversation`` (the generation /
+    ``complete`` mocks ``processing_recovery.complete_orphan_conversation`` (the generation /
     ownership fence), distinct from the legacy ``lifecycle.complete`` CAS.
     """
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_after', lambda: timedelta(seconds=900))
@@ -57,9 +59,9 @@ def _install(monkeypatch, candidates) -> tuple[MagicMock, MagicMock]:
     advance_cursor = MagicMock(return_value=True)
     monkeypatch.setattr(service.jobs_db, 'advance_stale_processing_sweep_cursor', advance_cursor)
     stamp = MagicMock()
-    monkeypatch.setattr(service.jobs_db, 'stamp_processing_admission_if_absent', stamp)
+    monkeypatch.setattr(service.processing_recovery, 'stamp_processing_admission_if_absent', stamp)
     complete = MagicMock()
-    monkeypatch.setattr(service.jobs_db, 'complete_orphan_conversation', complete)
+    monkeypatch.setattr(service.processing_recovery, 'complete_orphan_conversation', complete)
     return stamp, complete
 
 
@@ -118,7 +120,7 @@ def test_legacy_row_too_large_to_stamp_is_terminalized_not_retried_forever(monke
     stamp, complete = _install(monkeypatch, [_candidate('uid', 'oversized-1', legacy=True)])
     stamp.side_effect = InvalidArgument(_OVERSIZED_DOCUMENT_MESSAGE)
     unstampable = MagicMock(return_value=True)
-    monkeypatch.setattr(service.jobs_db, 'complete_unstampable_orphan_conversation', unstampable)
+    monkeypatch.setattr(service.processing_recovery, 'complete_unstampable_orphan_conversation', unstampable)
 
     result = service.reconcile_stale_processing_conversations()
 
@@ -133,7 +135,9 @@ def test_unstampable_row_still_owned_by_a_live_writer_is_skipped(monkeypatch):
     terminalize is an expected skip, never a completion."""
     stamp, _complete = _install(monkeypatch, [_candidate('uid', 'oversized-2', legacy=True)])
     stamp.side_effect = InvalidArgument(_OVERSIZED_DOCUMENT_MESSAGE)
-    monkeypatch.setattr(service.jobs_db, 'complete_unstampable_orphan_conversation', MagicMock(return_value=False))
+    monkeypatch.setattr(
+        service.processing_recovery, 'complete_unstampable_orphan_conversation', MagicMock(return_value=False)
+    )
 
     result = service.reconcile_stale_processing_conversations()
 
@@ -146,7 +150,7 @@ def test_non_size_invalid_argument_stays_an_error(monkeypatch):
     stamp, _complete = _install(monkeypatch, [_candidate('uid', 'legacy-boom', legacy=True)])
     stamp.side_effect = InvalidArgument('400 The referenced transaction has expired or is no longer valid.')
     unstampable = MagicMock(return_value=True)
-    monkeypatch.setattr(service.jobs_db, 'complete_unstampable_orphan_conversation', unstampable)
+    monkeypatch.setattr(service.processing_recovery, 'complete_unstampable_orphan_conversation', unstampable)
 
     result = service.reconcile_stale_processing_conversations()
 
@@ -167,7 +171,7 @@ def test_query_failure_is_fail_closed_and_records_an_error(monkeypatch):
 
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_candidates', _boom)
     complete = MagicMock()
-    monkeypatch.setattr(service.jobs_db, 'complete_orphan_conversation', complete)
+    monkeypatch.setattr(service.processing_recovery, 'complete_orphan_conversation', complete)
 
     result = service.reconcile_stale_processing_conversations()
 
@@ -240,7 +244,7 @@ def test_sweep_advances_and_rotates_the_cursor_with_cas_generation(monkeypatch):
 
     monkeypatch.setattr(service.jobs_db, 'get_stale_processing_orphan_candidates', _fake_candidates)
     complete = MagicMock(return_value=True)
-    monkeypatch.setattr(service.jobs_db, 'complete_orphan_conversation', complete)
+    monkeypatch.setattr(service.processing_recovery, 'complete_orphan_conversation', complete)
 
     # First sweep resumes from None (nothing persisted), advances the cursor.
     service.reconcile_stale_processing_conversations()

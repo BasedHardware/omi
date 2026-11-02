@@ -25,6 +25,26 @@ def ensure_synthetic_owner(uid, *, firestore_client=None):
     ensure(database.transaction())
 
 
+def reset_failures(*, firestore_client=None):
+    """Operator skip is not a pass and must not keep the previous failure streak."""
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = database.collection('dream_canary_health').document('current')
+
+    @firestore.transactional
+    def update(tx):
+        ref.get(transaction=tx)
+        tx.set(ref, {'canary_failures': 0}, merge=True)
+        return 0
+
+    return update(database.transaction())
+
+
+def failure_count(*, firestore_client=None):
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    row = database.collection('dream_canary_health').document('current').get().to_dict() or {}
+    return int(row.get('canary_failures', 0))
+
+
 def record_result(passed, *, firestore_client=None):
     database = firestore_client if firestore_client is not None else get_firestore_client()
     ref = database.collection('dream_canary_health').document('current')

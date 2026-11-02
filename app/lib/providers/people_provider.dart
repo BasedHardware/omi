@@ -15,7 +15,9 @@ class PeopleProvider extends BaseProvider {
     Future<bool> Function(String)? deletePersonById,
     Future<bool> Function(String, bool)? setPinned,
     void Function(ApiFallbackEvent)? fallback,
-  })  : _deletePersonById = deletePersonById ?? deletePerson,
+    Stream<PlayerState>? samplePlayerStates,
+  })  : _samplePlayerStates = samplePlayerStates,
+        _deletePersonById = deletePersonById ?? deletePerson,
         _setPinned = setPinned ?? setPersonPinned,
         _renamePerson = renamePerson ?? updatePersonName,
         _loadPeople = loadPeople ?? (() => getAllPeople(includeStats: true)),
@@ -27,6 +29,7 @@ class PeopleProvider extends BaseProvider {
   final Future<bool> Function(String, int) _deleteSample;
   final Future<bool> Function(String) _deletePersonById;
   final Future<bool> Function(String, bool) _setPinned;
+  final Stream<PlayerState>? _samplePlayerStates;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
   bool statsTruncated = SharedPreferencesUtil().cachedPeopleStatsTruncated;
   Map<String, List<String>> samplesUrl = {};
@@ -103,11 +106,13 @@ class PeopleProvider extends BaseProvider {
   }
 
   void _setupAudioPlayerListeners() {
-    _audioPlayer.playerStateStream.listen((playerState) {
+    (_samplePlayerStates ?? _audioPlayer.playerStateStream).listen((playerState) {
       if (playerState.processingState == ProcessingState.completed) {
         currentPlayingPersonIndex = null;
         currentPlayingIndex = null;
         isPlaying = false;
+        // Nothing else rebuilds the sample row when a sample ends, so without this it keeps its pause icon.
+        notifyListeners();
       }
     });
   }

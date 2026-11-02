@@ -8,6 +8,8 @@ Redis TIME owns the minute boundary; all endpoints/accounts share a provider bud
 import asyncio
 import logging
 import os
+
+from config.policy.listen import listen_value
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -33,16 +35,19 @@ _invalid_config_logged: set[str] = set()
 
 
 def enabled() -> bool:
-    return os.getenv('STT_PAID_SPILLOVER_BUDGET_ENABLED', 'false').lower() == 'true'
+    return (
+        str(listen_value('paid_spillover_budget_enabled', 'STT_PAID_SPILLOVER_BUDGET_ENABLED', 'false')).lower()
+        == 'true'
+    )
 
 
 def limit(provider: str) -> int:
-    configured = {
-        'soniox': os.getenv('STT_PAID_SPILLOVER_SONIOX_PER_MINUTE', '30'),
-        'modulate': os.getenv('STT_PAID_SPILLOVER_MODULATE_PER_MINUTE', '30'),
-        'deepgram': os.getenv('STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE', '30'),
-    }
-    cap = int(configured[provider])
+    field, key = {
+        'soniox': ('paid_spillover_soniox_per_minute', 'STT_PAID_SPILLOVER_SONIOX_PER_MINUTE'),
+        'modulate': ('paid_spillover_modulate_per_minute', 'STT_PAID_SPILLOVER_MODULATE_PER_MINUTE'),
+        'deepgram': ('paid_spillover_deepgram_per_minute', 'STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE'),
+    }[provider]
+    cap = int(listen_value(field, key, '30'))
     if not 0 <= cap <= 10000:
         raise ValueError('Paid spillover cap must be between 0 and 10000')
     return cap

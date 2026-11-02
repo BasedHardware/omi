@@ -81,7 +81,7 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, _KeyLookupSpy, _KeyLook
 def test_developer_key_on_an_mcp_endpoint_names_both_endpoint_families() -> None:
     with _loaded_dependencies() as (dependencies, mcp_lookup, _dev_lookup):
         with pytest.raises(HTTPException) as raised:
-            asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_dev_secret'))
+            asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert raised.value.status_code == 401
         assert '/v1/dev/' in raised.value.detail
@@ -92,7 +92,7 @@ def test_developer_key_on_an_mcp_endpoint_names_both_endpoint_families() -> None
 def test_mcp_key_on_a_developer_endpoint_names_both_endpoint_families() -> None:
     with _loaded_dependencies() as (dependencies, _mcp_lookup, dev_lookup):
         with pytest.raises(HTTPException) as raised:
-            asyncio.run(dependencies.get_api_key_auth('Bearer omi_mcp_secret'))
+            asyncio.run(dependencies.get_api_key_auth('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert raised.value.status_code == 401
         assert '/v1/mcp/' in raised.value.detail
@@ -103,18 +103,26 @@ def test_mcp_key_on_a_developer_endpoint_names_both_endpoint_families() -> None:
 def test_matching_key_family_still_reaches_its_own_key_lookup() -> None:
     with _loaded_dependencies() as (dependencies, _mcp_lookup, dev_lookup):
         with pytest.raises(HTTPException) as raised:
-            asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_secret'))
+            asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         # The stubbed lookup rejects every key; what matters is that the prefix guard
         # let a developer key through to the developer-key lookup.
-        assert raised.value.detail == 'Invalid API Key'
-        assert dev_lookup.calls == ['omi_dev_secret']
+        assert raised.value.detail == 'Unknown or revoked Developer API key. Check the full secret or create a new key.'
+        assert dev_lookup.calls == ['omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']
 
 
 def test_mcp_key_on_a_firebase_endpoint_points_at_the_mcp_endpoints() -> None:
     with pytest.raises(HTTPException) as raised:
-        get_current_user_uid(authorization='Bearer omi_mcp_secret')
+        get_current_user_uid(authorization='Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     assert raised.value.status_code == 401
     assert '/v1/mcp/' in raised.value.detail
     assert 'Firebase ID token' in raised.value.detail
+
+
+def test_malformed_developer_key_is_rejected_before_storage_lookup():
+    with _loaded_dependencies() as (dependencies, _mcp_lookup, dev_lookup):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_short'))
+        assert exc.value.status_code == 401 and 'Malformed Developer API key' in exc.value.detail
+        assert dev_lookup.calls == []

@@ -190,7 +190,8 @@ void main() {
     expect(find.byKey(const Key('chat-block-captureLink-block-capture-open')), findsOneWidget);
     expect(find.byKey(const Key('chat-block-conversationLink-block-conversation')), findsOneWidget);
     expect(find.byKey(const Key('chat-block-conversationLink-block-conversation-open')), findsOneWidget);
-    expect(find.byKey(const Key('chat-block-memoryLink-block-memory-unavailable')), findsOneWidget);
+    expect(find.byKey(const Key('chat-block-memoryLink-block-memory-unresolved')), findsOneWidget);
+    expect(find.byKey(const Key('chat-block-memoryLink-block-memory-retry')), findsOneWidget);
     expect(find.byKey(const Key('chat-block-questionCard-block-question')), findsOneWidget);
 
     // Message text is preserved beside the components.

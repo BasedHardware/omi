@@ -27,14 +27,21 @@ import 'package:omi/utils/logger.dart';
 class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterApi {
   static const Duration _stallThreshold = Duration(seconds: 3);
   static const Duration _stallCheckInterval = Duration(seconds: 1);
-  // Batch has no frames; liveness is the arrival of onBatchProgress (1Hz), which
+  // Healthy-state cadence used only when [paceHealthyChecks] is set (iOS).
+  // Capped by the stall deadline below, so a check is never scheduled later
+  // than the moment the existing threshold would trip. Faults snap back to
+  // [_stallCheckInterval].
+  static const Duration _healthyCheckInterval = Duration(seconds: 5);
+  // Batch has no frames; liveness is the arrival of onBatchProgress, which
   // keeps ticking through mutes/interruptions. A longer window than the stream
-  // stall threshold tolerates the coarser cadence.
+  // stall threshold tolerates the coarser cadence. The threshold itself is
+  // unchanged: a missing beat is still a stall at 10s.
   static const Duration _batchStallThreshold = Duration(seconds: 10);
 
   final PhoneMicHostApi _hostApi;
   final Timer Function(Duration, void Function(Timer)) _periodic;
   final DateTime Function() _now;
+  final bool _paceHealthyChecks;
 
   Function(Uint8List bytes)? _onByteReceived;
   Function()? _onRecording;
@@ -54,18 +61,22 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
   DateTime? _lastByteAt;
   Timer? _stallTimer;
   bool _stallReported = false;
+  bool _stallFastCadence = false;
   DateTime? _lastBatchProgressAt;
   Timer? _batchStallTimer;
   bool _batchStallReported = false;
+  bool _batchFastCadence = false;
 
   NativeMicRecorderService({
     PhoneMicHostApi? hostApi,
     bool registerFlutterApi = true,
     DateTime Function() now = DateTime.now,
     Timer Function(Duration, void Function(Timer))? periodic,
+    bool paceHealthyChecks = false,
   })  : _hostApi = hostApi ?? PhoneMicHostApi(),
         _now = now,
-        _periodic = periodic ?? Timer.periodic {
+        _periodic = periodic ?? Timer.periodic,
+        _paceHealthyChecks = paceHealthyChecks {
     if (registerFlutterApi) {
       PhoneMicFlutterApi.setUp(this);
     }
@@ -167,6 +178,12 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     }
     _lastByteAt = _now();
     _stallReported = false;
+    // Healthy frames must not reschedule the timer (that would be a wake per
+    // buffer). Only leave the fast cadence once a fresh frame proves the
+    // anomaly cleared.
+    if (_paceHealthyChecks && !_interrupted && _stallFastCadence) {
+      _armPacedStall(forceFast: false);
+    }
     _onByteReceived?.call(pcm16leMono16k);
   }
 
@@ -194,7 +211,13 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
         if (_batchMode) {
           // Batch emits no frames, so the stream stall watchdog would misfire.
           // Arm the batch (progress-arrival) watchdog once, on the first running.
-          if (_batchStallTimer == null) _startBatchWatchdog();
+          // A later running (resume) drops the interruption fast-cadence if the
+          // heartbeat is fresh; a gap already in progress stays on the deadline.
+          if (_batchStallTimer == null) {
+            _startBatchWatchdog();
+          } else if (_paceHealthyChecks) {
+            _armPacedBatch(forceFast: false);
+          }
         } else {
           // Armed here rather than in start(): the permission prompt can hold
           // start() open far longer than the stall threshold.
@@ -207,11 +230,26 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
           _interrupted = true;
           _onInterruption?.call(true);
         }
+        if (_paceHealthyChecks) {
+          if (_batchMode && _lastBatchProgressAt != null) {
+            _armPacedBatch(forceFast: true);
+          } else if (_stallTimer != null) {
+            _armPacedStall(forceFast: true);
+          }
+        }
         break;
       case PhoneMicCaptureState.rebuilding:
         // Frames pause briefly during a route/config rebuild — fresh grace
-        // period so the watchdog doesn't misread it as a stall.
+        // period so the watchdog doesn't misread it as a stall. Paced mode
+        // also snaps to the 1s poll for the grace window.
         _lastByteAt = _now();
+        if (_paceHealthyChecks) {
+          if (_batchMode && _lastBatchProgressAt != null) {
+            _armPacedBatch(forceFast: true);
+          } else if (_stallTimer != null) {
+            _armPacedStall(forceFast: true);
+          }
+        }
         break;
       case PhoneMicCaptureState.idle:
         // Native-side terminal stop without a Dart stop() call.
@@ -251,19 +289,81 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     // mutes/interruptions while events keep coming.
     _lastBatchProgressAt = _now();
     _batchStallReported = false;
+    if (_paceHealthyChecks && !_interrupted && _batchFastCadence) {
+      _armPacedBatch(forceFast: false);
+    }
   }
 
   void _startStallWatchdog() {
     _cancelStallWatchdog();
     _lastByteAt = _now();
     _stallReported = false;
-    _stallTimer = _periodic(_stallCheckInterval, (_) {
-      if (_stallReported || _lastByteAt == null || _interrupted || !_sessionActive) return;
-      if (_now().difference(_lastByteAt!) >= _stallThreshold) {
-        _stallReported = true;
-        _onStalled?.call();
-      }
-    });
+    if (!_paceHealthyChecks) {
+      _stallTimer = _periodic(_stallCheckInterval, (_) {
+        if (_stallReported || _lastByteAt == null || _interrupted || !_sessionActive) return;
+        if (_now().difference(_lastByteAt!) >= _stallThreshold) {
+          _stallReported = true;
+          _onStalled?.call();
+        }
+      });
+      return;
+    }
+    _armPacedStall(forceFast: false);
+  }
+
+  /// Next wake while paced. Never later than the stall deadline, and never
+  /// later than the active cadence. [fast] is the 1s fault poll.
+  Duration _pacedDelay({required Duration age, required Duration threshold, required bool fast}) {
+    final interval = fast ? _stallCheckInterval : _healthyCheckInterval;
+    final remaining = threshold - age;
+    if (remaining <= Duration.zero) return Duration.zero;
+    if (interval < remaining) return interval;
+    return remaining;
+  }
+
+  void _armPacedStall({required bool forceFast}) {
+    _stallTimer?.cancel();
+    _stallTimer = null;
+    if (!_sessionActive || _lastByteAt == null) return;
+    // Interrupted stream silence is expected. Keep the fast poll so resume is
+    // watched immediately, but do not declare a stall from this path.
+    if (_interrupted) {
+      _stallFastCadence = true;
+      _stallTimer = Timer(_stallCheckInterval, _onPacedStallTick);
+      return;
+    }
+    final age = _now().difference(_lastByteAt!);
+    if (age >= _stallThreshold) {
+      _stallFastCadence = true;
+      _stallTimer = Timer(Duration.zero, () {
+        if (_stallReported || _interrupted || !_sessionActive || _lastByteAt == null) return;
+        if (_now().difference(_lastByteAt!) >= _stallThreshold) {
+          _stallReported = true;
+          _onStalled?.call();
+        }
+      });
+      return;
+    }
+    final fast = forceFast || age >= _healthyCheckInterval;
+    _stallFastCadence = fast;
+    _stallTimer = Timer(_pacedDelay(age: age, threshold: _stallThreshold, fast: fast), _onPacedStallTick);
+  }
+
+  void _onPacedStallTick() {
+    _stallTimer = null;
+    if (!_sessionActive || _lastByteAt == null) return;
+    if (_interrupted) {
+      _armPacedStall(forceFast: true);
+      return;
+    }
+    if (_stallReported) return;
+    final age = _now().difference(_lastByteAt!);
+    if (age >= _stallThreshold) {
+      _stallReported = true;
+      _onStalled?.call();
+      return;
+    }
+    _armPacedStall(forceFast: age >= _healthyCheckInterval);
   }
 
   void _cancelStallWatchdog() {
@@ -271,19 +371,57 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _stallTimer = null;
     _lastByteAt = null;
     _stallReported = false;
+    _stallFastCadence = false;
   }
 
   void _startBatchWatchdog() {
     _cancelBatchWatchdog();
     _lastBatchProgressAt = _now();
     _batchStallReported = false;
-    _batchStallTimer = _periodic(_stallCheckInterval, (_) {
-      if (_batchStallReported || _lastBatchProgressAt == null || !_sessionActive) return;
-      if (_now().difference(_lastBatchProgressAt!) >= _batchStallThreshold) {
-        _batchStallReported = true;
-        _onBatchStalled?.call();
-      }
-    });
+    if (!_paceHealthyChecks) {
+      _batchStallTimer = _periodic(_stallCheckInterval, (_) {
+        if (_batchStallReported || _lastBatchProgressAt == null || !_sessionActive) return;
+        if (_now().difference(_lastBatchProgressAt!) >= _batchStallThreshold) {
+          _batchStallReported = true;
+          _onBatchStalled?.call();
+        }
+      });
+      return;
+    }
+    _armPacedBatch(forceFast: false);
+  }
+
+  void _armPacedBatch({required bool forceFast}) {
+    _batchStallTimer?.cancel();
+    _batchStallTimer = null;
+    if (!_sessionActive || _lastBatchProgressAt == null) return;
+    final age = _now().difference(_lastBatchProgressAt!);
+    if (age >= _batchStallThreshold) {
+      _batchFastCadence = true;
+      _batchStallTimer = Timer(Duration.zero, () {
+        if (_batchStallReported || !_sessionActive || _lastBatchProgressAt == null) return;
+        if (_now().difference(_lastBatchProgressAt!) >= _batchStallThreshold) {
+          _batchStallReported = true;
+          _onBatchStalled?.call();
+        }
+      });
+      return;
+    }
+    final fast = forceFast || _interrupted || age >= _healthyCheckInterval;
+    _batchFastCadence = fast;
+    _batchStallTimer = Timer(_pacedDelay(age: age, threshold: _batchStallThreshold, fast: fast), _onPacedBatchTick);
+  }
+
+  void _onPacedBatchTick() {
+    _batchStallTimer = null;
+    if (!_sessionActive || _lastBatchProgressAt == null || _batchStallReported) return;
+    final age = _now().difference(_lastBatchProgressAt!);
+    if (age >= _batchStallThreshold) {
+      _batchStallReported = true;
+      _onBatchStalled?.call();
+      return;
+    }
+    _armPacedBatch(forceFast: _interrupted || age >= _healthyCheckInterval);
   }
 
   void _cancelBatchWatchdog() {
@@ -291,6 +429,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _batchStallTimer = null;
     _lastBatchProgressAt = null;
     _batchStallReported = false;
+    _batchFastCadence = false;
   }
 
   /// Soft-rearm liveness after the app returns to foreground (#4706).
@@ -305,10 +444,14 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     if (_batchMode) {
       _lastBatchProgressAt = _now();
       _batchStallReported = false;
+      // Foreground is an anomaly edge: watch the next window at 1s, and let
+      // the next progress beat return to the healthy cadence.
+      if (_paceHealthyChecks) _armPacedBatch(forceFast: true);
       return;
     }
     _lastByteAt = _now();
     _stallReported = false;
+    if (_paceHealthyChecks) _armPacedStall(forceFast: true);
   }
 
   void _clearCallbacks() {

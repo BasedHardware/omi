@@ -652,6 +652,65 @@ class TestFinalizePath:
 
         session.flush.assert_awaited_once_with()
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'tail',
+        [
+            [],
+            [
+                {'text': 'tail one', 'start': 0.0, 'end': 0.1},
+                {'text': 'tail two', 'start': 0.1, 'end': 0.2},
+            ],
+        ],
+    )
+    async def test_finalize_sends_close_1000_after_all_tail_text(self, tail):
+        mod, session, lease = _make_app()
+        session.flush = AsyncMock(return_value=tail)
+        events = []
+
+        async def emit(segment):
+            events.append(('text', segment))
+
+        async def close(code):
+            events.append(('close', code))
+
+        websocket = SimpleNamespace(
+            accept=AsyncMock(),
+            receive=AsyncMock(return_value={'text': 'finalize'}),
+            send_json=AsyncMock(side_effect=emit),
+            close=AsyncMock(side_effect=close),
+        )
+        with patch.object(mod, 'StreamSession', return_value=session):
+            await mod.stream_transcribe(websocket, 16000, None, None)
+        assert events == [('text', {'type': 'ready'})] + [('text', segment) for segment in tail] + [('close', 1000)]
+        websocket.close.assert_awaited_once_with(code=1000)
+        session.cleanup.assert_called_once_with()
+        lease.release.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('failure', ['flush', 'tail_send'])
+    async def test_failed_tail_delivery_is_not_reported_as_clean_close(self, failure):
+        mod, session, lease = _make_app()
+        session.flush = AsyncMock(return_value=[{'text': 'tail', 'start': 0, 'end': 1}])
+        if failure == 'flush':
+            session.flush.side_effect = RuntimeError('flush failed')
+
+        async def emit(segment):
+            if segment.get('text'):
+                raise RuntimeError('tail send failed')
+
+        websocket = SimpleNamespace(
+            accept=AsyncMock(),
+            receive=AsyncMock(return_value={'text': 'finalize'}),
+            send_json=AsyncMock(side_effect=emit),
+            close=AsyncMock(),
+        )
+        with patch.object(mod, 'StreamSession', return_value=session):
+            await mod.stream_transcribe(websocket, 16000, None, None)
+        websocket.close.assert_not_awaited()
+        session.cleanup.assert_called_once_with()
+        lease.release.assert_called_once_with()
+
     def test_finalize_empty_flush_sends_nothing_and_stays_clean(self, caplog):
         mod, session, _ = _make_app()
 

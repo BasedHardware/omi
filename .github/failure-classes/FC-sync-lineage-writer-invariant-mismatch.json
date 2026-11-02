@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-lineage-writer-invariant-mismatch",
+  "violated_contract": "Every reader or validator of conversation redirect lineage must accept every shape the lineage writers actually persist. A validator must not reject, as structurally invalid, lineage that another production writer creates in normal operation.",
+  "canonical_prevention": "Build the validator's fixtures from the real writers (run the ordinary sync absorb to create lineage, then flatten it), not from hand-shaped rows, and repair legitimate legacy shapes to the stricter invariant inside the same transaction behind a kill switch.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_flatten_multihop_ancestry.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/config/merge_ancestry.py",
+    "backend/utils/sync/assignment.py",
+    "backend/utils/sync/bridge.py",
+    "backend/utils/conversations/smart_merge.py"
+  ],
+  "status": "open"
+}

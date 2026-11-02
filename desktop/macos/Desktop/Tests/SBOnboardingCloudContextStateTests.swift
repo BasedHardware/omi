@@ -44,7 +44,7 @@ final class SBOnboardingCloudContextStateTests: XCTestCase {
 
     model.begin()
 
-    let signals = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().filter {
+    let signals = DesktopDiagnosticsManager.shared.currentSnapshots().filter {
       $0["seam"] as? String == DesktopStateAuthoritySeam.onboardingSetupState.rawValue
     }
     XCTAssertEqual(

@@ -97,3 +97,22 @@ async def test_monitor_exits_without_terminating_once_already_terminal():
     with patch.object(receiver_mod, 'terminate_live_stt_session', new=AsyncMock()) as terminate:
         await ListenReceiver._monitor_stt_death(monitor_self)
     terminate.assert_not_awaited()
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+@pytest.mark.anyio
+async def test_cap_pause_keeps_receiving_when_provider_dies(legacy):
+    from utils.stt_cap_dispatch import LiveAdmission
+
+    receiver = _monitor_self(dead=True)
+    receiver.cap_admission = LiveAdmission('synthetic')
+    receiver.cap_admission.omi_selected = True
+    receiver.host.state.stt_cap_admission = receiver.cap_admission
+    if legacy:
+        receiver.recovery = None
+    receiver._failover_stt_socket = AsyncMock(side_effect=AssertionError('cap pause must not dial a replacement'))
+    with patch.object(receiver_mod, 'terminate_live_stt_session', new=AsyncMock()) as terminate:
+        await ListenReceiver._monitor_stt_death(receiver)
+    terminate.assert_not_awaited()
+    receiver._failover_stt_socket.assert_not_awaited()
+    assert receiver.host.state.active

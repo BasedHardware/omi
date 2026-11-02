@@ -25,11 +25,6 @@ def record_reserved_rejection_fallback(
 
 
 def can_try_next_provider(route: RouteArtifact, failed: ProviderRef, reason: FailureClass | str | None) -> bool:
-    if route.lane_id == 'omi:auto:dream-reasoning' and reason in {
-        FailureClass.RESERVED_CAPACITY_UNAVAILABLE,
-        FailureClass.PROVIDER_429_OMI_PAID,
-    }:
-        return False
     if reason == FailureClass.PROVIDER_INVALID_REQUEST:
         # This exception is strictly Gemini -> Luna inside one reserved route.
         # Invalid requests remain ineligible for cross-route/LKG failover.

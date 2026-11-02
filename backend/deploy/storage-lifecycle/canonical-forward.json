@@ -1,0 +1,12 @@
+{
+  "release": "20261015-v1",
+  "newBucketOnly": true,
+  "location": "us-central1",
+  "storageClass": "STANDARD",
+  "versioning": {"enabled": false},
+  "softDeletePolicy": {"retentionDurationSeconds": "0"},
+  "lifecycle": {"rule": [
+    {"action": {"type": "SetStorageClass", "storageClass": "COLDLINE"}, "condition": {"age": 30, "matchesPrefix": ["canonical-packs-20261015-v1/"], "matchesStorageClass": ["STANDARD"]}},
+    {"action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"}, "condition": {"age": 120, "matchesPrefix": ["canonical-packs-20261015-v1/"], "matchesStorageClass": ["COLDLINE"]}}
+  ]}
+}

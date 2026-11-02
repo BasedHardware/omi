@@ -41,26 +41,20 @@ void main() {
 
   test('Deepgram stop sends CloseStream before closing the socket', () async {
     final channel = RecordingWebSocketChannel();
-    final transcriber = DeepgramTranscriber(
-      apiKey: 'fake-key',
-      onTranscript: (_) {},
-      channel: channel,
-    );
+    final transcriber = DeepgramTranscriber(apiKey: 'fake-key', onTranscript: (_) {}, channel: channel);
 
     await transcriber.stop();
 
     expect(channel.events, ['send', 'close']);
-    expect(channel.sent, [jsonEncode({'type': 'CloseStream'})]);
+    expect(channel.sent, [
+      jsonEncode({'type': 'CloseStream'}),
+    ]);
     expect(channel.closed, isTrue);
   });
 
   test('Deepgram stop still closes when CloseStream send fails', () async {
     final channel = RecordingWebSocketChannel(sendError: StateError('synthetic send failure'));
-    final transcriber = DeepgramTranscriber(
-      apiKey: 'fake-key',
-      onTranscript: (_) {},
-      channel: channel,
-    );
+    final transcriber = DeepgramTranscriber(apiKey: 'fake-key', onTranscript: (_) {}, channel: channel);
 
     await transcriber.stop();
 
@@ -71,11 +65,7 @@ void main() {
   test('Deepgram still delivers transcripts until stop', () async {
     final channel = RecordingWebSocketChannel();
     final transcripts = <String>[];
-    DeepgramTranscriber(
-      apiKey: 'fake-key',
-      onTranscript: transcripts.add,
-      channel: channel,
-    );
+    DeepgramTranscriber(apiKey: 'fake-key', onTranscript: transcripts.add, channel: channel);
 
     channel.addIncoming(
       jsonEncode({
@@ -102,11 +92,7 @@ void main() {
       }),
     );
     final transcripts = <String>[];
-    final transcriber = DeepgramTranscriber(
-      apiKey: 'fake-key',
-      onTranscript: transcripts.add,
-      channel: channel,
-    );
+    final transcriber = DeepgramTranscriber(apiKey: 'fake-key', onTranscript: transcripts.add, channel: channel);
 
     await transcriber.stop();
 
@@ -131,11 +117,7 @@ void main() {
 
   test('Parakeet stop sends finalize before closing the socket', () async {
     final channel = RecordingWebSocketChannel();
-    final transcriber = ParakeetTranscriber(
-      apiUrl: 'https://parakeet.example',
-      onTranscript: (_) {},
-      channel: channel,
-    );
+    final transcriber = ParakeetTranscriber(apiUrl: 'https://parakeet.example', onTranscript: (_) {}, channel: channel);
 
     await transcriber.stop();
 
@@ -146,11 +128,7 @@ void main() {
 
   test('Parakeet stop still closes when finalize send fails', () async {
     final channel = RecordingWebSocketChannel(sendError: StateError('synthetic send failure'));
-    final transcriber = ParakeetTranscriber(
-      apiUrl: 'https://parakeet.example',
-      onTranscript: (_) {},
-      channel: channel,
-    );
+    final transcriber = ParakeetTranscriber(apiUrl: 'https://parakeet.example', onTranscript: (_) {}, channel: channel);
 
     await transcriber.stop();
 
@@ -159,9 +137,7 @@ void main() {
   });
 
   test('Parakeet stop drains a trailing transcript after finalize', () async {
-    final channel = RecordingWebSocketChannel(
-      trailingAfterCloseStream: jsonEncode({'text': 'final para'}),
-    );
+    final channel = RecordingWebSocketChannel(trailingAfterCloseStream: jsonEncode({'text': 'final para'}));
     final transcripts = <String>[];
     final transcriber = ParakeetTranscriber(
       apiUrl: 'https://parakeet.example',
@@ -208,7 +184,10 @@ void main() {
     await transcriber.stop();
     await stop;
 
-    expect(channel.sent, [Uint8List.fromList([1, 2]), 'finalize']);
+    expect(channel.sent, [
+      Uint8List.fromList([1, 2]),
+      'finalize',
+    ]);
   });
 
   test('Deepgram rejects PCM and a second CloseStream while draining', () async {
@@ -227,16 +206,15 @@ void main() {
     await transcriber.stop();
     await stop;
 
-    expect(channel.sent, [Uint8List.fromList([1, 2]), jsonEncode({'type': 'CloseStream'})]);
+    expect(channel.sent, [
+      Uint8List.fromList([1, 2]),
+      jsonEncode({'type': 'CloseStream'}),
+    ]);
   });
 }
 
 class RecordingWebSocketChannel extends StreamChannelMixin implements WebSocketChannel {
-  RecordingWebSocketChannel({
-    this.sendError,
-    this.trailingAfterCloseStream,
-    this.completeStreamOnCloseStream = true,
-  });
+  RecordingWebSocketChannel({this.sendError, this.trailingAfterCloseStream, this.completeStreamOnCloseStream = true});
 
   final Object? sendError;
   final Object? trailingAfterCloseStream;
@@ -287,8 +265,7 @@ class _RecordingSink implements WebSocketSink {
     if (error != null) {
       throw error;
     }
-    if ((event == jsonEncode({'type': 'CloseStream'}) || event == 'finalize') &&
-        _parent.completeStreamOnCloseStream) {
+    if ((event == jsonEncode({'type': 'CloseStream'}) || event == 'finalize') && _parent.completeStreamOnCloseStream) {
       scheduleMicrotask(() {
         final trailing = _parent.trailingAfterCloseStream;
         if (trailing != null) {

@@ -101,52 +101,43 @@ def _live_socket():
 
 
 @pytest.mark.anyio
-async def test_a_modulate_connect_that_returns_no_socket_serves_from_deepgram():
+async def test_a_modulate_connect_that_returns_no_socket_never_dials_retired_deepgram():
+    """Deepgram retired 2026-08-27: a dead Modulate leg exhausts the chain
+    instead of handing the session to a provider no deployment can serve."""
     receiver = _modulate_receiver()
-    dg_socket = _live_socket()
 
     with (
         _serving_policy(),
         patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
         patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=None)) as modulate,
-        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=dg_socket)) as dg,
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=_live_socket())) as dg,
         patch.object(streaming, 'record_fallback'),
     ):
-        socket = await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+        with pytest.raises(RuntimeError):
+            await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
 
     modulate.assert_awaited_once()
-    dg.assert_awaited_once()
-    assert socket is dg_socket
-    assert receiver.host.stt_service == STTService.deepgram
-    assert receiver.host.stt_model == 'nova-3'
+    dg.assert_not_awaited()
 
 
 @pytest.mark.anyio
-async def test_an_over_quota_modulate_stream_moves_the_session_to_deepgram():
-    """The real #11752 shape: the upgrade succeeds, then Velma refuses the stream."""
+async def test_an_over_quota_modulate_stream_releases_the_socket_and_never_dials_retired_deepgram():
+    """The #11752 socket-release rail stands; the retired dg leg is simply absent."""
     receiver = _modulate_receiver()
     rejected = _RejectedSocket()
-    dg_socket = _live_socket()
 
     with (
         _serving_policy(),
         patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
         patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=rejected)),
-        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=dg_socket)),
-        patch.object(streaming, 'record_fallback') as record,
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=_live_socket())) as dg,
+        patch.object(streaming, 'record_fallback'),
     ):
-        socket = await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+        with pytest.raises(RuntimeError):
+            await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
 
-    assert socket is dg_socket
-    assert receiver.host.stt_service == STTService.deepgram
     assert rejected.finished, 'the over-quota socket must be released, not leaked'
-    leg = record.call_args.kwargs
-    assert (leg['component'], leg['from_mode'], leg['to_mode'], leg['outcome']) == (
-        'stt_selection',
-        'modulate',
-        'deepgram',
-        'recovered',
-    )
+    dg.assert_not_awaited()
 
 
 @pytest.mark.anyio
@@ -213,25 +204,6 @@ async def test_deepgram_is_not_offered_a_session_the_deployment_never_listed_it_
 
 
 @pytest.mark.anyio
-async def test_the_deepgram_leg_gets_the_plain_callback_not_the_modulate_one():
-    """Modulate segments arrive in Velma's shape; Deepgram must not be handed it."""
-    receiver = _modulate_receiver()
-    callback = MagicMock(name='callback')
-    modulate_callback = MagicMock(name='modulate_callback')
-
-    with (
-        _serving_policy(),
-        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
-        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=None)) as modulate,
-        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=_live_socket())) as dg,
-        patch.object(streaming, 'record_fallback'),
-    ):
-        await ListenReceiver._create_stt_socket(receiver, callback, 16000, modulate_callback=modulate_callback)
-
-    assert modulate.await_args.args[0] is modulate_callback
-    assert dg.await_args.args[0] is callback
-
-
 # --- the helper seam: chain construction for a Modulate primary -------------
 
 
@@ -311,7 +283,7 @@ async def test_repeated_modulate_rejections_open_its_own_circuit():
         )
 
     assert service == STTService.deepgram
-    circuit.record_failure.assert_called_once_with()
+    circuit.record_failure.assert_called_once_with(error_class='config_incomplete')
 
 
 @pytest.mark.anyio
@@ -339,17 +311,11 @@ async def test_the_modulate_circuit_stays_independent_of_the_other_providers():
 # --- the policy gate --------------------------------------------------------
 
 
-def test_deepgram_is_a_configured_fallback_only_when_the_policy_lists_it():
+def test_retired_deepgram_is_never_a_configured_fallback():
+    """Deepgram retired 2026-08-27: listing, credential, or language fit never
+    re-admits it; the fallback model resolver answers None for every shape."""
     with patch.object(streaming, '_deepgram_is_available', return_value=True):
-        with patch.object(streaming, 'stt_service_models', ['modulate-velma-2', ' dg-nova-3', 'parakeet']):
-            assert streaming.deepgram_fallback_model('en') == 'nova-3'
-            # Nova-3 has no capability for an unknown code, so the session must not move.
-            assert streaming.deepgram_fallback_model('zz') is None
-        with patch.object(streaming, 'stt_service_models', ['modulate-velma-2', 'parakeet']):
-            assert streaming.deepgram_fallback_model('en') is None
-    # No reachable Deepgram credential means Deepgram cannot take the session over.
-    with (
-        patch.object(streaming, '_deepgram_is_available', return_value=False),
-        patch.object(streaming, 'stt_service_models', ['modulate-velma-2', 'dg-nova-3']),
-    ):
-        assert streaming.deepgram_fallback_model('en') is None
+        for models in (['modulate-velma-2', ' dg-nova-3', 'parakeet'], ['dg-nova-3']):
+            with patch.object(streaming, 'stt_service_models', models):
+                assert streaming.deepgram_fallback_model('en') is None
+                assert streaming.deepgram_fallback_model('zz') is None

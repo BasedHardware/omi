@@ -376,6 +376,19 @@ def test_invisible_rows_advance_the_cursor_without_ending_the_scan():
     assert stats['p1']['conversation_count'] == 3
 
 
+def test_dream_duplicate_capture_is_invisible_through_the_projected_scan():
+    # Dream's merge cleanup writes only dream_duplicate_of on the folded
+    # capture; discarded stays False. A projection that drops the field makes
+    # it come back absent, and is_visible_conversation reads an absent hide
+    # flag as visible, so the duplicate counted twice in People stats.
+    docs = [_stored('kept', 0), _stored('dream-duplicate', 1, dream_duplicate_of='kept')]
+    client, conversations = _scan(docs, field_paths=PEOPLE_STATS_FIELD_PATHS, limit=10, batch=10)
+    assert [c['id'] for c in conversations] == ['kept']
+    assert client.raw_reads == 2
+    stats = aggregate_people_stats(conversations)
+    assert stats['p1']['conversation_count'] == 1
+
+
 def test_stats_reads_only_to_the_raw_budget_through_mostly_deleted_rows():
     # One valid row, 2,000 tombstones, one more valid row: the 2,000-document
     # raw allowance stops exactly before the second valid row.

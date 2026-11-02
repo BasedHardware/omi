@@ -46,7 +46,12 @@ def test_desktop_cloud_run_receives_existing_gemini_secret_and_provider_switch()
 
 
 def test_runtime_manifest_tracks_gemini_tts_bindings():
-    manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))['environments']
+    # CSafeLoader keeps the call-phase parse of this ~4.8k-line manifest well
+    # inside the fast-unit CPU budget; same safe schema as safe_load.
+    manifest = yaml.load(
+        (BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )['environments']
     for environment in ('dev', 'prod'):
         backend_env = manifest[environment]['gke']['backend-listen']['env']
         assert backend_env['TTS_PROVIDER']['value'] == 'gemini'

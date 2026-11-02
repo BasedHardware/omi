@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-toggle-applies-fixed-direction",
+  "violated_contract": "An action presented as a toggle must take its direction from the current state of what it acts on. The web Tasks page lists Enter as 'Toggle complete' (useTaskKeyboardShortcuts), but TaskHub wired it to bulkComplete, which always marks the selection completed. A selected completed task could never be reopened with it, and pressing it re-sent completed=true, which makes the backend reset completed_at to now and repeat completion side effects such as the shared-task notification to the sender.",
+  "canonical_prevention": "Resolve a toggle's direction from its targets' current state in the handler that owns the action, and write only the targets whose state changes: reopen when every selected task is already completed, otherwise complete only the pending ones. Prove it with a hermetic test that drives the real shortcut on a completed selection and on a mixed selection and asserts the direction and the exact ids written.",
+  "canonical_prevention_artifact": [
+    "web/app/src/components/tasks/__tests__/TaskHubToggleComplete.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/components/tasks/TaskHub.tsx",
+    "web/app/src/hooks/useTaskKeyboardShortcuts.ts",
+    "web/app/src/hooks/useActionItems.ts"
+  ],
+  "status": "open"
+}

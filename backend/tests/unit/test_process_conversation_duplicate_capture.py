@@ -230,6 +230,9 @@ def _run(conversation, *, rows=None, lookup_error=None, trigger=None):
         # The relevance neighbor lookup shares the finished-after query; this harness
         # pins that duplicate-capture detection never runs inside the content gate.
         patch.object(pc, 'adjacent_conversation', MagicMock(return_value=None)),
+        # This standalone content-gate fixture has no occasion context. Its
+        # AutoMock databases cannot supply independent retention evidence.
+        patch.object(pc, 'occasion_retention', MagicMock(return_value=None)),
         patch.object(pc, 'record_fallback', fallback),
         patch.object(pc, 'get_conversation_notes', MagicMock(return_value=Structured(title='Summarized'))),
         patch.object(pc, '_fetch_dedup_candidates_for_query', MagicMock(return_value=[])),

@@ -542,3 +542,29 @@ def test_failed_review_purge_cannot_expose_tombstoned_canonical_candidate(monkey
     assert store[f"users/{uid}/memory_review_queue/{review_id}"]["candidate"]["content"] == (
         "Deleted private candidate"
     )
+
+
+@pytest.mark.parametrize("collection", ["memory_review_queue", "memory_corrections"])
+@pytest.mark.parametrize("gate_kind", ["explicit_memory_deletion", "retention_cleanup"])
+def test_cleanup_stops_before_next_delete_on_takeover(monkeypatch, review_queue, collection, gate_kind):
+    from database.legal_holds import DestructiveGateTakeover
+
+    uid = "uid-takeover"
+    paths = [f"users/{uid}/{collection}/{key}" for key in ("a", "b")]
+    store = {path: {"fact_id": "deleted"} for path in paths}
+    db = _FakeDb(store)
+    checks = []
+
+    def check(checked_uid, kind, *, firestore_client):
+        assert (checked_uid, kind, firestore_client) == (uid, gate_kind, db)
+        checks.append(kind)
+        if len(store) == 1:
+            raise DestructiveGateTakeover("peer completed before hold")
+
+    monkeypatch.setattr(review_queue, "assert_destructive_gate_still_ours", check)
+    with pytest.raises(DestructiveGateTakeover):
+        review_queue.purge_stale_review_conflicts_for_memories(
+            uid, ["deleted"], db_client=db, revalidate_gate=True, gate_kind=gate_kind
+        )
+    assert len(checks) == 2
+    assert list(store) == [paths[1]]

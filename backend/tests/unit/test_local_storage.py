@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from utils.other.local_storage import LocalStorageClient, local_storage_root_from_env
+from google.api_core.exceptions import PreconditionFailed
 from utils.other import storage as storage_helpers
 
 
@@ -31,6 +32,25 @@ def test_local_storage_round_trip_and_http_url(monkeypatch: pytest.MonkeyPatch, 
         'http://127.0.0.1:8000/_local/storage/speech-profiles/user-1/speech%20profile.wav'
     )
     assert (storage_root / 'speech-profiles' / 'user-1' / 'speech profile.wav').read_bytes() == b'voice-bytes'
+
+
+def test_local_archive_create_only_metadata_and_generation_survive_client_restart(monkeypatch, tmp_path):
+    root = _configure(monkeypatch, tmp_path)
+    client = LocalStorageClient(root)
+    blob = client.bucket('audio').blob('raw-live/owner/frame.bin')
+    blob.metadata = {'sha256': 'fixture-digest', 'codec': 'pcm16'}
+    blob.upload_from_string(b'\x01\x00', if_generation_match=0)
+    generation = blob.generation
+    restarted = LocalStorageClient(root).bucket('audio')
+    pinned = restarted.blob(blob.name, generation=generation)
+    pinned.reload()
+    assert pinned.metadata == {'sha256': 'fixture-digest', 'codec': 'pcm16'}
+    assert pinned.download_as_bytes(if_generation_match=generation) == b'\x01\x00'
+    assert [item.name for item in restarted.list_blobs('raw-live/owner/')] == [blob.name]
+    with pytest.raises(PreconditionFailed):
+        restarted.blob(blob.name).upload_from_string(b'other', if_generation_match=0)
+    with pytest.raises(PreconditionFailed):
+        restarted.blob(blob.name, generation=generation + 1).download_as_bytes()
 
 
 def test_production_storage_helper_returns_reachable_local_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -89,3 +109,35 @@ def test_local_storage_rejects_non_harness_and_traversal_paths(monkeypatch: pyte
     assert client is not None
     with pytest.raises(ValueError, match='Unsafe'):
         client.bucket('speech-profiles').blob('../escape')
+
+
+def test_local_download_refuses_destination_outside_owned_roots(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('utils.other.owned_paths.tempfile.gettempdir', lambda: str(tmp_path / 'system-temp'))
+    client = LocalStorageClient.from_env()
+    blob = client.bucket('profiles').blob('user.wav')
+    blob.upload_from_string(b'profile')
+    with pytest.raises(ValueError, match='outside owned scratch'):
+        blob.download_to_filename(str(tmp_path / 'private.wav'))
+    assert not (tmp_path / 'private.wav').exists()
+    destination = tmp_path / 'harness/export/profile.wav'
+    blob.download_to_filename(str(destination))
+    assert destination.read_bytes() == b'profile'
+
+
+def test_local_upload_refuses_source_outside_owned_roots(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('utils.other.owned_paths.tempfile.gettempdir', lambda: str(tmp_path / 'system-temp'))
+    source = tmp_path / 'private.wav'
+    source.write_bytes(b'private')
+    client = LocalStorageClient.from_env()
+    blob = client.bucket('profiles').blob('user.wav')
+    with pytest.raises(ValueError, match='outside owned scratch'):
+        blob.upload_from_filename(str(source))
+    assert not blob.exists()
+    allowed = tmp_path / 'harness/profile.wav'
+    allowed.write_bytes(b'profile')
+    blob.upload_from_filename(str(allowed))
+    assert blob.download_as_bytes() == b'profile'

@@ -7,7 +7,7 @@
 // sync outbox, live captions, the local knowledge graph, onboarding brain-map,
 // app-usage stats, rewind frames, proactive insights, indexed files). On a
 // user-initiated sign-out we DELETE all rows so a different account signing in
-// on the same machine starts clean (privacy). The two JIT keyframe cleanup
+// on the same machine starts clean (privacy). The legacy keyframe cleanup
 // tables are intentionally excluded: they are install-scoped retry authority
 // and are retired only after their physical image files unlink successfully (or
 // return ENOENT). Rows only, not schema (DELETE, not DROP), are changed here.
@@ -93,7 +93,7 @@ export function wipeUserDataOn(d: WipeableDb): void {
   d.exec('BEGIN')
   try {
     for (const table of USER_DATA_TABLES) {
-      // JIT bootstrap is additive and deliberately fail-open for the legacy
+      // Legacy data bootstrap is additive and deliberately fail-open for the
       // app. If it failed before creating every optional mirror table, account
       // switching must still erase all legacy user data atomically.
       if (table.startsWith('jit_') && !tableExists(d, table)) continue

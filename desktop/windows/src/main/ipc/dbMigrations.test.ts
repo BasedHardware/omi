@@ -136,43 +136,25 @@ describe('runMigrations', () => {
   })
 })
 
-describe('proactivity retirement migration', () => {
-  it('drops only retired tables and preserves KEEP data on upgrade and retry', () => {
+
+describe('legacy local data compatibility', () => {
+  it('does not migrate or delete existing JIT and ledger tables', () => {
     const db = new DatabaseSync(':memory:')
     db.exec(OLD_SCHEMA)
     runMigrations(db, MIGRATIONS.slice(0, 2))
-    const retired = [
-      'jit_trigger_mirror',
-      'jit_snapshot_receipt',
-      'jit_wakeup_receipt',
-      'jit_proactivity_reservation_receipt',
-      'jit_ambient_context_state',
-      'jit_feedback_outbox',
-      'jit_installation_identity'
-    ]
-    const kept = [
-      'jit_fact_mirror',
-      'jit_history_mirror',
-      'jit_playbook_mirror',
-      'jit_alias_mirror',
-      'jit_ledger_mirror_receipt',
-      'jit_keyframe_pin',
-      'jit_keyframe_cleanup_outbox',
-      'rewind_frames',
-      'focus_session',
-      'insight_history'
-    ]
-    for (const table of [...retired, ...kept]) {
-      db.exec(
-        `CREATE TABLE ${table} (id TEXT PRIMARY KEY); INSERT INTO ${table} VALUES ('sentinel')`
-      )
+    const legacy = ['jit_trigger_mirror', 'jit_snapshot_receipt', 'jit_wakeup_receipt',
+      'jit_proactivity_reservation_receipt', 'jit_ambient_context_state', 'jit_feedback_outbox',
+      'jit_installation_identity', 'jit_fact_mirror', 'jit_history_mirror', 'jit_playbook_mirror',
+      'jit_alias_mirror', 'jit_ledger_mirror_receipt', 'jit_keyframe_pin',
+      'jit_keyframe_cleanup_outbox', 'rewind_frames', 'focus_session', 'insight_history']
+    for (const table of legacy) {
+      db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY); INSERT INTO ${table} VALUES ('sentinel')`)
     }
-    expect(runMigrations(db)).toBe(2)
+    // Only v3 (screen-activity sync column on rewind_frames) is pending; no
+    // migration drops or rewrites the legacy JIT/ledger tables.
+    expect(runMigrations(db)).toBe(1)
     expect(runMigrations(db)).toBe(0)
-    for (const table of retired) {
-      expect(db.prepare('SELECT name FROM sqlite_master WHERE name = ?').get(table)).toBeUndefined()
-    }
-    for (const table of kept) {
+    for (const table of legacy) {
       expect(db.prepare(`SELECT id FROM ${table}`).get()).toEqual({ id: 'sentinel' })
     }
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
@@ -181,15 +163,21 @@ describe('proactivity retirement migration', () => {
 })
 
 describe('screen activity sync migration', () => {
-  it('upgrades the shipped v3 schema without losing Rewind rows and is idempotent', () => {
+  it('is v3 on the v1-v2 chain', () => {
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3])
+    expect(MIGRATIONS[2].name).toBe('rewind_screen_activity_sync_state')
+  })
+
+  it('upgrades the shipped v2 schema without losing Rewind rows and is idempotent', () => {
     const db = new DatabaseSync(':memory:')
     try {
       db.exec(OLD_SCHEMA)
       db.exec('CREATE TABLE rewind_frames (id INTEGER PRIMARY KEY, ocr_text TEXT)')
       db.exec("INSERT INTO rewind_frames VALUES (42, 'kept transcript')")
-      runMigrations(db, MIGRATIONS.slice(0, 3))
-      expect(getUserVersion(db)).toBe(3)
+      runMigrations(db, MIGRATIONS.slice(0, 2))
+      expect(getUserVersion(db)).toBe(2)
       expect(runMigrations(db)).toBe(1)
+      expect(getUserVersion(db)).toBe(3)
       expect(db.prepare('SELECT * FROM rewind_frames').get()).toEqual({
         id: 42,
         ocr_text: 'kept transcript',

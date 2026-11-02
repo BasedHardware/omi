@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-all-filter-persisted-as-every-category",
+  "violated_contract": "The All filter and a selection of every category are the same view and must both render as All. Loading a missing saved filter as every category left All unchecked, and tapping one category then removed it from the list instead of filtering to it.",
+  "canonical_prevention": "A missing or empty saved filter loads as an empty selection, the selection collapses to empty when it covers every category, and the regression tests assert All on a first visit and manual-only after one tap.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/memories_filter_selection_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/memories_provider.dart"
+  ],
+  "status": "open"
+}

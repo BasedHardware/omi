@@ -15,7 +15,9 @@ def hume_expression_measurement_callback(request: Request, data: dict):
     # which defensively parses an arbitrarily-nested prosody predictions structure. Modeling it would
     # duplicate Hume's API schema with no validation benefit since from_dict is the real parser.
     job_callback = hume.HumeJobCallbackModel.from_dict("prosody", data)
-    if job_callback is None:
+    # from_dict returns a model even for an empty payload — job_id is None on
+    # a missing/empty job_id, and processing a null job-id crashes downstream.
+    if job_callback is None or not job_callback.job_id:
         raise HTTPException(status_code=400, detail="Job callback is invalid")
 
     process_user_expression_measurement_callback(task.TaskActionProvider.HUME, job_callback.job_id, job_callback)

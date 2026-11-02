@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/payment.dart' as payment_api;
+import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -17,7 +20,10 @@ const _stepCount = 3;
 /// step is its own route, so the iOS edge swipe and system back step back one step. This widget
 /// is step 1 and owns the flow; [show] resolves `true` when the subscription was cancelled.
 class CancelSubscriptionFlow extends StatefulWidget {
-  const CancelSubscriptionFlow({super.key});
+  const CancelSubscriptionFlow({super.key, this.loadOffer});
+
+  /// Hermetic preview/test seam; production reads the retention endpoint.
+  final Future<wire.GeneratedRetentionOfferResponse?> Function()? loadOffer;
 
   static Future<bool?> show(BuildContext context) {
     return Navigator.of(context).push<bool>(omiPageRoute(builder: (_) => const CancelSubscriptionFlow()));
@@ -29,6 +35,8 @@ class CancelSubscriptionFlow extends StatefulWidget {
 
 /// What the reader has entered so far, shared by the three steps.
 class _CancelFlow {
+  _CancelFlow({this.loadOffer});
+  final Future<wire.GeneratedRetentionOfferResponse?> Function()? loadOffer;
   final exit = LeaveFlowExit();
   final details = TextEditingController();
   String? reason;
@@ -37,7 +45,7 @@ class _CancelFlow {
 }
 
 class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
-  final _flow = _CancelFlow();
+  late final _flow = _CancelFlow(loadOffer: widget.loadOffer);
 
   static const _reasons = [
     _Reason('too_expensive', FontAwesomeIcons.wallet),
@@ -176,8 +184,48 @@ class _CancelConfirmStep extends StatefulWidget {
 
 class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   bool _isCancelling = false;
+  bool _isAcceptingOffer = false;
+  wire.GeneratedRetentionOfferResponse? _offer;
 
   _CancelFlow get _flow => widget.flow;
+
+  bool get _busy => _isCancelling || _isAcceptingOffer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOffer();
+  }
+
+  Future<void> _loadOffer() async {
+    final offer = await (_flow.loadOffer ?? payment_api.getRetentionOffer)();
+    if (!mounted || offer == null || !offer.eligible || offer.discountedAmount == null) return;
+    setState(() => _offer = offer);
+    PlatformManager.instance.analytics
+        .track('Retention Offer Shown', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
+  }
+
+  String _monthlyPrice(wire.GeneratedRetentionOfferResponse offer) =>
+      formatBillingPrice(offer.discountedAmount!, offer.currency ?? 'usd');
+
+  Future<void> _acceptOffer() async {
+    final offer = _offer;
+    if (offer == null || _busy) return;
+    setState(() => _isAcceptingOffer = true);
+    PlatformManager.instance.analytics
+        .track('Retention Offer Accepted', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
+    final ok = await payment_api.acceptRetentionOffer();
+    if (!mounted) return;
+    if (ok) {
+      await context.read<UsageProvider>().fetchSubscription();
+      if (!mounted) return;
+      OmiFeedback.confirm(context, context.l10n.retentionOfferApplied(offer.percentOff, offer.durationMonths));
+      _flow.exit.close(context, false);
+    } else {
+      OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
+      setState(() => _isAcceptingOffer = false);
+    }
+  }
 
   Future<void> _confirmCancel() async {
     setState(() => _isCancelling = true);
@@ -221,15 +269,24 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final periodEnd = sub?.currentPeriodEnd;
     final renewalDate =
         periodEnd == null ? '' : OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
+    final offer = _offer;
 
     return LeaveFlowStepScaffold(
       step: 2,
       stepCount: _stepCount,
       title: context.l10n.justAMoment,
       subtitle: context.l10n.cancelConsequencesSubtitle,
-      canPop: !_isCancelling,
+      canPop: !_busy,
       body: Column(
         children: [
+          if (offer != null) ...[
+            LeaveFlowNotice(
+              icon: FontAwesomeIcons.tag,
+              text: context.l10n.retentionOfferBody(_monthlyPrice(offer), offer.durationMonths),
+              color: OmiColors.success,
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+          ],
           LeaveFlowNotice(
             icon: FontAwesomeIcons.circleInfo,
             text: context.l10n.cancelBillingPeriodInfo(renewalDate),
@@ -260,22 +317,30 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
       actions: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          OmiButton(
-            label: context.l10n.keepSubscription,
-            expand: true,
-            onPressed: _isCancelling
-                ? null
-                : () {
-                    PlatformManager.instance.analytics.subscriptionCancelKeptPlan(step: 3, reason: _flow.reason);
-                    _flow.exit.close(context, false);
-                  },
-          ),
+          if (offer != null)
+            OmiButton(
+              label: context.l10n.retentionOfferAccept(offer.percentOff),
+              expand: true,
+              isLoading: _isAcceptingOffer,
+              onPressed: _busy ? null : _acceptOffer,
+            )
+          else
+            OmiButton(
+              label: context.l10n.keepSubscription,
+              expand: true,
+              onPressed: _isCancelling
+                  ? null
+                  : () {
+                      PlatformManager.instance.analytics.subscriptionCancelKeptPlan(step: 3, reason: _flow.reason);
+                      _flow.exit.close(context, false);
+                    },
+            ),
           const SizedBox(height: OmiSpacing.xs),
           OmiButton.destructive(
             label: context.l10n.cancelSubscription,
             expand: true,
             isLoading: _isCancelling,
-            onPressed: _confirmCancel,
+            onPressed: _isAcceptingOffer ? null : _confirmCancel,
           ),
         ],
       ),

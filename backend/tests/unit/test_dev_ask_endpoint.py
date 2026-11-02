@@ -109,7 +109,7 @@ def test_ask_endpoint_is_bound_to_the_dev_ask_rate_limited_dependency():
 
     auth = SimpleNamespace(uid="u1", app_id="a1", key_id="k1")
     with patch.object(deps, "_require_conversations_read_scope", lambda a: None), patch.object(
-        deps, "_check_dev_api_key_rate_limit_async", fake_enforce
+        deps, "check_developer_api_key_rate_limit", fake_enforce
     ):
         uid = asyncio.run(deps.get_uid_with_conversations_read_ask(auth=auth, request=None))
 

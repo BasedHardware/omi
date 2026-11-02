@@ -1,0 +1,128 @@
+[
+  {
+    "uid": "omi-vertex-managed-25-paygo",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Vertex reservation cutover",
+    "title": "Managed non-Dream Gemini Flash after reservation cutover",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_vertex_managed_25_attempts_total{traffic_type=~\"shared|on_demand\"}[5m])) or vector(0)) + (sum(increase(omi_vertex_managed_25_on_demand_responses_total[5m])) or vector(0)) + (sum(increase(omi_vertex_non_dream_flash_after_cutover_attempts_total[5m])) or vector(0)) > bool 0",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Any non-Dream Gemini Flash generation attempt after the order moved, or any managed 2.5 shared/on-demand attempt, is a regression.",
+      "threshold": "Any positive increase in a 5 minute window; no volume or pending-duration threshold.",
+      "scope": "Company-paid non-Dream generation only after observed exclusive-order move; all Flash models and capacity modes, including blocked dispatches. Dream, BYOK, embeddings and synthetic dedicated discovery are excluded from the cutover series.",
+      "user_impact": "Non-Dream requests may consume Dream reservation capacity or unreserved Gemini spend.",
+      "verification": "Check omi_vertex_non_dream_flash_after_cutover_attempts_total by model, traffic_type and lane alongside routing decisions and reservation evidence.",
+      "safe_next_action": "Inspect the INACTIVE destination table and dispatch guard. Keep every serving non-Dream row on Luna; never restore a Gemini remap.",
+      "runbook": "backend/docs/runbooks/desktop-gemini-proxy-incidents.md"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-vertex-managed-25-paygo",
+      "component": "llm-gateway",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  }
+]

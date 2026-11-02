@@ -125,19 +125,6 @@ extension TaskAssistant {
     }
   }
 
-  /// Generate embedding for a newly saved staged task and store it
-  private func generateEmbeddingForTask(id: Int64, text: String) async {
-    do {
-      let embedding = try await EmbeddingService.shared.embed(text: text)
-      let data = await EmbeddingService.shared.floatsToData(embedding)
-      try await StagedTaskStorage.shared.updateEmbedding(id: id, embedding: data)
-      await EmbeddingService.shared.addToIndex(source: .staged, id: id, embedding: embedding)
-      log("Task: Generated embedding for staged task \(id)")
-    } catch {
-      logError("Task: Failed to generate embedding for staged task \(id)", error: error)
-    }
-  }
-
   /// Save extracted task to staged_tasks SQLite table
   private func saveTaskToSQLite(
     task: ExtractedTask,

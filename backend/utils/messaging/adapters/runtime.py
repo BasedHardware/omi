@@ -4,13 +4,16 @@ import asyncio
 import logging
 import os
 
-from utils.executors import start_background_task
+from utils.executors import start_background_task, run_blocking, sync_executor
+from utils.messaging.adapters.decoder import MediaDecoderUnavailable, get_media_decoder
 
 logger = logging.getLogger(__name__)
 
 
 def configured_adapters():
-    if os.getenv('OMI_MESSAGING_CHANNELS', 'off') != 'on':
+    from config.messaging import MESSAGING_CHANNELS, channel_enabled
+
+    if not any(channel_enabled(c) for c in MESSAGING_CHANNELS):
         return ()
     from utils.messaging.adapters.telegram import TelegramAdapter
     from utils.messaging.adapters.linq import IMessageAdapter, LinqProvider
@@ -26,12 +29,18 @@ def configured_adapters():
                 os.environ['TELEGRAM_BOT_TOKEN'],
                 os.environ['TELEGRAM_WEBHOOK_SECRET'],
                 streaming=streaming,
+                shared_pacing=os.getenv('OMI_TELEGRAM_SHARED_PACING', 'on') == 'on',
             )
         )
     if os.getenv('OMI_IMESSAGE_ENABLED', 'off') == 'on':
         provider = os.getenv('OMI_IMESSAGE_PROVIDER', 'linq')
-        if provider != 'linq':
+        if provider not in ('linq', 'keiki'):
             raise ValueError('iMessage provider is not installed')
+    else:
+        provider = None
+    if provider == 'keiki':
+        adapters.append(_keiki_adapter('imessage'))
+    elif provider == 'linq':
         transport = Transport()
         client = LinqProvider(
             os.environ['LINQ_API_KEY'],
@@ -48,7 +57,33 @@ def configured_adapters():
                 contact_card=os.getenv('OMI_IMESSAGE_CONTACT_CARD', 'off') == 'on',
             )
         )
+    if os.getenv('OMI_WHATSAPP_ENABLED', 'off') == 'on':
+        if os.getenv('OMI_WHATSAPP_PROVIDER', 'keiki') != 'keiki':
+            raise ValueError('WhatsApp provider is not installed')
+        adapters.append(_keiki_adapter('whatsapp'))
     return tuple(adapters)
+
+
+def _keiki_adapter(channel):
+    """One Keiki agent per channel: each has its own dispatch URL and signing secret."""
+    from utils.messaging.adapters.keiki import API_BASE, KeikiAdapter, KeikiClient
+    from utils.messaging.adapters.transport import Transport
+
+    prefix = channel.upper()
+    transport = Transport()
+    client = KeikiClient(
+        os.environ[f'KEIKI_{prefix}_AGENT_ID'],
+        os.environ[f'KEIKI_{prefix}_SIGNING_SECRET'],
+        transport=transport,
+        sleep=asyncio.sleep,
+        api_base=os.getenv('KEIKI_API_BASE', API_BASE),
+    )
+    return KeikiAdapter(
+        channel,
+        client,
+        transport=transport,
+        max_ratio=int(os.getenv(f'OMI_{prefix}_MAX_SEND_RECEIVE_RATIO', '3')),
+    )
 
 
 async def recover_pending(gateways, stop, *, interval=30):
@@ -57,6 +92,7 @@ async def recover_pending(gateways, stop, *, interval=30):
         for gateway in gateways:
             try:
                 await gateway.drain(limit=100)
+                await gateway.expired_notices()
             except Exception as error:
                 logger.warning(
                     'Messaging recovery paused provider=%s error_type=%s',
@@ -69,10 +105,17 @@ async def recover_pending(gateways, stop, *, interval=30):
             continue
 
 
-def start_adapters(register):
-    gateways = tuple(register(adapter.channel, adapter) for adapter in configured_adapters())
-    if not gateways:
+async def start_adapters(register):
+    adapters = configured_adapters()
+    if not adapters:
         return None
+    # Probe once so a broken image is loud at startup. It must not take the whole API down:
+    # text turns keep working, and voice notes get the typed decode reply.
+    try:
+        await run_blocking(sync_executor, get_media_decoder)
+    except MediaDecoderUnavailable:
+        logger.error('Messaging audio decoder unavailable at startup; voice notes will be declined')
+    gateways = tuple(register(adapter.channel, adapter) for adapter in adapters)
     stop = asyncio.Event()
     task = start_background_task(recover_pending(gateways, stop), name='messaging-pending-recovery')
     return stop, task

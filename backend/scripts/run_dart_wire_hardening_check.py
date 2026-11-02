@@ -15,6 +15,13 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 MESSAGES_WIRE = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'messages_wire.g.dart'
 MESSAGE_ADAPTER = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dart'
+PENDING_WIRE = MESSAGES_WIRE.with_name('pending_work_wire.g.dart')
+ADAPTER_DEPENDENCIES = (
+    'backend/schema/chat_content_block.dart',
+    'backend/schema/memory_review.dart',
+    'models/chat_evidence_reference.dart',
+    'backend/schema/gen/users_wire.g.dart',
+)
 
 
 def package_free_message_adapter_source() -> str:
@@ -42,7 +49,13 @@ class Uuid {
 }
 
 """
-    return "import 'messages_wire.g.dart' as wire;\n\n" + prelude + source
+    for dependency in ADAPTER_DEPENDENCIES:
+        source = source.replace('package:omi/' + dependency, Path(dependency).name)
+    # Keep Dart directives before the harness-only declarations.
+    lines = source.splitlines(keepends=True)
+    imports = ''.join(line for line in lines if line.startswith('import '))
+    body = ''.join(line for line in lines if not line.startswith('import '))
+    return "import 'messages_wire.g.dart' as wire;\n" + imports + prelude + body
 
 
 def main() -> int:
@@ -54,6 +67,7 @@ def main() -> int:
     source = """
 import 'messages_wire.g.dart';
 import 'message_adapter.dart';
+import 'pending_work_wire.g.dart';
 
 void expectValue(bool condition, String message) {
   if (!condition) {
@@ -80,6 +94,32 @@ Map<String, dynamic> responseMessageJson() => {
 };
 
 void main() {
+  final pending = GeneratedPendingWorkSnapshot.fromJson({
+    'enabled': true,
+    'attention_unseen_count': 1,
+    'items': [{
+      'id': 'conv:c1',
+      'kind': 'conversation',
+      'state': 'summarizing',
+      'conversation_ids': ['c1'],
+      'duration_seconds': 12.5,
+      'started_at': '2026-10-16T00:00:00Z',
+      'updated_at': null,
+    }],
+  });
+  expectValue(pending.enabled && pending.attentionUnseenCount == 1, 'pending snapshot should decode');
+  expectValue(pending.items.single.durationSeconds == 12.5, 'fractional duration should decode');
+  final roundTrip = GeneratedPendingWorkSnapshot.fromJson(pending.toJson());
+  expectValue(roundTrip.items.single.startedAt?.toUtc() == DateTime.utc(2026, 10, 16), 'dates should round-trip');
+  expectValue(roundTrip.items.single.updatedAt == null, 'nullable dates should round-trip');
+  expectValue(const GeneratedSeenRequest(all: true).toJson()['ids'].isEmpty, 'seen defaults must encode valid requests');
+  final retry = GeneratedAttentionRetryAllResponse.fromJson({
+    'operations': [{'id': 'attention:c1', 'operation_id': 'op1', 'state': 'in_progress'}],
+  });
+  expectValue(retry.operations.single.operationId == 'op1', 'retry operations should decode');
+  expectValue(retry.toJson()['operations'][0]['id'] == 'attention:c1', 'retry operations should encode');
+  expectFormatException(() => GeneratedPendingWorkSnapshot.fromJson({'enabled': true}), 'attention_unseen_count');
+
   final defaulted = GeneratedResponseMessage.fromJson(responseMessageJson());
   expectValue(defaulted.askForNps == false, 'absent nullable default should use schema default');
   expectValue(
@@ -174,6 +214,13 @@ void main() {
     with tempfile.TemporaryDirectory(prefix='omi-dart-wire-check-') as temp_dir:
         temp_path = Path(temp_dir)
         shutil.copyfile(MESSAGES_WIRE, temp_path / 'messages_wire.g.dart')
+        shutil.copyfile(PENDING_WIRE, temp_path / PENDING_WIRE.name)
+        for dependency in ADAPTER_DEPENDENCIES:
+            path = ROOT_DIR / 'app' / 'lib' / dependency
+            contents = path.read_text(encoding='utf-8')
+            for nested in ADAPTER_DEPENDENCIES:
+                contents = contents.replace('package:omi/' + nested, Path(nested).name)
+            (temp_path / path.name).write_text(contents, encoding='utf-8', newline='\n')
         (temp_path / 'message_adapter.dart').write_text(
             package_free_message_adapter_source(), encoding='utf-8', newline='\n'
         )

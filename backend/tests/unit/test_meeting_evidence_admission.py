@@ -43,6 +43,7 @@ def clock():
 
 @pytest.fixture(autouse=True)
 def _environment(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('MEETING_NOTES_EVIDENCE_WAIT_SECONDS', '25')
     monkeypatch.setenv('BUCKET_SCREEN_FRAMES', BUCKET)
     monkeypatch.setattr(admission, 'get_meeting_note_screenshots_enabled', lambda uid, **kw: True)
@@ -235,6 +236,8 @@ def _finalize_until_geolocation(monkeypatch, status):
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
             return data
+        if function is finalizer.reserve_recording:
+            return function(*args, **kwargs)
         if function is finalizer.get_cached_user_geolocation:
             calls.append('geolocation')
             raise _Stop()
@@ -312,6 +315,7 @@ class TestTheMarkerMustCoverTheCurrentWindow:
 
 def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
     """Run the finalizer to process_conversation with a transcript that grows during the wait."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
     before = dict(MEETING, id='c', status='processing', segments=['hello'])
     after = dict(MEETING, id='c', status=reloaded_status, segments=['hello', 'tail said during the wait'])
     reads = iter([before, after])
@@ -328,6 +332,10 @@ def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
             return next(reads)
+        if function is finalizer.reserve_recording:
+            return function(*args, **kwargs)
+        if function is finalizer.apply_call_metadata:
+            return function(*args, **kwargs)
         if function is finalizer.get_cached_user_geolocation:
             return None
         if function is finalizer.process_with_episode_budget:
