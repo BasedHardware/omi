@@ -5,12 +5,21 @@ import json
 import threading
 import time
 from bisect import bisect_right
+from datetime import datetime
 from google.cloud.exceptions import NotFound
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
 from utils.other.raw_audio import decode_capture
-from utils.other.audio_frame_table import FRAME_SCHEMA, committed_frames, entries, validate_frames, receipt_frames
+from utils.other.audio_frame_table import (
+    FRAME_SCHEMA,
+    committed_frames,
+    entries,
+    validate_frames,
+    receipt_frames,
+    resampled_samples,
+    io_timeout,
+)
 from utils.other.audio_raw_read_metrics import (
     ChecksumMismatch,
     CoverageMismatch,
@@ -18,6 +27,7 @@ from utils.other.audio_raw_read_metrics import (
     DecryptError,
     error_result,
     record,
+    log_failure,
 )
 
 _index_lock = threading.Lock()
@@ -36,17 +46,19 @@ def invalidate_pack_index(bucket, uid: str, conversation_id: str):
         _indexes.pop((getattr(bucket, 'name', ''), uid, conversation_id), None)
 
 
-def list_packs(bucket, uid: str, conversation_id: str):
+def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
     with _index_lock:
         cached = _indexes.get(key)
-        if cached and cached[0] > time.monotonic():
+        if not fresh and cached and cached[0] > time.monotonic():
             return cached[1]
     packs = []
     for index, blob in enumerate(
-        bucket.list_blobs(prefix=f'raw-live/{uid}/{conversation_id}/', timeout=10, retry=None)
+        bucket.list_blobs(
+            prefix=f'raw-live/{uid}/{conversation_id}/', timeout=io_timeout(deadline, timeout), retry=None
+        )
     ):
-        if index >= 10000:
+        if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('raw capture index budget exhausted')
         metadata = blob.metadata or {}
         if metadata.get('clock_source') == 'arrival_estimate':
@@ -73,11 +85,16 @@ def list_packs(bucket, uid: str, conversation_id: str):
                 'generation': getattr(blob, 'generation', None),
                 'pcm_sha256': metadata.get('pcm_sha256'),
             }
+            created = getattr(blob, 'time_created', None)
+            if isinstance(created, datetime):
+                source['raw_created_at'] = created.timestamp()
             if framed:
-                frames, rate = committed_frames(bucket, blob, uid)
+                frames, rate = committed_frames(bucket, blob, uid, deadline=deadline)
                 if sum(frame['gap_before'] for frame in frames) != int(metadata['gap_count']):
                     raise CoverageMismatch('capture gap count differs from frame table')
                 packs.extend(entries(frames, rate, source))
+                if len(packs) > max_count:
+                    raise TimeoutError('raw capture index budget exhausted')
             else:
                 packs.append(source)
         except (KeyError, ValueError, TypeError, NotFound):
@@ -88,6 +105,61 @@ def list_packs(bucket, uid: str, conversation_id: str):
             _indexes.pop(next(iter(_indexes)))
         _indexes[key] = (time.monotonic() + _INDEX_TTL, result)
     return result
+
+
+def raw_chunks_for_listing(
+    bucket,
+    uid,
+    conversation_id,
+    chunks,
+    *,
+    enabled,
+    include_raw=False,
+    timeout=None,
+    deadline=None,
+    max_count=None,
+    require_archive=False,
+    list_raw=list_packs,
+):
+    """Playback may fall back; independent replay proof requires a fresh complete inventory."""
+    if not enabled:
+        return []
+    try:
+        packs = (
+            list_raw(
+                bucket,
+                uid,
+                conversation_id,
+                fresh=True,
+                deadline=deadline,
+                timeout=timeout or 10,
+                max_count=max_count or 10000,
+            )
+            if include_raw
+            else list_raw(bucket, uid, conversation_id)
+        )
+        raw_chunks = packs if include_raw else uncovered_raw_packs(packs, chunks)
+        if max_count is not None and len(chunks) + len(raw_chunks) > max_count:
+            raise TimeoutError('speaker audio listing budget exhausted')
+        return raw_chunks
+    except Exception:
+        if require_archive or include_raw:
+            raise
+        log_failure('other')
+        return []
+
+
+def finish_audio_listing(chunks, raw_chunks, source_identity):
+    chunks.extend(raw_chunks)
+    if source_identity or raw_chunks:
+        for chunk in chunks:
+            span = chunk.get('span')
+            if span and span['start'] != chunk['timestamp']:
+                # Preserve the sample clock after encoded coverage replaces raw
+                # fragments and across archive kill-switch changes.
+                chunk['legacy_timestamp'] = chunk['timestamp']
+                chunk['timestamp'] = span['start']
+    return sorted(chunks, key=lambda item: item['timestamp'])
 
 
 def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
@@ -101,14 +173,15 @@ def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: i
 
 
 def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> bytes:
+    deadline = time.monotonic() + download_kwargs.get('timeout', 10)
     blob.reload(**(download_kwargs or {}))
     metadata = blob.metadata or {}
     if metadata.get('frame_schema') == FRAME_SCHEMA:
-        frames, rate = committed_frames(bucket, blob, uid)
-        expected = round(validate_frames(frames, rate) * sample_rate / rate) * 2
+        frames, rate = committed_frames(bucket, blob, uid, deadline=deadline)
+        expected = resampled_samples(validate_frames(frames, rate), rate, sample_rate) * 2
     else:
         expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
-    raw = blob.download_as_bytes(**(download_kwargs or {}))
+    raw = blob.download_as_bytes(**{**download_kwargs, 'timeout': io_timeout(deadline)})
     if metadata.get('encrypted') == 'true':
         try:
             raw = encryption.decrypt_audio_file(raw, uid)
@@ -233,15 +306,17 @@ def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:
             union.append((start, end))
     ends = [end for _, end in union]
     result = []
-    raw_cursor = None
-    for pack in packs:
+    # A reconnect can commit a second raw receipt before projection detects a
+    # conflict. Prefer the earlier immutable media creation time, regardless of
+    # prefix-list order or the new window's start/end; retain only its new tail.
+    for pack in sorted(packs, key=lambda item: (item.get('raw_created_at') is None, item.get('raw_created_at', 0))):
         # Keep historical selection for spanless legacy entries: their encoded
         # size is not proof of sample coverage.
         if any(pack['timestamp'] <= stamp < pack['raw_end'] for stamp in unknown):
             continue
         original_start = round(pack['timestamp'] * 16000)
         original_end = original_start + pack['span']['samples']
-        cursor = max(original_start, raw_cursor) if raw_cursor is not None else original_start
+        cursor = original_start
         remaining = []
         index = bisect_right(ends, cursor)
         while index < len(union) and union[index][0] < original_end and cursor < original_end:
@@ -252,7 +327,6 @@ def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:
             index += 1
         if cursor < original_end:
             remaining.append((cursor, original_end))
-        raw_cursor = max(raw_cursor or original_end, original_end)
         for start, end in remaining:
             item = dict(pack)
             if start != original_start or end != original_end:
@@ -264,9 +338,21 @@ def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:
                 )
                 if 'raw_offset_samples' in pack:
                     item['raw_offset_samples'] = pack['raw_offset_samples'] + start - original_start
+                    for key in ('raw_capture_offset_samples', 'raw_capture_samples', 'raw_capture_rate'):
+                        item.pop(key, None)
                     item.pop('raw_source_start', None)
             result.append(item)
-    return result
+        # Claim this pack's interval for subsequent raw packs, just as encoded
+        # spans already claim theirs. No stored bytes or frame times change.
+        merged = []
+        for lo, hi in sorted([*union, (original_start, original_end)]):
+            if merged and lo <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+            else:
+                merged.append((lo, hi))
+        union = merged
+        ends = [hi for _, hi in union]
+    return sorted(result, key=lambda item: item['timestamp'])
 
 
 def select_raw_pcm(pcm: bytes, chunk: dict, sample_rate: int) -> bytes:
@@ -274,6 +360,14 @@ def select_raw_pcm(pcm: bytes, chunk: dict, sample_rate: int) -> bytes:
     if 'raw_source_start' not in chunk and 'raw_offset_samples' not in chunk:
         return pcm
     span = chunk['span']
+    if 'raw_capture_rate' in chunk:
+        rate = chunk['raw_capture_rate']
+        start = resampled_samples(chunk['raw_capture_offset_samples'], rate, sample_rate)
+        end = resampled_samples(chunk['raw_capture_offset_samples'] + chunk['raw_capture_samples'], rate, sample_rate)
+        selected = pcm[start * 2 : end * 2]
+        if len(selected) != (end - start) * 2:
+            raise ValueError('raw playback fragment has incomplete sample coverage')
+        return selected
     offset = (
         round(chunk['raw_offset_samples'] * sample_rate / 16000)
         if 'raw_offset_samples' in chunk

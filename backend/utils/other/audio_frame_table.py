@@ -7,9 +7,11 @@ PCM concatenation, never elapsed wall time. A media upload alone is not proof.
 import hashlib
 import json
 import math
+import time
 from typing import Any
 
 from utils import encryption
+from utils.pusher_audio_window import AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 
 FRAME_SCHEMA = 'audio_frames_v1'
 MAX_FRAMES = 4096
@@ -38,7 +40,7 @@ def validate_frames(frames: list[dict], sample_rate: int) -> int:
             or not isinstance(frame['gap_before'], bool)
         ):
             raise ValueError('invalid capture frame')
-        if previous_end is not None and start < previous_end - 0.0001:
+        if previous_end is not None and start - previous_end < -AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
             raise ValueError('capture frames overlap')
         if previous_end is not None and frame['gap_before'] != (abs(start - previous_end) > 0.002):
             raise ValueError('capture gap marker differs from frame positions')
@@ -48,15 +50,27 @@ def validate_frames(frames: list[dict], sample_rate: int) -> int:
     return total
 
 
-def _manifest(bucket, uid: str, path: str, generation=None, digest=None) -> dict:
+def io_timeout(deadline=None, maximum=10):
+    remaining = maximum if deadline is None else min(maximum, deadline - time.monotonic())
+    if remaining <= 0:
+        raise TimeoutError('capture proof deadline exhausted')
+    return remaining
+
+
+def resampled_samples(samples: int, rate: int, output_rate: int = 16000) -> int:
+    """Length of audioop's whole-stream rendition, including its first sample."""
+    return ((samples - 1) * output_rate // rate + 1) if samples else 0
+
+
+def _manifest(bucket, uid: str, path: str, generation=None, digest=None, *, deadline=None) -> dict:
     if not path.startswith(f'audio-outbox/{uid}/'):
         raise ValueError('frame manifest owner mismatch')
     blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
-    blob.reload(timeout=10, retry=None)
+    blob.reload(timeout=io_timeout(deadline), retry=None)
     pinned = int(generation or blob.generation)
     if pinned <= 0:
         raise ValueError('frame manifest requires generation')
-    raw = blob.download_as_bytes(if_generation_match=pinned, timeout=10, retry=None)
+    raw = blob.download_as_bytes(if_generation_match=pinned, timeout=io_timeout(deadline), retry=None)
     if len(raw) > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
     if (blob.metadata or {}).get('encrypted') == 'true':
@@ -70,9 +84,9 @@ def _manifest(bucket, uid: str, path: str, generation=None, digest=None) -> dict
     return manifest
 
 
-def committed_frames(bucket, blob, uid: str) -> tuple[list[dict], int]:
+def committed_frames(bucket, blob, uid: str, *, deadline=None) -> tuple[list[dict], int]:
     metadata = blob.metadata or {}
-    manifest = _manifest(bucket, uid, metadata['custody_manifest_path'])
+    manifest = _manifest(bucket, uid, metadata['custody_manifest_path'], deadline=deadline)
     if manifest['media'] != {
         'bucket': bucket.name,
         'path': blob.name,
@@ -84,11 +98,16 @@ def committed_frames(bucket, blob, uid: str) -> tuple[list[dict], int]:
     return manifest['frames'], rate
 
 
-def receipt_frames(bucket, uid: str, receipt: dict) -> tuple[list[dict], int]:
+def receipt_frames(bucket, uid: str, receipt: dict, *, deadline=None) -> tuple[list[dict], int]:
     if receipt['bucket'] != bucket.name or not receipt['path'].startswith(f'raw-live/{uid}/'):
         raise ValueError('frame receipt owner mismatch')
     manifest = _manifest(
-        bucket, uid, receipt['manifest_path'], receipt['manifest_generation'], receipt['manifest_sha256']
+        bucket,
+        uid,
+        receipt['manifest_path'],
+        receipt['manifest_generation'],
+        receipt['manifest_sha256'],
+        deadline=deadline,
     )
     if manifest['media'] != {key: receipt[key] for key in ('bucket', 'path', 'generation', 'sha256')}:
         raise ValueError('frame receipt media mismatch')
@@ -104,13 +123,17 @@ def entries(frames: list[dict], rate: int, source: dict[str, Any]) -> list[dict]
     result = []
     offset = 0
     for frame in frames:
-        count = round(frame['samples'] * 16000 / rate)
+        mapped_offset = resampled_samples(offset, rate)
+        count = resampled_samples(offset + frame['samples'], rate) - mapped_offset
         entry = {
             **source,
             'timestamp': frame['start'],
             'raw_end': frame['start'] + frame['samples'] / rate,
             'span': {'start': frame['start'], 'samples': count, 'sample_rate': 16000},
-            'raw_offset_samples': round(offset * 16000 / rate),
+            'raw_offset_samples': mapped_offset,
+            'raw_capture_offset_samples': offset,
+            'raw_capture_samples': frame['samples'],
+            'raw_capture_rate': rate,
             'gap_before': frame['gap_before'],
             'is_batch': False,
         }
@@ -125,6 +148,7 @@ def entries(frames: list[dict], rate: int, source: dict[str, Any]) -> list[dict]
             )
         ):
             previous['span']['samples'] += count
+            previous['raw_capture_samples'] += frame['samples']
             previous['raw_end'] = entry['raw_end']
         else:
             result.append(entry)
@@ -138,9 +162,9 @@ def has_frame_receipt(blob) -> bool:
     return isinstance(metadata, dict) and 'framed_receipt' in metadata
 
 
-def projection_entries(bucket, blob, uid: str, source: dict) -> list[dict]:
+def projection_entries(bucket, blob, uid: str, source: dict, *, deadline=None) -> list[dict]:
     receipt = json.loads(blob.metadata['framed_receipt'])
-    frames, rate = receipt_frames(bucket, uid, receipt)
+    frames, rate = receipt_frames(bucket, uid, receipt, deadline=deadline)
     if (blob.metadata or {}).get('pcm_sha256') != receipt['pcm_sha256']:
         raise ValueError('projection frame identity mismatch')
     return entries(frames, rate, source)

@@ -27,8 +27,9 @@ from utils.other.raw_audio_read import (
     pcm_for_span,
     pcm_for_projection,
     invalidate_pack_index,
-    uncovered_raw_packs,
+    finish_audio_listing,
     select_raw_pcm,
+    raw_chunks_for_listing,
 )
 from utils.other.raw_audio import provenance, filename_provenance, packet_provenance
 from pathlib import Path
@@ -1174,6 +1175,7 @@ def list_audio_chunks(
     max_count: Optional[int] = None,
     source_identity: bool = False,
     require_archive: bool = False,
+    include_raw: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation. ``require_archive``: a failed raw-archive listing raises.
@@ -1239,34 +1241,31 @@ def list_audio_chunks(
                 if span is not None:
                     chunk_entry['span'] = span
                 chunks.extend(
-                    projection_entries(bucket, blob, uid, chunk_entry) if has_frame_receipt(blob) else [chunk_entry]
+                    projection_entries(bucket, blob, uid, chunk_entry, deadline=deadline)
+                    if has_frame_receipt(blob)
+                    else [chunk_entry]
                 )
+                if max_count is not None and len(chunks) > max_count:
+                    raise TimeoutError('speaker audio listing budget exhausted')
             except ValueError:
                 continue
 
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
-    sample_clock = source_identity
-    if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
-        try:
-            packs = list_packs(bucket, uid, conversation_id)
-            raw_chunks = uncovered_raw_packs(packs, chunks)
-            sample_clock = sample_clock or bool(raw_chunks)
-            chunks.extend(raw_chunks)
-        except Exception:
-            if require_archive:
-                raise
-            log_failure('other')
-    if sample_clock:
-        for chunk in chunks:
-            span = chunk.get('span')
-            if span and span['start'] != chunk['timestamp']:
-                # Identity keeps the sample clock after late encoded uploads
-                # cover the last raw fragment, and across archive kill-switch
-                # changes. Filename rounding never changes source identity.
-                chunk['legacy_timestamp'] = chunk['timestamp']
-                chunk['timestamp'] = span['start']
-    return sorted(chunks, key=lambda x: x['timestamp'])
+    raw_chunks = raw_chunks_for_listing(
+        bucket,
+        uid,
+        conversation_id,
+        chunks,
+        include_raw=include_raw,
+        enabled=include_raw or (audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None),
+        timeout=timeout,
+        deadline=deadline,
+        max_count=max_count,
+        require_archive=require_archive,
+        list_raw=list_packs,
+    )
+    return finish_audio_listing(chunks, raw_chunks, source_identity)
 
 
 def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
