@@ -250,13 +250,43 @@ def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypa
     assert len([v for (t, _), v in store.rows.items() if t == 'jobs']) == 1
 
 
-def test_projection_replaces_provisional_instead_of_appending_and_keeps_id():
-    result, survivors = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+@pytest.mark.parametrize('visible_restore', [False, True])
+def test_projection_replaces_provisional_instead_of_appending_and_keeps_id(visible_restore):
+    provisional = recording()
+    if visible_restore:
+        provisional['external_data'] = {'server_batch_only': True}
+        provisional['transcript_segments'][0].update(text='Synthetic Modulate preview.', stt_provider='modulate')
+    result, survivors = replace_record(provisional, incoming(), {'start': 100, 'end': 102})
     assert result['id'] == 'record'
     assert len(result['transcript_segments']) == 1
     assert result['transcript_segments'][0]['id'] == 'new'
     assert result['sync_content_revision'] == result['record_projection_revision'] == 1
     assert survivors[0]['speaker_id_scope'] == 'final:batch:unit'
+    assert result['record_lane_owner'] == 'batch_live_v1'
+    if visible_restore:
+        assert result['external_data']['server_batch_only'] is True
+        assert result['transcript_segments'][0]['text'] == 'Synthetic speech.'
+
+
+def test_final_batch_projection_fences_a_delayed_modulate_preview_flush():
+    from database import conversations
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    provisional = recording(external_data={'server_batch_only': True})
+    final, _ = replace_record(provisional, incoming(), {'start': 100, 'end': 102})
+    key = ('users', 'synthetic', 'conversations', 'record')
+    db = StrictFirestore({key: final})
+    assert (
+        conversations.update_conversation_segments(
+            'synthetic',
+            'record',
+            provisional['transcript_segments'],
+            live_segments=provisional['transcript_segments'],
+            firestore_client=db,
+        )
+        is False
+    )
+    assert db.rows[key] == final
 
 
 RULE_DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'}
