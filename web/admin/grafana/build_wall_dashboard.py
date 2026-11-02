@@ -69,6 +69,7 @@ GEOMETRY = {"Growth": (0, 5), "Activation": (5, 5), "Retention": (10, 5), "Reven
 STAT_H = 3
 STRIP_H = 1
 WALL_H = 27
+FUNNEL_H = 9
 # One value size and label size on every stat; sized so the widest value
 # ("10,287", "$72.4K") fits a three-value column at 1440 px.
 STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
@@ -588,6 +589,36 @@ def curve_options(panel):
     d["noValue"] = "Cohorts still filling"  # an empty frame, not "Cannot visualize data"
 
 
+def funnel_row():
+    """Below the TV's fixed wall: a full-width row reached by scrolling."""
+    proxy = ("Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as "
+             "organic, and pairing is itself an early success, so the gap between the two is overstated. ")
+    series_colors = [color("Device", MAGENTA), color("Organic", NEUTRAL)]
+    funnel = chart("Funnel · device vs organic",
+                   proxy + "Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old "
+                   "enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the "
+                   "clients that report it. Install is not shown because PostHog sees nobody before sign-up; first "
+                   "summary is not shown because it has no event.",
+                   [target("activation", "funnel", [("step", "Step", "string"), ("Device", "Device", "number"),
+                                                    ("Organic", "Organic", "number")])],
+                   unit="percent", decimals=0, kind="barchart", overrides=series_colors,
+                   extra=barchart_options(max_value=100, value_size=13))
+    weekly = chart("Activated · device vs organic",
+                   proxy + "Week-one activation for each matured weekly cohort, dated by its last day.",
+                   [target("activation", "funnelWeekly", [DATE, ("Device", "Device", "number"),
+                                                          ("Organic", "Organic", "number")])],
+                   unit="percent", decimals=0, soft_min=0, time_from="60d", overrides=series_colors)
+    platforms = chart("Funnel by platform",
+                      proxy + "Week-one activation in the latest matured weekly new-user cohort, by the platform users "
+                      "first arrived on, with its size in the label. Small platforms move a lot week to week.",
+                      [target("activation", "funnelPlatforms", [("platform", "Platform", "string"),
+                                                                ("Device", "Device", "number"),
+                                                                ("Organic", "Organic", "number")])],
+                      unit="percent", decimals=0, kind="barchart", overrides=series_colors,
+                      extra=barchart_options(horizontal=True, max_value=100, value_size=13))
+    return [(11, funnel), (7, weekly), (6, platforms)]
+
+
 def build_wall_board():
     panels = []
     for name, items in columns().items():
@@ -602,6 +633,11 @@ def build_wall_board():
             panels.append({**panel, "gridPos": {"x": x, "y": y, "w": w, "h": h}})
             y += h
         assert y == WALL_H, (name, y)  # every column fills the TV exactly, no scroll
+    x = 0
+    for w, panel in funnel_row():
+        panels.append({**panel, "gridPos": {"x": x, "y": WALL_H, "w": w, "h": FUNNEL_H}})
+        x += w
+    assert x == 24
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
     return {"uid": "omi-tv-v2", "title": "Omi TV · v3", "schemaVersion": 39, "version": 1, "timezone": "utc",
