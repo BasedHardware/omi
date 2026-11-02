@@ -86,8 +86,7 @@ from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
-from utils.conversations.processing_trigger import is_recovery_trigger
-from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
@@ -119,6 +118,7 @@ from utils.conversations.relevance_io import (
     emit_recorded_decision,
     record_decision,
     rules_only_relevance,
+    short_clip_relevance,
     occasion_retention,
 )
 from utils.conversations.factory import deserialize_conversation
@@ -416,11 +416,12 @@ def _get_structured(
             summary_app_selected=summary_app_selected,
         )
         if minimum is not None:
+            decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
             if relevance_observer is not None:
-                relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
-            if is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
+                relevance_observer(decision)
+            if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
-            return minimum, False
+            return minimum, decision.discard
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)

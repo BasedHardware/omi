@@ -1,4 +1,6 @@
+#ifndef CONFIG_OMI_NATIVE_SIM
 #include <haly/nrfy_gpio.h>
+#endif
 
 // #define SAMPLE_RATE 16000
 #define MIC_GAIN 64

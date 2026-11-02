@@ -41,10 +41,13 @@ def owner_hunt_interval(uid, state):
 
 def due_time(state, now, uid=None):
     last = state.get('last_attempt_at') or state.get('last_pass_at') or EPOCH
-    if not isinstance(last, datetime) or last.tzinfo is None:
-        last = EPOCH
+    if not isinstance(last, datetime) or last.tzinfo is None or last <= EPOCH:
+        # A never-attempted owner is due immediately. Backdating the epoch by
+        # score minutes created 1969 queue rows with permanent aging priority.
+        return now
     if state.get('score', 0) > 0:
-        return last - timedelta(minutes=min(500, state['score']))
+        due = last - timedelta(minutes=min(500, state['score']))
+        return due if due >= EPOCH else now
     return last + owner_hunt_interval(uid, state)
 
 
@@ -207,19 +210,32 @@ def _backlog_owed(uid):
 # Payoff first (David 2026-10-30). Only a month-overdue owner jumps the payoff order:
 # at 10-30 the oldest 200 due rows were all past a 7-day bound, so ranking was FIFO.
 PAYOFF_AGING = timedelta(days=30)
-# Heavy owners made 582 of 596 applied edits in the 10-29 shadow day.
-PAYOFF_HEAVY_BONUS = 20
+# By 11-01 the saturated oldest head was mostly never-yielded heavy owners.
+# Recent yield predicts payoff; heavy size now predicts cost, not yield.
+PAYOFF_HEAVY_BONUS = 0
+PAYOFF_AGING_FLOOR = 300
 PAYOFF_RANKED = 1000
 
 
 def payoff_order(rows, now, *, firestore_client=None):
-    """Rank due (uid, due_at) rows: aged owners first, then new material and recent yield.
+    """Rank due (uid, due_at) rows: aged owners first, then recent yield and material.
 
     Reads one dream_users doc per ranked owner (at most PAYOFF_RANKED, in
-    DISCOVERY_TRANSACTION_ROWS bulk gets). Owners past the ranked window keep due order.
+    DISCOVERY_TRANSACTION_ROWS bulk gets). Keep the oldest PAYOFF_AGING_FLOOR
+    rows, then sample evenly through the rest, including the newest due row.
+    Unsampled owners keep due order after the ranked window, except that
+    the aging guard always precedes payoff-ranked owners across the whole queue.
     """
     database = firestore_client if firestore_client is not None else get_firestore_client()
-    head, tail = rows[:PAYOFF_RANKED], rows[PAYOFF_RANKED:]
+    if len(rows) <= PAYOFF_RANKED:
+        head, tail = rows, []
+    else:
+        slots = PAYOFF_RANKED - PAYOFF_AGING_FLOOR
+        remaining = len(rows) - PAYOFF_AGING_FLOOR
+        ranked_indices = set(range(PAYOFF_AGING_FLOOR))
+        ranked_indices.update(PAYOFF_AGING_FLOOR + index * (remaining - 1) // (slots - 1) for index in range(slots))
+        head = [row for index, row in enumerate(rows) if index in ranked_indices]
+        tail = [row for index, row in enumerate(rows) if index not in ranked_indices]
     states = {}
     for start in range(0, len(head), DISCOVERY_TRANSACTION_ROWS):
         refs = [
@@ -231,18 +247,29 @@ def payoff_order(rows, now, *, firestore_client=None):
 
     def key(row):
         uid, due_at = row
-        due = due_at if isinstance(due_at, datetime) else now
+        # Existing pre-epoch sentinels must not win the aging class or due ties.
+        due = due_at if isinstance(due_at, datetime) and due_at.tzinfo is not None and due_at >= EPOCH else now
         if now - due >= PAYOFF_AGING:
             return (0, 0.0, due)
         state = states.get(uid, {})
         payoff = (
-            min(50, max(0, int(state.get('score', 0) or 0)))
-            + 5 * min(10, max(0, int(state.get('last_yield', 0) or 0)))
+            min(10, max(0, int(state.get('score', 0) or 0)))
+            + 7 * min(10, max(0, int(state.get('last_yield', 0) or 0)))
             + (PAYOFF_HEAVY_BONUS if state.get('size_bucket') == 'heavy' else 0)
         )
         return (1, -float(payoff), due)
 
-    return [uid for uid, _ in sorted(head, key=key)] + [uid for uid, _ in tail]
+    ranked = [uid for uid, _ in sorted(head, key=key)] + [uid for uid, _ in tail]
+    # The old contiguous head + FIFO tail kept every aged owner ahead of
+    # younger owners. Sampling must retain that guard even for skipped rows;
+    # classifying their due timestamp needs no additional state reads.
+    aged = [
+        uid
+        for uid, due_at in rows
+        if isinstance(due_at, datetime) and due_at.tzinfo is not None and EPOCH <= due_at <= now - PAYOFF_AGING
+    ]
+    aged_set = set(aged)
+    return aged + [uid for uid in ranked if uid not in aged_set]
 
 
 def remove_due(uid, *, firestore_client=None):

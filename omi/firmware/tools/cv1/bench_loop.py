@@ -7,6 +7,7 @@ A live adapter stays in the private bench profile and needs its own release.
 """
 import argparse
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -19,6 +20,10 @@ PAGE = 0x1000
 # flash addresses are never here, so no job or manifest can authorize them.
 APP_PAGES = range(0x10000, 0xf6000, PAGE)
 MIN_UPTIME_SECONDS = 30
+
+
+class CheckSkipped(RuntimeError):
+    """A post-boot check could not run; its reason must survive in the report."""
 
 
 class StageFailed(RuntimeError):
@@ -55,7 +60,7 @@ def pages_match(adapter, memory, selected):
 
 
 class Run:
-    def __init__(self, adapter, jobs, profile, contract, pins, folder):
+    def __init__(self, adapter, jobs, profile, contract, pins, folder, checks=()):
         self.adapter = adapter
         self.jobs = jobs
         self.profile = profile
@@ -66,6 +71,7 @@ class Run:
         self.stages = []
         self.images = {}
         self.erase = []
+        self.checks = checks
 
     def stage(self, name, action):
         """Record each stage once. Retries do not exist, including for restore."""
@@ -74,6 +80,8 @@ class Run:
         try:
             entry['receipt'] = action() or {}
             entry['result'] = 'passed'
+        except CheckSkipped as failure:
+            entry.update(result='skipped', reason=str(failure))
         except StageFailed as failure:
             entry.update(result='failed', code=failure.code, detail=str(failure))
             raise
@@ -83,6 +91,7 @@ class Run:
             raise StageFailed('adapter_error', repr(failure)) from failure
         finally:
             entry['finished_at'] = utc()
+        return entry['result']
 
     def admit(self):
         """Offline, so a bad job is refused before any device access."""
@@ -156,6 +165,22 @@ class Run:
         self.stage('restore_verify', lambda: self.verify('restore'))
         self.stage('restore_boot_check', self.boot_check)
 
+    @staticmethod
+    def check(action):
+        try:
+            receipt = action()
+        except (KeyboardInterrupt, SystemExit) as failure:
+            raise StageFailed('check_interrupted', type(failure).__name__) from failure
+        need(isinstance(receipt, dict), 'invalid_check_result')
+        result = receipt.get('result')
+        need(result in ('passed', 'failed', 'skipped'), 'invalid_check_result')
+        if result == 'skipped':
+            need(isinstance(receipt.get('reason'), str) and bool(receipt['reason'].strip()),
+                 'missing_skip_reason')
+            raise CheckSkipped(receipt['reason'])
+        need(result == 'passed', 'check_failed', str(receipt.get('reason', '')))
+        return receipt
+
     def execute(self):
         """Return (result, lease_clean). Restore is the only path out once a write begins."""
         try:
@@ -168,28 +193,49 @@ class Run:
         except StageFailed:
             return 'unexpected_device_state', False
         failed = False
+        skipped = False
         try:
             self.stage('flash_candidate', lambda: self.write('candidate'))
             self.stage('verify_candidate', lambda: self.verify('candidate'))
             self.stage('boot_check', self.boot_check)
+            for name, action in self.checks:
+                skipped |= self.stage(name, lambda: self.check(action)) == 'skipped'
         except StageFailed:
             failed = True
         try:
             self.restore()
         except StageFailed:
             return 'restore_failed_needs_owner', False
-        return ('candidate_failed_restored', False) if failed else ('candidate_passed_restored', True)
+        if failed:
+            return 'candidate_failed_restored', False
+        return ('candidate_incomplete_restored' if skipped else 'candidate_passed_restored'), True
 
 
-def run(adapter, jobs, profile, contract, pins, bench_dir, output, owner='bench_loop'):
+def run(adapter, jobs, profile, contract, pins, bench_dir, output, owner='bench_loop', checks=()):
     """Exit the lease as idle only with restoration proof or an untouched device."""
+    # Hooks are trusted controller code, not job-supplied commands.
+    checks = list(checks)
+    names = [name for name, action in checks]
+    reserved = {'admit', 'identity', 'baseline_check', 'flash_candidate', 'verify_candidate',
+                'boot_check', 'restore_write', 'restore_verify', 'restore_boot_check'}
+    if (any(
+            not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,63}', name)
+            or name in reserved or not callable(action) for name, action in checks)
+            or len(set(names)) != len(names)):
+        raise ValueError('checks require unique non-reserved names and callable actions')
     folder = Path(output)
     folder.mkdir(parents=True, exist_ok=False)
     with Lease(bench_dir, owner) as lease:
-        cycle = Run(adapter, jobs, profile, contract, pins, folder)
+        cycle = Run(adapter, jobs, profile, contract, pins, folder, checks)
         result, clean = cycle.execute()
+        observed = {s['stage']: {k: v for k, v in s.items()
+                                if k in ('result', 'reason', 'code', 'detail')}
+                    for s in cycle.stages if s['stage'] in names}
         summary = {'schema': 1, 'layer': adapter.layer, 'result': result, 'lease_clean': clean,
                    'hardware_exercised': adapter.layer != 'simulated', 'stages': cycle.stages,
+                   'checks_ran': [s['stage'] for s in cycle.stages if s['stage'] in names],
+                   'checks': [{'name': name, **observed.get(name, {'result': 'not_run'})}
+                              for name in names],
                    'finished_at': utc(), 'release_authorized': False}
         save(folder / 'summary.json', summary, exclusive=True)
         lease.clean = clean
