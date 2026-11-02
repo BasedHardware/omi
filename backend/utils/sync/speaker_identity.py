@@ -102,7 +102,7 @@ def build_person_embeddings_cache(
         return cache
     # Load paid non-owner candidates only after resolving the batch entitlement.
     try:
-        people = users_db.get_people(uid)
+        people = users_db.get_people(uid, memoize=True)
         enrollment_allowed = auto_enroll_db.context(uid) if any(p.get(POOL_FIELD) for p in people or []) else {}
     except Exception as error:
         logger.warning('sync person profile read failed type=%s', type(error).__name__)

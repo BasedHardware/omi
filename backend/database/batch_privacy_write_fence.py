@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from google.api_core.exceptions import GoogleAPICallError
 from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient
+from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1.types import (
     BatchWriteRequest,
     BatchWriteResponse,
@@ -32,8 +33,48 @@ Status = cast(Any, status_pb2).Status
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 _ROOT_AUTHORITIES = frozenset({'account_deletions', 'legal_holds', 'legal_hold_deletion_gates'})
-_USER_FIELDS = frozenset({'data_protection_level', 'migration_status', 'private_cloud_sync_enabled'})
+_USER_FIELDS = frozenset(
+    {'data_protection_level', 'migration_status', 'private_cloud_sync_enabled', 'speaker_auto_enroll_privacy_version'}
+)
 _CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
+_AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_value', 'purging': 'boolean_value'}
+
+
+def _authority_path(path: str) -> tuple[str, ...]:
+    try:
+        return FieldPath.from_api_repr(path).parts
+    except ValueError:
+        raise ValueError('invalid batch privacy authority field path') from None
+
+
+def _validate_authority_write(write: Any) -> None:
+    """Invalidate a decision without silently removing its durable authority."""
+    if write.delete:
+        raise ValueError('batch privacy authority must survive deletion')
+    transforms = [*write.update_transforms, *write.transform.field_transforms]
+    for transform in transforms:
+        if _authority_path(transform.field_path)[0] in _AUTHORITY_STATE_TYPES:
+            raise ValueError('batch privacy authority state requires explicit typed values')
+    if not write.update.name:
+        return
+    fields = write.update.fields
+    if Write.pb(write).HasField('update_mask'):
+        paths = [_authority_path(path) for path in write.update_mask.field_paths]
+        state = set()
+        for path in paths:
+            if path[0] in _AUTHORITY_STATE_TYPES:
+                if len(path) != 1:
+                    raise ValueError('batch privacy authority state cannot be nested')
+                state.add(path[0])
+    else:
+        # A replacement removes every omitted field, even if its payload only
+        # mentions metadata. The epoch writer already supplies all three fields.
+        state = set(_AUTHORITY_STATE_TYPES)
+    for name in state:
+        if name not in fields or Value.pb(fields[name]).WhichOneof('value_type') != _AUTHORITY_STATE_TYPES[name]:
+            raise ValueError('batch privacy authority state cannot be removed or malformed')
+        if name == 'generation' and fields[name].integer_value < 0:
+            raise ValueError('batch privacy authority generation must be nonnegative')
 
 
 def _changes_answer(write: Any, fields: frozenset[str]) -> bool:
@@ -62,6 +103,10 @@ def authority_tokens(writes: Any) -> set[str]:
             continue
         root, family, owner = '/'.join(parts[:5]), parts[5], parts[6]
         if family == PRIVACY_COLLECTION and len(parts) == 7:
+            # This authority intentionally survives account erasure. Recreating
+            # a deleted row with token fields alone would erase block/purge
+            # state and its generation. Refuse before any RPC, including bulk.
+            _validate_authority_write(write)
             tokens.add(path)
         elif (family in _ROOT_AUTHORITIES and len(parts) == 7) or (
             family == 'users'
@@ -94,8 +139,9 @@ def augment_commit(request: Any) -> tuple[Any, int]:
     if not tokens:
         return request, count
     prepared = CommitRequest(request)
-    # Appending after source writes also handles replacement/deletion of the
-    # privacy document itself. The final token is unique after wipe/recreation;
+    # Appending after source writes also handles authority field updates.
+    # Authority deletion is rejected above; account-subtree erasure retains it.
+    # The final token is unique after source wipe/recreation;
     # no generation, blocked or purging field is changed by this masked write.
     prepared.writes.extend(token_write(path) for path in sorted(tokens))
     # Preserve expanded atomic batches. The installed list-projection writer
@@ -144,13 +190,17 @@ def _wrap_commit(original: Any) -> Any:
     return wrapped
 
 
-def _bulk_parts(request):
-    prepared = BatchWriteRequest(request)
+def _bulk_parts(request, kwargs):
+    fields = {key: kwargs.pop(key) for key in ('database', 'writes', 'labels') if key in kwargs}
+    if request is not None and any(value is not None for value in fields.values()):
+        raise ValueError('request and flattened batch-write fields cannot both be supplied')
+    supplied = request if request is not None else fields
+    prepared = BatchWriteRequest(supplied)
     # BatchWrite is non-atomic and forbids duplicate documents. Relevant writes
     # become independent atomic Commits, each containing its own fence. Unrelated
     # writes retain BatchWrite, its labels and its per-write status semantics.
     indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write])]
-    return prepared, indices
+    return supplied, prepared, indices
 
 
 def _bulk_failure(error):
@@ -188,9 +238,9 @@ def _wrap_bulk(original: Any) -> Any:
 
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
-            prepared, indices = _bulk_parts(request)
+            supplied, prepared, indices = _bulk_parts(request, kwargs)
             if not indices:
-                return await original(client, request=request, **kwargs)
+                return await original(client, request=supplied, **kwargs)
             if prepared.labels:
                 # Commit has no labels field. Refuse before any writes rather
                 # than silently lose a caller's billing attribution.
@@ -214,9 +264,9 @@ def _wrap_bulk(original: Any) -> Any:
 
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
-            prepared, indices = _bulk_parts(request)
+            supplied, prepared, indices = _bulk_parts(request, kwargs)
             if not indices:
-                return original(client, request=request, **kwargs)
+                return original(client, request=supplied, **kwargs)
             if prepared.labels:
                 raise ValueError('labeled batch privacy bulk writes require atomic Commit migration')
             individual = {}
