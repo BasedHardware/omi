@@ -1485,7 +1485,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert config['metadata']['name'] == shared['metadata']['name']
     assert shared['spec']['endpoints'][0]['interval'] == '30s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
-        'omi_listen_server_batch_suppression_total|omi_.*|conversation_llm_input_dedupe_.*'
+        'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
     )
 
 
