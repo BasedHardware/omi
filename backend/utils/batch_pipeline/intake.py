@@ -627,6 +627,19 @@ async def accept_upload(
             )
         )
         items = []
+
+        def unit_item(unit, index):
+            return replace(
+                seed,
+                segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
+                capture_at=unit.capture_at,
+                duration_seconds=unit.duration_seconds,
+                unit_kind='conversation' if conversation_id else 'capture_span',
+                conversation_id=conversation_id
+                or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
+                privacy_generation=context.generation,
+            )
+
         # A sampled upload is decided by its first strict-VAD speech; silent leading units wait
         # unstaged (bounded) and are replayed in order once the sample admits the upload.
         held, queue, sample = [], [], None
@@ -644,9 +657,8 @@ async def accept_upload(
                 held.append(unit)
                 if speech is None and sum(u.duration_seconds for u in held) <= SAMPLE_SCAN_SECONDS:
                     continue
-                probe_item = replace(
-                    seed, segment_id=hashlib.sha256(f'{content_id}:{len(held) - 1}'.encode()).hexdigest()
-                )
+                # Authorize the sample as the exact unit it will replay as (index, derived conversation).
+                probe_item = unit_item(unit, len(held) - 1)
                 probe_guard = ServingLanguageProbeGuard(store, probe_item, authorize=batch_artifact_authorize)
                 decision = (
                     await run_blocking(
@@ -669,16 +681,7 @@ async def accept_upload(
                 record_route('intake', decision.language, 'parakeet')
                 sample, queue, held = (unit, decision), held, []
                 continue
-            item = replace(
-                seed,
-                segment_id=hashlib.sha256(f'{content_id}:{len(items)}'.encode()).hexdigest(),
-                capture_at=unit.capture_at,
-                duration_seconds=unit.duration_seconds,
-                unit_kind='conversation' if conversation_id else 'capture_span',
-                conversation_id=conversation_id
-                or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
-                privacy_generation=context.generation,
-            )
+            item = unit_item(unit, len(items))
             if sample is not None and unit is sample[0]:
                 # The admitting sample already classified this unit's speech under fresh authority.
                 language_decision = sample[1]

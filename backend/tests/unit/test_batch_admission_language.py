@@ -207,6 +207,27 @@ async def test_silent_unclassifiable_or_over_bound_upload_keeps_legacy_without_a
 
 
 @pytest.mark.asyncio
+async def test_sample_probe_is_authorized_as_the_unit_it_replays_as(monkeypatch):
+    # No conversation id on the upload: the unit's derived chunk conversation must be the one
+    # the sample's privacy guard checks, before any audio reaches the vendor.
+    speaking(monkeypatch, None, SPEECH)
+    guarded = []
+
+    def classify(*args, **kwargs):
+        guarded.append(kwargs['before_probe'].item)
+        return decision('en', True)
+
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', unit_count=2, decision=classify)
+    assert admitted(response, staged)
+    sampled_item = guarded[0]
+    assert sampled_item.segment_id == hashlib.sha256(b'new:1').hexdigest()
+    assert sampled_item.conversation_id and sampled_item.unit_kind == 'capture_span'
+    replayed_speech_unit = intake.chunk_identity('synthetic-owner', 'omi', None, False, sampled_item.capture_at)
+    assert sampled_item.conversation_id == replayed_speech_unit
+    assert sampled_item.capture_at != staged[0].capture_at  # unit 1, not the held unit 0
+
+
+@pytest.mark.asyncio
 async def test_self_lid_sample_does_not_admit(monkeypatch):
     # Worker self-LID evidence is bound to the unit's first 30 s, which a speech sample is not.
     speaking(monkeypatch)
