@@ -94,18 +94,31 @@ def read_reference(
 
 
 def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
-    manifest = json.loads(body[len(MAGIC) :])
+    try:
+        manifest = json.loads(body[len(MAGIC) :])
+    except ValueError:
+        raise InvalidRetainedManifest('retained audio manifest is not JSON') from None
+    references = manifest.get('references') if isinstance(manifest, dict) else None
+    if (
+        not isinstance(references, list)
+        or not isinstance(manifest.get('context'), dict)
+        or not all(
+            isinstance(ref, dict) and isinstance(ref.get('pcm_sha256'), str) and isinstance(ref.get('path', ''), str)
+            for ref in references
+        )
+    ):
+        raise InvalidRetainedManifest('malformed retained audio manifest')
     if (
         manifest.get('owner_id') != item.owner_id
         or manifest.get('conversation_id') != item.conversation_id
         or manifest.get('capture_at') != item.capture_at
-        or not 1 <= len(manifest.get('references', [])) <= MAX_REFERENCES
+        or not 1 <= len(references) <= MAX_REFERENCES
     ):
         raise InvalidRetainedManifest('retained audio manifest binding mismatch')
     pcm = bytearray(round(item.duration_seconds * 16000) * 2)
     previous = 0
     previous_key, previous_source = None, b''
-    for ref in manifest['references']:
+    for ref in references:
         source_key = tuple(ref.get(name) for name in ('bucket', 'path', 'generation', 'pcm_sha256'))
         pinned = all(value is not None for value in source_key)
         if pinned and source_key == previous_key:
@@ -115,7 +128,7 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
             if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
                 raise ValueError('retained PCM digest changed')
             previous_key, previous_source = source_key if pinned else None, source
-        start, offset, frames = ref['start_frame'], ref['offset_frame'], ref['frames']
+        start, offset, frames = ref.get('start_frame'), ref.get('offset_frame'), ref.get('frames')
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:
             raise InvalidRetainedManifest('invalid retained audio slice')
         if (offset + frames) * 2 > len(source) or (start + frames) * 2 > len(pcm):

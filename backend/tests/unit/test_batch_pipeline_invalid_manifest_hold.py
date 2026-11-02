@@ -33,11 +33,39 @@ def ref(start, frames, offset=0):
         manifest(ref(0, 0)),  # empty slice
         manifest(ref(0, 8000, offset=12000)),  # exceeds the capture
         manifest(),  # no references
+        manifest({k: v for k, v in ref(0, 8000).items() if k != 'frames'}),  # missing slice field
     ],
 )
 def test_structurally_invalid_manifest_is_a_distinct_permanent_error(body):
     with pytest.raises(InvalidRetainedManifest):
         materialize(body, ITEM, lambda _: SOURCE)
+
+
+def shaped(**changes):
+    body = {'owner_id': 'o', 'conversation_id': 'c', 'capture_at': 1, 'references': [ref(0, 8000)], 'context': {}}
+    return MAGIC + json.dumps({**body, **changes}).encode()
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        MAGIC + b'{not json',
+        MAGIC + b'\xff\xfe',
+        MAGIC + b'[]',
+        shaped(references=None),
+        shaped(references={'start_frame': 0}),
+        shaped(references=[None]),
+        shaped(references=[{**ref(0, 8000), 'pcm_sha256': None}]),
+        shaped(references=[{**ref(0, 8000), 'path': 7}]),
+        shaped(context=None),
+    ],
+)
+def test_malformed_manifest_shape_never_escapes_as_another_error(body):
+    """Luna r1: a valid-JSON manifest of the wrong shape must not leak TypeError/KeyError as a 500."""
+    fetched = []
+    with pytest.raises(InvalidRetainedManifest):
+        materialize(body, ITEM, lambda r: fetched.append(r) or SOURCE)
+    assert not fetched
 
 
 def test_valid_manifest_still_materializes():
