@@ -1,0 +1,106 @@
+{
+  "schema": "omi.retention/v1",
+  "_doc": "The one threshold source for audio-bucket retention, both ways. Floor: every lifecycle Delete that can reach a protected prefix has age >= max(hold days) + margin_days; a hold with days=null (or a pending ruling) forbids any age Delete there. Ceiling: soft delete, versioning and cache max ages a bucket may not exceed. Read by backend/scripts/check_sync_staging_lifecycle.py (release prerequisite; floors enforce, ceilings report) and by the workspace's infra/rollout/bin/retention_check.py and drift.sh (git show origin/main:<this file>). 11-01: a whole-bucket 7-day Delete on the batch staging bucket removed 161 failed_held sync uploads held 8+ days, the only server copy.",
+  "margin_days": 7,
+  "batch_staging_delete_age_days": 30,
+  "holds": {
+    "allowance_hold_retry_max": {
+      "days": 1,
+      "code": {"path": "backend/config/batch_pipeline.py", "pattern": "^ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400$"}
+    },
+    "vendor_failover_held_stale_grace_max": {
+      "days": 1,
+      "code": {"path": "backend/config/batch_pipeline_vendor_failover.py", "pattern": "^HELD_STALE_GRACE_SECONDS_MAX = 86400(\\.0)?$"}
+    },
+    "scheduler_requeue_delay_max": {
+      "days": 1,
+      "code": {"path": "backend/utils/batch_pipeline/scheduler.py", "pattern": "min\\(86400, value\\)"}
+    },
+    "artifact_cleanup_after_projection": {
+      "days": 1,
+      "code": {"path": "backend/utils/batch_pipeline/retention.py", "pattern": "^ARTIFACT_RETENTION = timedelta\\(hours=24\\)$"}
+    },
+    "upload_pending": {
+      "days": 0.03,
+      "code": {"path": "backend/utils/batch_pipeline/upload_policy.py", "pattern": "^UPLOAD_PENDING_SECONDS = 30 \\* 60$"}
+    },
+    "failed_held_quarantine_redrive_sla": {
+      "days": 21,
+      "ruling": "pending",
+      "note": "Code holds failed_held/quarantined units with no TTL (utils/batch_pipeline/retention.py: accepted audio must not silently expire). Proposed operator window to redrive or release them, fitting the 30-day staging rule with 7 days margin. While pending it counts as unbounded."
+    },
+    "staging_custody": {
+      "days": null,
+      "note": "Accepted sync staging is held until durable custody (docs/runbooks/audio-cleanup-custody.md); no TTL, so no age Delete may reach it."
+    },
+    "source_audio": {
+      "days": null,
+      "note": "Capture audio of record is retained indefinitely except authorized privacy deletion (David 2026-10-15, storage-lifecycle/FORWARD.md)."
+    },
+    "speech_profile": {
+      "days": null,
+      "note": "A user's speech profile lives until the user or account deletion removes it."
+    }
+  },
+  "ceiling_sources": {
+    "erasure_immediate": "docs/runbooks/audio-cleanup-custody.md: privacy erasure must remain possible immediately (no retention lock, holds, or soft-deleted copies)",
+    "voice_evidence": "utils/batch_pipeline/artifacts.py verify_voice_retention: soft delete must be 0",
+    "canonical_forward": "storage-lifecycle/FORWARD.md: versioning disabled and soft delete 0 at creation",
+    "declared_caches": "storage-lifecycle/prod.json: merged/ Delete 3 d, playback/ Delete 30 d"
+  },
+  "buckets": {
+    "syncing-local": {
+      "env": "BUCKET_TEMPORAL_SYNC_LOCAL",
+      "project": "based-hardware",
+      "protected_prefixes": [""],
+      "holds": ["staging_custody"],
+      "ceiling": {"soft_delete_seconds_max": 0, "noncurrent_cleanup": true, "ruling": "pending",
+                  "source": ["erasure_immediate"]}
+    },
+    "omi-audio-derived-uc1": {
+      "env": "BUCKET_AUDIO_DERIVED",
+      "project": "based-hardware",
+      "protected_prefixes": ["syncing/"],
+      "holds": ["staging_custody"],
+      "ceiling": {"soft_delete_seconds_max": 0, "source": ["erasure_immediate", "voice_evidence"]}
+    },
+    "based-hardware-batch-pipeline-staging": {
+      "env": "BUCKET_BATCH_PIPELINE",
+      "project": "based-hardware",
+      "protected_prefixes": [""],
+      "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
+                "artifact_cleanup_after_projection", "upload_pending", "failed_held_quarantine_redrive_sla"],
+      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
+    },
+    "based-hardware-dev-batch-pipeline-staging": {
+      "env": "BUCKET_BATCH_PIPELINE",
+      "project": "based-hardware-dev",
+      "protected_prefixes": [""],
+      "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
+                "artifact_cleanup_after_projection", "upload_pending", "failed_held_quarantine_redrive_sla"],
+      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
+    },
+    "omi-private-cloud-sync": {
+      "env": "BUCKET_PRIVATE_CLOUD_SYNC",
+      "project": "based-hardware",
+      "protected_prefixes": ["chunks/"],
+      "holds": ["source_audio"],
+      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"merged/": 3, "playback/": 30}, "noncurrent_cleanup": true,
+                  "ruling": "pending", "source": ["erasure_immediate", "declared_caches"]}
+    },
+    "speech-profiles": {
+      "env": "BUCKET_SPEECH_PROFILES",
+      "project": "based-hardware",
+      "protected_prefixes": [""],
+      "holds": ["speech_profile"],
+      "ceiling": {"soft_delete_seconds_max": 0, "ruling": "pending", "source": ["erasure_immediate"]}
+    },
+    "canonical-audio (BUCKET_CANONICAL_AUDIO, not provisioned)": {
+      "env": "BUCKET_CANONICAL_AUDIO",
+      "provisioned": false,
+      "protected_prefixes": [""],
+      "holds": ["source_audio"],
+      "ceiling": {"soft_delete_seconds_max": 0, "versioning": false, "source": ["canonical_forward"]}
+    }
+  }
+}
