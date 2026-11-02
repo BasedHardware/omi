@@ -148,6 +148,81 @@ class DeveloperErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(resp.json().get("detail"), "Invalid category. Please provide a valid category.")
         self.assertNotIn(bad_input, resp.text)
 
+    def test_default_conversation_list_uses_projected_shared_page_and_flags(self):
+        from unittest.mock import patch
+        from routers import developer
+
+        conversation = {
+            'id': 'stored',
+            'created_at': '2026-10-01T00:00:00Z',
+            'started_at': None,
+            'finished_at': None,
+            'structured': {'title': 'Budget', 'overview': 'Review', 'category': 'work'},
+        }
+        with patch.object(developer, 'conversation_cards_page_core', return_value=([conversation], 'next')) as read:
+            with patch.object(developer, 'populate_folder_names', lambda uid, rows: None):
+                response = self.client.get('/v1/dev/user/conversations?limit=500')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsInstance(response.json(), list)
+        self.assertFalse(response.json()[0]['transcript_included'])
+        self.assertFalse(response.json()[0]['participants_included'])
+        self.assertEqual(response.headers['X-Omi-Effective-Limit'], '200')
+        self.assertEqual(response.headers['X-Omi-Has-More'], 'true')
+        self.assertEqual(response.headers['X-Omi-Next-Cursor'], 'next')
+        self.assertEqual(
+            read.call_args.kwargs['extra_field_paths'], ['structured', 'source', 'geolocation', 'folder_id']
+        )
+
+    def test_search_term_on_list_route_is_rejected_instead_of_ignored(self):
+        response = self.client.get('/v1/dev/user/conversations?query=budget')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Unknown query parameter', response.text)
+        response = self.client.get('/v1/dev/user/memories?query=budget')
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_conversation_subroute_error_is_explicit(self):
+        from unittest.mock import patch
+        from routers import developer
+
+        self.client.app.dependency_overrides[developer.get_auth_with_conversation_detail_read] = lambda: MagicMock(
+            uid='test-uid'
+        )
+        with patch.object(developer.conversations_db, 'get_conversation', return_value=None):
+            response = self.client.get('/v1/dev/user/conversations/not-a-route')
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('unknown conversation sub-route', response.text)
+
+    def test_memory_limit_boundary_does_not_make_lookahead_break_valid_page(self):
+        from unittest.mock import patch
+        from routers import developer
+
+        # Empty page at the compatibility-window boundary still preserves the
+        # previously valid request; an over-window request remains explicit.
+        with patch.object(developer, 'read_developer_memories', return_value=[]) as read:
+            response = self.client.get('/v1/dev/user/memories?offset=4000&limit=1000')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(read.call_args.kwargs['limit'], 1000)
+        self.assertEqual(response.headers['X-Omi-Has-More'], 'false')
+        self.assertEqual(self.client.get('/v1/dev/user/memories?offset=4001&limit=1000').status_code, 413)
+
+    def test_cursor_page_does_not_advertise_an_inferred_offset(self):
+        from unittest.mock import patch
+        from routers import developer
+
+        conversation = {
+            'id': 'next-page',
+            'created_at': '2026-10-01T00:00:00Z',
+            'started_at': None,
+            'finished_at': None,
+            'structured': {'title': 'Budget', 'overview': 'Review', 'category': 'work'},
+        }
+        with patch.object(developer, 'conversation_cards_page_core', return_value=([conversation], 'next-cursor')):
+            with patch.object(developer, 'populate_folder_names', lambda uid, rows: None):
+                response = self.client.get('/v1/dev/user/conversations?cursor=prior-cursor')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers['X-Omi-Next-Cursor'], 'next-cursor')
+        self.assertNotIn('X-Omi-Next-Offset', response.headers)
+
 
 if __name__ == "__main__":
     unittest.main()

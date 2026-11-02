@@ -87,6 +87,10 @@ def test_candidates_are_gated_before_nonowner_reads(monkeypatch, surface, paid):
 
 
 def test_live_plan_changes_are_observed_on_rotation_once(monkeypatch):
+    # Rotation loads owner profiles even when capture had no speech profile.
+    # This entitlement test must not enter Firestore/recovery SDK retries.
+    monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
+    monkeypatch.setattr(speakers, 'load_owner_embedding', lambda *_a, **_kw: None)
     permission = Mock(side_effect=[True, False, True])
     monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', permission)
     monkeypatch.setattr(users, 'get_people', lambda uid: [])

@@ -98,17 +98,9 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
             want = not profile.name.startswith(('operational-', 'maintenance-'))
             assert profile.serving is want, (key, profile.name)
     assert (
-        outside.DRIVERS['utils.memory.belief_backfill._default_item_reader'].profiles[0].name.startswith('operational-')
-    )
-    assert (
         outside.DRIVERS['services.users.data_export_iterators.iter_user_subcollection']
         .profiles[0]
         .name.startswith('export-')
-    )
-    assert (
-        outside.DRIVERS['utils.memory.daily_memory_sweep_inventory._seed_registry']
-        .profiles[0]
-        .name.startswith('maintenance-')
     )
 
 
@@ -126,12 +118,6 @@ def test_nested_export_records_the_child_query(outside_results):
 
 
 def test_state_fixtures_reach_fenced_claims_feedback_and_keyframes(outside_results):
-    claim = outside_results['utils.memory.daily_memory_sweep._invoke_model_once_claimed'].shapes
-    assert any(
-        {predicate.field for predicate in shape.filters}
-        == {'uid', 'account_generation', 'source_generation', 'sweep_generation', 'window_id'}
-        for shape in claim
-    )
     feedback = outside_results['utils.feedback_context.resolve_chat_context'].shapes
     assert any(
         {'chat_session_id', 'created_at'} == {predicate.field for predicate in shape.filters} for shape in feedback
@@ -155,6 +141,17 @@ def test_outside_pins_are_literal_reviewed_function_fingerprints():
         key: entry.body_digest for key, entry in {**outside.COVERED_BY, **outside.SKIPS}.items() if entry.body_digest
     }
     assert all(serving_function_body_digest(key) == digest for key, digest in outside.BODY_DIGEST.items())
+
+
+def test_fingerprint_parse_reuse_cannot_hide_changed_source(tmp_path):
+    module = tmp_path / 'reader.py'
+    module.write_text('def read():\n    return 1\n')
+    before = serving_function_body_digest('reader.read', tmp_path)
+    assert serving_function_body_digest('reader.read', tmp_path) == before
+    module.write_text('def read():\n    return 2\n')
+    after = serving_function_body_digest('reader.read', tmp_path)
+    assert after != before
+    assert serving_function_body_digest('reader.read', tmp_path) == after
 
 
 @pytest.mark.parametrize('directory', ['routers', 'utils', 'services', 'jobs', 'new_serving_package'])

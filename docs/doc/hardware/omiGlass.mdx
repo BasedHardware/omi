@@ -1,7 +1,7 @@
 ---
-title: "Hardware & Assembly"
+title: "omiGlass"
 icon: "glasses"
-description: "Open source smart glasses with 6x the battery life of Meta Ray-Bans. Build your own AI-powered glasses with the XIAO ESP32 S3 Sense."
+description: "Open-source smart glasses built on the XIAO ESP32 S3 Sense, with open hardware, firmware, and software."
 ---
 
 <Frame>
@@ -10,38 +10,39 @@ description: "Open source smart glasses with 6x the battery life of Meta Ray-Ban
 
 ## Overview
 
-omiGlass is an open-source smart glasses project that gives you AI capabilities with exceptional battery life.
+omiGlass is an open-source smart glasses project: a XIAO ESP32 S3 Sense with a camera, 3D-printed frame, and battery pack, paired with an open app and firmware.
 
-<CardGroup cols={3}>
-  <Card title="6x Battery Life" icon="battery-full">
-    Longer lasting than Meta Ray-Bans
-  </Card>
+<CardGroup cols={2}>
   <Card title="ESP32 S3 Sense" icon="microchip">
-    Powerful XIAO microcontroller with camera
+    XIAO microcontroller with camera
   </Card>
-  <Card title="Fully Open Source" icon="code-branch">
-    Hardware, firmware, and software
+  <Card title="Fully open source" icon="code-branch">
+    Hardware, firmware, and software in this repo
   </Card>
 </CardGroup>
 
-<Info>
-Watch the [announcement video](https://x.com/kodjima33/status/1911852469329727811) to see omiGlass in action.
-</Info>
+<Note>
+omiGlass is a developer kit. Features are experimental; treat battery life and stability as unvalidated until you test your own build.
+</Note>
 
----
-
-## How to Get It
+## How to get it
 
 <CardGroup cols={2}>
-  <Card title="Pre-built Kit" icon="box" href="https://omi.me/glass">
-    Order a limited pre-built DevKit from Based Hardware
+  <Card title="Pre-built kit" icon="box" href="https://omi.me/glass">
+    Order a pre-built kit when available
   </Card>
-  <Card title="Build Your Own" icon="screwdriver-wrench">
+  <Card title="Build your own" icon="screwdriver-wrench">
     Follow the guide below to build from scratch
   </Card>
 </CardGroup>
 
----
+## Using it
+
+Pair omiGlass with the Omi app like any other Omi device: power it on, open the app, and follow the pairing flow. The camera captures first-person photos; the microphone captures audio for transcription. End-user setup help lives in the [help center](https://help.omi.me).
+
+<Warning>
+Always get consent when recording others, and be mindful of local recording laws. Respect privacy in public and private spaces.
+</Warning>
 
 ## Prerequisites
 
@@ -52,14 +53,12 @@ Watch the [announcement video](https://x.com/kodjima33/status/191185246932972781
   <Card title="Arduino IDE" icon="code" href="https://www.arduino.cc/en/software">
     For firmware upload
   </Card>
-  <Card title="3D Printer" icon="cube">
+  <Card title="3D printer" icon="cube">
     For hardware components
   </Card>
 </CardGroup>
 
----
-
-## Hardware Components
+## Hardware components
 
 | Component | Description | Link |
 |-----------|-------------|------|
@@ -73,12 +72,10 @@ Watch the [announcement video](https://x.com/kodjima33/status/191185246932972781
 The current design does not include a switch. See the contribution section for how you can help improve this.
 </Note>
 
----
-
-## Software Setup
+## Software setup
 
 <Steps>
-  <Step title="Clone the Repository">
+  <Step title="Clone the repository">
     ```bash
     git clone https://github.com/BasedHardware/omi.git
     cd omi/omiGlass
@@ -90,7 +87,7 @@ The current design does not include a switch. See the contribution section for h
     yarn install
     ```
   </Step>
-  <Step title="Configure API Keys">
+  <Step title="Configure API keys">
     Copy the template and add your keys:
 
     ```bash
@@ -102,12 +99,12 @@ The current design does not include a switch. See the contribution section for h
     - [OpenAI API key](https://platform.openai.com/api-keys)
     - Ollama URL (default: `http://localhost:11434/api/chat`)
   </Step>
-  <Step title="Install Ollama Model">
+  <Step title="Install Ollama model">
     ```bash
     ollama pull moondream:1.8b-v2-fp16
     ```
   </Step>
-  <Step title="Start the Application">
+  <Step title="Start the application">
     ```bash
     npm start
     ```
@@ -123,32 +120,28 @@ The current design does not include a switch. See the contribution section for h
   </Step>
 </Steps>
 
----
-
-## Hardware Assembly
+## Hardware assembly
 
 <Steps>
-  <Step title="3D Print the Case">
+  <Step title="3D print the case">
     Print the glasses mount case using the STL files in the `hardware` folder.
   </Step>
-  <Step title="Assemble Components">
+  <Step title="Assemble components">
     Wire the batteries and XIAO board according to the assembly diagram.
 
     <Frame>
       <img src="https://github.com/user-attachments/assets/45ef303b-0f92-43eb-bfad-1b20a86e948c" alt="omiGlass Assembly" style={{ maxWidth: '400px', margin: '0 auto' }} />
     </Frame>
   </Step>
-  <Step title="Final Assembly">
+  <Step title="Final assembly">
     Mount all components into the 3D printed case and attach hinges.
   </Step>
 </Steps>
 
----
-
-## Firmware Installation
+## Firmware installation
 
 <Steps>
-  <Step title="Open the Firmware">
+  <Step title="Open the firmware">
     Open the [firmware folder](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware) and load the `.ino` file in Arduino IDE.
 
     <Tip>
@@ -166,7 +159,7 @@ The current design does not include a switch. See the contribution section for h
     3. Go to **Tools → Board → Boards Manager**
     4. Search for `esp32` and install the latest version
   </Step>
-  <Step title="Select Board and Port">
+  <Step title="Select board and port">
     1. Select port (likely COM3 or higher) at the top of Arduino IDE
     2. Search for `xiao` in the board selector
     3. Select **XIAO_ESP32S3**
@@ -178,55 +171,51 @@ The current design does not include a switch. See the contribution section for h
       <img src="/images/docs/hardware/images/image.png" alt="PSRAM Settings" />
     </Frame>
   </Step>
-  <Step title="Upload Firmware">
+  <Step title="Upload firmware">
     Click the Upload button to flash the firmware to your XIAO ESP32S3 board.
   </Step>
 </Steps>
 
----
+For flashing and monitoring details, see [Flash Firmware](/doc/hardware/omiglass/flash-firmware) and [Monitoring](/doc/hardware/omiglass/monitoring).
 
 ## Contributing
 
-Help improve omiGlass!
+Help improve omiGlass.
 
 ### Software
 
 | Task | Status |
 |------|--------|
-| Connect glasses with Omi AI app | ✅ Complete |
+| Connect glasses with Omi AI app | Complete |
 
 ### Hardware
 
 | Task | Status |
 |------|--------|
-| Redesign legs/sides for bigger heads | ⬜ Open |
-| Add switch to design | ✅ Complete |
+| Redesign legs/sides for bigger heads | Open |
+| Add switch to design | Complete |
 
-<Card title="Join the Community" icon="discord" href="http://discord.omi.me">
+<Card title="Join the community" icon="discord" href="http://discord.omi.me">
   Get help with setup, contribute to the project, and connect with other builders
 </Card>
-
----
 
 ## License
 
 This project is licensed under the MIT License.
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Omi Consumer" icon="circle-dot" href="/doc/hardware/OmiConsumer">
+  <Card title="Omi (CV1)" icon="circle-dot" href="/doc/hardware/OmiConsumer">
     Production Omi wearable
   </Card>
   <Card title="DevKit 2" icon="microchip" href="/doc/hardware/DevKit2">
-    Necklace form factor DevKit
+    Necklace form factor DevKit (legacy)
   </Card>
-  <Card title="Build Guide" icon="screwdriver-wrench" href="/doc/assembly/Build_the_device">
-    General assembly instructions
+  <Card title="Build guide" icon="screwdriver-wrench" href="/doc/assembly/Build_the_device">
+    DevKit 1 assembly steps, for reference
   </Card>
-  <Card title="App Setup" icon="mobile" href="/doc/get_started/introduction">
-    Get started with the Omi app
+  <Card title="What is Omi" icon="circle-dot" href="/doc/get_started/what-is-omi">
+    Start here
   </Card>
 </CardGroup>

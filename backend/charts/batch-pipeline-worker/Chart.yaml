@@ -1,0 +1,6 @@
+apiVersion: v2
+name: batch-pipeline-worker
+description: Default-off dedicated GPU batch chain; no serving admission
+version: 0.1.0
+appVersion: "1"
+type: application

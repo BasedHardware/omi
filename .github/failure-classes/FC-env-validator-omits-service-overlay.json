@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-env-validator-omits-service-overlay",
+  "violated_contract": "A deployment env validator must account for documented service-specific overlays applied after the shared runtime env is rendered; comparing the exported worker against only the pre-overlay state rejects a valid deployment.",
+  "canonical_prevention": "Model the documented overlay in the shared validator with exact service and variable scoping plus a full endpoint match, and exercise valid overlays and invalid drift through the production validator in hermetic tests.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/tests/unit/test_attach_cloud_run_gmp_sidecar.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/tests/unit/test_attach_cloud_run_gmp_sidecar.py"
+  ],
+  "status": "open"
+}

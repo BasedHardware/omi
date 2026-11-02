@@ -448,7 +448,8 @@ def _processor(world, persist=None, speaker_map_dirty=False):
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=speaker_map_dirty),
+        state=SimpleNamespace(speaker_map_dirty=speaker_map_dirty, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist or default_persist),
         speakers=SimpleNamespace(segment_assignments={}, speaker_to_person={}, segment_identity_status={}),
     )

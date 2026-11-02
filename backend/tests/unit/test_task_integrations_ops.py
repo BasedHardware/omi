@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -16,6 +17,8 @@ os.environ.setdefault(
 )
 
 from utils import task_integrations_ops as ops
+
+SENSITIVE_ERROR = "[Errno -2] Name or service not known: internal-db.svc.cluster.local:5432"
 
 
 def _mock_response(status_code: int, json_data=None, text: str = ""):
@@ -168,3 +171,36 @@ async def test_asana_refresh_failure_before_resend_is_not_sent(monkeypatch):
 
     assert result["error_code"] == "token_refresh_failed"
     assert client.post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_oauth_token_unexpected_failure_hides_exception_text():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = httpx.ConnectError(SENSITIVE_ERROR)
+
+    with patch.dict(os.environ, {"ASANA_CLIENT_ID": "client-id", "ASANA_CLIENT_SECRET": "client-secret"}):
+        with pytest.raises(HTTPException) as exc_info:
+            await ops.refresh_oauth_token("uid-5", "asana", {"refresh_token": "refresh-token"}, client=client)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Failed to refresh Asana token due to an internal error"
+
+
+@pytest.mark.asyncio
+async def test_create_task_unexpected_failure_hides_exception_text():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = httpx.ConnectError(SENSITIVE_ERROR)
+
+    result = await ops.create_task_internal(
+        uid="uid-6",
+        app_key="todoist",
+        integration={"connected": True, "access_token": "tok"},
+        title="Plan launch",
+        client=client,
+    )
+
+    assert result == {
+        "success": False,
+        "error": "Failed to create task due to an internal error",
+        "error_code": "in_doubt",
+    }

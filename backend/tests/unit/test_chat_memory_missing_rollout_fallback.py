@@ -4,6 +4,15 @@ from types import SimpleNamespace
 
 import utils.retrieval.tool_services.memories as memory_service_tools
 import utils.retrieval.tools.memory_tools as memory_tools
+from database import notifications
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fixed_timezone(monkeypatch):
+    monkeypatch.setattr(notifications, "get_user_time_zone", lambda _uid: "UTC")
 
 
 class _Memory:
@@ -28,7 +37,8 @@ def test_get_memories_tool_reads_arbitrary_uid_through_universal_service(monkeyp
     monkeypatch.setattr(memory_tools, "MemoryService", _UniversalService)
 
     result = memory_tools.get_memories_tool.invoke(
-        {"limit": 10, "offset": 0}, config={"configurable": {"user_id": "uid-former-cohort"}}
+        {"limit": 10, "offset": 0},
+        config={"configurable": {"user_id": "uid-former-cohort", "user_timezone": "UTC"}},
     )
 
     assert "Universal memory" in result
@@ -48,10 +58,9 @@ def test_search_memories_tool_reads_arbitrary_uid_through_universal_service(monk
             return [match]
 
     monkeypatch.setattr(memory_tools, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_tools.notification_db, "get_user_time_zone", lambda _uid: "UTC")
 
     result = memory_tools.search_memories_tool.invoke(
-        {"query": "coffee"}, config={"configurable": {"user_id": "uid-arbitrary-account"}}
+        {"query": "coffee"}, config={"configurable": {"user_id": "uid-arbitrary-account", "user_timezone": "UTC"}}
     )
 
     assert "Universal memory" in result

@@ -9,27 +9,27 @@ abstract final class ChatAppsAnalytics {
     final value = switch (channel) {
       ChatChannel.telegram => ChatAppConnectStartedChannel.telegram,
       ChatChannel.imessage => ChatAppConnectStartedChannel.imessage,
-      ChatChannel.whatsapp => null,
+      ChatChannel.whatsapp => ChatAppConnectStartedChannel.whatsapp,
     };
-    if (value != null) const TypedEvents().emit(ChatAppConnectStarted(channel: value));
+    const TypedEvents().emit(ChatAppConnectStarted(channel: value));
   }
 
   static void connected(ChatChannel channel) {
     final value = switch (channel) {
       ChatChannel.telegram => ChatAppConnectedChannel.telegram,
       ChatChannel.imessage => ChatAppConnectedChannel.imessage,
-      ChatChannel.whatsapp => null,
+      ChatChannel.whatsapp => ChatAppConnectedChannel.whatsapp,
     };
-    if (value != null) const TypedEvents().emit(ChatAppConnected(channel: value));
+    const TypedEvents().emit(ChatAppConnected(channel: value));
   }
 
   static void disconnected(ChatChannel channel) {
     final value = switch (channel) {
       ChatChannel.telegram => ChatAppDisconnectedChannel.telegram,
       ChatChannel.imessage => ChatAppDisconnectedChannel.imessage,
-      ChatChannel.whatsapp => null,
+      ChatChannel.whatsapp => ChatAppDisconnectedChannel.whatsapp,
     };
-    if (value != null) const TypedEvents().emit(ChatAppDisconnected(channel: value));
+    const TypedEvents().emit(ChatAppDisconnected(channel: value));
   }
 
   static void waitlistJoined() => const TypedEvents().emit(const ChatAppWaitlistJoined());

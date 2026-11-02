@@ -2,6 +2,51 @@ part of 'capture_controller.dart';
 
 /// Pendant uplink effects share the existing admission and session owners.
 extension _CaptureUplinkPolicy on CaptureController {
+  /// Reconcile both the staged BLE activation and its committed ownership.
+  /// Socket setup/close may have tried to arm before deviceRecord existed.
+  void _reconcileTranscriptionKeepAlive() {
+    if (_captureControllerDisposed ||
+        _capture.stagedReadModel.phase != CapturePhase.pendantLive ||
+        !_shouldReconnectTranscriptionSocket ||
+        _transcriptServiceReady ||
+        (_keepAliveTimer?.isActive ?? false)) {
+      return;
+    }
+    _socketReconnectPending = true;
+    _startKeepAliveServices();
+  }
+
+  /// A BLE codec request must not hold the serialized KeepAliveTick forever.
+  /// Timing out this read (rather than dispatch) leaves no late socket effects.
+  Future<BleAudioCodec?> _getReconnectAudioCodec(String deviceId) async {
+    final expired = Completer<BleAudioCodec?>();
+    final deadline = _scheduling.once(const Duration(seconds: 10), () => expired.complete(null));
+    try {
+      return await Future.any<BleAudioCodec?>([_getAudioCodec(deviceId), expired.future]);
+    } finally {
+      deadline.cancel();
+    }
+  }
+
+  Future<void> _reconnectDeviceCaptureBody({bool testingProbe = false}) async {
+    final token = _sessionOwner?.token;
+    final device = _recordingDevice;
+    if (device == null || recordingState != RecordingState.deviceRecord || isPaused) return;
+    final stagedPhase = _capture.stagedReadModel.phase;
+    final attestedIdle = testingProbe &&
+        stagedPhase == CapturePhase.idle &&
+        !_capture.stagedReadModel.callActive &&
+        _pendantSuspension == null;
+    if (stagedPhase != CapturePhase.pendantLive && !attestedIdle) return;
+    final deviceRevision = _deviceIdentityRevision;
+    final codec = await _getReconnectAudioCodec(device.id);
+    if (codec == null) return;
+    if (!_captureSessionIsCurrent(token) || _deviceIdentityStale(deviceRevision)) return;
+    if (_capture.stagedReadModel.phase != stagedPhase || _recordingDevice?.id != device.id) return;
+    if (!_shouldReconnectTranscriptionSocket) return;
+    await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
+  }
+
   Future<void> _recoverCaptureRestoreMarkers() async {
     // Upgrade from #20837: an automatic power pause is not user mute intent.
     // The serialized reducer rechecks the marker so a newer manual mute wins.
@@ -115,14 +160,26 @@ extension _CaptureUplinkPolicy on CaptureController {
   Future<void> _pauseDeviceTailBody() async {
     var revision = _preferences.capturePolicy.revision;
     await BatteryWidgetService().updateMuteState(true);
-    if (_preferences.capturePolicy.revision != revision) return;
-    await _cancelUplinkAudio();
-    if (_preferences.capturePolicy.revision != revision) return;
+    if (_preferences.capturePolicy.revision != revision) {
+      updateRecordingState(RecordingState.pause);
+      _publishCaptureChange();
+      return;
+    }
+    await _cancelUplinkAudio().timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+    if (_preferences.capturePolicy.revision != revision) {
+      updateRecordingState(RecordingState.pause);
+      _publishCaptureChange();
+      return;
+    }
     await _preferences.saveBool('nativeBleForegroundReady', false);
     await _preferences.saveBool('nativeBleStreamingEnabled', false);
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
-    await _abandonTranscriptionSocket(reason: 'device capture paused');
+    await _abandonTranscriptionSocket(reason: 'device capture paused').timeout(
+      const Duration(milliseconds: 500),
+      onTimeout: () => null,
+    );
+    updateRecordingState(RecordingState.pause);
     _publishCaptureChange();
   }
 

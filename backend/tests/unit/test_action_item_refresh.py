@@ -194,12 +194,13 @@ def test_same_description_in_another_conversation_never_matches(world):
     assert world.external[0] != 'foreign'
 
 
-def test_duplicate_occurrences_pair_one_to_one(world):
+def test_duplicate_occurrences_do_not_create_more_tasks(world):
     world.write(['Send report', 'Send report'])
     world.drain()
     world.write(['Send report', 'Send report'])
     world.drain()
-    assert len(world.external) == 1
+    assert not world.external
+    assert len([p for p in world.store.rows if p[-2] == 'action_items']) == 1
 
 
 def test_user_edit_at_commit_retries_and_does_not_clobber(world):

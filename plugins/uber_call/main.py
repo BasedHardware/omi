@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from uber_links import build_location, build_uber_deep_links
 
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Omi Uber Call App")
 
@@ -28,9 +30,17 @@ class CallUberRequest(BaseModel):
     product_id: str | None = None
     geolocation: dict[str, Any] | None = None
 
+    @field_validator("pickup_latitude", "pickup_longitude", "dropoff_latitude", "dropoff_longitude", mode="before")
+    @classmethod
+    def _reject_bool_coordinate(cls, value: Any) -> Any:
+        # pydantic's lax float mode would turn true/false into 1.0/0.0.
+        if isinstance(value, bool):
+            raise ValueError("Coordinates must be a number, got bool.")
+        return value
+
 
 def _geo_value(geolocation: dict[str, Any] | None, *keys: str) -> Any:
-    if not geolocation:
+    if not isinstance(geolocation, dict):
         return None
     for key in keys:
         value = geolocation.get(key)
@@ -141,6 +151,9 @@ def call_uber(payload: CallUberRequest) -> dict[str, str]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("call_uber failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Failed to prepare Uber ride link.") from exc
 
     destination = payload.destination or payload.dropoff_address or "the selected destination"
     return {

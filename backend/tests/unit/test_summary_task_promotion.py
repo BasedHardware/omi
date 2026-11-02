@@ -6,13 +6,14 @@ from unittest.mock import Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import Aborted
 import pytest
 
 from database import _client, candidates
 from database.summary_task_links import read_summary_task_row
 from models.candidate import SummaryTaskReference
 from routers import candidates as router
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from tests.unit.universal_memory_test_helpers import configure_universal_memory
 from utils.task_intelligence import candidate_service
 
@@ -269,6 +270,66 @@ def test_legacy_summary_preserves_unknown_owner_and_zero_confidence(harness):
     accepted = accept(client, prepared.json()['candidate_id'])
     assert accepted.status_code == 200, accepted.text
     assert tasks(db)[0]['owner'] == 'unknown'
+
+
+def test_legacy_string_summary_promotes_only_selected_row_and_replays_its_link(harness):
+    client, db = harness
+    structured = db.rows[CONVERSATION_PATH]['structured']
+    structured['action_items'] = [None, '', 'Send the budget', {'description': 'Keep sibling', 'completed': True}]
+    selected = {**SELECTED, 'action_item_index': 2}
+    before = deepcopy(db.rows[CONVERSATION_PATH])
+
+    prepared = client.post('/v1/candidates/from-conversation', headers=HEADERS, json=selected)
+    assert prepared.status_code == 200, prepared.text
+    assert tasks(db) == []
+    assert db.rows[CONVERSATION_PATH] == before
+    candidate_id = prepared.json()['candidate_id']
+    accepted = client.post(f'/v1/candidates/{candidate_id}/accept', headers=HEADERS, json={'summary_item': selected})
+    assert accepted.status_code == 200, accepted.text
+    task_id = accepted.json()['task_id']
+    expected = deepcopy(before)
+    expected['structured']['action_items'][2] = {'description': 'Send the budget', 'target_task_id': task_id}
+    assert db.rows[CONVERSATION_PATH] == expected
+    assert len(tasks(db)) == 1
+
+    replay = client.post(
+        '/v1/candidates/from-conversation',
+        headers={**HEADERS, 'Idempotency-Key': 'reopened-legacy-summary'},
+        json=selected,
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()['candidate_id'] == candidate_id
+    assert len(tasks(db)) == 1
+    assert db.rows[CONVERSATION_PATH] == expected
+
+
+@pytest.mark.parametrize('phase', ['prepare', 'accept'])
+@pytest.mark.parametrize('contention', [True, False])
+def test_summary_transaction_retries_only_explicit_read_contention(harness, monkeypatch, phase, contention):
+    client, db = harness
+    candidate_id = prepare(client).json()['candidate_id'] if phase == 'accept' else None
+    original_get = StrictFirestoreDocument.get
+    attempts = []
+
+    def fail_first_control_read(reference, transaction=None, **kwargs):
+        if transaction is not None and reference.id == 'state':
+            attempts.append(transaction)
+            if len(attempts) == 1:
+                raise Aborted('synthetic contention') if contention else RuntimeError('synthetic unknown fault')
+        return original_get(reference, transaction=transaction, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', fail_first_control_read)
+    if not contention:
+        before = deepcopy(db.rows)
+        with pytest.raises(RuntimeError, match='synthetic unknown fault'):
+            prepare(client) if phase == 'prepare' else accept(client, candidate_id)
+        assert len(attempts) == 1
+        assert db.rows == before
+        return
+    response = prepare(client) if phase == 'prepare' else accept(client, candidate_id)
+    assert response.status_code == 200, response.text
+    assert len(attempts) == 2 and attempts[0] is not attempts[1]
+    assert len(tasks(db)) == (0 if phase == 'prepare' else 1)
 
 
 def test_missing_linked_task_cannot_recreate_or_retarget_summary(harness):

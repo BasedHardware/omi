@@ -41,6 +41,9 @@ const chatAppsOn = ChatAppsConfig(
 final String linkIdTelegram = 'a' * 64;
 final String linkIdIMessage = 'b' * 64;
 
+Map<String, dynamic> availabilityJson({bool available = false, String? reason, bool waitlisted = false}) =>
+    {'available': available, 'reason': reason, 'waitlisted': waitlisted};
+
 Map<String, dynamic> linkJson({
   required String id,
   required String channel,
@@ -62,11 +65,20 @@ class FakeMessagingBackend {
   final List<ApiRequest> requests = [];
   List<Map<String, dynamic>> links = [];
 
+  /// `availability` on the list response, by channel; null omits it like an older backend.
+  Map<String, Map<String, dynamic>>? availability;
+
+  /// Channels whose seats are full: minting answers 409 and waitlists the account, as the backend does.
+  final Set<String> seatCapped = {};
+
   /// Status for the next calls of a method + path prefix, e.g. `POST v1/messaging/link-proofs`.
   final Map<String, int> statusFor = {};
 
   /// How long minted proofs live.
   Duration proofTtl = const Duration(minutes: 10);
+
+  /// The line minted proofs name, when the backend assigned one.
+  String? proofAddress;
   int _minted = 0;
 
   Future<http.Response> send(ApiRequest request) async {
@@ -76,10 +88,23 @@ class FakeMessagingBackend {
       if ('${request.method} $path'.startsWith(entry.key)) return http.Response('{"detail":"no"}', entry.value);
     }
     if (request.method == 'GET' && path == 'v1/messaging/links') {
-      return http.Response(jsonEncode({'links': links}), 200);
+      return http.Response(jsonEncode({'links': links, if (availability != null) 'availability': availability}), 200);
     }
     if (request.method == 'POST' && path == 'v1/messaging/link-proofs') {
       final body = jsonDecode(request.body) as Map<String, dynamic>;
+      final channel = body['channel'] as String;
+      if (seatCapped.contains(channel)) {
+        availability = {
+          ...?availability,
+          channel: {'available': false, 'reason': 'seat_cap', 'waitlisted': true},
+        };
+        return http.Response(
+          jsonEncode({
+            'detail': {'reason': 'seat_cap', 'message': 'iMessage is full - join the waitlist'},
+          }),
+          409,
+        );
+      }
       _minted++;
       final proof =
           body['kind'] == 'code' ? '9F2C4A7B1D3E5F6${_minted % 10}0A1B2C3D4E5F6A7B' : 'tok_${_minted}_abcdefghijklmnop';
@@ -88,6 +113,7 @@ class FakeMessagingBackend {
           'proof': proof,
           'kind': body['kind'],
           'expires_at': DateTime.now().toUtc().add(proofTtl).toIso8601String(),
+          if (proofAddress != null) 'address': proofAddress,
         }),
         200,
       );
@@ -162,6 +188,7 @@ Widget chatAppsHost(
       ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity ?? StubConnectivity()),
     ],
     child: MaterialApp(
+      debugShowCheckedModeBanner: false,
       theme: buildOmiTheme(brightness: brightness),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

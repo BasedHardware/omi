@@ -29,7 +29,10 @@ class BaseAdapter:
 
     async def prepare(self, message, uid, session, guard):
         if message.attachments or message.media:
-            return await prepare_media(self, message, uid, session, guard)
+            from utils.http_client import get_messaging_media_semaphore
+
+            async with get_messaging_media_semaphore():
+                return await prepare_media(self, message, uid, session, guard)
         return message
 
     async def pace(self, chat, interval=1.05):

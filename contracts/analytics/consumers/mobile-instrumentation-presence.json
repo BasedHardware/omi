@@ -141,7 +141,12 @@
     "onboardingFirstCaptureConversationShown",
     "onboardingFirstCaptureEmptyResult",
     "onboardingFirstCaptureSkipped",
-    "onboardingStepCompleted"
+    "onboardingStepCompleted",
+    "paywallVariantShown",
+    "paywallVariantFallback",
+    "onboardingWebviewShown",
+    "onboardingWebviewCompleted",
+    "onboardingWebviewFallback"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

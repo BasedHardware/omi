@@ -8,6 +8,7 @@ import numpy as np
 from database import users as users_db
 from database import owner_profile_updates as recovery_db
 from utils.other.storage import get_profile_audio_if_exists
+from utils.other.owned_paths import owned_scratch_path
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
 _UNREAD = object()
@@ -24,7 +25,7 @@ def validated_embedding(value: Any) -> Optional[np.ndarray]:
 
 
 def read_profile_file(path: str) -> bytes:
-    return Path(path).read_bytes()
+    return Path(owned_scratch_path(path)).read_bytes()
 
 
 def load_owner_embedding(

@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-developers-home.png",
+      "platform": "web",
+      "description": "Web /developers at 1440 wide: Developers rail entry and Connect an agent with the three paths (mocked auth and API)",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-web-oauth-prompt-expanded.png",
+      "platform": "web",
+      "description": "MCP with sign-in card with its key-free copy-paste prompt expanded",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "003-web-mcp-key-created-handoff.png",
+      "platform": "web",
+      "description": "MCP key created: Send to My Agent Securely leads; raw key hidden",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "004-web-mcp-key-secure-prompt.png",
+      "platform": "web",
+      "description": "Prompt after the browser encrypted the key: contains only the zkr agent link (zkr create response faked; encryption real)",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "005-web-key-fallback-warning.png",
+      "platform": "web",
+      "description": "Show the key instead fallback with its warning",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "006-web-dev-api-secure-prompt.png",
+      "platform": "web",
+      "description": "Developer API key hand-off prompt with scopes and GET /v1/dev/key verification",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "007-web-profile-menu-no-developer-row.png",
+      "platform": "web",
+      "description": "Profile menu without the old Settings Developer row; Developers is in the rail",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "008-web-mobile-width-developers.png",
+      "platform": "web",
+      "description": "/developers at 390 wide",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "009-web-mobile-width-secure-prompt.png",
+      "platform": "web",
+      "description": "MCP key hand-off dialog at 390 wide",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "010-desktop-macos-settings-connect-agent.png",
+      "platform": "desktop-macos",
+      "description": "Settings > Advanced: Connect an Agent card and the renamed Model Provider Keys header (SwiftUI NSHostingView snapshot, not a live app capture)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-desktop-macos-connect-sheet-developer-link.png",
+      "platform": "desktop-macos",
+      "description": "Connect sheet footer link to the web developer home (SwiftUI snapshot)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-settings-connect-agent-row.png",
+      "platform": "mobile-ios",
+      "description": "Settings sheet with the Connect an Agent row (widget render, iOS, SF Pro)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-developer-settings-header.png",
+      "platform": "mobile-ios",
+      "description": "Developer Settings leading with Connect an Agent (widget render, cropped to header)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

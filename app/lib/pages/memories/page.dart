@@ -74,6 +74,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
+    // The search lives on the app-wide provider, so it outlives this page: it is still applied when
+    // you come back, and Global Search sets it before opening the page. Show it in the field, or the
+    // list stays filtered under an empty search box with no clear button.
+    _searchController.text = context.read<MemoriesProvider>().searchQuery;
     (() async {
       final provider = context.read<MemoriesProvider>();
       try {
@@ -176,6 +180,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     super.build(context);
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
+        // filteredMemories filters (and, while searching, lowercases) every
+        // memory. Take it once per build: reading it per row made each row
+        // built during a scroll cost O(all memories).
+        final visibleMemories = provider.filteredMemories;
         return Scaffold(
           backgroundColor: OmiColors.surface0,
           appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
@@ -206,8 +214,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             SliverToBoxAdapter(
                               child: MemoriesPartialLoadBanner(onRetry: () => provider.loadMemories()),
                             ),
-                          if (provider.memoryBeliefEnabled &&
-                              provider.showHistory &&
+                          if (provider.showHistory &&
                               (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
                             SliverToBoxAdapter(
                               child: Padding(
@@ -217,7 +224,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                 ),
                               ),
                             ),
-                          if (provider.showLoadError || provider.filteredMemories.isEmpty)
+                          if (provider.showLoadError || visibleMemories.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
                               child: MemoriesEmptyOrError(
@@ -231,7 +238,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                               padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
                               sliver: SliverList(
                                 delegate: SliverChildBuilderDelegate((context, index) {
-                                  final memory = provider.filteredMemories[index];
+                                  final memory = visibleMemories[index];
                                   return MemoryItem(
                                     memory: memory,
                                     highlighted: memory.id == _highlightedMemoryId,
@@ -242,7 +249,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       _showQuickEditSheet(context, tappedMemory, tappedProvider);
                                     },
                                   );
-                                }, childCount: provider.filteredMemories.length),
+                                }, childCount: visibleMemories.length),
                               ),
                             ),
                         ],

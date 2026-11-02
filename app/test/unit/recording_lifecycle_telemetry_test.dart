@@ -60,9 +60,14 @@ void main() {
       RecordingLifecycleTelemetry.startedEvent,
       RecordingLifecycleTelemetry.completedEvent,
     ]);
-    expect(events.first.properties, {'recording_id': 'recording-1', 'recording_source': 'phone_mic_live'});
+    expect(events.first.properties, {
+      'recording_id': 'recording-1',
+      'recording_source': 'phone_mic_live',
+      'request_origin': 'unknown',
+    });
     expect(events.last.properties, {
-      ...events.first.properties,
+      'recording_id': 'recording-1',
+      'recording_source': 'phone_mic_live',
       'duration_seconds': 2.75,
       'reason': 'user_stopped',
       'audio_observed': false,
@@ -228,6 +233,22 @@ void main() {
     final uri = Uri.parse((service.socket as PureSocket).url);
     expect(uri.path, '/v4/listen');
     expect(uri.queryParameters['client_conversation_id'], 'recording/with spaces');
+  });
+
+  test('request origin stays inside the proven caller set', () {
+    final events = <Map<String, dynamic>>[];
+    final telemetry = RecordingLifecycleTelemetry(emitter: (_, properties) => events.add(properties));
+    telemetry.prepare(source: 'phone_mic_live', requestOrigin: 'explicit_user');
+    telemetry.complete();
+    expect(events.first['request_origin'], 'explicit_user');
+
+    final rolled = RecordingLifecycleTelemetry(emitter: (_, properties) => events.add(properties));
+    rolled.prepare(source: 'phone_mic_live', requestOrigin: 'automatic_roll');
+    expect(events.last['request_origin'], 'automatic_roll');
+
+    final invented = RecordingLifecycleTelemetry(emitter: (_, properties) => events.add(properties));
+    invented.prepare(source: 'pendant_live', requestOrigin: 'user_probably');
+    expect(events.last['request_origin'], 'unknown');
   });
 
   test('telemetry failures never escape into capture behavior', () {

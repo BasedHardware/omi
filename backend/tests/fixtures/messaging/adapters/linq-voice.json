@@ -17,11 +17,12 @@
     },
     "parts": [
       {
-        "type": "voice_memo",
+        "type": "media",
         "url": "https://cdn.linqapp.com/attachments/fixture/voice.m4a",
         "filename": "voice.m4a",
         "mime_type": "audio/mp4",
-        "size_bytes": 9
+        "size_bytes": 3068,
+        "duration_ms": 120
       }
     ]
   }

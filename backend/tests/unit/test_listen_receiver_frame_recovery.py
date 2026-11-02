@@ -1,5 +1,6 @@
 """Listen receiver frame-level recovery regressions."""
 
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -78,8 +79,9 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
         ]
     )
     host = SimpleNamespace(
-        request=SimpleNamespace(websocket=websocket, codec=codec),
+        request=SimpleNamespace(websocket=websocket, uid='test-uid', codec=codec),
         state=SimpleNamespace(
+            current_conversation_id=None,
             active=True,
             close_code=1001,
             last_audio_received_time=None,
@@ -114,8 +116,8 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
 @pytest.mark.anyio
 async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_it():
     host = SimpleNamespace(
-        request=SimpleNamespace(codec='opus', sample_rate=16000),
-        state=SimpleNamespace(),
+        request=SimpleNamespace(uid='test-uid', codec='opus', sample_rate=16000),
+        state=SimpleNamespace(current_conversation_id=None),
         is_multi_channel=True,
         use_custom_stt=True,
     )
@@ -128,9 +130,19 @@ async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_
 
 
 @pytest.mark.anyio
-async def test_receiver_emits_decoded_audio_duration_at_session_end():
+async def test_receiver_emits_decoded_audio_duration_at_session_end(monkeypatch):
+    import routers.listen.receiver as receiver_module
+
     telemetry = _TelemetryClient()
     set_product_telemetry_client_for_tests(telemetry)
+    source_events = []
+    emit_product_event = receiver_module.emit_product_event
+
+    def capture_source_event(**event):
+        source_events.append(event)
+        return emit_product_event(**event)
+
+    monkeypatch.setattr(receiver_module, 'emit_product_event', capture_source_event)
     websocket = _FramesWebSocket([{'bytes': b'\x01\x00' * 16000}, {'type': 'websocket.disconnect', 'code': 1000}])
     host = SimpleNamespace(
         request=SimpleNamespace(websocket=websocket, codec='pcm16', sample_rate=16000, uid='user-1'),
@@ -159,7 +171,9 @@ async def test_receiver_emits_decoded_audio_duration_at_session_end():
 
     assert telemetry.events[0]['event'] == 'Encoded Audio Duration Measured'
     assert telemetry.events[0]['properties']['duration_seconds'] == 1.0
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+    assert source_events[0]['properties']['recording_id'] == 'recording-1'
+    assert source_events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert not {'recording_id', 'conversation_id'} & telemetry.events[0]['properties'].keys()
 
 
 @pytest.mark.anyio
@@ -196,3 +210,46 @@ async def test_receiver_emits_speech_positive_duration_at_session_end():
     assert telemetry.events[0]['event'] == 'Speech Positive Duration Measured'
     assert telemetry.events[0]['properties']['duration_seconds'] == 1.25
     assert telemetry.events[0]['properties']['measurement'] == 'server_vad'
+
+
+@pytest.mark.anyio
+async def test_archive_wait_starts_after_transcript_drain(monkeypatch):
+    websocket = _FramesWebSocket([{'type': 'websocket.disconnect', 'code': 1000}])
+    host = SimpleNamespace(
+        request=SimpleNamespace(websocket=websocket, uid='test-uid', codec='pcm16'),
+        state=SimpleNamespace(
+            active=True,
+            close_code=1001,
+            current_conversation_id=None,
+            first_audio_byte_timestamp=None,
+            last_usage_record_timestamp=None,
+        ),
+        limits=SimpleNamespace(ws_receive_timeout=1.0),
+        is_multi_channel=False,
+        use_custom_stt=True,
+        audio_bytes_send=None,
+        start_live_transcription=lambda: None,
+    )
+    receiver = ListenReceiver(host, [], {})
+    tail_sent = asyncio.Event()
+    release_archive = asyncio.Event()
+
+    async def drain(*args):
+        tail_sent.set()
+
+    async def slow_archive():
+        assert tail_sent.is_set()
+        assert receiver.stt_drain_complete.is_set()
+        assert not host.state.active
+        await release_archive.wait()
+
+    monkeypatch.setattr(receiver, '_teardown_body', drain)
+    monkeypatch.setattr(receiver.raw_archive, 'close', slow_archive)
+    task = asyncio.create_task(receiver.receive_data())
+    try:
+        await asyncio.wait_for(receiver.stt_drain_complete.wait(), timeout=1)
+        assert tail_sent.is_set()
+        assert not task.done()
+    finally:
+        release_archive.set()
+        await asyncio.wait_for(task, timeout=1)

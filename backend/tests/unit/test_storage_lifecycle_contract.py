@@ -3,6 +3,7 @@ from pathlib import Path
 
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
+    NONCURRENT_DELETE_RULE,
     validate_against_live,
     validate_desired_document,
     validate_notifications,
@@ -26,10 +27,12 @@ def test_checked_in_documents_pass_the_source_contract():
         assert validate_desired_document(_load(name)) == [], name
 
 
-def test_no_delete_rule_can_reach_chunks():
+def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
     for name in APPLY_FILES + ROLLBACK_FILES:
         for rule in _rules(_load(name)):
             if rule["action"]["type"] != "Delete":
+                continue
+            if rule == NONCURRENT_DELETE_RULE:
                 continue
             prefixes = rule["condition"].get("matchesPrefix")
             assert prefixes, f"{name}: unscoped Delete rule"
@@ -40,12 +43,69 @@ def test_no_delete_rule_can_reach_chunks():
 
 def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
     for name in APPLY_FILES:
-        set_class = [r for r in _rules(_load(name)) if r["action"]["type"] == "SetStorageClass"]
+        set_class = [
+            r
+            for r in _rules(_load(name))
+            if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+        ]
         assert len(set_class) == 1, name
         rule = set_class[0]
-        assert rule["action"]["storageClass"] == "COLDLINE"
         assert rule["condition"]["age"] == 30
         assert rule["condition"]["matchesPrefix"] == ["chunks/"]
+
+
+def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
+    set_class = [
+        r
+        for r in _rules(_load("prod.json"))
+        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+    ]
+    assert len(set_class) == 1
+    rule = set_class[0]
+    assert rule["condition"]["matchesSuffix"] == [".batch.enc", ".batch.bin"], (
+        "prod Coldline transitions must stay scoped to the large batch artifacts; "
+        "small .opus.enc chunks never pay back Coldline Class A pricing (p76)"
+    )
+
+
+def test_prod_archive_rule_is_pinned_to_the_coldline_batch_stock():
+    archive = [
+        r
+        for r in _rules(_load("prod.json"))
+        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "ARCHIVE"
+    ]
+    assert len(archive) == 1, "prod declares exactly one ARCHIVE transition (David 11-01)"
+    rule = archive[0]
+    assert rule["condition"]["matchesStorageClass"] == ["COLDLINE"], "only already-Coldline objects may move to Archive"
+    assert rule["condition"]["matchesPrefix"] == ["chunks/"]
+    assert rule["condition"]["matchesSuffix"] == [
+        ".batch.enc",
+        ".batch.bin",
+    ], "same batch-artifact scope as the Coldline rule; .opus.enc chunks stay out"
+    assert rule["condition"]["age"] == 90, (
+        "lifecycle age is creation-based and transitions are asynchronous, so no age can "
+        "*guarantee* a Coldline interval; 90 (3x the Coldline transition age) keeps a real "
+        "Coldline residency even for lagged transitions, and the pre-existing stock "
+        "(created >= 90d ago) still moves on first evaluation"
+    )
+
+
+def test_archive_rule_is_rejected_outside_prod():
+    dev = _load("development.json")
+    dev_with_archive = json.loads(json.dumps(dev))
+    dev_with_archive["lifecycle"]["rule"].append(
+        {
+            "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
+            "condition": {
+                "age": 90,
+                "matchesPrefix": ["chunks/"],
+                "matchesStorageClass": ["COLDLINE"],
+                "matchesSuffix": [".batch.enc", ".batch.bin"],
+            },
+        }
+    )
+    errors = validate_desired_document(dev_with_archive)
+    assert any("ARCHIVE" in e and "omi-private-cloud-sync" in e for e in errors), errors
 
 
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
@@ -57,14 +117,35 @@ def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
             assert legacy in rules, name
 
 
-def test_rollback_files_only_drop_the_set_storage_class_rule():
+def test_prod_noncurrent_delete_rule_is_pinned():
+    rules = _rules(_load("prod.json"))
+    assert NONCURRENT_DELETE_RULE in rules, "prod must declare the scoped noncurrent .opus.enc delete rule"
+    assert rules.count(NONCURRENT_DELETE_RULE) == 1
+    condition = NONCURRENT_DELETE_RULE["condition"]
+    assert condition["isLive"] is False
+    assert condition["numNewerVersions"] == 1, (
+        "numNewerVersions > 1 or 0 changes which generations survive; 1 keeps exactly the newest "
+        "generation of every object name (David 10-23 regen-check ruling)"
+    )
+    assert condition["matchesPrefix"] == ["chunks/"]
+    assert condition["matchesSuffix"] == [".opus.enc"], "wider suffixes would delete noncurrent PCM batch generations"
+
+
+def test_rollback_files_only_drop_rules_the_apply_variant_added():
     for apply_name, rollback_name in zip(APPLY_FILES, ROLLBACK_FILES):
         apply_rules = _rules(_load(apply_name))
         rollback_rules = _rules(_load(rollback_name))
         assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        assert [rule["action"]["type"] for rule in dropped] == ["SetStorageClass"]
+        expected = (
+            ["Delete", "SetStorageClass", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
+        )
+        assert (
+            sorted(rule["action"]["type"] for rule in dropped) == expected
+        ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"
+        if apply_name == "prod.json":
+            assert NONCURRENT_DELETE_RULE in dropped
         assert _load(apply_name)["bucket"] == _load(rollback_name)["bucket"]
 
 
@@ -120,6 +201,42 @@ def test_noncurrent_version_rule_is_rejected():
     )
     errors = validate_desired_document(document)
     assert any("noncurrent" in error for error in errors)
+
+
+def test_scoped_noncurrent_delete_rule_passes_and_near_misses_are_rejected():
+    base = {
+        "bucket": "omi-private-cloud-sync",
+        "project": "based-hardware",
+        "lifecycle": {"rule": list(_rules(_load("prod.json")))},
+    }
+    assert validate_desired_document(base) == []
+
+    def errors_with(mutated_rule):
+        document = json.loads(json.dumps(base))
+        document["lifecycle"]["rule"] = [
+            mutated_rule if rule == NONCURRENT_DELETE_RULE else rule for rule in document["lifecycle"]["rule"]
+        ]
+        return validate_desired_document(document)
+
+    # A wider suffix would delete noncurrent PCM batch generations.
+    wider = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+    wider["condition"]["matchesSuffix"] = [".opus.enc", ".batch.enc"]
+    assert any("noncurrent" in error or "can match 'chunks/'" in error for error in errors_with(wider))
+
+    # numNewerVersions != 1 changes which generations survive.
+    looser = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+    del looser["condition"]["numNewerVersions"]
+    assert any("noncurrent" in error for error in errors_with(looser))
+
+    # Dropping isLive widens the rule beyond the reviewed shape.
+    no_is_live = json.loads(json.dumps(NONCURRENT_DELETE_RULE))
+    del no_is_live["condition"]["isLive"]
+    assert any("noncurrent" in error for error in errors_with(no_is_live))
+
+    # The rule may appear at most once.
+    duplicated = json.loads(json.dumps(base))
+    duplicated["lifecycle"]["rule"].append(json.loads(json.dumps(NONCURRENT_DELETE_RULE)))
+    assert any("at most one" in error for error in validate_desired_document(duplicated))
 
 
 def test_live_rule_not_present_in_desired_fails_without_allow_rule_removal():

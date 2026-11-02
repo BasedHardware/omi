@@ -7,12 +7,17 @@ both sides then have to agree again.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import pytest
 
-from utils.conversations.meeting_context import call_tile_agent_names, call_tile_names, context_from_screen_activity
+from utils.conversations.meeting_context import (
+    call_tile_agent_names,
+    call_tile_names,
+    context_from_screen_activity,
+    strip_leading_tile_glyphs,
+)
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 
 VECTORS_PATH = Path(__file__).resolve().parents[1] / 'fixtures' / 'meeting_identity' / 'call_tile_vectors.json'
@@ -50,3 +55,112 @@ def test_extractor_participants_match_the_shared_vector(vector):
 def test_the_incident_vector_is_present():
     # The rule exists for this incident; losing the vector would un-pin it.
     assert any(vector['id'] == 'meet_1on1_bare_tile_repeated' for vector in VECTORS)
+
+
+# Zoom's speaking-indicator glyph OCRs glued to the tile name, one variant per
+# screenshot ("IllNik Shevchenko", "wIllNik Shevchenko"; conversation 79e8e434:
+# notes named no one although every row showed the name). These tests live here,
+# not in the shared parity vectors, until the macOS twin strips the glyph too.
+def _zoom_call_rows(name_lines, second_tile=None):
+    rows = []
+    for index, line in enumerate(name_lines):
+        lines = [line]
+        if second_tile:
+            lines.append(second_tile)
+        # Zoom control chrome is icon+labeled buttons; lowercase OCR keeps these
+        # lines from looking like tile names while still proving a call window.
+        lines += ['mute', 'stop video', 'participants', 'share screen', f'09:0{index}']
+        rows.append({'appName': 'zoom.us', 'windowTitle': 'Zoom Meeting', 'ocrText': '\n'.join(lines)})
+    return rows
+
+
+def test_speaking_glyph_variants_persist_as_one_tile_name():
+    rows = _zoom_call_rows(
+        ['IllNik Shevchenko', 'wIllNik Shevchenko', 'IIINik Shevchenko', 'lNik Shevchenko', 'Nik Shevchenko']
+    )
+    assert call_tile_names(rows) == ['Nik Shevchenko']
+    context = context_from_screen_activity(rows, started_at=START, finished_at=END)
+    assert [participant.name for participant in (context.participants if context else [])] == ['Nik Shevchenko']
+
+
+def test_glyphed_tile_does_not_shadow_the_clean_tile_next_to_it():
+    rows = _zoom_call_rows(['IllNik Shevchenko', 'wIllNik Shevchenko', 'Nik Shevchenko'], second_tile='Maria Lopez')
+    assert sorted(call_tile_names(rows)) == ['Maria Lopez', 'Nik Shevchenko']
+
+
+def test_glyph_free_names_survive_the_strip_unchanged():
+    rows = _zoom_call_rows(['Illinois Smith', 'Illinois Smith', 'Illinois Smith'])
+    assert call_tile_names(rows) == ['Illinois Smith']
+    rows = _zoom_call_rows(['William Penn', 'William Penn', 'William Penn'])
+    assert call_tile_names(rows) == ['William Penn']
+
+
+@pytest.mark.parametrize(
+    ('line', 'expected'),
+    [
+        ('IllNik Shevchenko', 'Nik Shevchenko'),
+        ('wIllNik Shevchenko', 'Nik Shevchenko'),
+        ('IIlNik Shevchenko', 'Nik Shevchenko'),
+        ('INik Shevchenko', 'Nik Shevchenko'),
+        ('Illinois Smith', 'Illinois Smith'),
+        ('William Penn', 'William Penn'),
+        ('Will Penn', 'Will Penn'),
+        ('wIlliam Penn', 'wIlliam Penn'),
+        ('III Nik', 'III Nik'),
+        ('IllZoom Meeting', 'Zoom Meeting'),
+    ],
+)
+def test_strip_leading_tile_glyphs_is_conservative(line, expected):
+    assert strip_leading_tile_glyphs(line) == expected
+
+
+def test_duplicate_remote_tile_labels_never_authorize_binding():
+    rows = _zoom_call_rows(['Robert Ream'] * 3, second_tile='Robert Ream')
+    assert call_tile_names(rows, current_only=True) == []
+
+
+def test_latest_renamed_label_cannot_be_outvoted_by_old_sightings():
+    rows = _zoom_call_rows(['Old Label'] * 6 + ['Robert Ream'])
+    assert call_tile_names(rows, current_only=True) == []  # current name has only one sighting
+    rows += _zoom_call_rows(['Robert Ream'] * 3)
+    assert call_tile_names(rows, current_only=True) == ['Robert Ream']
+
+
+def test_separate_call_windows_and_old_sightings_cannot_vote_in_current_call():
+    old = _zoom_call_rows(['Old Label'] * 6)
+    current = _zoom_call_rows(['Robert Ream'])
+    for index, row in enumerate(old):
+        row['timestamp'] = (START + timedelta(seconds=index)).isoformat()
+    current[0]['timestamp'] = (START + timedelta(minutes=10)).isoformat()
+    assert call_tile_names(list(reversed(old + current)), current_only=True) == []
+    for row in old:
+        row['windowTitle'] = 'Meet - abc-defg-hij'
+    for row in current:
+        row['timestamp'] = (START + timedelta(seconds=10)).isoformat()
+    assert call_tile_names(old + current, current_only=True) == []
+
+
+def test_tile_provenance_keeps_names_without_nearby_ocr_email():
+    rows = _zoom_call_rows(['Robert Ream'] * 3)
+    for row in rows:
+        row['ocrText'] += '\nrobert@example.com'
+    context = context_from_screen_activity(rows, started_at=START, finished_at=END)
+    assert context is not None
+    tiles = context.to_storage_dict()['participant_sources']['observed_call_tiles']
+    assert tiles == [{'name': 'Robert Ream'}]
+    assert context.model_dump()['participant_sources']['observed_call_tiles'] == tiles
+
+
+@pytest.mark.parametrize('new_name', ['Alice Smith', 'Otter Bot'])
+def test_new_tile_alongside_persistent_label_does_not_bind_mixed_channel(new_name):
+    rows = _zoom_call_rows(['Robert Ream'] * 6)
+    rows[-1]['ocrText'] += '\n' + new_name
+    assert call_tile_names(rows, current_only=True) == []
+
+
+def test_capped_screen_read_cannot_treat_an_old_page_as_latest_evidence():
+    from utils.conversations.meeting_context import MAX_SCREEN_CONTEXT_ROWS
+
+    rows = _zoom_call_rows(['Robert Ream'] * MAX_SCREEN_CONTEXT_ROWS)
+    context = context_from_screen_activity(rows, started_at=START, finished_at=END)
+    assert context.participant_sources.observed_call_tiles == []

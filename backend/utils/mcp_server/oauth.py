@@ -19,7 +19,6 @@ import database.mcp_client_metadata as mcp_client_metadata
 import database.mcp_oauth as mcp_oauth_db
 import database.mcp_token_cache as mcp_token_cache_db
 from utils.executors import ExecutorSaturatedError, cimd_executor, critical_executor, db_executor, run_blocking
-from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.mcp_server.metadata import MCP_AUTHORIZATION_SERVER_URL, SCOPE_PERMISSION_TEXT
 from utils.metrics import OMI_MCP_OAUTH_TOKEN_TOTAL
 from utils.other.endpoints import check_rate_limit_inline
@@ -346,11 +345,6 @@ async def mcp_authorize_consent(
         if isinstance(e, ValueError):
             return _oauth_error("invalid_request", "Invalid authorization request")
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
-
-    try:
-        enforce_jit_qa_uid(uid)
-    except JITQAAdmissionError as error:
-        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
 
     try:
         _, code = await run_blocking(

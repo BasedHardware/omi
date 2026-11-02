@@ -71,7 +71,7 @@ def test_correction_trim_and_item_payload_match():
 
 
 def test_agent_proposal_and_answer_contract():
-    from models.dream_agent import Edit
+    from models.dream_edit import Edit
     from models.review import AgentProposalItem, AgentProposalAnswer, ReviewItemV2, ReviewAnswerV2
 
     edit = Edit(kind='close_task', target='action_items/toy-task', reason='Done', evidence=['conversations/toy'])
@@ -97,7 +97,7 @@ def test_agent_proposal_and_answer_contract():
 
 def test_legacy_review_contract_rejects_agent_payloads():
     from models.review import ReviewItemV2, AgentProposalItem
-    from models.dream_agent import Edit
+    from models.dream_edit import Edit
 
     item = ReviewItemV2(
         item_id='agent_proposal:toy',

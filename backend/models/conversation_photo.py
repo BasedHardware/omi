@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 from pydantic import field_validator
+from utils.model_text import DisplayClock, format_elapsed, format_instant
 
 
 class ConversationPhoto(BaseModel):
@@ -39,7 +40,13 @@ class ConversationPhoto(BaseModel):
         return value
 
     @staticmethod
-    def photos_as_string(photos: List['ConversationPhoto'], include_timestamps: bool = False) -> str:
+    def photos_as_string(
+        photos: List['ConversationPhoto'],
+        include_timestamps: bool = False,
+        *,
+        started_at: Optional[datetime] = None,
+        clock: Optional[DisplayClock] = None,
+    ) -> str:
         if not photos:
             return 'None'
         descriptions: list[str] = []
@@ -47,7 +54,12 @@ class ConversationPhoto(BaseModel):
             if p.description and p.description.strip():
                 timestamp_str = ''
                 if include_timestamps:
-                    timestamp_str = f"[{p.created_at.strftime('%H:%M:%S')}] "
+                    if started_at is not None:
+                        timestamp_str = f'[{format_elapsed((p.created_at - started_at).total_seconds())}] '
+                    elif clock is not None:
+                        timestamp_str = f'[{format_instant(p.created_at, clock)}] '
+                    else:
+                        timestamp_str = f"[{p.created_at.strftime('%H:%M:%S')}] "
                 descriptions.append(f'- {timestamp_str}"{p.description}"')
 
         if not descriptions:

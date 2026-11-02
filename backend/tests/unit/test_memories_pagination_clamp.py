@@ -351,3 +351,116 @@ def test_first_page_propagates_non_503_errors():
 
     assert exc_info.value.status_code == 402
     service.read.assert_not_called()
+
+
+def test_index_window_invalid_cursor_falls_back_to_released_offset_read():
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(400, 'invalid_or_stale_cursor:expired_cursor')
+    service.read.return_value = ['legacy-page']
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod.firestore_read_levers, 'lever_enabled', return_value=True),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(mem_mod, 'memory_list_response', side_effect=lambda values, *a, **kw: values),
+    ):
+        result = mem_mod.get_memories(response=MagicMock(), uid='uid1', limit=7, offset=14, cursor='expired')
+    assert result == ['legacy-page']
+    service.read.assert_called_once()
+    assert service.read.call_args.kwargs['offset'] == 14
+    service.read_page.assert_called_once()
+
+
+def test_index_window_response_returns_existing_cursor_header_with_page():
+    service = MagicMock()
+    service.read_page.return_value = types.SimpleNamespace(
+        memories=['bounded-page'], next_cursor='next-window', truncated=False
+    )
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod.firestore_read_levers, 'lever_enabled', return_value=True),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(
+            mem_mod,
+            'list_read_budget_for_request',
+            return_value=types.SimpleNamespace(truncated=False, observe=lambda *a: None),
+        ),
+        patch.object(mem_mod, 'memory_list_response', side_effect=lambda values, *a, **kw: (values, kw['headers'])),
+    ):
+        values, headers = mem_mod.get_memories(response=MagicMock(), uid='uid1', limit=7, offset=0, cursor='valid')
+    assert values == ['bounded-page']
+    assert headers['X-Omi-Memory-Next-Cursor'] == 'next-window'
+    service.read.assert_not_called()
+
+
+def test_index_window_invalid_cursor_restarts_first_page_with_continuation():
+    service = MagicMock()
+    service.read_page.side_effect = [
+        HTTPException(400, 'invalid_or_stale_cursor:expired_cursor'),
+        types.SimpleNamespace(memories=['fresh-page'], next_cursor='fresh-continuation', truncated=False),
+    ]
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod.firestore_read_levers, 'lever_enabled', return_value=True),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(mem_mod, 'record_fallback') as fallback,
+        patch.object(
+            mem_mod,
+            'list_read_budget_for_request',
+            return_value=types.SimpleNamespace(truncated=False, observe=lambda *a: None),
+        ),
+        patch.object(mem_mod, 'memory_list_response', side_effect=lambda values, *a, **kw: (values, kw['headers'])),
+    ):
+        values, headers = mem_mod.get_memories(response=MagicMock(), uid='uid1', limit=7, offset=0, cursor='expired')
+    assert values == ['fresh-page']
+    assert headers['X-Omi-Memory-Next-Cursor'] == 'fresh-continuation'
+    assert [call.kwargs['cursor'] for call in service.read_page.call_args_list] == ['expired', None]
+    assert (
+        service.read_page.call_args_list[0].kwargs['request_budget']
+        is service.read_page.call_args.kwargs['request_budget']
+    )
+    service.read.assert_not_called()
+    fallback.assert_called_once()
+
+
+def test_index_window_valid_cursor_with_offset_preserves_400():
+    import pytest
+
+    service = MagicMock()
+    service.read_page.return_value = types.SimpleNamespace(memories=[], next_cursor='next', truncated=False)
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod.firestore_read_levers, 'lever_enabled', return_value=True),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        mem_mod.get_memories(response=MagicMock(), uid='uid1', limit=7, offset=14, cursor='valid')
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == 'Memory cursor pagination cannot be combined with offset'
+    service.read.assert_not_called()
+
+
+def test_index_window_off_preserves_invalid_cursor_400():
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(400, 'invalid_or_stale_cursor:malformed_cursor')
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod.firestore_read_levers, 'lever_enabled', return_value=False),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+    ):
+        try:
+            mem_mod.get_memories(response=MagicMock(), uid='uid1', limit=7, offset=0, cursor='bad')
+        except HTTPException as exc:
+            assert exc.status_code == 400
+        else:
+            raise AssertionError('off requests must retain the released invalid-cursor response')
+    service.read.assert_not_called()

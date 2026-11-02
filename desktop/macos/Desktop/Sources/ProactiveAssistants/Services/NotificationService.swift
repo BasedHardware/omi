@@ -302,10 +302,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
 
         metadata.onInteraction?(.opened)
-        if case .openProactivityItem(let target) = metadata.action {
-          ProactivityNotificationAdapter.open(target)
-          break
-        }
         switch Self.openAction(
           assistantId: assistantId,
           title: title,
@@ -375,8 +371,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// The main-window chat surface, where the meeting-notes card (with its
     /// conversation link) was materialized.
     case openMainChat
-    /// A muted-preview JIT banner opens the persistent in-app card so all
-    /// explicit feedback actions remain available after the user taps.
   }
 
   /// Resolve the tap destination from the notification's provenance.

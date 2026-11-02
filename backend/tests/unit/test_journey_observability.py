@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from prometheus_client import CollectorRegistry, generate_latest as generate_registry_latest
 
 from services import conversation_finalization
 from utils import metrics
@@ -77,38 +78,36 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
 
 
 def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
+    registry = CollectorRegistry()
+    monkeypatch.setattr(metrics, 'REGISTRY', registry)
+    monkeypatch.setattr(metrics, '_listen_finalization_summary_metrics_registered', False)
+    assert generate_registry_latest(registry) == b''
+
     durable = MagicMock()
     durable.labels.return_value = MagicMock()
     backlog = MagicMock()
     backlog.labels.return_value = MagicMock()
-    monkeypatch.setattr(
-        conversation_finalization.jobs_db,
-        'get_finalization_job_summary',
-        MagicMock(
-            return_value={
-                'accepted': 9,
-                'success': 3,
-                'failure': 1,
-                'stale': 2,
-                'nonterminal': 1,
-                'blocked_byok': 1,
-                'terminal_unknown': 1,
-                'queued': 1,
-                'leased': 0,
-                'dead_letter': 1,
-                'oldest_nonterminal_age_seconds': 12.5,
-                'oldest_blocked_byok_age_seconds': 42.0,
-            }
-        ),
-    )
+    summary = {
+        'accepted': 9,
+        'success': 3,
+        'failure': 1,
+        'stale': 2,
+        'nonterminal': 1,
+        'blocked_byok': 1,
+        'terminal_unknown': 1,
+        'queued': 1,
+        'leased': 0,
+        'dead_letter': 1,
+        'oldest_nonterminal_age_seconds': 12.5,
+        'oldest_blocked_byok_age_seconds': 42.0,
+    }
+    get_summary = MagicMock(side_effect=[RuntimeError('Firestore unavailable'), summary])
+    monkeypatch.setattr(conversation_finalization.jobs_db, 'get_finalization_job_summary', get_summary)
     monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_DURABLE_JOBS', durable)
     monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_JOB_STATUS', backlog)
-    monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS', MagicMock())
-
-    blocked_age = MagicMock()
-    monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS', blocked_age)
     conversation_finalization._publish_job_metrics()
-    blocked_age.set.assert_called_once_with(42.0)
+    assert generate_registry_latest(registry) == b''
+    conversation_finalization._publish_job_metrics()
 
     assert {call.kwargs['state'] for call in durable.labels.call_args_list} == {
         'accepted',
@@ -119,6 +118,10 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
         'blocked_byok',
         'terminal_unknown',
     }
+    exported = generate_registry_latest(registry).decode()
+    assert 'listen_finalization_oldest_nonterminal_age_seconds 12.5' in exported
+    assert 'listen_finalization_oldest_blocked_byok_age_seconds 42.0' in exported
+    assert 'listen_finalization_summary_last_success_timestamp_seconds ' in exported
 
 
 def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing_scrape_source():

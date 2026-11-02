@@ -28,39 +28,10 @@ extension DesktopAutomationActionRegistry {
         return [
           "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
           "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
-          "proactivity_base_url": JITRolloutClient.backendBaseURL,
           "gemini_helper_sample_lane": geminiRequest.value(forHTTPHeaderField: "X-Omi-Lane") ?? "",
           "gemini_helper_sample_workload": geminiRequest.value(forHTTPHeaderField: "X-Omi-Workload") ?? "",
           "gemini_helper_sample_client_platform": geminiRequest.value(forHTTPHeaderField: "X-App-Platform") ?? "",
         ]
-      }
-
-      register(
-        name: "knowledge_ledger_foundation_contracts",
-        effects: [],
-        summary: "Exercise the pure knowledge-ledger prompt and trigger projections. DEBUG non-prod only."
-      ) { _ in
-        guard AppBuild.isNonProduction else {
-          return ["error": "knowledge_ledger_foundation_contracts is disabled on production bundles"]
-        }
-        let prompt = KnowledgeLedgerPromptProjection(
-          rows: [
-            .init(
-              id: "mem_profile",
-              content: "Paris",
-              metadata: [
-                "ledger_schema_version": KnowledgeLedgerPromptProjection.schemaVersion,
-                "kind": "fact",
-                "subject_scope": "primary_user",
-                "slot": "home_city",
-                "intent_backed": "true",
-                "status": "active",
-              ]
-            )
-          ],
-          hasAuthoritativeSnapshot: true
-        ).render(userName: "Test")
-        return ["prompt_contains_profile_fact": prompt?.contains("home_city: Paris") == true ? "true" : "false"]
       }
 
       register(

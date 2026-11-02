@@ -105,6 +105,15 @@ export function useChatSessions(options?: {
   // Bumping this re-runs the fetch effect (retry, or a post-mutation re-query)
   // without changing `showStarredOnly`.
   const [reloadToken, setReloadToken] = useState(0)
+  // Ticks while the popover is mounted so `groupedSessions` re-buckets across
+  // local midnight even when the session list itself never changes (e.g. the
+  // popover is left open overnight) — otherwise the Today/Yesterday labels
+  // freeze at whatever `now` the last list change happened to capture.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // The fetch is INLINED in the effect (not a shared setState-ing callback) and
   // every write lands after the await, so the effect never triggers a
@@ -222,10 +231,6 @@ export function useChatSessions(options?: {
     async (id: string) => {
       try {
         await client.deleteSession(id)
-        // Chat-session deletion is a separate backend surface from
-        // conversation deletion; clear any attached JIT evidence only after
-        // the server confirms the session is gone.
-        if (typeof window !== 'undefined') await window.omi?.deleteJitConversationKeyframe?.(id)
       } catch (e) {
         setError(errorMessage(e))
         throw e
@@ -241,7 +246,10 @@ export function useChatSessions(options?: {
     () => filterSessions(sessions, searchQuery),
     [sessions, searchQuery]
   )
-  const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions])
+  const groupedSessions = useMemo(
+    () => groupSessionsByDate(filteredSessions, now),
+    [filteredSessions, now]
+  )
 
   return {
     sessions,

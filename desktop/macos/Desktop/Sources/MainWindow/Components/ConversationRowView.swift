@@ -102,8 +102,14 @@ struct ConversationRowView: View {
   /// a hover menu.
   @ViewBuilder
   private func statusCluster(phase: ConversationProcessingPhase) -> some View {
-    ConversationStatusBadge(state: conversation.displayState, phase: phase)
-    if isLivePipelineRow && phase == .stalled {
+    if conversation.discarded {
+      Text("Discarded")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    } else {
+      ConversationStatusBadge(state: conversation.displayState, phase: phase)
+    }
+    if !conversation.discarded && isLivePipelineRow && phase == .stalled {
       Button {
         Task { await reprocessConversation() }
       } label: {
@@ -278,7 +284,15 @@ struct ConversationRowView: View {
   /// can never again disagree on order, casing or wording.
   @ViewBuilder
   private var actionMenuItems: some View {
-    if offersReprocess(now: Date()) {
+    if conversation.discarded {
+      Button {
+        Task { await restoreConversation() }
+      } label: {
+        Text(isReprocessing ? "Restoring…" : "Restore Conversation")
+      }
+      .disabled(isReprocessing)
+      .accessibilityIdentifier("conversation-row-restore-\(conversation.id)")
+    } else if offersReprocess(now: Date()) {
       Button {
         Task { await reprocessConversation() }
       } label: {
@@ -347,6 +361,20 @@ struct ConversationRowView: View {
     }
   }
 
+  private func restoreConversation() async {
+    guard !isReprocessing else { return }
+    isReprocessing = true
+    defer { isReprocessing = false }
+    do {
+      _ = try await appState.restoreConversation(conversation.id)
+      OmiToastCenter.shared.confirm("Conversation restored")
+    } catch is CancellationError {
+      // The account changed before the response arrived.
+    } catch {
+      OmiToastCenter.shared.notice("Couldn't restore conversation. Try again.", systemImage: "exclamationmark.triangle")
+    }
+  }
+
   private var inlineActionMenu: some View {
     OmiIconMenu(systemName: "ellipsis", help: "Conversation Actions", size: .compact) {
       actionMenuItems
@@ -387,11 +415,15 @@ struct ConversationRowView: View {
       // Title + metadata below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(conversation.displayTitle)
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(titleColor)
-            .lineLimit(1)
-            .help(conversation.displayTitle)
+          // The locked badge already says "Saved and waiting"; the title slot
+          // stays quiet so the pill isn't duplicated beside itself.
+          if conversation.displayState != .locked {
+            Text(conversation.displayTitle)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(titleColor)
+              .lineLimit(1)
+              .help(conversation.displayTitle)
+          }
 
           statusCluster(phase: phase)
 
@@ -433,11 +465,14 @@ struct ConversationRowView: View {
       // Title + time/duration below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(conversation.displayTitle)
-            .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundColor(titleColor)
-            .lineLimit(1)
-            .help(conversation.displayTitle)
+          // The locked badge carries the waiting copy; no duplicate title.
+          if conversation.displayState != .locked {
+            Text(conversation.displayTitle)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(titleColor)
+              .lineLimit(1)
+              .help(conversation.displayTitle)
+          }
 
           statusCluster(phase: phase)
 

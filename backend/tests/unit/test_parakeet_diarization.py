@@ -10,6 +10,7 @@ import os
 
 import numpy as np
 import pytest
+import httpx
 
 os.environ.setdefault('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://fake')  # enables _diarize
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
@@ -44,6 +45,21 @@ def _make_socket(diarize=True):
     sock = st.ParakeetStreamingSocket(lambda segs: None, 'http://fake', 16000)
     sock._diarize = diarize
     return sock
+
+
+@pytest.mark.asyncio
+async def test_streaming_http_posts_mark_live_origin(monkeypatch):
+    seen = []
+
+    async def handle(request):
+        seen.append(request.headers.get('X-Omi-STT-Surface'))
+        return httpx.Response(200, json={'text': '', 'segments': []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        monkeypatch.setattr(st, 'get_stt_client', lambda: client)
+        monkeypatch.setattr(st, 'get_stt_semaphore', lambda: asyncio.Semaphore(1))
+        await _make_socket(diarize=False)._transcribe_chunk(b'\0\0' * 160, 0, 0.01)
+    assert seen == ['live-stream']
 
 
 def _patch_embeddings(monkeypatch, seq):

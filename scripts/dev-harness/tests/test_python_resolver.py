@@ -116,15 +116,18 @@ def _write_logged_python(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _resolve_python(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def _resolve_python(repo: Path, monkeypatch: pytest.MonkeyPatch, path: str | None = None) -> str:
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(RESOLVER, resolver)
     monkeypatch.delenv("PYTHON", raising=False)
+    env = _shell_env()
+    if path is not None:
+        env["PATH"] = path
     result = subprocess.run(
         [_bash_command(), "-c", 'source "$1"; dev_harness_python', "bash", _as_bash_path(resolver)],
         cwd=repo,
-        env=_shell_env(),
+        env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -133,6 +136,53 @@ def _resolve_python(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
+
+
+def _write_stub_python(directory: Path, name: str, *, meets_floor: bool) -> Path:
+    """Stub a PATH interpreter whose floor probe result is scripted.
+
+    The resolver probes each fallback candidate with
+    `python -c '... sys.version_info >= (3, 10) ...'`, so a stub that exits 0
+    represents a >= 3.10 interpreter and exit 1 represents a below-floor one.
+    Stubbing every fallback name keeps the resolution outcome deterministic on
+    any host, regardless of which real interpreters are installed.
+    """
+    stub = directory / name
+    stub.parent.mkdir(parents=True, exist_ok=True)
+    stub.write_text("#!/bin/sh\n" f"exit {0 if meets_floor else 1}\n", encoding="utf-8")
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    return stub
+
+
+def _stubbed_path(tmp_path: Path, meets_floor: dict[str, bool]) -> str:
+    directory = tmp_path / "stub-bin"
+    for name, floor_ok in meets_floor.items():
+        _write_stub_python(directory, name, meets_floor=floor_ok)
+    return os.pathsep.join((str(directory), os.environ.get("PATH", "")))
+
+
+def _assert_floor_qualified_or_documented_fallback(resolved: str) -> None:
+    """Accept every documented resolver outcome when no venv exists.
+
+    Either a PATH name (`python3`, `python3.X`) that the resolver floor-probed,
+    or an absolute prefix path that was floor-probed. Anything else (a bare
+    python3 name on a 3.9 Xcode CLT host when a qualified candidate exists) is
+    the regression this suite guards.
+    """
+    if resolved == "python3":
+        return
+    if not resolved.startswith("/"):
+        assert resolved.startswith("python3."), resolved
+        return
+    assert Path(resolved).is_file(), resolved
+    version_probe = subprocess.run(
+        [resolved, "-c", "import sys; print(sys.version_info[:2] >= (3, 10))"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert version_probe.stdout.strip() == "True", resolved
 
 
 def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
@@ -151,7 +201,214 @@ def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
     assert _resolve_python(repo, monkeypatch) == _as_bash_path(legacy)
 
     legacy.unlink()
-    assert _resolve_python(repo, monkeypatch) == "python3"
+    # Without a repo venv the resolver probes PATH candidates and then absolute
+    # install prefixes. Any floor-qualified outcome (or the documented bare
+    # `python3` name) is acceptable; a below-floor pick is the regression.
+    _assert_floor_qualified_or_documented_fallback(_resolve_python(repo, monkeypatch))
+
+
+def test_resolver_skips_below_floor_python3_for_versioned_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare `python3` is often macOS Xcode CLT 3.9, which cannot run the gate.
+
+    The pre-push check scripts use PEP 604 unions at module scope, so the
+    fallback chain must prefer a versioned interpreter that meets the 3.10
+    floor instead of crashing at import time.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": False,
+            "python3.13": False,
+            "python3.12": False,
+            "python3.11": True,
+            "python3.10": False,
+            "python3": False,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3.11"
+
+
+def test_resolver_prefers_newest_meeting_floor_among_versioned_fallbacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": True,
+            "python3.13": True,
+            "python3.12": True,
+            "python3.11": True,
+            "python3.10": True,
+            "python3": True,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3.14"
+
+
+def test_resolver_keeps_bare_python3_when_it_meets_the_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_path(
+        tmp_path,
+        {
+            "python3.14": False,
+            "python3.13": False,
+            "python3.12": False,
+            "python3.11": False,
+            "python3.10": False,
+            "python3": True,
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3"
+
+
+def _write_probe_stub_python(directory: Path, name: str, *, floor_ok: bool, imports_ok: bool) -> None:
+    """Stub an interpreter whose floor and cheap-gate import probes are scripted.
+
+    The resolver floor-probes with `-c 'import sys; ... version_info ...'` and
+    import-probes with `-c 'import dotenv, yaml'`; `$2` carries the payload, so
+    a stub can answer each probe independently.
+    """
+    stub = directory / name
+    stub.parent.mkdir(parents=True, exist_ok=True)
+    stub.write_text(
+        "#!/bin/sh\n"
+        'case "$2" in\n'
+        "  *version_info*) exit "
+        f"{0 if floor_ok else 1}"
+        " ;;\n"
+        "  *) exit "
+        f"{0 if imports_ok else 1}"
+        " ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+
+
+def _stubbed_probe_path(tmp_path: Path, probes: dict[str, tuple[bool, bool]]) -> str:
+    directory = tmp_path / "stub-probe-bin"
+    for name, (floor_ok, imports_ok) in probes.items():
+        _write_probe_stub_python(directory, name, floor_ok=floor_ok, imports_ok=imports_ok)
+    return os.pathsep.join((str(directory), os.environ.get("PATH", "")))
+
+
+def test_resolver_prefers_import_capable_python_over_newer_import_bare_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A newer interpreter without PyYAML/python-dotenv must not shadow one that has them.
+
+    The resolver is shared by mobile-session.sh, dev-up.sh and the cheap
+    pre-push gates, so among floor-qualified candidates the import-capable one
+    wins even when a version-newer candidate exists.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_probe_path(
+        tmp_path,
+        {
+            # floor-passing but cannot import the cheap-gate deps
+            "python3.14": (True, False),
+            "python3.13": (False, False),
+            "python3.12": (False, False),
+            # floor-passing AND import-capable: must win over python3.14
+            "python3.11": (True, True),
+            "python3.10": (False, False),
+            "python3": (False, False),
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3.11"
+
+
+def test_resolver_keeps_floor_qualified_fallback_when_no_candidate_has_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no import-capable candidate, keep the documented floor-only outcome.
+
+    The gate then reports the missing module (actionable) instead of silently
+    selecting a below-floor interpreter. An absolute prefix interpreter that is
+    both floor- and import-qualified is an equally valid outcome on hosts that
+    have one.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_probe_path(
+        tmp_path,
+        {
+            "python3.14": (True, False),
+            "python3.13": (False, False),
+            "python3.12": (False, False),
+            "python3.11": (False, False),
+            "python3.10": (False, False),
+            "python3": (False, False),
+        },
+    )
+    resolved = _resolve_python(repo, monkeypatch, path=stubbed)
+    assert resolved != "python3", resolved
+    _assert_floor_qualified_or_documented_fallback(resolved)
+
+
+def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hooks and cron contexts run /usr/bin:/bin PATHs with no versioned name.
+
+    The absolute Homebrew prefix probe must still find a floor-qualified
+    interpreter so the fixer push does not crash on macOS system 3.9. The probe
+    list is fixed in the resolver, so assert the host-adaptive contract: the
+    outcome must be a floor-qualified absolute prefix path when that prefix
+    exists, or any other documented outcome (a PATH name such as `python3.12`
+    on Linux hosts, or the bare `python3` fallback).
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stripped = os.pathsep.join(("/usr/bin", "/bin"))
+    resolved = _resolve_python(repo, monkeypatch, path=stripped)
+    # Host-adaptive contract for the absolute prefix probe: accept every
+    # documented outcome (floor-qualified absolute prefix path, relative PATH
+    # name such as `python3.12` on Linux, or bare `python3`) and reject only a
+    # below-floor pick. Whether an import-capable candidate shadows a newer
+    # prefix interpreter depends on host state the test cannot enumerate; that
+    # preference contract is pinned deterministically by
+    # test_resolver_prefers_import_capable_python_over_newer_import_bare_one
+    # with stubbed probes.
+    _assert_floor_qualified_or_documented_fallback(resolved)
+
+
+def test_resolver_skips_below_floor_venv_that_can_import_cheap_gates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 3.9 venv with dotenv/yaml must not shadow a floor-qualified pick.
+
+    The venv probes used to check only imports; the pre-push check scripts use
+    PEP 604 syntax at module scope, so a below-floor venv crashes the gate even
+    when a valid interpreter exists (Codex P2 on the venv path).
+    """
+    repo = tmp_path / "repo"
+    below_floor = repo / "backend/.venv/bin/python"
+    _write_probe_stub_python(below_floor.parent, "python", floor_ok=False, imports_ok=True)
+    stubbed = _stubbed_probe_path(
+        tmp_path,
+        {
+            # The PATH fallback the resolver must reach instead.
+            "python3.14": (True, False),
+            "python3.13": (True, True),
+            "python3.12": (False, False),
+            "python3.11": (False, False),
+            "python3.10": (False, False),
+            "python3": (False, False),
+        },
+    )
+    resolved = _resolve_python(repo, monkeypatch, path=stubbed)
+    assert resolved == "python3.13", resolved
 
 
 def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
@@ -177,8 +434,10 @@ def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
     assert python.is_file()
     probe = subprocess.run([str(python), "-c", "import dotenv, yaml"], capture_output=True, check=False)
     assert probe.returncode != 0
-    resolved = _resolve_python(repo, monkeypatch)
-    assert resolved == "python3"
+    # The skipped venv must fall through to the PATH probes and then absolute
+    # install prefixes: any floor-qualified outcome (or the documented bare
+    # `python3` name) is acceptable; a below-floor pick is the regression.
+    _assert_floor_qualified_or_documented_fallback(_resolve_python(repo, monkeypatch))
 
 
 def test_resolver_finds_windows_virtualenv_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -616,3 +875,273 @@ def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: P
     assert not marker.exists()
     assert result.returncode == 0, result.stderr
     assert calls.read_text(encoding="utf-8").splitlines() == ["scripts/dev-harness/list-memory-scenarios.py"]
+
+
+def _run_resolver_function(
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    function: str,
+    path: str | None = None,
+    extra_env: dict[str, str] | None = None,
+    preamble: str = "",
+) -> subprocess.CompletedProcess[str]:
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RESOLVER, resolver)
+    monkeypatch.delenv("PYTHON", raising=False)
+    env = _shell_env()
+    if path is not None:
+        env["PATH"] = path
+    for key, value in (extra_env or {}).items():
+        env[key] = value
+    return subprocess.run(
+        [
+            _bash_command(),
+            "-c",
+            f'source "$1"; {preamble}{function}',
+            "bash",
+            _as_bash_path(resolver),
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+
+
+def test_backend_pinned_python_prefers_path_311_over_uv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pinned-backend helper prefers a PATH python3.11 over uv discovery.
+
+    Both sources are the same runtime family; the PATH name is the cheaper
+    probe, so it must win when it exists. `uv` is absent from the stubbed PATH
+    here, proving the PATH branch answers alone.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    calls = tmp_path / "pinned-calls.log"
+    stub_bin = tmp_path / "pinned-stub-bin"
+    stub_bin.mkdir()
+    stub = stub_bin / "python3.11"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\\\n" "$*" >> "{calls}"\n'
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "python3.11"
+    # The floor probe ran against the PATH name; no uv discovery was needed.
+    assert any("version_info" in line for line in calls.read_text(encoding="utf-8").splitlines()), calls
+
+
+def test_backend_pinned_python_falls_back_to_uv_managed_311(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without a PATH python3.11, the helper discovers the uv-managed 3.11.
+
+    This is the provisioning contract the Codex P1 asks for: dev-init must be
+    able to bootstrap the pinned backend runtime from the same toolchain
+    `make lane-backend` uses, without requiring an install first.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    uv_managed = tmp_path / "uv" / "python3.11"
+    uv_managed.parent.mkdir(parents=True)
+    uv_managed.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    uv_managed.chmod(uv_managed.stat().st_mode | stat.S_IXUSR)
+    stub_bin = tmp_path / "uv-stub-bin"
+    stub_bin.mkdir()
+    uv = stub_bin / "uv"
+    uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "python" ] && [ "${2:-}" = "find" ] && [ "${3:-}" = "3.11" ]; then\n'
+        f'  printf "%s\\\\n" "{uv_managed}"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+        # A host with a real keg-only Homebrew 3.11 would otherwise satisfy
+        # discovery before the fixture's uv is consulted (Codex P2): point the
+        # prefix list at nothing.
+        preamble="dev_harness_backend_pinned_prefixes() { :; }\n",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(uv_managed)
+
+
+def test_backend_pinned_python_fails_without_any_311(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No usable 3.11 anywhere means failure — callers fall back.
+
+    dev-init keys its advisory path on this failure, so the helper must return
+    non-zero instead of printing an unqualified interpreter. Stubs make this
+    deterministic: a PATH python3.11 that fails the floor probe is skipped,
+    and a uv that cannot find 3.11 ends the discovery.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stub_bin = tmp_path / "nopin-stub-bin"
+    stub_bin.mkdir()
+    below_floor = stub_bin / "python3.11"
+    below_floor.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    below_floor.chmod(below_floor.stat().st_mode | stat.S_IXUSR)
+    uv = stub_bin / "uv"
+    uv.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+        # Host isolation: a real keg-only prefix must not rescue this fixture.
+        preamble="dev_harness_backend_pinned_prefixes() { :; }\n",
+    )
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""
+
+
+def test_backend_pinned_python_honors_python_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit PYTHON= selection passing the pin is the bootstrap pick.
+
+    The resolver-level PYTHON override is a supported caller choice; when it
+    points at a pinned 3.11 (e.g. a bare-named python3.11 without a python3.11
+    on PATH), the helper must accept it instead of reporting failure (Codex P1).
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    selected = tmp_path / "selected-python"
+    selected.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    selected.chmod(selected.stat().st_mode | 0o755)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join(("/usr/bin", "/bin")),
+        extra_env={"PYTHON": str(selected)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(selected)
+
+
+def test_backend_pinned_python_rejects_below_pin_python_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PYTHON= override that fails the pin is not accepted."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    below = tmp_path / "below-pin-python"
+    below.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    below.chmod(below.stat().st_mode | 0o755)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join(("/usr/bin", "/bin")),
+        extra_env={"PYTHON": str(below)},
+        # Host isolation: a real keg-only Homebrew 3.11 would legitimately
+        # answer after the override is rejected (Codex P2).
+        preamble="dev_harness_backend_pinned_prefixes() { :; }\n",
+    )
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""
+
+
+def test_backend_pinned_python_probes_keg_only_homebrew_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The advertised brew remedy must satisfy discovery without uv.
+
+    `brew install python@3.11` is keg-only when a newer python3 shadows it: no
+    `python3.11` on PATH, but a real interpreter at the Homebrew prefix. The
+    helper must probe those absolute prefixes before requiring uv (Codex P1).
+    The prefix list and the pin predicate are stubbed AFTER the source (the
+    resolver's definitions win otherwise) to point at a fixture keg path —
+    creating real /opt/homebrew paths in a test is not possible without root.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    keg = tmp_path / "keg" / "bin" / "python3.11"
+    keg.parent.mkdir(parents=True)
+    keg.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    keg.chmod(keg.stat().st_mode | 0o755)
+
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RESOLVER, resolver)
+    monkeypatch.delenv("PYTHON", raising=False)
+    env = _shell_env()
+    env["PATH"] = os.pathsep.join(("/usr/bin", "/bin"))
+    stubs = (
+        "dev_harness_backend_pinned_prefixes() { printf '%s\\n' \"" + str(keg) + "\"; }\n"
+        "dev_harness_venv_python_is_pinned_311() { [ \"$1\" = \"" + str(keg) + "\" ]; }\n"
+    )
+    result = subprocess.run(
+        [
+            _bash_command(),
+            "-c",
+            'source "$1"; '
+            + stubs
+            + "dev_harness_backend_pinned_python",
+            "bash",
+            _as_bash_path(resolver),
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(keg)

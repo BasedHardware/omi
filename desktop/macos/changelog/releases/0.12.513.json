@@ -1,0 +1,7 @@
+{
+  "version": "0.12.513",
+  "date": "2026-10-20",
+  "changes": [
+    "Conversation titles from older notes no longer show stray transcript reference codes"
+  ]
+}

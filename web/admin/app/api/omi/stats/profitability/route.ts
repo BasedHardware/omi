@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
-import { getOptionalStripe } from "@/lib/stripe";
+import { getOptionalStripeRead } from "@/lib/stripe";
 import {
   MRR_STATUSES,
   fetchOmiSubscriptions,
@@ -521,7 +521,7 @@ async function fetchStripeSnapshot(
   days: number,
   userPlatforms: Map<string, UserPlatformInfo>
 ): Promise<StripeSnapshot | null> {
-  const stripe = getOptionalStripe();
+  const stripe = getOptionalStripeRead();
   if (!stripe) return null;
 
   const mrrByPlatform: Record<Platform, number> = {
@@ -977,7 +977,7 @@ export async function computeProfitability(opts: {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -998,7 +998,7 @@ export async function GET(request: NextRequest) {
       maxAgeMs: MAX_PRECOMPUTED_AGE_MS,
     });
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (slow), cache, return.
@@ -1008,10 +1008,10 @@ export async function GET(request: NextRequest) {
       mobileCost,
     });
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Profitability stats error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Failed to compute profitability metrics" },
       { status: 500 }
     );

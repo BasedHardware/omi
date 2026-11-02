@@ -177,6 +177,10 @@ abstract class BleHostApi {
   @SwiftFunction('manageDevice(uuid:requiresBond:)')
   void manageDevice(String uuid, bool requiresBond);
 
+  /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+  @SwiftFunction('configureSavedReconnect(uuid:enabled:)')
+  void configureSavedReconnect(String uuid, bool enabled);
+
   @SwiftFunction('unmanageDevice(uuid:)')
   void unmanageDevice(String uuid);
 
@@ -250,6 +254,8 @@ abstract class BleHostApi {
 @FlutterApi()
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);
+
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs);
 
   void onPeripheralDiscovered(BlePeripheral peripheral);
 

@@ -34,3 +34,30 @@ async def test_async_redis_client_uses_shared_config_and_is_cached(monkeypatch):
         'health_check_interval': 0,
         'decode_responses': True,
     }
+
+
+def test_bounded_factory_reexport_uses_shared_minimal_connection_config(monkeypatch):
+    from database import redis_connection
+
+    built = []
+
+    class Recorder:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+
+    monkeypatch.setattr(redis_connection.redis, 'Redis', Recorder)
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-redis.internal')
+    monkeypatch.setenv('REDIS_DB_PORT', '6381')
+    monkeypatch.setenv('REDIS_DB_PASSWORD', 'synthetic-cache-secret')
+    redis_db.create_bounded_redis_client(0.1)
+    assert built == [
+        {
+            'host': 'synthetic-redis.internal',
+            'port': 6381,
+            'username': 'default',
+            'password': 'synthetic-cache-secret',
+            'health_check_interval': 30,
+            'socket_connect_timeout': 0.1,
+            'socket_timeout': 0.1,
+        }
+    ]

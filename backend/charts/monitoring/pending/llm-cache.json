@@ -1,0 +1,254 @@
+[
+  {
+    "uid": "omi-llm-cache-coverage",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM cache",
+    "title": "LLM gateway cache coverage below 20%",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (lane) (increase(llm_gateway_cache_read_tokens_total[15m])) / clamp_min(sum by (lane) (increase(llm_gateway_cache_prompt_tokens_total[15m])), 1) < bool 0.2) and on(lane) (sum by (lane) (increase(llm_gateway_cache_eligible_attempts_total[15m])) >= 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "runbook": "backend/llm_gateway/config/README.md",
+      "summary": "Cached input is below 20% over at least 100 eligible attempts in 15 minutes.",
+      "threshold": "Cached input is below 20% over at least 100 eligible attempts in 15 minutes.",
+      "scope": "Per gateway lane; eligible means stable prefix meets provider minimum. Includes unreported usage; excludes short and off requests.",
+      "user_impact": "Cache billing and capacity savings may be below expectations. This signal alone does not prove response failures.",
+      "verification": "Compare prompt, cached and eligible counters by lane, mode and reported. Check content-free llm_gateway_cache_receipt events; missing fields are not reported zero.",
+      "safe_next_action": "Check cache policy, stable-prefix violations, provider cache permissions and lifecycle errors before adjusting TTL. Do not enable another model or paid fallback."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-llm-cache-coverage",
+      "component": "llm-gateway",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-llm-cache-unreported",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM cache",
+    "title": "LLM gateway cache field unreported",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (lane) (increase(llm_gateway_cache_eligible_attempts_total{reported=\"false\"}[15m])) / clamp_min(sum by (lane) (increase(llm_gateway_cache_eligible_attempts_total[15m])), 1) > bool 0.2) and on(lane) (sum by (lane) (increase(llm_gateway_cache_eligible_attempts_total[15m])) >= 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "runbook": "backend/llm_gateway/config/README.md",
+      "summary": "Over 20% of at least 100 eligible attempts lack a provider cache field in 15 minutes.",
+      "threshold": "Over 20% of at least 100 eligible attempts lack a provider cache field in 15 minutes.",
+      "scope": "Per gateway lane; eligible means stable prefix meets provider minimum. Includes unreported usage; excludes short and off requests.",
+      "user_impact": "Cache billing and capacity savings may be below expectations. This signal alone does not prove response failures.",
+      "verification": "Compare prompt, cached and eligible counters by lane, mode and reported. Check content-free llm_gateway_cache_receipt events; missing fields are not reported zero.",
+      "safe_next_action": "Check cache policy, stable-prefix violations, provider cache permissions and lifecycle errors before adjusting TTL. Do not enable another model or paid fallback."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-llm-cache-unreported",
+      "component": "llm-gateway",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  }
+]

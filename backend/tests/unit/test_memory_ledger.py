@@ -40,6 +40,14 @@ def _load_modules():
 
     legal_holds_stub = ModuleType("database.legal_holds")
     legal_holds_stub.assert_no_destructive_operation_transaction = lambda *_args, **_kwargs: None
+    legal_holds_stub.assert_destructive_gate_still_ours = lambda *_args, **_kwargs: None
+    legal_holds_stub.assert_destructive_operation_transaction = lambda *_args, **_kwargs: None
+    legal_holds_stub.current_destructive_operation_token = lambda *_args, **_kwargs: "test-token"
+
+    class _LegalHoldAuthorityUnavailable(RuntimeError):
+        pass
+
+    legal_holds_stub.LegalHoldAuthorityUnavailable = _LegalHoldAuthorityUnavailable
 
     google_pkg = ModuleType("google")
     google_pkg.__path__ = []  # type: ignore[attr-defined]

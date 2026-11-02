@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Callable, Optional
+from urllib.parse import parse_qs, urlsplit
 
 import websockets
 
@@ -26,6 +27,7 @@ import websockets
 PUSHER_TRANSCRIPT = 102
 PUSHER_PROCESS_CONVERSATION = 104
 PUSHER_PROCESS_RESULT = 201
+PUSHER_AUDIO_TIMELINE_ACK = 202
 
 
 @dataclass(frozen=True)
@@ -354,11 +356,19 @@ class ScriptedPusherPeer(_LoopbackWebSocketServer):
         await websocket.send(_encode_pusher_result(payload))
 
     async def _handle(self, websocket: Any, path: Optional[str] = None) -> None:
+        request_path = _peer_path(websocket, path)
         with self._condition:
             self.connection_count += 1
             connection = self.connection_count
-            self.paths.append(_peer_path(websocket, path))
+            self.paths.append(request_path)
             self._condition.notify_all()
+        if parse_qs(urlsplit(request_path).query).get('audio_timeline') == ['2']:
+            # Eligible sessions now always negotiate span storage. Act like the
+            # capable production pusher before listen announces readiness.
+            await websocket.send(
+                struct.pack('<I', PUSHER_AUDIO_TIMELINE_ACK)
+                + json.dumps({'type': 'audio_timeline_ack', 'version': 2}).encode('utf-8')
+            )
         async for raw in websocket:
             if not isinstance(raw, bytes) or len(raw) < 4:
                 continue
@@ -606,18 +616,25 @@ def install_fake_firestore_transactions(monkeypatch: Any, store: Any) -> _Transa
     cross-worker storage proof.
     """
 
-    from database import conversation_finalization_jobs, recording_sessions
+    from database import (
+        conversation_finalization_jobs,
+        conversation_quiet_checks,
+        quiet_check_retirement,
+        recording_sessions,
+    )
 
     transactional_store = _TransactionalFirestore(store)
 
-    monkeypatch.setattr(conversation_finalization_jobs, 'get_firestore_client', lambda: transactional_store)
-    monkeypatch.setattr(recording_sessions, 'get_firestore_client', lambda: transactional_store)
-    monkeypatch.setattr(
+    # Quiet custody and its post-admission retirement share the same staged
+    # transaction protocol as the durable finalization/recording reducers.
+    for module in (
         conversation_finalization_jobs,
-        'firestore',
-        _FirestoreTransactionFacade(conversation_finalization_jobs.firestore),
-    )
-    monkeypatch.setattr(recording_sessions, 'firestore', _FirestoreTransactionFacade(recording_sessions.firestore))
+        conversation_quiet_checks,
+        quiet_check_retirement,
+        recording_sessions,
+    ):
+        monkeypatch.setattr(module, 'get_firestore_client', lambda: transactional_store)
+        monkeypatch.setattr(module, 'firestore', _FirestoreTransactionFacade(module.firestore))
     return transactional_store
 
 

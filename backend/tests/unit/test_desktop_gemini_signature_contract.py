@@ -74,13 +74,16 @@ def _chat(payload, stream=False):
 
 @pytest.mark.parametrize('streaming', [False, True])
 @pytest.mark.parametrize('legacy_client', [False, True])
-def test_signed_tool_history_survives_both_hops_and_old_client_history_is_admitted(streaming, legacy_client):
+@pytest.mark.parametrize('served', ['gemini-3.1-flash-lite', ptr.PT_MODEL_TARGET])
+def test_signed_tool_history_survives_both_hops_and_old_client_history_is_admitted(streaming, legacy_client, served):
     payload = _swift_request()
-    # Gemini 2.5 Pro is only the requested model; the real attempt serves 3.1.
-    served = ptr.reserved_generation_model('gemini-2.5-pro', {ptr.PT_MODEL_TARGET: State.ACTIVE})
-    assert served == ptr.PT_MODEL_TARGET
+    # Exercise the Gemini wire adapter independently of route admission. A moved
+    # reservation serves Dream only; desktop Pro aliases must resolve to Luna.
+    assert ptr.reserved_generation_model('gemini-2.5-pro', {ptr.PT_MODEL_TARGET: State.ACTIVE}) is None
     initial = ptr.model_payload(_vertex_request(_chat(payload)), served)
-    assert initial['generationConfig']['thinkingConfig'] == {'thinkingLevel': 'low'}
+    assert initial['generationConfig']['thinkingConfig'] == (
+        {'thinkingLevel': 'low'} if served == ptr.PT_MODEL_TARGET else {'thinkingBudget': 1024}
+    )
     assert initial['generationConfig']['maxOutputTokens'] == 2048
     assert initial['toolConfig']['functionCallingConfig']['mode'] == 'ANY'
     if streaming:

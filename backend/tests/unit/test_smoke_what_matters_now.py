@@ -109,7 +109,7 @@ def test_main_uses_the_code_owned_fixture_without_a_uid_environment_variable(mon
 
     assert smoke_what_matters_now.main() == 0
     assert captured['config'] == smoke_what_matters_now.SmokeConfig(
-        base_url='https://api.omi.dev', admin_key='private-key', timeout_seconds=30.0
+        base_url='https://api.omi.dev', admin_key='private-key', timeout_seconds=90.0
     )
 
 

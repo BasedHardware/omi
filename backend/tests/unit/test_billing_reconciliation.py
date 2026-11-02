@@ -83,11 +83,15 @@ def test_absent_historical_price_is_missing_not_wrong():
 
 
 def test_multiple_subscriptions_are_not_arbitrarily_selected():
-    report = compare([sub(), sub(price='price-operator', sub_id='sub-two')], [user(sub_id='sub-unrelated')])
+    report = compare(
+        [sub(), sub(price='price-operator', sub_id='sub-two')],
+        [user(plan='architect', price='price-neither', sub_id='sub-unrelated')],
+    )
     assert report.counts['multiple_entitled_subscriptions'] == 1
     assert report.counts['wrong_plan'] == 0
     assert report.counts['wrong_price'] == 0
     assert report.counts['subscription_id_mismatch'] == 0
+    assert report.counts['stale_period'] == 0
 
 
 def test_known_stored_id_is_compared_among_multiple_subscriptions():
@@ -251,6 +255,30 @@ def test_claimed_referral_is_not_reverse_drift():
     assert report.counts['paid_in_firestore_no_stripe_entitlement'] == 0
 
 
+def test_manual_or_referral_grant_still_compares_an_entitled_stripe_subscription():
+    grant = user('basic')
+    grant['subscription'].pop('stripe_subscription_id')
+    grant['subscription']['subscription_id'] = 'pi_fixture_company_payment'
+    grant['subscription']['current_period_end'] = None
+    basic = compare([sub()], [grant])
+    assert basic.counts['manual_payment_entitlement'] == 0
+    assert basic.counts['paid_in_stripe_basic_in_firestore'] == 1
+
+    paid_grant = user('unlimited', price='price-neither', end=150)
+    paid_grant['subscription'].pop('stripe_subscription_id')
+    paid_grant['subscription']['subscription_id'] = 'pi_fixture_company_payment'
+    paid = compare([sub()], [paid_grant])
+    assert paid.counts['manual_payment_entitlement'] == 0
+    assert paid.counts['wrong_plan'] == 1
+    assert paid.counts['wrong_price'] == 1
+    assert paid.counts['stale_period'] == 1
+
+    referral = compare([sub(price='price-plus')], [referral_fixture()])
+    assert referral.counts['referral_trial_entitlement'] == 0
+    assert referral.counts['wrong_plan'] == 1
+    assert referral.counts['stale_period'] == 1
+
+
 @pytest.mark.parametrize('start', [None, 11])
 def test_legacy_missing_start_is_not_stale_but_present_mismatch_is(start):
     stored = user()
@@ -303,3 +331,31 @@ def test_partial_price_map_extends_catalog(tmp_path, monkeypatch, capsys):
         == 0
     )
     assert json.loads(capsys.readouterr().out)['counts']['unknown_price'] == 0
+
+
+def test_price_map_rejects_catalog_price_collision(tmp_path, capsys):
+    catalog_price, catalog_plan = next(iter(reconciliation_cli.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()))
+    for name, content in [
+        ('stripe', {'complete': True, 'subscriptions': [sub(price=catalog_price)]}),
+        ('users', {'complete': True, 'users': [user(plan=catalog_plan.value)]}),
+        ('prices', {catalog_price: 'operator'}),
+    ]:
+        (tmp_path / f'{name}.json').write_text(json.dumps(content))
+    assert (
+        reconciliation_cli.main(
+            [
+                '--stripe-snapshot',
+                str(tmp_path / 'stripe.json'),
+                '--users-snapshot',
+                str(tmp_path / 'users.json'),
+                '--price-map',
+                str(tmp_path / 'prices.json'),
+                '--as-of',
+                '100',
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert 'collides with catalog price ids' in captured.err
+    assert captured.out == ''

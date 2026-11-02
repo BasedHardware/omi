@@ -66,8 +66,9 @@ final class PhoneMicEventEmitter {
         }
     }
 
-    /// Batch-mode 1Hz liveness/progress. Not epoch-gated: unlike frames it carries
+    /// Batch-mode liveness/progress. Not epoch-gated: unlike frames it carries
     /// no audio, and its steady arrival is the Dart watchdog's liveness signal.
+    /// Healthy iOS capture emits this every 4s; fault states snap back to 1s.
     func emitBatchProgress(_ capturedSeconds: Double, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
             self?.sink.onBatchProgress(capturedSeconds: capturedSeconds, sessionId: sessionId)

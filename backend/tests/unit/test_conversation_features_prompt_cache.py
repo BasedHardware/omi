@@ -248,7 +248,6 @@ def _run_metadata_extraction(monkeypatch, *, gateway=True, byok=False):
     monkeypatch.setattr('utils.byok.has_byok_keys', lambda: byok)
     monkeypatch.setattr(chat_module, 'get_llm', _get_llm)
     monkeypatch.setattr(chat_module, 'track_usage', lambda *a, **k: nullcontext())
-    monkeypatch.setattr(chat_module, 'add_filter_category_item', lambda *a, **k: None)
     chat_module._process_extracted_metadata('uid-1', 'one unique prompt', '2026-09-09')
     return captured
 

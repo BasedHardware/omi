@@ -21,15 +21,27 @@ export const SETTINGS_SECTIONS = [
     title: 'Privacy',
     description: 'Data permissions and training settings',
   },
-  {
-    id: 'developer',
-    label: 'Developer',
-    title: 'Developer',
-    description: 'API keys, webhooks, and data export',
-  },
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
+
+/**
+ * Developer tools (agent connection, API and MCP keys, webhooks, data export)
+ * are their own destination now, not a settings section.
+ */
+export const DEVELOPERS_PATH = '/developers';
+
+/**
+ * Where a retired `/settings?section=developer` link should go, keeping its
+ * `#api-keys` / `#mcp` / `#webhooks` anchor; null for every other section.
+ */
+export function developerRedirectTarget(
+  sectionParam: string | null,
+  hash: string,
+): string | null {
+  if (sectionParam !== 'developer') return null;
+  return `${DEVELOPERS_PATH}${hash.startsWith('#') ? hash : ''}`;
+}
 
 export const CLAUDE_CONNECTOR_OAUTH = {
   clientId: 'omi-claude-prod',

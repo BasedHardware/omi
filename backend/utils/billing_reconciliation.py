@@ -69,10 +69,15 @@ def reconcile(
     for uid, user in by_uid.items():
         stored = user.get('subscription') or {}
         manual_payment = stored.get('subscription_id')
+        stripe_entitled = entitled.get(uid) or []
+        # A PaymentIntent grant or claimed referral is its own bucket only when
+        # Stripe has no active/trialing subscription for this uid. Otherwise
+        # wrong_plan, stale_period, and paid-in-Stripe drift still have to be counted.
         if (
             isinstance(manual_payment, str)
             and manual_payment.startswith('pi_')
             and not stored.get('stripe_subscription_id')
+            and not stripe_entitled
         ):
             # Organization admin grants use a one-time PaymentIntent, not a
             # recurring subscription. Preserve that separate authority.
@@ -89,6 +94,7 @@ def reconcile(
             and user.get('referral')
             and not stored.get('subscription_id')
             and not stored.get('stripe_subscription_id')
+            and not stripe_entitled
         ):
             counts['referral_trial_entitlement'] += 1
             continue

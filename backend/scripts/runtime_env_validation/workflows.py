@@ -29,6 +29,7 @@ from scripts.runtime_env_validation.common import (
     _literal_env_entries_by_name,
     _manifest_env_value,
     _network_flags,
+    _remove_env_extra,
     _substitute_values,
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
@@ -340,8 +341,11 @@ def _rendered_runtime_env_outputs(
             if service_config is None:
                 continue
             output_prefix = service.replace('-', '_')
+            outputs[f'{output_prefix}_forbidden_env_names'] = ','.join(sorted(service_config.get('forbidden_env', [])))
+            outputs[f'{output_prefix}_remove_env_extra'] = _remove_env_extra(service, service_config)
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+            outputs[f'{output_prefix}_flags'] = _render_cloud_run_flags(service_config.get('flags', {}))
             service_account = _declared_service_account(service_config)
             outputs[f'{output_prefix}_identity_flags'] = (
                 f'--service-account={service_account} --remove-secrets={",".join(KEY_CREDENTIAL_ENV_NAMES)}'
@@ -389,8 +393,13 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         '${{ steps.backfill-runtime.outputs.secrets }}',
         rendered_outputs.get('backend_sync_backfill_secrets', ''),
     )
+    # The lifecycle emits the manifest's backfill queue, defaulting to sync-backfill when undeclared.
+    backfill_queue = 'sync-backfill'
+    for line in rendered_outputs.get('backend_sync_backfill_env_vars', '').splitlines():
+        if line.startswith('SYNC_BACKFILL_TASKS_QUEUE=') and line.split('=', 1)[1]:
+            backfill_queue = line.split('=', 1)[1]
     sync_backfill_overlay = (
-        'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill\n'
+        f'SYNC_BACKFILL_TASKS_QUEUE={backfill_queue}\n'
         'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run\n'
         'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
     )
@@ -495,7 +504,7 @@ def _validate_cloud_run_workflows(
         errors.extend(
             _validate_workflow_flags(
                 scope=f'cloud_run_workflow/{service}',
-                expected=_network_flags(env_config),
+                expected={**_network_flags(env_config), **service_config.get('flags', {})},
                 actual=_substitute_values(service_state.get('flags', {}), variables=workflow_vars),
                 strict_provisional=strict_provisional,
             )
@@ -636,12 +645,18 @@ def _validate_firestore_readiness_workflow_contract(
     is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
     # Both lanes resolve their source from the Release Eligibility run listing,
-    # which needs actions:read. Neither may hold anything beyond that and the
-    # repository read its checkouts require.
-    expected_permissions = {'actions': 'read', 'contents': 'read'}
+    # which needs actions:read. Beyond that and the repository read its
+    # checkouts require, only the id-token the keyless index check mints
+    # through the deploy pool is allowed — never a content write or a
+    # deployer-scoped permission.
+    expected_permissions = {'actions': 'read', 'contents': 'read', 'id-token': 'write'}
     if permissions != expected_permissions:
         errors.append(
-            ValidationError(scope, 'Firestore readiness job permissions must be limited to its release-proof boundary')
+            ValidationError(
+                scope,
+                'Firestore readiness job permissions must be limited to its release-proof boundary '
+                'plus the keyless index check id-token',
+            )
         )
 
     steps = _as_config_list(readiness_job.get('steps')) or []
@@ -697,7 +712,11 @@ def _validate_firestore_readiness_workflow_contract(
     if (
         gate_with.get('source_sha') != admitted_readiness_ref
         or gate_with.get('project_id') != '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
-        or gate_with.get('credentials_json') != '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
+        or gate_with.get('service_account') != 'omi-ci-index-check@based-hardware.iam.gserviceaccount.com'
+        or not any(
+            f'workloadIdentityPools/{pool}-' in str(gate_with.get('workload_identity_provider'))
+            for pool in ('omi-gha-deploy', 'omi-gha-notif')
+        )
         or gate_with.get('database', '(default)') != '(default)'
         or gate_step.get('if') is not None
         or gate_step.get('continue-on-error') not in (None, False)
@@ -706,7 +725,8 @@ def _validate_firestore_readiness_workflow_contract(
         errors.append(
             ValidationError(
                 scope,
-                'Firestore readiness gate must unconditionally bind the admitted source, runtime project, and read-only credentials',
+                'Firestore readiness gate must unconditionally bind the admitted source, runtime project, '
+                'and the keyless index-check identity',
             )
         )
     if not is_manual_deploy and gate_with.get('verify_credential_project') != 'true':
@@ -786,10 +806,13 @@ def _validate_firestore_readiness_composite(
         if isinstance(run, str) and has_direct_firestore_mutation(run):
             errors.append(ValidationError(scope, 'Firestore readiness composite must stay read-only (--check-only)'))
     auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v3']
-    if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
-        '${{ inputs.credentials_json }}'
+    auth_with = _as_config_dict(auth_steps[0].get('with')) or {} if auth_steps else {}
+    if (
+        len(auth_steps) != 1
+        or auth_with.get('workload_identity_provider') != '${{ inputs.workload_identity_provider }}'
+        or auth_with.get('service_account') != '${{ inputs.service_account }}'
     ):
-        errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
+        errors.append(ValidationError(scope, 'Firestore readiness must use the keyless index-check workload identity'))
     expected_path = (
         '${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}'
         '${{ inputs.artifact_suffix }}.json'
@@ -1000,10 +1023,4 @@ def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict
         ),
         '${{ vars.MEMORY_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
         '${{vars.MEMORY_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
-        '${{ vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED }}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
-        ),
-        '${{vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED}}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
-        ),
     }

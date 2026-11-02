@@ -21,7 +21,14 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
         finished_at=now,
         structured=Structured(),
         transcript_segments=[
-            TranscriptSegment(id='s', text='Synthetic meeting text', speaker_id=4, is_user=False, start=0, end=5)
+            TranscriptSegment(
+                id='s',
+                text='Synthetic meeting text with enough workshop planning details to reach the real notes model',
+                speaker_id=4,
+                is_user=False,
+                start=0,
+                end=5,
+            )
         ],
         private_cloud_sync_enabled=False,
     )
@@ -34,6 +41,7 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
     assert conversation.get_person_ids() == ['correct']
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *a, **k: 'Owner')
     monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
     prompts = []

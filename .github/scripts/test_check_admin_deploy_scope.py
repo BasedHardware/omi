@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import os
 import shutil
 import subprocess
@@ -330,66 +329,6 @@ class AdminDeployScopeAdmissionTests(unittest.TestCase):
                 root = self.fixture_root()
                 self.mutate(root, old, new)
                 self.assertIn(expected, ADMISSION.validate(root))
-
-
-class OmiTvDashboardContractTests(unittest.TestCase):
-    def dashboard(self) -> dict:
-        path = ROOT / "web/admin/grafana/dashboards/omi-tv.json"
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    def test_keeps_uid_and_strips_instance_ids(self) -> None:
-        dashboard = self.dashboard()
-        self.assertEqual(dashboard["uid"], "omi-tv")
-        self.assertNotIn("id", dashboard)
-        self.assertNotIn("version", dashboard)
-
-    def test_activation_panels_use_firestore_activation_selectors(self) -> None:
-        panels = {panel["title"]: panel for panel in self.dashboard()["panels"]}
-        # The base (all-platform) board carries the macOS-only qualifier in the
-        # tile's description (the title is kept short enough to render on the
-        # TV wall) and in the series title, because that route only covers
-        # macOS signups.
-        rate_panel = panels["Activation"]
-        self.assertIn("macOS only", rate_panel["description"])
-        rate = rate_panel["targets"][0]
-        self.assertEqual(rate["url"], "http://127.0.0.1:8899/api/omi/stats/activation?days=60")
-        self.assertEqual([column["selector"] for column in rate["columns"]], ["rate"])
-        self.assertNotIn("viral-metrics", rate["url"])
-
-        series = next(
-            panel["targets"][0]
-            for title, panel in panels.items()
-            if title.startswith("Activation (signup")
-        )
-        # `_tzdates=week` is a proxy-side display rewrite (stripped before the
-        # upstream request); the Firestore activation route contract is the
-        # base URL.
-        self.assertEqual(
-            series["url"].split("&_tzdates=")[0],
-            "http://127.0.0.1:8899/api/omi/stats/activation?days=60",
-        )
-        self.assertEqual(series["root_selector"], "weeks")
-        self.assertEqual(
-            [column["selector"] for column in series["columns"]],
-            ["week", "signups", "activated", "rate"],
-        )
-
-
-class ApplyOmiTvDashboardTests(unittest.TestCase):
-    def test_skips_when_token_is_absent(self) -> None:
-        import subprocess
-
-        env = {key: value for key, value in __import__("os").environ.items() if key != "GRAFANA_TOKEN"}
-        completed = subprocess.run(
-            [sys.executable, str(ROOT / "web/admin/grafana/apply_omi_tv_dashboard.py")],
-            check=False,
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=ROOT,
-        )
-        self.assertEqual(completed.returncode, 0)
-        self.assertIn("skipping omi-tv apply", completed.stdout)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
+import logging
 import os
 import re
-import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -16,6 +16,7 @@ from utils.phone_calls import check_call_access, check_destination_allowed, get_
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.executors import critical_executor, db_executor, run_blocking
+from utils.log_sanitizer import sanitize
 from utils.multipart import MultipartMaxPartSizeRoute, PHONE_CALL_MAX_PART_SIZE, parse_multipart_form
 from utils.twilio_service import (
     generate_access_token,
@@ -25,6 +26,8 @@ from utils.twilio_service import (
     get_caller_id,
     validate_twilio_signature,
 )
+
+logger = logging.getLogger(__name__)
 
 E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$')
 
@@ -144,11 +147,17 @@ def verify_phone_number(
                     status_code=409,
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(
+            f"Failed to start phone verification for {_redact_phone(phone_number)}: {sanitize(str(e))}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Failed to start phone number verification")
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(
+            f"Unexpected error starting phone verification for {_redact_phone(phone_number)}: {sanitize(str(e))}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Failed to start phone number verification")
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])
@@ -239,7 +248,8 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")
+        logger.error(f"Failed to generate phone token for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate phone access token")
 
 
 # ************************************************

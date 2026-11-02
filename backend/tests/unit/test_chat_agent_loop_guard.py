@@ -6,14 +6,31 @@ gate because search_conversations shares a date window and defaults; only
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from utils.retrieval.safety import AgentSafetyGuard, CollectedContextReady, SafetyGuardError
 
-from tests.unit.test_chat_agent_provider_retry import _FakeChatModel, _openai_chunk
-from tests.unit.test_prompt_cache_integration import _get_agentic_module
+
+@pytest.fixture(scope='module', autouse=True)
+def agentic_module():
+    from utils.retrieval import agentic
+
+    return agentic
+
+
+class _FakeChatModel:
+    def __init__(self, scripts):
+        self.scripts = iter(scripts)
+
+    def bind(self, **kwargs):
+        return self
+
+    async def astream(self, messages):
+        for chunk in next(self.scripts):
+            yield chunk
 
 
 def _search_params(query: str) -> dict:
@@ -54,7 +71,8 @@ class TestSearchConversationsLoopGuard:
 @pytest.mark.asyncio
 async def test_abort_with_collected_results_is_forbidden():
     """The canned stuck message must not replace an answer once retrieval collected hits."""
-    agentic_mod = _get_agentic_module()
+    from utils.retrieval import agentic as agentic_mod
+
     guard = AgentSafetyGuard()
     collected = [{'id': 'conv-1'}]
     tool_calls = [
@@ -65,7 +83,7 @@ async def test_abort_with_collected_results_is_forbidden():
     full_response = []
 
     with patch.object(agentic_mod, '_execute_tool', new=AsyncMock(return_value='found dinner')):
-        results = await agentic_mod._execute_independent_tool_calls(
+        results = await agentic_mod.execute_independent_tool_calls(
             tool_calls,
             name_of=lambda call: call['name'],
             input_of=lambda call: call['input'],
@@ -87,7 +105,8 @@ async def test_abort_with_collected_results_is_forbidden():
 @pytest.mark.asyncio
 async def test_parallel_tool_calls_in_one_turn_overlap():
     """Two tool_use blocks in one turn must start concurrently, not wait serially."""
-    agentic_mod = _get_agentic_module()
+    from utils.retrieval import agentic as agentic_mod
+
     started: list[str] = []
 
     async def fake_execute(tool_name, _tool_input, _registry, _configurable):
@@ -105,7 +124,7 @@ async def test_parallel_tool_calls_in_one_turn_overlap():
     ]
 
     async def go():
-        return await agentic_mod._execute_independent_tool_calls(
+        return await agentic_mod.execute_independent_tool_calls(
             tool_calls,
             name_of=lambda call: call['name'],
             input_of=lambda call: call['input'],
@@ -129,7 +148,8 @@ async def test_parallel_tool_calls_in_one_turn_overlap():
 
 @pytest.mark.asyncio
 async def test_managed_loop_runs_two_tool_calls_without_serial_wait():
-    agentic_mod = _get_agentic_module()
+    from utils.retrieval import agentic as agentic_mod
+
     started: list[str] = []
 
     async def fake_execute(tool_name, _tool_input, _registry, _configurable):
@@ -152,7 +172,7 @@ async def test_managed_loop_runs_two_tool_calls_without_serial_wait():
                 },
             )()
         ],
-        [_openai_chunk('both done')],
+        [SimpleNamespace(content='both done', tool_call_chunks=[])],
     ]
     safety_guard = AgentSafetyGuard()
     callback = agentic_mod.AsyncStreamingCallback()

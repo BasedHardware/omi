@@ -3,10 +3,14 @@ import os
 import sys
 import tempfile
 import time
+import wave
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import numpy as np
+import soundfile as sf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -127,6 +131,98 @@ def test_aged_backfill_gets_one_turn_after_four_live_batches():
         assert all(r.lane == 'live' for r in engine._select_batch())
     finally:
         loop.close()
+
+
+def test_packing_never_dispatches_aged_backfill_before_queued_live():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=8, max_inflight=1, packing=True)
+    loop = asyncio.new_event_loop()
+    try:
+        old = PendingRequest('/tmp/old.wav', True, loop.create_future(), submitted_at=time.monotonic() - 60)
+        live = PendingRequest('/tmp/live.wav', True, loop.create_future(), lane='live')
+        engine._pending = [old, live]
+        for _ in range(10):
+            assert engine._select_batch() == [live]
+        engine._pending = [old, PendingRequest('/tmp/other.wav', True, loop.create_future())]
+        assert engine._select_batch() == [old]
+    finally:
+        loop.close()
+
+
+def test_packing_rejects_multiple_gpu_batches_inflight():
+    with pytest.raises(ValueError, match='MAX_INFLIGHT=1'):
+        BatchEngine(_make_mock_gpu_worker(), packing=True, max_inflight=2)
+
+
+@pytest.mark.asyncio
+async def test_packing_cannot_bypass_quantum_bound(monkeypatch):
+    engine = BatchEngine(_make_mock_gpu_worker(), packing=True, max_inflight=1)
+    await engine.start()
+    try:
+        for duration in (None, 120.001):
+            monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: duration)
+            with pytest.raises(ValueError, match='<=120s'):
+                await engine.submit('/tmp/oversized.wav')
+        assert not engine._pending
+    finally:
+        await engine.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('seconds', [30, 120])
+async def test_v2_short_pcm16_submit_audio_preserves_original_path_and_subtype(tmp_path, seconds):
+    bounded = load_module_fresh('bounded_audio', str(_PARAKEET_DIR / 'bounded_audio.py'))
+    source = tmp_path / 'v2-upload.wav'
+    sf.write(source, np.linspace(-0.8, 0.8, seconds * 16000, dtype=np.float32), 16000, subtype='PCM_16')
+    seen = []
+
+    def infer(payload):
+        assert payload['audio_paths'] == [str(source)]
+        assert sf.info(payload['audio_paths'][0]).subtype == 'PCM_16'
+        seen.extend(payload['audio_paths'])
+        return [{'text': 'short turn', 'timestamp': {}}]
+
+    engine = BatchEngine(_make_mock_gpu_worker(infer), max_batch_size=1, max_inflight=1, packing=True)
+    await engine.start()
+    try:
+        with ThreadPoolExecutor(1) as pool:
+            # Match v2: packing backfill, default owns_file=False for later diarization.
+            result = await bounded.submit_audio(engine, str(source), pool, packing=True)
+        assert result['text'] == 'short turn'
+        assert seen == [str(source)]
+        assert source.exists() and sf.info(source).subtype == 'PCM_16'
+        assert list(tmp_path.iterdir()) == [source]
+    finally:
+        await engine.stop()
+
+
+@pytest.mark.asyncio
+async def test_split_float_quanta_pass_real_batch_engine_duration_reader(tmp_path):
+    bounded = load_module_fresh('bounded_audio', str(_PARAKEET_DIR / 'bounded_audio.py'))
+    source = tmp_path / 'v2-long-upload.wav'
+    sf.write(source, np.zeros(121 * 8000, dtype=np.float32), 8000, subtype='PCM_16')
+    durations = []
+
+    def infer(payload):
+        (path,) = payload['audio_paths']
+        assert path != str(source)
+        assert sf.info(path).subtype == 'FLOAT'
+        with pytest.raises(wave.Error, match='unknown format'):
+            with wave.open(path):
+                pass
+        # Exercise the real soundfile fallback, also used by submit's admission check.
+        durations.append(BatchEngine._get_audio_duration(path))
+        return [{'text': 'quantum', 'timestamp': {}}]
+
+    engine = BatchEngine(_make_mock_gpu_worker(infer), max_batch_size=1, max_inflight=1, packing=True)
+    await engine.start()
+    try:
+        with ThreadPoolExecutor(1) as pool:
+            result = await bounded.submit_audio(engine, str(source), pool, packing=True)
+        assert durations == [120.0, 1.0]
+        assert result['text'] == 'quantum quantum'
+        assert list(tmp_path.iterdir()) == [source]
+    finally:
+        await engine.stop()
 
 
 class TestBatchEngineSubmit:

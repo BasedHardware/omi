@@ -99,6 +99,22 @@ class GatewayContextChatOpenAI(ChatOpenAI):
         super().__init__(*args, **kwargs)
         self._omi_gateway_feature = omi_gateway_feature
 
+    def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
+        result = super()._convert_chunk_to_generation_chunk(chunk, default_chunk_class, base_generation_info)
+        usage = chunk.get('usage')
+        if result is not None and isinstance(usage, dict):
+            # LangChain currently drops GPT-5.6 cache-write tokens from UsageMetadata.
+            # Preserve only numeric usage, never provider text or arbitrary metadata.
+            details = usage.get('prompt_tokens_details') or {}
+            if isinstance(chunk.get('model'), str):
+                result.message.response_metadata.setdefault('model_name', chunk['model'])
+            result.message.response_metadata['omi_token_usage'] = {
+                'prompt_tokens': usage.get('prompt_tokens', 0),
+                'completion_tokens': usage.get('completion_tokens', 0),
+                'prompt_tokens_details': {k: details.get(k, 0) for k in ('cached_tokens', 'cache_write_tokens')},
+            }
+        return result
+
     def _get_request_payload(self, input_: Any, *, stop: list[str] | None = None, **kwargs: Any) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
         raw_headers = payload.get('extra_headers')

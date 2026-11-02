@@ -181,6 +181,11 @@ def cursor_cohort_utc(cursor: Optional[Dict[str, Any]]) -> Optional[datetime]:
     return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
 
 
+def cursor_retry_only(cursor: Optional[Dict[str, Any]]) -> bool:
+    """True when the saved cohort was fully walked and only failed recipients remain."""
+    return bool((cursor or {}).get('retry_only') is True)
+
+
 def cursor_hour(cursor: Optional[Dict[str, Any]]) -> Optional[int]:
     if not cursor:
         return None

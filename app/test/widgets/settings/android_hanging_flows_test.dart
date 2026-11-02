@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -164,5 +165,237 @@ void main() {
     expect(provider.isAppConnected(TaskIntegrationApp.todoist), isTrue);
     expect(provider.selectedApp, TaskIntegrationApp.todoist);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('a grant saved after returning from Google is adopted without another manual action', (tester) async {
+    var connected = false;
+    final defaults = <String>[];
+    final provider = TaskIntegrationProvider(
+        fetchStatus: () async => TaskIntegrationsResponse(
+            integrations: connected
+                ? {
+                    'todoist': {'app_key': 'todoist', 'connected': true}
+                  }
+                : {}),
+        setDefaultTaskIntegrationFn: (key) async {
+          defaults.add(key);
+          return true;
+        });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(defaults, isEmpty);
+    connected = true;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(defaults, ['todoist']);
+    expect(provider.selectedApp, TaskIntegrationApp.todoist);
+  });
+
+  testWidgets('a status read that answers inside its own 45s budget still completes authorization', (tester) async {
+    var authorized = false;
+    final defaults = <String>[];
+    final provider = TaskIntegrationProvider(fetchStatus: () async {
+      if (!authorized) return TaskIntegrationsResponse(integrations: {});
+      await Future<void>.delayed(const Duration(seconds: 30)); // slower than the old 20s probe
+      return TaskIntegrationsResponse(integrations: {
+        'todoist': {'app_key': 'todoist', 'connected': true}
+      });
+    }, setDefaultTaskIntegrationFn: (key) async {
+      defaults.add(key);
+      return true;
+    });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    authorized = true;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+    expect(defaults, ['todoist']);
+    expect(provider.selectedApp, TaskIntegrationApp.todoist);
+  });
+
+  testWidgets('choosing another task app retires the earlier pending authorization selection', (tester) async {
+    var connected = false;
+    final defaults = <String>[];
+    final provider = TaskIntegrationProvider(
+        fetchStatus: () async => TaskIntegrationsResponse(integrations: {
+              'asana': {'app_key': 'asana', 'connected': true},
+              if (connected) 'todoist': {'app_key': 'todoist', 'connected': true},
+            }),
+        setDefaultTaskIntegrationFn: (key) async {
+          defaults.add(key);
+          return true;
+        });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Asana'));
+    await tester.pumpAndSettle();
+    expect(defaults, ['asana']);
+    connected = true;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(defaults, ['asana']);
+    expect(provider.selectedApp, TaskIntegrationApp.asana);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  TaskIntegrationProvider asanaConnectedProvider(List<String> defaults, bool Function() todoistConnected) {
+    final provider = TaskIntegrationProvider(
+        fetchStatus: () async => TaskIntegrationsResponse(integrations: {
+              'asana': {'app_key': 'asana', 'connected': true},
+              if (todoistConnected()) 'todoist': {'app_key': 'todoist', 'connected': true},
+            }),
+        setDefaultTaskIntegrationFn: (key) async {
+          defaults.add(key);
+          return true;
+        });
+    provider.clearUserData();
+    return provider;
+  }
+
+  Future<void> startTodoist(WidgetTester tester) async {
+    await tester.tap(find.text('Todoist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+  }
+
+  testWidgets('a newer selection while authorization is still starting retires the older attempt', (tester) async {
+    var connected = false;
+    final defaults = <String>[];
+    final provider = asanaConnectedProvider(defaults, () => connected);
+    addTearDown(provider.dispose);
+    final launch = Completer<bool>();
+    await pumpPage(
+        tester,
+        ChangeNotifierProvider.value(
+            value: provider,
+            child: TaskIntegrationsPage(
+                authenticate: (app) => app == TaskIntegrationApp.todoist ? launch.future : Future.value(true))));
+    await startTodoist(tester); // the browser launch result is still outstanding
+    await tester.tap(find.text('Asana'));
+    await tester.pumpAndSettle();
+    expect(defaults, ['asana']);
+
+    connected = true;
+    launch.complete(true); // the earlier Todoist launch reports late
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(defaults, ['asana'], reason: 'the retired Todoist attempt never saves a default');
+    expect(provider.selectedApp, TaskIntegrationApp.asana);
+    expect(find.text('Try Again'), findsNothing, reason: 'no pending authorization is resurrected');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a launch receipt after the page closes does nothing', (tester) async {
+    var connected = false;
+    final defaults = <String>[];
+    final provider = asanaConnectedProvider(defaults, () => connected);
+    addTearDown(provider.dispose);
+    final launch = Completer<bool>();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) => launch.future)));
+    await startTodoist(tester);
+    await tester.pumpWidget(const SizedBox());
+    connected = true;
+    launch.complete(true);
+    await tester.pump(const Duration(seconds: 3));
+    expect(defaults, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a launch receipt after an account change does nothing for the new account', (tester) async {
+    var connected = false;
+    final defaults = <String>[];
+    final provider = asanaConnectedProvider(defaults, () => connected);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().uid = 'account-a';
+    final launch = Completer<bool>();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) => launch.future)));
+    await startTodoist(tester);
+    SharedPreferencesUtil().uid = 'account-b';
+    connected = true;
+    launch.complete(true);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(defaults, isEmpty, reason: "account A's authorization never selects for account B");
+    expect(find.text('Try Again'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a launch that throws leaves the next selection free to start', (tester) async {
+    final defaults = <String>[];
+    final provider = asanaConnectedProvider(defaults, () => false);
+    addTearDown(provider.dispose);
+    var launches = 0;
+    await pumpPage(
+        tester,
+        ChangeNotifierProvider.value(
+            value: provider,
+            child: TaskIntegrationsPage(authenticate: (_) async {
+              launches++;
+              if (launches == 1) throw StateError('browser unavailable');
+              return true;
+            })));
+    await startTodoist(tester);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await startTodoist(tester);
+    await tester.pumpAndSettle();
+    expect(launches, 2, reason: 'a thrown launch must not leave authorization stuck as starting');
+    expect(find.text('Try Again'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('choosing Asana while a Todoist default save is pending keeps Asana', (tester) async {
+    final writes = <String>[];
+    final pending = <String, Completer<bool>>{};
+    final provider = TaskIntegrationProvider(
+        fetchStatus: () async => TaskIntegrationsResponse(integrations: {
+              'asana': {'app_key': 'asana', 'connected': true},
+              'todoist': {'app_key': 'todoist', 'connected': true},
+            }),
+        setDefaultTaskIntegrationFn: (key) {
+          writes.add(key);
+          return (pending[key] = Completer<bool>()).future;
+        });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pump();
+    await tester.tap(find.text('Asana'));
+    await tester.pump();
+    if (pending['asana'] != null) pending['asana']!.complete(true);
+    pending['todoist']!.complete(true);
+    await tester.pump();
+    if (pending['asana']?.isCompleted == false) pending['asana']!.complete(true);
+    await tester.pumpAndSettle();
+
+    expect(writes.last, 'asana', reason: 'the server ends on the latest choice');
+    expect(provider.selectedApp, TaskIntegrationApp.asana);
+    await tester.pumpWidget(const SizedBox());
   });
 }

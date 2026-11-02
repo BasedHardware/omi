@@ -179,7 +179,8 @@ async def test_live_adapter_uses_transaction_result_for_client_ids(world):
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False),
+        state=SimpleNamespace(speaker_map_dirty=False, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(segment_assignments={}, speaker_to_person={}, segment_identity_status={}),
     )
@@ -224,7 +225,8 @@ async def test_recognized_speaker_words_merge_into_one_live_utterance(world, per
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False),
+        state=SimpleNamespace(speaker_map_dirty=False, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(
             segment_assignments={},
@@ -313,7 +315,8 @@ async def test_manually_labeled_owner_words_merge_despite_live_voice_status(worl
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False),
+        state=SimpleNamespace(speaker_map_dirty=False, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(
             segment_assignments={},

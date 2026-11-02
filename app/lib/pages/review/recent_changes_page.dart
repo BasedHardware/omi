@@ -3,26 +3,43 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/review.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/review.dart';
+import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart';
+import 'package:omi/pages/review/widgets/recent_change_groups.dart';
+import 'package:omi/pages/review/widgets/recent_change_row.dart';
+import 'package:omi/pages/review/widgets/recent_change_sheet.dart';
+import 'package:omi/pages/review/widgets/review_parts.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 typedef ReviewChangesLoader = Future<ApiResult<ReviewChangesPage>> Function({String? cursor});
 typedef ReviewChangeToggler = Future<ApiResult<ReviewChange>> Function(String changeId, {required bool undone});
 
-/// What Omi changed on its own in the last 30 days, each with its reason and an Undo. A back-office
-/// screen reached from Review; nothing here is pushed at the user.
+/// What Omi changed on its own in the last 30 days, grouped by what changed. Each row shows the
+/// change itself (before → after) and opens every place it landed, in context, with Undo. A
+/// back-office screen reached from Review; nothing here is pushed at the user.
 class RecentChangesPage extends StatefulWidget {
-  const RecentChangesPage({super.key, this.loadChanges, this.setUndone});
+  const RecentChangesPage({super.key, this.loadChanges, this.setUndone, this.openConversation, this.openTasks});
 
   final ReviewChangesLoader? loadChanges;
   final ReviewChangeToggler? setUndone;
+
+  /// Opens a source conversation; defaults to the conversation detail page.
+  final void Function(BuildContext context, String conversationId)? openConversation;
+
+  /// Opens the task list from a task change; defaults to the Tasks page.
+  final void Function(BuildContext context)? openTasks;
 
   @override
   State<RecentChangesPage> createState() => _RecentChangesPageState();
 }
 
 class _RecentChangesPageState extends State<RecentChangesPage> {
+  /// Ticks whenever [_changes] or [_busy] change, so an open sheet follows the page.
+  final _revision = ValueNotifier<int>(0);
   List<ReviewChange> _changes = const [];
+  Map<RecentChangeSection, List<RecentChangeGroup>> _groups = const {};
   String? _cursor;
   bool _loading = true;
   bool _failed = false;
@@ -38,6 +55,20 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     _refresh();
   }
 
+  @override
+  void dispose() {
+    _revision.dispose();
+    super.dispose();
+  }
+
+  void _update(VoidCallback change) {
+    setState(() {
+      change();
+      _groups = groupRecentChanges(_changes);
+    });
+    _revision.value++;
+  }
+
   Future<void> _refresh() async {
     setState(() {
       _loading = true;
@@ -45,7 +76,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     });
     final result = await _load();
     if (!mounted) return;
-    setState(() {
+    _update(() {
       _loading = false;
       switch (result) {
         case ApiSuccess(:final data):
@@ -63,7 +94,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     setState(() => _loadingMore = true);
     final result = await _load(cursor: cursor);
     if (!mounted) return;
-    setState(() {
+    _update(() {
       _loadingMore = false;
       if (result case ApiSuccess(:final data)) {
         _changes = [..._changes, ...data.changes];
@@ -72,18 +103,80 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     });
   }
 
-  Future<void> _setUndone(ReviewChange change, bool undone) async {
+  /// Sets [undone] on each change in turn. There is no bulk endpoint; a failure leaves the rest
+  /// applied and returns how many failed.
+  Future<int> _setUndone(List<ReviewChange> changes, bool undone) async {
+    var failures = 0;
+    _update(() => _busy.addAll(changes.map((c) => c.changeId)));
+    for (final change in changes) {
+      final result = await _toggle(change.changeId, undone: undone);
+      if (!mounted) return failures;
+      _update(() {
+        _busy.remove(change.changeId);
+        if (result case ApiSuccess(:final data)) {
+          _changes = [for (final c in _changes) c.changeId == data.changeId ? data : c];
+        }
+      });
+      if (result is ApiFailure) failures++;
+    }
+    return failures;
+  }
+
+  Future<void> _toggleOne(ReviewChange change) async {
     final failed = context.l10n.reviewChangeFailed;
-    setState(() => _busy.add(change.changeId));
-    final result = await _toggle(change.changeId, undone: undone);
-    if (!mounted) return;
-    setState(() {
-      _busy.remove(change.changeId);
-      if (result case ApiSuccess(:final data)) {
-        _changes = [for (final c in _changes) c.changeId == data.changeId ? data : c];
+    final failures = await _setUndone([change], !change.undone);
+    if (mounted && failures > 0) OmiFeedback.error(context, failed);
+  }
+
+  Future<void> _toggleGroup(RecentChangeGroup group) async {
+    final l10n = context.l10n;
+    final undo = !group.allUndone;
+    final targets = undo ? group.active : group.changes;
+    final failures = await _setUndone(targets, undo);
+    if (!mounted || failures == 0) return;
+    OmiFeedback.error(
+      context,
+      targets.length == 1 ? l10n.reviewChangeFailed : l10n.reviewChangesUndoPartial(failures, targets.length),
+    );
+  }
+
+  RecentChangeGroup? _findGroup(String key) {
+    for (final groups in _groups.values) {
+      for (final group in groups) {
+        if (group.key == key) return group;
       }
-    });
-    if (result is ApiFailure) OmiFeedback.error(context, failed);
+    }
+    return null;
+  }
+
+  void _openConversation(BuildContext context, String conversationId) {
+    final open = widget.openConversation;
+    if (open != null) return open(context, conversationId);
+    openChatBlockConversation(context, conversationId: conversationId);
+  }
+
+  void _openTasks(BuildContext context) {
+    final open = widget.openTasks;
+    if (open != null) return open(context);
+    routeToPage(context, const ActionItemsPage());
+  }
+
+  void _openGroup(RecentChangeGroup group) {
+    showOmiSheet<void>(
+      context: context,
+      title: _sectionLabel(context, group.section),
+      builder: (sheetContext) => SingleChildScrollView(
+        padding: const EdgeInsets.only(top: OmiSpacing.xs, bottom: OmiSpacing.md),
+        child: RecentChangeSheetBody(
+          key: const Key('recent_change_sheet'),
+          listenable: _revision,
+          group: () => _findGroup(group.key),
+          isBusy: _busy.contains,
+          onToggle: _toggleOne,
+          onOpenConversation: (id) => _openConversation(sheetContext, id),
+        ),
+      ),
+    );
   }
 
   @override
@@ -97,25 +190,30 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     } else if (_changes.isEmpty) {
       body = OmiEmptyState(icon: Icons.history, title: l10n.reviewNoChangesTitle, message: l10n.reviewNoChangesBody);
     } else {
-      final dates = OmiDateFormat.of(context);
       final rows = <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, 0, OmiSpacing.xxs, OmiSpacing.xs),
           child: Text(l10n.reviewChangesIntro, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
         ),
       ];
-      String? lastHeader;
-      for (final change in _changes) {
-        final header = dates.dayHeader(change.createdAt);
-        if (header != lastHeader) {
-          lastHeader = header;
-          rows.add(_DayHeader(label: header));
-        }
-        rows.add(_ChangeRow(
-          change: change,
-          busy: _busy.contains(change.changeId),
-          onToggle: () => _setUndone(change, !change.undone),
+      for (final MapEntry(key: section, value: groups) in _groups.entries) {
+        rows.add(Padding(
+          padding: const EdgeInsets.only(top: OmiSpacing.sm),
+          child: ReviewSectionLabel(
+              key: ValueKey('recent_changes_section_${section.name}'), label: _sectionLabel(context, section)),
         ));
+        for (final group in groups) {
+          rows.add(Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: RecentChangeRow(
+              group: group,
+              busy: group.changes.any((c) => _busy.contains(c.changeId)),
+              onOpen: () => _openGroup(group),
+              onToggleAll: () => _toggleGroup(group),
+              onOpenTask: () => _openTasks(context),
+            ),
+          ));
+        }
       }
       if (_cursor != null) {
         rows.add(Center(
@@ -139,28 +237,21 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   }
 }
 
-class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.sm, OmiSpacing.xxs, OmiSpacing.xs),
-      child: Semantics(
-        header: true,
-        child: Text(
-          label.toUpperCase(),
-          style: OmiType.footnote
-              .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
-        ),
-      ),
-    );
-  }
+String _sectionLabel(BuildContext context, RecentChangeSection section) {
+  final l10n = context.l10n;
+  return switch (section) {
+    RecentChangeSection.terms => l10n.reviewChangesSectionTerms,
+    RecentChangeSection.memories => l10n.memories,
+    RecentChangeSection.tasks => l10n.tasks,
+    RecentChangeSection.titles => l10n.reviewChangesSectionTitles,
+    RecentChangeSection.people => l10n.people,
+    RecentChangeSection.conversations => l10n.conversations,
+    RecentChangeSection.other => l10n.reviewChangesSectionOther,
+  };
 }
 
-IconData _changeIcon(ReviewChangeKind kind) => switch (kind) {
+/// The glyph a change of [kind] wears wherever Omi's own changes are listed.
+IconData reviewChangeIcon(ReviewChangeKind kind) => switch (kind) {
       ReviewChangeKind.rename => Icons.spellcheck,
       ReviewChangeKind.mergeMemories => Icons.call_merge,
       ReviewChangeKind.updatePerson => Icons.person_outline,
@@ -169,71 +260,3 @@ IconData _changeIcon(ReviewChangeKind kind) => switch (kind) {
       ReviewChangeKind.closeTask => Icons.task_alt,
       ReviewChangeKind.other => Icons.auto_fix_high_outlined,
     };
-
-class _ChangeRow extends StatelessWidget {
-  const _ChangeRow({required this.change, required this.busy, required this.onToggle});
-
-  final ReviewChange change;
-  final bool busy;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final undone = change.undone;
-    return Container(
-      key: ValueKey('review_change_${change.changeId}'),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 14, OmiSpacing.xs, 14),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(undone ? Icons.undo : _changeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
-          ),
-          const SizedBox(width: OmiSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  change.title,
-                  style: undone
-                      ? OmiType.subhead.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.lineThrough)
-                      : OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                ),
-                if (undone)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(l10n.reviewChangeUndone, style: OmiType.footnote),
-                  )
-                else ...[
-                  if (change.reason != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(change.reason!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-                    ),
-                  if (change.snippet != null)
-                    Container(
-                      margin: const EdgeInsets.only(top: OmiSpacing.xs),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: OmiSpacing.xs),
-                      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                      child: Text(change.snippet!, style: OmiType.footnote),
-                    ),
-                ],
-              ],
-            ),
-          ),
-          OmiButton.tertiary(
-            key: ValueKey('review_change_toggle_${change.changeId}'),
-            label: undone ? l10n.redo : l10n.undo,
-            isLoading: busy,
-            onPressed: busy ? null : onToggle,
-          ),
-        ],
-      ),
-    );
-  }
-}

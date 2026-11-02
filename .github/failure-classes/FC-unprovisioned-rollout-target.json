@@ -11,5 +11,9 @@
     "backend/charts/**",
     ".github/workflows/**"
   ],
-  "status": "open"
+  "status": "open",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_ingest_archive.py",
+    "backend/docs/runbooks/sync-ingest-archive.md"
+  ]
 }

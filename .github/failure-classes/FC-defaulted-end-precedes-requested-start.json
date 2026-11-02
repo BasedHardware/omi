@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-defaulted-end-precedes-requested-start",
+  "violated_contract": "A default for a missing range bound must not place the range's end before the start the caller asked for. With a search_query, get_calendar_events_tool defaulted a missing end_date to now, so a future start_date produced an end in its own past; the widening step then padded that window backwards from now and the upcoming events the user asked about were never requested.",
+  "canonical_prevention": "Derive a defaulted end from the requested start (at least the documented span after it, never before now) before any widening runs. A hermetic test with a fake provider asserts that a future start with no end requests a window reaching past that start.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_calendar_search_future_start.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/tools/calendar_tools.py"
+  ],
+  "status": "open"
+}

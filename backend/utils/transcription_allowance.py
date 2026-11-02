@@ -23,6 +23,10 @@ class TranscriptionAllowance:
     # Total managed budget, distinct from remaining after usage. None is unlimited.
     limit_seconds: Optional[int] = 0
 
+    # Internal ladder estimate; intentionally absent from the released-client wire.
+    remaining_units: Optional[float] = None
+    budget_units: Optional[float] = None
+
     @property
     def managed(self) -> bool:
         return self.mode == 'managed'

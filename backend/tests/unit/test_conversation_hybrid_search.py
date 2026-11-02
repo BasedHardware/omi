@@ -135,6 +135,7 @@ class TestKeywordSearchConversationIds:
                 uid='uid1',
                 query='Steph',
                 per_page=7,
+                page=1,
                 include_discarded=False,
                 start_date=100,
                 end_date=200,

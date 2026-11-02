@@ -11,6 +11,9 @@ Optional: --page-size 5000 --project based-hardware --collection llm_gateway_att
 
 import argparse, collections, csv, hashlib, json, os, subprocess, sys, time, urllib.error, urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import auth_http  # noqa: E402
+
 PROJECT_DEFAULT = "based-hardware"
 COLLECTION_DEFAULT = "llm_gateway_attempts"
 ENV_SCRIPT = os.path.expanduser("~/.hermes/scripts/omi-prod-gcp-read-only-env.sh")
@@ -108,8 +111,10 @@ class Api:
             headers={"Authorization": "Bearer " + self.token, "Content-Type": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            with auth_http.open_authenticated(req, timeout=self.timeout) as r:
                 return json.loads(r.read().decode())
+        except auth_http.RedirectRefused:
+            raise RuntimeError("firestore redirect refused") from None
         except urllib.error.HTTPError as e:
             if e.code == 401 and attempt_refresh:
                 sys.stderr.write("  [401] refreshing token\n")

@@ -169,6 +169,118 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     assert "reactivate" in reason
 
 
+def _mock_new_buyer(monkeypatch, subscription_module):
+    """A buyer with no current paid subscription and no Stripe-side surprises."""
+    sub = subscription_module
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: None
+    sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: None)
+
+
+def _set_catalog_prices(monkeypatch):
+    monkeypatch.setenv("STRIPE_PLUS_MONTHLY_PRICE_ID", "price_plus_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID", "price_unlimited_v2_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID", "price_unlimited_v2_annual")
+    monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", "price_operator_monthly")
+
+
+def _subscriber(plan, subscription_id="sub_personal", price_id=None):
+    return lambda uid, **kwargs: SimpleNamespace(
+        plan=plan,
+        status="active",
+        cancel_at_period_end=False,
+        current_period_end=2_000_000_000,
+        stripe_subscription_id=subscription_id,
+        current_price_id=price_id,
+    )
+
+
+def test_new_buyer_single_plan_rejects_retired_prices(monkeypatch, subscription_module):
+    """Omi Pro (`unlimited_v2`) is the only plan sold. A buyer with no current
+    paid subscription cannot start on a retired plan's price."""
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for price_id in ("price_plus_monthly", "price_operator_monthly"):
+        error = sub.new_buyer_single_plan_violation("u1", price_id)
+        assert error is not None and "Omi Pro" in error, price_id
+
+
+def test_granted_plan_without_personal_subscription_is_not_exempt(monkeypatch, subscription_module):
+    """Organization grants store a one-time PaymentIntent (`pi_…`) or no id at
+    all; only a current *recurring* personal subscription exempts a caller.
+    A grant recipient is a new buyer for checkout."""
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    for granted_id in ("pi_org_grant", None):
+        sub.users_db.get_user_valid_subscription = _subscriber(PlanType.operator, granted_id)
+        assert sub.new_buyer_single_plan_violation("u1", "price_operator_monthly") is not None, granted_id
+
+
+def test_current_subscriber_exempt_only_for_their_own_plan(monkeypatch, subscription_module):
+    """A subscriber on a retired plan keeps managing that plan, but cannot buy
+    a different retired plan."""
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = _subscriber(PlanType.operator, price_id="price_operator_monthly")
+    assert sub.new_buyer_single_plan_violation("u1", "price_operator_monthly") is None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly") is not None
+    assert sub.new_buyer_single_plan_violation("u1", "price_unlimited_v2_monthly") is None
+
+
+def test_new_buyer_single_plan_accepts_unlimited_v2(monkeypatch, subscription_module):
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for price_id in ("price_unlimited_v2_monthly", "price_unlimited_v2_annual"):
+        assert sub.new_buyer_single_plan_violation("u1", price_id) is None, price_id
+
+
+def test_new_buyer_single_plan_kill_switch_restores_old_targets(monkeypatch, subscription_module):
+    for off_value in ("false", "0", "off", "no"):
+        monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", off_value)
+        sub = subscription_module
+        _mock_new_buyer(monkeypatch, sub)
+        _set_catalog_prices(monkeypatch)
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly") is None, off_value
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+
+
+def test_new_buyer_single_plan_rejection_metric_counts_by_reason_and_plan(monkeypatch, subscription_module):
+    from prometheus_client import REGISTRY
+
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+    labels = {"reason": "non_omi_pro_price", "plan": "plus"}
+    before = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels) or 0.0
+
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly") is not None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly") is not None
+    # A rejection-free call must not move the counter.
+    assert sub.new_buyer_single_plan_violation("u1", "price_unlimited_v2_monthly") is None
+
+    after = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels)
+    assert after == before + 2.0
+
+
+def test_retired_plan_change_allows_only_omi_pro_or_same_plan(monkeypatch, subscription_module):
+    sub = subscription_module
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+    assert sub.retired_plan_change_error(PlanType.plus, PlanType.unlimited_v2) is None
+    assert sub.retired_plan_change_error(PlanType.operator, PlanType.operator) is None
+    assert sub.retired_plan_change_error(PlanType.plus, PlanType.operator) is not None
+    assert sub.retired_plan_change_error(PlanType.unlimited_v2, PlanType.architect) is not None
+    monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", "false")
+    assert sub.retired_plan_change_error(PlanType.plus, PlanType.operator) is None
+
+
 def test_retained_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
     sub = subscription_module
     retained_price_id = "price_1RtJPm1F8wnoWYvwhVJ38kLb"

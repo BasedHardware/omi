@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
@@ -305,6 +306,14 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           value: provider.vadGateEnabled,
           onChanged: provider.onVadGateChanged,
         ),
+        OmiSettingsRow.toggle(
+          key: const Key('developer_home_daily_recaps_toggle'),
+          leading: const FaIcon(FontAwesomeIcons.calendarDay),
+          title: l10n.dailyRecapsOnHome,
+          subtitle: l10n.dailyRecapsOnHomeDescription,
+          value: HomeDailyRecapsSetting.enabled,
+          onChanged: (v) => setState(() => HomeDailyRecapsSetting.enabled = v),
+        ),
       ],
     );
   }
@@ -369,6 +378,21 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               body: ListView(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xxl),
                 children: [
+                  // Agent setup leads: most people open this page to connect Claude, ChatGPT or
+                  // Codex, and the web developer home is where prompts and keys live.
+                  OmiSettingsGroup(
+                    children: [
+                      OmiSettingsRow(
+                        key: const ValueKey('developer_connect_agent'),
+                        leading: const FaIcon(FontAwesomeIcons.terminal),
+                        title: l10n.connectAnAgent,
+                        subtitle: l10n.connectAnAgentSubtitle,
+                        showChevron: true,
+                        onTap: () => openSettingsDestination(context, SettingsDestination.connectAgent),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: OmiSpacing.xxl),
                   OmiSettingsGroup(
                     header: l10n.appCreators,
                     children: [

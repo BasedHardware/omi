@@ -11,7 +11,6 @@ from utils.conversations import action_item_refresh as flow
 @pytest.mark.parametrize(
     'state',
     [
-        {'completed': True, 'completed_at': NOW},
         {'folder_id': 'user-folder', 'manual_assignment': 'person'},
         {'due_at': NOW, 'apple_reminder_id': 'linked-reminder'},
         {'external_task_id': 'separate-export', 'exported': True},
@@ -51,6 +50,12 @@ def real_sync(world, monkeypatch):
     from utils import task_sync
 
     calls = []
+    # The provider leaf is fake; do not build real TLS/proxy pools for it.
+    real_client = task_sync.httpx.AsyncClient
+    transport = task_sync.httpx.MockTransport(lambda request: pytest.fail('provider HTTP forbidden'))
+    monkeypatch.setattr(
+        task_sync.httpx, 'AsyncClient', lambda **kwargs: real_client(transport=transport, trust_env=False, **kwargs)
+    )
 
     async def blocking(executor, fn, *args):
         return fn(*args)

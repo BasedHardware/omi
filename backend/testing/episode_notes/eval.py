@@ -9,10 +9,11 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from testing.episode_notes.cache import validate_output_path, write_json
-from testing.episode_notes.prompts import CANDIDATE_MODEL, SCORING_MODEL
+from testing.episode_notes.prompts import CANDIDATE_MODEL, GENERATION_REVIEW_PROMPT, SCORING_MODEL
 from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT, evaluate
 from testing.episode_notes.schema import FIXTURES, LLMCallError, LLMResult, load_fixtures
-from config.episode_writer import EFFORTS, SELECTIONS, EpisodeWriterSettings
+from config.episode_writer import EFFORTS
+from testing.episode_notes.settings import EpisodeEvalSettings
 
 
 class CompatibleEndpoint:
@@ -132,8 +133,6 @@ def main(argv: list[str] | None = None) -> None:
         default=0,
         help='High/xhigh byte ceiling; 0 (production default) disables it',
     )
-    parser.add_argument('--selection', choices=('compact', *SELECTIONS), default='compact')
-    parser.add_argument('--jev-threshold', type=float, default=0.70)
     parser.add_argument('--tiered', action='store_true')
     parser.add_argument('--apply-deadlines', action='store_true')
     parser.add_argument('--writer-timeout', type=float, default=120)
@@ -153,13 +152,6 @@ def main(argv: list[str] | None = None) -> None:
             'fact_check',
             'facts_first',
             'best_two',
-            'jev_veto',
-            'jev_per_source',
-            'jev_per_source_pool',
-            'jev_rank',
-            'jev_rank_verify',
-            'jev_discussed',
-            'jev_choice',
         ),
         default='none',
     )
@@ -198,8 +190,6 @@ def main(argv: list[str] | None = None) -> None:
         ]
     }
 
-    from utils.conversations.episode_jev import JEV_SELECTOR_PROMPT
-
     jev = None
     from threading import Lock
 
@@ -210,7 +200,7 @@ def main(argv: list[str] | None = None) -> None:
         role = 'reference' if prompt == REFERENCE_PROMPT else 'judge' if prompt == JUDGE_PROMPT else 'candidate'
         result = None
         try:
-            if prompt == JEV_SELECTOR_PROMPT:
+            if prompt == GENERATION_REVIEW_PROMPT:
                 role = 'jev'
                 if jev is None:
                     from testing.episode_notes.systemone import SystemOneEndpoint
@@ -250,12 +240,10 @@ def main(argv: list[str] | None = None) -> None:
             episode_ids=tuple(args.episode_id),
             reference_model=args.reference_model,
             judge_model=args.judge_model,
-            settings=EpisodeWriterSettings(
-                args.candidate_effort,
-                args.selection,
-                not args.no_claims,
+            settings=EpisodeEvalSettings(
+                effort=args.candidate_effort,
+                claims=not args.no_claims,
                 thinking_max_input_bytes=args.thinking_max_input_bytes,
-                jev_threshold=args.jev_threshold,
                 tiered=args.tiered,
                 apply_deadlines=args.apply_deadlines,
                 writer_timeout=args.writer_timeout,

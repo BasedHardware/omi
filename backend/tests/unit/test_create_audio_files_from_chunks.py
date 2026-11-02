@@ -48,7 +48,7 @@ def _fake_client(blobs_by_prefix):
     """GCS client double: bucket().list_blobs(prefix=...) serves canned blobs."""
 
     class _Bucket:
-        def list_blobs(self, prefix=None):
+        def list_blobs(self, prefix=None, **kwargs):
             return blobs_by_prefix.get(prefix, [])
 
     class _Client:

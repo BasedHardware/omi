@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -793,7 +794,8 @@ class SiriIntegration extends SiriEventsApi {
         .map(
           (row) => SiriConversation(
             id: row.id,
-            title: row.structured.title,
+            // Siri shows the title: repair legacy citation debris as every display surface does.
+            title: presentableConversationTitle(row),
             summary: row.structured.overview,
             startedAtMs: (row.startedAt ?? row.createdAt).millisecondsSinceEpoch,
             updatedAtMs: (row.finishedAt ?? row.createdAt).millisecondsSinceEpoch,
@@ -881,8 +883,6 @@ class SiriIntegration extends SiriEventsApi {
                       limit: limit,
                       offset: cursor == null ? offset : 0,
                       cursor: cursor,
-                      view: MemoryReadView.all,
-                      forceView: true,
                     ))
                 .timeout(const Duration(seconds: 10));
         if (_uid != uid || _accountGeneration != generation) return;
