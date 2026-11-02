@@ -324,6 +324,14 @@ def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str, *, policy
     raise RuntimeError('sync job policy persistence contended')  # Never expose an unrecorded policy.
 
 
+def _sequenced_stale_seconds() -> int:
+    try:
+        seconds = int(os.getenv('SYNC_SEQUENCED_STALE_SECONDS', '43200'))
+    except (ValueError, TypeError):
+        seconds = 43200
+    return seconds if seconds > 0 else 43200
+
+
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:
     """Return whether a 'processing' job has gone silent past the stale bound.
 
@@ -344,12 +352,10 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     which case no queue retry is coming and the marker's horizon is the
     recovery bound.
     """
-    # The UID owner/sweeper, not a polling reader, owns liveness for accepted
-    # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
-    # direct Cloud Tasks dispatch-stale threshold for a heavy account.
-    if job.get('dispatch_mode') == 'sequenced':
-        return False
+    status = job.get('status')
+    dispatch_mode = job.get('dispatch_mode')
     reference_time = time.time() if now is None else now
+
     # Marker read before any status branching: a budget expiry can land during
     # staged-file download or other post-lock work before the attempt marks the
     # job processing, and the delayed replacement is scheduled past the
@@ -364,24 +370,32 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
         else None
     )
     deferred = deferred_until is not None
-    status = job.get('status')
-    if status == 'processing':
+
+    if (
+        status == 'queued'
+        and not (dispatch_mode == 'cloud_tasks' and deferred)
+        and (job.get('started_at') is not None or job.get('attempt') is not None)
+    ):
+        return False
+
+    if dispatch_mode == 'sequenced' and status in ('queued', 'processing'):
+        # The UID owner/sweeper owns liveness for accepted sequenced jobs.
+        # Waiting in the per-UID queue can take several hours on heavy accounts.
+        # However, an unstarted queued or lost processing sequenced job exceeding
+        # the 12h wait limit must not deadlock the account queue forever (#21943).
+        threshold = _sequenced_stale_seconds()
+    elif status == 'processing':
         if deferred and reference_time < deferred_until:
             return False
         threshold = STALE_THRESHOLD_SECONDS
-    elif (
-        status == 'queued'
-        and job.get('dispatch_mode') == 'cloud_tasks'
-        and deferred
-        and reference_time < deferred_until
-    ):
+    elif status == 'queued' and dispatch_mode == 'cloud_tasks' and deferred and reference_time < deferred_until:
         # The replacement is deliberately scheduled ~31 minutes out (past the
         # preserved lock's TTL); the 30-minute queued-dispatch-stale threshold
         # would classify it dispatch-lost before it is due. Guard the window
         # exactly as the processing branch does, then resume normal
         # queued-dispatch staleness once the replacement is overdue.
         return False
-    elif status == 'queued' and job.get('dispatch_mode') == 'cloud_tasks' and deferred:
+    elif status == 'queued' and dispatch_mode == 'cloud_tasks' and deferred:
         # Overdue deferred marker: the final replacement either exhausted the
         # attempt contract (deferrals_exhausted) or was never scheduled, and no
         # sequencer owner or run lock remains to resume the job. A prior
@@ -393,12 +407,7 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
         # recovery signal: make the queued state stale on the processing
         # threshold, the same bound the marker-horizon comment above promises.
         threshold = STALE_THRESHOLD_SECONDS
-    elif (
-        status == 'queued'
-        and job.get('dispatch_mode') == 'cloud_tasks'
-        and job.get('started_at') is None
-        and job.get('attempt') is None
-    ):
+    elif status == 'queued' and dispatch_mode == 'cloud_tasks':
         threshold = QUEUED_DISPATCH_STALE_SECONDS
     else:
         return False
