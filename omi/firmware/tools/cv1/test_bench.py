@@ -50,7 +50,7 @@ class BenchTests(unittest.TestCase):
   (index.parent/record['source']['snapshot']).write_text('{}')
   with self.assertRaises(ValueError):bench.validate_corpus(record,index.parent)
  def test_provenance_separation(self):
-  for value in [{'schema_version':1,'scenario':'x'},{'schema_version':1,'provenance':'synthetic','scenario':'x','source':{}},{'schema_version':1,'provenance':'actual','expected':True}]:
+  for value in [{'schema_version':1,'scenario':'x'},{'schema_version':1,'provenance':'synthetic','scenario':'x','source':{}},{'schema_version':1,'provenance':'operator_supplied','expected':True}]:
    with self.assertRaises(ValueError):bench.validate_corpus(value,self.root)
  def test_success_cleanup(self):
   r=json.loads(bench.synthetic_run(self.root).read_text());self.assertEqual(r['state'],'completed');self.assertTrue(r['cleanup_verified']);self.assertFalse(r['hardware_access'])

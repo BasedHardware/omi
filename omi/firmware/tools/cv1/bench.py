@@ -174,8 +174,8 @@ def manifest(folder, role, artifacts, revision, baseline=None):
 
 
 def validate_corpus(record, root):
-    if record.get('schema_version') != 1 or record.get('provenance') not in ('actual', 'synthetic'):
-        raise ValueError('explicit actual/synthetic provenance required')
+    if record.get('schema_version') != 1 or record.get('provenance') not in ('operator_supplied', 'synthetic'):
+        raise ValueError('explicit operator_supplied/synthetic provenance required')
     if record['provenance'] == 'synthetic':
         if 'source' in record or 'observation' in record or not record.get('scenario'):
             raise ValueError('synthetic scenarios must not impersonate observed receipts')
@@ -183,7 +183,7 @@ def validate_corpus(record, root):
             raise ValueError('synthetic stimulus/expected required')
     else:
         if any(key in record for key in ('expected', 'stimulus', 'scenario')):
-            raise ValueError('actual observations cannot include invented expectations/stimuli')
+            raise ValueError('operator-supplied observations cannot include invented expectations/stimuli')
         source = record['source']
         if source['kind'] != 'ble_scan_json':
             raise ValueError('only existing BLE scan receipts currently supported')
@@ -191,10 +191,10 @@ def validate_corpus(record, root):
         if path.parent != Path(root).resolve():
             raise ValueError('receipt snapshot must remain within corpus')
         if digest(path) != source['sha256']:
-            raise ValueError('actual source hash mismatch')
+            raise ValueError('supplied source hash mismatch')
         observation = json.loads(path.read_text())
         if observation != record['observation']:
-            raise ValueError('actual payload differs from receipt')
+            raise ValueError('supplied payload differs from receipt')
         if observation.get('state') != 'completed' or observation.get('error') is not None:
             raise ValueError('not a completed observation')
     return True
@@ -211,7 +211,7 @@ def corpus(folder, receipts):
         if not target.exists():
             with target.open('xb') as out:
                 out.write(src.read_bytes())
-        record = {'schema_version': 1, 'provenance': 'actual',
+        record = {'schema_version': 1, 'provenance': 'operator_supplied',
                   'source': {'kind': 'ble_scan_json', 'original_path': str(src.resolve()),
                              'snapshot': name, 'sha256': digest(src)},
                   'observation': json.loads(target.read_text())}

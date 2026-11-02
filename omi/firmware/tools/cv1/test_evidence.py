@@ -37,4 +37,5 @@ class EvidenceTests(unittest.TestCase):
  def test_ble_replay_excludes_synthetic(self):
   p=self.root/'receipt.json';p.write_text(json.dumps({'state':'completed','error':None,'run_id':'synthetic-test-receipt','results':[],'match_count':0}));index=bench.corpus(self.root/'corpus',[p]);report=evidence.replay_ble(index)
   self.assertEqual(len(report['observations']),1);self.assertFalse(report['device_emulation'])
+  self.assertEqual(report['observations'][0]['provenance'],'operator_supplied');self.assertIn('cannot prove',report['limitations'][0])
 if __name__=='__main__':unittest.main()

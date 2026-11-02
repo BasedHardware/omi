@@ -26,7 +26,7 @@ def import_capture(output,kind,metadata,raw=None):
   if bench.digest(target)!=before or bench.digest(source)!=before:raise ValueError('capture changed during import')
   sources.append({'snapshot':name,'original_path':str(source.resolve()),'sha256':before,'size_bytes':target.stat().st_size})
  if kind=='uart_capture' and raw is not None and (root/'raw.bin').stat().st_size!=value['bytes']:raise ValueError('UART raw/metadata byte count mismatch')
- record={'schema_version':1,'provenance':'actual','evidence_type':kind,'sources':sources,'metadata':value,
+ record={'schema_version':1,'provenance':'operator_supplied','evidence_type':kind,'sources':sources,'metadata':value,
          'timing_model':'host receipt timestamps only; raw byte timing unknown','hardware_access':False}
  bench.save(root/'capture.json',record,exclusive=True);validate_capture(root/'capture.json')
  return root/'capture.json'
@@ -34,7 +34,7 @@ def import_capture(output,kind,metadata,raw=None):
 
 def validate_capture(path):
  path=Path(path);record=json.loads(path.read_text())
- if record.get('schema_version')!=1 or record.get('provenance')!='actual' or record.get('evidence_type') not in ('uart_capture','debug_capture'):raise ValueError('not an actual capture envelope')
+ if record.get('schema_version')!=1 or record.get('provenance')!='operator_supplied' or record.get('evidence_type') not in ('uart_capture','debug_capture'):raise ValueError('not an actual capture envelope')
  for source in record['sources']:
   file=(path.parent/source['snapshot']).resolve(strict=True)
   if file.parent!=path.parent.resolve() or bench.digest(file)!=source['sha256'] or file.stat().st_size!=source['size_bytes']:raise ValueError('capture file hash/path mismatch')
@@ -51,7 +51,7 @@ def replay_uart(path,chunk_size=64):
  offset=0
  with raw.open('rb') as stream:
   for block in iter(lambda:stream.read(chunk_size),b''):
-   yield {'provenance':'actual','offset':offset,'data_base64':base64.b64encode(block).decode(),
+   yield {'provenance':'operator_supplied','offset':offset,'data_base64':base64.b64encode(block).decode(),
           'timing':'unspecified; replay chunk boundaries are synthetic, not original UART timing'}
    offset+=len(block)
 
@@ -100,12 +100,12 @@ def replay_ble(index):
   bench.validate_corpus(record,path.parent)
   if record['provenance']=='synthetic':continue
   value=record['observation']
-  summaries.append({'provenance':'actual','run_id':value.get('run_id'),'scan_started_at':value.get('scan_started_at'),
+  summaries.append({'provenance':'operator_supplied','run_id':value.get('run_id'),'scan_started_at':value.get('scan_started_at'),
    'completed_at':value.get('completed_at'),'authorization':value.get('authorization'),'state':value.get('state'),
    'matching_ids':sorted(x['peripheral_id'] for x in value.get('results',[])),
    'match_count':value.get('match_count'),'source_sha256':record['source']['sha256']})
  return {'schema_version':1,'layer':'offline receipt replay','device_emulation':False,'observations':summaries,
-         'limitations':['no packet timing reconstruction','no GATT/audio/UART behavior inferred','power-state labels come from operator history, not radio data']}
+         'limitations':['receipts are supplied by the operator; this tool cannot prove a device produced them','no packet timing reconstruction','no GATT/audio/UART behavior inferred','power-state labels come from operator history, not radio data']}
 
 
 def main():

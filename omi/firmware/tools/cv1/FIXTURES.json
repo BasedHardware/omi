@@ -101,21 +101,6 @@
       "path": "startup-fixtures/startup-2.log",
       "sha256": "8680ae39e2442307b88420fcb71bbae865da280a3e53fe7d96ee2a34f0a28f0c",
       "bytes": 3576
-    },
-    {
-      "path": "telemetry-fixtures/manifest.json",
-      "sha256": "c910d44ab62425ce1fe8679ab99c534763b9f581416ab55df9342a8c7256acbb",
-      "bytes": 727
-    },
-    {
-      "path": "telemetry-fixtures/proposed-policy.json",
-      "sha256": "2cdd6a886ab93d2cbe73a9b2a7b272dc39d2e41d1e49c692d3ef600bf70acfb0",
-      "bytes": 1086
-    },
-    {
-      "path": "telemetry-fixtures/sanitized-telemetry.json",
-      "sha256": "224820920fd0d320e5c5efd21a8a3b7a23e798ab1b59973ccd7e806e77031843",
-      "bytes": 13418
     }
   ]
 }

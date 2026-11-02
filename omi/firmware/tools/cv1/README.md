@@ -30,11 +30,11 @@ This is a fixed key-free build profile for reviewed source and an existing trust
 
 `bench.py`, `artifact_preflight.py` and `job_dry_run.py` are offline models/planners, not a live controller. They cannot reset, flash, erase or authorize a release. Artifact admission retains exact hash/board/layout/role/mode gates. Installed b0n is hash-only; provision-key metadata equality is not ECDSA authentication. See [validation model](../../docs/validation-model.md). A host test pass cannot supply missing independent BLE, OTA interruption/recovery or signed-image acceptance evidence.
 
-Startup/telemetry fixtures are sanitized derivatives; radio fixtures omit unrelated device identifiers. They characterize observed formats and failures, not a full firmware emulator. Shared C parameter cases, Python methods, compilation and actual device evidence are separate coverage categories.
+Startup fixtures are sanitized derivatives; radio fixtures omit unrelated device identifiers. They characterize observed formats and failures, not a full firmware emulator. Shared C parameter cases, Python methods, compilation and actual device evidence are separate coverage categories. Imported receipts and captures are labelled `operator_supplied`: these tools check that their bytes are unchanged, not that a device produced them, so they are not hardware evidence on their own.
 
 ## Radio tests on an opened board
 
-The mainboard has no antenna part. `RF_COM` ends at pogo pad PP1, labelled "Dual band Antenna" in `omi/hardware/consumer/electrical/mainboard/schematic.pdf`, and the BOM lists six `CA02-PG07` pogo pins and no antenna, so the aluminum covers appear to be the radiator. A board on a jig with its covers off barely radiates: expect advertising near a receiver's sensitivity limit, around -100 dBm or missing altogether. Treat that as a fixture condition, not a firmware or RF fault, and restore the antenna contact before drawing any conclusion from BLE range or RSSI.
+The mainboard has no antenna part. `RF_COM` ends at pogo pad PP1, labelled "Dual band Antenna" in `omi/hardware/consumer/electrical/mainboard/schematic.pdf`, and the BOM lists six `CA02-PG07` pogo pins and no antenna, so the aluminum covers appear to be the radiator; no document states this and it has not been tested. With its covers off, a board on a jig may have no working antenna contact. One such board advertised at about -100 dBm on a nearby Mac and was not seen at all by another. That is one observation, not a specification, and it does not show that any other board is healthy. Restore the antenna contact before drawing a conclusion from BLE range or RSSI, in either direction.
 
 ## Official and personal firmware
 
