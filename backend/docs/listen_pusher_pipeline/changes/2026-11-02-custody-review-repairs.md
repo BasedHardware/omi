@@ -6,6 +6,9 @@ well as projections, fails closed on listing/proof errors, and excludes only the
 receipt currently being projected. A conflicting extended projection cannot hide
 earlier custody. Raw playback also gives earlier media creation times precedence
 over later overlapping raw receipts, independent of listing/window order.
+Native-rate raw captures are compared in the requested replay rendition, so a
+matching 16 kHz replay of a 44.1 kHz capture is verified rather than rejected.
+The native captured bytes remain unchanged.
 
 Frame rendition offsets and lengths use cumulative whole-stream resampler
 boundaries. Original capture offsets/counts remain available to readers at other
