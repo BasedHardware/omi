@@ -41,6 +41,7 @@ overlay:
       env:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
+        STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
@@ -258,6 +259,7 @@ overlay:
       env:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
+        STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
@@ -514,6 +516,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -867,6 +870,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -1255,6 +1259,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -1608,6 +1613,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}

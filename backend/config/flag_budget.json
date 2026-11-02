@@ -20,8 +20,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 222,
+  "count": 223,
   "names": {
+    "STT_GPU_FLEET_OFF": {"owner": "gpufleetoff / two-lane lead", "review_by": "2026-11-15"},
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_UID_ALLOWLIST": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},

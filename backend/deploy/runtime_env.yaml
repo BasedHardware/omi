@@ -2391,6 +2391,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_GPU_FLEET_OFF:
+            value: 'true'
+            category: ops_kill
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2602,6 +2605,9 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          STT_GPU_FLEET_OFF:
+            value: 'true'
+            category: ops_kill
           OMI_FLAGS_FIRESTORE_PROJECT:
             value: based-hardware
             category: service_discovery
@@ -3141,6 +3147,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
@@ -3540,6 +3549,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
@@ -3933,6 +3945,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
@@ -4260,6 +4275,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            STT_GPU_FLEET_OFF:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
               value: enrichment
