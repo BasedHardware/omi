@@ -22,7 +22,7 @@ from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
-from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, lineage_digest
+from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.sync import final_pass_rehome
 
 
@@ -287,7 +287,7 @@ async def test_each_speech_unit_keeps_its_own_language_and_a_silent_unit_never_i
 
 
 @pytest.mark.asyncio
-async def test_admission_records_the_lineage_digest_and_each_units_frozen_language(monkeypatch):
+async def test_admission_records_the_frozen_lineage_and_each_units_frozen_language(monkeypatch):
     # A later missing-input repair replays exactly these; it never re-derives them (lead 6d0246).
     speaking(monkeypatch, SPEECH, None)
     answers = iter([decision('en', True), decision('und', False, 0.0)])
@@ -297,7 +297,8 @@ async def test_admission_records_the_lineage_digest_and_each_units_frozen_langua
         monkeypatch, user_language='en', unit_count=2, decision=lambda *a, **k: next(answers), store=store
     )
     record = intake.admit.call_args.kwargs['intake']
-    assert record['repair_lineage_sha256'] == lineage_digest(None)
+    for context in contexts:  # exactly what admission froze into each staged unit
+        assert recorded_lineage(record['repair_lineage']) == {key: context.get(key) for key in LINEAGE_KEYS}
     assert record['repair_languages'] == {
         work.segment_id: {key: context[key] for key in LANGUAGE_KEYS} for work, context in zip(staged, contexts)
     }

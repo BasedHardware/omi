@@ -34,7 +34,7 @@ from database.sync_ledger import (
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
-from utils.batch_pipeline.repair_lineage import lineage_digest
+from utils.batch_pipeline.repair_lineage import lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -869,7 +869,7 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
-                'repair_lineage_sha256': lineage_digest(intake_context),
+                'repair_lineage': lineage_record(intake_context),
                 'repair_languages': {item.segment_id: repair_languages[item.segment_id] for item in items},
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).

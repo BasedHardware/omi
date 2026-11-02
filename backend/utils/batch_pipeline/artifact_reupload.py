@@ -11,7 +11,7 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.capture_decode import decode_units
-from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, lineage_digest
+from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
 
 logger = logging.getLogger(__name__)
@@ -44,24 +44,27 @@ def _hold(reason):
 def _repair_evidence(store, binding, snapshots, intake_context):
     """The original projection inputs, from the durable intake record only; holds when absent.
 
-    Admission records a lineage digest and each unit's frozen language decision
-    (lead 6d0246). The retried request must reproduce the digest exactly, and
-    repair replays the recorded decision instead of probing again. A legacy
-    intake has neither, so it holds with phone custody and its audio intact.
+    Admission records the frozen lineage fields and each unit's language decision
+    (lead 6d0246). Repair restages with both as recorded: the retried request's
+    lineage fields are discarded, and no unit is probed again. A legacy intake
+    has neither, so it holds with phone custody and its audio intact.
     """
     intake = store.run(lambda tx: tx.get('intakes', binding.job_id)) or {}
-    digest = intake.get('repair_lineage_sha256')
-    if digest is None:
+    record = intake.get('repair_lineage')
+    if record is None:
         raise _hold('legacy_lineage_unproven')
-    if lineage_digest(intake_context) != digest:
-        raise _hold('lineage_changed')
+    try:
+        lineage = recorded_lineage(record)
+    except (TypeError, ValueError):
+        raise _hold('lineage_unreadable') from None
+    context = {key: value for key, value in (intake_context or {}).items() if key not in LINEAGE_KEYS}
     languages = {}
     for sid in snapshots:
         proof = (intake.get('repair_languages') or {}).get(sid)
         if not isinstance(proof, dict) or not isinstance(proof.get('stt_language'), str):
             raise _hold('language_unproven')
         languages[sid] = {key: proof.get(key) for key in LANGUAGE_KEYS}
-    return dict(intake_context or {}), languages
+    return {**context, **lineage}, languages
 
 
 def _original_unit(jobs, index, unit):

@@ -20,7 +20,7 @@ from utils.sync.content_id import compute_sync_segment_id
 from utils.batch_pipeline.audio import audio_unit, read_context
 from utils.stt import batch_language
 from utils.stt.batch_language import LanguageDecision
-from utils.batch_pipeline.repair_lineage import lineage_digest
+from utils.batch_pipeline.repair_lineage import LINEAGE_KEYS, lineage_record, recorded_lineage
 
 ORIGINAL_LANGUAGE = {
     'stt_language': 'en',
@@ -28,6 +28,15 @@ ORIGINAL_LANGUAGE = {
     'stt_language_confidence': 0.97,
     'stt_language_probe_seconds': 12.0,
 }
+ORIGINAL_LINEAGE = {
+    'recording_session_id': 'original',
+    'audio_start_seconds': 100.0,
+    'audio_end_seconds': 160.0,
+    'geolocation': {'latitude': 1.5, 'longitude': 2.5},
+    'capture_evidence_claims': {'a.bin': [[0, 1], [2, 3]]},
+}
+# A legitimate retry: the router's skew offset shrank, so both bounds moved (Luna r2).
+RETRY_LINEAGE = {**ORIGINAL_LINEAGE, 'audio_start_seconds': 104.0, 'audio_end_seconds': 164.0}
 
 
 def test_batch_checkpoint_is_not_a_legacy_reupload_checkpoint(tmp_path, monkeypatch):
@@ -142,7 +151,7 @@ def test_reupload_never_reclaims_other_content_or_changed_work(setup, change):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'change',
-    ['none', 'boundary', 'extra_unit', 'foreign_device', 'open_intent', 'lineage_changed', 'no_language', 'legacy'],
+    ['none', 'retry_lineage_moved', 'boundary', 'extra_unit', 'foreign_device', 'open_intent', 'no_language', 'legacy'],
 )
 async def test_whole_upload_repairs_only_absent_unit_then_replays_without_staging(setup, monkeypatch, change):
     from database import batch_pipeline_store
@@ -155,9 +164,7 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
         intake_key = ('batch_pipeline_prod_intakes', binding.job_id)
         client.rows[intake_key] = {
             **client.rows.get(intake_key, {}),
-            'repair_lineage_sha256': lineage_digest(
-                {'recording_session_id': 'original'} if change == 'lineage_changed' else None
-            ),
+            'repair_lineage': lineage_record(ORIGINAL_LINEAGE),
             'repair_languages': {} if change == 'no_language' else {'bad': ORIGINAL_LANGUAGE},
         }
     ProjectionStore(store).complete_partial(binding, 102, PARTIAL_ACCOUNTING)
@@ -191,15 +198,17 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
         **upload_arguments(),
         'client_platform': binding.client_platform,
         'client_device_id': 'foreign-device' if change == 'foreign_device' else binding.client_device_id,
+        # The router re-normalizes clock bounds against the current server time on every retry.
+        'intake_context': RETRY_LINEAGE if change == 'retry_lineage_moved' else ORIGINAL_LINEAGE,
     }
     before_good = deepcopy(row(client, 'jobs', 'good'))
     response = await intake.accept_upload(**arguments, decode=lambda ceiling: iter(units))
-    if change != 'none':
+    if change not in {'none', 'retry_lineage_moved'}:
         assert response.status_code == 503
         assert row(client)['state'] == 'quarantined' and row(client)['artifact_disposition']['state'] == 'missing'
         assert row(client, 'jobs', 'good') == before_good
         assert not probes
-        if change in {'lineage_changed', 'no_language', 'legacy'}:
+        if change in {'no_language', 'legacy'}:
             assert not staged_ids  # evidence holds before any decode or staging
         return
     assert response.status_code == 202
@@ -209,6 +218,8 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
     assert staged_ids == ['bad'] and not probes
     assert contexts[0]['job_id'] == binding.job_id and contexts[0]['segment_id'] == 'bad'
     assert {key: contexts[0][key] for key in ORIGINAL_LANGUAGE} == ORIGINAL_LANGUAGE
+    # Restaged with the lineage frozen at admission, never the retried request's.
+    assert {key: contexts[0][key] for key in LINEAGE_KEYS} == ORIGINAL_LINEAGE
     assert row(client, 'jobs', 'good') == before_good
     assert 'artifact_missing_units' not in ledger_row(client, binding)
 
@@ -226,7 +237,6 @@ def evidence_store(intake):
 
 
 BINDING = SimpleNamespace(job_id='job')
-LINEAGE = {'recording_session_id': 'original', 'audio_start_seconds': 1.0, 'filenames': ['a.bin']}
 
 
 def held_reason(store, context):
@@ -237,29 +247,37 @@ def held_reason(store, context):
     return error.value.block_reason
 
 
-def test_new_intake_repair_requires_the_exact_original_lineage_and_language():
+def test_repair_restages_the_recorded_lineage_and_language_whatever_the_retry_sends():
     from utils.batch_pipeline.artifact_reupload import _repair_evidence
 
-    intake = {'repair_lineage_sha256': lineage_digest(LINEAGE), 'repair_languages': {'bad': ORIGINAL_LANGUAGE}}
+    intake = {'repair_lineage': lineage_record(ORIGINAL_LINEAGE), 'repair_languages': {'bad': ORIGINAL_LANGUAGE}}
     store = evidence_store(intake)
-    context, languages = _repair_evidence(store, BINDING, {'bad': {}}, LINEAGE)
-    assert context == LINEAGE and languages == {'bad': ORIGINAL_LANGUAGE}
-    for changed in (
-        {**LINEAGE, 'recording_session_id': 'other'},
-        {**LINEAGE, 'audio_start_seconds': 2.0},
-        {k: v for k, v in LINEAGE.items() if k != 'recording_session_id'},
-        {**LINEAGE, 'capture_evidence_claims': [{'kind': 'synthetic'}]},
+    for retried in (
+        ORIGINAL_LINEAGE,
+        RETRY_LINEAGE,
+        {k: v for k, v in ORIGINAL_LINEAGE.items() if k != 'recording_session_id'},
+        {**ORIGINAL_LINEAGE, 'capture_evidence_claims': None},
         None,
     ):
-        assert held_reason(store, changed) == 'lineage_changed'
+        context, languages = _repair_evidence(store, BINDING, {'bad': {}}, {**(retried or {}), 'filenames': ['a.bin']})
+        assert context == {**ORIGINAL_LINEAGE, 'filenames': ['a.bin']}
+        assert languages == {'bad': ORIGINAL_LANGUAGE}
     for proofs in ({}, {'bad': None}, {'bad': {'stt_language': None}}):
-        assert held_reason(evidence_store({**intake, 'repair_languages': proofs}), LINEAGE) == 'language_unproven'
+        assert held_reason(evidence_store({**intake, 'repair_languages': proofs}), None) == 'language_unproven'
+    for record in ('not json', '[]', '{"recording_session_id": "x"}', 7):
+        assert held_reason(evidence_store({**intake, 'repair_lineage': record}), None) == 'lineage_unreadable'
+
+
+def test_recorded_lineage_survives_nested_claim_arrays_as_one_string():
+    # Firestore rejects arrays of arrays; the record is a single canonical JSON string.
+    record = lineage_record(ORIGINAL_LINEAGE)
+    assert isinstance(record, str) and recorded_lineage(record) == ORIGINAL_LINEAGE
 
 
 @pytest.mark.parametrize('intake', [None, {}, {'repair_languages': {'bad': ORIGINAL_LANGUAGE}}])
-def test_legacy_intake_without_a_lineage_digest_always_holds(intake):
-    # The original context lived only in the missing artifact; nothing durable proves it.
-    for context in (LINEAGE, None):
+def test_legacy_intake_without_recorded_lineage_always_holds(intake):
+    # The original context lived only in the missing artifact; nothing durable records it.
+    for context in (ORIGINAL_LINEAGE, None):
         assert held_reason(evidence_store(intake), context) == 'legacy_lineage_unproven'
 
 
