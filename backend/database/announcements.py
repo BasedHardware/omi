@@ -1,10 +1,37 @@
+import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from models.announcement import Announcement, AnnouncementType, TriggerType
+
+logger = logging.getLogger(__name__)
+
+
+def _clean_uid(uid: Optional[str]) -> str:
+    cleaned = (uid or "").strip()
+    if not cleaned:
+        raise ValueError("uid cannot be empty")
+    return cleaned
+
+
+def _clean_test_uids(values: Iterable[object]) -> set[str]:
+    """Normalize legacy target values while retaining the runtime string check."""
+    return {value.strip() for value in values if isinstance(value, str)}
+
+
+def _has_uid(uid: Optional[str]) -> bool:
+    return bool(uid and uid.strip())
+
+
+def _clean_id(id_val: Optional[str], name: str = "id") -> str:
+    cleaned = (id_val or "").strip()
+    if not cleaned:
+        raise ValueError(f"{name} cannot be empty")
+    return cleaned
 
 
 def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -14,36 +41,57 @@ def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
 
 
 def _doc_to_announcement(doc: Any) -> Optional[Announcement]:
-    raw: object = doc.to_dict()
+    if not getattr(doc, "exists", True):
+        return None
+    raw: object = getattr(doc, "to_dict", lambda: None)()
     if not isinstance(raw, dict):
         return None
     data = dict(cast(Dict[str, Any], raw))
     if not data.get("id") and getattr(doc, "id", None):
         data["id"] = str(doc.id)
-    return Announcement.from_dict(data)
+    try:
+        return Announcement.from_dict(data)
+    except Exception as exc:
+        logger.warning(f"Skipping malformed announcement doc {getattr(doc, 'id', 'unknown')}: {exc}")
+        return None
 
 
-def get_announcement_by_id(announcement_id: str) -> Optional[Announcement]:
+def get_announcement_by_id(announcement_id: str, *, firestore_client: Optional[Any] = None) -> Optional[Announcement]:
     """Get a single announcement by ID."""
-    doc_ref = db.collection("announcements").document(announcement_id)
-    doc = doc_ref.get()
-    if getattr(doc, "exists", False):
-        return _doc_to_announcement(doc)
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return None
+    client = firestore_client if firestore_client is not None else db
+    try:
+        doc_ref = client.collection("announcements").document(clean_id)
+        doc = doc_ref.get()
+        if getattr(doc, "exists", False):
+            return _doc_to_announcement(doc)
+    except Exception as exc:
+        logger.warning(f"Failed to fetch announcement id={clean_id}: {exc}")
     return None
 
 
-def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]:
+def get_app_changelogs(
+    from_version: str, to_version: str, *, firestore_client: Optional[Any] = None
+) -> List[Announcement]:
     """
     Get all app changelog announcements between two versions.
     Returns changelogs where from_version < app_version <= to_version.
     Sorted by app_version descending (newest first).
     """
-    announcements_ref = db.collection("announcements")
+    client = firestore_client if firestore_client is not None else db
+    announcements_ref = client.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.CHANGELOG.value)).where(
         filter=FieldFilter("active", "==", True)
     )
 
-    docs = query.stream()
+    try:
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream app changelogs: {exc}")
+        return []
+
     changelogs: List[Announcement] = []
 
     for doc in docs:
@@ -64,18 +112,29 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     return changelogs
 
 
-def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> List[Announcement]:
+def get_recent_changelogs(
+    limit: int = 5, max_version: Optional[str] = None, *, firestore_client: Optional[Any] = None
+) -> List[Announcement]:
     """
     Get the most recent app changelog announcements.
     Returns up to `limit` changelogs sorted by version descending.
     If max_version is provided, only returns changelogs with app_version <= max_version.
     """
-    announcements_ref = db.collection("announcements")
+    if limit <= 0:
+        return []
+
+    client = firestore_client if firestore_client is not None else db
+    announcements_ref = client.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.CHANGELOG.value)).where(
         filter=FieldFilter("active", "==", True)
     )
 
-    docs = query.stream()
+    try:
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream recent changelogs: {exc}")
+        return []
+
     changelogs: List[Announcement] = []
 
     for doc in docs:
@@ -98,19 +157,27 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
     return changelogs[: max(0, limit)]
 
 
-def get_firmware_features(firmware_version: str, device_model: Optional[str] = None) -> List[Announcement]:
+def get_firmware_features(
+    firmware_version: str, device_model: Optional[str] = None, *, firestore_client: Optional[Any] = None
+) -> List[Announcement]:
     """
     Get feature announcements for a specific firmware version.
     Optionally filter by device model.
     """
-    announcements_ref = db.collection("announcements")
+    client = firestore_client if firestore_client is not None else db
+    announcements_ref = client.collection("announcements")
     query = (
         announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.FEATURE.value))
         .where(filter=FieldFilter("active", "==", True))
         .where(filter=FieldFilter("firmware_version", "==", firmware_version))
     )
 
-    docs = query.stream()
+    try:
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream firmware features: {exc}")
+        return []
+
     features: List[Announcement] = []
 
     for doc in docs:
@@ -128,18 +195,24 @@ def get_firmware_features(firmware_version: str, device_model: Optional[str] = N
     return features
 
 
-def get_app_features(app_version: str) -> List[Announcement]:
+def get_app_features(app_version: str, *, firestore_client: Optional[Any] = None) -> List[Announcement]:
     """
     Get feature announcements for a specific app version.
     """
-    announcements_ref = db.collection("announcements")
+    client = firestore_client if firestore_client is not None else db
+    announcements_ref = client.collection("announcements")
     query = (
         announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.FEATURE.value))
         .where(filter=FieldFilter("active", "==", True))
         .where(filter=FieldFilter("app_version", "==", app_version))
     )
 
-    docs = query.stream()
+    try:
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream app features: {exc}")
+        return []
+
     out: List[Announcement] = []
     for doc in docs:
         announcement = _doc_to_announcement(doc)
@@ -148,19 +221,27 @@ def get_app_features(app_version: str) -> List[Announcement]:
     return out
 
 
-def get_general_announcements(last_checked_at: Optional[datetime] = None) -> List[Announcement]:
+def get_general_announcements(
+    last_checked_at: Optional[datetime] = None, *, firestore_client: Optional[Any] = None
+) -> List[Announcement]:
     """
     Get active, non-expired general announcements.
     If last_checked_at is provided, only returns announcements created after that time.
     """
     now = datetime.now(timezone.utc)
     checked_at = _ensure_utc(last_checked_at)
-    announcements_ref = db.collection("announcements")
+    client = firestore_client if firestore_client is not None else db
+    announcements_ref = client.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.ANNOUNCEMENT.value)).where(
         filter=FieldFilter("active", "==", True)
     )
 
-    docs = query.stream()
+    try:
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream general announcements: {exc}")
+        return []
+
     announcements: List[Announcement] = []
 
     for doc in docs:
@@ -192,6 +273,8 @@ def get_general_announcements(last_checked_at: Optional[datetime] = None) -> Lis
 def get_all_announcements(
     announcement_type: Optional[AnnouncementType] = None,
     active_only: bool = False,
+    *,
+    firestore_client: Optional[Any] = None,
 ) -> List[Announcement]:
     """
     Get all announcements with optional filtering.
@@ -200,7 +283,8 @@ def get_all_announcements(
         announcement_type: Filter by type (changelog, feature, announcement)
         active_only: If True, only return active announcements
     """
-    announcements_ref = db.collection("announcements")
+    client = firestore_client if firestore_client is not None else db
+    announcements_ref = client.collection("announcements")
     query = announcements_ref
 
     if announcement_type:
@@ -209,7 +293,12 @@ def get_all_announcements(
     if active_only:
         query = query.where(filter=FieldFilter("active", "==", True))
 
-    docs = query.stream()
+    try:
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream all announcements: {exc}")
+        return []
+
     announcements: List[Announcement] = []
     for doc in docs:
         announcement = _doc_to_announcement(doc)
@@ -224,27 +313,41 @@ def get_all_announcements(
     return announcements
 
 
-def create_announcement(announcement: Announcement) -> Announcement:
+def create_announcement(announcement: Announcement, *, firestore_client: Optional[Any] = None) -> Announcement:
     """Create a new announcement."""
-    doc_ref = db.collection("announcements").document(announcement.id)
+    client = firestore_client if firestore_client is not None else db
+    doc_ref = client.collection("announcements").document(announcement.id)
     doc_ref.set(announcement.to_dict())
     return announcement
 
 
-def update_announcement(announcement_id: str, updates: Dict[str, Any]) -> Optional[Announcement]:
+def update_announcement(
+    announcement_id: str, updates: Dict[str, Any], *, firestore_client: Optional[Any] = None
+) -> Optional[Announcement]:
     """Update an existing announcement."""
-    doc_ref = db.collection("announcements").document(announcement_id)
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return None
+    client = firestore_client if firestore_client is not None else db
+    doc_ref = client.collection("announcements").document(clean_id)
     doc = doc_ref.get()
     if not getattr(doc, "exists", False):
         return None
 
-    doc_ref.update(updates)
-    return get_announcement_by_id(announcement_id)
+    try:
+        doc_ref.update(updates)
+    except NotFound:
+        return None
+    return get_announcement_by_id(clean_id, firestore_client=client)
 
 
-def delete_announcement(announcement_id: str) -> bool:
+def delete_announcement(announcement_id: str, *, firestore_client: Optional[Any] = None) -> bool:
     """Delete an announcement."""
-    doc_ref = db.collection("announcements").document(announcement_id)
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return False
+    client = firestore_client if firestore_client is not None else db
+    doc_ref = client.collection("announcements").document(clean_id)
     doc = doc_ref.get()
     if not getattr(doc, "exists", False):
         return False
@@ -253,14 +356,21 @@ def delete_announcement(announcement_id: str) -> bool:
     return True
 
 
-def deactivate_announcement(announcement_id: str) -> bool:
+def deactivate_announcement(announcement_id: str, *, firestore_client: Optional[Any] = None) -> bool:
     """Soft delete - set active to False."""
-    doc_ref = db.collection("announcements").document(announcement_id)
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return False
+    client = firestore_client if firestore_client is not None else db
+    doc_ref = client.collection("announcements").document(clean_id)
     doc = doc_ref.get()
     if not getattr(doc, "exists", False):
         return False
 
-    doc_ref.update({"active": False})
+    try:
+        doc_ref.update({"active": False})
+    except NotFound:
+        return False
     return True
 
 
@@ -357,19 +467,36 @@ def compare_versions(v1: str, v2: str) -> int:
 # ============================================================================
 
 
-def get_dismissed_announcement_ids(uid: str) -> set[str]:
+def get_dismissed_announcement_ids(uid: str, *, firestore_client: Optional[Any] = None) -> set[str]:
     """Get the set of announcement IDs that a user has dismissed."""
-    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements")
-    docs = dismissed_ref.stream()
-    return {str(doc.id) for doc in docs}
+    if not _has_uid(uid):
+        return set()
+    client = firestore_client if firestore_client is not None else db
+    try:
+        dismissed_ref = client.collection("users").document(uid.strip()).collection("dismissed_announcements")
+        docs = dismissed_ref.stream()
+        return {str(doc.id) for doc in docs if getattr(doc, "id", None)}
+    except Exception as exc:
+        logger.warning(f"Failed to fetch dismissed announcements for uid={uid.strip()}: {exc}")
+        return set()
 
 
-def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = False) -> bool:
+def dismiss_announcement(
+    uid: str, announcement_id: str, cta_clicked: bool = False, *, firestore_client: Optional[Any] = None
+) -> bool:
     """
     Mark an announcement as dismissed for a user.
     Returns True if successful.
     """
-    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
+    clean_uid = _clean_uid(uid)
+    clean_announcement_id = _clean_id(announcement_id, "announcement_id")
+    client = firestore_client if firestore_client is not None else db
+    dismissed_ref = (
+        client.collection("users")
+        .document(clean_uid)
+        .collection("dismissed_announcements")
+        .document(clean_announcement_id)
+    )
     dismissed_ref.set(
         {
             "dismissed_at": datetime.now(timezone.utc),
@@ -379,11 +506,23 @@ def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = Fal
     return True
 
 
-def is_announcement_dismissed(uid: str, announcement_id: str) -> bool:
+def is_announcement_dismissed(uid: str, announcement_id: str, *, firestore_client: Optional[Any] = None) -> bool:
     """Check if a user has dismissed a specific announcement."""
-    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
-    doc = dismissed_ref.get()
-    return bool(getattr(doc, "exists", False))
+    if not _has_uid(uid) or not (announcement_id and announcement_id.strip()):
+        return False
+    client = firestore_client if firestore_client is not None else db
+    try:
+        dismissed_ref = (
+            client.collection("users")
+            .document(uid.strip())
+            .collection("dismissed_announcements")
+            .document(announcement_id.strip())
+        )
+        doc = dismissed_ref.get()
+        return bool(getattr(doc, "exists", False))
+    except Exception as exc:
+        logger.warning(f"Failed to check announcement dismissal uid={uid.strip()} id={announcement_id.strip()}: {exc}")
+        return False
 
 
 # ============================================================================
@@ -398,8 +537,14 @@ def get_pending_announcements(
     trigger: str,
     firmware_version: Optional[str] = None,
     device_model: Optional[str] = None,
+    *,
+    firestore_client: Optional[Any] = None,
 ) -> List[Announcement]:
     """Get all active, non-dismissed announcements matching the user's version, platform, and trigger, sorted by priority descending."""
+    clean_uid = uid.strip() if uid else ""
+    if not clean_uid:
+        return []
+
     now = datetime.now(timezone.utc)
 
     # Map trigger string to enum
@@ -411,12 +556,17 @@ def get_pending_announcements(
     requested_trigger = trigger_map.get(trigger, TriggerType.IMMEDIATE)
 
     # Get user's dismissed announcements
-    dismissed_ids = get_dismissed_announcement_ids(uid)
+    dismissed_ids = get_dismissed_announcement_ids(clean_uid, firestore_client=firestore_client)
 
     # Query all active announcements
-    announcements_ref = db.collection("announcements")
-    query = announcements_ref.where(filter=FieldFilter("active", "==", True))
-    docs = query.stream()
+    client = firestore_client if firestore_client is not None else db
+    try:
+        announcements_ref = client.collection("announcements")
+        query = announcements_ref.where(filter=FieldFilter("active", "==", True))
+        docs = query.stream()
+    except Exception as exc:
+        logger.warning(f"Failed to stream active announcements: {exc}")
+        return []
 
     pending: List[Announcement] = []
 
@@ -475,7 +625,9 @@ def get_pending_announcements(
 
         # 8. Check test_uids (if set, only those users see the announcement)
         if targeting.test_uids:
-            if uid not in targeting.test_uids:
+            test_uids: List[Any] = targeting.test_uids
+            clean_test_uids = _clean_test_uids(test_uids)
+            if clean_uid not in clean_test_uids:
                 continue
 
         pending.append(announcement)

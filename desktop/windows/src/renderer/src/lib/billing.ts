@@ -55,36 +55,36 @@ export function fetchOverageInfo(): Promise<OverageInfoResponse> {
 
 // ── Legacy-catalog canary ────────────────────────────────────────────────────
 // The backend version-gates the plan catalog on X-App-Platform/X-App-Version. If
-// it doesn't recognize this client's platform it serves the pre-Operator/Architect
-// LEGACY catalog (adapt_plans_for_legacy_client in backend/utils/subscription.py):
-// it DROPS the operator + pro plans entirely and RENAMES titles to "Unlimited
-// Plan"/"Omi Pro". A desktop client must always get the new catalog (Neo /
-// Operator / Architect); the legacy shape means our platform identity wasn't
-// recognized — the exact class of defect that once rendered as "real live data".
+// it doesn't recognize this client's platform it serves the LEGACY catalog
+// (adapt_plans_for_legacy_client in backend/utils/subscription.py), which renames
+// Architect to "Omi Pro" and Neo (unlimited) to "Unlimited Plan". The current
+// catalog is Omi Pro (unlimited_v2) plus the caller's own plan, so neither the
+// "Omi Pro" title nor a missing Operator plan is a legacy signal on its own; only
+// a legacy title on the plan id the adapter renames proves the legacy shape.
 // We do NOT block rendering (fail-open UX — the catalog still renders), the canary
 // just makes the divergence impossible to miss in logs/verification.
 
-// Titles the legacy adapter renames plans to. Their presence proves legacy shape.
-const LEGACY_PLAN_TITLES = new Set(['Omi Pro', 'Unlimited Plan'])
+// Plan id -> title the legacy adapter gives it. Its presence proves legacy shape.
+const LEGACY_PLAN_RENAMES: Readonly<Record<string, string>> = {
+  architect: 'Omi Pro',
+  unlimited: 'Unlimited Plan'
+}
 
 /**
  * Mechanical legacy-shape detection, derived from adapt_plans_for_legacy_client.
- * A correct desktop catalog always contains an 'operator' plan and never uses the
- * legacy titles; the adapter guarantees the inverse. An empty catalog is NOT
- * legacy (nothing served yet) — only a populated, legacy-shaped one trips it.
+ * An empty catalog is NOT legacy (nothing served yet) — only a populated catalog
+ * carrying an adapter rename trips it.
  */
 export function detectLegacyCatalog(plans: SubscriptionPlan[] | undefined): {
   legacy: boolean
   reasons: string[]
 } {
-  const list = plans ?? []
-  if (list.length === 0) return { legacy: false, reasons: [] }
-  const reasons: string[] = []
-  if (!list.some((p) => p.id === 'operator')) reasons.push("no 'operator' plan in catalog")
-  const legacyTitles = list.map((p) => p.title).filter((t) => LEGACY_PLAN_TITLES.has(t))
-  if (legacyTitles.length > 0)
-    reasons.push(`legacy plan titles present: ${legacyTitles.join(', ')}`)
-  return { legacy: reasons.length > 0, reasons }
+  const renamed = (plans ?? []).filter((p) => LEGACY_PLAN_RENAMES[p.id] === p.title)
+  if (renamed.length === 0) return { legacy: false, reasons: [] }
+  return {
+    legacy: true,
+    reasons: [`legacy plan titles present: ${renamed.map((p) => `${p.id}=${p.title}`).join(', ')}`]
+  }
 }
 
 // Report once per session — this is a config-level divergence (the backend doesn't
@@ -107,9 +107,8 @@ export function reportLegacyCatalog(plans: SubscriptionPlan[] | undefined): bool
   if (!legacy) return false
   console.error(
     '[billing:legacy-catalog] Legacy plan catalog served to the Windows desktop client — ' +
-      'backend did not recognize this platform/version, so it returned the pre-Operator/' +
-      'Architect catalog instead of Operator/Architect. The plan grid is rendering the wrong ' +
-      `catalog. Signals: ${reasons.join('; ')}.`,
+      'backend did not recognize this platform/version, so it returned the legacy-adapted ' +
+      `catalog. The plan grid is rendering the wrong catalog. Signals: ${reasons.join('; ')}.`,
     { plan_ids: plans?.map((p) => p.id), plan_titles: plans?.map((p) => p.title) }
   )
   if (!legacyCatalogReported) {
@@ -311,16 +310,18 @@ export function quotaResetText(resetAtSeconds: number | null, now: Date = new Da
 
 // ── Plan catalog (AccountBilling plan grid) ─────────────────────────────────
 
-// Mac ordering: Neo(unlimited) → Operator → Architect. Unknown ids sort last.
-// Plus/Unlimited-v2 are included for lossless catalog fixtures even though
-// Windows' current storefront normally serves the desktop plans only.
-const PLAN_ORDER: Record<string, number> = {
-  unlimited: 0,
-  operator: 1,
-  architect: 2,
-  plus: 3,
-  unlimited_v2: 4
-}
+// Omi Pro (unlimited_v2) is the only plan sold. Retired tiers are never offered
+// in the grid; a subscriber still sees and manages their own retired plan on the
+// current-plan card.
+const RETIRED_PLAN_IDS: ReadonlySet<string> = new Set([
+  'plus',
+  'unlimited',
+  'operator',
+  'architect'
+])
+
+// Omi Pro first. Unknown ids sort last.
+const PLAN_ORDER: Record<string, number> = { unlimited_v2: 0 }
 
 /** True if this catalog plan is the one the user is currently on (operator↔
  *  unlimited aliasing + current-price ownership). */
@@ -339,13 +340,14 @@ export function isCurrentCatalogPlan(
   return plan.id === effectivePlanId
 }
 
-/** Order the catalog (Neo→Operator→Architect, unknown last, stable) and drop the
- *  plan the user is already on. */
+/** Order the catalog (Omi Pro first, unknown last, stable) and drop retired
+ *  tiers and the plan the user is already on. */
 export function orderedCatalog(
   sub: Pick<BillingSubscription, 'plan' | 'current_price_id'>,
   availablePlans: SubscriptionPlan[] | undefined
 ): SubscriptionPlan[] {
   return (availablePlans ?? [])
+    .filter((p) => !RETIRED_PLAN_IDS.has(p.id))
     .filter((p) => !isCurrentCatalogPlan(p, sub, availablePlans))
     .map((p, i) => ({ p, i }))
     .sort((a, b) => {
@@ -356,9 +358,9 @@ export function orderedCatalog(
     .map(({ p }) => p)
 }
 
-// Single edit point for the Operator price quoted in the deprecation-banner
+// Single edit point for the Omi Pro price quoted in the deprecation-banner
 // fallback (used only when the API omits `deprecation_message`).
-export const OPERATOR_DEPRECATION_FALLBACK_PRICE = '$49/mo'
+export const OMI_PRO_DEPRECATION_FALLBACK_PRICE = '$29.99/mo'
 
 // Per-plan-id fallbacks (BillingHelpers planEyebrow/planSubtitle/planDescription/
 // fallback features), used only when the catalog omits the field.
@@ -366,37 +368,15 @@ const PLAN_FALLBACKS: Record<
   string,
   { eyebrow: string; subtitle: string; description: string; features: string[] }
 > = {
-  unlimited: {
-    eyebrow: 'Starter',
-    subtitle: '200 questions per month',
-    description: '200 chat questions per month. Shared with mobile and web.',
+  unlimited_v2: {
+    eyebrow: '7-day free trial',
+    subtitle: 'Everything in Omi',
+    description: 'The full Omi experience on desktop, mobile and web.',
     features: [
-      '200 chat questions per month',
       'Unlimited listening and transcription',
       'Unlimited memories and insights',
+      'Omi desktop app included',
       'Shared with mobile and web'
-    ]
-  },
-  operator: {
-    eyebrow: 'Most popular',
-    subtitle: '500 questions per month',
-    description: '500 chat questions per month. Shared with mobile and web.',
-    features: [
-      '500 chat questions per month',
-      'Unlimited listening and transcription',
-      'Unlimited memories and insights',
-      'Shared with mobile and web'
-    ]
-  },
-  architect: {
-    eyebrow: 'Automation + coding',
-    subtitle: 'Power-user AI — thousands of chats + agentic automations',
-    description: 'Power-user AI for heavy agentic workflows and vibe coding.',
-    features: [
-      'Automations and vibe coding',
-      'Unlimited listening, memories, and insights',
-      'Priority desktop AI features',
-      '~$400 of monthly AI compute included (fair-use cap)'
     ]
   }
 }
@@ -487,11 +467,18 @@ export function trialTimeTone(remainingSeconds: number): 'amber' | 'yellow' | 'g
 // ── Checkout orchestration (BillingHelpers.startCheckout) ───────────────────
 
 export const RESUBSCRIBE_FIRST = 'Resubscribe first to change plans.'
+export const EXISTING_SUBSCRIPTION =
+  'You already have a subscription. Manage your existing subscription instead of starting a new checkout.'
+
+function isConflict(e: unknown): boolean {
+  return (e as { response?: { status?: number } } | null)?.response?.status === 409
+}
 
 export type StartCheckoutResult =
   | { kind: 'upgraded' }
   | { kind: 'reactivated'; message?: string }
   | { kind: 'blocked' }
+  | { kind: 'existing_subscription' }
   | { kind: 'completed' }
   | { kind: 'refresh_lagging' }
   | { kind: 'cancelled' }
@@ -534,12 +521,25 @@ export async function startCheckout(
   }
 
   const upgradeInPlace = hasPaidSubscription(sub) && sub.cancel_at_period_end === false
+  // The two routes use 409 for different refusals: upgrade means a pending
+  // cancellation, checkout means the account already has a subscription.
   if (upgradeInPlace) {
-    await deps.upgradeSubscription(priceId, promotionCode)
+    try {
+      await deps.upgradeSubscription(priceId, promotionCode)
+    } catch (e) {
+      if (isConflict(e)) return { kind: 'blocked' }
+      throw e
+    }
     return { kind: 'upgraded' }
   }
 
-  const session = await deps.createCheckoutSession(priceId, promotionCode)
+  let session: PaymentCheckoutSessionResponse
+  try {
+    session = await deps.createCheckoutSession(priceId, promotionCode)
+  } catch (e) {
+    if (isConflict(e)) return { kind: 'existing_subscription' }
+    throw e
+  }
   if (session.status === 'reactivated') {
     const seconds = session.next_billing_date ?? sub.current_period_end
     const date = formatMediumDate(seconds)

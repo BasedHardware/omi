@@ -1,0 +1,94 @@
+name: Deploy In-cluster Safety Guards
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment for the independent guard release
+        required: true
+        type: choice
+        default: development
+        options: [development, prod]
+      source_sha:
+        description: Full merged source SHA (must be an ancestor of main)
+        required: true
+        type: string
+      dry_run:
+        description: Kill switch for HPA writes (development always dry runs)
+        required: true
+        type: boolean
+        default: false
+      enabled:
+        description: Enable guard resources (false removes this release's guards)
+        required: true
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-incluster-guards-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    # Prod runs only the reviewed workflow definition on main; source_sha pins the chart files,
+    # this pins the auth/Helm steps that apply them.
+    if: inputs.environment != 'prod' || github.ref == 'refs/heads/main'
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+      - name: Admit immutable merged source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+      - uses: azure/setup-helm@v5
+      - name: Google Auth (prod WIF)
+        if: inputs.environment == 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Google Auth (dev WIF)
+        if: inputs.environment == 'development'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+      - uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: us-central1
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - name: Deploy only the guard release
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ENABLED: ${{ inputs.enabled }}
+        run: |
+          set -euo pipefail
+          STAGE=dev
+          if [[ "$ENVIRONMENT" == prod ]]; then STAGE=prod; else DRY_RUN=true; fi
+          helm upgrade --install "$STAGE-omi-incluster-guards" backend/charts/incluster-guards \
+            --namespace "$STAGE-omi-backend" \
+            -f "backend/charts/incluster-guards/${STAGE}_omi_incluster_guards_values.yaml" \
+            --set "dryRun=$DRY_RUN" --set "enabled=$ENABLED" \
+            --atomic --wait --timeout 180s
+          echo "Guard source: $(git rev-parse HEAD), environment: $ENVIRONMENT, dryRun: $DRY_RUN, enabled: $ENABLED" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Helm installs the CronJob; first scheduled reading starts its full 15m arming window.' >> "$GITHUB_STEP_SUMMARY"

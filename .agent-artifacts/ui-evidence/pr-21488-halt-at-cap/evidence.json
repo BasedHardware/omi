@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-card-capped-en-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: card capped en light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-card-capped-en-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: card capped en dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-card-waiting-en-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: card waiting en light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-card-waiting-en-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: card waiting en dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-banner-capped-es-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: banner capped es light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-banner-waiting-ja-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: banner waiting ja dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-settings-waiting-es-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: settings waiting es light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-settings-capped-ja-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: settings capped ja light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-partial-confirm-en-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: partial confirm en light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-partial-confirm-es-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: partial confirm es dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-partial-confirm-ja-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: partial confirm ja light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-deferred-list-en-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: deferred list en dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-deferred-detail-en-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: deferred detail en light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-deferred-detail-es-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: deferred detail es light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-ios-deferred-detail-ja-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: deferred detail ja dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-ios-settings-processing-en-dark.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: settings processing en dark; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-ios-card-processing-es-light.png",
+      "platform": "mobile-ios",
+      "description": "Hermetic v5 widget fixture: card processing es light; synthetic transcript and backend backlog state",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

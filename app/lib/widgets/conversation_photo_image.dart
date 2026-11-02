@@ -17,13 +17,16 @@ typedef ConversationPhotoStorageFetcher = Future<Uint8List?> Function(String con
 class ConversationPhotoBytesCache {
   final ConversationPhotoStorageFetcher _fetchStorageImage;
   final Map<String, Future<Uint8List?>> _storageRequests = {};
+  // Weak keys keep remounts from decoding the same inline bytes again without
+  // retaining every photo (and its base64) for the lifetime of the app.
+  final Expando<Future<Uint8List?>> _inlineRequests = Expando();
 
   ConversationPhotoBytesCache({ConversationPhotoStorageFetcher? fetchStorageImage})
       : _fetchStorageImage = fetchStorageImage ?? getConversationPhotoImage;
 
   Future<Uint8List?> load(ConversationPhoto photo, String? conversationId) {
     if (photo.base64.isNotEmpty) {
-      return Future.value(_decodeInlinePhoto(photo.base64));
+      return _inlineRequests[photo] ??= Future.value(_decodeInlinePhoto(photo.base64));
     }
     final normalizedConversationId = conversationId?.trim() ?? '';
     final storageId = photo.storageId?.trim() ?? '';
@@ -133,12 +136,22 @@ class _ConversationPhotoImageState extends State<ConversationPhotoImage> {
             ),
           );
         }
-        return Image.memory(
-          bytes,
-          fit: widget.fit,
-          gaplessPlayback: true,
-          color: widget.color,
-          colorBlendMode: widget.colorBlendMode,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Thumbnails need display pixels, not the camera's full-resolution
+            // raster. Width alone preserves the original image aspect ratio.
+            final cacheWidth = constraints.hasBoundedWidth && constraints.maxWidth > 0
+                ? (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context)).ceil()
+                : null;
+            return Image.memory(
+              bytes,
+              cacheWidth: cacheWidth,
+              fit: widget.fit,
+              gaplessPlayback: true,
+              color: widget.color,
+              colorBlendMode: widget.colorBlendMode,
+            );
+          },
         );
       },
     );

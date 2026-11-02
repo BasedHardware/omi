@@ -6,15 +6,12 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     int offset = 0,
     bool thisDeviceOnly = false,
     String? cursor,
-    MemoryReadView? view,
   }) =>
       getMemoriesResult(
         limit: limit,
         offset: offset,
         thisDeviceOnly: thisDeviceOnly,
         cursor: cursor,
-        view: view,
-        forceView: view != null,
         retry: _memoriesReadRetry,
       );
 
@@ -23,11 +20,10 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     required int offset,
     required bool thisDeviceOnly,
     String? cursor,
-    MemoryReadView? view,
   }) {
     final cursorRequest = _fetchMemoriesCursorRequest;
     if (cursorRequest != null) {
-      return cursorRequest(limit: limit, offset: offset, thisDeviceOnly: thisDeviceOnly, cursor: cursor, view: view);
+      return cursorRequest(limit: limit, offset: offset, thisDeviceOnly: thisDeviceOnly, cursor: cursor);
     }
     // A caller-provided legacy fetcher has no cursor contract. The load loop
     // stops before reaching this branch with a non-null cursor, so this is only
@@ -46,8 +42,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
   Future<void> _loadMemoriesInternal({int limit = 100}) async {
     final generation = _sessionGeneration;
     final loadSequence = ++_loadSequence;
-    _beliefEnabled ??= memoryBeliefCapability;
-    final serverView = _serverViewForCollection(_collectionView);
     final ledgerProjectionRevision = _ledgerProjectionRevision;
     // Snapshot the pending-deletion ID before any await: a refresh that
     // started during the undo window must still suppress the deleted item
@@ -80,7 +74,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     String? memoryCursor;
     var currentTraversalComplete = false;
     var currentFetchCoversAll = false;
-    var viewProtocolRestarts = 0;
     var deviceScopeSupported = true;
     var ledgerHistorySupported = false;
     var ledgerHistoryTruncated = false;
@@ -108,7 +101,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
 
     try {
       for (var page = 0; page < maxPages; page++) {
-        final requestedView = _beliefEnabled == true ? serverView : null;
         final result = await _fetchMemoryPage(
           limit: limit,
           // Cursor pages and offset pages are different protocols. The API
@@ -117,10 +109,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
           offset: memoryCursor == null ? offset : 0,
           thisDeviceOnly: _filterThisDeviceOnly,
           cursor: memoryCursor,
-          // Do not send a temporal selector until the capability probe has
-          // confirmed it. A restart below binds the first cursor page to the
-          // same selector used by every continuation page.
-          view: requestedView,
         );
         if (generation != _sessionGeneration || loadSequence != _loadSequence) {
           return;
@@ -162,28 +150,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
           return;
         }
         deviceScopeSupported = result.deviceScopeSupported;
-        // A missing header is a capability reset. Do not let a prior true value
-        // leak into a stable/older response on the next page or account.
-        _beliefEnabled = result.beliefEnabled;
-        final responseUsesTemporalView = result.beliefEnabled == true;
-        if ((requestedView != null) != responseUsesTemporalView) {
-          if (viewProtocolRestarts < 2) {
-            viewProtocolRestarts++;
-            all.clear();
-            seenCurrent.clear();
-            currentFetchCoversAll = false;
-            offset = 0;
-            memoryCursor = null;
-            Logger.debug('MemoriesProvider: restarting memory read after capability/view change');
-            continue;
-          }
-          Logger.warning(
-              'MemoriesProvider: capability/view changed repeatedly; stopping before mixing cursor protocols');
-          break;
-        }
-        // Scope belongs to the successful current-page response. The separate
-        // ledger-history request may reset capability without broadening it.
-        currentFetchCoversAll = result.beliefEnabled != true || requestedView == MemoryReadView.all;
         all.addAll(result.memories.where((memory) => seenCurrent.add(memory.id)));
         publishProvisional();
         // A truncated page that already has rows is an honest partial response
@@ -239,9 +205,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
             return;
           }
           ledgerHistorySupported = result.supported;
-          // Every history response is authoritative for the beta capability.
-          // Missing/false headers reset useful-now filtering to stable behavior.
-          _beliefEnabled = result.beliefEnabled;
           if (!result.supported) break;
           all.addAll(result.memories.where((memory) => seen.add(memory.id)));
           publishProvisional();
@@ -282,6 +245,10 @@ extension _MemoriesProviderLoading on MemoriesProvider {
           Logger.warning('MemoriesProvider: ledger history is partial; loaded $historyRowsLoaded rows');
         }
       }
+      // A complete current list alone cannot prove that previously indexed
+      // ledger rows are absent. Reconcile only when the separately fetched
+      // owner-scoped history projection is also supported and complete.
+      currentFetchCoversAll = ledgerHistorySupported && !ledgerHistoryTruncated;
     } catch (e) {
       if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;

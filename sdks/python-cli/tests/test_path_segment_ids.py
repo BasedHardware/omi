@@ -18,13 +18,16 @@ from omi_cli.main import app
         ("a#frag", "a%23frag"),
         ("../x", "..%2Fx"),
         ("a b", "a%20b"),
+        ("  abc123  ", "abc123"),
+        ("\ta b\t", "a%20b"),
+        ("  ../x  ", "..%2Fx"),
     ],
 )
 def test_path_segment_encodes_reserved_characters(raw: str, encoded: str) -> None:
     assert path_segment(raw) == encoded
 
 
-@pytest.mark.parametrize("raw", ["", ".", ".."])
+@pytest.mark.parametrize("raw", ["", ".", "..", "   ", "\t", "\n  ", "  .  ", "  ..  "])
 def test_path_segment_rejects_dot_segments(raw: str) -> None:
     with pytest.raises(Exception) as excinfo:
         path_segment(raw)

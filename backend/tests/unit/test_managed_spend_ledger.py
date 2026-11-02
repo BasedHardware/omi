@@ -20,6 +20,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 import database._client as firestore_client_module
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION
+from llm_gateway.gateway import accounting
 from llm_gateway.gateway.accounting import CostStatus, PricedUsage, ProviderResponseMetadata, ProviderUsage, UsageStatus
 from routers import desktop_proxy, omni_relay
 from utils.llm import desktop_gemini_telemetry
@@ -130,7 +131,24 @@ def test_event_carries_attribution_and_groups_by_invocation_ordinal() -> None:
     assert event.cost_status == CostStatus.UNPRICED
 
 
-def test_reported_usage_is_priced_on_the_gateway_rate_card() -> None:
+@pytest.mark.parametrize(
+    'frozen, expected_card_id, expected_cost_micro_usd',
+    [
+        (datetime(2026, 10, 17, tzinfo=timezone.utc), 'vertex.gemini-2.5-flash.2026-10-15', 540_000),
+        (datetime(2026, 10, 18, tzinfo=timezone.utc), 'vertex.gemini-2.5-flash.2026-10-18', 300_000),
+    ],
+)
+def test_reported_usage_is_priced_on_the_gateway_rate_card(
+    monkeypatch, frozen, expected_card_id, expected_cost_micro_usd
+) -> None:
+    class FrozenDateTime(datetime):
+        _now = frozen
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls._now.astimezone(tz) if tz else cls._now.replace(tzinfo=None)
+
+    monkeypatch.setattr(accounting, 'datetime', FrozenDateTime)
     usage = ProviderUsage(
         prompt_tokens=1_000_000, uncached_input_tokens=1_000_000, output_tokens=0, total_tokens=1_000_000
     )
@@ -138,8 +156,8 @@ def test_reported_usage_is_priced_on_the_gateway_rate_card() -> None:
 
     assert event.usage_status == UsageStatus.CONFIRMED
     assert event.cost_status == CostStatus.ESTIMATED
-    assert event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
-    assert event.estimated_cost_micro_usd and event.estimated_cost_micro_usd > 0
+    assert event.rate_card_id == expected_card_id
+    assert event.estimated_cost_micro_usd == expected_cost_micro_usd
 
 
 def test_caller_priced_usage_replaces_a_missing_rate_card() -> None:

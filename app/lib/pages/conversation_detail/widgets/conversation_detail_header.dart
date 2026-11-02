@@ -111,6 +111,7 @@ class ConversationDetailHeader extends StatelessWidget {
       focusNode: provider.titleFocusNode,
       controller: provider.titleController,
       style: titleStyle,
+      displayText: (stored) => presentableConversationTitle(conversation, title: stored),
       hintText: transcriptFallbackTitle(conversation) ??
           recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
     );

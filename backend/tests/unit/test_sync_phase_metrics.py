@@ -276,7 +276,8 @@ def test_shutdown_racing_worker_start_stops_and_joins_worker(monkeypatch):
     assert not starter.is_alive()
 
 
-def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
+@pytest.fixture
+def app_shutdown_handler():
     # Execute the real handler with unrelated service cleanups replaced, avoiding
     # main's credential/client initialization and router imports in this unit test.
     main_path = Path(__file__).resolve().parents[2] / 'main.py'
@@ -285,18 +286,22 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
         node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == 'shutdown_event'
     )
     handler.decorator_list = []
+    return handler
+
+
+def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch, app_shutdown_handler):
     namespace = {
         'app': SimpleNamespace(state=SimpleNamespace()),
         'batch_pressure': SimpleNamespace(stop=AsyncMock()),
+        'flush_active': AsyncMock(),
         'drain_background_tasks': AsyncMock(),
         'shutdown_managed_spend_ledger': AsyncMock(),
         'shutdown_sync_metrics': metrics.shutdown_sync_metrics,
         'close_all_clients': AsyncMock(),
         'close_posthog_control_plane': Mock(),
-        'close_free_tier_control_plane': Mock(),
         'stop_metrics_sidecar_server': Mock(),
     }
-    exec(compile(ast.Module(body=[handler], type_ignores=[]), str(main_path), 'exec'), namespace)
+    exec(compile(ast.Module(body=[app_shutdown_handler], type_ignores=[]), '<shutdown-handler>', 'exec'), namespace)
     flush = metrics._BackgroundFlush()
     monkeypatch.setattr(metrics, '_flush', flush)
     try:
@@ -304,6 +309,8 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
         assert metrics._flush_shutdown.is_set()
         assert not flush.worker.is_alive()
         assert flush.pending.unfinished_tasks == 0
+        namespace['flush_active'].assert_awaited_once_with(timeout=30.0)
+        namespace['drain_background_tasks'].assert_awaited_once_with(timeout=10.0)
         namespace['close_all_clients'].assert_awaited_once()
     finally:
         flush.stop()

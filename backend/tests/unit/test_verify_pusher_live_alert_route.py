@@ -38,6 +38,10 @@ def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dic
                 for name in verifier.REQUIRED_METRICS
                 for job in verifier.REQUIRED_JOBS
             ]
+            + [
+                {"metric": {"__name__": name, "job": "pusher-metrics"}, "value": [1, "1"]}
+                for name in verifier.PUSHER_RECEIVE_METRICS
+            ]
         },
     }
     receiver = next(iter(rules.values()))["notification_settings"]["receiver"]
@@ -200,6 +204,33 @@ def test_prepublish_does_not_deadlock_on_a_not_yet_deployed_metric_family(verifi
         )
         == []
     )
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'omi_pusher_record_close_abandoned_outstanding',
+        'omi_pusher_record_close_outstanding_refusals_total',
+        'pusher_socket_frames_total',
+        'pusher_receive_work_stalls_total',
+        'pusher_receive_work_stalled_handlers',
+        'pusher_receive_work_duration_seconds_count',
+        'pusher_socket_closed_total',
+    ],
+)
+def test_postrollout_requires_every_receive_metric_from_pusher_not_listen(verifier, missing):
+    rules, datasource, up, telemetry, points = _inputs(verifier)
+    telemetry['data']['result'] = [
+        item for item in telemetry['data']['result'] if item['metric']['__name__'] != missing
+    ]
+    telemetry['data']['result'].append(
+        {'metric': {'__name__': missing, 'job': 'backend-listen-metrics'}, 'value': [1, '1']}
+    )
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='postrollout') == [
+        'live Prometheus pusher receive-work telemetry sources are missing or incomplete'
+    ]
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='prepublish') == []
+    assert missing in verifier.METRIC_COVERAGE_QUERY
 
 
 def test_serving_check_keeps_min_over_non_deleting_targets_and_does_not_use_max() -> None:
@@ -497,15 +528,14 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
     assert set(gated) <= set(committed)
 
 
-def test_live_stt_import_allowlist_excludes_pending_runway_rules(verifier: SimpleNamespace) -> None:
+def test_live_stt_import_allowlist_matches_committed_rules(verifier: SimpleNamespace) -> None:
     rules = verifier.load_live_stt_import_rules()
     gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
     assert set(rules) == set(gated) | set(verifier.DATASOURCE_CANARY_UIDS)
     assert set(verifier.RULE_UIDS) <= set(rules)
     assert "omi-datasource-gmp" not in rules
-    assert set(rules).isdisjoint(verifier.LIVE_STT_PENDING_UIDS)
     non_live_stt = set(gated) - set(verifier.LIVE_STT_IMPORT_UIDS)
-    assert (set(rules) - set(verifier.DATASOURCE_CANARY_UIDS) - non_live_stt) | set(verifier.LIVE_STT_PENDING_UIDS) == {
+    assert (set(rules) - set(verifier.DATASOURCE_CANARY_UIDS) - non_live_stt) == {
         rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())
     }
     assert set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS) | set(verifier.RULE_UIDS) <= set(
@@ -533,6 +563,11 @@ def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_rout
             return [{"uid": existing_uid}]
         if path == "/api/v1/provisioning/contact-points":
             return contact_points
+        if path.startswith(verifier.MUTE_TIMING_PATH + "/"):
+            return {
+                "name": path.rsplit("/", 1)[-1],
+                "time_intervals": [{"times": [{"begin_time": "00:00", "end_time": "24:00"}]}],
+            }
         uid = path.rsplit("/", 1)[-1]
         if uid in verifier.DATASOURCE_CANARY_UIDS:
             assert [key for key, _ in calls] == list(verifier.DATASOURCE_CANARY_UIDS)
@@ -548,7 +583,6 @@ def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_rout
     assert {uid for uid, _exists in calls} == set(rules)
     assert (existing_uid, True) in calls
     assert all(exists for uid, exists in calls if uid == existing_uid)
-    assert not any(uid in verifier.LIVE_STT_PENDING_UIDS for uid, _exists in calls)
 
 
 def test_import_rejects_missing_verified_telegram_receiver(
@@ -564,6 +598,230 @@ def test_import_rejects_missing_verified_telegram_receiver(
     )
     failures = verifier._run_live_stt_import("https://monitor.omi.me", "secret")
     assert failures == ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+
+
+def test_committed_mute_timings_cover_every_referenced_interval(verifier: SimpleNamespace) -> None:
+    committed = verifier.load_committed_mute_timings()
+    for production in (True, False):
+        referenced = verifier._referenced_mute_timings(verifier.load_live_stt_import_rules(production=production))
+        assert referenced, "the import set is expected to reference at least omi-tier-silent"
+        assert set(referenced) <= set(committed)
+
+
+def test_import_creates_a_missing_referenced_mute_timing_before_writing_any_rule(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules = verifier.load_live_stt_import_rules(production=False)
+    name = verifier._referenced_mute_timings(rules)[0]
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+    events: list[tuple[str, str]] = []
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        if path == f"{verifier.MUTE_TIMING_PATH}/{name}":
+            # Still absent on the read-back after creation.
+            return None
+        raise AssertionError(f"unexpected Grafana read path: {path}")
+
+    def fake_create(_url: str, timing: dict[str, Any], _token: str) -> None:
+        events.append(("create", timing["name"]))
+
+    def fake_write(_url: str, uid: str, _rule: dict[str, Any], _token: str, *, exists: bool) -> None:
+        events.append(("rule", uid))
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_create_mute_timing", fake_create)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_write_rule", fake_write)
+    with pytest.raises(verifier.AlertRouteError, match="did not become readable after creation"):
+        verifier._run_live_stt_import("https://monitor.omiapi.com", "secret")
+    # Creation was attempted from the committed definition and no rule was written.
+    assert events == [("create", name)]
+
+
+def test_import_creates_a_missing_mute_timing_and_proceeds(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rules = verifier.load_live_stt_import_rules(production=False)
+    name = verifier._referenced_mute_timings(rules)[0]
+    committed = verifier.load_committed_mute_timings()[name]
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+    created: list[dict[str, Any]] = []
+    events: list[tuple[str, str]] = []
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        if path == f"{verifier.MUTE_TIMING_PATH}/{name}":
+            return committed if created else None
+        raise AssertionError(f"unexpected Grafana read path: {path}")
+
+    def fake_create(_url: str, timing: dict[str, Any], _token: str) -> None:
+        created.append(timing)
+
+    def fake_write(_url: str, uid: str, _rule: dict[str, Any], _token: str, *, exists: bool) -> None:
+        events.append(("rule", uid))
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_create_mute_timing", fake_create)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_write_rule", fake_write)
+    assert verifier._run_live_stt_import("https://monitor.omiapi.com", "secret") == []
+    assert created == [committed]
+    assert {uid for kind, uid in events if kind == "rule"} == set(rules)
+    assert f"CREATED mute timing {name}" in capsys.readouterr().out
+
+
+def test_import_never_overwrites_an_existing_mute_timing(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules = verifier.load_live_stt_import_rules()
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        if path.startswith(verifier.MUTE_TIMING_PATH + "/"):
+            return {
+                "name": path.rsplit("/", 1)[-1],
+                "time_intervals": [{"times": [{"begin_time": "00:00", "end_time": "24:00"}]}],
+            }
+        if path.startswith(verifier.ALERT_RULE_LIST_PATH + "/"):
+            return rules[path.rsplit("/", 1)[-1]]
+        raise AssertionError(f"unexpected Grafana read path: {path}")
+
+    def fail_create(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("an existing mute timing must never be rewritten")
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_create_mute_timing", fail_create)
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_write_rule",
+        lambda _url, uid, _rule, _token, *, exists: None,
+    )
+    assert verifier._run_live_stt_import("https://monitor.omi.me", "secret") == []
+
+
+@pytest.mark.parametrize(
+    "narrowing",
+    [
+        pytest.param(
+            {
+                "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+                "times": [{"begin_time": "09:00", "end_time": "17:00"}],
+            },
+            id="business-hours",
+        ),
+        pytest.param({"months": ["january"]}, id="january-only"),
+        pytest.param({"years": ["2026"]}, id="single-year"),
+        pytest.param({"days_of_month": ["1", "2"]}, id="two-days-a-month"),
+    ],
+)
+def test_import_fails_closed_when_a_live_mute_timing_drifts_from_the_committed_window(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, narrowing: dict[str, Any]
+) -> None:
+    """A narrower live mute window would let agent-tier rules page Telegram
+    outside the committed silence; the import names the drift instead of
+    trusting the existing timing blindly (review rounds 1 and 2 on #23612:
+    business hours, then the calendar selectors the signature must not
+    ignore)."""
+
+    rules = verifier.load_live_stt_import_rules()
+    name = verifier._referenced_mute_timings(rules)[0]
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+    narrowed_timing = {"name": name, "time_intervals": [dict(narrowing, location="UTC")]}
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        if path == f"{verifier.MUTE_TIMING_PATH}/{name}":
+            return narrowed_timing
+        raise AssertionError(f"unexpected Grafana read path: {path}")
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_create_mute_timing",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("a drifted timing must not be recreated")),
+    )
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_write_rule",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("no rule may be written under a drifted timing")
+        ),
+    )
+    with pytest.raises(verifier.AlertRouteError, match="differs from the committed definition"):
+        verifier._run_live_stt_import("https://monitor.omi.me", "secret")
+
+
+def test_import_fails_closed_when_a_referenced_mute_timing_is_uncommitted(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules = verifier.load_live_stt_import_rules()
+    name = verifier._referenced_mute_timings(rules)[0]
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_request_json",
+        lambda _url, path, _token, **_kwargs: ([] if path == verifier.ALERT_RULE_LIST_PATH else contact_points),
+    )
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "load_committed_mute_timings",
+        lambda: {key: value for key, value in verifier.load_committed_mute_timings().items() if key != name},
+    )
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_write_rule",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no rule may be written")),
+    )
+    with pytest.raises(verifier.AlertRouteError, match="no committed definition"):
+        verifier._run_live_stt_import("https://monitor.omi.me", "secret")
 
 
 def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
@@ -935,6 +1193,11 @@ def test_canary_readback_failure_prevents_business_keep_last_writes(verifier, mo
             return []
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         uid = path.rsplit('/', 1)[-1]
         return broken if uid == verifier.DATASOURCE_CANARY_UIDS[0] else rules[uid]
 
@@ -958,6 +1221,11 @@ def test_prod_import_reads_canaries_back_before_finalization_rules(verifier, mon
             return []
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         uid = path.rsplit('/', 1)[-1]
         events.append(('read', uid))
         return _with_grafana_assigned_query_defaults(rules[uid])
@@ -989,6 +1257,11 @@ def test_nondefault_canary_query_readback_stops_before_finalization_rules(verifi
             return []
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         uid = path.rsplit('/', 1)[-1]
         live = _with_grafana_assigned_query_defaults(rules[uid])
         if uid == verifier.DATASOURCE_CANARY_UIDS[0]:
@@ -1067,6 +1340,11 @@ def test_nonproduction_import_never_installs_or_reads_production_canaries(verifi
             return []
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         raise AssertionError('nonproduction must not read production canaries')
 
     monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_request_json', read)
@@ -1162,3 +1440,75 @@ def test_pusher_gate_selects_development_expectations_by_grafana_host(verifier, 
     production_failures = verifier._run_pusher_gate('https://monitor.omi.me', 'dummy-secret', 'postrollout', 1)
     assert production_failures
     assert all('execErrState does not match' in failure for failure in production_failures)
+
+
+def _gate_requests(verifier: SimpleNamespace, up_responses: dict[str, list[object]], queries: list[str]):
+    rules, datasource, _up, metric_query, contact_points = _inputs(verifier)
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path.startswith("/api/datasources/proxy/uid/prometheus/api/v1/query?"):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)["query"][0]
+            queries.append(query)
+            if query == verifier.POD_DELETION_TIMESTAMP_QUERY:
+                return _series_query([])
+            if query == verifier.KSM_POD_INFO_COUNT_QUERY:
+                return _ksm_present()
+            if query in up_responses:
+                response = up_responses[query].pop(0)
+                if isinstance(response, Exception):
+                    raise response
+                return response
+            return metric_query
+        if path.startswith("/api/v1/provisioning/alert-rules/"):
+            return rules[path.rsplit("/", 1)[-1]]
+        if path == "/api/datasources/uid/prometheus/health":
+            return datasource
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        raise AssertionError(path)
+
+    return fake_request
+
+
+def test_prepublish_reads_windowed_up_and_postrollout_keeps_instant_up(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    healthy = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l")])
+    assert verifier.PREPUBLISH_UP_QUERY == ('max_over_time(up{job=~"pusher-metrics|backend-listen-metrics"}[2m])')
+    for phase, expected in (("prepublish", verifier.PREPUBLISH_UP_QUERY), ("postrollout", verifier.SERVING_UP_QUERY)):
+        queries: list[str] = []
+        fake = _gate_requests(verifier, {expected: [healthy]}, queries)
+        monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake)
+        assert verifier._run_pusher_gate("https://monitor.omi.me", "secret", phase, 1) == []
+        up_queries = {q for q in queries if q in (verifier.PREPUBLISH_UP_QUERY, verifier.SERVING_UP_QUERY)}
+        assert up_queries == {expected}
+
+
+def test_prepublish_retries_a_brief_miss_and_a_transient_query_error(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missed = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l", "0")])
+    healthy = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l")])
+    responses = {verifier.PREPUBLISH_UP_QUERY: [verifier.AlertRouteError("HTTP 502"), missed, healthy]}
+    fake = _gate_requests(verifier, responses, [])
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake)
+    monkeypatch.setattr(verifier._run_pusher_gate.__globals__["time"], "sleep", lambda _s: None)
+    assert verifier._run_pusher_gate("https://monitor.omi.me", "secret", "prepublish", 3) == []
+
+
+def test_prepublish_still_fails_a_target_down_for_the_whole_window(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    down = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l", "0")])
+    fake = _gate_requests(verifier, {verifier.PREPUBLISH_UP_QUERY: [down, down]}, [])
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake)
+    monkeypatch.setattr(verifier._run_pusher_gate.__globals__["time"], "sleep", lambda _s: None)
+    failures = verifier._run_pusher_gate("https://monitor.omi.me", "secret", "prepublish", 2)
+    assert any("backend-listen-metrics=0" in failure for failure in failures)
+
+
+def test_attempts_default_to_six_only_for_prepublish(verifier: SimpleNamespace) -> None:
+    assert verifier.resolve_attempts(None, mode="pusher", phase="prepublish") == 6
+    assert verifier.resolve_attempts(None, mode="pusher", phase="postrollout") == 1
+    assert verifier.resolve_attempts(None, mode="fleet", phase=None) == 1
+    assert verifier.resolve_attempts(12, mode="pusher", phase="prepublish") == 12

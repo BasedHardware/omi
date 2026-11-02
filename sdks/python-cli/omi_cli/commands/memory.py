@@ -148,7 +148,7 @@ def delete_memory(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete memory {memory_id}?", abort=True)
+        typer.confirm(f"Delete memory {memory_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/memories/{path_segment(memory_id)}")
     if ctx.renderer.json_mode:

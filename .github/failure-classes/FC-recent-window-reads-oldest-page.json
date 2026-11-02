@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-recent-window-reads-oldest-page",
+  "violated_contract": "A projection named for recent entries of an append-only sequence must read the tail of that sequence, not its first page. Reading sequence > 0 with a fixed limit returns the oldest page for every record, so a thread past the page size never shows its newest changes.",
+  "canonical_prevention": "Start the ascending read at latest_sequence minus the page size, which is exact when every append assigns sequence = latest_sequence + 1 in the same transaction, and seed a journal longer than the page in the regression test.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_workstream_detail_recent_events.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/workstreams.py"
+  ],
+  "status": "open"
+}

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -57,6 +58,83 @@ Future<Map<String, dynamic>> _graphLoaded() async => {
     };
 
 final memoriesScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'memories-mind-map-distinct-identities',
+    title: 'Mind Map: owner, same-name people and a concept called I stay distinct',
+    page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
+    state: 'Synthetic Sam Altman account; canonical owner follows distinct people and a concept in response order',
+    prefs: const {'givenName': 'Sam', 'familyName': 'Altman'},
+    run: (a) async {
+      await a.pump(
+          MemoryGraphPage(
+            trackOpenEvent: false,
+            loadGraph: () async => {
+              'nodes': [
+                {'id': 'ent_1611f3f21a8027b7c4f5', 'label': 'Sam Altman', 'node_type': 'person'},
+                {'id': 'contact-sam', 'label': 'Sam', 'node_type': 'person'},
+                {'id': 'ent_f33e07a0450b65412254', 'label': 'I', 'node_type': 'concept'},
+                {'id': 'user', 'label': 'user', 'node_type': 'person'},
+              ],
+              'edges': [
+                {'source_id': 'user', 'target_id': 'ent_1611f3f21a8027b7c4f5', 'label': 'knows'},
+                {'source_id': 'user', 'target_id': 'contact-sam', 'label': 'knows'},
+                {'source_id': 'user', 'target_id': 'ent_f33e07a0450b65412254', 'label': 'studies'},
+              ],
+            },
+          ),
+          scaffold: false);
+      void assertIdentities() {
+        final graph = a.tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage)).simulation;
+        expect(graph.nodes.map((node) => node.id).toSet(),
+            {'user', 'ent_1611f3f21a8027b7c4f5', 'contact-sam', 'ent_f33e07a0450b65412254'});
+        expect(graph.nodes.singleWhere((node) => node.isFixed).id, 'user');
+        expect(graph.edges.length, 3);
+      }
+
+      assertIdentities();
+      await a.shot('Distinct people and concept retain their owner relationships', step: 'loaded');
+      await a.tap(find.byKey(const ValueKey('mind_map_refresh')));
+      assertIdentities();
+      await a.shot('Refresh preserves all identities and relationships', step: 'refreshed');
+    },
+  ),
+  AuditScenario(
+    id: 'memories-mind-map-recovery',
+    title: 'Mind Map: saved memories without assertions, then a later graph page',
+    page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
+    state: 'A canonical page with saved memories and a signed cursor; a later page contains relationships',
+    run: (a) async {
+      await a.pump(
+          MemoryGraphPage(
+            trackOpenEvent: false,
+            loadGraph: () async => {
+              'nodes': [],
+              'edges': [],
+              'catalog_nodes': [
+                for (var i = 0; i < _listed.length; i++) {'id': 'memory:$i', 'label': _listed[i]}
+              ],
+              'has_more': true,
+              'next_cursor': 'fixture-page-2',
+            },
+            loadMoreGraph: (_) => _graphLoaded(),
+          ),
+          scaffold: false);
+      await a.shot('Saved memories remain readable without invented relationships', step: 'catalog');
+      await a.tap(find.byKey(const ValueKey('mind_map_load_more')));
+      await a.shot('Load a later page containing supported relationships', step: 'graph');
+    },
+  ),
+  AuditScenario(
+    id: 'memories-mind-map-empty',
+    title: 'Mind Map: genuinely empty account with refresh',
+    page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
+    state: 'A successful canonical read has no eligible memories or relationships',
+    run: (a) async {
+      await a.pump(MemoryGraphPage(trackOpenEvent: false, loadGraph: () async => {'nodes': [], 'edges': []}),
+          scaffold: false);
+      await a.shot('Refresh remains reachable on an empty Mind Map');
+    },
+  ),
   AuditScenario(
     id: 'memories-manual-memory',
     title: 'Memories: empty, create, save, quick edit, no results, filtered out',

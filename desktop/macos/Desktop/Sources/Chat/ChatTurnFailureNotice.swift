@@ -32,7 +32,7 @@ struct ChatTurnFailureNotice: Equatable, Sendable {
   /// message. A dismissible banner can afford that; a row that stays in the
   /// transcript cannot — `HTTP 402 status code (no body)` is what the reader
   /// would still be reading a month from now. The raw string keeps going to
-  /// the local log and to Sentry; the row says the part a reader can act on.
+  /// the local log; the row says the part a reader can act on.
   static let unclassifiedText = "Omi couldn't answer this one. Try sending it again."
 
   /// The marker for a turn that ended in a raw provider/transport error, or

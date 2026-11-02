@@ -1,4 +1,4 @@
-"""Exact HEAD/candidate OFF receipt through the approved offline harness."""
+"""Graduated sync/v2 resolution receipt through the approved offline harness."""
 
 import json
 import os
@@ -25,8 +25,8 @@ def old_counters():
     }
 
 
-def test_off_resolution_receipt(env, verified_audio, monkeypatch):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+def test_graduated_resolution_receipt(env, verified_audio, monkeypatch):
+
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'false')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_RETENTION', 'false')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'false')
@@ -63,3 +63,5 @@ def test_off_resolution_receipt(env, verified_audio, monkeypatch):
             json.dumps(dict(rows=rows, metrics=delta), sort_keys=True, indent=2) + '\n'
         )
     assert len(rows) == 4
+    assert all(row["embeddings"] == 1 for row in rows)
+    assert all(row["payload"]["speaker_resolution"]["status"] == "resolved" for row in rows)

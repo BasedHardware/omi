@@ -11,8 +11,6 @@ from typing import Any, Dict, Iterable
 
 from pydantic import BaseModel
 
-from utils.memory.belief_model import belief_model_enabled
-
 
 class MemoryApiExposure(str, Enum):
     LEGACY = "legacy"
@@ -60,9 +58,8 @@ def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExp
         tier = payload.get("memory_tier") or payload.get("tier")
         if tier is not None and payload.get("layer") is None:
             payload["layer"] = tier
-    if not belief_model_enabled():
-        for field in BELIEF_VIEW_FIELDS:
-            payload.pop(field, None)
+    for field in BELIEF_VIEW_FIELDS:
+        payload.pop(field, None)
     return payload
 
 

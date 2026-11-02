@@ -7,7 +7,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  */
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
 }));
 
 const fetchMock = vi.fn();
@@ -29,6 +29,7 @@ import { withFreshness } from "@/lib/payload-cache";
 import { buildDateSeries } from "@/app/api/omi/stats/crash-rate/route";
 import { toGrafanaActivationPayload } from "@/lib/activation-compat";
 import { computeMacosVersions } from "@/app/api/omi/stats/macos-versions/route";
+import { testIdentity } from "./support/test-identity";
 
 describe("activation payload", () => {
   it("keeps erroredUsers alongside the rate it shrank", () => {

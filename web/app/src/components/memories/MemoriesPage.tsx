@@ -80,9 +80,6 @@ export function MemoriesPage() {
     error,
     hasMore,
     truncated,
-    beliefEnabled,
-    memoryView,
-    setMemoryView,
     loadMore,
     refresh,
     addMemory,
@@ -92,7 +89,6 @@ export function MemoriesPage() {
     toggleVisibility,
     acceptMemory,
     rejectMemory,
-    setMemoryUse,
     setCategories,
     activeCategories,
   } = useMemories();
@@ -522,34 +518,6 @@ export function MemoriesPage() {
                     activeCategories={activeCategories}
                     onCategoriesChange={setCategories}
                   />
-
-                  {beliefEnabled === true && (
-                    <div
-                      className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1"
-                      aria-label="Memory view"
-                    >
-                      {(
-                        [
-                          ['useful_now', 'Useful now'],
-                          ['history', 'History'],
-                          ['all', 'All'],
-                        ] as const
-                      ).map(([value, label]) => (
-                        <button
-                          key={value}
-                          onClick={() => setMemoryView(value)}
-                          className={cn(
-                            'rounded-md px-2.5 py-1 text-sm font-medium transition-all duration-150',
-                            memoryView === value
-                              ? 'bg-white text-black'
-                              : 'text-text-tertiary hover:text-text-primary',
-                          )}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -672,7 +640,6 @@ export function MemoriesPage() {
                           onToggleVisibility={toggleVisibility}
                           onAccept={acceptMemory}
                           onReject={rejectMemory}
-                          onSetUse={beliefEnabled === true ? setMemoryUse : undefined}
                           highlightedMemoryId={highlightedMemoryId}
                           // Only pass selection props when in select mode
                           selectedIds={isSelectMode ? selectedIds : undefined}

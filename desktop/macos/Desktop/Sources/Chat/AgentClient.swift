@@ -79,10 +79,6 @@ enum AgentClient {
     let providerTargets: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
-    let jitCostStatus: String?
-    let jitEstimatedCostUsd: Double?
-    let jitProviderAttempts: Int?
-    let jitReceiptAttemptIDs: [String]
 
     init(_ result: AgentBridge.QueryResult) {
       text = result.text
@@ -101,10 +97,6 @@ enum AgentClient {
       providerTargets = result.providerTargets
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
-      jitCostStatus = result.jitCostStatus
-      jitEstimatedCostUsd = result.jitEstimatedCostUsd
-      jitProviderAttempts = result.jitProviderAttempts
-      jitReceiptAttemptIDs = result.jitReceiptAttemptIDs
     }
 
     @discardableResult
@@ -169,6 +161,10 @@ enum AgentClient {
 
     func invalidateSurface(_ surface: AgentSurfaceReference) async {
       await bridge.invalidateSurface(surface)
+    }
+
+    func requestProviderAuth() async {
+      await bridge.requestProviderAuth()
     }
 
     func setGlobalAuthHandlers(

@@ -16,8 +16,10 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date
+from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Optional, Sequence
+from uuid import UUID
 
 from rich.console import Console
 from rich.table import Table
@@ -99,7 +101,7 @@ class Renderer:
         # Explicit columns win; inferred columns preserve keys from every row.
         cols = list(columns) if columns else list(dict.fromkeys(key for row in rows for key in row))
 
-        table = Table(title=title, show_lines=False, header_style="bold")
+        table = Table(title=Text(title) if title is not None else None, show_lines=False, header_style="bold")
         for col in cols:
             table.add_column(Text(col, style="bold"))
         for row in rows:
@@ -107,7 +109,7 @@ class Renderer:
         self._stdout.print(table)
 
     def _emit_mapping(self, mapping: Mapping[str, Any], *, title: Optional[str]) -> None:
-        table = Table(title=title, show_header=False, show_lines=False, box=None)
+        table = Table(title=Text(title) if title is not None else None, show_header=False, show_lines=False, box=None)
         table.add_column("field", style="bold")
         table.add_column("value")
         for k, v in mapping.items():
@@ -160,7 +162,10 @@ class Renderer:
     def debug(self, message: str) -> None:
         if not self.verbose:
             return
-        self._stderr.print(f"[dim][debug][/dim] {message}")
+        line = Text()
+        line.append("[debug]", style="dim")
+        line.append(f" {message}")
+        self._stderr.print(line)
 
 
 def _stringify(v: Any) -> str:
@@ -168,8 +173,10 @@ def _stringify(v: Any) -> str:
         return ""
     if isinstance(v, bool):
         return "✓" if v else "✗"
-    if isinstance(v, (datetime,)):
+    if isinstance(v, date):
         return v.isoformat()
+    if isinstance(v, (set, frozenset)):
+        return ", ".join(sorted(_stringify(x) for x in v))
     if isinstance(v, (list, tuple)):
         return ", ".join(_stringify(x) for x in v)
     if isinstance(v, Mapping):
@@ -178,8 +185,14 @@ def _stringify(v: Any) -> str:
 
 
 def _json_default(v: Any) -> Any:
-    if isinstance(v, datetime):
+    if isinstance(v, date):
         return v.isoformat()
+    if isinstance(v, (PurePath, UUID)):
+        return str(v)
+    if isinstance(v, (set, frozenset)):
+        # Sort by serialized value while leaving members for the JSON encoder.
+        # Pretty text would turn booleans, numbers and tuples into strings.
+        return sorted(v, key=lambda x: json.dumps(x, default=_json_default, sort_keys=True))
     if hasattr(v, "model_dump"):  # pydantic v2
         return v.model_dump()
     if hasattr(v, "dict"):  # pydantic v1 fallback

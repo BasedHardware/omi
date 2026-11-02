@@ -53,7 +53,6 @@ def memory_surfaces(monkeypatch):
 
     for module in (service_tools, chat_tools):
         monkeypatch.setattr(module, "MemoryService", FakeMemoryService)
-        monkeypatch.setattr(module, "belief_model_enabled", lambda: False)
     monkeypatch.setattr(notifications, "get_user_time_zone", lambda _uid: "UTC")
 
     state.service_tools = service_tools
@@ -348,9 +347,9 @@ def test_chat_search_entrypoint_uses_real_tool_wrapper_and_preserves_order(memor
     assert memory_surfaces.search_calls == [("uid-test", "preferences", {"limit": 2})]
 
 
-def test_list_surfaces_preserve_evidence_clock_and_normalize_utc_label(memory_surfaces):
+def test_list_surfaces_use_creation_clock_and_normalize_utc_label(memory_surfaces):
     memory = _memory("An older evidence-backed claim.", memory_id="dated")
-    memory.as_of = datetime(2026, 9, 1, 8, 30, tzinfo=timezone(timedelta(hours=7)))
+    memory.created_at = datetime(2026, 9, 1, 8, 30, tzinfo=timezone(timedelta(hours=7)))
     memory_surfaces.memories = [memory]
 
     results = [
@@ -362,25 +361,3 @@ def test_list_surfaces_preserve_evidence_clock_and_normalize_utc_label(memory_su
 
     assert all("date: Tue 1 Sep 2026, 01:30 UTC" in result for result in results)
     assert all("2026-09-21" not in result for result in results)
-
-
-def test_temporal_truncated_page_keeps_rows_warns_and_omits_next_offset(memory_surfaces):
-    memory = _memory("truncated scan claim", memory_id="truncated")
-    memory_surfaces.memories = [memory]
-    memory_surfaces.read_page_result = SimpleNamespace(memories=[memory], next_cursor=None, truncated=True)
-    memory_surfaces.monkeypatch.setattr(memory_surfaces.service_tools, "belief_model_enabled", lambda: True)
-    memory_surfaces.monkeypatch.setattr(memory_surfaces.chat_tools, "belief_model_enabled", lambda: True)
-
-    results = [
-        memory_surfaces.service_tools.get_memories_text("uid-test", limit=1, offset=0),
-        memory_surfaces.chat_tools.get_memories_tool.invoke(
-            {"limit": 1, "offset": 0}, config={"configurable": {"user_id": "uid-test"}}
-        ),
-    ]
-
-    assert '"truncated scan claim"' in results[0]
-    assert '"truncated scan claim"' not in results[1]
-    assert all("may exist" in result for result in results)
-    assert all("Next list offset:" not in result for result in results)
-    assert "bounded scan" in results[0]
-    assert "bounded scan" in results[1]

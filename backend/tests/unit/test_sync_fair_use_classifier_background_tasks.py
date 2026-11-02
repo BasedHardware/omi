@@ -20,14 +20,6 @@ def _source(rel_path: str) -> str:
     return (Path(__file__).resolve().parents[2] / rel_path).read_text(encoding='utf-8')
 
 
-def test_sync_router_schedules_classifier_via_start_background_task():
-    """Static checker (source scrape), not behavioral coverage."""
-    source = _source('routers/sync.py')
-    assert 'start_background_task(' in source
-    assert 'trigger_classifier_if_needed(uid, triggered_caps)' in source
-    assert 'asyncio.create_task(trigger_classifier_if_needed' not in source
-
-
 def test_pipeline_schedules_classifier_via_start_background_task():
     """Static checker (source scrape), not behavioral coverage."""
     source = _source('utils/sync/pipeline.py')

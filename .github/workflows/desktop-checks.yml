@@ -1,14 +1,50 @@
 name: Desktop Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
+    # Superset of the detect-changes has_desktop_agent_runtime filter, so a
+    # main push that cannot wake the agent-runtime job skips the workflow
+    # entirely. desktop-swift-ci.yml must NOT copy this: release planning
+    # needs its exact-SHA push evidence on every main commit.
+    paths:
+      - 'desktop/macos/agent/**'
+      - 'desktop/macos/pi-mono-extension/**'
+      - 'desktop/macos/run.sh'
+      - 'desktop/macos/scripts/audit-desktop-bundle-deps.sh'
+      - 'desktop/macos/scripts/prepare-agent-runtime.sh'
+      - 'desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh'
+      - 'desktop/macos/scripts/test-tool-surfaces.sh'
+      - 'desktop/macos/scripts/agent-logic-harness.sh'
+      - 'codemagic.yaml'
+      - 'scripts/pre-push'
+      - 'scripts/pre_push_ci_prediction.py'
+      - '.github/actions/detect-changes/**'
+      - '.github/workflows/desktop-checks.yml'
   pull_request:
     branches: main
 
 concurrency:
-  group: desktop-checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: desktop-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # A newer PR push supersedes that PR's older run. A newer main push must not
+  # cancel the running one: with cancel-in-progress false GitHub replaces only
+  # the pending run in the group, so the running SHA finishes and the newest
+  # pending SHA runs next — main always gets a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   changes:
@@ -16,11 +52,12 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
-      has_desktop_agent_runtime: ${{ steps.changes.outputs.has_desktop_agent_runtime }}
+      has_desktop_agent_runtime: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_desktop_agent_runtime) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
 
       - name: Detect changed paths
@@ -36,6 +73,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
 
       - name: Setup Node.js for desktop agent runtime

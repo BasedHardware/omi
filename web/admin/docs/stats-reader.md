@@ -1,6 +1,6 @@
 # Keyless machine access to aggregate stats
 
-`verifyAdmin` accepts Google-signed OIDC ID tokens only for **GET** requests
+The admin guard (`requireScope` in `lib/auth.ts`) accepts Google-signed OIDC ID tokens only for **GET** requests
 under `/api/omi/stats/`, including `/api/omi/stats/wall`. Firebase ID tokens
 still require the existing `adminData/{uid}` membership check. Machine tokens
 cannot authorize other admin or user-data routes, or any mutation. This

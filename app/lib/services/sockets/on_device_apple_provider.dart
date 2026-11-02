@@ -6,6 +6,8 @@ import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/experiments/on_device_overflow_gate.dart';
+import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/utils/audio/whisper_pcm.dart';
 import 'package:omi/services/sockets/apple_speech_readiness.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
@@ -30,6 +32,7 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
       {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
     if (!(isIOS ?? Platform.isIOS)) return false;
     try {
+      if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) return (await readiness(language)).ready;
       final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
         'language': language,
         'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
@@ -47,9 +50,18 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
     bool prepare = false,
   }) async {
     try {
+      var overflowUsesLegacy = false;
+      if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
+        final batch = await AppleBatchEngine.channel.invokeMapMethod<String, dynamic>('status', {'language': language});
+        final engine = batch?['engine'] as String? ?? 'unavailable';
+        overflowUsesLegacy = engine == 'sfspeech';
+        if (!overflowUsesLegacy) {
+          return AppleSpeechReadiness(engine, batch?['phase'] == 'installed' ? 'ready' : 'unavailable');
+        }
+      }
       final data = await _channel.invokeMapMethod<String, dynamic>(prepare ? 'prepareSpeech' : 'readiness', {
         'language': language,
-        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
+        'useSpeechAnalyzer': !overflowUsesLegacy && await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
       });
       return AppleSpeechReadiness.fromMap(data);
     } catch (_) {
@@ -67,8 +79,32 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
     String? language,
   }) async {
     try {
-      final sw = Stopwatch()..start();
       final normalized = WhisperPcm.normalize(audioData);
+      if (await OnDeviceOverflowGate.read()) {
+        final result = await AppleBatchEngine().transcribe(normalized.wav, language: language ?? this.language);
+        final duration = normalized.duration;
+        if (result.text.trim().isEmpty) {
+          return SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration);
+        }
+        return SttTranscriptionResult(rawText: result.text, audioEndSeconds: audioOffsetSeconds + duration, segments: [
+          if (result.words.isEmpty)
+            SttSegment(
+                text: result.text,
+                start: audioOffsetSeconds,
+                end: audioOffsetSeconds + duration,
+                speakerId: 0,
+                sttProvider: 'on_device:${result.engine}')
+          else
+            for (final word in result.words)
+              SttSegment(
+                  text: word.text,
+                  start: audioOffsetSeconds + word.start,
+                  end: audioOffsetSeconds + word.end,
+                  speakerId: 0,
+                  sttProvider: 'on_device:${result.engine}'),
+        ]);
+      }
+      final sw = Stopwatch()..start();
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/temp_apple_audio_${DateTime.now().millisecondsSinceEpoch}.wav');
@@ -118,12 +154,18 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         }
       }
     } catch (e) {
+      // Keep the native domain/code before translating setup failures for the
+      // recovery UI. Polling otherwise only sees the bounded LocalSttFailure.
+      CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
+      if (e is PlatformException && useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
+        final state = await readiness(language ?? this.language);
+        if (!state.ready) throw LocalSttFailure(state.status, canProbeRecovery: true);
+      }
       if (e is PlatformException && ['UNAUTHORIZED', 'UNAVAILABLE', 'INVALID_ARGS'].contains(e.code)) {
         final details = e.details;
         final status = details is Map ? details['status'] as String? : null;
         throw LocalSttFailure(status ?? e.code.toLowerCase(), canProbeRecovery: e.code != 'INVALID_ARGS');
       }
-      CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
       rethrow; // Keep failed/timed-out audio in the polling buffer for retry.
     }
   }

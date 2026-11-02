@@ -64,7 +64,12 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
     observeAuthChanges: Bool = true,
     now: @escaping @Sendable () -> Date = { Date() },
     fetchSubscription: @escaping @Sendable () async throws -> UserSubscriptionResponse = {
-      try await APIClient.shared.getUserSubscription()
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      let response = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+      if let authorization {
+        ScreenCloudEntitlementService.shared.accept(response, authorization: authorization)
+      }
+      return response
     },
     isByokActive: @escaping @Sendable () -> Bool = { APIKeyService.isByokActive }
   ) {

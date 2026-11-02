@@ -14,13 +14,20 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailRequestIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift
+  # Read-time section presentation; exact citation vectors live in NoteCitationContractTests.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/NoteCitationContract.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummaryProvenanceState.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
+  # Summary composition; per-section source navigation is exercised in ConversationSectionSourcesTests.
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSectionSources.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/SummaryDocumentProse.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationPhotoGallery.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/MeetingMemoryBrief.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/MeetingMemoryBriefCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/MeetingFollowUpDraftSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/CitationCardView.swift

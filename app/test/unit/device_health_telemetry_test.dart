@@ -474,6 +474,486 @@ void main() {
     expect(record['open_since'], DateTime(2026, 10, 9, 23).millisecondsSinceEpoch);
   });
 
+  test('stale native outage on a connected device is not a full lost day', () async {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    final poisoned = DeviceHealthTelemetry.rollup({
+      'observed_at': start + 86400000,
+      'outage_open_since': start - 86400000,
+      'connected_at': start + 90000,
+    }, day);
+    expect(poisoned['connected_time_fraction'], greaterThan(0.99));
+    expect(poisoned['lost_audio_seconds'], 90);
+    expect(poisoned['unresolved_outage_seconds'], 90);
+
+    const id = 'stale-connected';
+    await DeviceHealthTelemetry.recordOutage(id, at: DateTime.fromMillisecondsSinceEpoch(start - 86400000));
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': start + 86400000,
+              'audio_outage_started_at': start - 86400000,
+              'connected_at': start + 90000,
+              'audio_packets_received': 5000,
+              'audio_packet_days': [
+                {'ts': start, 'received': 5000, 'expected': 5000, 'last_at': start + 3600000}
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-15']);
+    expect(events.single['connected_time_fraction'], greaterThan(0.99));
+    expect(events.single['lost_audio_seconds'], 90);
+    expect(events.single['unresolved_outage_open'], isFalse);
+    expect(events.single['lost_audio_seconds'], isNot(86400));
+  });
+
+  test('stalled Android retry does not close an open audio outage', () async {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    final disconnectAt = start + 10 * 3600000;
+    final retryAt = start + 12 * 3600000;
+    const id = 'android-stalled-retry';
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': retryAt,
+              'audio_outage_started_at': disconnectAt,
+              // Attempt start, before GATT. The previous session's counter is
+              // still set; packet evidence is older than this attempt.
+              'connected_at': retryAt,
+              'audio_packets_received': 5000,
+              'audio_packet_days': [
+                {'ts': start, 'received': 5000, 'expected': 5000, 'last_at': disconnectAt - 1000}
+              ],
+              'disconnect_history_v2': [
+                {
+                  'timestamp': disconnectAt,
+                  'eventType': 'disconnect',
+                  'connectionDurationMs': 10 * 3600000,
+                  'audioPacketsReceived': 5000,
+                }
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-15']);
+    expect(events.single['unresolved_outage_open'], isTrue);
+    expect(events.single['lost_audio_seconds'], 2 * 3600);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], disconnectAt);
+  });
+
+  test('recovery stamp closes an outage while the start marker is still present', () async {
+    const id = 'recovery-stamp';
+    final start = DateTime(2026, 10, 15, 10);
+    final resolved = DateTime(2026, 10, 15, 12);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'audio_outage_started_at': start.millisecondsSinceEpoch,
+              'audio_outage_resolved_start': start.millisecondsSinceEpoch,
+              'audio_outage_resolved_at': resolved.millisecondsSinceEpoch,
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['unresolved_outage_open'], isFalse);
+    expect(events.single['lost_audio_seconds'], 2 * 3600);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], isNull);
+    expect(record['last_resolved_start'], start.millisecondsSinceEpoch);
+  });
+
+  test('fractional outage_open_since and observed_at do not bill or widen a day', () {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    // observed_at truncation would extend the exposure window; a fractional
+    // open_since would bill an outage boundary the writers never wrote.
+    final rolled = DeviceHealthTelemetry.rollup({
+      'observed_at': start + 20 * 3600000 + 0.5,
+      'outage_open_since': start + 3600000 + 0.5,
+      'disconnect_history_v2': [
+        {'timestamp': start + 3600000, 'eventType': 'disconnect', 'connectionDurationMs': 60000},
+      ],
+    }, day);
+    // The fractional open is malformed: it contributes no lost audio.
+    expect(rolled['lost_audio_seconds'] ?? 0, 0);
+    // The integer disconnect row still counts its minute of connection.
+    final fraction = rolled['connected_time_fraction'] as num;
+    // 60s of a 24h day is ~0.00069; a truncated-but-fractional window would
+    // not reach it exactly, so require at least half the minute.
+    expect(fraction, greaterThanOrEqualTo(0.0003));
+  });
+
+  test('fractional native outage start is not imported as an outage', () async {
+    const id = 'fractional-native-start';
+    final start = DateTime(2026, 10, 15, 10);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              // Fractional native start: truncation would bill an outage the
+              // writers never recorded.
+              'audio_outage_started_at': start.millisecondsSinceEpoch + 0.5,
+            }),
+        emit: (_, props) => events.add(props));
+    // The malformed start proves nothing: no outage record is written at all.
+    expect((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id)), isNull);
+  });
+
+  test('fractional audio_recovered history row is not imported as a resolution', () async {
+    const id = 'fractional-history-row';
+    final start = DateTime(2026, 10, 15, 10);
+    final resolved = DateTime(2026, 10, 15, 12);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'audio_outage_started_at': start.millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'eventType': 'audio_recovered',
+                  'timestamp': start.millisecondsSinceEpoch + 0.5,
+                  'lostAudioResolvedAt': resolved.millisecondsSinceEpoch + 0.5,
+                }
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    // The malformed row proves nothing: the outage stays open.
+    expect(events.single['unresolved_outage_open'], isTrue);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], start.millisecondsSinceEpoch);
+  });
+
+  test('fractional recovery stamp values never close an outage', () async {
+    const id = 'fractional-stamp';
+    final start = DateTime(2026, 10, 15, 10);
+    final resolved = DateTime(2026, 10, 15, 12);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'audio_outage_started_at': start.millisecondsSinceEpoch,
+              // 0.5 fractions must not truncate into the outage's exact
+              // (start, at) pair: writers emit integer millis only.
+              'audio_outage_resolved_start': start.millisecondsSinceEpoch + 0.5,
+              'audio_outage_resolved_at': resolved.millisecondsSinceEpoch + 0.5,
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['unresolved_outage_open'], isTrue);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], start.millisecondsSinceEpoch);
+  });
+
+  test('replayed days before the retention horizon exclude the unknown prefix', () {
+    final day = DateTime(2026, 10, 9);
+    final start = day.millisecondsSinceEpoch;
+    final observedAt = DateTime(2026, 10, 16, 23).millisecondsSinceEpoch;
+    final horizon = observedAt - 7 * 24 * 3600 * 1000;
+    final survived = {
+      'timestamp': horizon + 30 * 60 * 1000,
+      'eventType': 'disconnect',
+      'connectionDurationMs': 30 * 60 * 1000,
+    };
+    final withPackets = DeviceHealthTelemetry.rollup({
+      'observed_at': observedAt,
+      'outage_open_since': start,
+      'audio_packet_days': [
+        {'ts': start, 'received': 100, 'expected': 100, 'last_at': start + 22 * 3600000}
+      ],
+      'disconnect_history_v2': [survived],
+    }, day);
+    expect(withPackets['connection_history_incomplete'], isTrue);
+    expect(withPackets['lost_audio_seconds'], 30 * 60);
+    expect(withPackets['unresolved_outage_open'], isTrue);
+    // No packet row: the pruned prefix is still unknown budget, and the
+    // outage stays open. The surviving 30 minutes after the horizon remain.
+    final withoutPackets = DeviceHealthTelemetry.rollup({
+      'observed_at': observedAt,
+      'outage_open_since': start,
+      'disconnect_history_v2': [survived],
+    }, day);
+    expect(withoutPackets['connection_history_incomplete'], isTrue);
+    expect(withoutPackets['lost_audio_seconds'], 30 * 60);
+    expect(withoutPackets['unresolved_outage_open'], isTrue);
+  });
+
+  test('unbacked audio recovery is not imported and its persisted day is kept', () async {
+    const id = 'stale-false-recovery';
+    final falseDay = DateTime(2026, 10, 14, 10);
+    final backedDay = DateTime(2026, 10, 15, 12);
+    await DeviceHealthTelemetry.recordOutage(id, at: falseDay);
+    await DeviceHealthTelemetry.recordRecovery(id, at: falseDay.add(const Duration(hours: 2)));
+    await DeviceHealthTelemetry.recordOutage(id, at: backedDay);
+    await DeviceHealthTelemetry.recordRecovery(id, at: backedDay.add(const Duration(seconds: 60)));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-10-13');
+    final backedStart = backedDay.millisecondsSinceEpoch;
+    final falseStart = falseDay.millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'timestamp': falseStart,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': falseStart + 2 * 3600000,
+                },
+                {
+                  'timestamp': backedStart,
+                  'eventType': 'disconnect',
+                  'lostAudioResolvedAt': backedStart + 60000,
+                },
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-14', '2026-10-15']);
+    expect(events.first['lost_audio_seconds'], 2 * 3600);
+    expect(events.last['lost_audio_seconds'], 60);
+  });
+
+  test('standalone audio recovery backed by a native stamp is imported', () async {
+    const id = 'stamped-standalone-recovery';
+    final start = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final resolved = start + 60000;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'timestamp': start,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': resolved,
+                },
+              ],
+              'audio_outage_resolved_start': start,
+              'audio_outage_resolved_at': resolved,
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 60);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['last_resolved_start'], start);
+  });
+
+  test('audio recovery with neither disconnect nor stamp is dropped', () async {
+    const id = 'unproven-audio-recovered';
+    final start = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'timestamp': start,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': start + 2 * 3600000,
+                },
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events, isEmpty);
+    expect((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id)), isNull);
+  });
+
+  test('a native stamp does not import a different standalone recovery', () async {
+    const id = 'stamp-mismatch';
+    final rowStart = DateTime(2026, 10, 15, 10).millisecondsSinceEpoch;
+    final stampStart = DateTime(2026, 10, 15, 14).millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'timestamp': rowStart,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': rowStart + 2 * 3600000,
+                },
+              ],
+              'audio_outage_resolved_start': stampStart,
+              'audio_outage_resolved_at': stampStart + 60000,
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 60);
+  });
+
+  test('every native recovery proof imports its standalone row', () async {
+    const id = 'two-standalone-proofs';
+    final first = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final second = DateTime(2026, 10, 15, 14).millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'audio_outage_resolved_start': second,
+              'audio_outage_resolved_at': second + 120000,
+              'audio_outage_recovery_proofs': [
+                {'start': first, 'at': first + 60000},
+                {'start': second, 'at': second + 120000},
+              ],
+              'disconnect_history_v2': [
+                {'timestamp': first, 'eventType': 'audio_recovered', 'lostAudioResolvedAt': first + 60000},
+                {'timestamp': second, 'eventType': 'audio_recovered', 'lostAudioResolvedAt': second + 120000},
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 180);
+  });
+
+  test('a mixed false and real recovery day is left intact', () async {
+    const id = 'mixed-recovery-day';
+    final falseStartAt = DateTime(2026, 10, 15, 10);
+    final falseStart = falseStartAt.millisecondsSinceEpoch;
+    final realStart = falseStart + 3 * 3600000;
+    await DeviceHealthTelemetry.recordOutage(id, at: falseStartAt);
+    await DeviceHealthTelemetry.recordRecovery(id, at: falseStartAt.add(const Duration(hours: 2)));
+    await DeviceHealthTelemetry.recordOutage(id, at: DateTime.fromMillisecondsSinceEpoch(realStart));
+    await DeviceHealthTelemetry.recordRecovery(id, at: DateTime.fromMillisecondsSinceEpoch(realStart + 60000));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-10-14');
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'timestamp': falseStart,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': falseStart + 2 * 3600000,
+                },
+                {
+                  'timestamp': realStart,
+                  'eventType': 'disconnect',
+                  'lostAudioResolvedAt': realStart + 60000,
+                },
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 7260);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect((record['resolved_days'] as Map)[DateTime(2026, 10, 15).millisecondsSinceEpoch.toString()], 7260);
+  });
+
+  test('an aged-out native recovery does not delete the persisted day', () async {
+    const id = 'aged-out-native-recovery';
+    final observedAt = DateTime(2026, 10, 16, 8);
+    // Native history and recovery proofs expire after seven days. This recovery
+    // ended before that horizon; Dart still emits the calendar day.
+    const nativeRetentionMs = 7 * 24 * 3600 * 1000;
+    final horizon = observedAt.millisecondsSinceEpoch - nativeRetentionMs;
+    final resolvedAt = DateTime.fromMillisecondsSinceEpoch(horizon - 3600000);
+    final start = resolvedAt.subtract(const Duration(hours: 2));
+    expect(resolvedAt.millisecondsSinceEpoch, lessThan(horizon));
+    await DeviceHealthTelemetry.recordOutage(id, at: start);
+    await DeviceHealthTelemetry.recordRecovery(id, at: resolvedAt);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-10-08');
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: observedAt,
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': observedAt.millisecondsSinceEpoch,
+              'disconnect_history_v2': [],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['day'], '2026-10-09');
+    expect(events.single['lost_audio_seconds'], 2 * 3600);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(
+        (record['resolved_days'] as Map).containsKey(DateTime(2026, 10, 9).millisecondsSinceEpoch.toString()), isTrue);
+  });
+
+  test('importing the same native proofs twice does not double count', () async {
+    const id = 'proofs-twice';
+    final first = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final second = DateTime(2026, 10, 15, 14).millisecondsSinceEpoch;
+    Future<String> load(_) async => jsonEncode({
+          'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+          'audio_outage_resolved_start': second,
+          'audio_outage_resolved_at': second + 120000,
+          'audio_outage_recovery_proofs': [
+            {'start': first, 'at': first + 60000},
+            {'start': second, 'at': second + 120000},
+          ],
+          'disconnect_history_v2': [
+            {'timestamp': first, 'eventType': 'audio_recovered', 'lostAudioResolvedAt': first + 60000},
+            {'timestamp': second, 'eventType': 'audio_recovered', 'lostAudioResolvedAt': second + 120000},
+          ],
+        });
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: load,
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 180);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-10-14');
+    events.clear();
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: load,
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 180);
+    final record = jsonDecode(prefs.getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect((record['resolved_days'] as Map)[DateTime(2026, 10, 15).millisecondsSinceEpoch.toString()], 180);
+  });
+
+  test('audio recovery backed by a disconnect is imported', () async {
+    const id = 'backed-audio-recovered';
+    final start = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {'timestamp': start, 'eventType': 'disconnect'},
+                {
+                  'timestamp': start + 1000,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': start + 61000,
+                },
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 60);
+  });
+
   test('sign-out sends native retirement before subsequent recording', () async {
     final policies = <Map>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

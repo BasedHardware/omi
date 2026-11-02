@@ -13,7 +13,7 @@ spec.loader.exec_module(b)
 
 def test_canaries_execute_active_numeric_datasources_and_route_to_telegram():
     canaries = json.loads((MONITORING / 'alerts/datasource-health.json').read_text())
-    assert {r['data'][0]['datasourceUid'] for r in canaries} == {'prometheus', 'beuxmaq8oxhq8e'}
+    assert {r['data'][0]['datasourceUid'] for r in canaries} == {'prometheus', 'beuxmaq8oxhq8e', 'gmp-cloud-run'}
     for rule in canaries:
         assert rule['noDataState'] == rule['execErrState'] == 'Alerting'
         assert rule['for'] == '2m' and not rule['isPaused']
@@ -21,10 +21,12 @@ def test_canaries_execute_active_numeric_datasources_and_route_to_telegram():
         assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
         assert rule['notification_settings']['group_by'] == ['alertname']
         # Healthy samples, including zero instances, resolve; no samples page after pending.
-        healthy = 1 if rule['data'][0]['datasourceUid'] == 'prometheus' else 0
+        healthy = 0 if rule['data'][0]['datasourceUid'] == 'beuxmaq8oxhq8e' else 1
         assert b.evaluate(rule, {'A': {(): [healthy]}}) == {(): 0}
         assert b.episodes(rule, [(t, {}) for t in range(0, 240, 60)], 0, 180, 60)['episodes'] == 1
-    prometheus, cloud = canaries
+    by_source = {rule['data'][0]['datasourceUid']: rule for rule in canaries}
+    prometheus, cloud = by_source['prometheus'], by_source['beuxmaq8oxhq8e']
+    assert 'cluster="__run__"' in by_source['gmp-cloud-run']['data'][0]['model']['expr']
     assert prometheus['data'][0]['model']['expr'] == 'max(up)'
     query = cloud['data'][0]['model']
     assert query['queryType'] == 'timeSeriesList'

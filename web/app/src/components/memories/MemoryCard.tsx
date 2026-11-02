@@ -15,18 +15,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
-import type { MemoryUseAction } from '@/lib/api';
-
-type MemoryBeliefView = Memory & {
-  belief_class?: string | null;
-  currency_band?: string | null;
-  as_of?: string | null;
-  belief_computed_at?: string | null;
-  invalid_at?: string | null;
-  superseded_by?: string | null;
-  ledger_status?: string | null;
-  arguments?: Record<string, unknown>;
-};
 
 interface MemoryCardProps {
   memory: Memory;
@@ -35,7 +23,6 @@ interface MemoryCardProps {
   onToggleVisibility: (id: string, visibility: MemoryVisibility) => Promise<boolean>;
   onAccept?: (id: string) => Promise<boolean>;
   onReject?: (id: string) => Promise<boolean>;
-  onSetUse?: (id: string, action: MemoryUseAction) => Promise<boolean>;
   isHighlighted?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -76,13 +63,11 @@ export const MemoryCard = memo(function MemoryCard({
   onToggleVisibility,
   onAccept,
   onReject,
-  onSetUse,
   isHighlighted,
   isSelected,
   onToggleSelect,
   onEnterSelectionMode,
 }: MemoryCardProps) {
-  const beliefMemory = memory as MemoryBeliefView;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(memory.content);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -98,18 +83,6 @@ export const MemoryCard = memo(function MemoryCard({
   const categoryInfo =
     (memory.category && categoryConfig[memory.category]) || DEFAULT_CATEGORY_CONFIG;
   const needsReview = !memory.reviewed && memory.user_review === null;
-  const memoryUse =
-    beliefMemory.arguments?.memory_use &&
-    typeof beliefMemory.arguments.memory_use === 'object'
-      ? (beliefMemory.arguments.memory_use as { suppressed?: boolean; useful?: boolean })
-      : undefined;
-  const isSuppressed = memoryUse?.suppressed === true;
-  const isUseful = memoryUse?.useful === true;
-  const isInactiveHistorical = Boolean(
-    beliefMemory.invalid_at ||
-      beliefMemory.superseded_by ||
-      (beliefMemory.ledger_status && beliefMemory.ledger_status !== 'active'),
-  );
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -173,11 +146,6 @@ export const MemoryCard = memo(function MemoryCard({
     await onToggleVisibility(memory.id, newVisibility);
   };
 
-  const handleSetUse = async (action: MemoryUseAction) => {
-    if (!onSetUse || isInactiveHistorical) return false;
-    return onSetUse(memory.id, action);
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -190,23 +158,6 @@ export const MemoryCard = memo(function MemoryCard({
   const handleTextDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsEditing(true);
-  };
-
-  const beliefLabel = beliefMemory.currency_band
-    ? beliefMemory.currency_band.replaceAll('_', ' ')
-    : beliefMemory.belief_computed_at
-    ? 'Needs classification'
-    : null;
-
-  const formatEvidenceDate = (dateString: string | null | undefined) => {
-    if (!dateString) return null;
-    const date = new Date(dateString);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   const handleCardDoubleClick = () => {
@@ -381,29 +332,6 @@ export const MemoryCard = memo(function MemoryCard({
                     )}
                   </>
                 )}
-
-                {beliefLabel && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-0.5 text-xs capitalize text-text-secondary"
-                    title={
-                      beliefMemory.belief_computed_at
-                        ? `Assessed ${
-                            formatEvidenceDate(beliefMemory.belief_computed_at) ||
-                            'recently'
-                          }`
-                        : undefined
-                    }
-                  >
-                    {beliefLabel}
-                  </span>
-                )}
-
-                {beliefMemory.as_of && (
-                  <span className="text-xs text-text-quaternary">
-                    Evidence{' '}
-                    {formatEvidenceDate(beliefMemory.as_of) || beliefMemory.as_of}
-                  </span>
-                )}
               </div>
 
               {/* Date and indicators on the right */}
@@ -448,41 +376,6 @@ export const MemoryCard = memo(function MemoryCard({
                 : 'opacity-100 sm:pointer-events-none sm:opacity-0 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100',
             )}
           >
-            {onSetUse && !isInactiveHistorical && (
-              <>
-                <button
-                  onClick={() => handleSetUse(isSuppressed ? 'allow' : 'suppress')}
-                  className={cn(
-                    'rounded-lg px-2 py-1 text-xs transition-colors',
-                    isSuppressed
-                      ? 'text-success hover:bg-success/10'
-                      : 'text-text-tertiary hover:bg-error/10 hover:text-error',
-                  )}
-                  title={
-                    isSuppressed
-                      ? 'Allow Omi to use this memory'
-                      : "Don't use this memory"
-                  }
-                >
-                  {isSuppressed ? 'Allow use' : "Don't use"}
-                </button>
-                {!isSuppressed && !needsReview && (
-                  <button
-                    onClick={() => handleSetUse('useful')}
-                    className={cn(
-                      'rounded-lg p-2 transition-colors',
-                      isUseful
-                        ? 'text-success hover:bg-success/10'
-                        : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
-                    )}
-                    title="Mark memory useful"
-                    aria-label="Mark memory useful"
-                  >
-                    <ThumbsUp className="h-4 w-4" />
-                  </button>
-                )}
-              </>
-            )}
             {needsReview && onAccept && onReject ? (
               // Review buttons
               <>

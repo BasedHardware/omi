@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-list-cache-miss-treated-as-deletion",
+  "violated_contract": "A reference absent from a stale, bounded or failed collection read is unresolved, not proven deleted. The memory-link card on main skipped refresh once MemoriesProvider.hasLoaded was true and rendered No longer available for a newly created memory or failed list read (#23701).",
+  "canonical_prevention": "Resolve cached hits through the existing provider; on a miss use its coalesced, account-scoped refresh and hydration budget. Keep loading, unresolved/retry and resolved states distinct. Do not infer a terminal deletion from collection absence or introduce another memory writer.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/memory_link_resolution_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/chat/widgets/content_blocks/memory_link_block.dart"
+  ],
+  "status": "open"
+}

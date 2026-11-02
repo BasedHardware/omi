@@ -15,6 +15,7 @@ import {
   type ItemListKind,
 } from '@/lib/itemList';
 import { cn } from '@/lib/utils';
+import { conversationDisplayTitle } from '@/lib/conversationTitle';
 
 /** A loaded row: its title, or why it cannot be shown. */
 export type ItemListRowState =
@@ -38,7 +39,7 @@ export interface ItemListLoaders {
 const defaultLoaders: ItemListLoaders = {
   conversation: async (id) => {
     const conversation = await getConversation(id);
-    const title = conversation.structured?.title?.trim();
+    const title = conversationDisplayTitle(conversation).trim();
     return { title: title || 'Untitled conversation' };
   },
   task: async (id) => {

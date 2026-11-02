@@ -9,16 +9,33 @@ import 'package:omi/widgets/device_widget.dart';
 
 /// Top of the device page: the device's name, a Connected / Disconnected pill and its picture.
 class DevicePageHeader extends StatelessWidget {
-  const DevicePageHeader({super.key, required this.pairedDevice, required this.connectedDevice});
+  const DevicePageHeader({
+    super.key,
+    required this.pairedDevice,
+    required this.connectedDevice,
+    this.listening = false,
+    this.paused = false,
+  });
 
   final BtDevice? pairedDevice;
   final BtDevice? connectedDevice;
+
+  /// The device is capturing right now ("Listening"), or capture is paused on it ("Paused").
+  final bool listening;
+  final bool paused;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final isConnected = connectedDevice != null;
-    final stateColor = isConnected ? OmiColors.success : OmiColors.textSecondary;
+    final stateColor = isConnected && !paused ? OmiColors.success : OmiColors.textSecondary;
+    final stateLabel = !isConnected
+        ? l10n.disconnected
+        : listening
+            ? '${l10n.listening} · ${l10n.connected}'
+            : paused
+                ? '${l10n.paused} · ${l10n.connected}'
+                : l10n.connected;
     return Column(
       children: [
         Semantics(
@@ -33,20 +50,24 @@ class DevicePageHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
           decoration: BoxDecoration(
-            color: isConnected ? OmiColors.successSurface : OmiColors.surface2,
+            color: isConnected && !paused ? OmiColors.successSurface : OmiColors.surface2,
             borderRadius: OmiRadius.pillAll,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: stateColor, shape: BoxShape.circle),
-              ),
+              if (listening)
+                const OmiLiveDot(size: 6)
+              else
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(color: stateColor, shape: BoxShape.circle),
+                ),
               const SizedBox(width: 6),
               Text(
-                isConnected ? l10n.connected : l10n.disconnected,
+                stateLabel,
+                key: const Key('device_status_label'),
                 style: OmiType.footnote.copyWith(color: stateColor, fontWeight: FontWeight.w500),
               ),
             ],

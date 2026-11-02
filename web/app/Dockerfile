@@ -10,12 +10,15 @@ WORKDIR /app/web/app
 # Copy only the lock and package files
 COPY web/app/package.json web/app/bun.lock ./
 
+COPY web/packages/note-shared /app/web/packages/note-shared
+
 RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app/web/app
 COPY --from=deps /app/web/app/node_modules ./node_modules
+COPY --from=deps /app/web/packages/note-shared /app/web/packages/note-shared
 COPY web/app .
 
 ARG NEXT_PUBLIC_API_BASE_URL
@@ -61,6 +64,8 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 COPY --from=builder --chown=bun:bun /app/web/app/.moonshine ./.moonshine
 COPY --from=builder --chown=bun:bun /app/web/app/package.json ./package.json
 COPY --from=builder --chown=bun:bun /app/web/app/bun.lock ./bun.lock
+
+COPY --from=deps /app/web/packages/note-shared /app/web/packages/note-shared
 
 RUN bun install --production --frozen-lockfile
 

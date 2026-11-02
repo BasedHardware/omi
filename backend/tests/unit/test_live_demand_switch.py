@@ -12,6 +12,7 @@ from tests.unit.test_live_cost_router import controls  # noqa: F401
 from routers.listen.demand_routing import LiveDemandRouting
 from routers.listen import demand_routing
 from config.live_demand import resolve_live_demand
+from config.live_stt_replay import DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS, REPLAY_PREFIX_MARGIN_ENV
 from tests.unit.fixtures.replay_clock import VirtualClock
 from utils.audio_timeline import CaptureTimeline
 from utils.stt import recovery_state, replay_delivery, resilient_stream
@@ -302,8 +303,9 @@ async def test_default_hidden_dwell_fits_quiet_capture_replay_budget(monkeypatch
     monkeypatch.setattr(resilient_stream, 'clock', lambda: timer.now)
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     monkeypatch.delenv('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', raising=False)
+    monkeypatch.delenv(REPLAY_PREFIX_MARGIN_ENV, raising=False)
     dwell = resolve_live_demand().dwell_seconds
-    assert dwell < replay_delivery.REPLAY_PREFIX_SECONDS
+    assert dwell < replay_delivery.REPLAY_PREFIX_SECONDS - DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
     # No emitted vendor anchor: all pre-dwell capture remains replay-owned.
     actual._window_replay_audio.append(b'\x00\x00' * int(dwell * 16000), 0)
     old = actual.stt_socket
@@ -312,6 +314,38 @@ async def test_default_hidden_dwell_fits_quiet_capture_replay_budget(monkeypatch
         assert old.retired_for_replay
         assert actual.host.stt_model == 'parakeet-window'
         assert not actual.live_demand.policy.fallback
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('unanswered_seconds, admitted', [(19.0, True), (19.5, False), (20.0, False)])
+async def test_handover_refuses_unanswered_capture_past_the_margined_budget(monkeypatch, unanswered_seconds, admitted):
+    # A handover replays the whole unanswered ring uncut, so it refuses — and
+    # keeps the healthy source — past the same wall-minus-margin the failure
+    # path holds back; exactly-the-wall capture would miss the wall at 1x.
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    timer = VirtualClock()
+    monkeypatch.setattr(replay_delivery, 'clock', lambda: timer.now)
+    monkeypatch.setattr(replay_delivery, 'sleep', timer.sleep)
+    monkeypatch.setattr(recovery_state, 'clock', lambda: timer.now)
+    monkeypatch.setattr(resilient_stream, 'clock', lambda: timer.now)
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    monkeypatch.delenv(REPLAY_PREFIX_MARGIN_ENV, raising=False)
+    actual._window_replay_audio.append(b'\x00\x00' * int(unanswered_seconds * 16000), 0)
+    old = actual.stt_socket
+    try:
+        assert await actual._switch_live_demand('parakeet') is admitted
+        if admitted:
+            assert old.retired_for_replay
+            assert actual.host.stt_model == 'parakeet-window'
+            assert not actual.live_demand.policy.fallback
+        else:
+            assert actual.stt_socket is old
+            assert actual.host.stt_service == st.STTService.soniox
+            assert not old.retired_for_replay and not old.is_connection_dead
+            assert actual.live_demand.policy.fallback
     finally:
         actual.stt_socket.finish()
         await stop(raws)

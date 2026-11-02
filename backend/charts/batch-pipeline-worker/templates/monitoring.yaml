@@ -1,13 +1,22 @@
+{{- define "batch-pipeline-worker.monitoring" -}}
 {{- if and .Values.enabled .Values.podMonitoring.enabled }}
 apiVersion: monitoring.googleapis.com/v1
 kind: PodMonitoring
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ .instance.name }}
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: batch-pipeline-worker
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/instance: {{ .instance.name }}
   endpoints:
     - {port: http, path: /metrics, interval: 15s}
+{{- end }}
+{{- end }}
+{{- if and .Values.enabled .Values.podMonitoring.enabled }}
+{{- $root := . }}
+{{- range $instance := (include "batch-pipeline-worker.instances" . | fromYamlArray) }}
+{{ include "batch-pipeline-worker.monitoring" (dict "Values" $root.Values "Release" $root.Release "instance" $instance) }}
+---
+{{- end }}
 {{- end }}

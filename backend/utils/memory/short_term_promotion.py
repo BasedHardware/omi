@@ -1,8 +1,8 @@
-"""Deterministic retention, owed intake completion and canonical outbox delivery.
+"""Retention, bounded intake decisions and canonical outbox delivery.
 
-Retrospective semantic consolidation is owned by Dream. This host retains the
-legacy disposition primitive for TTL and explicit, receipted durable-required
-submissions; it never chooses cleanup outcomes with a model.
+Dream owns retrospective semantic cleanup. This worker completes explicit,
+receipted submissions and retries ordinary observation intake independently of
+Dream's cleanup eligibility, while preserving canonical disposition fences.
 """
 
 from __future__ import annotations
@@ -26,15 +26,26 @@ from jobs.short_term_lifecycle_worker import (
     fetch_expired_short_term_memory_items_firestore,
     process_short_term_lifecycle_item,
 )
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
+from models.product_memory import (
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryLayer,
+    ProcessingState,
+    awaiting_memory_decision,
+    undecided_visible,
+)
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState, WriterMode
 from utils.memory.canonical_consolidation import (
     ConsolidationAgentDecision,
     RequiredIntakeCompletion,
+    ObservationIntakeCompletion,
+    complete_pending_observation_intake,
+    complete_pending_observation_intake_sync,
     apply_consolidation_decision,
     complete_required_intake,
 )
+
 from utils.memory.canonical_required_processing import (
     REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     RequiredMemoryProcessingReport,
@@ -49,7 +60,6 @@ from utils.memory.memory_system import (
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
 from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
-from utils.memory.belief_model import belief_model_enabled
 
 from utils.executors import db_executor, run_blocking
 
@@ -77,12 +87,15 @@ class CanonicalShortTermMaintenanceReport:
     skipped_reason: Optional[str] = None
     required_processing: Optional[RequiredMemoryProcessingReport] = None
     required_intake: Optional[RequiredIntakeCompletion] = None
+    observations: Optional[ObservationIntakeCompletion] = None
     lifecycle: Optional[CanonicalShortTermLifecycleReport] = None
     outbox: Optional[Dict[str, Any]] = None
 
     @property
     def promoted_count(self) -> int:
-        return len(self.required_intake.promoted_memory_ids) if self.required_intake is not None else 0
+        return (len(self.required_intake.promoted_memory_ids) if self.required_intake is not None else 0) + (
+            len(self.observations.promoted_memory_ids) if self.observations is not None else 0
+        )
 
     @property
     def routed_count(self) -> int:
@@ -90,7 +103,7 @@ class CanonicalShortTermMaintenanceReport:
             (len(self.required_intake.promoted_memory_ids) + len(self.required_intake.failed_memory_ids))
             if self.required_intake is not None
             else 0
-        )
+        ) + (len(self.observations.decided_memory_ids) if self.observations is not None else 0)
 
 
 def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client: Any) -> bool:
@@ -304,17 +317,14 @@ def run_canonical_short_term_ttl_lifecycle(
     for item in items:
         if job_budget_guard is not None:
             job_budget_guard()
+        if undecided_visible() and awaiting_memory_decision(item):
+            # Age is not a routing decision. Do not irreversibly hide owed intake
+            # or Review while the decision worker is unavailable.
+            continue
         disposition = None
         expired = item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time
-        if expired and not belief_model_enabled():
+        if expired:
             disposition = ShortTermDisposition.reject_or_hide
-        elif expired:
-            logger.info(
-                "canonical_short_term_ttl_lifecycle: skipped_time_only_reject " "uid=%s memory_id=%s run_id=%s",
-                uid,
-                item.memory_id,
-                run_id,
-            )
         record, was_created = process_short_term_lifecycle_item(
             item,
             store=store,
@@ -453,6 +463,16 @@ def run_canonical_short_term_maintenance(
         # owner. Previously the entire host was skipped, including its outbox.
         lifecycle = CanonicalShortTermLifecycleReport(uid=uid, skipped_reason='daily_sweep_lifecycle_owner')
         required_intake = RequiredIntakeCompletion(uid=uid)
+    observations = None
+    if compatibility_intake:
+        if job_budget_guard is not None:
+            job_budget_guard()
+        observations = complete_pending_observation_intake_sync(
+            uid,
+            db_client=client,
+            now=current_time,
+            run_id=run_id,
+        )
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.
     if job_budget_guard is not None:
@@ -470,6 +490,7 @@ def run_canonical_short_term_maintenance(
         uid=uid,
         required_processing=required_processing,
         required_intake=required_intake,
+        observations=observations,
         lifecycle=lifecycle,
         outbox=outbox,
     )
@@ -482,6 +503,7 @@ async def run_canonical_short_term_maintenance_async(
     now: Optional[datetime] = None,
     run_id: str,
     required_processor: Optional[RequiredMemoryProcessor] = None,
+    observation_planner=None,
     required_processing_attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     required_processing_result_guard: Optional[Callable[[], None]] = None,
     required_processing_limit: int = 0,
@@ -545,6 +567,16 @@ async def run_canonical_short_term_maintenance_async(
         # owner. Previously the entire host was skipped, including its outbox.
         lifecycle = CanonicalShortTermLifecycleReport(uid=uid, skipped_reason='daily_sweep_lifecycle_owner')
         required_intake = RequiredIntakeCompletion(uid=uid)
+    observations = None
+    if compatibility_intake:
+        observations = await complete_pending_observation_intake(
+            uid,
+            db_client=client,
+            now=current_time,
+            run_id=run_id,
+            job_budget_guard=job_budget_guard,
+            planner=observation_planner,
+        )
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.
     if job_budget_guard is not None:
@@ -562,6 +594,7 @@ async def run_canonical_short_term_maintenance_async(
         uid=uid,
         required_processing=required_processing,
         required_intake=required_intake,
+        observations=observations,
         lifecycle=lifecycle,
         outbox=outbox,
     )

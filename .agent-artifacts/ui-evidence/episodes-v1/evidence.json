@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-live-episode-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home: live episode as the first Today row, filled sync row (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-live-episode-light.png",
+      "platform": "mobile-ios",
+      "description": "Home: live episode row and filled sync row (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-scrolled-sync-ring.png",
+      "platform": "mobile-ios",
+      "description": "Home scrolled: live row gone, quiet sync ring on the device glyph",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-device-page-right-now.png",
+      "platform": "mobile-ios",
+      "description": "Device page: stats, Right now, Recently, Controls",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-live-episode-summary.png",
+      "platform": "mobile-ios",
+      "description": "Live episode: So far, provisional tasks, transcript preview, moments",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-live-episode-transcript.png",
+      "platform": "mobile-ios",
+      "description": "Live transcript: moment divider and captured items with Undo",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-finished-episode-dark.png",
+      "platform": "mobile-ios",
+      "description": "Finished conversation with collapsed Moments (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-finished-episode-light.png",
+      "platform": "mobile-ios",
+      "description": "Finished conversation with collapsed Moments (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-finished-episode-moments-open.png",
+      "platform": "mobile-ios",
+      "description": "Finished conversation, Moments expanded",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-one-moment-episode.png",
+      "platform": "mobile-ios",
+      "description": "One-moment episode: identical to today's page",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

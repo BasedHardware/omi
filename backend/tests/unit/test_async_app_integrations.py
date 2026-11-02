@@ -23,6 +23,7 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 _database_stubs = [
     "database",
     "database._client",
+    "database.account_deletion_marker",
     "database.mem_db",
     "database.redis_db",
     "database.memories",
@@ -54,7 +55,6 @@ _utils_stubs = [
     "utils.llm.usage_tracker",
     "utils.llms",
     "utils.llms.memory",
-    "utils.mentor_notifications",
     "utils.log_sanitizer",
     "utils.http_client",
     "utils.subscription",
@@ -119,6 +119,9 @@ _db_pkg = types.ModuleType("database")
 _db_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
 _install_module("database", _db_pkg)
 _install_module("database._client", MagicMock())
+_deletion_marker_stub = types.ModuleType("database.account_deletion_marker")
+_deletion_marker_stub.account_deletion_blocks_user_work = lambda _uid: False
+_install_module("database.account_deletion_marker", _deletion_marker_stub)
 
 for submod in [
     "redis_db",
@@ -219,7 +222,6 @@ sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
 sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0] * 3072)
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
-sys.modules["utils.mentor_notifications"].process_mentor_notification = MagicMock(return_value=None)
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.subscription"].is_trial_paywalled = MagicMock(return_value=False)
@@ -704,9 +706,7 @@ class TestAsyncTriggerRealtimeIntegrations:
     @pytest.mark.asyncio
     async def test_no_apps_returns_empty(self):
         """No apps and no mentor → empty result."""
-        with patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ):
+        with patch.object(app_integrations, "get_available_apps", return_value=[]):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
         assert result == {}
 
@@ -725,8 +725,8 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         assert mock_client.post.call_count == 2
@@ -745,8 +745,8 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ), patch.object(
             app_integrations, "send_app_notification_async", new_callable=AsyncMock
         ) as mock_notify, patch.object(
             app_integrations, "add_app_message", return_value={"id": "msg-1"}
@@ -770,8 +770,8 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], None)
 
         call_url = mock_client.post.call_args[0][0]

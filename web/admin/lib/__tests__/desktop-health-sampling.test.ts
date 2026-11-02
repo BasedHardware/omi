@@ -20,8 +20,10 @@ it("weights only the physical PostHog arm and both fallback query volumes at eve
   const { chat, voice } = responseReliabilityQueries(30);
   const [physical, floating] = voice.split("UNION ALL");
   expect(DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER).toBe(10);
-  expect(DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER).toBeNull();
-  expect(DESKTOP_HEALTH_EVENT_WEIGHT_SQL).toBe("1");
+  expect(DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER).toBe("2026-10-17T03:43:08Z");
+  expect(DESKTOP_HEALTH_EVENT_WEIGHT_SQL).toBe(
+    "if(timestamp >= toDateTime('2026-10-17 03:43:08', 'UTC'), 10, 1)"
+  );
   expect(physical).toContain(
     `sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count`
   );

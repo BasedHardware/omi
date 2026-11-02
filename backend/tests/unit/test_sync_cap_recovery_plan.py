@@ -76,3 +76,69 @@ async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(tm
     assert path == str(piece) and piece.read_bytes() == original
     assert restored_context == context
     prepare.assert_awaited_once()
+
+
+async def test_v4_plan_freezes_source_slices_without_second_audio_upload(tmp_path, monkeypatch):
+    import shutil
+    from utils.sync import cap_hold, live_cap_codec as codec
+    from utils.encryption import decrypt
+
+    async def leaf(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(plan, 'run_blocking', leaf)
+    original = tmp_path / 'original.opus'
+    codec.encode(str(original), b'\x01\x02' * 16000, 16000)
+    reads = []
+
+    def fetch(uid, row, path):
+        reads.append(row['audio_path'])
+        shutil.copyfile(original, path)
+
+    monkeypatch.setattr(cap_hold, '_read_single_audio', fetch)
+    upload = Mock(side_effect=AssertionError('a source-slice plan must not upload another audio copy'))
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    row = {
+        'live_custody_version': 4,
+        'audio_path': 'chunks/synthetic/cap-held/source.opus.enc',
+        'audio_codec': 'ogg_opus',
+        'sample_rate': 16000,
+        'source_frames': 16000,
+    }
+    directory, snapshot = SimpleNamespace(name=str(tmp_path)), SimpleNamespace(id='source')
+
+    async def prepare(uid, path, meta):
+        with wave.open(path) as audio:
+            audio.setpos(100)
+            data = audio.readframes(1000)
+        piece = str(tmp_path / '100.006250.wav')
+        with wave.open(piece, 'wb') as audio:
+            audio.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+            audio.writeframes(data)
+        return {piece}, {piece: ({'live_source_slice': True}, 100)}, {}, {}
+
+    async def save(uid, snapshot, stored, update):
+        stored.update(update)
+        return True
+
+    meta = {'timestamp': 100, 'target_conversation_id': 'original-owner'}
+    pieces, _, _ = await plan.ensure_plan('synthetic', snapshot, row, meta, directory, prepare, save)
+    name, entry = next(iter(pieces.items()))
+    expected = (tmp_path / name).read_bytes()
+    assert entry['audio_path'] == row['audio_path'] and entry['source_slice']['start'] == 100
+    assert entry['source_frames'] == 16000 and entry['seconds'] == 1000 / 16000
+    frozen_context = json.loads(decrypt(entry['metadata'], 'synthetic'))
+    assert frozen_context['target_conversation_id'] == 'original-owner'
+    assert frozen_context['source_position_map'] is None
+    prepare_again = AsyncMock(side_effect=AssertionError('retry must not replan VAD'))
+    pieces, locals_, contexts = await plan.ensure_plan('synthetic', snapshot, row, meta, directory, prepare_again, save)
+    path, context = await plan.stage_piece('synthetic', name, entry, directory, locals_, contexts)
+    assert open(path, 'rb').read() == expected and context == frozen_context
+    # Two pieces/retries reuse one decoded local source, never a second cloud object.
+    await plan.stage_piece('synthetic', name, entry, directory, {}, {})
+    assert len(reads) == 2  # Initial planning source + one cached retry source.
+    upload.assert_not_called()
+    changed = {**entry, 'source_slice': {**entry['source_slice'], 'sha256': 'changed'}}
+    with pytest.raises(ValueError, match='decode changed'):
+        await plan.stage_piece('synthetic', name, changed, directory, {}, {})
+    assert not (tmp_path / name).exists()

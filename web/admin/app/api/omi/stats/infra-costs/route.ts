@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 import {
   MAX_PRECOMPUTED_AGE_MS,
@@ -536,9 +536,13 @@ export async function computeBillingInfraCosts(
       total: round(desktop + mobile),
       // Provider legs of the same total (TV cost stack). Vertex/Gemini LLM is
       // inside the GCP bill; OpenAI and Anthropic are their own invoices.
+      // `vertexReserved` is the prepaid Provisioned-Throughput slice already
+      // inside `vertexLlm` (never an extra dollar): the variable-margin tile
+      // subtracts it; the all-in total keeps counting it.
       components: {
         gcpInfra: round(otherPool),
         vertexLlm: round(row.llmNetUsd),
+        vertexReserved: round(row.vertexReservedUsd ?? 0),
         openai: round(openaiByDay.get(row.date) ?? 0),
         anthropic: round(chatPool),
         gcpServices: row.services,
@@ -829,7 +833,7 @@ export async function computeInfraCosts(opts: {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -846,16 +850,16 @@ export async function GET(request: NextRequest) {
       maxAgeMs: MAX_PRECOMPUTED_AGE_MS,
     });
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (may be slow), cache, return.
     const payload = await computeInfraCosts({ days, overheadMonthly });
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Infra costs error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Failed to compute infra costs" },
       { status: 500 }
     );

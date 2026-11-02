@@ -89,7 +89,7 @@ def omit_null_processing_state(payload: dict[str, Any]) -> dict[str, Any]:
 def clear_summary_retryable(payload: dict[str, Any]) -> dict[str, Any]:
     """A processing result answers a pending summary retry.
 
-    Used by the enrichment and free-tier terminal persists: a row that carried
+    Used by the enrichment persists: a row that carried
     ``summary_retryable=True`` now holds the outcome of a new processing pass,
     so the retry affordance must go. merge=True keeps an omitted key, so a set
     marker is cleared with an explicit null; an absent or null marker is
@@ -113,8 +113,7 @@ def client_processing_mutation(projection: Any) -> dict[str, Any]:
 
     1. Merge into a document-create payload (``create_processing_conversation``
        / ``create_completed_conversation`` when this persist IS the conversation's
-       first write). ``_store_projected_conversation`` /
-       ``_store_deterministic_minimum`` do this only for
+       first write). ``_store_budget_waiting`` do this only for
        ``CreateConversation`` / ``ExternalIntegrationCreateConversation``.
     2. Pass to ``update_conversation`` after the coordinator returns. This is
        the working way for a route whose conversation already exists (from-segments

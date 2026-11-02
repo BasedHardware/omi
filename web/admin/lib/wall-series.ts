@@ -1,3 +1,11 @@
+import {
+  readRollup,
+  preferRollup,
+  rollupStatus,
+  RollupRead,
+  RollupStatus,
+} from "./wall-rollup";
+import { RollupRequest } from "./wall-rollup-sql";
 /** Omi TV v3 chart series. Same definitions as the v2 snapshot (`wall-metrics`):
  * the snapshot's own complete periods are reused verbatim and win on every date
  * they cover, so each chart's latest point is the stat above it. Only older
@@ -30,10 +38,34 @@ import {
 } from "./wall-posthog";
 import { aggregatePeriod, Metric, MetricId, WallPayload } from "./wall-metrics";
 import { fetchShopifyWeek } from "./wall-shopify";
-import { fetchFinopsHistory, FinopsHistory } from "./wall-finops";
+import {
+  fetchFinopsHistory,
+  fetchInfraHistory,
+  fetchModulateModelled,
+  fetchPlanCostHistory,
+  fetchStripeFeeHistory,
+  fetchVendorBalanceHistory,
+  FinopsHistory,
+  HEALTH_COST_DAYS,
+  InfraHistory,
+  ModulateModelledDay,
+  PlanCostHistory,
+  StripeFeeHistory,
+  VendorBalanceHistory,
+} from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
-import { wallRefreshSettled } from "./wall-cache";
-import { allInCost } from "./wall-cost";
+import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
+import {
+  allInCost,
+  CostDay,
+  EstimateStatus,
+  estimateStatus,
+  FEES_UNAVAILABLE_REASON,
+  sonioxBalanceInputs,
+  sonioxSeriesBroken,
+  variableMarginLineStatus,
+  variableMarginSeries,
+} from "./wall-cost";
 import { createHash } from "crypto";
 import {
   firestoreSeriesStore,
@@ -42,6 +74,7 @@ import {
   LegDoc,
   memorySeriesStore,
   mergeLegDoc,
+  readThroughStore,
   SeriesStore,
   StoredRead,
   WriteResult,
@@ -69,12 +102,22 @@ export interface SeriesPayload {
   gaps: Record<string, string>;
   /** Headline only: oldest leg's data-through day across all series. */
   status?: { through: string | null; text: string } | null;
+  /** When the oldest value in this body turns 24h old; the stats proxy never
+   * serves the body as last-good past it. */
+  staleUntil: string | null;
 }
 
 export const GROWTH_WEEKS = 26;
 export const COHORT_WEEKS = 12;
 export const CURVE_COHORTS = 9;
 export const MONEY_WEEKS = 8;
+/** Daily unit-economics points (the board shows 35 days; FinOps book
+ * snapshots are daily from 2026-09-18). */
+export const UNIT_DAYS = 36;
+const MAU_WEEKS = Math.ceil(UNIT_DAYS / 7);
+const WEEK_OFFSETS = [0, 1, 2, 3, 4, 5, 6];
+/** Invisible cohort-age tag on curve field names (the board's ramp matcher). */
+export const CURVE_MARK = "\u200b";
 /** Mobile allowlisted events (Memory Created, tab/list clicks, mic starts) begin
  * the week of 2026-05-04 in PostHog; earlier periods undercount mobile, so the
  * growth series starts at the first fully instrumented period. */
@@ -85,6 +128,8 @@ const PARTIAL_RETRY = 2 * 60_000;
 const FAILURE_RETRY = 60_000;
 const MAX_BACKOFF = 30 * 60_000;
 const MAX_STALE = 24 * 60 * 60_000;
+/** The warm route answers within this; Scheduler's attempt deadline is 30 min. */
+export const WARM_BUDGET_MS = 20 * 60_000;
 const DAYS_PER_MONTH = 365.25 / 12;
 /** 60% blended margin goal: cost may be at most 40% of revenue per MAU. */
 export const MARGIN_GOAL = 0.6;
@@ -110,9 +155,24 @@ type Billing = {
 } | null;
 export interface SeriesSources {
   query: Query;
+  rollup?: RollupRead;
+  rollupStatus?: () => Promise<RollupStatus>;
   shopify: typeof fetchShopifyWeek;
   billing: () => Promise<Billing>;
   finops: (today: string) => Promise<FinopsHistory>;
+  planCost: (today: string) => Promise<PlanCostHistory>;
+  /** Measured Stripe fees; throws while the fee table is dark (missing scope). */
+  fees?: (today: string) => Promise<StripeFeeHistory>;
+  /** Soniox balance-derived day-rate; throws while that table is dark. */
+  vendorBalance?: (today: string) => Promise<VendorBalanceHistory>;
+  /** Modulate modelled volume line; throws while its table is dark. */
+  modulate?: (today: string) => Promise<{
+    byDay: Record<string, ModulateModelledDay>;
+    price: number | null;
+    priceAsOf: string | null;
+  }>;
+  /** Mercury non-GCP infra run rate; throws while that table is dark. */
+  infra?: (today: string) => Promise<InfraHistory>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -120,6 +180,8 @@ export interface SeriesSources {
 }
 export const defaultSeriesSources: SeriesSources = {
   query: queryPosthog,
+  rollup: readRollup,
+  rollupStatus,
   shopify: fetchShopifyWeek,
   billing: async () => {
     const { computeBillingInfraCosts } = await import(
@@ -128,7 +190,15 @@ export const defaultSeriesSources: SeriesSources = {
     return computeBillingInfraCosts(90, 0, true);
   },
   finops: fetchFinopsHistory,
-  store: firestoreSeriesStore,
+  planCost: fetchPlanCostHistory,
+  fees: fetchStripeFeeHistory,
+  vendorBalance: fetchVendorBalanceHistory,
+  modulate: fetchModulateModelled,
+  infra: fetchInfraHistory,
+  // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
+  store: process.env.K_REVISION
+    ? firestoreSeriesStore
+    : readThroughStore(firestoreSeriesStore),
 };
 
 /** Leg results. Each leg is complete, partial (some periods failed) or failed. */
@@ -139,12 +209,26 @@ export interface Legs {
   retainedHistory?: AggregateRows;
   establishedHistory?: AggregateRows;
   curve?: AggregateRows;
-  /** 30-day MAU keyed by days before today: week 1 (headline priors) … */
-  mauRecent?: Record<number, number>;
-  /** … and weeks 2–7 (chart history). Split so a slow history read never
-   * holds back the headline. */
-  mauHistory?: Record<number, number>;
+  /** 30-day MAU keyed by days before today: days 7–13 (headline priors) … */
+  mauPrior?: Record<number, number>;
+  /** … and every other day the unit-economics chart draws. Split so a slow
+   * history read never holds back the headline. */
+  mauDaily?: Record<number, number>;
   finops?: FinopsHistory;
+  /** FinOps plan cost (margin by plan); settled about D−3. */
+  planCost?: PlanCostHistory;
+  /** Measured Stripe processing fees (missing = the leg is unavailable). */
+  fees?: StripeFeeHistory;
+  /** Soniox balance series (missing = the leg is unavailable). */
+  vendorBalance?: VendorBalanceHistory;
+  /** Modulate modelled volume line (missing = the leg is unavailable). */
+  modulate?: {
+    byDay: Record<string, ModulateModelledDay>;
+    price: number | null;
+    priceAsOf: string | null;
+  };
+  /** Mercury non-GCP infra run rate (missing = the leg is unavailable). */
+  infra?: InfraHistory;
   billing?: Billing;
   shopify?: {
     date: string;
@@ -155,12 +239,22 @@ export interface Legs {
 }
 type LegName = keyof Legs;
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
-  headline: ["finops", "mauRecent", "billing"],
+  headline: ["finops", "mauPrior", "billing"],
   growth: ["growth"],
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
-  revenue: ["finops", "mauRecent", "mauHistory", "shopify"],
-  health: ["billing", "finops", "mauRecent", "mauHistory"],
+  revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
+  health: [
+    "billing",
+    "finops",
+    "mauPrior",
+    "mauDaily",
+    "planCost",
+    "fees",
+    "vendorBalance",
+    "modulate",
+    "infra",
+  ],
 };
 
 /** Shift period numbers of a chunk read at an older end date. */
@@ -207,24 +301,40 @@ export function legJobs(
   now: Date
 ): Record<LegName, () => Promise<unknown>> {
   const end = utcDay(now);
+  const read = (request: RollupRequest, sql: string) =>
+    preferRollup(sources.rollup, request, () => sources.query(sql));
   const back = (weeks: number) => shiftDay(end, -7 * weeks);
   // Snapshot periods 0–5 come from the wall payload; read only 6–11.
-  const history = (build: (stop: Date, n: number) => string, stop: Date) =>
-    periodQueries(
-      sources.query,
-      build,
+  const history = (
+    build: (stop: Date, n: number) => string,
+    stop: Date,
+    request: (stop: Date, n: number) => RollupRequest
+  ) => {
+    const requests = new Map<string, RollupRequest>();
+    return periodQueries(
+      (sql) => read(requests.get(sql)!, sql),
+      (stop, n) => {
+        const sql = build(stop, n);
+        requests.set(sql, request(stop, n));
+        return sql;
+      },
       shiftDay(stop, -7 * SNAPSHOT_PERIODS),
       7,
       COHORT_WEEKS - SNAPSHOT_PERIODS
     ).then((rows) => offsetRows(rows, SNAPSHOT_PERIODS));
-  // Week 0 is the snapshot's own MAU; read 30-day windows at earlier week
-  // ends (ARPMAU) and one day earlier (cost/MAU, settled D−2).
-  const mauWeeks = async (from: number, to: number) => {
+  };
+  // 30-day MAU for every day the unit-economics chart draws: one read per
+  // week of seven daily offsets (one scan of 36 days, about the cost of one).
+  // Day 0 is the snapshot's own MAU; cost/MAU (settled D−2) uses day + 1.
+  const mauWeeks = async (weeks: number[]) => {
     const out: Record<number, number> = {};
     let failure: string | null = null;
-    for (let week = from; week < to; week++) {
+    for (const week of weeks) {
       try {
-        const rows = await sources.query(mauOffsetsQuery(back(week), [0, 1]));
+        const rows = await read(
+          { kind: "mau", end: back(week), offsets: WEEK_OFFSETS },
+          mauOffsetsQuery(back(week), WEEK_OFFSETS)
+        );
         for (const r of rows) out[7 * week + Number(r[0])] = Number(r[1]);
       } catch (error) {
         failure ||= wallFailure("PostHog", error);
@@ -236,20 +346,67 @@ export function legJobs(
   return {
     growth: () =>
       periods(GROWTH_WEEKS, (p) =>
-        sources.query(weeklyGrowthQuery(back(p), 1))
+        read(
+          { kind: "growth", end: back(p), periods: 1 },
+          weeklyGrowthQuery(back(p), 1)
+        )
       ),
-    activationHistory: () => history((stop, n) => cohortQuery(stop, 7, n), end),
-    captureSource: () => sources.query(captureSourceQuery(end)),
-    retainedHistory: () => history((stop, n) => cohortQuery(stop, 37, n), end),
-    establishedHistory: () => history(establishedQuery, completeWeek(now).end),
+    activationHistory: () =>
+      history(
+        (stop, n) => cohortQuery(stop, 7, n),
+        end,
+        (end, periods) => ({ kind: "cohort", end, periods, maturity: 7 })
+      ),
+    captureSource: () =>
+      read({ kind: "capture", end }, captureSourceQuery(end)),
+    retainedHistory: () =>
+      history(
+        (stop, n) => cohortQuery(stop, 37, n),
+        end,
+        (end, periods) => ({ kind: "cohort", end, periods, maturity: 37 })
+      ),
+    establishedHistory: () =>
+      history(establishedQuery, completeWeek(now).end, (end, periods) => ({
+        kind: "established",
+        end,
+        periods,
+      })),
     // One cohort per read; partial cohorts are kept and only the missing retried.
     curve: () =>
       periods(CURVE_COHORTS, (p) =>
-        sources.query(retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end))
+        read(
+          {
+            kind: "curve",
+            end: shiftDay(end, -7 * (p + 1)),
+            periods: 1,
+            observedEnd: end,
+          },
+          retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end)
+        )
       ),
-    mauRecent: () => mauWeeks(1, 2),
-    mauHistory: () => mauWeeks(2, MONEY_WEEKS),
+    mauPrior: () => mauWeeks([1]),
+    mauDaily: () =>
+      mauWeeks(
+        Array.from({ length: MAU_WEEKS }, (_, w) => w).filter((w) => w !== 1)
+      ),
     finops: () => sources.finops(isoDay(now)),
+    planCost: () => sources.planCost(isoDay(now)),
+    fees: () =>
+      sources.fees
+        ? sources.fees(isoDay(now))
+        : Promise.reject(new Error("Stripe fee source unavailable")),
+    vendorBalance: () =>
+      sources.vendorBalance
+        ? sources.vendorBalance(isoDay(now))
+        : Promise.reject(new Error("Soniox balance source unavailable")),
+    modulate: () =>
+      sources.modulate
+        ? sources.modulate(isoDay(now))
+        : Promise.reject(new Error("Modulate modelled source unavailable")),
+    infra: () =>
+      sources.infra
+        ? sources.infra(isoDay(now))
+        : Promise.reject(new Error("Infra run-rate source unavailable")),
     billing: async () => {
       const bill = await sources.billing();
       if (!bill || bill.summary.costSource !== "billing")
@@ -282,7 +439,7 @@ export function legJobs(
 // ---------------------------------------------------------------- assembly
 
 const mauAt = (legs: Legs, offset: number) =>
-  legs.mauRecent?.[offset] ?? legs.mauHistory?.[offset] ?? null;
+  legs.mauPrior?.[offset] ?? legs.mauDaily?.[offset] ?? null;
 
 const round = (v: number | null, digits = 2) =>
   v == null || !Number.isFinite(v)
@@ -342,6 +499,17 @@ function cohortSeries(
   return mergeSnapshot(points, m, (t) =>
     cohortRow(t.value, t.split, t.denominator)
   );
+}
+
+/** The board's shaded "maturing" span: from the newest cohort whose window
+ * has closed (`stop` − 1, the cohort's label) to now. Cohorts roll daily, so
+ * the line always ends `maturity` + 1 days back; nothing is pending a weekly
+ * release. A hidden 0–1 axis draws it full height. */
+function maturingBand(stop: Date, now: Date): Row[] {
+  return [
+    { date: ts(isoDay(shiftDay(stop, -1))), maturing: 1 },
+    { date: now.toISOString(), maturing: 1 },
+  ];
 }
 
 export function growthFrames(
@@ -419,18 +587,18 @@ export function growthFrames(
   return { weekly, power };
 }
 
-/** Short bar labels: the 5-column panel cannot fit the segment names. */
+/** Bar labels: short enough for the narrow column, readable without a legend. */
 const CAPTURE_LABELS: Record<(typeof CAPTURE_SEGMENTS)[number], string> = {
-  "Omi pendant": "Pendant",
-  "Multiple devices": "Multi-device",
+  "Omi pendant": "Omi pendant",
+  "Multiple devices": "2+ devices",
   Limitless: "Limitless",
-  "Apple Watch": "Watch",
+  "Apple Watch": "Apple Watch",
   "Other device": "Other device",
-  "Omi, model unknown": "Omi (model?)",
+  "Omi, model unknown": "Other Omi",
   "Phone + Mac": "Phone + Mac",
   "Mac only": "Mac only",
   "Phone mic only": "Phone mic",
-  "No capture": "None",
+  "No capture": "No capture",
 };
 
 export function activationFrames(
@@ -444,7 +612,7 @@ export function activationFrames(
   const activation = cohortSeries(legs.activationHistory, rate, stop, 3, 2);
   const captured = cohortSeries(legs.activationHistory, capture, stop, 8, 2);
   // Activation by first-week capture source for the latest matured cohort
-  // (the stat's cohort); people ride in the label, segments in a fixed order.
+  // (the stat's cohort); users ride in the label, largest group first.
   const counts = new Map(
     (legs.captureSource || []).map((r) => [
       String(r[0]),
@@ -461,7 +629,13 @@ export function activationFrames(
       people,
     };
   });
-  return { activation, capture: captured, sources };
+  sources.sort((a, b) => b.people - a.people);
+  return {
+    activation,
+    capture: captured,
+    sources,
+    maturing: maturingBand(stop, now),
+  };
 }
 
 export function retentionFrames(
@@ -488,14 +662,24 @@ export function retentionFrames(
         timeZone: "UTC",
       })
     );
-  // Nine week rows once any cohort has loaded (the x field must exist with
-  // its y fields); no rows before then, so the panel shows its noValue text
-  // instead of "Cannot visualize data".
-  const curve = Array.from({ length: cohorts.length ? 9 : 0 }, (_, k) => {
-    const row: Row = { week: k };
-    cohorts.forEach((p, i) => (row[labels[i]] = byCohort.get(p)?.[k] ?? null));
-    return row;
-  });
+  // One frame per cohort age (`cohort_0` = newest): the board joins them in
+  // date order (Grafana sorts one frame's fields by name, which put "Aug 8"
+  // after "Aug 29"). Each name carries `age` invisible marks so the board can
+  // color the joined fields on a ramp, newest strongest.
+  // Nine week rows per loaded cohort (the x field must exist with its y
+  // field); an unloaded age is an empty frame the panel skips.
+  const curves: Record<string, Row[]> = {};
+  for (let age = 0; age < CURVE_COHORTS; age++) {
+    const i = cohorts.indexOf(age);
+    curves[`cohort_${age}`] =
+      i < 0
+        ? []
+        : Array.from({ length: 9 }, (_, k) => ({
+            week: k,
+            [labels[i] + CURVE_MARK.repeat(age)]:
+              byCohort.get(age)?.[k] ?? null,
+          }));
+  }
   const established = cohortSeries(
     legs.establishedHistory,
     metric(snapshot, "retention.established_week"),
@@ -511,9 +695,10 @@ export function retentionFrames(
     3
   );
   return {
-    curve,
+    ...curves,
     established,
     retained,
+    retainedMaturing: maturingBand(shiftDay(end, -37), now),
     power: growthFrames(legs, snapshot, now).power,
   };
 }
@@ -521,13 +706,10 @@ export function retentionFrames(
 function mrrTotal(day: Record<string, number> | undefined) {
   return day ? Object.values(day).reduce((s, v) => s + v, 0) : null;
 }
-/** FinOps book at or just before a day (snapshots are daily, may lag a day). */
+/** FinOps book snapshotted on a day (by `snapshot_date`, as the MRR chart and
+ * margin read it). A day without a snapshot is a gap, never a neighbour's book. */
 function finopsMrr(f: FinopsHistory | undefined, day: Date) {
-  for (const back of [0, 1]) {
-    const v = mrrTotal(f?.mrr[isoDay(shiftDay(day, -back))]);
-    if (v != null) return v;
-  }
-  return null;
+  return mrrTotal(f?.mrr[isoDay(day)]);
 }
 
 export function revenueFrames(
@@ -537,6 +719,10 @@ export function revenueFrames(
 ) {
   const end = utcDay(now);
   const live = usable(metric(snapshot, "revenue.mrr"));
+  // The stat is the FinOps book now (coupons applied); the live-book row only
+  // appears when the stat itself fell back to the live read.
+  const liveFallback =
+    live != null && (live.reason || "").includes("live renewal");
   const mrrPoints = new Map<string, Row>();
   for (const [day, plans] of Object.entries(legs.finops?.mrr || {})) {
     const row: Row = { source: "FinOps book" };
@@ -544,8 +730,8 @@ export function revenueFrames(
     row.total = round(mrrTotal(plans), 0);
     mrrPoints.set(day, row);
   }
-  if (live) {
-    const row: Row = { source: "Live Stripe book" };
+  if (liveFallback) {
+    const row: Row = { source: "Live Stripe book (fallback)" };
     for (const k of PLAN_KEYS) row[k] = live.breakdown?.[k] ?? 0;
     row.total = live.value;
     mrrPoints.set(isoDay(now), row);
@@ -556,15 +742,17 @@ export function revenueFrames(
 
   const mauNow = usable(metric(snapshot, "engagement.mau"));
   const arpLive = usable(metric(snapshot, "revenue.arpmau"));
+  // Daily: the FinOps book at each day ÷ that day's 30-day MAU. Days without
+  // a book snapshot (before 2026-09-18) are absent, never zero.
   const arpmau: Row[] = [];
-  for (let k = MONEY_WEEKS - 1; k >= 0; k--) {
-    const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, 7 * k) ?? null;
-    const book = finopsMrr(legs.finops, shiftDay(end, -7 * k));
+  for (let k = UNIT_DAYS - 1; k >= 0; k--) {
+    const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, k) ?? null;
+    const book = finopsMrr(legs.finops, shiftDay(end, -k - 1));
     const finopsArp = mau && book != null ? book / mau : null;
     const value = k === 0 && arpLive ? arpLive.value : finopsArp;
     if (value == null) continue;
     arpmau.push({
-      date: ts(isoDay(shiftDay(end, -7 * k - 1))),
+      date: ts(isoDay(shiftDay(end, -k - 1))),
       arpmau: value,
       finopsArpmau: round(finopsArp),
       mau,
@@ -592,28 +780,108 @@ export function healthFrames(
 ) {
   const end = utcDay(now);
   const cutoff = isoDay(shiftDay(end, -2));
-  // Same all-in model as the snapshot's cost stats (every cost line counted).
+  // Same all-in model as the snapshot's cost stats (every cost line counted),
+  // including the Soniox balance series and the Modulate modelled line so the
+  // chart's STT matches the stat. The fee leg is unavailable, not zero, while
+  // the FinOps fee table is dark.
+  const feesUnavailable = legs.fees ? null : FEES_UNAVAILABLE_REASON;
+  const vendor = {
+    sttMeasured: legs.planCost?.sttMeasured,
+    sonioxBalance: sonioxBalanceInputs(legs.vendorBalance ?? null, cutoff),
+    modulateModelled: legs.modulate ?? undefined,
+    sttCash: legs.planCost?.sttCash,
+    saasMeasured: legs.planCost?.saasMeasured,
+    infraMeasured: legs.infra?.infraMeasured,
+    infraAnnualPartial: legs.infra?.infraAnnualPartial,
+    infraStripeFeesCash: legs.infra?.infraStripeFeesCash,
+    stripeFees: legs.fees?.fees,
+  };
   const allIn = allInCost(
     (legs.billing?.daily || []).filter((d) => d.date <= cutoff),
-    legs.billing?.summary.coverage
+    legs.billing?.summary.coverage,
+    vendor,
+    feesUnavailable
   );
+  const latestCostDay = allIn.daily.find((d) => d.date === cutoff);
+  // A Soniox series that stopped covering the cutoff day puts the dated
+  // constant back in use: stale now, not once the constant ages out. An infra
+  // day the dated constant floors is likewise priced by that constant.
+  const estimates = estimateStatus(
+    now,
+    {
+      STT: latestCostDay?.sttMeasured,
+      SaaS: latestCostDay?.saasMeasured,
+      Infra: latestCostDay?.infraMeasured && !latestCostDay.infraFloored,
+    },
+    {
+      STT:
+        !!latestCostDay &&
+        sonioxSeriesBroken(vendor, latestCostDay.date) &&
+        !latestCostDay.sttMeasured,
+    }
+  );
+  // 1 when a manual estimate is older than its line's staleness threshold.
+  const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
     (net?.trend || []).map((t) => [t.date, t.value])
   );
-  const cost = days.slice(-60).map((d) => {
-    const book = finopsMrr(legs.finops, shiftDay(new Date(ts(d.date)), 1));
+  const lastFeeDay =
+    Object.keys(legs.fees?.fees || {})
+      .sort()
+      .at(-1) ?? null;
+  // The fee/infra history reads cover every frame this renders (their shared
+  // window constant), so a fee-dark day keeps its Mercury stripe_fees cash
+  // however old it is.
+  const cost = days.slice(-HEALTH_COST_DAYS).map((d) => {
+    const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
       date: ts(d.date),
       gcp: d.gcp,
       vertexLlm: d.vertexLlm,
       openai: d.openai,
-      anthropic: d.anthropic,
+      // Counted only when the admin API reports spend; seats are SaaS cash.
+      anthropic: d.anthropic != null && d.anthropic > 0 ? d.anthropic : null,
       stt: d.stt,
+      sttSource: d.sttMeasured
+        ? "measured"
+        : d.sttCash
+        ? "estimate+cash"
+        : "estimate",
+      // The measured series carries ONLY measured dollars: the Soniox balance
+      // delta (or usage line) plus measured Deepgram. Modelled Modulate and
+      // every dated constant stay out of it (they have their own series).
+      sttEstimateUsd: d.sttSonioxMeasured ? null : d.sttSonioxUsd,
+      sttMeasuredUsd:
+        (d.sttSonioxMeasured ? d.sttSonioxUsd : 0) +
+        (d.sttDeepgramMeasured ? d.sttDeepgramUsd : 0),
+      sttModulateModelledUsd: d.sttModulateModelled ? d.sttModulateUsd : null,
+      sttCashUsd: d.sttCash || null,
       saas: d.saas,
+      saasSource: d.saasMeasured ? "measured" : "estimate",
+      saasEstimateUsd: d.saasMeasured ? null : d.saas,
+      saasMeasuredUsd: d.saasMeasured ? d.saas : null,
+      // The infra base is measured only when the producer's run rate stands
+      // on its own; a partial run rate the dated constant floors is priced by
+      // that constant. Mercury stripe_fees cash counted here (fee line dark
+      // for the day) rides in its own field so neither series absorbs it.
+      infra: d.infra,
+      infraSource: d.infraMeasured && !d.infraFloored ? "measured" : "estimate",
+      infraEstimateUsd:
+        d.infraMeasured && !d.infraFloored ? null : d.infra - d.infraFeesCash,
+      infraMeasuredUsd:
+        d.infraMeasured && !d.infraFloored ? d.infra - d.infraFeesCash : null,
+      infraFeesCashUsd: d.infraFeesCash || null,
+      estimateStale,
+      fees: d.fees,
+      feesUnavailable: d.fees == null ? 1 : 0,
       oneTimeExcluded: d.oneTime || null,
-      total: snapshotTotals.get(d.date) ?? d.total,
+      // The snapshot uses estimates; measured vendor lines own the all-in total.
+      total:
+        d.sttMeasured || d.saasMeasured || d.infraMeasured
+          ? d.total
+          : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
     };
   });
@@ -625,29 +893,197 @@ export function healthFrames(
     ])
   );
   const live = usable(metric(snapshot, "cost.per_mau_month"));
+  // Daily, settled D−2: day k's 30-day all-in cost ÷ the same window's MAU.
   const costPerMau: Row[] = [];
-  for (let k = MONEY_WEEKS - 1; k >= 0; k--) {
-    const windowEnd = shiftDay(end, -1 - 7 * k); // exclusive; D−2 inclusive
+  for (let k = UNIT_DAYS - 1; k >= 1; k--) {
+    const windowEnd = shiftDay(end, -k); // exclusive; D−2 inclusive at k = 1
     const window = Array.from({ length: 30 }, (_, i) =>
       byDay.get(isoDay(shiftDay(windowEnd, -30 + i)))
     );
-    const mau = k === 0 ? live?.denominator ?? null : mauAt(legs, 7 * k + 1);
+    const mau = k === 1 ? live?.denominator ?? null : mauAt(legs, k);
     const settled = window.every((v) => v != null);
     const value =
-      k === 0 && live
+      k === 1 && live
         ? live.value
         : settled && mau
         ? window.reduce<number>((s, v) => s + (v as number), 0) / mau
         : null;
     if (value == null) continue;
-    const arpmau = arp.get(isoDay(shiftDay(end, -7 * k - 1)));
+    const arpmau = arp.get(isoDay(shiftDay(windowEnd, -1)));
     costPerMau.push({
       date: ts(isoDay(shiftDay(windowEnd, -1))),
       costPerMau: value,
       goal: arpmau == null ? null : round(arpmau * (1 - MARGIN_GOAL)),
     });
   }
-  return { cost, costPerMau };
+  const marginByPlan = marginFrames(legs, days, now);
+  // Variable-margin points off the same all-in days (see the return note).
+  const variable = variableMarginSeries(
+    days,
+    (d) => finopsMrr(legs.finops, new Date(ts(d))),
+    { feesCash: vendor.infraStripeFeesCash }
+  );
+  return {
+    cost,
+    costPerMau,
+    marginByPlan,
+    marginStatus: [
+      {
+        text:
+          marginStatus(marginByPlan, days, now) +
+          (feesUnavailable
+            ? " · Stripe fees unavailable (finops key scope)"
+            : ` · Stripe fees measured through ${
+                lastFeeDay ? shortDay(lastFeeDay) : "—"
+              }`),
+      },
+    ],
+    estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
+    // Variable margin (David 2026-10-23): same all-in cost days, the margin's
+    // own scope (GCP ex prepaid Vertex reserved, taken before the all-in
+    // one-time-incident exclusion, + OpenAI + Soniox + Modulate + Stripe
+    // fees), trailing-7-day run rate against that day's book. MRR comes from
+    // the day's own snapshot — a day without one keeps its cost point and
+    // nulls the margin, never borrowing a neighbour's book.
+    variableMargin: variable.map((p) => ({
+      date: ts(p.date),
+      marginPct: round(p.marginPct, 1),
+      costPerMonth: round(p.costPerMonth, 0),
+      mrr: p.mrr == null ? null : round(p.mrr, 0),
+      goalCost: round(p.goalCost, 0),
+      gcpPerMonth: round(p.gcpPerMonth, 0),
+      vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
+      openaiPerMonth: round(p.openaiPerMonth, 0),
+      sonioxPerMonth: round(p.sonioxPerMonth, 0),
+      modulatePerMonth: round(p.modulatePerMonth, 0),
+      feesPerMonth: round(p.feesPerMonth, 0),
+      missing: p.missing.length ? p.missing.join("+") : null,
+    })),
+    variableMarginStatus: [
+      {
+        text: variableMarginLineStatus(variable.at(-1), {
+          now,
+          soniox: vendor.sonioxBalance,
+          feesUnavailable,
+          nonUsdPaying: variable.at(-1)
+            ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
+            : null,
+        }).join(" · "),
+      },
+    ],
+  };
+}
+
+/** Plans on the margin chart, as FinOps plan ids: Neo (legacy), Unlimited,
+ * Pro, Plus, Architect, Free. Every other FinOps segment (`unattributed`,
+ * `none`, a retired id) is the unattributed row. */
+export const MARGIN_PLANS = [
+  "unlimited",
+  "unlimited_v2",
+  "operator",
+  "plus",
+  "architect",
+  "basic",
+] as const;
+export const MARGIN_DAYS = 35;
+
+/** Allocated-estimate margin by plan (David 2026-10-17), one row per day that
+ * has both a settled FinOps plan cost and that day's book snapshot; FinOps
+ * plan cost settles about D−3, and a missing day is absent, never zero.
+ * Plan cost = FinOps fully-loaded plan cost + a share of the shared remainder
+ * (TV all-in total − FinOps fully loaded: BigQuery, STT, SaaS) in proportion
+ * to the plan's cost-active user-days that day, so the plans and the
+ * unattributed row sum to the all-in total. Revenue = that day's book ÷ 30.4.
+ * Paid plans carry margin %; Free has no revenue, so only its −$/day. */
+export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
+  const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
+  const known = new Set<string>(MARGIN_PLANS);
+  const rows: Row[] = [];
+  for (let k = MARGIN_DAYS; k >= 1; k--) {
+    const day = isoDay(shiftDay(utcDay(now), -k));
+    const plans = legs.planCost?.plans[day];
+    const book = legs.finops?.mrr[day];
+    const total = allIn.get(day);
+    if (!plans || !book || total == null) continue;
+    const segments = Object.entries(plans);
+    const finops = segments.reduce((s, [, p]) => s + p.usd, 0);
+    const users = segments.reduce((s, [, p]) => s + p.users, 0);
+    if (!users) continue;
+    const shared = total - finops;
+    const allocated = (p: { usd: number; users: number }) =>
+      p.usd + (shared * p.users) / users;
+    const row: Row = {
+      date: ts(day),
+      allInTotal: round(total),
+      finopsTotal: round(finops),
+      shared: round(shared),
+    };
+    for (const plan of MARGIN_PLANS) {
+      const cost = allocated(plans[plan] ?? { usd: 0, users: 0 });
+      const revenue = (book[plan] ?? 0) / DAYS_PER_MONTH;
+      row[`${plan}Revenue`] = round(revenue);
+      row[`${plan}Cost`] = round(cost);
+      row[`${plan}Margin`] = round(revenue - cost);
+      row[`${plan}Pct`] =
+        revenue > 0 ? round((100 * (revenue - cost)) / revenue, 1) : null;
+    }
+    row.unattributedCost = round(
+      segments
+        .filter(([plan]) => !known.has(plan))
+        .reduce((s, [, p]) => s + allocated(p), 0)
+    );
+    row.unattributedRevenue = round(
+      Object.entries(book)
+        .filter(([plan]) => !known.has(plan))
+        .reduce((s, [, v]) => s + v / DAYS_PER_MONTH, 0)
+    );
+    rows.push(row);
+  }
+  return rows;
+}
+
+const shortDay = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/** The margin chart's freshness line: its own data-through day (it lags the
+ * rest of the wall) and how its STT, SaaS and Infra lines were priced. */
+function marginStatus(rows: Row[], days: CostDay[], now: Date) {
+  const through = rows.length ? String(rows.at(-1)!.date).slice(0, 10) : null;
+  const day = through ? days.find((d) => d.date === through) : undefined;
+  // A floored infra day is priced by the dated constant, so that line shows
+  // its estimate (and the constant's age) rather than a measured label.
+  const infraOwnsItsPrice = day?.infraMeasured && !day.infraFloored;
+  const measuredByLine: Record<EstimateStatus["line"], boolean | undefined> = {
+    STT: day?.sttMeasured,
+    SaaS: day?.saasMeasured,
+    Infra: infraOwnsItsPrice,
+  };
+  const estimates = estimateStatus(now, {
+    STT: day?.sttMeasured,
+    SaaS: day?.saasMeasured,
+    Infra: infraOwnsItsPrice,
+  });
+  const shown = estimates.filter((e) => !measuredByLine[e.line]);
+  const asOf = shown.map((e) => e.asOf).sort()[0];
+  const stale = shown.some((e) => e.stale);
+  const labels = [
+    day?.sttMeasured ? "STT measured" : "STT estimate",
+    day?.saasMeasured ? "measured SaaS (Mercury)" : "SaaS estimate",
+    infraOwnsItsPrice
+      ? "measured Infra non-GCP (Mercury)"
+      : day?.infraMeasured
+      ? "Infra non-GCP estimate (floors partial Mercury run rate)"
+      : "Infra non-GCP estimate",
+  ];
+  const dated = asOf ? ` as of ${shortDay(asOf)}` : "";
+  return [
+    `Margin through ${through ? shortDay(through) : "—"}`,
+    `${labels.join(" · ")}${dated}${stale ? " (stale)" : ""}`,
+  ].join(" · ");
 }
 
 const HEADLINE: [string, MetricId][] = [
@@ -661,6 +1097,14 @@ const HEADLINE: [string, MetricId][] = [
   ["hardware", "revenue.hardware_usd_week"],
   ["netCost", "cost.net_day"],
 ];
+/** Every snapshot metric a headline stat draws (live MRR, per-user stats too). */
+const HEADLINE_IDS = new Set<string>([
+  ...HEADLINE.map(([, id]) => id),
+  "revenue.mrr",
+  "revenue.arpmau",
+  "cost.per_mau_month",
+  "cost.per_customer_month",
+]);
 /** Sourceless wall metrics: one-line TV labels (contract audit 2026-10-15); the
  * route's full classified reason stays in the hidden `reason` column. */
 export const COVERAGE_GAPS: [MetricId, string, string][] = [
@@ -708,9 +1152,10 @@ export function headlineDelta(key: string, rows: Row[]) {
     ? "—"
     : shown == null
     ? "no prior"
-    : `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"} ${Math.abs(shown).toFixed(
-        1
-      )}${unit === "pp" ? " pp" : "%"}${
+    : // Non-breaking spaces: a narrow stat must not wrap the glyph apart.
+      `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"}\u00a0${Math.abs(
+        shown
+      ).toFixed(1)}${unit === "pp" ? "\u00a0pp" : "%"}${
         tone === "good" ? GOOD_MARK : tone === "bad" ? BAD_MARK : ""
       }`;
   return { key, prior, current, delta, unit, tone, text };
@@ -773,7 +1218,17 @@ export function headlineFrames(
         }
       )
     : [];
-  const [arpPrior, arpNow] = revenue.arpmau.slice(-2);
+  // Per-user stats compare with the point a week earlier (the charts are daily).
+  const weekBefore = (rows: Row[]) => {
+    const last = rows.at(-1);
+    if (!last) return [undefined, undefined] as const;
+    const day = isoDay(shiftDay(new Date(String(last.date)), -7));
+    return [
+      rows.find((r) => String(r.date).slice(0, 10) === day),
+      last,
+    ] as const;
+  };
+  const [arpPrior, arpNow] = weekBefore(revenue.arpmau);
   frames.arpmau = arpNow
     ? pair(
         arpPrior && arpNow.finopsArpmau
@@ -791,8 +1246,8 @@ export function headlineFrames(
         }
       )
     : [];
-  const [cpmPrior, cpmNow] = healthFrames(legs, snapshot, now).costPerMau.slice(
-    -2
+  const [cpmPrior, cpmNow] = weekBefore(
+    healthFrames(legs, snapshot, now).costPerMau
   );
   frames.costPerMau = cpmNow
     ? pair(
@@ -810,11 +1265,12 @@ export function headlineFrames(
   // counts and money (David 2026-10-16). Grafana's native percent change is
   // relative only, so the API carries the delta and its text.
   // A missing stat keeps its slot (one null row → the stat shows "—"), so the
-  // stat values and the strip below stay aligned column for column.
+  // stat values and the strip below stay aligned column for column. The slot
+  // is dated at the data-through day the stats describe, never today.
+  const through = ts(isoDay(shiftDay(utcDay(now), -1)));
   for (const keys of Object.values(DELTA_STRIPS))
     for (const key of keys)
-      if (!frames[key]?.length)
-        frames[key] = [{ date: ts(isoDay(utcDay(now))), value: null }];
+      if (!frames[key]?.length) frames[key] = [{ date: through, value: null }];
   frames.deltas = [];
   for (const [column, keys] of Object.entries(DELTA_STRIPS)) {
     const strip: Row = {};
@@ -905,13 +1361,13 @@ const sqlHash = (sql: string) =>
 class StoreTimeout extends Error {}
 class LeaseLost extends Error {}
 
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+function withTimeout<T>(work: Promise<T>, wait = STORE_WAIT): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     work,
     new Promise<T>(
       (_, reject) =>
-        (timer = setTimeout(() => reject(new StoreTimeout()), STORE_WAIT))
+        (timer = setTimeout(() => reject(new StoreTimeout()), wait))
     ),
   ]).finally(() => clearTimeout(timer));
 }
@@ -968,7 +1424,11 @@ async function legState(
     return cached;
   let doc = cached?.doc ?? null;
   try {
-    const shared = await withTimeout(store.read<LegEntry>(name));
+    // A fresh process's first read also opens the store channel.
+    const shared = await withTimeout(
+      store.read<LegEntry>(name),
+      doc ? STORE_WAIT : COLD_STORE_WAIT
+    );
     storeOk();
     if (shared) doc = shared;
   } catch {
@@ -1263,6 +1723,59 @@ export function dataStatus(
 
 const ALL_LEGS = Array.from(new Set(Object.values(LEGS_FOR).flat()));
 
+export interface WarmLeg {
+  day: string | null;
+  complete: boolean;
+  reason: string | null;
+  /** Another instance holds the fill lease; the next warm tick picks it up. */
+  busy: boolean;
+  storeDown: boolean;
+}
+
+/** Fill every leg to completion off the viewing path (the `omi-admin-wall-warm`
+ * scheduler). Viewers then read legs that are already complete for the UTC day
+ * instead of paying the day's cold fill; a complete leg is a store read only.
+ * Uses the same leases as requests, so a warm tick and a viewer never fill the
+ * same leg twice. */
+export async function warmSeries(
+  now = new Date(),
+  sources: SeriesSources = defaultSeriesSources,
+  /** Answer by then; unfinished fills keep running (retained) and the next
+   * tick sees their leases. Keeps the request under Scheduler's deadline. */
+  budgetMs = WARM_BUDGET_MS,
+  retain: (work: Promise<unknown>) => void = () => {}
+): Promise<Record<string, WarmLeg>> {
+  const day = isoDay(utcDay(now));
+  const store = sources.store ?? localStore;
+  const starts = await Promise.all(
+    ALL_LEGS.map((leg) => ensureLeg(leg, sources, store, day, now, retain))
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.allSettled(starts.flatMap((s) => (s ? [s.flight] : []))),
+    new Promise((resolve) => (timer = setTimeout(resolve, budgetMs))),
+  ]);
+  if (timer) clearTimeout(timer);
+  return Object.fromEntries(
+    ALL_LEGS.map((leg) => {
+      const state = local.get(leg);
+      const entry = state?.doc?.entry;
+      return [
+        leg,
+        {
+          day: entry?.day ?? null,
+          complete: Boolean(
+            entry?.complete && entry.day === day && !state?.flight
+          ),
+          reason: entry?.reason ?? null,
+          busy: Boolean(state?.busy),
+          storeDown: Boolean(state?.storeDown),
+        },
+      ];
+    })
+  );
+}
+
 export async function seriesPayload(
   name: SeriesName,
   snapshot: Promise<WallPayload | null>,
@@ -1279,7 +1792,7 @@ export async function seriesPayload(
   );
   const flights = starts.flatMap((s) => (s ? [s.flight] : []));
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const [wall] = await Promise.all([
+  const [served] = await Promise.all([
     snapshot.catch(() => null),
     flights.length
       ? Promise.race([
@@ -1289,26 +1802,59 @@ export async function seriesPayload(
       : null,
   ]);
   if (timer) clearTimeout(timer);
+  // A metric the snapshot retained is shown for 24h from `retainedSince`,
+  // never longer, whatever the age of the snapshot that carries it.
+  const wall = served && {
+    ...served,
+    metrics: served.metrics.map((m) =>
+      m.retainedSince &&
+      now.getTime() - Date.parse(m.retainedSince) >= MAX_STALE
+        ? { ...m, value: null, trend: [] }
+        : m
+    ),
+  };
   const legs: Legs = {};
   const gaps: Record<string, string> = {};
   let cacheStale = Boolean(wall?.cacheStale);
   let refreshing = false;
+  let staleUntil = Infinity;
+  // A retained snapshot metric ages from `retainedSince`, not the snapshot's
+  // newer generatedAt (Luna r3).
+  for (const m of wall?.metrics || []) {
+    if (m.value == null) continue;
+    const at = Date.parse(m.retainedSince || wall!.generatedAt);
+    if (Number.isFinite(at)) staleUntil = Math.min(staleUntil, at + MAX_STALE);
+  }
   for (const leg of LEGS_FOR[name]) {
     const state = local.get(leg);
     const entry = state?.doc?.entry;
     const running = Boolean(state?.flight || state?.busy);
     refreshing ||= running;
-    if (entry?.value !== undefined)
+    // Never serve a value older than the stale-good bound, however it was kept.
+    const expired =
+      entry?.value !== undefined && now.getTime() - entry.at >= MAX_STALE;
+    if (entry?.value !== undefined && !expired) {
       (legs as Record<string, unknown>)[leg] = entry.value;
+      staleUntil = Math.min(staleUntil, entry.at + MAX_STALE);
+    }
     if (entry?.day !== day && entry?.value !== undefined) cacheStale = true;
     if (entry?.value === undefined && running)
       gaps[leg] = "Series refresh running";
-    if (entry?.reason) gaps[leg] = entry.reason;
+    if (expired) gaps[leg] = "Series data older than 24h";
+    else if (entry?.reason) gaps[leg] = entry.reason;
     else if (entry?.value === undefined && !running)
       gaps[leg] = state?.storeDown
         ? "Shared series store unavailable"
         : "Series data unavailable";
   }
+  // A snapshot with no value yet is still filling (or retrying): never settled,
+  // so the proxy keeps re-polling instead of pinning the empty frames.
+  if (wall && wall.metrics.every((m) => m.value == null)) {
+    refreshing = true;
+    gaps.snapshot = wall.refreshError || "Snapshot refresh running";
+  } else if (wall?.refreshing || wall?.retryableFailures) refreshing = true;
+  // A finished partial snapshot is retried in 30s: keep it unsettled so the
+  // proxy does not pin the gap (or a retained stat) for its settled TTL.
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
   if (name === "headline") {
@@ -1322,6 +1868,26 @@ export async function seriesPayload(
       states.map((s) => s.doc?.entry),
       filling
     );
+    // The TV's one freshness line (no diagnostics table on the wall); the
+    // rollup detail below stays in the API's status and gaps.
+    // A headline stat the cache kept from an earlier read is not current.
+    const retained = (wall?.metrics || []).filter(
+      (m) => m.retainedSince && HEADLINE_IDS.has(m.id)
+    ).length;
+    frames.through = [
+      {
+        text: `Data through ${status.text}${
+          retained ? ` · ${retained} stat${retained > 1 ? "s" : ""} stale` : ""
+        }`,
+      },
+    ];
+    const rollup = await sources
+      .rollupStatus?.()
+      .catch(() => ({ through: null, reason: "unavailable" }));
+    if (rollup)
+      status.text += ` · rollup ${
+        rollup.through || rollup.reason || "unavailable"
+      }`;
     frames.gaps = [
       { metric: "Data through", missing: status.text, reason: "" },
       ...(frames.gaps || []),
@@ -1337,6 +1903,9 @@ export async function seriesPayload(
     status,
     frames,
     gaps,
+    staleUntil: Number.isFinite(staleUntil)
+      ? new Date(staleUntil).toISOString()
+      : null,
   };
 }
 

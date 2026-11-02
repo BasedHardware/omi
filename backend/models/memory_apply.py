@@ -502,8 +502,6 @@ def _materialize_memory_item(
         ledger_schema_version=patch.ledger_schema_version,
         kind=patch.kind,
         subject_scope=patch.subject_scope,
-        half_life_days=patch.half_life_days,
-        belief_class=patch.belief_class,
         slot=patch.slot,
         body=patch.body,
         valid_from=patch.valid_from or now,
@@ -598,8 +596,6 @@ def _apply_update_memory_item(
         "ledger_schema_version",
         "kind",
         "subject_scope",
-        "half_life_days",
-        "belief_class",
         "slot",
         "body",
         "valid_from",
@@ -705,7 +701,6 @@ def apply_long_term_patch_transaction(
     control_state: MemoryControlState,
     operation: MemoryOperation,
     patch_payload: Dict[str, Any],
-    allow_trigger_feedback_arguments: bool = False,
 ) -> ApplyResult:
     """Pure transaction skeleton for Milestone 3.
 
@@ -722,10 +717,6 @@ def apply_long_term_patch_transaction(
     expected_content_hash = raw.pop("expected_content_hash", None)
     extra_item_updates: Dict[str, Any] = {}
     for optional_key in (
-        "corroboration_count",
-        "last_corroborated_at",
-        "half_life_days",
-        "belief_class",
         "captured_at",
         "updated_at",
         "expires_at",
@@ -739,7 +730,6 @@ def apply_long_term_patch_transaction(
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
     for timestamp_key in (
-        "last_corroborated_at",
         "captured_at",
         "updated_at",
         "expires_at",
@@ -980,12 +970,7 @@ def apply_long_term_patch_transaction(
                 )
             )
             explicit_short_term_demotion = patch.target_tier == MemoryTier.short_term and patch.clear_graph_assertion
-            if (
-                semantic_change
-                and not explicit_short_term_demotion
-                and not graph_enrichment
-                and not allow_trigger_feedback_arguments
-            ):
+            if semantic_change and not explicit_short_term_demotion and not graph_enrichment:
                 return ApplyResult(
                     status=ApplyStatus.invalid_patch,
                     control_state=control_state,

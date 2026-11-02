@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // usage-weighted shares, honest D-2 window, labeled fallback to the legacy
 // estimated path when BigQuery is unavailable.
 
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),
   setPayload: vi.fn(async () => {}),

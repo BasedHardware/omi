@@ -24,21 +24,6 @@ from utils.stt.committed_words import (
 RATE = 16000
 
 
-def _flags_on(monkeypatch):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'true')
-
-
-def _flags_off(monkeypatch):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'false')
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', 'false')
-
-
-def _flags_partial(monkeypatch, dark_write, committed):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', dark_write)
-    monkeypatch.setenv('LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED', committed)
-
-
 def _map(*spans):
     send_map = SendMap(RATE)
     for provider_first, capture_first, length in spans:
@@ -46,24 +31,7 @@ def _map(*spans):
     return send_map
 
 
-@pytest.mark.parametrize(
-    'dark_write,committed',
-    [
-        ('false', 'false'),
-        ('false', 'true'),
-        ('true', 'false'),
-    ],
-)
-def test_remember_provider_word_flag_off_leaves_segment_byte_identical(monkeypatch, dark_write, committed):
-    _flags_partial(monkeypatch, dark_write, committed)
-    segment = {'text': 'hi', 'start': 0.0, 'end': 0.5}
-    before = copy.deepcopy(segment)
-    remember_provider_word(segment, 0.0, 0.5, 'hi')
-    assert segment == before
-
-
 def test_remember_provider_word_collects_valid_intervals_only(monkeypatch):
-    _flags_on(monkeypatch)
     segment = {'text': 'hi there', 'start': 0.0, 'end': 1.0}
     remember_provider_word(segment, 0.0, 0.5, 'hi')
     remember_provider_word(segment, 0.6, 1.0, 'there')
@@ -89,7 +57,6 @@ def test_remember_provider_word_collects_valid_intervals_only(monkeypatch):
     ],
 )
 def test_remember_provider_word_invalid_interval_abstains_segment(monkeypatch, start, end):
-    _flags_on(monkeypatch)
     segment = {'text': 'hi there', 'start': 0.0, 'end': 2.0}
     remember_provider_word(segment, 0.0, 0.5, 'hi')
     remember_provider_word(segment, start, end, 'bad')
@@ -100,7 +67,6 @@ def test_remember_provider_word_invalid_interval_abstains_segment(monkeypatch, s
 
 
 def test_remember_provider_word_overflow_abstains_and_blocks_readding(monkeypatch):
-    _flags_on(monkeypatch)
     segment = {'text': 'x', 'start': 0.0, 'end': 400.0}
     for i in range(256):
         remember_provider_word(segment, i * 1.5, i * 1.5 + 1.0, 'w')
@@ -324,7 +290,6 @@ async def _capture_dg_on_message(monkeypatch):
 
 
 async def test_deepgram_adapter_attaches_word_ranges_when_flags_on(monkeypatch):
-    _flags_on(monkeypatch)
     on_message, collected = await _capture_dg_on_message(monkeypatch)
     on_message(
         None,
@@ -335,30 +300,7 @@ async def test_deepgram_adapter_attaches_word_ranges_when_flags_on(monkeypatch):
     assert collected[1][PROVIDER_WORD_RANGES_KEY] == [(1.1, 1.4)]
 
 
-async def test_deepgram_adapter_flags_off_payloads_byte_identical(monkeypatch):
-    _flags_off(monkeypatch)
-    on_message, collected = await _capture_dg_on_message(monkeypatch)
-    result = _dg_result(_dg_word(0.0, 0.5, 'hi'), _dg_word(0.6, 1.0, 'there'))
-    on_message(None, result)
-    on_message(None, result)
-    assert (
-        collected
-        == [
-            {
-                'speaker': 'SPEAKER_0',
-                'start': 0.0,
-                'end': 1.0,
-                'text': 'hi there',
-                'is_user': False,
-                'person_id': None,
-            }
-        ]
-        * 2
-    )
-
-
 def test_soniox_tokens_attach_preseconds_adjusted_word_ranges(monkeypatch):
-    _flags_on(monkeypatch)
     segments = drive(
         [
             {
@@ -379,11 +321,3 @@ def test_soniox_tokens_attach_preseconds_adjusted_word_ranges(monkeypatch):
         (pytest.approx(0.5), pytest.approx(0.9)),
         (pytest.approx(1.0), pytest.approx(1.1)),
     ]
-
-
-def test_soniox_tokens_flag_off_segments_unchanged(monkeypatch):
-    _flags_off(monkeypatch)
-    segments = drive([{'tokens': [token('alpha ', 0, 400), token('beta', 500, 900)]}])
-    for segment in segments:
-        assert PROVIDER_WORD_RANGES_KEY not in segment
-        assert PROVIDER_WORDS_ABSTAIN_KEY not in segment

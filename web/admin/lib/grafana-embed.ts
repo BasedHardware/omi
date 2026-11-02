@@ -10,7 +10,6 @@ const ORIGIN = "https://monitor.omi.me";
 const ISSUER = "https://admin.omi.me";
 const TTL = 240;
 let auth: GoogleAuth | undefined;
-let legacyCheckedUntil = 0;
 const cache = new Map<string, { until: number; value: Record<string, any> }>();
 
 export function embedEnabled(): boolean {
@@ -94,71 +93,11 @@ async function grafana(
   return response.json();
 }
 
-async function legacyOriginDeniesAnonymous(base: string): Promise<boolean> {
-  const response = await fetch(`${base}/api/datasources`, {
-    redirect: "manual",
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  });
-  await response.body?.cancel();
-  return response.status === 401 || response.status === 403;
-}
-
-async function requirePrivateLegacy() {
-  if (legacyCheckedUntil > Date.now()) return;
-  // Existing anonymous Infinity access can recreate a deleted private board's
-  // queries. Cutover must close that data path, not only delete its dashboard.
-  for (const base of [
-    "https://admin.omi.me/grafana",
-    "https://omi-grafana-208440318997.us-central1.run.app/grafana",
-  ]) {
-    if (!(await legacyOriginDeniesAnonymous(base))) {
-      throw new Error("Legacy Grafana still permits anonymous data access");
-    }
-  }
-  legacyCheckedUntil = Date.now() + 60_000;
-}
-
-let legacyBoardCheckedUntil = 0;
-let legacyBoardOpenState = false;
-
-/**
- * True only while the same-origin legacy board still serves anonymous
- * readers. Kiosk fallback keeps the legacy iframe solely in this window;
- * once legacy is private (prerequisite applied or rollback) the kiosk must
- * render a native notice instead of Grafana's login page.
- */
-export async function legacyBoardOpen(): Promise<boolean> {
-  if (legacyBoardCheckedUntil > Date.now()) return legacyBoardOpenState;
-  try {
-    const response = await fetch(
-      "https://admin.omi.me/grafana/api/datasources",
-      {
-        redirect: "manual",
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
-    if (response.status === 200) {
-      legacyBoardOpenState = Array.isArray(await response.json());
-    } else {
-      await response.body?.cancel();
-      legacyBoardOpenState = false;
-    }
-  } catch {
-    legacyBoardOpenState = false; // Fail closed: never frame a private board.
-  }
-  legacyBoardCheckedUntil = Date.now() + 60_000;
-  return legacyBoardOpenState;
-}
-
 export async function mintEmbed(uid: string) {
-  await requirePrivateLegacy();
   const { key, kid } = await signingKey();
   const membership = await secret(process.env.GRAFANA_BUSINESS_TOKEN_SECRET);
   if (
-    !Number.isSafeInteger(membership.orgId) ||
-    membership.orgId <= 1 ||
+    membership.orgId !== 2 ||
     !Number.isSafeInteger(membership.teamId) ||
     membership.teamId <= 0 ||
     !membership.token
@@ -190,7 +129,11 @@ export async function mintEmbed(uid: string) {
   // JWT creates a namespaced identity in the dedicated org; the org-scoped
   // service account enrolls it into the only folder-capable team before return.
   const org = await grafana("/api/org", membership.token);
-  if (org.id !== membership.orgId || org.name !== "Omi Business") {
+  if (
+    org.id !== 2 ||
+    org.id !== membership.orgId ||
+    org.name !== "Omi Business"
+  ) {
     throw new Error("Grafana token targets an unexpected organization");
   }
   const user = await grafana("/api/user", jwt, undefined, true);

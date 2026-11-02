@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "status": "held-emitter-required",
+  "event": "omi_http_request_terminal",
+  "all_service_names": true,
+  "resource": "cloud_run_revision",
+  "fields": {
+    "route_template": "resolved router template from a reviewed per-service registry; unmatched is /other; never request.url/path",
+    "action": [
+      "batchEmbedContents",
+      "embedContent",
+      "generateContent",
+      "streamGenerateContent",
+      "none"
+    ],
+    "status": "integer HTTP status",
+    "duration_ms": "finite nonnegative number",
+    "terminal_source": "application"
+  },
+  "Gemini_normalization": {
+    "/v1/proxy/gemini/{path:path}": "/v1/proxy/gemini",
+    "/v1/proxy/gemini-stream/{path:path}": "/v1/proxy/gemini-stream"
+  },
+  "requirements": [
+    "Install one terminal emitter at route entry on every Cloud Run service entrypoint",
+    "Emit exactly once per accepted request including cancellation and bounded pre-provider failure",
+    "A platform 300s timeout may preempt application terminal emission; retain platform request logs as coverage anchor",
+    "Do not union/add application terminal events to platform request counts",
+    "Route registry must be finite per deployment, including parameter placeholders rather than concrete values",
+    "Unknown action becomes none; unknown/unmatched route becomes /other",
+    "No raw URL, model ID, uid, job ID, headers, payload or raw exception in these fields"
+  ],
+  "blocks": [
+    "No common per-request resolved-route emitter verified in current source",
+    "Current request-log regex cannot replace arbitrary path parameters with a template",
+    "Must verify platform request-log coverage per service; sync may have request logs disabled"
+  ]
+}

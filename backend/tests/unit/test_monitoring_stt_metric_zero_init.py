@@ -25,6 +25,10 @@ DECLARED_SPARSE = {
     'omi_live_stt_terminal_failures_total': 'Provider/phase failure children appear only on live-STT failure.',
     'omi_live_stt_accepted_total': 'Provider/platform/environment children appear only on accepted STT traffic.',
     'omi_live_stt_terminal_total': 'Provider/outcome/phase children appear only at live-STT termination.',
+    'omi_sync_transcription_job_total': (
+        'Service/outcome children appear only when a sync job reaches a terminal outcome; the failure-reason '
+        'step rule needs >= 50 reason jobs per 60m and treats a missing baseline as new.'
+    ),
     'omi_listen_accepted_total': 'Source/platform children appear only when a listen session is accepted.',
     'omi_client_journey_terminal_total': (
         'Client journey children are traffic-created to bound cardinality. Journey SLOs zero-fill only the '

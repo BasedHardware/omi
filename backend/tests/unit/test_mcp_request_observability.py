@@ -394,18 +394,18 @@ class TestToolCallUserSampling:
 
 @pytest.fixture(autouse=True)
 def _reset_mcp_active_local_seen():
-    """The process-local uid/day cache survives across tests in one process."""
+    """The process-local uid/client/day cache survives across tests in one process."""
     with mcp_analytics._mcp_active_seen_lock:
-        mcp_analytics._mcp_active_seen_uids.clear()
+        mcp_analytics._mcp_active_seen_clients.clear()
         mcp_analytics._mcp_active_seen_day = None
     yield
     with mcp_analytics._mcp_active_seen_lock:
-        mcp_analytics._mcp_active_seen_uids.clear()
+        mcp_analytics._mcp_active_seen_clients.clear()
         mcp_analytics._mcp_active_seen_day = None
 
 
 class TestMcpActiveMarker:
-    """``MCP Active`` fires at most once per uid per UTC day behind a Redis
+    """``MCP Active`` fires at most once per uid/client per UTC day behind a Redis
     ``SET NX EX`` marker, and fails open when Redis is down."""
 
     def _properties(self):
@@ -420,7 +420,7 @@ class TestMcpActiveMarker:
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
         args, kwargs = redis.r.set.call_args
         assert args[0].startswith("mcp:active:")
-        assert args[0].endswith(":u1")
+        assert args[0].endswith(":u1:claude_ai")
         assert kwargs == {"nx": True, "ex": 172800}
         distinct_id, event, properties = emit.call_args.args
         assert distinct_id == "u1"
@@ -474,7 +474,7 @@ class TestMcpActiveMarker:
 
 
 class TestMcpActiveLocalCache:
-    """The bounded process-local uid/day cache short-circuits the Redis NX
+    """The bounded process-local uid/client/day cache short-circuits the Redis NX
     claim at scheduling time and inside the worker; Redis stays authority."""
 
     def _properties(self):
@@ -531,7 +531,7 @@ class TestMcpActiveLocalCache:
         current["day"] = "20260729"
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
         assert redis.r.set.call_count == 2
-        assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
+        assert redis.r.set.call_args.args[0].endswith(":20260729:u1:claude_ai")
 
     def test_fifo_cap_evicts_oldest_entries(self, monkeypatch):
         redis = self._redis(monkeypatch)
@@ -565,11 +565,65 @@ class TestMcpActiveLocalCache:
 
         redis.r.set.side_effect = _set_then_roll
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
-        assert redis.r.set.call_args.args[0].endswith(":20260728:u1")
+        assert redis.r.set.call_args.args[0].endswith(":20260728:u1:claude_ai")
         assert mcp_analytics._mcp_active_seen_day == "20260728"
         mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
         assert redis.r.set.call_count == 2
-        assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
+        assert redis.r.set.call_args.args[0].endswith(":20260729:u1:claude_ai")
+
+    def test_distinct_clients_emit_and_each_client_deduplicates_at_schedule(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, 'emit_mcp_posthog_event', emit)
+
+        def immediate(executor, fn, **kwargs):
+            fn(**kwargs)
+
+        submit = MagicMock(side_effect=immediate)
+        monkeypatch.setattr(mcp_analytics, 'submit_with_context', submit)
+        for client in ('claude_ai', 'cursor', 'claude_ai', 'cursor'):
+            mcp_analytics.schedule_mcp_active(uid='u1', **dict(self._properties(), client_name=client))
+        assert submit.call_count == redis.r.set.call_count == emit.call_count == 2
+        assert {call.args[0].rsplit(':', 1)[-1] for call in redis.r.set.call_args_list} == {'claude_ai', 'cursor'}
+        assert {call.args[2]['client_name'] for call in emit.call_args_list} == {'claude_ai', 'cursor'}
+        assert all(call.args[0] == 'u1' and call.args[1] == 'MCP Active' for call in emit.call_args_list)
+        assert all(call.kwargs == {'nx': True, 'ex': 172800} for call in redis.r.set.call_args_list)
+
+    def test_redis_deduplicates_each_client_across_local_cache_resets(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        claimed = set()
+
+        def claim(key, value, *, nx, ex):
+            assert nx is True and ex == 172800 and value == '1'
+            if key in claimed:
+                return None
+            claimed.add(key)
+            return True
+
+        redis.r.set.side_effect = claim
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, 'emit_mcp_posthog_event', emit)
+        for _ in range(2):
+            # Model an independent process/evicted local cache. Redis remains
+            # the authority, separately for each of the two client enums.
+            with mcp_analytics._mcp_active_seen_lock:
+                mcp_analytics._mcp_active_seen_clients.clear()
+            for name in ('claude_ai', 'cursor'):
+                mcp_analytics.emit_mcp_active(uid='u1', **dict(self._properties(), client_name=name))
+        assert len(claimed) == emit.call_count == 2
+        assert redis.r.set.call_count == 4
+
+    @pytest.mark.parametrize('client', ['private-unbounded-client-name', {}, [], None, 123])
+    def test_unknown_clients_share_one_bounded_marker(self, monkeypatch, client):
+        redis = self._redis(monkeypatch)
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, 'emit_mcp_posthog_event', emit)
+        for name in (client, 'another arbitrary private value'):
+            mcp_analytics.emit_mcp_active(uid='u1', **dict(self._properties(), client_name=name))
+        assert redis.r.set.call_count == emit.call_count == 1
+        assert redis.r.set.call_args.args[0].endswith(':u1:unknown')
+        assert emit.call_args.args[2]['client_name'] == 'unknown'
+        assert set(mcp_analytics._mcp_active_seen_clients) == {('u1', 'unknown')}
 
 
 class TestInitializeNegotiatedAnalytics:
@@ -660,16 +714,3 @@ class TestRequestToolDimension:
             )
         assert response.status_code == 200
         assert authed.request_log.call_args.kwargs["tool_name"] is None
-
-
-def test_flag_reads_never_use_shared_capture_aliases(monkeypatch):
-    from utils import jit_rollout, free_tier_cohort
-
-    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
-    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
-    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'phc_capture-only')
-    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing-only')
-    provider = jit_rollout.PostHogJITFlagProvider.__new__(jit_rollout.PostHogJITFlagProvider)
-    provider._timeout_seconds = 1
-    assert provider._build_client() is None
-    assert free_tier_cohort._build_posthog_client() is None

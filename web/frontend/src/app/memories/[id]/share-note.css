@@ -1575,3 +1575,22 @@ html[data-share-theme='dark']:has(.share-note) body {
   line-height: 1.6;
   color: var(--sn-muted);
 }
+
+/* Note provenance uses the public transcript identities, never displays them. */
+.sn-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--sn-hairline);
+  border-radius: 999px;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+}
+.sn-source-chip:hover, .sn-source-chip:focus-visible { background: rgba(128,128,128,.12); }
+.sn-seg { scroll-margin-block: 100px; transition: background-color .25s; }
+.sn-seg-source { background: var(--sn-card); border-radius: 8px; }
+
+.sn-sources { display: flex; flex-wrap: wrap; gap: 6px; }

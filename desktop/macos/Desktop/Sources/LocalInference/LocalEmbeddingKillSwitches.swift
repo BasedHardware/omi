@@ -15,7 +15,8 @@ struct LocalEmbeddingKillSwitches: Sendable, Equatable {
   static func resolve(
     environment: [String: String] = ProcessInfo.processInfo.environment,
     defaults: UserDefaults = .standard,
-    isNonProduction: Bool = AppBuild.isNonProduction
+    isNonProduction _: Bool = AppBuild.isNonProduction,
+    remoteDisabled: Bool = LocalCapabilityRemoteKill.isDisabled
   ) -> Self {
     func trimmed(_ value: String?) -> String? {
       guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
@@ -35,8 +36,8 @@ struct LocalEmbeddingKillSwitches: Sendable, Equatable {
     }
     return Self(
       isDisabled: environment["OMI_DISABLE_LOCAL_EMBEDDINGS"] == "1"
-        || defaults.bool(forKey: .disableLocalEmbeddings),
-      isEnabled: boolFlag(environment["OMI_LOCAL_EMBEDDINGS"]) ?? defaultsEnabled ?? isNonProduction,
+        || defaults.bool(forKey: .disableLocalEmbeddings) || remoteDisabled,
+      isEnabled: boolFlag(environment["OMI_LOCAL_EMBEDDINGS"]) ?? defaultsEnabled ?? true,
       forcedEngineRaw: trimmed(environment["OMI_FORCE_LOCAL_EMBEDDING_ENGINE"])
         ?? trimmed(defaults.string(forKey: .forceLocalEmbeddingEngine)))
   }

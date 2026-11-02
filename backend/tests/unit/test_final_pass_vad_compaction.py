@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from utils.stt import vad
+from utils.stt import local_vad as vad
 from utils.stt.vad_compaction import compact_speech, transcribe_with_speech_compaction, diarize_with_speech_compaction
 from utils.sync import wal_audio_coverage_metrics as coverage_metrics
 
@@ -159,7 +159,7 @@ def test_offline_detector_keeps_final_partial_window(monkeypatch):
         observed.append(len(samples))
         return [{'start': 0, 'end': len(samples) / 16000, 'duration': len(samples) / 16000}]
 
-    monkeypatch.setattr(vad, '_segments_from_16khz_samples', detect)
+    monkeypatch.setattr(vad, 'segments_from_16khz_samples', detect)
     result = vad.offline_pcm_speech_segments(b'\x00\x00' * 513)
     assert observed == [1024]
     assert result == [{'start': 0, 'end': 513 / 16000, 'duration': 513 / 16000}]
