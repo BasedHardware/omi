@@ -434,9 +434,25 @@ def test_batch_text_supersedes_an_automatic_record_discard(real_projection, deci
     # The verdict was made without this text; enrichment reassesses it.
     assert target['discarded'] is False and target['relevance_decision'] is None
     assert len(_projected_segments(lane)) == 1
+    assert row['projection']['enrichment_required'] is True
     projected = deepcopy(target)
     lane.assign()  # receipt replay
     assert lane.client.rows[lane.target_key] == projected
+
+
+def test_silent_pass_keeps_an_automatic_discard_without_reassessment(real_projection):
+    lane = real_projection
+    for table in ('jobs', 'results'):
+        lane.client.rows[(lane.namespace + '_' + table, 'unit')]['result'] = {'outcome': 'silence'}
+    lane.client.rows[lane.target_key] = _automatically_discarded(lane, AUTOMATIC_DISCARDS[2])
+    lane.assign()
+    row = lane.client.rows[(lane.namespace + '_results', 'unit')]
+    assert row['projection']['state'] == 'persisted'
+    # Unchanged text must not rerun relevance: a fresh verdict could un-hide it.
+    assert row['projection']['enrichment_required'] is False
+    target = lane.client.rows[lane.target_key]
+    assert target['discarded'] is True and target['relevance_decision'] == AUTOMATIC_DISCARDS[2]
+    assert not any(key.startswith('_sync_') for key in target)
 
 
 @pytest.mark.parametrize('decision', AUTOMATIC_DISCARDS)

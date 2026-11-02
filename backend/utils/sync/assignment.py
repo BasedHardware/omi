@@ -349,6 +349,9 @@ def assign_in_transaction(
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
         remember_size_payload(target_id, result)
+        if not survivors and is_automatic_discard(target):
+            # No text landed, so the automatic verdict stands: skip the relevance rerun.
+            result['_sync_lineage_repeat_only'] = True
         if target_id not in full_ids and estimated <= SYNC_CONVERSATION_BYTE_BUDGET:
             transaction.update(collection.document(target_id), encoded)
             result['_sync_projected_size_bucket'] = projected_size_bucket(estimated)
