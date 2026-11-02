@@ -274,7 +274,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     processes = environment_values.get('worker', {}).get('processes', defaults['worker']['processes'])
     assert project_env['BATCH_PIPELINE_WORKER_PROCESSES']['value'] == str(processes)
     # Two processes double the one-process host sizing, inside g2-standard-8.
-    sized = ('12Gi', '14Gi', '4') if processes == 1 else ('24Gi', '27Gi', '6')
+    sized = ('12Gi', '14Gi', '4') if processes == 1 else ('24Gi', '26Gi', '6')
     assert (
         container['resources']['requests']['memory'],
         container['resources']['limits']['memory'],
@@ -663,7 +663,7 @@ def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expec
 
 @pytest.mark.parametrize(
     'arguments,expected,memory',
-    [((), '2', ('24Gi', '27Gi')), (('--set', 'worker.processes=1'), '1', ('12Gi', '14Gi'))],
+    [((), '2', ('24Gi', '26Gi')), (('--set', 'worker.processes=1'), '1', ('12Gi', '14Gi'))],
 )
 def test_worker_processes_ship_two_size_the_pod_and_one_is_the_kill_switch(arguments, expected, memory):
     result = render(*enabled_arguments(), *arguments)

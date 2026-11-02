@@ -128,7 +128,7 @@ processResources:
       nvidia.com/gpu: "1"
     limits:
       cpu: "8"
-      memory: 27Gi
+      memory: 26Gi
       nvidia.com/gpu: "1"
 autoscaling:
   # Enable only after scoped admissible-count series/adapter and target qualify.

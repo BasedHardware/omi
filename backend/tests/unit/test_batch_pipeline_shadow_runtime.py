@@ -532,3 +532,26 @@ async def test_v1_shaped_offer_computes_identity_before_legacy_decode(repository
     await asyncio.gather(*tasks)
     assert row(repository, identity('synthetic-owner', content + ':0'))['state'] == 'ready'
     assert original.exists()  # Only shadow's private copy was decoded/cleaned.
+
+
+def test_sibling_processes_in_one_pod_never_settle_each_others_shadow_job(repository, monkeypatch):
+    from utils.batch_pipeline.shadow_worker import shadow_worker_id
+
+    monkeypatch.setenv('POD_NAME', 'worker-pod')
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX', raising=False)
+    single = shadow_worker_id()
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX', '0')
+    first = ShadowRunner(repository, Mock()).worker_id
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_PROCESS_INDEX', '1')
+    second = ShadowRunner(repository, Mock()).worker_id
+    assert len({single, first, second}) == 3
+
+    repository.offer(second)
+    reservation = repository.reserve('synthetic-owner', 'sibling-unit', 'deep')
+    work = WorkItem(reservation[0], 'synthetic-owner', 1, 'synthetic:audio', 300, 2, shadow=True, privacy_generation=0)
+    assert repository.ready(reservation, work, '')
+    assert repository.take(second) == work
+    # The sibling refreshing or closing its own slot leaves the running job alone.
+    repository.offer(first)
+    repository.offer(first, close=True)
+    assert row(repository, work.segment_id).get('outcome') is None

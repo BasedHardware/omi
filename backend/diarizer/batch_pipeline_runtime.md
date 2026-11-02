@@ -85,7 +85,7 @@ non-zero so Kubernetes replaces the pod and its GPU state.
 
 Host memory scales with the count: the chart takes pod resources from
 `processResources.<count>` and refuses a count without an entry. Two processes
-double the one-process sizing (24Gi request / 27Gi limit, 6 / 8 CPU) inside
+double the one-process sizing (24Gi request / 26Gi limit, 6 / 8 CPU; the limit stays under node allocatable minus daemons) inside
 `g2-standard-8` allocatable; three do not fit that machine shape.
 
 ## Encrypted staging and results
