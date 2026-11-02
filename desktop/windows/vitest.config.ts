@@ -30,7 +30,8 @@ export default defineConfig({
     alias: {
       // Node-side suites import main-process modules whose graph pulls in
       // `electron`, whose real entry needs the native binary. Alias to a stub.
-      electron: resolve(__dirname, 'test/electronStub.ts')
+      electron: resolve(__dirname, 'test/electronStub.ts'),
+      '@omi/note-shared': resolve(__dirname, '../../web/packages/note-shared')
     }
   },
   test: {

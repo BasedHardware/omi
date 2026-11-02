@@ -1,7 +1,12 @@
 # Admin TV share links
 
-Kiosk wall = Grafana `omi-tv` (same board as `/dashboard`), opened via a
-secret URL. No custom metrics board.
+Kiosk wall = Grafana `omi-tv-v2` in the Business org (same board as
+`/dashboard`), opened via a secret URL. No custom metrics board. The board
+carries revenue, MRR and cost panels, so a share link is finance data:
+issuing one requires `finance:read` (on top of `analytics:share`), the link
+list redacts the tokens without it, and the kiosk re-checks the issuer still
+holds `finance:read` on every view — demote or remove the issuer and their
+links stop working.
 
 | Surface | Auth | Role |
 | --- | --- | --- |
@@ -12,19 +17,16 @@ secret URL. No custom metrics board.
 | `DELETE /api/omi/tv-links/[id]` | Firebase admin | Revoke (`await props.params`) |
 | `POST /api/grafana/tv-embed` | Capability token | Mint kiosk embed for a validated link |
 
-Optional query on the kiosk URL: `?tv=0.55` (Fire TV scale). While the
-legacy board is still framed, `&platform=macos|mobile` selects that legacy
-platform board; the private v2 embed is the single combined canonical board
-and ignores `platform`.
+Optional query on the kiosk URL: `?tv=0.55` (Fire TV scale).
 
 Firestore `admin_tv_links`; doc id = sha256 hex; store `tokenHash` + `token`.
-Default TTL 90d. TV tokens unlock the kiosk page only. While the private
-Grafana cutover flag is off and the legacy board still serves anonymous
-readers, the kiosk keeps framing legacy `/grafana/d/omi-tv`. Once the cutover
-is enabled — or legacy goes private for any reason — the kiosk mints a
-short-lived Business embed through `POST /api/grafana/tv-embed` (token
-re-validated server-side, identity namespaced per link) and never frames
-Grafana's login page; revocation/expiry of the link stops new embeds.
+Default TTL 90d. TV tokens unlock the kiosk page only. When the private
+Business embed is enabled, the kiosk mints a short-lived embed through
+`POST /api/grafana/tv-embed` (token re-validated server-side — including the
+issuer's `finance:read` — identity namespaced per link). It never falls back
+to the retired Grafana instance or frames Grafana's login page;
+revocation/expiry of the link, or the issuer losing `finance:read`, stops new
+embeds.
 
 `AuthProvider` must skip admin check/sign-out/redirect on `/tv/view/*`.
 

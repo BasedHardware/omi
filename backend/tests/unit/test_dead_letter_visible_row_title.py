@@ -12,6 +12,8 @@ Row states (David's rule: a listed row always carries something useful, and a
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 import json
 import os
 import zlib
@@ -451,7 +453,7 @@ def test_orphan_at_the_document_limit_still_terminalizes_without_growth():
     del orphan.data['finalization_job_id']
     transaction = _Transaction()
 
-    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, _NOW, _UID) is True
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, _NOW, _UID) is True
     assert transaction.updates == [(orphan, {'status': 'completed'})]
 
 

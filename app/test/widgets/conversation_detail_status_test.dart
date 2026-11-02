@@ -17,6 +17,7 @@ import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/reprocess_fakes.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
       id: 'seg-1',
@@ -137,10 +138,10 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(status: ConversationStatus.failed),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
           calls.add(id);
           return gate.future;
-        },
+        }),
       );
       addTearDown(detail.dispose);
 
@@ -159,11 +160,12 @@ void main() {
   });
 
   group('Activity strip', () {
-    testWidgets('shows while this conversation is reprocessed and goes away when it lands', (tester) async {
+    testWidgets('stays hidden while the reader reprocesses: the Summary tab is the one progress surface',
+        (tester) async {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(segments: [_segment('Hi')], overview: 'Old summary'),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) => gate.future,
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 
@@ -172,9 +174,10 @@ void main() {
 
       unawaited(detail.reprocessConversation());
       await tester.pump();
-      expect(find.byKey(const Key('conversation_activity_strip')), findsOneWidget);
-      expect(find.text(_l10n(tester).reprocessingConversationProgress), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(detail.isReprocessingOpenConversation, isTrue);
+      expect(find.byKey(const Key('conversation_activity_strip')), findsNothing);
+      expect(find.text(_l10n(tester).reprocessingConversationProgress), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
 
       gate.complete(_conversation(segments: [_segment('Hi')], overview: 'New summary'));
       await tester.pump();
@@ -217,7 +220,7 @@ void main() {
     final gate = Completer<ServerConversation?>();
     final detail = _detail(
       _conversation(segments: [_segment('Hi')]),
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) => gate.future,
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
     );
     addTearDown(detail.dispose);
 
@@ -228,7 +231,8 @@ void main() {
     unawaited(detail.reprocessConversation());
     await tester.pump();
     expect(find.text(l10n.generateSummary), findsNothing);
-    expect(find.text(l10n.summarizingConversation), findsOneWidget);
+    expect(find.byKey(const Key('summary_generating_state')), findsOneWidget);
+    expect(find.text(l10n.summarySummarizingWith(l10n.omiAppName)), findsOneWidget);
 
     gate.complete(null);
     await tester.pump();
@@ -298,7 +302,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(segments: [_segment('Hi')]),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) => gate.future,
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 

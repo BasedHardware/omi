@@ -59,12 +59,22 @@ class ClientTelemetrySchema {
   };
   static const processingOutcomes = {'completed', 'failed', 'cancelled'};
   static const latencyBases = {'processing_observed', 'request_started', 'unknown'};
+
+  /// Native OmiCaptureHealth phases (OmiCaptureHealth.swift) in wire form, plus
+  /// the legacy names other emitters may still send. The native set is
+  /// inactive, unverified, flowing, repairing, reconnecting, quiet,
+  /// actionRequired; `mapIngressPhase` translates each camelCase name.
   static const ingressPhases = {
     'unknown',
+    'inactive',
+    'unverified',
     'subscribing',
     'awaiting_audio',
     'flowing',
+    'quiet',
+    'repairing',
     'recovering',
+    'reconnecting',
     'action_required',
     'disconnected',
   };
@@ -170,12 +180,13 @@ class ClientTelemetrySchema {
     };
   }
 
-  static String mapIngressPhase(String phase) {
-    if (phase == 'actionRequired') return 'action_required';
-    return ingressPhases.contains(phase) ? phase : 'unknown';
-  }
+  static String mapIngressPhase(String phase) => switch (phase) {
+        'actionRequired' => 'action_required',
+        'inactive' || 'unverified' || 'flowing' || 'quiet' || 'repairing' || 'reconnecting' => phase,
+        _ => ingressPhases.contains(phase) ? phase : 'unknown',
+      };
 
-  static bool ingressPhaseMapped(String phase) => phase == 'actionRequired' || ingressPhases.contains(phase);
+  static bool ingressPhaseMapped(String phase) => mapIngressPhase(phase) != 'unknown';
 
   static String mapIngressReason(String reason) => ingressReasons.contains(reason) ? reason : 'unknown';
 

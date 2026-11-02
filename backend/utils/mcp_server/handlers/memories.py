@@ -1,7 +1,7 @@
 """Memory tool handlers for the hosted MCP server."""
 
 import logging
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from fastapi import HTTPException
 
@@ -18,7 +18,6 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.mcp_memories import (
-    collect_filtered_memories,
     filter_and_sort_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
@@ -44,6 +43,7 @@ from utils.mcp_server.errors import (
     stable_error_code,
     tool_error_from_http,
 )
+from utils.other.list_budget import ListReadBudget
 from utils.other.endpoints import check_rate_limit_context, check_rate_limit_inline
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,7 @@ def _read_memories_keyset_page(
     updated_after: Any,
     sort: str,
     categories: Optional[List[str]],
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[Dict[str, Any], Optional[str]]:
     """Page the mixed memory view through ``MemoryService.read_page``.
 
@@ -101,7 +102,12 @@ def _read_memories_keyset_page(
     rounds = 0
     while len(filtered) < limit and rounds < _MEMORY_KEYSET_MAX_ROUNDS:
         try:
-            page = service.read_page(uid, limit=limit - len(filtered), cursor=uml_cursor)
+            page = service.read_page(
+                uid,
+                limit=limit - len(filtered),
+                cursor=uml_cursor,
+                **({"request_budget": budget} if budget is not None else {}),
+            )
         except HTTPException as exc:
             raise_tool_error_from_http(exc)
         uml_cursor = page.next_cursor
@@ -122,11 +128,14 @@ def _read_memories_keyset_page(
         rounds += 1
         if page.next_cursor is None:
             break
+    if uml_cursor is not None and len(filtered) < limit:
+        scan_truncated = True
     result = {
         'memories': filtered,
         'returned_count': len(filtered),
         'has_more': uml_cursor is not None,
         'more_in_window': False,
+        'more_in_window_known': uml_cursor is None,
         'offset': 0,
         'limit': limit,
         'sort': sort,
@@ -201,6 +210,14 @@ def get_memories(
     )
 
 
+def read_filtered_mcp_memories(
+    uid: str, *, filters: dict, db_client: Any, budget: Optional[ListReadBudget] = None, max_candidates: int = 5000
+) -> Tuple[List[Dict[str, Any]], int]:
+    return MemoryService(db_client=db_client).read_mcp_filtered(
+        uid, filters=filters, max_candidates=max_candidates, **({"budget": budget} if budget is not None else {})
+    )
+
+
 def memories_page_core(
     uid: str,
     *,
@@ -216,14 +233,14 @@ def memories_page_core(
     categories: Optional[List[str]] = None,
     max_scan: int = MCP_MEMORY_LIST_MAX_SCAN,
     cursor_kind: str,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Any]:
-    """Shared validated memory page for the MCP ``get_memories`` tool and REST list.
+    """Authorize upstream, then read complete candidates or a resumable keyset.
 
-    ``cursor_kind`` binds the opaque cursor to the calling surface so tokens
-    minted on one surface cannot resume the other. ``max_scan`` bounds the
-    filtered-scan path — REST keeps its released 5000-row window while the
-    tool uses the smaller MCP cap. Callers must authorize the read grant
-    first — this function performs no product authorization.
+    Unfiltered global sorts retain an explicitly bounded source window. Native
+    updated/scoring keysets keep their independent signed stream positions.
+    max_scan bounds each materialized source window; REST may share a stricter
+    request budget across candidate reads, lineage checks and suppression.
     """
     valid_categories = list(categories or [])
     filters = {
@@ -245,10 +262,93 @@ def memories_page_core(
         else:
             offset = offset_position(position)
 
-    if uml_cursor is not None or (cursor_token is None and offset == 0 and sort in _MEMORY_KEYSET_SORTS):
+    sparse_filters = (
+        updated_after is not None or reviewed is not None or manually_added is not None or bool(valid_categories)
+    )
+    use_keyset = not sparse_filters and sort in _MEMORY_KEYSET_SORTS
+    if not sparse_filters and not use_keyset:
+        # Released default reads sort a bounded newest-updated source window.
+        # One released-size first batch avoids main's growing prefix rereads;
+        # it cannot prove global exhaustion, even when policy hides some rows.
+        window_limit = min(max_scan, 200, max(100, limit * 3))
+        source = [
+            memory.model_dump(mode='json')
+            for memory in MemoryService(db_client=db).read(
+                uid, limit=window_limit, offset=0, **({'budget': budget} if budget is not None else {})
+            )
+        ]
+        rows = filter_and_sort_memories(
+            source, include_activity=include_activity, include_sensitive=include_sensitive, sort=sort
+        )
+        page = rows[offset : offset + limit]
+        more = len(rows) > offset + limit
+        result = {
+            'memories': page,
+            'returned_count': len(page),
+            'has_more': True,
+            'more_in_window': more,
+            'more_in_window_known': True,
+            'scan_truncated': True,
+            'scanned_count': len(source),
+            'matched_count': len(rows),
+            'offset': offset,
+            'limit': limit,
+            'sort': sort,
+            'include_activity': include_activity,
+            'include_sensitive': include_sensitive,
+            'coverage': 'bounded newest-updated source window; global ordering and exhaustion are unknown; use updated_desc with cursor for older candidates',
+            'source_window_limit': window_limit,
+        }
+        if more:
+            result['next_cursor'] = encode_cursor(
+                kind=cursor_kind, uid=uid, position={'offset': offset + len(page)}, filters=filters
+            )
+        resume_uml = None
+    elif not use_keyset:
+        if uml_cursor is not None:
+            raise ToolExecutionError(
+                'This filtered cursor predates indexed memory windows. Restart without cursor.', code=-32602
+            )
+        rows, scanned_count = read_filtered_mcp_memories(
+            uid,
+            db_client=db,
+            budget=budget,
+            max_candidates=max_scan,
+            filters={
+                'reviewed': reviewed,
+                'manually_added': manually_added,
+                'include_activity': include_activity,
+                'include_sensitive': include_sensitive,
+                'updated_after': updated_after,
+                'sort': sort,
+                'categories': valid_categories or None,
+            },
+        )
+        page = rows[offset : offset + limit]
+        has_more = len(rows) > offset + limit
+        result: Dict[str, Any] = {
+            'memories': page,
+            'returned_count': len(page),
+            'has_more': has_more,
+            'more_in_window': has_more,
+            'scan_truncated': False,
+            'scanned_count': scanned_count,
+            'matched_count': len(rows),
+            'offset': offset,
+            'limit': limit,
+            'sort': sort,
+            'include_activity': include_activity,
+            'include_sensitive': include_sensitive,
+        }
+        if has_more:
+            result['next_cursor'] = encode_cursor(
+                kind=cursor_kind, uid=uid, position={'offset': offset + len(page)}, filters=filters
+            )
+        resume_uml = None
+    else:
         result, resume_uml = _read_memories_keyset_page(
             uid,
-            limit=limit,
+            limit=offset + limit,
             uml_cursor=uml_cursor,
             reviewed=reviewed,
             manually_added=manually_added,
@@ -257,36 +357,20 @@ def memories_page_core(
             updated_after=updated_after,
             sort=sort,
             categories=valid_categories or None,
+            budget=budget,
         )
-    else:
-        result = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
-                memory.model_dump(mode='json')
-                for memory in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
-            ],
-            limit=limit,
-            offset=offset,
-            reviewed=reviewed,
-            manually_added=manually_added,
-            include_activity=include_activity,
-            include_sensitive=include_sensitive,
-            updated_after=updated_after,
-            sort=sort,
-            categories=valid_categories or None,
-            max_scan=max_scan,
+        result['memories'] = result['memories'][offset : offset + limit]
+        result['returned_count'] = len(result['memories'])
+        result['offset'] = offset
+        result['limit'] = limit
+    if result.get('scan_truncated') and use_keyset and not result.get('memories'):
+        raise ToolExecutionError(
+            'memory_scan_incomplete: no complete empty page can be established; narrow updated_after or use updated_desc and a cursor.',
+            code=-32009,
+            http_status=503,
         )
-        resume_uml = None
-        # The bounded scan walks at most max_scan raw rows per call, so an
-        # offset beyond the collected window could never be reached: emit a
-        # cursor only for in-window continuation and let scan_truncated mark
-        # the boundary instead of a dangling position.
-        if result.get("more_in_window"):
-            result["next_cursor"] = encode_cursor(
-                kind=cursor_kind,
-                uid=uid,
-                position={"offset": offset + len(result["memories"])},
-                filters=filters,
-            )
+    if result.get('scan_truncated') and use_keyset:
+        result['coverage'] = 'bounded_scan; older candidates may be omitted; use updated_desc with cursor'
     # Apply locked content truncation
     for memory in result["memories"]:
         if memory.get('is_locked', False):

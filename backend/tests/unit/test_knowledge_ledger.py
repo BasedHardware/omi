@@ -26,7 +26,6 @@ from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
     close_fact,
-    render_playbook_index,
     render_profile,
     reopen_standalone_fact,
 )
@@ -499,100 +498,6 @@ def test_ledger_slot_aliases_are_canonical_and_unknown_new_slots_fail_closed():
     assert migrated.slot is None
 
 
-def test_playbook_and_trigger_writes_require_their_own_authority():
-    provenance = LedgerProvenance(
-        source_id="turn-authority",
-        source_type="chat_turn",
-        action_id="action-authority",
-    )
-
-    with pytest.raises(ValueError, match="recurring_workflow authority"):
-        LedgerWrite(
-            kind=MemoryKind.document,
-            content="Release workflow",
-            body="Do the safe release steps.",
-            provenance=provenance,
-            write_reason=LedgerWriteReason.agent_reusable_conclusion,
-        )
-
-    with pytest.raises(ValueError, match="standing_trigger authority"):
-        LedgerWrite(
-            kind=MemoryKind.trigger,
-            content="Notify on release readiness",
-            trigger_condition={"keyword": "ready"},
-            provenance=provenance,
-            write_reason=LedgerWriteReason.agent_reusable_conclusion,
-        )
-
-    with pytest.raises(ValueError, match="primary_user scope"):
-        LedgerWrite(
-            kind=MemoryKind.document,
-            content="Third-party workflow",
-            body="Private third-party steps",
-            provenance=provenance,
-            write_reason=LedgerWriteReason.recurring_workflow,
-            subject_scope=MemorySubjectScope.third_party,
-            subject_entity_id="person-sarah",
-        )
-
-    for invalid_reason in (LedgerWriteReason.recurring_workflow, LedgerWriteReason.standing_trigger):
-        with pytest.raises(ValueError, match="facts cannot use document or trigger authority"):
-            LedgerWrite(
-                kind=MemoryKind.fact,
-                content="Wrong authority",
-                provenance=provenance,
-                write_reason=invalid_reason,
-                slot="home_city",
-            )
-
-
-def test_playbook_description_is_one_bounded_handle_in_write_and_projection():
-    provenance = LedgerProvenance(
-        source_id="turn-playbook",
-        source_type="chat_turn",
-        action_id="action-playbook",
-    )
-    write = LedgerWrite(
-        kind=MemoryKind.document,
-        content="Deploy safely\n1. Export artifacts\n2. Verify release",
-        body="Full private workflow",
-        provenance=provenance,
-        write_reason=LedgerWriteReason.recurring_workflow,
-    )
-    historical = _item(
-        "playbook-multiline",
-        kind=MemoryKind.document,
-        slot=None,
-        content="Deploy safely\n1. Export artifacts\n2. Verify release",
-        body="Full private workflow",
-        write_reason=LedgerWriteReason.recurring_workflow,
-    )
-    third_party = historical.model_copy(
-        update={
-            "memory_id": "third-party-playbook",
-            "subject_scope": MemorySubjectScope.third_party,
-            "subject_entity_id": "person-sarah",
-        }
-    )
-
-    assert write.content == "Deploy safely 1. Export artifacts 2. Verify release"
-    assert render_playbook_index([historical]) == (
-        "playbook-multiline: Deploy safely 1. Export artifacts 2. Verify release"
-    )
-    assert render_playbook_index([third_party, historical]) == (
-        "playbook-multiline: Deploy safely 1. Export artifacts 2. Verify release"
-    )
-
-    with pytest.raises(ValueError, match="compact handle limit"):
-        LedgerWrite(
-            kind=MemoryKind.document,
-            content="x" * 361,
-            body="Full private workflow",
-            provenance=provenance,
-            write_reason=LedgerWriteReason.recurring_workflow,
-        )
-
-
 def test_profile_renderer_selects_one_slot_winner_by_authority_then_recency():
     direct = _item(
         "direct",
@@ -680,70 +585,6 @@ def test_profile_renderer_rejects_promotion_without_changing_order_or_budget():
     assert len(rendered) <= budget
 
 
-def test_playbook_index_never_injects_body():
-    playbook = _item(
-        "playbook-1",
-        kind=MemoryKind.document,
-        slot=None,
-        content="Release the macOS beta",
-        body="secret implementation detail",
-        write_reason=LedgerWriteReason.recurring_workflow,
-    )
-
-    rendered = render_playbook_index([playbook])
-
-    assert rendered == "playbook-1: Release the macOS beta"
-    assert "secret implementation detail" not in rendered
-
-
-def test_playbook_index_rejects_promotion_without_changing_order_or_budget():
-    """A rejected high-priority playbook must not hide approved handles at the bound."""
-    accepted_without_review = _item(
-        "playbook-a",
-        kind=MemoryKind.document,
-        slot=None,
-        content="Alpha",
-        body="alpha body",
-        curation_weight=2,
-        promotion=None,
-    )
-    accepted_with_review = _item(
-        "playbook-b",
-        kind=MemoryKind.document,
-        slot=None,
-        content="Beta",
-        body="beta body",
-        curation_weight=1,
-        promotion={"user_review": True},
-    )
-    rejected = _item(
-        "rejected-playbook",
-        kind=MemoryKind.document,
-        slot=None,
-        content="Rejected",
-        body="private rejected workflow",
-        curation_weight=100,
-        promotion={"user_review": False},
-    )
-    unrelated = _item("unrelated-fact", content="not a playbook", promotion={"user_review": False})
-    budget = len("playbook-a: Alpha\nplaybook-b: Beta")
-
-    expected = render_playbook_index(
-        [accepted_without_review, accepted_with_review, unrelated],
-        character_budget=budget,
-    )
-    rendered = render_playbook_index(
-        [rejected, accepted_with_review, unrelated, accepted_without_review],
-        character_budget=budget,
-    )
-
-    assert expected == "playbook-a: Alpha\nplaybook-b: Beta"
-    assert rendered == expected
-    assert "rejected-playbook" not in rendered
-    assert "private rejected workflow" not in rendered
-    assert len(rendered) <= budget
-
-
 def test_close_fact_retry_returns_identical_closed_history(monkeypatch):
     closed_at = NOW + timedelta(hours=1)
     closed = _item(
@@ -821,68 +662,6 @@ def test_ledger_migration_adapter_retry_is_a_noop(monkeypatch):
     )
 
     assert result == adapted
-
-
-def test_write_playbook_and_create_trigger_persist_their_own_kind(monkeypatch):
-    """The two dormant write verbs land the exact kind their JIT tools rely on."""
-    captured: dict = {}
-
-    def fake_write(uid, data, **kwargs):
-        captured["uid"] = uid
-        captured["data"] = data
-        return data["id"]
-
-    monkeypatch.setattr(knowledge_ledger, "write_canonical_knowledge_ledger_memory", fake_write)
-
-    playbook_provenance = LedgerProvenance(
-        source_id="turn-playbook", source_type="agent_chat", action_id="action-playbook"
-    )
-    playbook_id = knowledge_ledger.write_playbook(
-        "u1",
-        "Cut a release candidate",
-        "1. Run checks\n2. Publish",
-        provenance=playbook_provenance,
-    )
-    assert captured["uid"] == "u1"
-    assert captured["data"]["id"] == playbook_id
-    assert captured["data"]["kind"] == MemoryKind.document.value
-    assert captured["data"]["body"] == "1. Run checks\n2. Publish"
-    assert captured["data"]["write_reason"] == LedgerWriteReason.recurring_workflow.value
-    assert captured["data"]["subject_scope"] == MemorySubjectScope.primary_user.value
-
-    trigger_provenance = LedgerProvenance(
-        source_id="turn-trigger", source_type="agent_chat", action_id="action-trigger"
-    )
-    trigger_condition = {
-        "keywords": ["jane"],
-        "action": {"type": "agent_prompt", "prompt": "Tell the user Jane emailed."},
-    }
-    trigger_id = knowledge_ledger.create_trigger(
-        "u1",
-        "Watch for Jane",
-        trigger_condition,
-        provenance=trigger_provenance,
-        arguments={"wakeup_budget_per_day": 1},
-    )
-    assert captured["data"]["id"] == trigger_id
-    assert captured["data"]["kind"] == MemoryKind.trigger.value
-    assert captured["data"]["trigger_condition"] == trigger_condition
-    assert captured["data"]["arguments"] == {"wakeup_budget_per_day": 1}
-    assert captured["data"]["write_reason"] == LedgerWriteReason.standing_trigger.value
-
-    # The pre-existing verb signature omitted ``arguments`` entirely, which
-    # made it impossible for any caller to ever populate
-    # ``wakeup_budget_per_day`` — the one field the paid-work trigger snapshot
-    # (utils.memory.jit_trigger_snapshot) requires before it will admit a row.
-    # Confirm the additive default still behaves for a caller that omits it.
-    trigger_id_no_arguments = knowledge_ledger.create_trigger(
-        "u1",
-        "Watch for Jane again",
-        trigger_condition,
-        provenance=LedgerProvenance(source_id="turn-trigger-2", source_type="agent_chat", action_id="action-trigger-2"),
-    )
-    assert captured["data"]["id"] == trigger_id_no_arguments
-    assert captured["data"]["arguments"] == {}
 
 
 def test_close_fact_sets_valid_to_via_canonical_mutation(monkeypatch):

@@ -30,6 +30,7 @@ def test_main_installs_deadline_outside_other_middlewares():
         and isinstance(node.value.args[0], ast.Name)
     ]
     assert middleware[-1] == 'DesktopProxyDeadlineMiddleware'
+    assert middleware.index('TimeoutMiddleware') < middleware.index('ExternalListMetricsMiddleware')
     assert 'BYOKMiddleware' in middleware
 
 

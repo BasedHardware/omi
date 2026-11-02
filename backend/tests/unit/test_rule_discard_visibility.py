@@ -25,6 +25,13 @@ from tests.unit.test_sync_donor_tombstone_visibility import (
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
 
 
+@pytest.fixture(autouse=True)
+def legacy_independent_discard_rollback(monkeypatch):
+    # These fixtures pin the retired intake verdict and historical read contract.
+    # Forward occasion-aware intake is covered by test_occasion_relevance.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+
+
 def _visible_row(when: datetime, row_id: str = 'visible') -> dict:
     return {
         'id': row_id,
@@ -239,9 +246,9 @@ def test_default_list_sends_limit_then_offset_and_refill_stays_capped(monkeypatc
     first_limit = next(i for i, c in enumerate(calls) if c[0] == 'limit')
     assert calls[first_limit] == ('limit', 2)
     assert calls[first_limit + 1] == ('offset', 0)
-    # the refill read is bounded: 70 skips at window 2 = 35 batches, capped
+    # Refill windows request only missing slots; total raw refill reads are capped.
     refill_streams = [c for c in calls if c[0] == 'stream' and c[3] is not None]
-    assert len(refill_streams) <= 36
+    assert sum(c[2] for c in refill_streams) <= 64
     # the cap stopped the scan: the page is short, never wrong
     assert ids == ['visible']
     # sanity: without the cap the deep row would exist in this listing
@@ -355,7 +362,9 @@ def test_completed_live_shared_rule_discard_stays_hidden_on_append(text, reason)
     assert result['sync_live_target'] is True
 
 
-def test_empty_segment_append_is_a_dedupe_noop_and_leaves_stored_state():
+def test_empty_segment_append_is_a_dedupe_noop_and_leaves_stored_state(monkeypatch):
+    # Exercise lineage dedupe for the fixture owner; absent keys now deny membership.
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
     store = StrictFirestore()
     incident = chunk('incident', 1000, 'I think it is.')
     incident['structured'] = {'title': '', 'overview': ''}
@@ -430,13 +439,13 @@ def pipeline(monkeypatch):
     from utils.sync import pipeline as module
 
     calls = []
-    real = module.lifecycle_service.discard_by_relevance
+    real = module.lifecycle_service.rule_discard_outcome
 
     def tracked(*args, **kwargs):
         calls.append((args, kwargs))
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(module.lifecycle_service, 'discard_by_relevance', tracked)
+    monkeypatch.setattr(module.lifecycle_service, 'rule_discard_outcome', tracked)
     return module, conversations_db, calls
 
 
@@ -482,12 +491,41 @@ def test_pipeline_discard_refuses_a_revised_or_newly_curated_row(pipeline, monke
     store = StrictFirestore({('users', 'u', 'conversations', 'incident'): _incident(sync_content_revision=4)})
     _wire_store(monkeypatch, module, conversations_db, store)
     _stub_read(monkeypatch, conversations_db, _incident())
-
-    module._reprocess_conversation_after_update('u', 'incident', 'en')
+    context = {}
+    token = module.PROCESS_CONTEXT.set(context)
+    try:
+        module._reprocess_conversation_after_update('u', 'incident', 'en')
+    finally:
+        module.PROCESS_CONTEXT.reset(token)
 
     module.process_conversation.assert_not_called()
     module.record_conversation_relevance.assert_not_called()
     assert store.rows[('users', 'u', 'conversations', 'incident')]['discarded'] is False
+    assert 'discarded' not in context
+
+
+def test_pipeline_receipts_a_stored_discard_without_rewriting_it(pipeline, monkeypatch):
+    # Intake stores rule-settled fragments discarded=True. The obligation for
+    # such a row must settle as a discard on its first wake: the write is a
+    # no-op there, and an admitted first-summary deadline would otherwise keep
+    # retrying the wake as callback-pending.
+    module, conversations_db, calls = pipeline
+    row = _incident(discarded=True)
+    store = StrictFirestore({('users', 'u', 'conversations', 'incident'): deepcopy(row)})
+    _wire_store(monkeypatch, module, conversations_db, store)
+    _stub_read(monkeypatch, conversations_db, row)
+    context = {}
+    token = module.PROCESS_CONTEXT.set(context)
+    try:
+        module._reprocess_conversation_after_update('u', 'incident', 'en')
+    finally:
+        module.PROCESS_CONTEXT.reset(token)
+
+    module.process_conversation.assert_not_called()
+    module.record_conversation_relevance.assert_not_called()
+    assert len(calls) == 1 and calls[0][1]['expected_sync_content_revision'] == 3
+    assert store.rows[('users', 'u', 'conversations', 'incident')] == row
+    assert context['discarded'] is True
 
 
 @pytest.mark.parametrize('curation', [{'sync_relevance_user_kept': True}, {'user_title': 'Saved note'}])
@@ -553,6 +591,37 @@ def test_discard_by_relevance_refuses_newly_curated_and_non_completed(monkeypatc
     assert store.rows[('users', 'u', 'conversations', 'c')]['discarded'] is True
 
     assert conversations.discard_by_relevance('u', 'missing', decision) is False
+
+
+def test_rule_discard_outcome_distinguishes_a_stored_discard_from_a_refusal(monkeypatch):
+    from database import conversations
+
+    invalidations = []
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: invalidations.append(a))
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+    decision = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only'}
+
+    store = StrictFirestore({('users', 'u', 'conversations', 'c'): _incident()})
+    monkeypatch.setattr(conversations, 'db', store)
+    assert conversations.rule_discard_outcome('u', 'c', decision, expected_sync_content_revision=3) == 'discarded'
+    assert (
+        conversations.rule_discard_outcome('u', 'c', decision, expected_sync_content_revision=3) == 'already_discarded'
+    )
+    assert len(invalidations) == 1
+
+    for refusal in (
+        {'deleted': True, 'discarded': True},
+        {'status': 'in_progress'},
+        {'sync_relevance_user_kept': True},
+        {'sync_content_revision': 7},
+    ):
+        store = StrictFirestore({('users', 'u', 'conversations', 'c'): _incident(**refusal)})
+        monkeypatch.setattr(conversations, 'db', store)
+        assert (
+            conversations.rule_discard_outcome('u', 'c', decision, expected_sync_content_revision=3) == 'refused'
+        ), refusal
+    assert conversations.rule_discard_outcome('u', 'missing', decision) == 'refused'
+    assert len(invalidations) == 1
 
 
 def test_kept_empty_capture_gets_the_deterministic_title(monkeypatch):
@@ -642,3 +711,20 @@ def test_detail_http_omitted_param_hides_a_rule_discard_and_keeps_a_stored_disca
     kept = client.get('/v1/conversations/archived')
     assert kept.status_code == 200 and kept.json()['id'] == 'archived'
     assert stored['discarded'] is False
+
+
+def test_occasion_policy_delegates_rule_review_to_aggregate_finalization(pipeline, monkeypatch):
+    module, conversations_db, calls = pipeline
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'true')
+    row = _incident(relevance_decision=None)
+    store = StrictFirestore({('users', 'u', 'conversations', 'incident'): deepcopy(row)})
+    _wire_store(monkeypatch, module, conversations_db, store)
+    _stub_read(monkeypatch, conversations_db, row)
+    processed = SimpleNamespace(discarded=False, structured=SimpleNamespace(overview=''))
+    module.process_conversation.return_value = processed
+    monkeypatch.setattr(module, 'schedule_after_finalization', MagicMock())
+    assert module._reprocess_conversation_after_update('u', 'incident', 'en') is processed
+    assert calls == []
+    module.process_conversation.assert_called_once()
+    module.schedule_after_finalization.assert_called_once()
+    assert not store.rows[('users', 'u', 'conversations', 'incident')]['discarded']

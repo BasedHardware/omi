@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { embedEnabled, legacyBoardOpen, mintEmbed } from "@/lib/grafana-embed";
+import { embedEnabled, mintEmbed } from "@/lib/grafana-embed";
 import { resolveActiveTvToken } from "@/lib/tv-links";
 
 export const dynamic = "force-dynamic";
@@ -7,10 +7,11 @@ export const runtime = "nodejs";
 
 /**
  * Capability-authenticated kiosk embed. The TV share token is validated
- * server-side before any embed is minted, so revocation and expiry keep
- * working after the private cutover closes anonymous legacy access.
- * Flag-off mirrors /api/grafana/embed's rollout honesty: the kiosk keeps
- * the legacy board only while that board actually serves anonymous readers.
+ * server-side before the private Business embed is minted, so revocation,
+ * expiry, and the issuer still holding finance:read keep working for
+ * existing TV links.
+ * Flag-off keeps the TV page unavailable until the private Business embed is
+ * enabled; it never falls back to the retired same-origin Grafana instance.
  */
 export async function POST(request: NextRequest) {
   const headers = {
@@ -37,10 +38,7 @@ export async function POST(request: NextRequest) {
     );
   }
   if (!embedEnabled()) {
-    return NextResponse.json(
-      { enabled: false, legacy: await legacyBoardOpen() },
-      { headers }
-    );
+    return NextResponse.json({ enabled: false }, { headers });
   }
   try {
     return NextResponse.json(

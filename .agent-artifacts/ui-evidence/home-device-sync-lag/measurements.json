@@ -1,0 +1,43 @@
+{
+  "layer": "host_flutter_tester; no GPU raster or phone-latency claim",
+  "flutter": "3.44.5",
+  "base": "33d7596f4be57f2946ebf35bd1b6ffbdbe4501ec",
+  "frames": 60,
+  "pump_microseconds": 16667,
+  "capture_sync_notification_pairs": 10,
+  "before": {
+    "home_idle_builds": 0,
+    "home_idle_surrounding_paints": 0,
+    "home_syncing_rotation_builds": 60,
+    "home_syncing_surrounding_paints": 60,
+    "device_idle_page_builds": 10,
+    "device_syncing_page_builds": 10,
+    "host_ui_p95_ms": {
+      "home_idle": 0.769,
+      "home_syncing": 2.443,
+      "device_idle": 21.143,
+      "device_syncing": 20.789
+    }
+  },
+  "after": {
+    "home_idle_builds": 0,
+    "home_idle_surrounding_paints": 0,
+    "home_syncing_rotation_builds": 0,
+    "home_syncing_surrounding_paints": 0,
+    "device_idle_page_builds": 0,
+    "device_syncing_page_builds": 0,
+    "host_ui_p95_ms": {
+      "home_idle": 0.797,
+      "device_idle": 1.958,
+      "home_syncing": 0.733,
+      "device_syncing": 1.21
+    },
+    "source_blobs": {
+      "app/lib/pages/settings/device_settings.dart": "8be6398d8f831bb5c4a6ff26471ffe92557de77a",
+      "app/lib/ui/components/omi_live_indicators.dart": "981d7d3bb02a57537cd41bbf59949d328a9ac860"
+    },
+    "inventory_passes_per_sync_notification": 1,
+    "inventory_passes_per_capture_metric_notification": 0
+  },
+  "reproduce": "cd app && flutter test --no-pub -d flutter-tester integration_test/perf/sync_indicator_perf.dart"
+}

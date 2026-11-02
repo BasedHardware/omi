@@ -20,6 +20,14 @@ from database.action_items_cache import bump_action_items_list_version
 from database.action_item_refresh_policy import LIMIT, RECEIPT, plan
 
 
+class RefreshConversationUnavailable(ValueError):
+    """The transaction rejected a stale target before any task writes."""
+
+    def __init__(self, successor_id: str | None = None) -> None:
+        self.successor_id = successor_id
+        super().__init__('refresh conversation unavailable')
+
+
 def task_refs(user: Any, conversation_id: str, transaction: Any) -> list[Any]:
     """Bounded complete conversation membership, including deleted rows; overflow fails closed."""
     query = user.collection('action_items').where(filter=FieldFilter('conversation_id', '==', conversation_id))
@@ -46,7 +54,8 @@ def reconcile(
     def write(transaction):
         conversation = typed_doc(conversation_ref.get(transaction=transaction))
         if not conversation or conversation.get('deleted'):
-            raise ValueError('refresh conversation unavailable')
+            successor = conversation.get('sync_merged_into') if conversation else None
+            raise RefreshConversationUnavailable(successor if isinstance(successor, str) and successor else None)
         if donor_id is None and conversation.get('sync_content_revision') != expected_revision:
             raise ValueError('refresh conversation revision changed')
         control = typed_doc(user.collection('task_intelligence_control').document('state').get(transaction=transaction))

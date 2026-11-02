@@ -1932,143 +1932,13 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "aet29e27cgmwwc"
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
       },
-      "description": "",
+      "description": "Matching backend-listen GKE log entries from Cloud Logging. Replaces the Loki log-derived rate view; this panel shows log evidence, not requests per second or numeric error rates. Namespace and container are pinned; Grafana time range bounds the query.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic-by-name"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 65,
-            "gradientMode": "opacity",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "accepted"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "listen"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "end"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "purple",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "listen start"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "listen end"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "defaults": {},
+        "overrides": []
       },
       "gridPos": {
         "h": 6,
@@ -2078,158 +1948,60 @@
       },
       "id": 59,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
       },
       "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({service_name=\"backend-listen\"} |~ `/listen.*accepted` [$__auto]))",
-          "hide": true,
-          "legendFormat": "accepted",
-          "queryType": "range",
-          "refId": "B"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"/listen.*accepted\" OR jsonPayload.message=~\"/listen.*accepted\")",
+          "refId": "B",
+          "hide": true
         },
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({service_name=\"backend-listen\"} |= `_listen` [$__auto]))-count(rate({service_name=\"backend-listen\"} |~ `_listen.*end` [$__auto]))",
-          "hide": false,
-          "legendFormat": "listen start",
-          "queryType": "range",
-          "refId": "A"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"_listen\" OR jsonPayload.message=~\"_listen\")\nNOT (textPayload=~\"_listen.*end\" OR jsonPayload.message=~\"_listen.*end\")",
+          "refId": "A",
+          "hide": false
         },
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({service_name=\"backend-listen\"} |~ `_listen.*end` [$__auto]))",
-          "hide": false,
-          "legendFormat": "listen end",
-          "queryType": "range",
-          "refId": "C"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"_listen.*end\" OR jsonPayload.message=~\"_listen.*end\")",
+          "refId": "C",
+          "hide": false
         }
       ],
-      "title": "Transcription Service - RPS (Log based)",
-      "type": "timeseries"
+      "title": "Transcription lifecycle logs (Cloud Logging)",
+      "type": "logs"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "aet29e27cgmwwc"
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
       },
-      "description": "",
+      "description": "Matching backend-listen GKE log entries from Cloud Logging. Replaces the Loki log-derived rate view; this panel shows log evidence, not requests per second or numeric error rates. Namespace and container are pinned; Grafana time range bounds the query.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic-by-name"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 25,
-            "gradientMode": "opacity",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "noValue": "\ud83d\udc9a",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Handshake failure"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Token expired"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "defaults": {},
+        "overrides": []
       },
       "gridPos": {
         "h": 6,
@@ -2239,145 +2011,50 @@
       },
       "id": 60,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
       },
       "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "builder",
-          "expr": "count(rate({service_name=\"backend-listen\"} |= `ASGI callable returned without sending` [$__auto]))",
-          "hide": false,
-          "legendFormat": "Handshake failure",
-          "queryType": "range",
-          "refId": "A"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"ASGI callable returned without sending\" OR jsonPayload.message=~\"ASGI callable returned without sending\")",
+          "refId": "A",
+          "hide": false
         },
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "builder",
-          "expr": "count(rate({service_name=\"backend-listen\"} |= `Token expired` [$__auto]))",
-          "hide": false,
-          "legendFormat": "Token expired",
-          "queryType": "range",
-          "refId": "B"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"Token expired\" OR jsonPayload.message=~\"Token expired\")",
+          "refId": "B",
+          "hide": false
         }
       ],
-      "title": "Transcription Service Error Rate (Log based)",
-      "type": "timeseries"
+      "title": "Transcription handshake and token error logs (Cloud Logging)",
+      "type": "logs"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "aet29e27cgmwwc"
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
       },
-      "description": "",
+      "description": "Matching backend-listen GKE log entries from Cloud Logging. Replaces the Loki log-derived rate view; this panel shows log evidence, not requests per second or numeric error rates. Namespace and container are pinned; Grafana time range bounds the query.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic-by-name"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 25,
-            "gradientMode": "opacity",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "noValue": "\ud83d\udc9a",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Handshake failure"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Token expired"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "defaults": {},
+        "overrides": []
       },
       "gridPos": {
         "h": 6,
@@ -2387,36 +2064,30 @@
       },
       "id": 63,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
       },
       "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({service_name=\"backend-listen\"} |= `Could not process data: error b'corrupted stream` [$__auto]))",
-          "hide": false,
-          "legendFormat": "Corrupted Stream",
-          "queryType": "range",
-          "refId": "C"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"Could not process data: error b'corrupted stream\" OR jsonPayload.message=~\"Could not process data: error b'corrupted stream\")",
+          "refId": "C",
+          "hide": false
         }
       ],
-      "title": "Transcription Service Error Rate: Data corrupted",
-      "type": "timeseries"
+      "title": "Transcription corrupted-stream logs (Cloud Logging)",
+      "type": "logs"
     },
     {
       "collapsed": false,
@@ -8196,62 +7867,11 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "aet29e27cgmwwc"
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
       },
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
+        "defaults": {},
         "overrides": []
       },
       "gridPos": {
@@ -8262,35 +7882,31 @@
       },
       "id": 62,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
       },
       "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
           },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({service_name=~\"backend-listen\"} |~ `429.*(quota)` [$__auto])) or vector(0)",
-          "legendFormat": "Error",
-          "queryType": "range",
-          "refId": "A"
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_container\"\nresource.labels.project_id=\"based-hardware\"\nresource.labels.cluster_name=\"prod-omi-gke\"\nresource.labels.namespace_name=\"prod-omi-backend\"\nresource.labels.container_name=\"backend-listen\"\n(textPayload=~\"429.*(quota)\" OR jsonPayload.message=~\"429.*(quota)\")",
+          "refId": "A",
+          "hide": false
         }
       ],
-      "title": "OpenAI - Quota exceeded",
-      "type": "timeseries"
+      "title": "OpenAI quota error logs (Cloud Logging)",
+      "type": "logs",
+      "description": "Matching backend-listen GKE log entries from Cloud Logging. Replaces the Loki log-derived rate view; this panel shows log evidence, not requests per second or numeric error rates. Namespace and container are pinned; Grafana time range bounds the query."
     }
   ],
   "preload": false,

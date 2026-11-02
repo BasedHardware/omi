@@ -202,6 +202,26 @@ def test_cloud_text_rollback_preserves_error_stream(monkeypatch):
     assert 'failure' in err.getvalue() and 'normal' not in err.getvalue()
 
 
+def test_text_default_keeps_cloud_split_until_json_opt_in(monkeypatch):
+    monkeypatch.setenv('K_SERVICE', 'backend')
+    out, err = io.StringIO(), io.StringIO()
+    logs.configure_logging('backend', default_format='text', stdout=out, stderr=err)
+    logging.info('normal')
+    logging.error('failure')
+    assert out.getvalue() == 'INFO root: normal\n'
+    assert err.getvalue() == 'ERROR root: failure\n'
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    out = io.StringIO()
+    logs.configure_logging('backend', default_format='text', stdout=out)
+    logging.info('opted in')
+    assert json.loads(out.getvalue())['message'] == 'opted in'
+
+
+def test_invalid_default_format_is_rejected():
+    with pytest.raises(ValueError):
+        logs.configure_logging('backend', default_format='JSON')
+
+
 def test_requested_level_constrains_named_loggers():
     output = io.StringIO()
     logs.configure_logging('test', level=logging.ERROR, stdout=output)

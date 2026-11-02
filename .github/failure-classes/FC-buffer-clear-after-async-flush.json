@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-buffer-clear-after-async-flush",
+  "violated_contract": "A capture source boundary must retain every admitted packet. Clearing a shared frame buffer after awaiting a flush erases packets appended during that I/O, including native BLE orphan packets received while a pendant reconnects.",
+  "canonical_prevention": "Seal the complete old buffer with its source metadata and advance codec and device identity synchronously, before awaiting disk I/O. Later arrivals remain in the new buffer under the new device's custody. Force the write interval with a barrier and verify exact packet payloads from durable files for same-codec reconnects and codec changes, plus per-device ring evidence across handoff.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/local_wal_durability_seam_test.dart",
+    "app/test/unit/local_wal_live_custody_test.dart",
+    "app/test/services/capture/capture_live_recovery_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/local_wal_sync.dart"
+  ],
+  "status": "open"
+}

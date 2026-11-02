@@ -1,12 +1,16 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
-from config.batch_pipeline import enabled_for
+from config.policy import BatchUnitPolicy, resolve_batch_policy
+from config.batch_pipeline import require_record_protocol_ready
+from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import Scheduler
 
@@ -26,14 +30,34 @@ def admit(
     namespace: str,
     intake: dict | None = None,
     require_artifacts: bool = False,
+    policy: BatchUnitPolicy | None = None,
+    enqueue: Callable[..., bool] | None = None,
+    adopt: Callable[[dict], bool] | None = None,
+    record_barrier: dict | None = None,
 ) -> dict:
+    """Admit one content upload atomically.
+
+    ``enqueue(tx, item, now, *, policy)`` replaces the GPU-ring enqueue for every
+    item (the C8 provider-STT stage writes its units outside the ring) and must
+    record the admission ``policy`` on the job as the ring does. ``adopt`` lets a caller take over a
+    non-batch ledger row it has re-validated inside this transaction (a legacy
+    row legacy can no longer finish); the batch ledger write below replaces it.
+    With both unset, behaviour is unchanged.
+    """
+    enqueue_item = enqueue or Scheduler.enqueue_in_transaction
     if not items or tuple(item.segment_id for item in items) != binding.segment_ids:
         raise ValueError('complete ordered sibling set must match immutable projection binding')
     if any(
         item.owner_id != binding.owner_id or item.privacy_generation != binding.privacy_generation for item in items
     ):
         raise ValueError('work identity must match projection binding')
+    policy = policy or resolve_batch_policy(binding.owner_id)
     content_key = f'{binding.owner_id}/{binding.content_id}'
+    serialized_binding = asdict(binding)
+    # Ordinary work must remain readable by pre-partial projection hosts
+    # throughout the roll. Only partial work requires the new field/readers.
+    if not binding.partial_record:
+        serialized_binding.pop('partial_record')
 
     def commit(tx):
         existing = tx.get('content', content_key)
@@ -41,12 +65,61 @@ def admit(
             return {'outcome': 'batch', 'job_id': existing['job_id']}
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(existing.get('result')):
             return {'outcome': 'completed', 'result': existing['result']}
-        if existing:
+        if existing and not (adopt is not None and adopt(existing)):
             # Never take a legacy content owner, including ambiguous/expired
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
-        if not enabled_for(binding.owner_id):
-            raise AdmissionDisabled('cohort no longer enabled')
+        pending = tx.get('jobs', binding.segment_ids[0])
+        partial_metadata = intake or {}
+        partial_parent = partial_metadata.get('record_partial_parent')
+        if partial_parent:
+            pending = tx.get('jobs', partial_parent)
+            run = pending.get('partial_run') or {}
+            if (
+                not pending.get('partial_coordinator')
+                or run.get('complete')
+                or run.get('generation') != partial_metadata.get('record_partial_generation')
+                or run.get('page') != partial_metadata.get('record_partial_page')
+                or binding.content_id != partial_metadata.get('record_partial_content')
+            ):
+                raise ValueError('partial continuation ownership changed')
+        reserved_recording = (
+            pending.get('state') == 'record_pending'
+            and pending.get('owner_id') == binding.owner_id
+            and pending.get('conversation_id') == binding.target_conversation_id
+            and (partial_parent or pending.get('record_content_id') == binding.content_id)
+        )
+        admission = policy
+        if reserved_recording:
+            raw = pending.get('policy')
+            # Main already accepts a reserved native capture after rollback.
+            # A pre-E1 reservation is the durable receipt of that admission.
+            admission = (
+                BatchUnitPolicy.from_dict(raw)
+                if raw is not None
+                else replace(policy, batch_enabled=True, live_admission_enabled=True, live_record_enabled=True)
+            )
+        if not admission.batch_enabled:
+            raise AdmissionDisabled('recorded admission policy does not enable batch')
+        if partial_parent and admission.provider_reason == 'byok':
+            raise ValueError('partial BYOK excluded')
+        if binding.record_origin:
+            key = f'{binding.owner_id}/{binding.target_conversation_id}'
+            row = tx.get('conversations', key)
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
+                raise ValueError('registered record target unavailable')
+            if binding.native_record:
+                require_record_protocol_ready()
+                require_record_audio_barrier(row, expected=record_barrier)
+            expected = (
+                row.get('record_lane_owner')
+                if partial_parent and reserved_recording
+                else 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            )
+            if row.get('record_lane_owner') not in {None, expected}:
+                raise ValueError('record owner is immutable')
+            if row.get('record_lane_owner') != expected:
+                tx.patch('conversations', key, {'record_lane_owner': expected})
         for item in items:
             if require_artifacts:
                 key = artifact_id(item.segment_id, item.audio_uri)
@@ -61,11 +134,14 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = Scheduler.enqueue_in_transaction(tx, item, now)
+            created = enqueue_item(tx, item, now, policy=admission)
             job = tx.get('jobs', item.segment_id)
-            if not created and job.get('projection_binding') != asdict(binding):
+            previous_binding = dict(job.get('projection_binding') or {})
+            if previous_binding.get('partial_record') is False:
+                previous_binding.pop('partial_record')
+            if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
-            job['projection_binding'] = asdict(binding)
+            job['projection_binding'] = serialized_binding
             tx.put('jobs', item.segment_id, job)
         if intake is not None:
             tx.put('intakes', binding.job_id, {**intake, 'accepted_at': now})
@@ -80,6 +156,9 @@ def admit(
                 'dispatch_protocol': PROTOCOL,
                 'updated_at': timestamp,
                 'created_at': timestamp,
+                # A legacy row taken over through ``adopt`` (stranded claim, contract (h));
+                # the zero-lost census reads it (scripts/legacy_dark/lost_recordings.py).
+                **({'adopted_legacy_job_id': existing.get('job_id')} if existing else {}),
                 'batch_pipeline': {
                     'protocol_version': 1,
                     'namespace': namespace,
@@ -87,9 +166,22 @@ def admit(
                 },
             },
         )
-        return {'outcome': 'batch', 'job_id': binding.job_id}
+        return {
+            'outcome': 'batch',
+            'job_id': binding.job_id,
+            '_policy_id': admission.policy_id,
+            '_admitted_seconds': sum(i.duration_seconds for i in items),
+        }
 
-    return store.run(commit)
+    outcome = store.run(commit)
+    policy_id = str(outcome.pop('_policy_id', policy.policy_id))
+    seconds = outcome.pop('_admitted_seconds', None)
+    if seconds is not None:
+        from config.policy.telemetry import record_policy_source
+
+        record_policy_source('admission', policy_id)
+        record_correctness('admitted', seconds=float(seconds))
+    return outcome
 
 
 def cache_completed(store: Store, uid: str, content_id: str, job_id: str, intake: dict, now: float) -> bool:

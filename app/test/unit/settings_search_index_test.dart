@@ -82,6 +82,22 @@ void main() {
     );
   });
 
+  test('a remembered-but-disconnected pendant keeps Device Settings searchable', () {
+    const remembered = SettingsSearchScope(
+      deviceConnected: false,
+      supportLinks: false,
+      android: false,
+      rememberedDevice: true,
+    );
+    const forgotten = SettingsSearchScope(deviceConnected: false, supportLinks: false, android: false);
+
+    // The page itself stays findable, but its live-link rows (firmware, mic gain) do not.
+    expect(searchSettings(en, en.deviceSettings, remembered).map((e) => e.key), contains('deviceSettings'));
+    expect(searchSettings(en, en.deviceSettings, forgotten), isEmpty);
+    expect(searchSettings(en, en.firmware, remembered).map((e) => e.key), isNot(contains('firmware')));
+    expect(searchSettings(en, en.micGain, remembered).map((e) => e.key), isNot(contains('micGain')));
+  });
+
   test('"Profile" still finds the Account row (its old name) and Voice Profile', () {
     const scope = SettingsSearchScope(deviceConnected: false, supportLinks: false, android: false);
     final results = searchSettings(en, 'profile', scope);

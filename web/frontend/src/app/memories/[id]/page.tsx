@@ -19,6 +19,10 @@ import {
 } from '@/src/lib/share-preview-analytics.mjs';
 import { shareAlternates } from '@/src/lib/shared-export.mjs';
 import { firstSectionBulletPlainText } from '@/src/lib/shared-note.mjs';
+import {
+  noteTranscriptIDs,
+  presentableNoteStructured,
+} from '@omi/note-shared/note-sources.mjs';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
@@ -50,13 +54,18 @@ export async function generateMetadata(
   // and overview in the document head after the share is revoked.
   const memory = (await getSharedMemory(params.id)) ?? null;
 
+  // Link previews read the same repaired text the page shows, not raw citation debris.
+  const structured = presentableNoteStructured(
+    memory?.structured,
+    noteTranscriptIDs(memory?.transcript_segments),
+  );
   const title = !memory
     ? 'Shared Conversation Not Found'
-    : memory?.structured?.title || DEFAULT_TITLE_MEMORY;
+    : structured?.title || DEFAULT_TITLE_MEMORY;
   const description = !memory
     ? 'This shared conversation is private or no longer available. Open Omi to capture your own.'
-    : firstSectionBulletPlainText(memory?.structured?.sections) ||
-      markdownToPlainText(memory?.structured?.overview) ||
+    : firstSectionBulletPlainText(structured?.sections) ||
+      markdownToPlainText(structured?.overview) ||
       'A conversation shared from Omi — open it in the app.';
 
   const ogUrl = prevData.metadataBase

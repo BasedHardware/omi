@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import runpy
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
+import yaml
 
+RUNTIME_ENV_MANIFEST = Path(__file__).resolve().parents[2] / "deploy" / "runtime_env.yaml"
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "verify_pusher_promotion_evidence.py"
 RECEIPT_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "pusher_release_receipt.py"
 SEMANTIC_PROBE_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "pusher_semantic_probe.py"
@@ -232,6 +236,7 @@ def validate(
     final_deployment_receipt_override: dict[str, object] | None = None,
     canary_mutator: Callable[[dict[str, object]], None] | None = None,
     require_final: bool = False,
+    expected_repository: str | tuple[str, ...] = REPOSITORY,
 ) -> list[str]:
     expected_sha = prod_source_sha if expected_canary_source_sha is None else expected_canary_source_sha
     receipt_sha = verifier.canonical_sha256(deployment_receipt)
@@ -303,7 +308,7 @@ def validate(
         canary_run,
         run,
         expected_digest=DIGEST,
-        expected_repository=REPOSITORY,
+        expected_repository=expected_repository,
         expected_workflow_id=WORKFLOW_ID,
         expected_run_id=RUN_ID,
         expected_canary_workflow_id=CANARY_WORKFLOW_ID,
@@ -376,6 +381,71 @@ def test_accepts_an_exact_digest_from_the_successful_main_dev_run(
     run: dict[str, object],
 ) -> None:
     assert validate(verifier, evidence, deployment_receipt, run) == []
+
+
+ROLE_REPOSITORY = "gcr.io/based-hardware-dev/backend-pusher"
+
+
+def test_accepts_a_backend_pusher_qualification_only_when_that_registry_is_admitted(
+    verifier: SimpleNamespace,
+    run: dict[str, object],
+) -> None:
+    """Plan B B3: the dev qualification may name the backend-pusher role image."""
+    receipt = _deployment_receipt()
+    receipt["image"] = {"repository": ROLE_REPOSITORY, "digest": DIGEST}
+    evidence = _evidence(verifier, receipt)
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    assert validate(verifier, evidence, receipt, run, expected_repository=(REPOSITORY, ROLE_REPOSITORY)) == []
+    assert validate(verifier, evidence, receipt, run, expected_repository=ROLE_REPOSITORY) == []
+
+    fat_only = validate(verifier, evidence, receipt, run)
+    assert fat_only == ["qualification evidence repository is not an admitted development Pusher registry"]
+
+
+def test_receipt_must_name_the_repository_the_evidence_qualified(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    errors = validate(verifier, evidence, deployment_receipt, run, expected_repository=(REPOSITORY, ROLE_REPOSITORY))
+
+    assert "deployment receipt image does not match the exact qualified candidate" in errors
+    assert not any("admitted development Pusher registry" in error for error in errors)
+
+
+def test_backend_pusher_qualification_closure_fires_on_role_dockerfile_drift(
+    verifier: SimpleNamespace,
+    tmp_path: Path,
+) -> None:
+    """Plan B B3 review: a moved production main that changes backend/Dockerfile.roles
+    must invalidate a backend-pusher qualification, not only the fat closure."""
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    (repo / "backend" / "Dockerfile.roles").write_text("FROM base AS pusher\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    dev_sha = _commit_all(repo, "qualified with role dockerfile")
+    (repo / "backend" / "Dockerfile.roles").write_text("FROM base AS pusher\nRUN true\n", encoding="utf-8")
+    prod_sha = _commit_all(repo, "moved main mutates the role dockerfile")
+
+    receipt = _deployment_receipt(dev_sha)
+    receipt["image"] = {"repository": ROLE_REPOSITORY, "digest": DIGEST}
+    evidence = _evidence(verifier, receipt)
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    errors = validate(
+        verifier,
+        evidence,
+        receipt,
+        _run(dev_sha),
+        prod_source_sha=prod_sha,
+        expected_canary_source_sha=prod_sha,
+        checkout_repository=repo,
+        expected_repository=(REPOSITORY, ROLE_REPOSITORY),
+    )
+    assert any("Pusher image source or chart changed" in error for error in errors)
 
 
 def test_accepts_writer_emitted_live_segment_window(
@@ -803,6 +873,109 @@ def test_qualification_recorder_never_invents_semantic_probe_pass(
     assert qualification["qualification_status"] == "BLOCKED"
 
 
+def test_dev_qualification_recorder_output_satisfies_the_prod_promotion_contract(
+    receipt_builder: SimpleNamespace,
+    verifier: SimpleNamespace,
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+    tmp_path: Path,
+) -> None:
+    probe_path = tmp_path / "pusher-semantic-probe.json"
+    probe_path.write_text(json.dumps(_evidence(verifier, deployment_receipt)["semantic_probe"]), encoding="utf-8")
+
+    qualification = receipt_builder.record_qualification(deployment_receipt, semantic_probe_path=probe_path)
+
+    assert qualification["contract_sha256"] == verifier.contract_fingerprint()
+    assert validate(verifier, qualification, deployment_receipt, run) == []
+
+
+def _runtime_env_manifest(tmp_path: Path, name: str, mutate: Callable[[dict[str, Any]], None] | None = None) -> Path:
+    """Write a minimal composed runtime env with the real manifest's shape."""
+
+    manifest: dict[str, Any] = {
+        "schema_version": 2,
+        "environments": {
+            environment: {
+                "gcp_project": f"project-{environment}",
+                "region": "us-central1",
+                "gke": {
+                    "pusher": {
+                        "values_file": f"backend/charts/pusher/{environment}_omi_pusher_values.yaml",
+                        "env": {"PUSHER_FLAG": {"value": "false", "category": "rollout"}},
+                    },
+                    "backend-listen": {"env": {"LISTEN_FLAG": {"value": "false", "category": "rollout"}}},
+                    "config_map": {"entries": {"REDIS_DB_HOST": {"source": "environment"}}},
+                },
+                "cloud_run": {"backend": {"env": {"API_FLAG": {"value": "false", "category": "rollout"}}}},
+            }
+            for environment in ("dev", "prod")
+        },
+    }
+    if mutate is not None:
+        mutate(manifest)
+    path = tmp_path / name
+    path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    return path
+
+
+def test_real_runtime_env_manifest_has_a_pusher_projection(verifier: SimpleNamespace) -> None:
+    projection = verifier.pusher_runtime_env_projection(RUNTIME_ENV_MANIFEST)
+
+    assert set(projection) == {"schema_version", "dev", "prod"}
+    for environment in ("dev", "prod"):
+        assert projection[environment]["pusher"]["values_file"].endswith(f"{environment}_omi_pusher_values.yaml")
+        assert projection[environment]["config_map"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("prod", "gke", "backend-listen", "env", "LISTEN_FLAG"),
+        ("dev", "gke", "backend-listen", "env", "LISTEN_FLAG"),
+        ("prod", "cloud_run", "backend", "env", "API_FLAG"),
+    ],
+)
+def test_unrelated_runtime_env_flag_change_keeps_the_promotion_contract(
+    verifier: SimpleNamespace, tmp_path: Path, path: tuple[str, ...]
+) -> None:
+    def flip(manifest: dict[str, Any]) -> None:
+        node = manifest["environments"]
+        for key in path:
+            node = node[key]
+        node["value"] = "true"
+
+    baseline = verifier.contract_fingerprint(_runtime_env_manifest(tmp_path, "baseline.yaml"))
+    moved = verifier.contract_fingerprint(_runtime_env_manifest(tmp_path, "moved.yaml", flip))
+
+    assert moved == baseline
+
+
+def _flip_pusher_env(manifest: dict[str, Any], environment: str) -> None:
+    manifest["environments"][environment]["gke"]["pusher"]["env"]["PUSHER_FLAG"]["value"] = "true"
+
+
+def _flip_shared_config_map(manifest: dict[str, Any], environment: str) -> None:
+    # The Pusher pod envFroms this ConfigMap, so a literal host change reaches it.
+    entry = manifest["environments"][environment]["gke"]["config_map"]["entries"]["REDIS_DB_HOST"]
+    entry.update({"source": "literal", "value": "redis.example.internal"})
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+@pytest.mark.parametrize("mutate", [_flip_pusher_env, _flip_shared_config_map])
+def test_pusher_runtime_env_change_breaks_the_promotion_contract(
+    verifier: SimpleNamespace,
+    tmp_path: Path,
+    environment: str,
+    mutate: Callable[[dict[str, Any], str], None],
+) -> None:
+    baseline = verifier.contract_fingerprint(_runtime_env_manifest(tmp_path, "baseline.yaml"))
+    moved = verifier.contract_fingerprint(
+        _runtime_env_manifest(tmp_path, "moved.yaml", lambda manifest: mutate(manifest, environment))
+    )
+
+    assert moved != baseline
+
+
 def test_semantic_probe_pass_receipt_binds_candidate_and_is_redacted(
     semantic_probe: SimpleNamespace,
     verifier: SimpleNamespace,
@@ -917,7 +1090,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
     """Helm renders `value: ""` (unset repo variable) but the API server stores
     the env entry without the value key (omitempty marshalling). The rendered
     projection must normalize to the API form before hashing (2026-09-22 prod
-    canary: FREE_TIER_LOCAL_PROCESSING_COHORT)."""
+    canary: OPTIONAL_EMPTY_FIXTURE)."""
     expected = {
         "spec": {
             "serviceAccountName": "prod-omi-pusher",
@@ -927,7 +1100,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
                     "image": f"repo@{DIGEST}",
                     "env": [
                         {"name": "MEMORY_ENABLED", "value": "on"},
-                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+                        {"name": "OPTIONAL_EMPTY_FIXTURE", "value": ""},
                     ],
                 }
             ],
@@ -942,7 +1115,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
                     "image": f"repo@{DIGEST}",
                     "env": [
                         {"name": "MEMORY_ENABLED", "value": "on"},
-                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT"},
+                        {"name": "OPTIONAL_EMPTY_FIXTURE"},
                     ],
                 }
             ],

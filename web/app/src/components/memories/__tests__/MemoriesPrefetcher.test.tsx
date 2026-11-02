@@ -64,11 +64,10 @@ describe('MemoriesPrefetcher', () => {
     });
 
     expect(mocks.getMemories).toHaveBeenCalledTimes(1);
-    expect(mocks.cacheMemories).toHaveBeenCalledWith(
-      [{ id: 'memory-owner-a' }],
-      'useful_now',
-      { ownerId: 'owner-a', backendScope: 'https://backend-a' },
-    );
+    expect(mocks.cacheMemories).toHaveBeenCalledWith([{ id: 'memory-owner-a' }], {
+      ownerId: 'owner-a',
+      backendScope: 'https://backend-a',
+    });
   });
 
   it('does not cache the previous owner response when the owner changes mid-flight', async () => {
@@ -99,7 +98,7 @@ describe('MemoriesPrefetcher', () => {
 
     // Only owner B's own prefetch may write; A's late response is discarded
     // before it can be cached under A's (or B's) scope.
-    const scopesWritten = mocks.cacheMemories.mock.calls.map((call) => call[2]);
+    const scopesWritten = mocks.cacheMemories.mock.calls.map((call) => call[1]);
     expect(scopesWritten).toEqual([
       { ownerId: 'owner-b', backendScope: 'https://backend-a' },
     ]);

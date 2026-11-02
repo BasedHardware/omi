@@ -11,6 +11,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/lag_recorder.dart';
 
 class HomeProvider extends ChangeNotifier {
   /// The two pages of the Home shell, switched at the top of the screen.
@@ -94,6 +95,7 @@ class HomeProvider extends ChangeNotifier {
     'Marathi': 'mr',
     'Norwegian': 'no',
     'Persian': 'fa',
+    'Punjabi': 'pa',
     'Polish': 'pl',
     'Romanian': 'ro',
     'Serbian': 'sr',
@@ -197,6 +199,7 @@ class HomeProvider extends ChangeNotifier {
   void setIndex(int index) {
     selectedIndex = index;
     onSelectedIndexChanged?.call(index);
+    lagHomeTabChanged?.call(index);
     notifyListeners();
   }
 

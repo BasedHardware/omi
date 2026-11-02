@@ -27,7 +27,7 @@ class ProviderLogFilter(logging.Filter):
         # HTTPX's INFO request receipt includes Telegram tokens and signed CDN
         # URLs. Suppress receipts for the provider hosts rather than log credentials.
         message = record.getMessage()
-        return not any(host in message for host in ('api.telegram.org', 'linqapp.com'))
+        return not any(host in message for host in ('api.telegram.org', 'linqapp.com', 'onkeiki.com'))
 
 
 class Transport:
@@ -96,7 +96,12 @@ async def request_json(
         status = response.status_code
         from utils.messaging.metrics import HTTP
 
-        provider = 'telegram' if urlparse(url).hostname == 'api.telegram.org' else 'linq'
+        host = urlparse(url).hostname or ''
+        provider = (
+            'telegram'
+            if host == 'api.telegram.org'
+            else 'keiki' if host == 'onkeiki.com' or host.endswith('.onkeiki.com') else 'linq'
+        )
         HTTP.labels(provider, str(status)).inc()
         if status == 429 or value.get('error_code') == 429:
             delay = value.get('parameters', {}).get('retry_after', response.headers.get('Retry-After', 1))

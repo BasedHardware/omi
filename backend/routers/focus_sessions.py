@@ -1,9 +1,10 @@
 """Focus sessions — focus/distraction tracking and statistics."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+import logging
+from typing import Any, Dict, List, Mapping, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from models.focus_session import FocusSession, FocusStats
@@ -13,6 +14,8 @@ import database.focus_sessions as focus_sessions_db
 import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -58,7 +61,23 @@ def get_focus_sessions(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
+    raw_sessions = focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
+
+    def _log_skipped_session(record: Any, exc: Exception) -> None:
+        doc_id = 'unknown'
+        try:
+            if isinstance(record, (dict, Mapping)):
+                raw_id = record.get('id')
+                if raw_id is not None:
+                    doc_id = str(raw_id)
+        except Exception:
+            doc_id = 'unknown'
+        try:
+            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+        except Exception:
+            pass
+
+    return FocusSession.deserialize_many_safe(raw_sessions, on_error=_log_skipped_session)
 
 
 @router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'], response_model=StatusResponse)
@@ -66,7 +85,9 @@ def delete_focus_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    focus_sessions_db.delete_focus_session(uid, session_id)
+    deleted = focus_sessions_db.delete_focus_session(uid, session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail='Focus session not found')
     return {'status': 'ok'}
 
 

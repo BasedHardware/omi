@@ -50,7 +50,7 @@ async def test_unbuffered_stream_preserves_first_chunk_and_bytes_without_limit_r
     assert [part async for part in stream] == [b'cd']
 
 
-def request():
+def request(lane='omi:auto:dream-reasoning', *, force_explicit=False):
     result = {
         '_dream_capacity_mode': 'reserved',
         'messages': [
@@ -71,7 +71,11 @@ def request():
             {'type': 'function', 'function': {'name': 'invented', 'parameters': {'type': 'object', 'properties': {}}}}
         ],
     }
-    apply_lane_cache_policy(result, lane='omi:auto:dream-reasoning', provider='gemini', model='gemini-3.8-flash')
+    apply_lane_cache_policy(result, lane=lane, provider='gemini', model='gemini-3.8-flash')
+    if force_explicit:
+        # Exercise the cache manager's explicit path independently of the
+        # production Gemini lane policy, which now leaves caching implicit.
+        result['_gateway_cache_policy']['mode'] = 'explicit'
     return result
 
 
@@ -86,7 +90,7 @@ async def test_cache_wire_reuse_owner_isolation_expiry_and_refresh():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         cache = VertexContentCache(client, now=lambda: clock[0])
-        req = request()
+        req = request(force_explicit=True)
         payload = _vertex_request(req)
         assert payload['contents'] == [
             {
@@ -136,11 +140,46 @@ async def test_cache_wire_reuse_owner_isolation_expiry_and_refresh():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'lane',
+    [
+        'omi:auto:dream-reasoning',
+        'omi:auto:dream-verify',
+        'omi:auto:desktop-vertex-flash',
+    ],
+)
+async def test_configured_gemini_lanes_do_not_create_vertex_caches(lane):
+    calls = []
+
+    def handle(req):
+        calls.append(req)
+        raise AssertionError(f'unexpected Vertex cache request: {req.method} {req.url}')
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        cache = VertexContentCache(client)
+        req = request(lane=lane)
+        payload = _vertex_request(req)
+        body, key = await cache.prepare(
+            payload,
+            request=req,
+            owner='synthetic-owner',
+            endpoint=ENDPOINT,
+            model='gemini-3.8-flash',
+            headers={},
+            receipt=CacheReceipt(),
+        )
+
+    assert req['_gateway_cache_policy']['mode'] == 'implicit'
+    assert body == payload and key is None
+    assert calls == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('status', [400, 403, 429, 500])
 async def test_cache_errors_fall_through(status):
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(status, json={}))) as client:
         cache = VertexContentCache(client)
-        req = request()
+        req = request(force_explicit=True)
         payload = _vertex_request(req)
         receipt = CacheReceipt()
         body, key = await cache.prepare(
@@ -165,7 +204,7 @@ async def test_expired_handle_recreated_once_then_uncached():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         cache = VertexContentCache(client)
-        req = request()
+        req = request(force_explicit=True)
         payload = _vertex_request(req)
         sent = []
 
@@ -185,6 +224,7 @@ async def test_expired_handle_recreated_once_then_uncached():
             model='gemini-3.8-flash',
             headers={},
             receipt=receipt,
+            allow_recreate=True,
         ) == {'synthetic': True}
         assert len(creates) == 2 and len(sent) == 3
         assert sent[-1] == payload
@@ -198,13 +238,14 @@ async def test_short_or_ownerless_prefix_never_persists():
     ) as client:
         cache = VertexContentCache(client)
         for req, owner in [
-            (request(), None),
+            (request(force_explicit=True), None),
             (
                 {'messages': [{'role': 'system', 'content': 'short'}, {'role': 'user', 'content': 'tail'}]},
                 'synthetic-owner',
             ),
         ]:
             apply_lane_cache_policy(req, lane='omi:auto:dream-verify', provider='gemini', model='gemini-3.8-flash')
+            req['_gateway_cache_policy']['mode'] = 'explicit'
             payload = _vertex_request(req)
             assert (
                 await cache.prepare(
@@ -220,9 +261,16 @@ async def test_short_or_ownerless_prefix_never_persists():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'lane',
+    [
+        'omi:auto:dream-reasoning',
+        'omi:auto:dream-verify',
+    ],
+)
 @pytest.mark.parametrize('capacity', ['dedicated', 'shared'])
 @pytest.mark.parametrize('streaming', [False, True])
-async def test_provider_boundary_caches_both_traffic_types(monkeypatch, capacity, streaming):
+async def test_provider_boundary_skips_explicit_cache_for_gemini_lanes(monkeypatch, lane, capacity, streaming):
     from llm_gateway.gateway.auth import ServiceCaller
     from llm_gateway.gateway.credentials import build_omi_managed_credential_context
     from llm_gateway.gateway.providers import VertexGeminiProvider
@@ -262,7 +310,7 @@ async def test_provider_boundary_caches_both_traffic_types(monkeypatch, capacity
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
         monkeypatch.setattr(provider, '_refresh_reservations', refresh)
-        req = request()
+        req = request(lane=lane)
         if capacity == 'shared':
             req.update(_dream_capacity_mode='on_demand', google={'dream_owner_allowlisted': True})
         kwargs = {
@@ -278,19 +326,21 @@ async def test_provider_boundary_caches_both_traffic_types(monkeypatch, capacity
             async for chunk in provider.stream_chat_completion(req, **kwargs):
                 events.extend(decoder.feed(chunk))
             metadata = [openai_usage_from_sse_payload(json.loads(e.data)) for e in events if e.data != '[DONE]'][-1]
-            assert metadata.cache_mode == 'explicit' and metadata.cache_write_tokens == 6400
+            assert metadata.cache_mode == 'implicit' and metadata.cache_write_tokens == 0
             assert metadata.usage.cache_status == CacheStatus.NOT_REPORTED
         else:
             response = await provider.create_chat_completion(req, **kwargs)
-            assert response.accounting.cache_mode == 'explicit'
-            assert response.accounting.cache_write_tokens == 6400
+            assert response.accounting.cache_mode == 'implicit'
+            assert response.accounting.cache_write_tokens == 0
             assert response.accounting.traffic_type == (
                 'ON_DEMAND' if capacity == 'shared' else 'PROVISIONED_THROUGHPUT'
             )
+        assert len(seen) == 1
         inference = seen[-1]
         assert inference.headers['X-Vertex-AI-LLM-Request-Type'] == capacity
-        assert 'cachedContent' in json.loads(inference.content)
-        assert 'systemInstruction' not in json.loads(inference.content)
+        assert not any(req.url.path.endswith('/cachedContents') for req in seen)
+        assert 'cachedContent' not in json.loads(inference.content)
+        assert 'systemInstruction' in json.loads(inference.content)
 
 
 @pytest.mark.asyncio

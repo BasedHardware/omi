@@ -132,6 +132,8 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 | `users/{uid}/messages/{id}` | Existing chat fields plus surface, channel_link_id, data_usage=`user_serving_only`; channel text is encrypted using existing per-user encryption. |
 | `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Re-entry evidence is hidden from message listing; this log is not shaped model context. |
 | `channel_capacity/{channel}` / `members/{uid}` | Initialized count of distinct linked users and each member's linked identity IDs; transactional seat admission and release. |
+| `channel_capacity/{channel}/lines/{address}` | Per-line `users` count and `starts`, a map of sha256(uid) to at and linked, kept for 24 hours. Content-free. |
+| `users/{uid}/channel_lines/{channel}` | The line assigned to this user, kept after unlink so a returning user keeps their conversation. Deleted with the account. |
 | `users/{uid}/channel_waitlist/{channel}` | Content-free waitlist with updated_at and expires_at; no proactive notification. |
 | `users/{uid}/channel_turn_leases/{surface_hash}` | token and created_at; fail-closed serialization. |
 
@@ -142,7 +144,9 @@ alone is never proof. Linking cannot transfer another uid's existing identity. T
 transaction reads everything before any write. App endpoints expose mint/list/unlink
 and per-link settings; OpenAPI and generated Dart wire models include those schemas.
 Mint returns `deep_link` and `address` from `OMI_MESSAGING_LINK_TARGETS` when that
-channel entry is configured, and nulls otherwise. `GET /v2/chat-sessions` includes
+channel entry is configured, and nulls otherwise. A channel entry with `lines` returns the
+line assigned to this user; when no line has room, mint answers like a full seat cap (409,
+waitlist). `GET /v2/chat-sessions` includes
 optional `channel`, `channel_link_id` and `surface`. Channel retrieval drops memories
 marked private and memories with a restricted sensitivity label while
 `keep_private_memories_in_app` is on. Insights is stored and not yet applied.
@@ -184,8 +188,16 @@ and appears immediately after the system prefix. Original messages remain reacha
 Summaries refresh in a tracked background task after the turn, with a 60-second
 budget and at most two concurrent sessions per process. The answer uses stored
 continuity (or none); missing indexes and model/Firestore/CAS errors only degrade
-optional context and never gate streaming. Send-path optional reads have a combined
-150 ms deadline. Over-long model summaries are truncated; empty summaries leave
+optional context and never gate streaming. For shaped app/channel turns, summary
+and digest reads start before router metadata and agentic prompt/tool setup, with
+a one-second background window in the dedicated four-worker context pool. It accepts
+no queued work; saturation skips context and cannot occupy setup's `db_executor`.
+Running calls retain their slots after caller cancellation. Every request-context RPC
+has an explicit timeout and an always-false Retry predicate. The model samples ready
+components, then validates session/account/deletion/link and generation/revision fences
+with one projected BatchGet, capped at 150 ms. Failed, late or saturated validation
+omits both summary and digest; it never injects an unchecked snapshot. Over-long model summaries
+are clipped before persistence (an informational event); empty summaries leave
 the source checkpoint unchanged.
 Reported, cleared and revised messages erase affected session summary ciphertext
 and increment a generation in the same atomic write;
@@ -194,8 +206,9 @@ checks prevent stale writes from resurrecting removed sessions.
 
 Current activity elsewhere inspects at most twenty newest message candidates and
 is capped at 3,200 characters. Active-session rows are skipped before decryption;
-there is no paginated digest scan. Digest IO has a 75 ms deadline and failures omit
-the digest. It is request-local, not appended to permanent events. Activity, app request scope and the original channel request clock appear only
+there is no paginated digest scan. Its RPC has a one-second timeout with retries
+disabled, matching the overlapping read window. Digest failures or a digest still
+pending at model start omit only the digest when the summary read succeeded. It is request-local, not appended to permanent events. Activity, app request scope and the original channel request clock appear only
 inside the final user message. The app's existing current datetime stays there too.
 
 GPT-5.6 explicit caching uses at most two breakpoints: the system block and one
@@ -228,7 +241,8 @@ Installed-app tools occupy the existing entitled/connected lane. Adapters regist
 tools through `Adapter.tools(sink)`; future workspace tools can join the entitled input.
 A name collision with a different implementation is an error, never silent replacement.
 Channel turns have no live device callback and omit device tools. The enabled app surface
-retains declared device tools. Existing tool-level JIT/privacy/entitlement gates still apply.
+retains declared device tools. Existing per-invocation privacy and entitlement
+checks still apply.
 
 One immutable `ToolProjection.registry` supplies schemas and `_execute_tool` authority.
 The harness test advertises a surface-only tool, scripts its provider call through the real

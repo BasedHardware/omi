@@ -4,11 +4,16 @@ import argparse
 import logging
 import os
 
+from omi_logging import configure_logging
+
+# Text keeps the textPayload that omi_messaging_maintenance_failures matches
+# (deploy/messaging/log-metrics.json) until its consumers are admitted for JSON.
+configure_logging('messaging-maintenance', default_format='text')
+
 from database.messaging import MessagingStore
 
 
 def run():
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
     parser = argparse.ArgumentParser()
     parser.add_argument('--prepare-launch', action='store_true')
     args = parser.parse_args()

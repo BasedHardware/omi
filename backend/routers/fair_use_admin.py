@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -185,6 +185,10 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     if stage == 'none':
         updates['throttle_until'] = None
         updates['restrict_until'] = None
+    elif stage == 'restrict':
+        # Stage reads expire a restriction with no future restrict_until, so give a manual
+        # restrict the same 30-day window escalate_enforcement applies.
+        updates['restrict_until'] = datetime.now(timezone.utc) + timedelta(days=30)
 
     fair_use_db.update_fair_use_state(uid, updates)
     invalidate_enforcement_cache(uid)
@@ -233,7 +237,7 @@ def get_public_case_status(case_ref: str):
 
         stage = 'none'
         if uid:
-            state = fair_use_db.get_fair_use_state(uid)
+            state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
             stage = state.get('stage', 'none')
 
         created_at = data.get('created_at')

@@ -9,11 +9,18 @@ from database.messaging import MessagingStore
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database import chat as chat_db
 from utils import encryption
+from database import chat_context_prefetch
 
 
 class ChatContextStore:
     def __init__(self, *, messaging=None):
         self.messaging = messaging or MessagingStore()
+
+    def load_for_turn(self, uid, session_id):
+        return chat_context_prefetch.load(self.messaging, uid, session_id)
+
+    def validate_for_turn(self, uid, session_id, state, timeout):
+        chat_context_prefetch.validate(self.messaging, uid, session_id, state, timeout)
 
     def assert_access(self, uid, session_id):
         ref = self.messaging.user(uid).collection('chat_sessions').document(session_id)

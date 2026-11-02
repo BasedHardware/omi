@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-obligation-outlives-terminal-owner",
+  "violated_contract": "A durable wake obligation must retire when its owner is deleted, merged away or leaves the live lifecycle. Terminal replay rows must not retain a due index that schedules no-op work forever.",
+  "canonical_prevention": "Retire at every owning lifecycle commit through one shared transaction that rechecks the latest conversation and job. Preserve concurrently reopened live owners and generation-fence delivered workers. Remove terminal due indexes instead of rescheduling them. Restore an existing quiet obligation atomically when processing rolls back to an eligible live owner; fence pre-admission deliveries with a new generation.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_quiet_check_retirement.py",
+    "backend/scripts/quiet_finalization_replay_emulator_test.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/**",
+    "backend/services/conversation_finalization.py"
+  ],
+  "status": "open"
+}

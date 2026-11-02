@@ -1,1 +1,10 @@
 backend/google-credentials.json
+desktop/
+**/.build
+**/node_modules
+.git
+backend/charts
+**/.venv
+omi/
+.hermes/
+backend/edge/target

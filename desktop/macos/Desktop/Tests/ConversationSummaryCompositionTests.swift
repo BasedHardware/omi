@@ -66,13 +66,12 @@ final class ConversationSummaryCompositionTests: XCTestCase {
     XCTAssertFalse(rendered.contains("Blank heading must stay hidden"))
     XCTAssertFalse(rendered.contains("##"))
 
-    // Drive the production source Button through a real event pair. The label sits directly
-    // below this section's prose; target its text, beyond the icon-to-text gap of a plain button.
-    let firstProse = try XCTUnwrap(
-      descendants(NSTextView.self, from: host).first { $0.string.contains("First detail.") })
-    let proseFrame = firstProse.convert(firstProse.bounds, to: host)
-    let point = NSPoint(x: proseFrame.minX + 45, y: host.isFlipped ? proseFrame.maxY + 12 : proseFrame.minY - 12)
-    let location = host.convert(point, to: nil)
+    // Drive the section's actual focusable sources control through a real event pair.
+    let sourceButton = try XCTUnwrap(
+      descendants(NSView.self, from: host).first {
+        String(describing: type(of: $0)) == "_FocusRingView"
+      })
+    let location = sourceButton.convert(NSPoint(x: sourceButton.bounds.midX, y: sourceButton.bounds.midY), to: nil)
     let down = try XCTUnwrap(
       NSEvent.mouseEvent(
         with: .leftMouseDown, location: location, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,

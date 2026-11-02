@@ -139,6 +139,26 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertFalse(conv.canReprocess)
   }
 
+  func test_legacyTitleDebrisIsRepairedForDisplayOnly() {
+    let s01234 = TranscriptSegment(
+      id: "s01234", text: "Hi", speaker: "SPEAKER_00", isUser: false, personId: nil, start: 0, end: 1)
+    let conv = makeConversation(title: "Kickoff [s01234]", status: .completed, segments: [s01234])
+    XCTAssertEqual(conv.displayState, .titled("Kickoff"))
+    XCTAssertEqual(conv.displayTitle, "Kickoff")
+    // Rename starts from the stored title.
+    XCTAssertEqual(conv.title, "Kickoff [s01234]")
+  }
+
+  func test_ordinaryBracketedTitleWordsAreKept() {
+    XCTAssertEqual(makeConversation(title: "Project [Q3]").displayState, .titled("Project [Q3]"))
+    XCTAssertEqual(makeConversation(title: "Notes [v2] [s01234]").displayState, .titled("Notes [v2]"))
+  }
+
+  func test_titleOfOnlyDebrisReadsAsUntitled() {
+    let conv = makeConversation(title: "Speaker_00 [s01234]", status: .completed)
+    XCTAssertEqual(conv.displayState, .untitledEmpty)
+  }
+
   func test_deferredFlagIgnored_onceCompleted() {
     let conv = makeConversation(title: "Real title", status: .completed, deferred: true)
     XCTAssertEqual(conv.displayState, .titled("Real title"))

@@ -94,6 +94,39 @@ def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch)
     assert 'GOOGLE_CLIENT_ID' not in secret_names
 
 
+def test_missing_secret_stops_binding_migration_and_traffic_repair(monkeypatch, capsys):
+    preflight = load_preflight()
+    monkeypatch.setattr(preflight, 'validate_voice_transcription_storage', lambda *args: [])
+    monkeypatch.setattr(preflight, '_cloud_run_service_configs', lambda **kwargs: {})
+    monkeypatch.setattr(
+        preflight,
+        'check_rendered_secrets',
+        lambda **kwargs: [preflight.SecretBinding('REQUIRED', 'missing-required-secret', 'latest')],
+    )
+    migration = Mock()
+    repair = Mock()
+    monkeypatch.setattr(preflight, 'migrate_legacy_public_bindings', migration)
+    monkeypatch.setattr(preflight.repair_cloud_run_traffic, 'repair_live', repair)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--env=prod',
+            '--project=based-hardware',
+            '--check-secrets',
+            '--repair-traffic',
+            '--migrate-legacy-public-binding=backend',
+        ],
+    )
+    assert preflight.main() == 1
+    error = capsys.readouterr().err
+    assert 'secret/REQUIRED' in error
+    assert 'missing-required-secret' not in error
+    migration.assert_not_called()
+    repair.assert_not_called()
+
+
 def test_check_rendered_secrets_passes_when_secrets_exist(monkeypatch: pytest.MonkeyPatch) -> None:
     preflight = load_preflight()
     monkeypatch.setattr(preflight, '_secret_exists', lambda **kwargs: True)
@@ -689,8 +722,6 @@ def test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_
     workflows = (
         'gcp_backend_pusher_auto_deploy.yml',
         'gcp_llm_gateway.yml',
-        'gcp_memory_maintenance_job.yml',
-        'gcp_memory_maintenance_job_auto_dev.yml',
         'gcp_notifications_job.yml',
     )
 

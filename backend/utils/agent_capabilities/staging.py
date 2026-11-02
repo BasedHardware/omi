@@ -11,6 +11,7 @@ from models.agent_edit import HarnessEdit
 from models.dream_edit import Term
 from models.agent_refs import base_ref, has_ref, cited_value
 from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities.evidence import model_view
 from utils.agent_capabilities.guards import verbatim_quote
 from utils.executors import db_executor, run_blocking
 from utils.agent_capabilities.errors import ToolError
@@ -79,7 +80,9 @@ async def stage(
         key = dream_tools.edit_key(operation, records)
         value, why_it_matters = operation.value, operation.why_it_matters
     elif isinstance(operation, HarnessQuestion):
-        if not verbatim_quote(operation.quote, cited_value(operation.source_ref, records)):
+        if not verbatim_quote(
+            operation.quote, model_view(operation.source_ref, cited_value(operation.source_ref, records))
+        ):
             raise ValueError('agent_invalid_question_evidence')
         if operation.same_person:
             entities = {row.get('entity_id') for row in records.values()}

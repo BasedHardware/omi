@@ -11,6 +11,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import '../helpers/reprocess_fakes.dart';
 
 ServerConversation conversation({
   String id = 'c',
@@ -60,13 +61,13 @@ void main() {
         if (fail) throw StateError('synthetic transport failure');
         return true;
       },
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         reprocessCalls++;
         expectSync(requireSpeakerReceipt, isTrue);
         final refreshed = conversation(overview: 'Named summary');
         refreshed.transcriptSegments.single.personId = 'new';
         return refreshed;
-      },
+      }),
     );
     select(provider, conversation());
     expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
@@ -89,10 +90,10 @@ void main() {
         var reprocessCalls = 0;
         final provider = ConversationDetailProvider(
           assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => saved,
-          reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+          reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
             reprocessCalls++;
             return conversation(overview: 'Named summary');
-          },
+          }),
         );
         select(provider, conversation(status: status, overview: overview));
         expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
@@ -110,10 +111,10 @@ void main() {
     var reprocessCalls = 0;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         reprocessCalls++;
         return conversation(overview: 'Named summary');
-      },
+      }),
     );
     final target = conversation();
     target.transcriptSegments.single.personId = 'same';
@@ -136,10 +137,10 @@ void main() {
     bool fail = true;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         requests++;
         return fail ? await result.future : conversation(overview: 'Named summary');
-      },
+      }),
     );
     select(provider, conversation());
     expect(await provider.assignSpeaker(['s'], 'new'), isTrue);
@@ -174,10 +175,10 @@ void main() {
     int reprocessCalls = 0;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) => saved.future,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         reprocessCalls++;
         return null;
-      },
+      }),
     );
     select(provider, conversation());
     final assignment = provider.assignSpeaker(['s'], 'new');
@@ -201,10 +202,10 @@ void main() {
         assigned.add(personId!);
         return firstSave.future;
       },
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         reprocessCalls++;
         return null;
-      },
+      }),
     );
     select(provider, conversation());
     final first = provider.assignSpeaker(['s'], 'first');
@@ -225,11 +226,11 @@ void main() {
     var reprocessCalls = 0;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         expectSync(requireSpeakerReceipt, isTrue);
         reprocessCalls++;
         return null;
-      },
+      }),
     );
     final target = conversation();
     target.transcriptSegments.add(
@@ -261,14 +262,14 @@ void main() {
     var reprocessCalls = 0;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         expectSync(requireSpeakerReceipt, isTrue);
         reprocessCalls++;
         if (reprocessCalls == 1) return null; // Older backend lacked the capability header.
         final refreshed = conversation(overview: 'Named summary');
         refreshed.transcriptSegments.single.personId = 'named-person';
         return refreshed;
-      },
+      }),
     );
     select(provider, conversation());
 
@@ -292,11 +293,11 @@ void main() {
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
       fetchConversation: (id) async => conversation(id: id),
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         expectSync(requireSpeakerReceipt, isTrue);
         reprocessCalls++;
         return null;
-      },
+      }),
     );
     select(provider, conversation());
 
@@ -315,11 +316,11 @@ void main() {
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
       fetchConversation: (id) async => conversation(id: id),
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         expectSync(requireSpeakerReceipt, isTrue);
         refreshedIds.add(id);
         return null;
-      },
+      }),
     );
     select(provider, conversation(id: 'first'));
     final assignment = provider.assignSpeaker(['s'], 'named-person');
@@ -340,10 +341,10 @@ void main() {
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) => id == 'first' ? save.future : Future.value(true),
       fetchConversation: (id) async => conversation(id: id),
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         refreshedIds.add(id);
         return null;
-      },
+      }),
     );
     select(provider, conversation(id: 'first'));
     final firstAssignment = provider.assignSpeaker(['s'], 'named-person');
@@ -370,10 +371,10 @@ void main() {
     var regenerations = 0;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         regenerations++;
         return null;
-      },
+      }),
     );
     select(provider, conversation());
     final assignment = provider.assignSpeaker(['s'], 'named-person');
@@ -398,10 +399,10 @@ void main() {
         fetches++;
         return target;
       },
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         regenerations++;
         return null;
-      },
+      }),
     );
     provider.conversationProvider = list;
     select(provider, target);
@@ -423,10 +424,10 @@ void main() {
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
       fetchConversation: (id) async => null,
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         regenerations++;
         return null;
-      },
+      }),
     );
     select(provider, conversation());
     expect(await provider.assignSpeaker(['s'], 'named-person'), isTrue);
@@ -439,7 +440,8 @@ void main() {
   testWidgets('completed and failed labeling sessions release tracking', (tester) async {
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => id == 'saved',
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async => conversation(id: id),
+      reprocess: conversationReprocess(
+          (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => conversation(id: id)),
     );
     select(provider, conversation(id: 'saved'));
     expect(await provider.assignSpeaker(['s'], 'named-person'), isTrue);
@@ -463,10 +465,10 @@ void main() {
         expectSync(id, donorId);
         return conversation(id: survivorId);
       },
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
         refreshedIds.add(id);
         return null;
-      },
+      }),
     );
     select(provider, conversation(id: donorId));
     final assignment = provider.assignSpeaker(['s'], 'named-person');
@@ -497,7 +499,7 @@ void main() {
         fetchedIds.add(id);
         return survivor;
       },
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) async => null,
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => null),
     );
     provider.conversationProvider = list;
     select(provider, donor);
@@ -545,11 +547,11 @@ void main() {
           return save?.call() ?? Future.value(true);
         },
         fetchConversation: (id) async => twoVoices(id: id),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
           expectSync(requireSpeakerReceipt, isTrue);
           reprocessed.add(id);
           return twoVoices(id: id);
-        },
+        }),
       );
       select(provider, twoVoices());
       return (provider: provider, reprocessed: reprocessed, saves: saves);
@@ -722,7 +724,8 @@ void main() {
           return true;
         },
         fetchConversation: (id) async => twoVoices(id: id),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async => twoVoices(id: id),
+        reprocess: conversationReprocess(
+            (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => twoVoices(id: id)),
       );
       select(provider, twoVoices());
       final segments = provider.conversation.transcriptSegments;
@@ -750,11 +753,11 @@ void main() {
           fetched.add(id);
           return twoVoices(id: survivorId);
         },
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
           expectSync(requireSpeakerReceipt, isTrue);
           reprocessed.add(id);
           return twoVoices(id: id);
-        },
+        }),
       );
       select(provider, twoVoices(id: donorId));
       provider.beginSpeakerLabelingSession();
@@ -789,10 +792,10 @@ void main() {
         final provider = ConversationDetailProvider(
           assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
           fetchConversation: (id) async => twoVoices(id: survivorId),
-          reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+          reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
             reprocessed.add(id);
             return twoVoices(id: id);
-          },
+          }),
         );
         select(provider, twoVoices(id: donorId));
         provider.beginSpeakerLabelingSession();

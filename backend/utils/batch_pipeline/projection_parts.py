@@ -5,17 +5,42 @@ from uuid import NAMESPACE_URL, uuid5
 
 from utils.batch_pipeline.contracts import MAX_PROJECTION_PARTS, projection_speech_spans
 from utils.sync.vad_segments import merge_and_cap_vad_segments
+from diarizer.batch_pipeline import validate_words
+
+
+def bounded_projection_words(words, duration):
+    """Intersect validated model clocks with PCM before deriving part geometry."""
+    words = validate_words(words, duration)
+    if not words:
+        raise ValueError('successful batch result must contain words')
+    # Keep every validated token, including zero-duration model words. A word
+    # wholly in the allowed EOF tolerance becomes a point at EOF, not silence
+    # silently removed from the transcript or an invented positive audio span.
+    return [{**word, 'timestamp': [min(value, duration) for value in word['timestamp']]} for word in words]
+
+
+def align_projection_words(words, payload, segment_id):
+    """Preserve provider grouping while keeping point words out of voice evidence."""
+    from utils.conversations.final_pass_assignment import assign_words
+
+    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    # Point words have text but no captured voice evidence. The legacy grouper
+    # must not merge them with positive-duration neighbours in either producer.
+    return [
+        (
+            {**word, 'speaker': f'BATCH_UNASSIGNED_{segment_id}_point_{index}'}
+            if word['timestamp'][0] == word['timestamp'][1]
+            else word
+        )
+        for index, word in enumerate(aligned)
+    ]
 
 
 def split_result(item, payload):
-    from diarizer.batch_pipeline import validate_words
-
     duration = float(payload['audio_seconds'])
     if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
         raise ValueError('result audio duration differs from admitted capture')
-    words = validate_words(payload['words'], duration)
-    if not words:
-        raise ValueError('successful batch result must contain words')
+    words = bounded_projection_words(payload['words'], duration)
     if 'speech_spans' in payload or item.requires_compute_admission:
         spans = projection_speech_spans(payload, duration)
     else:

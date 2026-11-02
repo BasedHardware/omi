@@ -4,7 +4,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class MemoryPressureEpisodeTrackerTests: XCTestCase {
-  func testCriticalEpisodeSeparatesRemediationCadenceFromSentryReminderCadence() {
+  func testCriticalEpisodeSeparatesRemediationCadenceFromAlertCadence() {
     var tracker = MemoryPressureEpisodeTracker()
     let startedAt = Date(timeIntervalSince1970: 1_000)
 

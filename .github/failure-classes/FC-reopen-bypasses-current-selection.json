@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-reopen-bypasses-current-selection",
+  "violated_contract": "A planned transport reopen must re-evaluate the current managed provider selection instead of replaying a captured vendor factory indefinitely after a cheaper eligible provider recovers.",
+  "canonical_prevention": "Yield idle onset to the ordinary configured selection and capture replay/adoption boundary. Preserve exact admitted pre-roll, retain fleet/account/capability/allocation gates, censor planned retirement from provider failure evidence, and meter each raw transport by bounded construction origin.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_soniox_idle_cost_reselect.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/soniox_idle.py",
+    "backend/utils/stt/live_session.py",
+    "backend/routers/listen/receiver.py"
+  ],
+  "status": "open"
+}

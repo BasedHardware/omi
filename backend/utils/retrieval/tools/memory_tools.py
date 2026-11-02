@@ -3,7 +3,7 @@ Tools for accessing user memories and facts.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 import contextvars
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -12,7 +12,6 @@ from langchain_core.runnables import RunnableConfig
 from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.model_text import format_date, format_instant, lookup_failed, truncation_note
 from utils.user_clock import clock_for_config
 from utils.messaging.memory_privacy import (
@@ -96,15 +95,6 @@ def _memory_tools_blocked_by_chat_scope(configurable: Any) -> Optional[str]:
     return None
 
 
-def _parse_aware_iso(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if dt.tzinfo is None:
-        raise ValueError("naive datetime")
-    return dt
-
-
 def _memory_in_scope(created_at: Optional[datetime], start_dt: Optional[datetime], end_dt: Optional[datetime]) -> bool:
     if created_at is None:
         return not (start_dt or end_dt)
@@ -115,12 +105,17 @@ def _memory_in_scope(created_at: Optional[datetime], start_dt: Optional[datetime
     return True
 
 
-def _memory_read_date(memory: object, *, temporal: bool) -> Optional[datetime]:
-    """Use captured/evidence time for beta temporal ranges and display."""
-    if temporal:
-        evidence_date = getattr(memory, 'as_of', None)
-        if isinstance(evidence_date, datetime):
-            return evidence_date
+def _parse_date_from_chat_scope(value: object) -> Optional[datetime]:
+    if not isinstance(value, str) or not value:
+        return None
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("chat_scope dates must include a timezone")
+    return parsed
+
+
+def _memory_read_date(memory: object) -> Optional[datetime]:
+    """Use memory creation time for date ranges and display."""
     created_at = getattr(memory, 'created_at', None)
     return created_at if isinstance(created_at, datetime) else None
 
@@ -131,8 +126,6 @@ def get_memories_tool(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    view: Literal['useful_now', 'history', 'all'] = 'useful_now',
-    as_of: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -175,14 +168,12 @@ def get_memories_tool(
         offset: Pagination offset for retrieving additional memories beyond the limit (default: 0)
         start_date: Filter memories after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
         end_date: Filter memories before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
-        view: Temporal view. Use history only for an explicit dated recall request; default is useful_now.
-        as_of: Optional timezone-aware ISO traversal anchor for a stable temporal read.
 
     Returns:
         Formatted list of facts about the user with categories, dates, and emoji representations.
     """
     logger.info(
-        f"🔧 get_memories_tool called - limit: {limit}, offset: {offset}, start_date: {start_date}, end_date: {end_date}, view: {view}"
+        f"🔧 get_memories_tool called - limit: {limit}, offset: {offset}, start_date: {start_date}, end_date: {end_date}"
     )
 
     # Get config from parameter or context variable (like other tools do)
@@ -209,13 +200,6 @@ def get_memories_tool(
         return "Error: User ID not found in configuration"
     clock = clock_for_config(config or _agent_config(), uid)
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
-
-    try:
-        requested_view = normalize_temporal_read_view(view)
-        effective_view = requested_view if belief_model_enabled() else 'released'
-        as_of_dt = _parse_aware_iso(as_of)
-    except ValueError as e:
-        return f"Error: Invalid temporal read arguments: {e}"
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
     if blocked:
@@ -266,67 +250,25 @@ def get_memories_tool(
         scan_offset = 0
         visible: List[MemoryDB] = []
         max_scan = 5000
-        page_size = 500
-        max_pages = max(1, (max_scan + page_size - 1) // page_size)
-        pages_scanned = 0
-        if effective_view != 'released':
-            cursor = None
-            while pages_scanned < max_pages and len(visible) < target_end:
-                pages_scanned += 1
-                page = service.read_page(
-                    uid,
-                    limit=page_size,
-                    cursor=cursor,
-                    view=effective_view,
-                    as_of=as_of_dt,
-                )
-                batch = page.memories
-                if page.truncated:
-                    # A budget-truncated page can arrive without a continuation
-                    # cursor; that condition must still surface as an honest
-                    # partial scan instead of a silent complete result.
-                    scan_truncated = True
-                    cursor = None
-                    break
-                cursor = page.next_cursor
-                if not batch and not cursor:
-                    break
-                scan_offset += len(batch)
-                for memory in batch:
-                    if (
-                        memory.is_locked
-                        or getattr(memory, 'user_review', None) is False
-                        or (belief_model_enabled() and memory_use_suppressed(memory))
-                        or not _memory_in_scope(_memory_read_date(memory, temporal=True), start_dt, end_dt)
-                    ):
-                        continue
-                    visible.append(memory)
-                if not cursor:
-                    break
-            scan_truncated = scan_truncated or bool(cursor and pages_scanned >= max_pages and len(visible) < target_end)
-        else:
-            while scan_offset < max_scan and len(visible) < target_end:
-                batch_limit = min(500, max_scan - scan_offset)
-                fetch_limit = target_end if scan_offset == 0 else batch_limit
-                batch = service.read(uid, limit=fetch_limit, offset=scan_offset)
-                if not batch:
-                    break
-                scan_offset += len(batch)
-                for memory in batch:
-                    if (
-                        memory.is_locked
-                        or getattr(memory, 'user_review', None) is False
-                        or (belief_model_enabled() and memory_use_suppressed(memory))
-                    ):
-                        continue
-                    if not _memory_in_scope(memory.created_at, start_dt, end_dt):
-                        continue
-                    visible.append(memory)
-                if len(batch) < fetch_limit:
-                    break
+        while scan_offset < max_scan and len(visible) < target_end:
+            batch_limit = min(500, max_scan - scan_offset)
+            fetch_limit = target_end if scan_offset == 0 else batch_limit
+            batch = service.read(uid, limit=fetch_limit, offset=scan_offset)
+            if not batch:
+                break
+            scan_offset += len(batch)
+            for memory in batch:
+                if memory.is_locked or getattr(memory, 'user_review', None) is False:
+                    continue
+                if not _memory_in_scope(memory.created_at, start_dt, end_dt):
+                    continue
+                visible.append(memory)
+            if len(batch) < fetch_limit:
+                break
+        scan_truncated = scan_offset >= max_scan and len(visible) < target_end
         memories = omit_channel_private(visible[max(offset, 0) : target_end], configurable)
     except Exception as e:
-        logger.error("get_memories_tool retrieval failed error_type=%s", type(e).__name__)
+        logger.error("get_memories_tool retrieval failed error_type=%s", type(e).__name__, exc_info=True)
         return lookup_failed('memories')
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
@@ -359,12 +301,9 @@ def get_memories_tool(
         return msg
 
     title = "User Memories"
-    if effective_view != 'released':
-        title += f" ({effective_view} view; dates are evidence time)"
     records = []
     for memory in memories:
-        # Preserve the existing list formatter's preference for the evidence clock.
-        stamp = _memory_read_date(memory, temporal=True)
+        stamp = _memory_read_date(memory)
         if stamp and stamp.tzinfo is not None:
             stamp = stamp.astimezone(timezone.utc)
         date_str = format_instant(stamp, clock) if stamp else 'Unknown'
@@ -395,8 +334,6 @@ def get_memories_tool(
 def search_memories_tool(
     query: str,
     limit: int = 5,
-    view: Literal['useful_now', 'history', 'all'] = 'useful_now',
-    as_of: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -423,14 +360,10 @@ def search_memories_tool(
     Args:
         query: Natural language description of what to search for (required)
         limit: Number of memories to retrieve (default: 5, max: 20)
-        view: Temporal view. Use history only for an explicit dated recall request; default is useful_now.
-        as_of: Optional timezone-aware ISO traversal anchor for a stable temporal read.
 
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    logger.info('search_memories_tool called view=%s', view)
-
     # Get config from parameter or context variable
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
@@ -455,13 +388,6 @@ def search_memories_tool(
     clock = clock_for_config(config or _agent_config(), uid)
     logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
-    try:
-        requested_view = normalize_temporal_read_view(view)
-        effective_view = requested_view if belief_model_enabled() else 'released'
-        as_of_dt = _parse_aware_iso(as_of)
-    except ValueError as e:
-        return f"Error: Invalid temporal read arguments: {e}"
-
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
     if blocked:
         return blocked
@@ -470,57 +396,30 @@ def search_memories_tool(
     _, _, scope_err = apply_chat_scope_dates(scope, None, None)
     if scope_err:
         return f"Error: {scope_err}"
-    try:
-        scope_start_dt = _parse_aware_iso(scope.get("start_date") if isinstance(scope.get("start_date"), str) else None)
-        scope_end_dt = _parse_aware_iso(scope.get("end_date") if isinstance(scope.get("end_date"), str) else None)
-    except ValueError as e:
-        return f"Error: chat_scope dates invalid ({e})"
+    scope_start_dt = _parse_date_from_chat_scope(scope.get("start_date"))
+    scope_end_dt = _parse_date_from_chat_scope(scope.get("end_date"))
 
     # Cap limit at 20
     limit = min(limit, 20)
 
     try:
-        if effective_view == 'released' and not (scope_start_dt or scope_end_dt):
-            # Keep the released call contract explicit for older adapters and
-            # test doubles. Temporal arguments are only needed on the beta
-            # read path below.
+        if not (scope_start_dt or scope_end_dt):
             matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
         else:
             service = MemoryService(db_client=firestore_db)
-            if scope_start_dt or scope_end_dt:
-                candidate_limit = limit * 3
-            else:
-                candidate_limit = None
-            if effective_view != 'released':
-                if candidate_limit is not None:
-                    matches = service.search(
-                        uid,
-                        query,
-                        limit=limit,
-                        candidate_limit=candidate_limit,
-                        view=effective_view,
-                        as_of=as_of_dt,
-                    )
-                else:
-                    matches = service.search(uid, query, limit=limit, view=effective_view, as_of=as_of_dt)
-            elif candidate_limit is not None:
-                matches = service.search(uid, query, limit=limit, candidate_limit=candidate_limit)
-            else:
-                matches = service.search(uid, query, limit=limit)
+            matches = service.search(uid, query, limit=limit, candidate_limit=limit * 3)
         hide_private = channel_private_filter_active(configurable)
         matches = [
             match
             for match in matches
-            if not match.memory.is_locked
-            and not (belief_model_enabled() and memory_use_suppressed(match.memory))
-            and not (hide_private and is_channel_private_memory(match.memory))
+            if not match.memory.is_locked and not (hide_private and is_channel_private_memory(match.memory))
         ]
         if scope_start_dt or scope_end_dt:
             matches = [
                 m
                 for m in matches
                 if _memory_in_scope(
-                    _memory_read_date(m.memory, temporal=effective_view != 'released'),
+                    _memory_read_date(m.memory),
                     scope_start_dt,
                     scope_end_dt,
                 )
@@ -540,22 +439,11 @@ def search_memories_tool(
         for match in matches:
             memory = match.memory
             score = match.score
-            display_date = _memory_read_date(memory, temporal=effective_view != 'released')
+            display_date = _memory_read_date(memory)
             date_str = format_date(display_date, clock) if display_date else 'Unknown'
             memory_id = getattr(memory, 'id', None)
             memory_id_prefix = f'memory_id: {memory_id}, ' if memory_id else ''
             suffix = f"{memory_id_prefix}relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
-            if effective_view != 'released':
-                band = getattr(memory, 'currency_band', None)
-                evidence_date = getattr(memory, 'as_of', None)
-                evidence_date_str = (
-                    format_date(evidence_date, clock) if isinstance(evidence_date, datetime) else date_str
-                )
-                if band:
-                    suffix += f", band: {band}"
-                suffix += f", as_of: {evidence_date_str}"
-                if effective_view == 'history':
-                    suffix += ", historical: true"
             records.append(
                 format_memory_evidence(
                     memory.content,
@@ -581,9 +469,7 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        error_msg = f"Error performing memory search: {str(e)}"
-        logger.info(f"❌ search_memories_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error searching memories: {str(e)}"
+        # The exception text can carry provider keys and user content; keep the
+        # type for diagnosis and leave the message out of the log.
+        logger.error("search_memories_tool failed error_type=%s", type(e).__name__, exc_info=True)
+        return "Error searching memories. Please try again."

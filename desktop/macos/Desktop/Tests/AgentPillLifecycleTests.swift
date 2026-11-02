@@ -1487,8 +1487,8 @@ import XCTest
           "DesktopDiagnosticsManager.shared.recordRealtimeProviderCloseResolution(\n        closeAttemptID: closeAttemptID,"
         )
         && hubSource.contains(
-          "if shouldCaptureProviderCloseToSentry {\n        logError(reportingPlan.sentryMessage)"),
-      "Credential close reporting must record the bounded recovery decision before Sentry captures its attachment")
+          "if isActionableProviderClose {\n        logError(reportingPlan.boundedErrorMessage)"),
+      "Credential close reporting must record the bounded recovery decision before the actionable-close error log")
     XCTAssertTrue(
       hubSource.contains("func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
       "Provider switching must be centralized and limited to stable credential/quota failures")
@@ -1977,26 +1977,12 @@ import XCTest
     XCTAssertFalse(source.contains("Copy table"))
   }
 
-  func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
+  func testOmiAppNoLongerInitializesSentry() throws {
     let source = try omiAppSource()
-    let loggerSource = try loggerSource()
 
-    XCTAssertTrue(source.contains("options.enableAutoSessionTracking = !isDev"))
-    XCTAssertTrue(source.contains("options.enableCrashHandler = !isDev"))
-    XCTAssertTrue(source.contains("options.enableAppHangTracking = !isDev"))
-    XCTAssertTrue(source.contains("options.enableWatchdogTerminationTracking = !isDev"))
-    XCTAssertTrue(source.contains("options.appHangTimeoutInterval = isDev ? 0 : 3.0"))
-    XCTAssertTrue(source.contains("guard !AnalyticsManager.isDevBuild else { return }"))
-    XCTAssertTrue(source.contains("let breadcrumb = Breadcrumb(level: .info, category: \"lifecycle\")"))
-    XCTAssertTrue(source.contains("breadcrumb.message = \"App Terminating\""))
-    XCTAssertFalse(source.contains("SentrySDK.capture(message: \"App Terminating\")"))
     XCTAssertFalse(
-      loggerSource.contains("breadcrumb.message = message"),
-      "free-form local log messages must not be sent as Sentry breadcrumbs")
-    XCTAssertTrue(
-      loggerSource.contains("writeIncidentDiagnosticsAttachment("),
-      "actionable errors must send bounded redacted diagnostics instead")
-    XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
+      source.contains("SentrySDK"),
+      "Sentry has been removed; OmiApp must not initialize or touch it")
   }
 
   func testFloatingVoicePlaybackIgnoresStaleBargeInCallbacks() throws {

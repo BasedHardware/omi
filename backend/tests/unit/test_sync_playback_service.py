@@ -36,6 +36,8 @@ def _load_playback(request):
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()
+    storage_module.get_playback_failure_retry_epoch = MagicMock(return_value=None)
+    storage_module.is_playback_unavailable.return_value = False
     with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
         module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
         request.module.playback = module

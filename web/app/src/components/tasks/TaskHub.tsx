@@ -153,24 +153,6 @@ export function TaskHub() {
     setIsSelectMode(!isSelectMode);
   }, [isSelectMode]);
 
-  // Handle select all (respects search filter)
-  const handleSelectAll = useCallback(() => {
-    // Filter by search query if present
-    const visibleItems = searchQuery
-      ? items.filter((i) =>
-          i.description.toLowerCase().includes(searchQuery.toLowerCase()),
-        )
-      : items;
-    const pendingItems = visibleItems.filter((i) => !i.completed);
-    if (selectedIds.size === pendingItems.length && pendingItems.length > 0) {
-      // Deselect all
-      setSelectedIds(new Set());
-    } else {
-      // Select all pending items
-      setSelectedIds(new Set(pendingItems.map((i) => i.id)));
-    }
-  }, [items, searchQuery, selectedIds.size]);
-
   // Bulk actions
   const handleBulkComplete = useCallback(async () => {
     await bulkComplete(Array.from(selectedIds));
@@ -230,13 +212,21 @@ export function TaskHub() {
     [bulkSetDueDate],
   );
 
-  // Handle bulk toggle complete
+  // Handle bulk toggle complete (Enter): complete the selection's pending tasks, or
+  // reopen the selection when every selected task is already done. Completing a done
+  // task again would only reset its completion time.
   const handleBulkToggleComplete = useCallback(
     async (ids: string[]) => {
-      await bulkComplete(ids);
+      const selected = items.filter((i) => ids.includes(i.id));
+      const pendingIds = selected.filter((i) => !i.completed).map((i) => i.id);
+      if (pendingIds.length > 0) {
+        await bulkComplete(pendingIds);
+      } else {
+        await Promise.all(selected.map((i) => toggleComplete(i.id, false)));
+      }
       clearSelection();
     },
-    [bulkComplete, clearSelection],
+    [items, bulkComplete, toggleComplete, clearSelection],
   );
 
   // Handle bulk delete via keyboard
@@ -300,13 +290,80 @@ export function TaskHub() {
     };
   }, [groupedItems, searchQuery]);
 
+  // The list view's rows, narrowed by the search. TaskListView renders exactly these and
+  // highlights focusedIndex among them (pending first, then completed), so the arrow
+  // keys and Space must index the same rows, not the unfiltered list.
+  const filteredFlatList = useMemo(() => {
+    if (!searchQuery) return sortedFlatList;
+    const query = searchQuery.toLowerCase();
+    const filterTasks = (tasks: typeof items) =>
+      tasks.filter((item) => item.description.toLowerCase().includes(query));
+    return {
+      pending: filterTasks(sortedFlatList.pending),
+      completed: filterTasks(sortedFlatList.completed),
+    };
+  }, [sortedFlatList, searchQuery]);
+
+  // Shortcuts act only on selected tasks the search still shows. A task selected before
+  // the search hid it stays selected, but d, Enter, t and n cannot reach it unseen.
+  const visibleSelectedIds = useMemo(() => {
+    if (!searchQuery) return selectedIds;
+    const visibleIds = new Set(filteredItems.map((item) => item.id));
+    return new Set(Array.from(selectedIds).filter((id) => visibleIds.has(id)));
+  }, [selectedIds, filteredItems, searchQuery]);
+
+  // Filter tasks based on view mode and selected date
+  const filteredView = useMemo(() => {
+    if (!selectedDate) return null;
+    const dateStr = selectedDate.toDateString();
+    const dateFilteredItems = filteredItems.filter((item) => {
+      if (!item.due_at) return false;
+      return new Date(item.due_at).toDateString() === dateStr;
+    });
+    return {
+      pending: dateFilteredItems.filter((i) => !i.completed),
+      completed: dateFilteredItems.filter((i) => i.completed),
+      dateLabel: selectedDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      }),
+    };
+  }, [filteredItems, selectedDate]);
+
+  // The pending rows the view actually shows: the search narrows them, and in the hub
+  // a picked day narrows them further. Select All and its toggle state both use this
+  // set, so neither can reach a row the list hides.
+  const selectablePendingItems = useMemo(
+    () =>
+      viewMode === 'list'
+        ? filteredFlatList.pending
+        : filteredView
+          ? filteredView.pending
+          : filteredItems.filter((i) => !i.completed),
+    [filteredFlatList, filteredItems, filteredView, viewMode],
+  );
+
+  // Select all toggles exactly the pending rows the view shows. Compare membership by
+  // id, not by count: with a task selected that the search or the picked day hides, a
+  // size comparison counts that hidden task as one of the visible rows and clears the
+  // selection instead of selecting the rows on screen.
+  const handleSelectAll = useCallback(() => {
+    if (selectablePendingItems.length === 0) return;
+    if (selectablePendingItems.every((item) => selectedIds.has(item.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectablePendingItems.map((item) => item.id)));
+    }
+  }, [selectablePendingItems, selectedIds]);
+
   // Keyboard navigation (defined after filteredItems)
   const handleNavigate = useCallback(
     (direction: 'up' | 'down') => {
       const totalItems =
         viewMode === 'list'
-          ? sortedFlatList.pending.length +
-            (showCompleted ? sortedFlatList.completed.length : 0)
+          ? filteredFlatList.pending.length +
+            (showCompleted ? filteredFlatList.completed.length : 0)
           : filteredItems.filter((i) => !i.completed).length;
 
       if (totalItems === 0) return;
@@ -319,30 +376,40 @@ export function TaskHub() {
         }
       });
     },
-    [viewMode, sortedFlatList, showCompleted, filteredItems],
+    [viewMode, filteredFlatList, showCompleted, filteredItems],
   );
 
   // Toggle select focused item
   const handleToggleSelectFocused = useCallback(() => {
     const allItems =
       viewMode === 'list'
-        ? [...sortedFlatList.pending, ...(showCompleted ? sortedFlatList.completed : [])]
+        ? [
+            ...filteredFlatList.pending,
+            ...(showCompleted ? filteredFlatList.completed : []),
+          ]
         : filteredItems.filter((i) => !i.completed);
 
     if (focusedIndex >= 0 && focusedIndex < allItems.length) {
       const item = allItems[focusedIndex];
       handleSelect(item.id, !selectedIds.has(item.id));
     }
-  }, [viewMode, sortedFlatList, showCompleted, filteredItems, focusedIndex, selectedIds]);
+  }, [
+    viewMode,
+    filteredFlatList,
+    showCompleted,
+    filteredItems,
+    focusedIndex,
+    selectedIds,
+  ]);
 
   // Keyboard shortcuts
   useTaskKeyboardShortcuts({
     enabled: !loading && items.length > 0,
-    selectedIds,
+    selectedIds: visibleSelectedIds,
     focusedIndex,
     totalItems:
       viewMode === 'list'
-        ? sortedFlatList.pending.length
+        ? filteredFlatList.pending.length
         : filteredItems.filter((i) => !i.completed).length,
     onSetDueToday: handleSetDueToday,
     onSetDueTomorrow: handleSetDueTomorrow,
@@ -356,33 +423,6 @@ export function TaskHub() {
   });
 
   // Filter tasks based on view mode and selected date
-  const getVisibleGroups = () => {
-    if (selectedDate) {
-      // Filter to selected date only
-      const dateStr = selectedDate.toDateString();
-      const dateFilteredItems = filteredItems.filter((item) => {
-        if (!item.due_at) return false;
-        return new Date(item.due_at).toDateString() === dateStr;
-      });
-
-      const pending = dateFilteredItems.filter((i) => !i.completed);
-      const completed = dateFilteredItems.filter((i) => i.completed);
-
-      return {
-        pending,
-        completed,
-        dateLabel: selectedDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'short',
-          day: 'numeric',
-        }),
-      };
-    }
-
-    return null;
-  };
-
-  const filteredView = getVisibleGroups();
   const isEmpty = !loading && items.length === 0;
 
   return (
@@ -480,10 +520,10 @@ export function TaskHub() {
                 onSelectAll={handleSelectAll}
                 onDone={toggleSelectMode}
                 allSelected={
-                  selectedIds.size === filteredItems.filter((i) => !i.completed).length &&
-                  filteredItems.filter((i) => !i.completed).length > 0
+                  selectablePendingItems.length > 0 &&
+                  selectablePendingItems.every((i) => selectedIds.has(i.id))
                 }
-                totalCount={filteredItems.filter((i) => !i.completed).length}
+                totalCount={selectablePendingItems.length}
               />
             )}
 
@@ -555,8 +595,8 @@ export function TaskHub() {
                 {/* List view - flat list with TaskListView */}
                 {viewMode === 'list' ? (
                   <TaskListView
-                    pendingTasks={sortedFlatList.pending}
-                    completedTasks={sortedFlatList.completed}
+                    pendingTasks={filteredFlatList.pending}
+                    completedTasks={filteredFlatList.completed}
                     showCompleted={showCompleted}
                     onToggleShowCompleted={() => setShowCompleted(!showCompleted)}
                     selectedIds={selectedIds}

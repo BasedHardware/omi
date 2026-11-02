@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-temporal-sync-admission-publishes-live-twin",
+  "violated_contract": "An unstamped sync upload of audio already captured by a same-device live conversation must not publish a second visible identity merely because only explicit targets can adopt live rows.",
+  "canonical_prevention": "Discover strict same-device live overlaps from interval metadata, revalidate them in the existing assignment transaction, and retain the live identity through the existing merge path. Keep empty stubs and other devices excluded. Use immediate visible sync fallback on discovery failure or live document capacity exhaustion; never leave captured speech behind an unscheduled hidden merge.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_sync_live_overlap.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/sync/**", "backend/database/conversations.py"],
+  "status": "open"
+}

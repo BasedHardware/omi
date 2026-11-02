@@ -2,6 +2,7 @@
 import { generateKeyPairSync, createPublicKey, verify } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { testIdentity } from "./support/test-identity";
 vi.mock("google-auth-library", () => ({
   GoogleAuth: class {
     async getAccessToken() {
@@ -9,7 +10,10 @@ vi.mock("google-auth-library", () => ({
     }
   },
 }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const signing = {
   kid: "test-key",
@@ -31,8 +35,6 @@ beforeEach(() => {
   );
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
-    if (url.endsWith("/grafana/api/datasources"))
-      return new Response(null, { status: 403 });
     const headers = init.headers as Record<string, string>;
     if (url.startsWith("https://secretmanager.googleapis.com/")) {
       expect(headers.Authorization).toBe("Bearer metadata-access");
@@ -129,8 +131,8 @@ it("fails before enrollment when a service account targets the monitoring org", 
   );
 });
 it("checks admin membership before any token or secret access", async () => {
-  const { verifyAdmin } = await import("@/lib/auth");
-  vi.mocked(verifyAdmin).mockResolvedValue(
+  const { requireScope } = await import("@/lib/auth");
+  vi.mocked(requireScope).mockResolvedValue(
     NextResponse.json({ error: "Forbidden" }, { status: 403 })
   );
   const { GET } = await import("@/app/api/grafana/embed/route");
@@ -142,8 +144,8 @@ it("checks admin membership before any token or secret access", async () => {
 });
 it("leaves the existing board available while prerequisites are disabled", async () => {
   vi.stubEnv("GRAFANA_EMBED_ENABLED", "");
-  const { verifyAdmin } = await import("@/lib/auth");
-  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "admin" });
+  const { requireScope } = await import("@/lib/auth");
+  vi.mocked(requireScope).mockResolvedValue(testIdentity(undefined, "admin"));
   const { GET } = await import("@/app/api/grafana/embed/route");
   const response = await GET(
     new NextRequest("https://admin.omi.me/api/grafana/embed")
@@ -153,18 +155,19 @@ it("leaves the existing board available while prerequisites are disabled", async
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("blocks cutover while legacy anonymous datasource access remains", async () => {
-  const original = fetchMock.getMockImplementation()!;
-  fetchMock.mockImplementation((url, init) =>
-    url.endsWith("/grafana/api/datasources")
-      ? Response.json([])
-      : original(url, init)
-  );
+it("mints only the Business embed without probing the retired Grafana origins", async () => {
   const { mintEmbed } = await import("../grafana-embed");
-  await expect(mintEmbed("admin")).rejects.toThrow("anonymous data access");
+  const result = await mintEmbed("admin");
+  const url = new URL(result.url);
+  expect(url.origin).toBe("https://monitor.omi.me");
+  expect(url.searchParams.get("orgId")).toBe("2");
   expect(
-    fetchMock.mock.calls.some(([url]) => url.includes("secretmanager"))
-  ).toBe(false);
+    fetchMock.mock.calls.every(
+      ([requestUrl]) =>
+        requestUrl.startsWith("https://secretmanager.googleapis.com/") ||
+        requestUrl.startsWith("https://monitor.omi.me/")
+    )
+  ).toBe(true);
 });
 
 it("publishes the public verification key while cutover is disabled for staged Helm startup", async () => {

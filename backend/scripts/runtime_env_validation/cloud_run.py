@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import subprocess
 
-from config.free_tier_rollout import FREE_TIER_DEPLOY_KEYS, validate_free_tier_deploy_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_validation.common import (
     ConfigDict,
@@ -82,7 +81,10 @@ def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
         first_container = _as_config_dict(containers[0]) or {}
         services[service] = {
             'env': first_container.get('env', []),
-            'flags': _cloud_run_network_flags_from_annotations(annotations),
+            'flags': {
+                **_cloud_run_network_flags_from_annotations(annotations),
+                '--timeout': f"{template_spec.get('timeoutSeconds', 300)}s",
+            },
             'service_account': template_spec.get('serviceAccountName'),
         }
     return {'services': services}
@@ -110,12 +112,6 @@ def _validate_cloud_run(
             errors.append(ValidationError(f'cloud_run/{service}', 'missing service state'))
             continue
         actual_env = _env_entries_by_name(service_state.get('env', []))
-        for name in FREE_TIER_DEPLOY_KEYS:
-            if name in actual_env:
-                try:
-                    validate_free_tier_deploy_value(name, str(actual_env[name].get('value', '')))
-                except ValueError as exc:
-                    errors.append(ValidationError(f'cloud_run/{service}', str(exc)))
         errors.extend(
             _validate_env_entries(
                 scope=f'cloud_run/{service}',
@@ -141,7 +137,7 @@ def _validate_cloud_run(
         errors.extend(
             _validate_workflow_flags(
                 scope=f'cloud_run/{service}',
-                expected=_network_flags(env_config),
+                expected={**_network_flags(env_config), **service_config.get('flags', {})},
                 actual=service_state.get('flags', {}),
                 strict_provisional=strict_provisional,
             )

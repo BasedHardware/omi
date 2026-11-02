@@ -220,7 +220,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     final isCritical = device.type == DeviceType.bee && device.isBeeFirmwareUnsupported;
 
     if (!isCritical) {
-      final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+      final prefKey = device.firmwareWarningAcknowledgedKey;
       final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey);
       if (alreadyAcknowledged) {
         return; // User already acknowledged this warning
@@ -261,7 +261,7 @@ class _FoundDevicesState extends State<FoundDevices> {
               isDefault: true,
               onPressed: () {
                 if (dontShowAgain) {
-                  final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+                  final prefKey = device.firmwareWarningAcknowledgedKey;
                   SharedPreferencesUtil().saveBool(prefKey, true);
                 }
                 Navigator.pop(dialogContext);

@@ -25,3 +25,9 @@ CONTEXT_READS = Histogram(
     ['surface', 'phase'],
     buckets=(0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.3, 1, 5, 60),
 )
+CONTEXT_SETUP_OVERLAP = Histogram(
+    'omi_chat_context_setup_overlap_seconds',
+    'Time available for prefetched context before the model mount consumes ready results',
+    ['surface'],
+    buckets=(0.01, 0.05, 0.1, 0.15, 0.3, 0.5, 1, 2, 5, 10, 25),
+)

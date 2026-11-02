@@ -91,4 +91,4 @@ gcloud scheduler jobs update http x-connector-sync-6h \
   --oauth-service-account-email="$SCHEDULER_SA"
 ```
 
-Pattern checklist: [`docs/doc/developer/backend/cloud_run_jobs_checklist.md`](../../../docs/doc/developer/backend/cloud_run_jobs_checklist.md).
+Pattern checklist: [`backend/docs/cloud_run_jobs_checklist.md`](../cloud_run_jobs_checklist.md).

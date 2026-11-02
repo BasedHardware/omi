@@ -1,4 +1,4 @@
-"""Firestore adapter for the additive just-in-time frame-request queue.
+"""Firestore adapter for the bounded frame-request queue.
 
 All documents live under the authenticated user's namespace.  The adapter
 stores frame metadata and upload references only; it never accepts or emits
@@ -15,7 +15,11 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
-from database.conversations import conversations_collection, prepare_photo_for_write
+from database.conversations import (
+    conversations_collection,
+    is_soft_deleted,
+    prepare_photo_for_write,
+)
 from database.durable_queue import ProcessOutcome, drain_isolated
 from database.firestore_index_registry import (
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
@@ -32,7 +36,7 @@ from utils.retrieval.frame_request_policy import (
     FRAME_REQUEST_MAX_BATCH,
     FRAME_REQUEST_MAX_BYTES_PER_DEVICE,
     FRAME_REQUEST_MAX_BYTES_PER_CONVERSATION,
-    FRAME_REQUEST_MAX_TTL_SECONDS,
+    FRAME_REQUEST_MAX_TTL_SECONDS as FRAME_REQUEST_MAX_TTL_SECONDS,
     FRAME_REQUEST_DEDUPE_WINDOW_SECONDS,
     FRAME_REQUEST_MAX_ATTACHED_PER_CONVERSATION,
     check_device_quota,
@@ -91,88 +95,6 @@ def _deletion_outbox_collection(uid: str, *, firestore_client: Any | None = None
 
 def _deletion_receipt_id(conversation_id: str, storage_id: str) -> str:
     return hashlib.sha256(f"{conversation_id}\0{storage_id}".encode("utf-8")).hexdigest()
-
-
-def reserve_frame_vision_invocation(
-    uid: str,
-    authority_key: str,
-    *,
-    request_id: str,
-    account_generation: int,
-    now: datetime | None = None,
-    firestore_client: Any | None = None,
-) -> dict[str, Any]:
-    """Durably reserve the sole paid invocation for one stable chat turn.
-
-    The receipt is written *before* provider egress. An expired lease is an
-    honest indeterminate outcome, not permission to pay twice after a crash.
-    """
-    if not authority_key.strip():
-        raise ValueError("stable vision authority is required")
-    current = _utc(now or datetime.now(timezone.utc))
-    client = _get_client(firestore_client)
-    receipt_id = hashlib.sha256(authority_key.encode("utf-8")).hexdigest()
-    ref = (
-        client.collection(USERS_COLLECTION)
-        .document(uid)
-        .collection(FRAME_VISION_RECEIPTS_COLLECTION)
-        .document(receipt_id)
-    )
-    transaction = client.transaction()
-
-    @firestore.transactional
-    def _reserve(transaction: Any) -> dict[str, Any]:
-        snapshot = ref.get(transaction=transaction)
-        if snapshot.exists:
-            row = snapshot.to_dict() or {}
-            if row.get("request_id") != request_id or row.get("account_generation") != account_generation:
-                raise PermissionError("vision receipt authority mismatch")
-            return row
-        row = {
-            "request_id": request_id,
-            "account_generation": account_generation,
-            "state": "invoked",
-            "created_at": current,
-            "lease_expires_at": current + timedelta(minutes=5),
-        }
-        transaction.create(ref, row)
-        return {**row, "reserved": True}
-
-    return _reserve(transaction)
-
-
-def complete_frame_vision_invocation(
-    uid: str,
-    authority_key: str,
-    *,
-    request_id: str,
-    account_generation: int,
-    description: str,
-    now: datetime | None = None,
-    firestore_client: Any | None = None,
-) -> None:
-    """Store only the bounded derived result; never pixels or prompt content."""
-    bounded = description[:4000]
-    ref = (
-        _get_client(firestore_client)
-        .collection(USERS_COLLECTION)
-        .document(uid)
-        .collection(FRAME_VISION_RECEIPTS_COLLECTION)
-        .document(hashlib.sha256(authority_key.encode("utf-8")).hexdigest())
-    )
-    snapshot = ref.get()
-    row = snapshot.to_dict() if snapshot.exists else {}
-    if row.get("request_id") != request_id or row.get("account_generation") != account_generation:
-        raise PermissionError("vision receipt authority mismatch")
-    completed_at = _utc(now or datetime.now(timezone.utc))
-    ref.update(
-        {
-            "state": "completed",
-            "description": bounded,
-            "completed_at": completed_at,
-            "output_expires_at": completed_at + timedelta(seconds=FRAME_REQUEST_MAX_TTL_SECONDS),
-        }
-    )
 
 
 def persist_conversation_frame_deletion_outbox(
@@ -370,7 +292,8 @@ def attach_frame_request_to_conversation(
             raise ValueError("only uploaded frame requests may be promoted")
 
         conversation_snapshot = conversation_ref.get(transaction=transaction)
-        if not conversation_snapshot.exists:
+        conversation_data = conversation_snapshot.to_dict() if conversation_snapshot.exists else None
+        if not conversation_snapshot.exists or is_soft_deleted(conversation_data):
             raise KeyError("conversation not found")
 
         # Firestore reads in this transaction establish a contention fence for
@@ -398,7 +321,7 @@ def attach_frame_request_to_conversation(
             if existing_storage_id != permanent_storage_id:
                 raise ValueError("conversation photo id is already used")
         else:
-            level = (conversation_snapshot.to_dict() or {}).get("data_protection_level", "standard")
+            level = (conversation_data or {}).get("data_protection_level", "standard")
             photo_data = prepare_photo_for_write(
                 {
                     "id": request.request_id,

@@ -3,6 +3,7 @@
 import copy
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -11,6 +12,7 @@ import pytest
 from scripts import messaging_operations as ops
 from utils.messaging import maintenance
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 IMAGE = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
 CHANNELS = ['projects/based-hardware/notificationChannels/123']
 
@@ -57,8 +59,13 @@ class Session:
                 assert self.job is not None and url.endswith(self.job['name'])
                 assert set(kwargs['params']) == {'validateOnly'}
                 assert kwargs['json'] == ops.desired_job(IMAGE)
+            else:
+                assert method == 'POST' and url.endswith('/jobs')
+                assert 'name' not in kwargs['json']
+                assert kwargs['params']['jobId'] == 'messaging-maintenance-job'
             if kwargs['params']['validateOnly'] == 'false':
                 self.job = copy.deepcopy(kwargs['json'])
+                self.job['name'] = ops.desired_job(IMAGE)['name']
             value = {'name': 'projects/based-hardware/locations/us-central1/operations/validation'}
         else:
             value = copy.deepcopy(kwargs['json'])
@@ -94,6 +101,54 @@ def test_alert_create_is_verified_and_second_run_is_noop():
     assert all(c[0] == 'GET' for c in session.calls)
 
 
+@pytest.mark.parametrize('mode', ['validate', 'apply'])
+def test_new_job_omits_name_only_on_create_and_then_matches(mode):
+    session = Session()
+    ops.reconcile_job(session, IMAGE, mode)
+    method, url, kwargs = session.calls[-1]
+    assert method == 'POST' and url.endswith('/locations/us-central1/jobs')
+    assert kwargs['params'] == {
+        'jobId': 'messaging-maintenance-job',
+        'validateOnly': 'true' if mode == 'validate' else 'false',
+    }
+    assert kwargs['json'] == {k: v for k, v in ops.desired_job(IMAGE).items() if k != 'name'}
+    assert (session.job is None) == (mode == 'validate')
+    if mode == 'apply':
+        assert not ops.reconcile_job(session, IMAGE, 'check')
+
+
+def test_alert_groups_install_nine_then_rate_without_touching_other_policies(monkeypatch):
+    session = Session()
+    ops.reconcile_log_metrics(session, 'apply')
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'messaging_operations.py',
+            'alerts',
+            '--apply',
+            '--alert-group',
+            'operational',
+            '--notification-channels',
+            *CHANNELS,
+        ],
+    )
+    monkeypatch.setattr(ops.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0, stdout='fake-token'))
+    monkeypatch.setattr(ops, 'AuthorizedSession', lambda credentials: session)
+    assert ops.main() == 0
+    assert len(session.policies) == 9
+    assert all(p['displayName'] != ops.CONTEXT_RATE_POLICY for p in session.policies)
+    installed = copy.deepcopy(session.policies)
+    session.calls.clear()
+    assert ops.reconcile_alerts(session, CHANNELS, 'apply', 'context-rate')
+    assert len(session.policies) == 10 and session.policies[:9] == installed
+    assert sum(c[0] == 'POST' for c in session.calls) == 1
+    session.calls.clear()
+    assert not ops.reconcile_alerts(session, CHANNELS, 'check', 'operational')
+    assert not ops.reconcile_alerts(session, CHANNELS, 'check', 'context-rate')
+    assert all(c[0] == 'GET' for c in session.calls)
+
+
 def test_duplicate_policy_fails_before_any_write():
     body = ops.desired_alerts(CHANNELS)[-1]
     session = Session([body, body])
@@ -102,6 +157,15 @@ def test_duplicate_policy_fails_before_any_write():
     with pytest.raises(RuntimeError, match='Duplicate'):
         ops.reconcile_alerts(session, CHANNELS, 'apply')
     assert all(c[0] == 'GET' for c in session.calls)
+
+
+def test_context_rate_counts_summary_loss_but_not_digest_only_loss():
+    policy = next(p for p in ops.desired_alerts(CHANNELS) if p['displayName'] == ops.CONTEXT_RATE_POLICY)
+    query = policy['conditions'][0]['conditionPrometheusQueryLanguage']['query']
+    assert 'outcome=~"degraded|summary_pending"' in query
+    assert 'outcome!="unscoped"' in query
+    assert '>= 20' in query and '> 0.05' in query
+    assert 'digest_degraded' not in query
 
 
 @pytest.mark.parametrize('mode', ['validate', 'apply'])
@@ -222,11 +286,36 @@ def test_existing_log_alert_is_replaced_by_threshold_preserving_condition_identi
 
 
 @pytest.mark.parametrize(
-    'image', ['latest', 'gcr.io/based-hardware/backend:main', 'gcr.io/other/backend@sha256:' + 'a' * 64]
+    'image',
+    [
+        'latest',
+        'gcr.io/based-hardware/backend:main',
+        'gcr.io/other/backend@sha256:' + 'a' * 64,
+        # Plan B B3: only the fat backend image or its workers role image runs the job.
+        'gcr.io/based-hardware-dev/backend-workers@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/backend-api@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/pusher@sha256:' + 'a' * 64,
+        'us-docker.pkg.dev/based-hardware/backend-workers@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/backend-workers:aaaaaaa',
+    ],
 )
 def test_job_rejects_unpinned_or_foreign_images(image):
     with pytest.raises(ValueError):
         ops.desired_job(image)
+
+
+@pytest.mark.parametrize('image', [IMAGE, 'gcr.io/based-hardware/backend-workers@sha256:' + 'a' * 64])
+def test_job_admits_the_backend_image_and_its_workers_role_digest(image):
+    assert ops.desired_job(image)['template']['template']['containers'][0]['image'] == image
+
+
+def test_job_images_follow_the_runtime_image_registry():
+    registry = json.loads((BACKEND_DIR / 'runtime_images.json').read_text(encoding='utf-8'))
+    spec = registry['services']['messaging-maintenance']
+    assert ops.MAINTENANCE_JOB_IMAGES == (spec['current_image'], spec['image'])
+    assert spec['role'] == 'workers'
+    workers = next(image for image in registry['images'] if image['name'] == spec['image'])
+    assert 'utils.messaging.maintenance' in workers['entrypoints']
 
 
 def test_maintenance_failure_is_redacted_and_nonzero(monkeypatch, caplog):
@@ -239,3 +328,25 @@ def test_maintenance_failure_is_redacted_and_nonzero(monkeypatch, caplog):
     assert error.value.code == 1
     assert 'outcome=failed reason=permission error_type=PermissionError' in caplog.text
     assert 'private account' not in caplog.text
+
+
+def test_zero_threshold_omitted_by_proto_json_still_matches_and_verifies():
+    class OmittingSession(Session):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if method != 'GET' or 'alertPolicies' not in url or not response.ok:
+                return response
+            # Copy before trimming so the stored policy keeps its declared zero.
+            body = copy.deepcopy(response.json())
+            for policy in body.get('alertPolicies', [body]):
+                for condition in policy.get('conditions', []):
+                    threshold = condition.get('conditionThreshold', {})
+                    if threshold.get('thresholdValue') == 0:
+                        del threshold['thresholdValue']
+            return SimpleNamespace(ok=True, status_code=200, json=lambda: body)
+
+    session = OmittingSession()
+    ops.reconcile_log_metrics(session, 'apply')
+    ops.reconcile_alerts(session, CHANNELS, 'apply')
+    assert len(session.policies) == 10
+    assert not ops.reconcile_alerts(session, CHANNELS, 'check')

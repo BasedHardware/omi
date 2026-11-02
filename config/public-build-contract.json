@@ -28,6 +28,7 @@
           "TYPESENSE_HOST": "WEB_ADMIN_TYPESENSE_HOST:latest",
           "TYPESENSE_API_KEY": "WEB_ADMIN_TYPESENSE_API_KEY:latest",
           "STRIPE_SECRET_KEY": "WEB_ADMIN_STRIPE_SECRET_KEY:latest",
+          "STRIPE_READ_API_KEY": "STRIPE_READ_API_KEY:latest",
           "STRIPE_UNLIMITED_MONTHLY_PRICE_ID": "WEB_ADMIN_STRIPE_UNLIMITED_MONTHLY_PRICE_ID:latest",
           "STRIPE_UNLIMITED_ANNUAL_PRICE_ID": "WEB_ADMIN_STRIPE_UNLIMITED_ANNUAL_PRICE_ID:latest",
           "REDIS_HOST": "WEB_ADMIN_REDIS_HOST:latest",
@@ -259,7 +260,10 @@
           "--base-url",
           "{base_url}"
         ],
-        "marker": "app:ready"
+        "marker": "app:ready",
+        "path": "/login",
+        "timeout_seconds": 120,
+        "retry_timeout_seconds": 60
       },
       "traffic_promotion": "candidate_after_browser_acceptance"
     },

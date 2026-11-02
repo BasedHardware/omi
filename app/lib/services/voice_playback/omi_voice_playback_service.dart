@@ -296,7 +296,10 @@ class OmiVoicePlaybackService {
       );
     }
 
-    await _clearInFlightState();
+    // Admission can be revoked by another begin attempt, but prior audio must
+    // still be cleared unless another response actually takes playback over.
+    final cleanupOwner = _lifecycleToken;
+    await _clearInFlightState(canContinue: () => cleanupOwner == _lifecycleToken);
     if (!stillCurrent()) return;
     final continuing = _lifecycleOpen && _activeMessageId == messageId;
     _activeMessageId = messageId;
@@ -407,11 +410,18 @@ class OmiVoicePlaybackService {
       _lifecycleToken++;
       _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
     }
+    // A begin attempt can be skipped without taking playback ownership. Only
+    // an admitted replacement lifecycle retires cleanup of this response.
+    final owner = _lifecycleToken;
+    bool stillCurrent() => owner == _lifecycleToken;
     await _cancelPreview();
+    if (!stillCurrent()) return;
     _activeMessageId = null;
     _spoken = 0;
-    await _clearInFlightState();
+    await _clearInFlightState(canContinue: stillCurrent);
+    if (!stillCurrent()) return;
     await _stopFallback();
+    if (!stillCurrent()) return;
     await _deactivateSession();
   }
 
@@ -454,11 +464,14 @@ class OmiVoicePlaybackService {
   // Internals
   // ---------------------------------------------------------------------------
 
-  Future<void> _clearInFlightState() async {
+  Future<void> _clearInFlightState({bool Function()? canContinue}) async {
+    bool current() => canContinue?.call() ?? true;
+    if (!current()) return;
     _synthesisQueue.clear();
     final request = _activeSynthesisRequest;
     _activeSynthesisRequest = null;
     await request?.cancel();
+    if (!current()) return;
     final sources = <ProgressiveTtsAudioSource>{
       if (_activeAudioSource != null) _activeAudioSource!,
       for (final chunk in _audioQueue)
@@ -471,6 +484,7 @@ class OmiVoicePlaybackService {
     if (debugCompletion != null && !debugCompletion.isCompleted) debugCompletion.complete();
     for (final source in sources) {
       await source.cancel();
+      if (!current()) return;
     }
     _audioQueue.clear();
     _synthesizing = false;

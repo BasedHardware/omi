@@ -3,9 +3,11 @@ from typing import Callable, Sequence
 
 import numpy as np
 
+from omi_speaker_policy import PARAKEET_CLUSTER
+
 # Enrollment verification is a separate backend operation fixed at 0.45. These
 # defaults are for short, noisy in-session/batch centroid clustering only.
-SPEAKER_CLUSTERING_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_CLUSTERING_THRESHOLD", "0.60"))
+SPEAKER_CLUSTERING_THRESHOLD = PARAKEET_CLUSTER.distance
 SPEAKER_CLUSTERING_MAX_SPEAKERS = max(1, int(os.getenv("PARAKEET_SPEAKER_CLUSTERING_MAX_SPEAKERS", "8")))
 
 

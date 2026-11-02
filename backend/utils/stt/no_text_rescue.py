@@ -6,7 +6,7 @@ replays unanswered capture into Parakeet using the ordinary recovery fences.
 """
 
 import math
-import os
+from config.policy.listen import listen_value
 import time
 from typing import Any, Callable
 
@@ -15,9 +15,12 @@ from utils.stt.live_metrics import NO_TEXT_RESCUE_AUDIO, NO_TEXT_RESCUE_OUTCOME
 
 class NoTextRescue:
     def __init__(self, *, recovery_enabled: bool, clock: Callable[[], float] | None = None) -> None:
-        self.enabled = recovery_enabled and os.getenv('STT_NO_TEXT_RESCUE_ENABLED', 'false').lower() == 'true'
+        self.enabled = (
+            recovery_enabled
+            and str(listen_value('no_text_rescue_enabled', 'STT_NO_TEXT_RESCUE_ENABLED', 'false')).lower() == 'true'
+        )
         try:
-            seconds = float(os.getenv('STT_NO_TEXT_RESCUE_SECONDS', '60'))
+            seconds = float(listen_value('no_text_rescue_seconds', 'STT_NO_TEXT_RESCUE_SECONDS', '60'))
         except ValueError:
             seconds = 60.0
         self.seconds = min(120.0, max(5.0, seconds)) if math.isfinite(seconds) else 60.0
