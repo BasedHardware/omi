@@ -75,7 +75,7 @@ class _Query:
         return self
 
     def start_after(self, snapshot):
-        self.cursor_id = snapshot.id
+        self.cursor_id = snapshot['__name__'].id if isinstance(snapshot, dict) else snapshot.id
         return self
 
     def stream(self, transaction=None):
@@ -144,6 +144,9 @@ class _Firestore:
 
 @pytest.fixture
 def db(monkeypatch):
+    from utils.sync import worker_control
+
+    monkeypatch.setattr(worker_control, '_candidate_after', None, raising=False)
     client = _Firestore()
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'off')
@@ -278,7 +281,9 @@ def test_pull_claim_reaches_owner_after_first_100_filtered_candidates(db, monkey
         monkeypatch.setattr(
             legacy_dark,
             'current_mode',
-            lambda uid=None: legacy_dark.LegacySyncMode.ON if uid == eligible else legacy_dark.LegacySyncMode.DARK,
+            lambda uid=None: (
+                legacy_dark.LegacySyncMode.ON if uid in (None, eligible) else legacy_dark.LegacySyncMode.DARK
+            ),
         )
     pages = []
     stream = _Query.stream
@@ -290,12 +295,72 @@ def test_pull_claim_reaches_owner_after_first_100_filtered_candidates(db, monkey
         return rows
 
     monkeypatch.setattr(_Query, 'stream', record_page)
+    # A bounded poll resumes at its cursor on the following request.
+    assert worker_control.claim() is None
     lease = worker_control.claim()
     assert lease is not None
     assert lease['payload']['uid'] == eligible
     assert pages == [excluded, [eligible]]
     assert all(db.docs[(registry.COLLECTION, uid)]['worker_available'] for uid in excluded)
     assert not db.docs[(registry.COLLECTION, eligible)]['worker_available']
+
+
+def test_claim_bounds_scan_and_resumes_then_wraps(db, monkeypatch):
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for i in range(201):
+        db.docs[(registry.COLLECTION, f'synthetic-{i:04d}')] = {
+            'worker_available': True,
+            'active_epoch': 1,
+            'active_job_id': 'job',
+        }
+    monkeypatch.setattr(worker_control.policy, 'selected', lambda uid: uid == 'synthetic-0200')
+    claim = MagicMock(return_value=None)
+    monkeypatch.setattr(registry, 'claim_worker', claim)
+    pages = []
+    stream = _Query.stream
+
+    def record(query, transaction=None):
+        rows = stream(query, transaction=transaction)
+        pages.append(len(rows))
+        return rows
+
+    monkeypatch.setattr(_Query, 'stream', record)
+    assert worker_control.claim() is None
+    assert pages == [100]
+    assert worker_control.claim() is None
+    assert pages == [100, 100]
+    assert worker_control.claim() is None
+    claim.assert_called_once()
+    # One rejected transactional claim ends this poll; next poll reaches EOF.
+    assert pages == [100, 100, 1]
+    assert worker_control.claim() is None
+    assert pages == [100, 100, 1, 0]
+    assert worker_control.claim() is None
+    assert pages == [100, 100, 1, 0, 100]
+
+
+def test_claim_attempts_at_most_one_transaction_per_poll(db, monkeypatch):
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for i in range(100):
+        db.docs[(registry.COLLECTION, f'synthetic-{i:04d}')] = {
+            'worker_available': True,
+            'active_epoch': 1,
+            'active_job_id': 'job',
+        }
+    claim = MagicMock(return_value=None)
+    monkeypatch.setattr(registry, 'claim_worker', claim)
+    assert worker_control.claim() is None
+    claim.assert_called_once()
 
 
 def test_worker_completion_immediately_dispatches_next_head_once(db, monkeypatch):

@@ -29,6 +29,11 @@ from utils.staging_fence import assert_staging_isolation
 logger = logging.getLogger(__name__)
 POLL_SECONDS = 5
 HEARTBEAT_SECONDS = 120
+# Wall-clock work bound, enforced outside the job's event loop/executors.
+# Includes bootstrap, provider work and normal child flushing. Both silence
+# leases remain 1800s; timeout kills the group without releasing Redis early.
+WORK_DEADLINE_SECONDS = 1380
+EMPTY_POLL_MAX_SECONDS = 60
 
 
 async def launch_job():
@@ -48,13 +53,17 @@ class Runtime:
         self.last_tick = time.monotonic()
         self.connected = False
         self.active = False
+        self.poll_seconds = POLL_SECONDS
 
     async def tick(self) -> None:
         result = await self.client.call('claim')
         self.connected = True
         lease = result.get('lease')
         if lease:
+            self.poll_seconds = POLL_SECONDS
             await self.execute(lease)
+        else:
+            self.poll_seconds = min(EMPTY_POLL_MAX_SECONDS, self.poll_seconds * 2)
 
     async def execute(self, lease: dict) -> None:
         payload = lease['payload']
@@ -71,27 +80,30 @@ class Runtime:
         waiter = None
         completed = False
         try:
-            # Payload and opaque lease token travel through stdin, never argv.
-            process = await launch_job()
-            assert process.stdin is not None
-            process.stdin.write(json.dumps(lease).encode())
-            await process.stdin.drain()
-            process.stdin.close()
-            waiter = start_background_task(process.wait(), name='sync-pull:job-exit')
-            next_heartbeat = time.monotonic() + HEARTBEAT_SECONDS
-            while process.returncode is None:
-                self.last_tick = time.monotonic()
-                try:
-                    await asyncio.wait_for(asyncio.shield(waiter), POLL_SECONDS)
-                except TimeoutError:
-                    pass
-                if process.returncode is not None:
-                    break
-                if time.monotonic() >= next_heartbeat:
-                    if not (await self.client.call('heartbeat', identity)).get('accepted'):
-                        raise RuntimeError('sequencer lease lost')
-                    next_heartbeat = time.monotonic() + HEARTBEAT_SECONDS
-            completed = process.returncode == 0
+            async with asyncio.timeout(WORK_DEADLINE_SECONDS):
+                # Payload and opaque lease token travel through stdin, never argv.
+                process = await launch_job()
+                assert process.stdin is not None
+                process.stdin.write(json.dumps(lease).encode())
+                await process.stdin.drain()
+                process.stdin.close()
+                waiter = start_background_task(process.wait(), name='sync-pull:job-exit')
+                next_heartbeat = time.monotonic() + HEARTBEAT_SECONDS
+                while process.returncode is None:
+                    self.last_tick = time.monotonic()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(waiter), POLL_SECONDS)
+                    except TimeoutError:
+                        pass
+                    if process.returncode is not None:
+                        break
+                    if time.monotonic() >= next_heartbeat:
+                        if not (await self.client.call('heartbeat', identity)).get('accepted'):
+                            raise RuntimeError('sequencer lease lost')
+                        next_heartbeat = time.monotonic() + HEARTBEAT_SECONDS
+                completed = process.returncode == 0
+        except TimeoutError:
+            logger.warning('event=sync_pull_worker outcome=work_deadline')
         finally:
             if process is not None:
                 # No pattern-based kill: this child owns a fresh process group.
@@ -118,12 +130,19 @@ class Runtime:
                 await self.tick()
             except Exception as error:
                 self.connected = False
+                self.poll_seconds = min(EMPTY_POLL_MAX_SECONDS, self.poll_seconds * 2)
                 logger.warning('event=sync_pull_worker outcome=rpc_error exception_type=%s', type(error).__name__)
             self.last_tick = time.monotonic()
-            try:
-                await asyncio.wait_for(self.stop.wait(), POLL_SECONDS)
-            except TimeoutError:
-                pass
+            remaining = self.poll_seconds
+            while remaining > 0 and not self.stop.is_set():
+                # Keep health fresh during backoff without claiming again.
+                interval = min(POLL_SECONDS, remaining)
+                try:
+                    await asyncio.wait_for(self.stop.wait(), interval)
+                except TimeoutError:
+                    pass
+                self.last_tick = time.monotonic()
+                remaining -= interval
 
 
 def create_app() -> FastAPI:

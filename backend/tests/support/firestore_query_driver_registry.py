@@ -2516,6 +2516,7 @@ _add(
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.worker_candidates',
+        domains={'after_uid': [None, UID]},
         neutrals={'limit': _LIMIT},
         patchers=_SYNC_PROD,
     )
@@ -2937,6 +2938,7 @@ _add(
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
             'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
+            'memo_site': ('other', 'closed telemetry site; does not alter the Firestore query shape'),
         },
     )
 )

@@ -644,7 +644,9 @@ def _execution_matches(owner: dict, job_id: str, epoch: int, token: Optional[str
     )
 
 
-def worker_candidates(*, limit: int = 100, firestore_client: Any = None) -> Iterator[dict[str, Any]]:
+def worker_candidates(
+    *, limit: int = 100, after_uid: Optional[str] = None, firestore_client: Any = None
+) -> Iterator[dict[str, Any]]:
     """Page available owners lazily, including past a filtered first page.
 
     Cohort/legacy policy can change after admission, leaving available owners
@@ -660,6 +662,8 @@ def worker_candidates(*, limit: int = 100, firestore_client: Any = None) -> Iter
         .order_by('__name__')
         .limit(page_size)
     )
+    if after_uid is not None:
+        query = query.start_after({'__name__': client.collection(COLLECTION).document(after_uid)})
     while True:
         docs = list(query.stream())
         for doc in docs:

@@ -115,11 +115,16 @@ async def execute(lease: dict, client: ControlClient) -> bool:
     from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
     from utils.sync.ledger_completion import SyncJobRunLeaseLost, bind_or_converge_sync_ledger_completion
     from utils.sync.pipeline import download_staged_files, run_full_pipeline_background_async
+    from utils.sync import minimal_redrive
     from models.conversation import ConversationSource
     from models.geolocation import Geolocation
 
     payload = lease['payload']
     uid, job_id = payload['uid'], payload['job_id']
+    redrive_mode = minimal_redrive.parse_mode(payload)
+    if redrive_mode and not minimal_redrive.enabled():
+        logger.warning('event=sync_minimal_redrive outcome=refused reason=disabled')
+        return False
     if (
         payload.get('lane') != 'backfill'
         or payload.get('ledger_fence_mode') != 'active'
@@ -202,6 +207,7 @@ async def execute(lease: dict, client: ControlClient) -> bool:
                 audio_end_seconds=payload.get('audio_end_seconds'),
                 raw_capture_paths=payload.get('raw_capture_paths'),
                 capture_evidence_claims=payload.get('capture_evidence_claims'),
+                **({'redrive_mode': redrive_mode} if redrive_mode else {}),
             )
         job = await run_blocking(db_executor, sync_jobs.get_sync_job, job_id)
         if not job or job['status'] not in sync_jobs.TERMINAL_STATUSES:

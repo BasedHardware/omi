@@ -82,6 +82,19 @@ async def test_stop_interrupts_idle_wait():
     assert runtime.stop.is_set()
 
 
+async def test_empty_claims_back_off_and_work_resets_poll_interval():
+    client = AsyncMock()
+    client.call.return_value = {'lease': None}
+    runtime = worker_runtime.Runtime(client)
+    runtime.execute = AsyncMock()
+    for _ in range(8):
+        await runtime.tick()
+    assert runtime.poll_seconds == 60
+    client.call.return_value = {'lease': {'payload': {}}}
+    await runtime.tick()
+    assert runtime.poll_seconds == worker_runtime.POLL_SECONDS
+
+
 def render(*extra):
     result = subprocess.run(
         [
