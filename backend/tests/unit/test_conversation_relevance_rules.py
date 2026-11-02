@@ -152,4 +152,13 @@ def test_repeated_exact_asr_outros_are_noise(texts):
     ],
 )
 def test_outro_rule_preserves_real_or_uncertain_speech(texts):
-    assert deterministic_relevance(texts, None)[1] != 'repeated_asr_outro'
+    verdict, reason = deterministic_relevance(texts, None)
+    assert verdict in (None, 'keep')
+    assert reason != 'repeated_asr_outro'
+
+
+@pytest.mark.parametrize('opening,closing', [('"', '"'), ("'", "'"), ('`', '`'), ('“', '”'), ('「', '」')])
+def test_quoted_outros_are_not_hard_discarded(opening, closing):
+    verdict, reason = deterministic_relevance([opening + 'Thanks for watching.' + closing] * 3, None)
+    assert verdict in (None, 'keep')
+    assert reason != 'repeated_asr_outro'

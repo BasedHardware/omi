@@ -118,3 +118,5 @@ def test_daily_summary_prompt_separates_calendar_plans_from_outcomes(ext):
     prompt = ext.get_llm.return_value.invoke.call_args.args[0]
     assert 'Calendar titles and invitations describe planned context, not observed outcomes.' in prompt
     assert 'Do not report attendance or completion from a calendar title alone.' in prompt
+    assert 'supplied conversation notes, action items, or events' in prompt
+    assert 'Preserve transcript-supported' not in prompt

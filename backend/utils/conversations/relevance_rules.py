@@ -36,7 +36,7 @@ from typing import FrozenSet, List, Literal, Optional, Sequence, Tuple
 Verdict = Literal['keep', 'discard']
 
 # Bumped whenever a rule changes, so stored decisions stay attributable.
-RULES_VERSION = 3
+RULES_VERSION = 4
 
 # ---------------------------------------------------------------------------
 # Lexicons. All entries are casefolded; apostrophes are normalised to "'".
@@ -216,6 +216,14 @@ _ASR_OUTROS = frozenset(
 
 
 def repeated_asr_outros(texts: Sequence[str]) -> bool:
+    # A quotation is evidence of discussion, not a bare ASR outro. Do not
+    # erase that distinction while normalizing punctuation for matching.
+    if any(
+        mark in text
+        for text in texts
+        for mark in ('"', "'", '`', '“', '”', '‘', '’', '«', '»', '‹', '›', '「', '」', '『', '』')
+    ):
+        return False
     utterances = [re.sub(r'[^\w\s]', '', unicodedata.normalize('NFKC', text).casefold()).strip() for text in texts]
     utterances = [' '.join(text.split()) for text in utterances if text]
     return len(utterances) >= 3 and all(text in _ASR_OUTROS for text in utterances)

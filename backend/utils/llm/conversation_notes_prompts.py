@@ -110,7 +110,9 @@ OVERVIEW
 - Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
 
 ACTION ITEMS
-- Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
+- Keep description timeless, specific, verb-led, and at most 15 words. Keep timing out of description.
+- Put explicit date-and-time deadlines in due_at; retain an explicit date-only request in context
+  without inventing an hour.
 - Set owner_name to the actual name when known and context to one line explaining why/detail.
 - LEAVE due_at EMPTY BY DEFAULT. Only set it when the speakers explicitly committed to a specific
   calendar date for completing the item. A date that was merely discussed, proposed, or floated is

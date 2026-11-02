@@ -212,6 +212,8 @@ def test_one_shaped_note_call_projects_sections_and_preserves_action_detail(monk
     assert 'They do not prove attendance, completion, pickup, purchase' in instructions
     assert 'An explicit "remind me to ..."' in instructions
     assert 'current session are not personal follow-up tasks' in instructions
+    assert 'retain an explicit date-only request in context' in instructions
+    assert 'Put timing only in due_at' not in instructions
     assert 'COVERAGE BEATS BREVITY' not in instructions
     assert 'terse fragments, not sentences' not in instructions
 
