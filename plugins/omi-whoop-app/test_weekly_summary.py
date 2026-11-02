@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 if TestClient is not None:
     from main import app
+    from whoop_tools_auth import require_whoop_tools_auth
 
 
 def _page(records, next_token=None):
@@ -34,6 +35,11 @@ def _record(value_path, value):
 @unittest.skipIf(TestClient is None, "fastapi/httpx test dependencies are not installed")
 class WeeklySummaryPaginationTests(unittest.TestCase):
     def setUp(self):
+        # These are handler-level tests; bypass the /tools/* shared-secret
+        # guard (require_whoop_tools_auth) so they exercise the handler logic
+        # rather than authentication (which has its own dedicated tests).
+        app.dependency_overrides[require_whoop_tools_auth] = lambda: None
+        self.addCleanup(app.dependency_overrides.clear)
         self.client = TestClient(app)
         patcher = patch("main.get_valid_access_token", return_value="test-token")
         self.addCleanup(patcher.stop)
