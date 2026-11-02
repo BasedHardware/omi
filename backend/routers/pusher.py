@@ -19,7 +19,7 @@ from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
 
 from fastapi import APIRouter
-from fastapi.websockets import WebSocketDisconnect, WebSocket
+from fastapi.websockets import WebSocketDisconnect, WebSocket, WebSocketState
 from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
@@ -1802,7 +1802,7 @@ async def _run_websocket_util_trigger(
 
         journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 
-        if pusher_projection_errors.peer_connected(websocket):
+        if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:

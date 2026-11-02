@@ -36,7 +36,3 @@ def ack_peer_departed(exc: Exception, websocket: Any) -> bool:
         or getattr(websocket, 'client_state', None) == WebSocketState.DISCONNECTED
         or str(exc) == 'Cannot call "send" once a close message has been sent.'
     )
-
-
-def peer_connected(websocket: Any) -> bool:
-    return websocket.client_state == WebSocketState.CONNECTED
