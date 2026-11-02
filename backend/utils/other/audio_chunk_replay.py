@@ -88,7 +88,7 @@ def _raw_chunk_object_pcm(
 
 
 def _chunk_samples(chunk, sample_rate):
-    if 'raw_capture_rate' not in chunk or sample_rate == 16000:
+    if 'raw_capture_rate' not in chunk:
         return chunk['span']['samples']
     offset = chunk['raw_capture_offset_samples']
     rate = chunk['raw_capture_rate']

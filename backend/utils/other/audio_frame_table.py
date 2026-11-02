@@ -15,7 +15,6 @@ from utils.pusher_audio_window import AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 
 FRAME_SCHEMA = 'audio_frames_v1'
 MAX_FRAMES = 4096
-MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 
 
 def validate_frames(frames: list[dict], sample_rate: int) -> int:
@@ -71,7 +70,7 @@ def _manifest(bucket, uid: str, path: str, generation=None, digest=None, *, dead
     if pinned <= 0:
         raise ValueError('frame manifest requires generation')
     raw = blob.download_as_bytes(if_generation_match=pinned, timeout=io_timeout(deadline), retry=None)
-    if len(raw) > MAX_MANIFEST_BYTES:
+    if len(raw) > 4 * 1024 * 1024:
         raise ValueError('frame manifest exceeds read bound')
     if (blob.metadata or {}).get('encrypted') == 'true':
         raw = encryption.decrypt_audio_file(raw, uid)

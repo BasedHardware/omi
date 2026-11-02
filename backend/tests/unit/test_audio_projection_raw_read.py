@@ -1,7 +1,6 @@
 """Framed PCM reads use the receipt table without false single-span hash misses."""
 
 import json
-import struct
 from unittest.mock import MagicMock
 import time
 
@@ -357,88 +356,3 @@ def test_replay_compares_native_rate_raw_capture_in_requested_rendition(remote, 
     else:
         assert remote.blob(upload()[0]).data == replay
     assert audio_outbox.read_pcm('owner', old) == captured
-
-
-@pytest.mark.parametrize('rate', [8000, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 96000])
-@pytest.mark.parametrize('prefix_samples', [0, 1024])
-@pytest.mark.parametrize('coverage', ['start', 'end', 'both', 'middle'])
-def test_clipped_raw_frames_keep_capture_coordinates(remote, monkeypatch, rate, prefix_samples, coverage):
-    captured = struct.pack(f'<{prefix_samples + 1024}h', *range(prefix_samples + 1024))
-    target = captured[prefix_samples * 2 :]
-    frames = (
-        [frame(captured[: prefix_samples * 2], 997), frame(target, 1000, 1, prefix_samples * 2, True)]
-        if prefix_samples
-        else [frame(target, 1000)]
-    )
-    receipt = audio_outbox.commit_pcm_window(
-        'owner', captured, 'conversation', frames[0]['start'], rate, 'root', 0, frames, framed=True
-    )
-    original = raw_audio_read.list_packs(remote, 'owner', 'conversation')[-1]
-    before = dict(original)
-    projected_start = original['raw_offset_samples']
-    projected_end = projected_start + original['span']['samples']
-    count = original['span']['samples']
-    covered = {
-        'start': [(0, 80)],
-        'end': [(count - 80, count)],
-        'both': [(0, 80), (count - 80, count)],
-        'middle': [(count // 2 - 10, count // 2 + 10)],
-    }[coverage]
-    encoded = [
-        {
-            'timestamp': 1000 + lo / 16000,
-            'span': {'start': 1000 + lo / 16000, 'samples': hi - lo, 'sample_rate': 16000},
-        }
-        for lo, hi in covered
-    ]
-    fragments = raw_audio_read.uncovered_raw_packs([original], encoded)
-    remaining = {
-        'start': [(80, count)],
-        'end': [(0, count - 80)],
-        'both': [(80, count - 80)],
-        'middle': [(0, count // 2 - 10), (count // 2 + 10, count)],
-    }[coverage]
-    assert len(fragments) == len(remaining)
-    monkeypatch.setattr(storage, 'list_audio_chunks', lambda *args, **kwargs: fragments)
-    for output_rate in dict.fromkeys((rate, 16000, 48000)):
-        decoded = raw_audio_read.read_pack(remote, receipt.path, 'owner', sample_rate=output_rate)
-        expected = []
-        for fragment, (lo, hi) in zip(fragments, remaining):
-            # Cuts quantize on the source sample clock; an untouched edge stays
-            # at the captured frame endpoint, never a rounded 16 kHz duration.
-            left = prefix_samples if lo == 0 else max(prefix_samples, round((projected_start + lo) * rate / 16000))
-            right = (
-                prefix_samples + 1024
-                if hi == count
-                else min(prefix_samples + 1024, round((projected_start + hi) * rate / 16000))
-            )
-            if output_rate == 16000:
-                wanted = decoded[(projected_start + lo) * 2 : (projected_start + hi) * 2]
-            elif output_rate == rate:
-                wanted = captured[left * 2 : right * 2]
-            else:
-                metadata = remote.blob(receipt.path).metadata
-                start = len(decode_capture(captured[: left * 2], metadata, output_rate)) if left else 0
-                end = len(decode_capture(captured[: right * 2], metadata, output_rate)) if right else 0
-                wanted = decoded[start:end]
-            assert raw_audio_read.select_raw_pcm(decoded, fragment, output_rate) == wanted
-            assert audio_chunk_replay._chunk_pcm(decoded, fragment, output_rate) == wanted
-            assert audio_chunk_replay._chunk_samples(fragment, output_rate) == len(wanted) // 2
-            assert fragment['raw_capture_rate'] == rate
-            assert fragment['raw_capture_offset_samples'] == left
-            assert fragment['raw_capture_samples'] == right - left
-            expected.append(wanted)
-        played = list(iter_audio_chunk_pcm('owner', 'conversation', lambda *args: True, sample_rate=output_rate))
-        assert [pcm for _, pcm in played] == expected
-        assert storage.download_audio_chunks_and_merge(
-            'owner',
-            'conversation',
-            [row['timestamp'] for row in fragments],
-            sample_rate=output_rate,
-            fill_gaps=False,
-            listed_chunks=fragments,
-            strict_sources=True,
-        ) == b''.join(expected)
-    assert projected_end <= len(raw_audio_read.read_pack(remote, receipt.path, 'owner')) // 2
-    assert original == before
-    assert audio_outbox.read_pcm('owner', receipt) == captured

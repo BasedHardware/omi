@@ -16,10 +16,10 @@ without retracting an earlier part receipt. Indexes do not retire source WALs.
 Snapshots are bounded at 16 MiB; exceeding the bound leaves prefix discovery
 authoritative. No read cohort is admitted in this slice.
 
-The same `AUDIO_CUSTODY_FRAMED_PERCENT=0` holds writes dark. Lead owns the later
-train after batch holds 100 through Monday peak: matched hour after the GKE
-roll, 5% for at least 12 h, then 100%. Refuse missing raw-read counter, rising
-window_tail would-drop/custody failures, playback/batch STT errors or a staged
-WAL release without a receipt. Restart if batch percent or playback-on-demand
-changes. Infracost posts writes/object creation per step and verifies next-day
-settled billing. Index write credit is included in slice 4, not booked separately.
+This writer is parked as draft #24410 until measurement justifies slice 4,
+its only proposed consumer. There is no production index reader; the reported
+residual is approximately $3.20–3.80/day. Framed-pack reader/receipt repairs
+have moved to #24441 and must land before the framed percent moves from 0.
+The index has no scheduled ramp or savings credit. Stop-PCM stays off. The lead
+must justify the consumer and a fresh measurement packet before proposing this
+writer for merge; no flag, deployment or existing object changes here.
