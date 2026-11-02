@@ -37,7 +37,7 @@ from diarizer.batch_pipeline import (
     validate_words,
 )
 from diarizer.batch_pipeline_context import capture_stream
-from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
+from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload, install_shared_trunk
 from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
 from utils.batch_pipeline import leaf_timings
 
@@ -360,6 +360,8 @@ def create_local_worker(
         if config.flight_batching
         else None
     )
+    if flight is None and config.shared_embedding_trunk:
+        install_shared_trunk(pyannote_model)
     # Resolve dynamically: run_process binds its private registry after loading.
     staged = StagedAudio(fetch_audio, timings_of=lambda: worker.timings)
 
