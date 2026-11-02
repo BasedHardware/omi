@@ -5,6 +5,7 @@ from dataclasses import asdict
 from uuid import uuid4
 
 from config.policy import RecoveryPolicy
+from config.batch_paid_attempt import attempted, renewed, retryable
 from config.batch_language_recovery import (
     language_guarded,
     independent_attempted,
@@ -106,6 +107,25 @@ class SpeechRedriveStore:
     def checked(self, tx, segment_id):
         return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
 
+    def observe_preflight(self, segment_id, owner_id, expected_recovery, now, seconds):
+        """Retain acoustic custody evidence without creating a paid intent."""
+
+        def commit(tx):
+            job, binding = self.checked(tx, segment_id)
+            result = tx.get('results', segment_id)
+            if (
+                binding.owner_id != owner_id
+                or job.get('recovery') != expected_recovery
+                or not self.terminal(job, result, now)
+            ):
+                raise ProjectionBlocked('terminal held obligation required')
+            measured = held_vad_census(job, seconds)
+            if job.get('measured_held_vad_speech_seconds') != measured:
+                job['measured_held_vad_speech_seconds'] = measured
+                tx.put('jobs', segment_id, job)
+
+        self.store.run(commit)
+
     @staticmethod
     def terminal(job, existing, now):
         return (
@@ -196,6 +216,13 @@ class SpeechRedriveStore:
                     or marker.get('silent', False) is not silent
                 ):
                     raise ProjectionBlocked('different speech redrive intent')
+                if retryable(marker, marker.get('state')):
+                    if not self.terminal(job, existing, now):
+                        raise ProjectionBlocked('terminal held obligation required')
+                    marker = renewed(marker, token)
+                    marker['state'] = 'prepared'
+                    job['speech_redrive'] = marker
+                    tx.put('jobs', segment_id, job)
                 return job
             if not self.terminal(job, existing, now):
                 raise ProjectionBlocked('terminal held obligation required')
@@ -250,6 +277,7 @@ class SpeechRedriveStore:
             ):
                 return False
             marker.update(state='running', started_at=now)
+            attempted(marker)
             tx.put('jobs', segment_id, job)
             return True
 
