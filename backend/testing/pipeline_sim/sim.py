@@ -487,10 +487,14 @@ class Simulation:
 
     # ---- models replacing Firestore-query / Cloud Tasks / Redis leaves ----
     def _recovery_candidates(self, client, namespace, owner_id, limit=10, *, after_id=None):
-        """Model of recovery_candidates(): recovery_state in held/prepared/running, ordered by doc id."""
+        """Model of recovery_candidates(): quarantined, recovery_state in held/prepared/running, ordered by doc id."""
         rows = []
         for (table, key), row in sorted(self.store.rows.items()):
-            if table != 'jobs' or row.get('recovery_state') not in {'held', 'prepared', 'running'}:
+            if (
+                table != 'jobs'
+                or row.get('state') != 'quarantined'
+                or row.get('recovery_state') not in {'held', 'prepared', 'running'}
+            ):
                 continue
             if owner_id is not None and row.get('owner_id') != owner_id:
                 continue
