@@ -7,6 +7,7 @@ to its provider caller. No provider work is retried by this registry.
 
 import asyncio
 from collections.abc import Callable
+import contextvars
 import logging
 import signal
 from threading import Lock, current_thread, main_thread
@@ -68,8 +69,16 @@ async def drain_on_shutdown(drain: Callable[[], Any], *, timeout: float = 5.0) -
     Timeout stops waiting, not the worker: settlement may continue during the
     remaining platform grace. It never asserts that the provider has stopped.
     """
+    from utils.executors import get_pinecone_shutdown_executor
+
     try:
-        await asyncio.wait_for(asyncio.to_thread(drain), timeout=timeout)
+        # Keep the executor-owned Future alive even if timeout or later task
+        # cancellation stops awaiting it. Neither default-pool starvation nor
+        # background-task cancellation may discard a queued settlement retry.
+        future = asyncio.get_running_loop().run_in_executor(
+            get_pinecone_shutdown_executor(), contextvars.copy_context().run, drain
+        )
+        await asyncio.wait_for(asyncio.shield(future), timeout=timeout)
     except TimeoutError:
         logger.warning('event=pinecone_mutation_drain outcome=shutdown_wait_timeout')
     except Exception:

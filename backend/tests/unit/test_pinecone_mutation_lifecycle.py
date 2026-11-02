@@ -3,6 +3,7 @@
 import asyncio
 import signal
 from threading import Event
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -83,3 +84,51 @@ async def test_default_signal_for_standalone_job_is_not_replaced():
         restore()
     finally:
         signal.signal(signal.SIGTERM, original)
+
+
+async def test_default_executor_saturation_cannot_starve_shutdown_settlement():
+    loop = asyncio.get_running_loop()
+    release, occupied, settled = Event(), Event(), Event()
+    default_pool = ThreadPoolExecutor(max_workers=1)
+    loop.set_default_executor(default_pool)
+
+    def occupy_default():
+        occupied.set()
+        assert release.wait(5)
+
+    blocker = loop.run_in_executor(None, occupy_default)
+    try:
+        # Yield until the single default worker is occupied; no other default
+        # worker can be borrowed to wait on the event itself.
+        async with asyncio.timeout(2):
+            while not occupied.is_set():
+                await asyncio.sleep(0.001)
+        await drain_on_shutdown(settled.set, timeout=1)
+        assert settled.is_set()
+    finally:
+        release.set()
+        await blocker
+        default_pool.shutdown(wait=True)
+
+
+async def test_queued_retry_survives_shutdown_wait_timeout():
+    from utils.executors import get_pinecone_shutdown_executor
+
+    release, occupied, settled = Event(), Event(), Event()
+    loop = asyncio.get_running_loop()
+
+    def occupy_drain_worker():
+        occupied.set()
+        assert release.wait(5)
+
+    blocker = loop.run_in_executor(get_pinecone_shutdown_executor(), occupy_drain_worker)
+    try:
+        assert await asyncio.to_thread(occupied.wait, 2)
+        await drain_on_shutdown(settled.set, timeout=0.02)
+        assert not settled.is_set()
+        release.set()
+        await blocker
+        assert await asyncio.to_thread(settled.wait, 2)
+    finally:
+        release.set()
+        await blocker

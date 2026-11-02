@@ -32,8 +32,9 @@ provider acknowledgement cannot clear a ticket already marked uncertain.
   handler or operator behavior is changed for those standalone entrypoints.
 
 The drain runs before other application cleanup consumes the shutdown grace.
-It offloads synchronous Firestore settlement independently of the shared DB
-executor, whose workers may all be blocked in provider calls. The lifespan waits
+It offloads synchronous Firestore settlement to a lazy dedicated worker with one
+queued retry slot, independent of the shared DB and default asyncio executors.
+Queued settlement survives a bounded-wait timeout or caller cancellation. The lifespan waits
 at most five seconds, leaving time for audio/client cleanup; settlement may
 continue in its worker during the remaining platform grace. It does not wait
 for provider calls to finish. Firestore RPC latency and platform
