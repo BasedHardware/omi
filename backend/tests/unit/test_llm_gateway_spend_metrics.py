@@ -86,7 +86,6 @@ def test_written_receipt_counts_full_usage_even_below_cache_minimum(registry):
     }
     cost = samples(registry, 'llm_gateway_estimated_cost_micro_usd_total')
     assert len(cost) == 1 and cost[0].value == value.estimated_cost_micro_usd
-    assert cost[0].value > 0 if any(raw.values()) else cost[0].value == 0
     for family in registry.collect():
         for sample in family.samples:
             assert not {'uid', 'user_uid', 'request_id', 'feature', 'caller', 'attempt_id'} & sample.labels.keys()
@@ -268,6 +267,7 @@ def test_complete_anthropic_receipt_publishes_reported_tokens_and_cost(registry,
     assert tokens(registry)['cache_write'] == raw.get('cache_creation_input_tokens', 0)
     cost = samples(registry, 'llm_gateway_estimated_cost_micro_usd_total')
     assert len(cost) == 1 and cost[0].value == value.estimated_cost_micro_usd
+    assert cost[0].value > 0 if any(raw.values()) else cost[0].value == 0
     assert samples(registry, 'llm_gateway_accounted_attempts_total')[0].labels['usage_status'] == 'confirmed'
 
 
