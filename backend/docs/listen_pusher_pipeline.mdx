@@ -7337,6 +7337,17 @@ URI, and rechecks the inspector's 0.1-second job-duration tolerance transactiona
 A disabled recovery setting, lower runtime cap or temporary allowance refusal
 for an otherwise eligible window keeps its existing retry behavior.
 
+A retained-audio manifest that fails structural validation (not JSON, a
+malformed shape, binding mismatch, no references, a reference without its
+owner-scoped path or generation, an empty or overlapping slice, or a slice
+beyond its source or capture) can never materialize, so a retry rereads the
+same bytes. Recovery records an `invalid_retained_manifest` refusal and enters `failed_held` before
+any paid start, and the delivery answers 2xx. The unit leaves the recovery
+candidate set, so neither a Cloud Tasks retry nor the sweep re-wakes it. The
+manifest and its sources stay in place. A changed source digest, a reference
+outside the configured buckets, or any other download error keeps its existing
+retry behavior.
+
 The Soniox incremental public-rate estimate is $0.000556/20 s or $0.001667/60 s; actual
 token-based vendor billing is authoritative. Temporary vendor resources have
 best-effort cleanup and may persist to documented 30-day expiry after a crash.
