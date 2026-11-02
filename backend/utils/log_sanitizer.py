@@ -133,6 +133,7 @@ _PROVIDER_EXCEPTION_TYPE_NAMES = frozenset(
         'ConnectionClosed',
         'ConnectionClosedError',
         'ConnectionClosedOK',
+        'GoogleAPIError',
     }
 )
 
