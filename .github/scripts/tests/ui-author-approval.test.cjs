@@ -129,3 +129,30 @@ test('moved trigger still reconciles revoked approval on remaining locked-head P
   assert.equal(f.statuses.at(-1).state,'failure');
   assert.ok(f.statuses.every(s => s.sha === locked));
 });
+
+test('Swift files over 1 MB are read through the immutable blob, not failed', async () => {
+  const f = fixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift'}],commits:[],total_commits:0}});
+  const big = Buffer.from('import Foundation\n' + '// x\n'.repeat(300000));
+  const sha = 'f'.repeat(40);
+  f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:big.length,sha}});
+  f.github.rest.git = {getBlob:async ({file_sha}) => ({data:{sha:file_sha,encoding:'base64',size:big.length,content:big.toString('base64')}})};
+  await run(f); assert.equal(f.statuses.at(-1).state,'success');
+  const ui = Buffer.from('import SwiftUI\n' + '// x\n'.repeat(300000));
+  f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:ui.length,sha}});
+  f.github.rest.git.getBlob = async ({file_sha}) => ({data:{sha:file_sha,encoding:'base64',size:ui.length,content:ui.toString('base64')}});
+  await run(f); assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('large Swift blob mismatch or truncation still fails closed', async () => {
+  const f = fixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift'}],commits:[],total_commits:0}});
+  const big = Buffer.from('import Foundation\n' + '// x\n'.repeat(300000));
+  f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:big.length,sha:'f'.repeat(40)}});
+  f.github.rest.git = {getBlob:async () => ({data:{sha:'0'.repeat(40),encoding:'base64',size:big.length,content:big.toString('base64')}})};
+  await assert.rejects(run(f),/Incomplete Swift source evidence/);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  f.github.rest.git.getBlob = async ({file_sha}) => ({data:{sha:file_sha,encoding:'base64',size:big.length,content:big.subarray(0,1000).toString('base64')}});
+  await assert.rejects(run(f),/Incomplete Swift source evidence/);
+  f.github.rest.repos.getContent = async () => ({data:{type:'file',encoding:'none',content:'',size:big.length}});
+  await assert.rejects(run(f),/Incomplete Swift source evidence/);
+});
