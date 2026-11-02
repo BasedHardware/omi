@@ -24,6 +24,7 @@ from database.batch_pipeline_projection import assignment_held_without_recovery
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
 from config.batch_pipeline import projection_hold_recovery_enabled
+from utils.conversations.fragment_visibility import is_automatic_discard
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,8 @@ class ProjectionReleaseStore:
                 not binding.record_origin or conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
             )
             and not conversation.get('deleted')
-            and not conversation.get('discarded')
+            # A record's batch text supersedes the pipeline's own discard (replace_record).
+            and (not conversation.get('discarded') or (binding.record_origin and is_automatic_discard(conversation)))
             and conversation.get('status') == 'completed'
             and not conversation.get('uses_custom_stt')
             and conversation.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}

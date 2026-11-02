@@ -265,14 +265,55 @@ failover). Overflow is part of vendor routing: owners must be in the
 vendor-routing cohort with legacy `draining` or `dark`, and every interlock
 above applies.
 
-Table to serve (same JSON on backend-sync and backend-integration):
-`selection: ordered`, rows `gpu_supported: [gpu, modulate, soniox]` and
-`*: [modulate, soniox]`, Soniox `failover_only`, a Modulate
-`daily_audio_hours_cap` as the durable daily budget, and `gpu_floor_percent`
-for the share that always waits for GPU. Arm with env
-`BATCH_VENDOR_ROUTING_PERCENT` (clamped to the batch percent); do not seed
-`batch-vendor-routing` in `_ramp` while the actuator's `ramp_set` predates
-nested names.
+Table to serve: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`
+(lead ruling 7cb3fb: GPU-first, Modulate overflow, spill to legacy, no queue).
+- `selection: ordered`, rows `gpu_unsupported: [modulate, soniox]` and
+  `*: [gpu, modulate, soniox]`. Soniox is `failover_only`.
+- Modulate `daily_audio_hours_cap` 3,000 (a durable daily budget, about 2x the
+  expected 100% batch load). Soniox cap 1,000: it covers a mean full
+  Modulate outage day of unsupported-language STT (about 900 audio-h/day)
+  for about $100 at list. On a peak day, units past the cap hold with their
+  audio and redrive when Modulate returns.
+- `gpu_floor_percent` 0: ordered GPU-first already keeps every Parakeet unit
+  on the floor.
+- Overflow throughput is capped by `provider-stt`'s 10 dispatches/s.
+
+`tests/unit/test_batch_vendor_route_table_prod.py` runs the real selection
+over the file. Healthy and unsaturated, it routes every language exactly as
+`resolve_route` does, including blank, `multi` and unknown. A saturated ring
+overflows fresh Parakeet units to Modulate, never to Soniox. A Modulate outage
+fails unsupported languages over to Soniox, else holds them.
+
+Set the same compact JSON on backend-sync, backend-sync-backfill and
+backend-integration. A comma-free delimiter is needed because the JSON
+contains commas:
+
+```
+TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
+if [ -z "$TABLE" ]; then
+  echo "STOPPED: table did not parse; nothing updated"
+else
+  for s in backend-sync backend-sync-backfill backend-integration; do
+    if ! gcloud run services update "$s" --region us-central1 --project based-hardware \
+        --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"; then
+      echo "STOPPED at $s: run the rollback on the services updated before it"
+      break
+    fi
+  done
+fi
+```
+
+Each update is checked explicitly (not with `set -e`, which a `||` or `if`
+around it would suspend). The loop stops at the first failure and says where,
+so the services never stay split between two tables without notice.
+
+Once served, Soniox failover is live for vendor-routed units even at routing
+percent 0, because the stage reads the served table. Overflow needs the cohort
+too: arm with env `BATCH_VENDOR_ROUTING_PERCENT` (clamped to the batch
+percent). Do not seed `batch-vendor-routing` in `_ramp` while the actuator's
+`ramp_set` predates nested names. Rollback: `--remove-env-vars
+BATCH_VENDOR_ROUTE_TABLE` serves the builtin table (today's routing). Make it
+durable in the runtime overlay before the next deploy, or the deploy removes it.
 
 Watch: `omi_batch_pipeline_vendor_gpu_overflow_active`,
 `omi_batch_pipeline_vendor_gpu_backlog_age_seconds`,
