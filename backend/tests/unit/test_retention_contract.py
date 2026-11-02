@@ -50,19 +50,30 @@ def test_batch_staging_age_covers_the_proposed_holds():
     assert CONTRACT['buckets'][BATCH]['ceiling']['max_age_days'][''] == CONTRACT['batch_staging_delete_age_days']
 
 
+def test_the_finalization_alarm_entry_is_davids_ruling():
+    hold = CONTRACT['holds']['batch_finalization_alarm']
+    assert (hold['decided_by'], hold['ruling'].split()[0]) == ('David', 'bus:6be2e1')
+    assert hold['deadline'] is None and 'pending' not in json.dumps(hold)
+    assert hold['finalization_target_seconds'] == 30 * 60
+    assert round(hold['days'] * 86400) == pytest.approx(hold['finalization_alarm_seconds'], abs=60)
+
+
 def test_the_11_01_seven_day_rule_violates_the_floor():
-    violations = rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(7)]}, accept_pending=True)
-    assert violations == [{'age': 7, 'required': 28.0, 'pending': []}]
+    # Longest hold is 1 d (allowance retry, vendor grace, requeue, cleanup) plus 7 d margin.
+    violations = rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(7)]})
+    assert violations == [{'age': 7, 'required': 8.0, 'pending': []}]
+    assert rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(30)]}) == []
 
 
 def test_a_pending_ruling_is_unbounded_until_ruled():
-    pending = rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(30)]})
-    assert pending and pending[0]['pending'] == ['failed_held_quarantine_redrive_sla']
-    ruled = copy.deepcopy(CONTRACT)
-    ruled['holds']['failed_held_quarantine_redrive_sla']['ruling'] = 'lead:example'
-    assert rc.floor_violations(ruled, BATCH, {'rule': [delete(30)]}) == []
-    ruled['holds']['failed_held_quarantine_redrive_sla']['days'] = 30
-    assert rc.floor_violations(ruled, BATCH, {'rule': [delete(30)]})  # lengthening a hold needs the bucket first
+    pending = copy.deepcopy(CONTRACT)
+    pending['holds']['batch_finalization_alarm']['ruling'] = 'pending'
+    held = rc.floor_violations(pending, BATCH, {'rule': [delete(30)]})
+    assert held and held[0]['pending'] == ['batch_finalization_alarm']
+    assert rc.floor_violations(pending, BATCH, {'rule': [delete(30)]}, accept_pending=True) == []
+    longer = copy.deepcopy(CONTRACT)
+    longer['holds']['batch_finalization_alarm']['days'] = 30
+    assert rc.floor_violations(longer, BATCH, {'rule': [delete(30)]})  # lengthening a hold needs the bucket first
 
 
 def test_declared_private_cloud_sync_lifecycle_keeps_source_audio_and_bounds_caches():

@@ -24,10 +24,14 @@
       "days": 0.03,
       "code": {"path": "backend/utils/batch_pipeline/upload_policy.py", "pattern": "^UPLOAD_PENDING_SECONDS = 30 \\* 60$"}
     },
-    "failed_held_quarantine_redrive_sla": {
-      "days": 21,
-      "ruling": "pending",
-      "note": "Code holds failed_held/quarantined units with no TTL (utils/batch_pipeline/retention.py: accepted audio must not silently expire). Proposed operator window to redrive or release them, fitting the 30-day staging rule with 7 days margin. While pending it counts as unbounded."
+    "batch_finalization_alarm": {
+      "days": 0.0833,
+      "finalization_target_seconds": 1800,
+      "finalization_alarm_seconds": 7200,
+      "deadline": null,
+      "decided_by": "David",
+      "ruling": "bus:6be2e1 2026-11-02T06:09Z",
+      "note": "David: no 21-day deadline; most audio within 30 min of finalization, alarm at 2 h (lane alarm2h owns the alarm). failed_held/quarantined units still have no TTL in code (utils/batch_pipeline/retention.py: accepted audio must not silently expire). The floor counts this hold until a human is alarmed (days = finalization_alarm_seconds) plus margin_days for the response, so a 30-day staging Delete leaves ~30 days after the alarm."
     },
     "staging_custody": {
       "days": null,
@@ -69,7 +73,7 @@
       "project": "based-hardware",
       "protected_prefixes": [""],
       "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
-                "artifact_cleanup_after_projection", "upload_pending", "failed_held_quarantine_redrive_sla"],
+                "artifact_cleanup_after_projection", "upload_pending", "batch_finalization_alarm"],
       "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
     },
     "based-hardware-dev-batch-pipeline-staging": {
@@ -77,7 +81,7 @@
       "project": "based-hardware-dev",
       "protected_prefixes": [""],
       "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
-                "artifact_cleanup_after_projection", "upload_pending", "failed_held_quarantine_redrive_sla"],
+                "artifact_cleanup_after_projection", "upload_pending", "batch_finalization_alarm"],
       "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
     },
     "omi-private-cloud-sync": {
