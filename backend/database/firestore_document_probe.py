@@ -360,6 +360,11 @@ _KNOWN_PATTERNS = frozenset(
     {
         'users',
         'users/conversations',
+        # Batch privacy authority rows and the fence's added token writes.
+        'users/deleted_conversations',
+        'batch_pipeline_privacy',
+        'legal_holds',
+        'legal_hold_deletion_gates',
         'users/memory_items',
         'users/memory_outbox',
         'users/memory_historical_overrides',

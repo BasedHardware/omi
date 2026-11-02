@@ -524,6 +524,31 @@ def test_privacy_authority_delete_preserves_blocked_generation_and_purge(world, 
         deny_without_expected_generation(w.client.transaction())
 
 
+def test_canonical_purge_finish_rejects_stale_generation_and_memo_stays_blocked(world):
+    from google.cloud import firestore
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    w = world
+
+    @firestore.transactional
+    def check_generation_eight(tx):
+        return w.privacy.assert_batch_write_allowed(
+            w.client, tx, w.uid, conversation_ids=['source'], expected_generation=8
+        )
+
+    with batch_privacy_attempt():
+        assert w.check() == 7  # A prior allowed decision must not survive purge entry.
+        assert w.privacy.advance_privacy_generation(w.client, w.uid, blocked=False) == 8
+        pending = w.token.get().to_dict()
+        assert pending['purging'] is True
+        w.privacy.finish_privacy_purge(w.client, w.uid, 7)
+        assert w.token.get().to_dict() == pending
+        with pytest.raises(w.privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+            check_generation_eight(w.client.transaction())
+        w.privacy.finish_privacy_purge(w.client, w.uid, 8)
+        assert check_generation_eight(w.client.transaction()) == 8
+
+
 def test_standalone_platform_backfill_installs_fence_before_admin_client(world, monkeypatch):
     import sys
     from scripts import backfill_user_signup_platform as backfill
@@ -559,3 +584,20 @@ def test_standalone_platform_backfill_installs_fence_before_admin_client(world, 
     assert w.token.get().to_dict()['generation'] == 7
     assert len(w.requests) == 1
     assert w.requests[0].writes[-1].update.name == w.token._document_path
+
+
+def test_absent_cloud_sync_consent_is_allowed_then_explicit_opt_out_invalidates(world):
+    from google.cloud import firestore
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    world.user.update({'private_cloud_sync_enabled': firestore.DELETE_FIELD})
+    with batch_privacy_attempt():
+        assert world.check() == 7
+        assert world.check() == 7
+        before = world.token.get().to_dict()
+        world.user.update({'private_cloud_sync_enabled': False})
+        after = world.token.get().to_dict()
+        assert before['memo_token'] != after['memo_token']
+        assert before['generation'] == after['generation'] == 7
+        with pytest.raises(world.privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
+            world.check()

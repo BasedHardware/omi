@@ -466,3 +466,49 @@ def test_artifact_authorizer_exercises_shadow_without_enforcement_but_exports_st
                 assert snapshots['conversations']['source']['title'] == f'fresh-shadow-{i}'
     assert outputs[0] == outputs[1] and outputs[0].generation == 7
     assert metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get() == before + (0 if export_snapshots else 2)
+
+
+@pytest.mark.parametrize('on', [False, True])
+def test_absent_cloud_sync_consent_matches_main_default_and_explicit_opt_out_denies(monkeypatch, reads, on):
+    enabled(monkeypatch, on)
+    db = database()
+    db.rows[('users', UID)].pop('private_cloud_sync_enabled')
+    with batch_privacy_attempt():
+        assert check(db) == 7
+        assert check(db) == 7
+        assert len(reads) == (6 if on else 10)
+        # Model the atomic consent write + token rotation; emulator coverage
+        # below verifies the actual SDK writer rather than this fixture seam.
+        db.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+        db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
+            check(db)
+
+
+@pytest.mark.parametrize('outer_retry', [False, True])
+def test_real_store_transaction_retries_revalidate_token_and_deny(monkeypatch, reads, outer_retry):
+    enabled(monkeypatch)
+    db = database()
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: outer_retry)
+    original_transaction = db.transaction
+    commits = []
+
+    def commit():
+        commits.append(True)
+        db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+        db.rows[('users', UID, 'deleted_conversations', 'source')] = {}
+        raise Aborted('synthetic concurrent deletion')
+
+    def transaction(max_attempts=None):
+        tx = original_transaction(max_attempts=2 if max_attempts is None else max_attempts)
+        monkeypatch.setattr(tx, '_commit', commit)
+        return tx
+
+    monkeypatch.setattr(db, 'transaction', transaction)
+    with batch_privacy_attempt():
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+    assert len(commits) == 1
+    assert len(db.transactions) == (2 if outer_retry else 1)
+    assert Counter(reads)[TOKEN_PATH] == 2

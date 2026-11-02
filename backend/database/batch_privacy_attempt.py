@@ -12,6 +12,10 @@ import re
 TOKEN_FIELD = 'memo_token'
 SCHEMA_FIELD = 'memo_schema'
 TOKEN_SCHEMA = 1
+# Shared with the sync writer: unchanged authority fields must not become writes.
+CONVERSATION_AUTHORITY_FIELDS = frozenset(
+    {'deleted', 'sync_merged_into', 'record_lane_owner', 'uses_custom_stt', 'private_cloud_sync_enabled'}
+)
 
 
 def token_version(snapshot):

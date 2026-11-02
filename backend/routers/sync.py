@@ -27,8 +27,8 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.batch_privacy_attempt import with_batch_privacy_attempt
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,

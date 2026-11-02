@@ -26,7 +26,7 @@ from google.cloud.firestore_v1.types import (
     WriteResult,
 )
 from google.rpc import status_pb2
-from database.batch_privacy_attempt import TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
+from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
@@ -36,9 +36,7 @@ _ROOT_AUTHORITIES = frozenset({'account_deletions', 'legal_holds', 'legal_hold_d
 _USER_FIELDS = frozenset(
     {'data_protection_level', 'migration_status', 'private_cloud_sync_enabled', 'speaker_auto_enroll_privacy_version'}
 )
-_CONVERSATION_FIELDS = frozenset(
-    {'deleted', 'sync_merged_into', 'record_lane_owner', 'uses_custom_stt', 'private_cloud_sync_enabled'}
-)
+_CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
 _AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_value', 'purging': 'boolean_value'}
 
 

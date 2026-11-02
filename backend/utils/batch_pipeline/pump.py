@@ -425,7 +425,7 @@ class Pump:
             if prepared is not None:
 
                 async def discard_invalid_preparation(handle):
-                    while handle.item.segment_id not in lost and not (stop_event is not None and stop_event.is_set()):
+                    while lost.isdisjoint(handle.segment_ids) and not (stop_event is not None and stop_event.is_set()):
                         await asyncio.sleep(0.1)
                     # Cancellation is immediate for queued work. Running SDK
                     # calls retain their reservation until the lane's final
@@ -476,8 +476,8 @@ class Pump:
                     if prepared is not None:
                         # A queued decode may have been cancelled on stop/lease
                         # loss. Never let it become this or a replacement attempt.
-                        if prepared.cancelled or prepared.item.segment_id in skipped:
-                            skipped.add(prepared.item.segment_id)
+                        if prepared.cancelled or not skipped.isdisjoint(prepared.segment_ids):
+                            skipped.update(prepared.segment_ids)
                             # The fetch may already be running and cannot be
                             # cancelled. Final cleanup drains it after GPU unlock,
                             # with its reservation and lease renewal still held.

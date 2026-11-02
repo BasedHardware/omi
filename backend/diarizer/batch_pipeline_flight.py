@@ -24,15 +24,19 @@ Clustering, reconstruction and labelling remain pyannote's own ``apply``; only
 its two model-feature hooks read the precomputed values.
 
 With packing off, ``install_shared_trunk`` gives the serial chain the same
-per-chunk trunk forward, one unit at a time.
+per-chunk trunk forward, one unit at a time, and ``VadSegmentationReuse``
+hands a full-unit diarization the raw segmentation scores its own VAD computed.
 """
 
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import metadata
 import logging
 import math
+import threading
 import warnings
+import weakref
 from typing import Any, Callable, Sequence
 
 import numpy as np
@@ -66,6 +70,7 @@ EMBEDDINGS_KEY = 'omi_flight_embeddings'
 # trunk_embedding_rows mirrors SpeakerDiarization.get_embeddings of these
 # releases; any other pyannote.audio keeps its stock per-pair forward.
 SHARED_TRUNK_PYANNOTE_VERSIONS = ('4.0.',)
+VAD_SEGMENTATION_KEY = 'omi_vad_segmentation'
 
 
 def is_out_of_memory(exc) -> bool:
@@ -283,6 +288,113 @@ def install_shared_trunk(diarizer) -> bool:
     object.__setattr__(diarizer, 'get_embeddings', get_embeddings)
     logger.info('event=batch_shared_trunk outcome=enabled')
     return True
+
+
+class VadSegmentationReuse:
+    """Serial chain: diarize a full unit on the raw scores its own VAD pass computed.
+
+    The serial chain runs the shared community-1 segmentation model twice on a
+    full-unit diarization: once inside VAD, once inside ``get_segmentations``.
+    Both Inference objects slide the same model over the same waveform with the
+    same chunking and forward batch (``unsupported_reason`` proves it), and the
+    VAD keeps the raw multilabel scores until its ``pre_aggregation_hook``. So
+    those scores are exactly what the diarizer's skip-aggregation inference
+    returns; this hands them over instead of running the forwards again.
+
+    Scores are keyed by the identity of the live waveform array the VAD saw
+    (held weakly, dropped when the array is freed), so a speech-only compacted
+    waveform, a different unit or another flight never matches and runs
+    pyannote's own segmentation. Nothing is shared across units.
+    ``BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED=false`` restores the second
+    forward.
+    """
+
+    def __init__(self, diarizer, vad):
+        self.inference = diarizer._segmentation
+        self.counts = {'reused': 0, 'shape_mismatch': 0}
+        self._local = threading.local()
+        # Reentrant: a weakref callback may run on this thread under the lock.
+        self._lock = threading.RLock()
+        self._scores: dict[int, tuple[Any, Any]] = {}
+        vad_inference = vad._segmentation
+        aggregate_hook = vad_inference.pre_aggregation_hook
+        original = diarizer.get_segmentations
+
+        def pre_aggregation_hook(scores):
+            self._capture(scores)
+            return aggregate_hook(scores)
+
+        def get_segmentations(file, hook=None):
+            cached = file.get(VAD_SEGMENTATION_KEY) if isinstance(file, Mapping) else None
+            return cached if cached is not None else original(file, hook=hook)
+
+        vad_inference.pre_aggregation_hook = pre_aggregation_hook
+        # Same bypass as the shared-trunk hooks; pyannote's own call otherwise.
+        object.__setattr__(diarizer, 'get_segmentations', get_segmentations)
+
+    @classmethod
+    def install(cls, diarizer, vad):
+        reason = 'runtime_unavailable' if SlidingWindowFeature is None else unsupported_reason(diarizer, vad)
+        if reason is not None:
+            logger.warning('event=batch_vad_segmentation_reuse outcome=disabled reason=%s', reason)
+            return None
+        logger.info('event=batch_vad_segmentation_reuse outcome=enabled')
+        return cls(diarizer, vad)
+
+    @contextmanager
+    def capturing(self, samples):
+        """Record the raw scores of the VAD call made on ``samples``."""
+        self._local.samples = samples
+        try:
+            yield
+        finally:
+            self._local.samples = None
+
+    def _capture(self, scores):
+        samples = getattr(self._local, 'samples', None)
+        if samples is None:
+            return
+        key = id(samples)
+
+        def dropped(ref):
+            with self._lock:
+                if self._scores.get(key, (None,))[0] is ref:
+                    del self._scores[key]
+
+        try:
+            ref = weakref.ref(samples, dropped)
+        except TypeError:
+            return  # Not weakly referenceable: diarization segments it itself.
+        with self._lock:
+            self._scores[key] = (ref, scores)
+
+    def forget(self, samples):
+        """Drop the scores of a unit that will not be diarized (VAD silence)."""
+        with self._lock:
+            self._scores.pop(id(samples), None)
+
+    def _expected_chunks(self, num_samples):
+        """Inference.slide's chunk count: complete chunks plus a padded last one."""
+        window_size = self.inference.model.audio.get_num_samples(self.inference.duration)
+        step_size = round(self.inference.step * SAMPLE_RATE)
+        complete = (num_samples - window_size) // step_size + 1 if num_samples >= window_size else 0
+        has_last_chunk = (num_samples < window_size) or (num_samples - window_size) % step_size > 0
+        return complete + int(has_last_chunk)
+
+    def take(self, samples):
+        """The unit's VAD scores as get_segmentations returns them, or None."""
+        with self._lock:
+            entry = self._scores.pop(id(samples), None)
+        if entry is None or entry[0]() is not samples:
+            return None
+        scores = entry[1]
+        if scores.ndim != 3 or scores.shape[0] != self._expected_chunks(len(samples)):
+            self.counts['shape_mismatch'] += 1
+            logger.warning('event=batch_vad_segmentation_reuse outcome=fallback reason=shape_mismatch')
+            return None
+        self.counts['reused'] += 1
+        frames = SlidingWindow(start=0.0, duration=self.inference.duration, step=self.inference.step)
+        return SlidingWindowFeature(scores, frames)
 
 
 class FlightPyannote:

@@ -121,3 +121,10 @@ def test_cjk_only_tiebreak_never_discards_unknown_content(text):
     from utils.conversations.relevance_rules import deterministic_tiebreak
 
     assert deterministic_tiebreak([text]) == 'keep'
+
+
+def test_katakana_laughter_and_acknowledgement_are_filler():
+    assert deterministic_relevance(['ハハハハ'], None) == ('discard', 'filler_only')
+    assert deterministic_relevance(['ハイ'], None) == ('discard', 'filler_only')
+    assert deterministic_relevance(['ハノイ'], None) == (None, 'non_latin_content')
+    assert deterministic_relevance(['アイ'], None) == (None, 'non_latin_content')
