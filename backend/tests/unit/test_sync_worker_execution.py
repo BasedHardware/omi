@@ -1,16 +1,21 @@
 """Worker death, stale claims and retry custody on the real Redis fence."""
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sys
+import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import fakeredis
 import pytest
 
 from database import sync_jobs
-from utils.sync import worker_job, worker_runtime
+from database import sync_backfill_sequencer as registry
+from tests.unit.test_sync_backfill_uid_sequencer import _Firestore
+from utils.sync import worker_control, worker_job, worker_runtime
 
 LEASE = {
     'payload': {
@@ -92,6 +97,90 @@ async def test_crashed_job_reaps_orphan_leaf_before_fail_rpc(monkeypatch, tmp_pa
 
     monkeypatch.setattr(worker_runtime, 'launch_job', launch)
     await asyncio.wait_for(worker_runtime.Runtime(CrashClient()).execute(LEASE), 5)
+
+
+async def test_work_deadline_kills_hung_job_before_fallback(execution, monkeypatch, tmp_path):
+    processes = []
+    operations = []
+    now = datetime.now(timezone.utc)
+    store = _Firestore()
+    store.docs[(registry.COLLECTION, 'synthetic')] = {
+        'active_job_id': 'job',
+        'active_epoch': 3,
+        'epoch': 3,
+        'active_state': 'dispatching',
+        'worker_available': True,
+        'active_payload': LEASE['payload'],
+        'active_accepted_at': now,
+        'lease_expires_at': now + timedelta(seconds=1800),
+    }
+
+    def transactional(fn):
+        def commit(transaction):
+            with store.lock:
+                return fn(transaction)
+
+        return commit
+
+    monkeypatch.setattr(registry.firestore, 'transactional', transactional)
+    monkeypatch.setattr(registry, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(registry, '_now', lambda: now)
+    assert registry.claim_worker('synthetic', 'job', 3, LEASE['token'])
+    run_token = sync_jobs.try_acquire_sync_job_run_lock('job')
+    assert run_token
+
+    async def launch():
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(Path(__file__).parent / 'fixtures/sync_worker_child.py'),
+            str(tmp_path),
+            stdin=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+        processes.append(process)
+        return process
+
+    class HealthyClient:
+        async def call(self, operation, body=None):
+            operations.append(operation)
+            if operation == 'fail':
+                assert processes[0].returncode is not None
+                before = (tmp_path / 'leaf-tick').read_text()
+                await asyncio.sleep(0.05)
+                assert (tmp_path / 'leaf-tick').read_text() == before
+                assert sync_jobs.try_acquire_sync_job_run_lock('job') is None
+            if operation == 'heartbeat':
+                return {'accepted': worker_control.heartbeat(**body)}
+            assert operation == 'fail'
+            return {'accepted': worker_control.fail(**body)}
+
+    monkeypatch.setattr(worker_runtime, 'launch_job', launch)
+    monkeypatch.setattr(worker_runtime, 'WORK_DEADLINE_SECONDS', 1.5, raising=False)
+    monkeypatch.setattr(worker_runtime, 'POLL_SECONDS', 0.01)
+    monkeypatch.setattr(worker_runtime, 'HEARTBEAT_SECONDS', 0.1)
+    runtime = worker_runtime.Runtime(HealthyClient())
+    await asyncio.wait_for(runtime.execute(LEASE), 4)
+    assert operations[-1] == 'fail'
+    assert operations.count('heartbeat') >= 2
+    assert runtime.active is False
+    assert sync_jobs.sync_job_run_lock_present('job')
+    assert execution[2].await_count == 0
+    assert registry.redrive_job('synthetic', 'job', 3) is None
+    # Advance the hermetic stores' clocks past the real 1800s silence windows;
+    # neither TTL nor epoch rules are shortened to make the test pass.
+    now += timedelta(seconds=1801)
+    from fakeredis import _basefakesocket
+
+    redis_time = time.time() + 1801
+    monkeypatch.setattr(_basefakesocket, 'time', SimpleNamespace(time=lambda: redis_time))
+    replacement = registry.redrive_job('synthetic', 'job', 3)
+    assert replacement and replacement['epoch'] == 4
+    assert registry.begin_job('synthetic', 'job', 4)
+    fallback_token = sync_jobs.try_acquire_sync_job_run_lock('job')
+    assert fallback_token
+    assert not registry.renew_job('synthetic', 'job', 3, worker_token=LEASE['token'])
+    assert not sync_jobs.renew_job_run_lock('job', run_token)
+    sync_jobs.release_job_run_lock('job', fallback_token)
 
 
 @pytest.fixture
@@ -235,6 +324,35 @@ async def test_worker_runs_fenced_pipeline_without_request_budget(execution, mon
     assert await worker_job.execute(LEASE, Client())
     cleanup.assert_awaited_once()
     assert not sync_jobs.sync_job_run_lock_present('job')
+
+
+async def test_disabled_minimal_redrive_refuses_before_any_work(execution, monkeypatch):
+    _, pipeline, cleanup = execution
+    monkeypatch.setenv('SYNC_MINIMAL_REDRIVE_ENABLED', 'false')
+    process = AsyncMock()
+    download = lambda *args, **kwargs: pytest.fail('download before minimal-mode refusal')
+    monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', process)
+    monkeypatch.setattr(pipeline, 'download_staged_files', download)
+    lease = {**LEASE, 'payload': {**LEASE['payload'], 'redrive_mode': 'minimal'}}
+    assert not await worker_job.execute(lease, Client())
+    process.assert_not_awaited()
+    cleanup.assert_not_awaited()
+    assert not sync_jobs.sync_job_run_lock_present('job')
+
+
+async def test_enabled_minimal_redrive_reaches_pipeline_unchanged(execution, monkeypatch):
+    redis, pipeline, _ = execution
+    monkeypatch.setenv('SYNC_MINIMAL_REDRIVE_ENABLED', 'true')
+
+    async def process(*args, **kwargs):
+        assert kwargs['redrive_mode'] == 'minimal'
+        row = json.loads(redis.get('sync_job:job'))
+        row['status'] = 'completed'
+        redis.set('sync_job:job', json.dumps(row))
+
+    monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', process)
+    lease = {**LEASE, 'payload': {**LEASE['payload'], 'redrive_mode': 'minimal'}}
+    assert await worker_job.execute(lease, Client())
 
 
 async def test_cancelled_worker_keeps_redis_fence_and_retry_material(execution, monkeypatch):

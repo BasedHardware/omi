@@ -92,6 +92,18 @@ def test_rollback_closes_intake_without_reading_state(monkeypatch):
     assert worker_control.claim() is None
 
 
+def test_global_legacy_dark_closes_intake_before_firestore(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    monkeypatch.setattr(
+        worker_control.legacy_dark, 'current_mode', lambda uid=None: worker_control.legacy_dark.LegacySyncMode.DARK
+    )
+    monkeypatch.setattr(registry, 'get_firestore_client', MagicMock(side_effect=AssertionError('Firestore read')))
+    assert worker_control.claim() is None
+
+
 @pytest.mark.parametrize('value', ['nan', 'inf', '-1', 'invalid', '0'])
 def test_bad_or_zero_percent_closes_intake(monkeypatch, value):
     monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', value)

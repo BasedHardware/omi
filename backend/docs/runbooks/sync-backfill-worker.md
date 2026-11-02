@@ -14,6 +14,19 @@ after rollback. Claim also requires the sequencer enabled, active ledger
 fencing, an explicitly worker-eligible backfill payload, and legacy dispatch
 allowed for the account. Existing payloads are ineligible.
 
+Global legacy dark closes claims before owner queries. Other polls read at
+most one page of 100 available owners and attempt one claim transaction
+(Firestore's default five attempts). A per-API-process document-ID cursor
+resumes after skipped candidates, wrapping at EOF; process restarts may
+revisit a page. Empty/error polls back off from 5s to 10/20/40/60s, capped at
+60s; accepted work resets the interval to 5s. Shutdown interrupts the wait.
+At the 5s floor, the conservative bound is 105 owner-document reads per poll
+(100 candidates plus five transactional reads), or 1,814,400/day per serial
+worker, 3,628,800/day for two replicas. Sustained empty polls at the 60s cap
+are at most 151,200/day per worker, plus the initial backoff transition.
+An empty query still bills at least one read. These are bounds, not live
+measurements; global dark and percent zero issue no owner-query reads.
+
 The private RPCs `/v2/sync-jobs/claim`, `/heartbeat`, `/complete`, `/fail`
 use `SYNC_BACKFILL_WORKER_AUDIENCE` and
 `SYNC_BACKFILL_WORKER_SERVICE_ACCOUNT`, with the existing OIDC verifier.
@@ -112,6 +125,16 @@ sequencer heartbeat is 120s; the child renews Redis every 300s. TTLs remain
 1800s. A failed renewal cancels execution and exits the entire job process.
 The supervisor kills remaining group members even if the root child already
 crashed, so detached executor/decoder work cannot outlive the local job.
+The supervisor enforces a 1380s work deadline, including process startup and
+normal flushing, independently of the child's provider/executor loop. At the
+deadline it stops sequencer heartbeats and SIGKILLs the owned process group,
+stopping Redis renewals before any failure handoff. A hung call therefore
+cannot extend either lease forever. Redis remains fenced until its unchanged
+1800s silence TTL, and the existing sequencer sweep redrives the fallback
+after lease expiry. This bound is separate from HTTP deferral/replacement.
+Minimal redrives use the same kill switch as Cloud Tasks: disabled mode
+refuses before acquiring Redis or downloading audio; enabled mode reaches
+the pipeline with `redrive_mode=minimal`, preserving its provider/cost policy.
 
 Ordinary retry preserves staged custody, resets the nonterminal job under its
 Redis token, then hands it back through `/fail`. Cancellation or unknown leaf
