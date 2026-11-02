@@ -121,7 +121,8 @@ async def execute(lease: dict, client) -> bool:
         payload.get('lane') != 'backfill'
         or payload.get('ledger_fence_mode') != 'active'
         or payload.get('worker_eligible') is not True
-        or sync_jobs.get_sync_ledger_fence_mode() is not sync_jobs.SyncLedgerFenceMode.ACTIVE
+        or await run_blocking(db_executor, sync_jobs.get_sync_ledger_fence_mode)
+        is not sync_jobs.SyncLedgerFenceMode.ACTIVE
     ):
         return False
     run_token = await run_blocking(db_executor, sync_jobs.try_acquire_sync_job_run_lock, job_id)
@@ -136,7 +137,11 @@ async def execute(lease: dict, client) -> bool:
         if not (await client.call('heartbeat', identity(lease))).get('accepted'):
             return False
         job = await run_blocking(db_executor, sync_jobs.get_sync_job, job_id)
-        if not job or job.get('uid') != uid or not sync_jobs.sync_job_uses_ledger_fence(job):
+        if (
+            not job
+            or job.get('uid') != uid
+            or not await run_blocking(db_executor, sync_jobs.sync_job_uses_ledger_fence, job)
+        ):
             return False
         if job['status'] in sync_jobs.TERMINAL_STATUSES:
             await cleanup_terminal(payload, job)
@@ -144,6 +149,17 @@ async def execute(lease: dict, client) -> bool:
         if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
             return False
         if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
+            return False
+        marked = await run_blocking(
+            db_executor,
+            sync_jobs.fenced_update_sync_job,
+            job_id,
+            run_token,
+            {'execution_drive': 'pull'},
+            allowed_current_statuses={'queued', 'processing'},
+        )
+        if not marked.applied:
+            release = False
             return False
         owner_task = asyncio.current_task()
         assert owner_task is not None
