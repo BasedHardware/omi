@@ -8683,6 +8683,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -8753,6 +8765,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -29388,6 +29412,14 @@
             "title": "Capture Completeness",
             "type": "string"
           },
+          "devices": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
           "first_observed_at": {
             "anyOf": [
               {
@@ -30186,6 +30218,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -30260,6 +30304,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
