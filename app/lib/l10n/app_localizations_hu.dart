@@ -10629,7 +10629,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get firmwareBatteryUnavailable =>
-      'Az akkumulátor töltöttsége még nem érhető el. Várjon egy kicsit, és csatlakozzon újra, ha ez nem változik.';
+      'Az akkumulátor töltöttsége még nem érhető el. Várj egy kicsit, és csatlakozz újra, ha ez nem változik.';
 
   @override
   String firmwareBatteryTooLow(int level) {

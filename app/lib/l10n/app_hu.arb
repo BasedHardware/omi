@@ -3444,7 +3444,7 @@
     "firmwareUpdateFailedTitle": "A frissítés nem sikerült",
     "firmwareUpdateFailedMessage": "A frissítés nem fejeződött be. Az eszközöd továbbra is a jelenlegi firmware-t használja, és biztonságosan használható. Tartsd feltöltve és a telefon közelében, majd próbáld újra.",
     "firmwareDownloadFailedMessage": "A frissítést nem sikerült letölteni, az eszköz nem változott. Ellenőrizd az internetkapcsolatot, majd próbáld újra.",
-    "firmwareBatteryUnavailable": "Az akkumulátor töltöttsége még nem érhető el. Várjon egy kicsit, és csatlakozzon újra, ha ez nem változik.",
+    "firmwareBatteryUnavailable": "Az akkumulátor töltöttsége még nem érhető el. Várj egy kicsit, és csatlakozz újra, ha ez nem változik.",
     "firmwareBatteryTooLow": "Az akkumulátor {level}%-on áll. Frissítés előtt töltsd legalább 15%-ra.",
     "startUpdate": "Frissítés indítása",
     "otaNotSupported": "Ez a firmware nem frissíthető Wi-Fi-n keresztül.",

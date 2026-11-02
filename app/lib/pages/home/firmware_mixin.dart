@@ -31,14 +31,6 @@ enum FirmwareUpdateFailure {
   install,
 }
 
-/// The lowest battery an Omi firmware update may start at. Enforced in code, not left to a
-/// checklist.
-const int kFirmwareUpdateMinBattery = 15;
-
-/// Charging is sufficient; otherwise a known battery must meet the update threshold.
-bool canStartFirmwareUpdate({required int batteryLevel, required bool isCharging}) =>
-    isCharging || batteryLevel >= kFirmwareUpdateMinBattery;
-
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
 

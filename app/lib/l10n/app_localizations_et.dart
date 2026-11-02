@@ -10577,7 +10577,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get firmwareBatteryUnavailable =>
-      'Aku laetuse tase pole veel saadaval. Oodake veidi ja ühendage seade uuesti, kui see ei muutu.';
+      'Aku laetuse tase pole veel saadaval. Oota veidi ja ühenda seade uuesti, kui see ei muutu.';
 
   @override
   String firmwareBatteryTooLow(int level) {

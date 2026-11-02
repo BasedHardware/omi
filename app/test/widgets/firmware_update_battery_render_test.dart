@@ -8,17 +8,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/home/firmware_mixin.dart';
+import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/firmware_update_dialog.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -35,19 +39,18 @@ class _EnvFields implements EnvFields {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
-class _DeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _DeviceProvider({this.batteryLevel = -1, this.isCharging = false});
-  @override
-  int batteryLevel;
-  @override
-  bool isCharging;
+class _DeviceProvider extends DeviceProvider {
+  _DeviceProvider({int batteryLevel = -1, bool isCharging = false}) {
+    this.batteryLevel = batteryLevel;
+    this.isCharging = isCharging;
+  }
   int updateStarts = 0;
   int updateResets = 0;
 
   void sample(int battery, {bool charging = false}) {
-    batteryLevel = battery;
+    final chargingChanged = isCharging != charging;
     isCharging = charging;
-    notifyListeners();
+    if (!updateBatteryLevelForTesting(battery) && chargingChanged) notifyListeners();
   }
 
   @override
@@ -59,8 +62,13 @@ class _DeviceProvider extends ChangeNotifier implements DeviceProvider {
   void setOnFirmwareUpdatePage(bool value) {}
   @override
   void resetFirmwareUpdateState() => updateResets++;
+}
+
+class _NoConnectivity extends ConnectivityPlatform {
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  Future<List<ConnectivityResult>> checkConnectivity() async => [ConnectivityResult.none];
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
 void main() {
@@ -70,6 +78,10 @@ void main() {
   final boundary = GlobalKey();
 
   setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    ConnectivityPlatform.instance = _NoConnectivity();
+    await ServiceManager.init();
     Env.init(const _EnvFields());
     // All requests are answered in memory below, without credentials or sockets.
     Env.overrideApiBaseUrl('http://firmware.test/');
@@ -93,7 +105,8 @@ void main() {
     _onDownload = null;
   });
 
-  Future<void> pumpPage(WidgetTester tester, _DeviceProvider provider, {bool rollback = false}) async {
+  Future<void> pumpPage(WidgetTester tester, _DeviceProvider provider,
+      {bool rollback = false, Locale locale = const Locale('en')}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     tester.view.physicalSize = const Size(393, 852);
@@ -110,7 +123,7 @@ void main() {
         value: provider,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          locale: const Locale('en'),
+          locale: locale,
           theme: theme.copyWith(
               appBarTheme: theme.appBarTheme.copyWith(
             titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
@@ -137,6 +150,20 @@ void main() {
 
   OmiButton startButton(WidgetTester tester) => tester.widget(find.byKey(const Key('firmware_update_start')));
 
+  Future<void> capture(WidgetTester tester, String filename) async {
+    if (output.isEmpty) return;
+    final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    _paintProductFont(render);
+    await tester.pump();
+    await tester.runAsync(() async {
+      final image = await render.toImage(pixelRatio: 3);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      await Directory(output).create(recursive: true);
+      await File('$output/$filename').writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+  }
+
   for (final rollback in [false, true]) {
     testWidgets('unknown battery renders waiting message and refreshes (rollback=$rollback)', (tester) async {
       final provider = _DeviceProvider();
@@ -144,21 +171,22 @@ void main() {
       expect(find.text(en.firmwareBatteryUnavailable), findsOneWidget);
       expect(find.text(en.firmwareBatteryTooLow(-1)), findsNothing);
       expect(startButton(tester).onPressed, isNull);
-      if (output.isNotEmpty && !rollback) {
-        await tester.runAsync(() async {
-          final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-          final image = await render.toImage(pixelRatio: 3);
-          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          await Directory(output).create(recursive: true);
-          await File('$output/001-mobile-ios-firmware-battery-unavailable.png')
-              .writeAsBytes(bytes!.buffer.asUint8List());
-          image.dispose();
-        });
-      }
+      if (!rollback) await capture(tester, '001-mobile-ios-firmware-battery-unavailable.png');
       provider.sample(kFirmwareUpdateMinBattery);
       await tester.pumpAndSettle();
       expect(find.text(en.firmwareBatteryUnavailable), findsNothing);
       expect(startButton(tester).onPressed, isNotNull);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  for (final (locale, ordinal) in [('ro', '002'), ('hu', '003'), ('et', '004')]) {
+    testWidgets('unknown battery guidance renders in $locale', (tester) async {
+      await pumpPage(tester, _DeviceProvider(), locale: Locale(locale));
+      expect(find.text(lookupAppLocalizations(Locale(locale)).firmwareBatteryUnavailable), findsOneWidget);
+      expect(startButton(tester).onPressed, isNull);
+      expect(tester.takeException(), isNull);
+      await capture(tester, '$ordinal-mobile-ios-firmware-battery-unavailable-$locale.png');
       debugDefaultTargetPlatformOverride = null;
     });
   }
@@ -184,6 +212,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('firmware_update_sheet_start')), findsNothing);
     expect(provider.updateStarts, 0);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('disconnect clears cached battery and charging; reconnect waits for a fresh sample', (tester) async {
+    final provider = _DeviceProvider(batteryLevel: 80, isCharging: true);
+    await pumpPage(tester, provider);
+    final staleStart = startButton(tester).onPressed!;
+    provider.setIsConnected(false);
+    expect(provider.batteryLevel, -1);
+    expect(provider.isCharging, isFalse);
+    await staleStart();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('firmware_update_sheet_start')), findsNothing);
+    expect(startButton(tester).onPressed, isNull);
+    expect(find.text(en.firmwareBatteryUnavailable), findsOneWidget);
+    provider.setIsConnected(true);
+    await tester.pumpAndSettle();
+    expect(startButton(tester).onPressed, isNull);
+    provider.sample(80);
+    await tester.pumpAndSettle();
+    expect(startButton(tester).onPressed, isNotNull);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('one-point threshold crossings refresh the update and failure screens', (tester) async {
+    final provider = _DeviceProvider();
+    await pumpPage(tester, provider);
+    provider.sample(kFirmwareUpdateMinBattery - 1);
+    await tester.pumpAndSettle();
+    expect(startButton(tester).onPressed, isNull);
+    provider.sample(kFirmwareUpdateMinBattery);
+    await tester.pumpAndSettle();
+    expect(startButton(tester).onPressed, isNotNull);
+    await tester.tap(find.byKey(const Key('firmware_update_start')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('firmware_update_sheet_start')));
+    await tester.pumpAndSettle();
+    final retry = find.byKey(const Key('firmware_update_try_again'));
+    expect(find.text(en.firmwareDownloadFailedMessage), findsOneWidget);
+    provider.sample(kFirmwareUpdateMinBattery - 1);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OmiButton>(retry).onPressed, isNull);
+    provider.sample(kFirmwareUpdateMinBattery);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OmiButton>(retry).onPressed, isNotNull);
+    expect(find.text(en.firmwareBatteryTooLow(kFirmwareUpdateMinBattery - 1)), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('disconnect while the confirmation sheet is open blocks a cached charging battery', (tester) async {
+    final provider = _DeviceProvider(batteryLevel: 80, isCharging: true);
+    await pumpPage(tester, provider);
+    await tester.tap(find.byKey(const Key('firmware_update_start')));
+    await tester.pumpAndSettle();
+    provider.setIsConnected(false);
+    await tester.tap(find.byKey(const Key('firmware_update_sheet_start')));
+    await tester.pumpAndSettle();
+    expect(provider.updateStarts, 0);
+    expect(startButton(tester).onPressed, isNull);
+    expect(find.text(en.firmwareBatteryUnavailable), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -254,6 +342,29 @@ void main() {
   });
 }
 
+// Evidence only: the widget-test engine's system face is not the phone's font.
+// Repaint paragraphs explicitly in the loaded product fixture for every locale.
+void _paintProductFont(RenderObject object) {
+  if (object is RenderParagraph) object.text = _productFont(object.text);
+  object.visitChildren(_paintProductFont);
+  object.markNeedsPaint();
+}
+
+InlineSpan _productFont(InlineSpan span) {
+  if (span is! TextSpan) return span;
+  final style = span.style ?? const TextStyle();
+  final family = style.fontFamily;
+  if (family != null && (family.startsWith('packages/') || family.contains('Icons'))) return span;
+  return TextSpan(
+    text: span.text,
+    style: style.copyWith(fontFamily: 'SF Pro Display'),
+    children: span.children?.map(_productFont).toList(),
+    recognizer: span.recognizer,
+    semanticsLabel: span.semanticsLabel,
+    locale: span.locale,
+  );
+}
+
 Future<void> _loadFonts() async {
   final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
   for (final family in manifest) {
@@ -280,6 +391,19 @@ Future<void> _loadFonts() async {
     }
     await loader.load();
   }
+  // Flutter's built-in Material font is outside FontManifest.json in widget tests.
+  // Register it explicitly so every locale's platform back glyph is captured.
+  var directory = File(Platform.resolvedExecutable).absolute.parent;
+  for (var i = 0; i < 10; i++, directory = directory.parent) {
+    for (final path in ['artifacts/material_fonts', 'material_fonts']) {
+      final icons = File('${directory.path}/$path/MaterialIcons-Regular.otf');
+      if (!icons.existsSync()) continue;
+      await (FontLoader('MaterialIcons')..addFont(Future.value(ByteData.sublistView(await icons.readAsBytes()))))
+          .load();
+      return;
+    }
+  }
+  throw StateError('MaterialIcons-Regular.otf not found above ${Platform.resolvedExecutable}');
 }
 
 class _FirmwareHttpOverrides extends HttpOverrides {

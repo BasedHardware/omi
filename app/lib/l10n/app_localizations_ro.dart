@@ -10636,7 +10636,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get firmwareBatteryUnavailable =>
-      'Nivelul bateriei nu este încă disponibil. Așteptați puțin și reconectați dispozitivul dacă situația persistă.';
+      'Nivelul bateriei nu este încă disponibil. Așteaptă puțin și reconectează dispozitivul dacă situația persistă.';
 
   @override
   String firmwareBatteryTooLow(int level) {

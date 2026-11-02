@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/pages/home/firmware_mixin.dart';
+import 'package:omi/utils/firmware_update_battery.dart';
 
 void main() {
   for (final (name, battery, charging, allowed) in [
