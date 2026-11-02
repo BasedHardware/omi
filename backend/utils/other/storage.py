@@ -16,6 +16,8 @@ from utils.other.playback_identity import playback_manifest_recovery_enabled
 from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PCM_WRITES_AVOIDED
 from utils.other.audio_raw_read_metrics import log_failure
+from utils.other.audio_framed_projection import upload_projection
+from utils.other.audio_frame_table import projection_entries
 from utils.other.raw_audio_read import (
     list_packs,
     read_pack,
@@ -58,23 +60,13 @@ from database.audio_timeline import (
     strip_extension as _strip_extension,
 )
 from utils.observability.fallback import record_fallback
-from utils.other.audio_chunk_replay import RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
+from utils.other.audio_chunk_replay import AudioChunkContentConflict, RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
 from database import users as users_db, conversation_tombstones
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-class AudioChunkContentConflict(ValueError):
-    """A v2 upload found different bytes at its content-addressed name.
-
-    Deterministic: retrying the same payload replays the same collision, so
-    the durable projection treats it as terminal instead of transient. Other
-    upload failures (including wrapped probe/read errors raised as plain
-    ``ValueError``) stay retryable.
-    """
 
 
 # Per-request fan-out limits for storage_executor (#7387)
@@ -961,6 +953,18 @@ def upload_audio_chunks_batch(
     bucket_name = audio_archive.regional_chunk_bucket(uid, private_cloud_sync_bucket)
     bucket = private_bucket if bucket_name == private_cloud_sync_bucket else _get_storage_client().bucket(bucket_name)
 
+    if all(chunk.get('custody_receipt') for chunk in sorted_chunks):
+        return upload_projection(
+            bucket,
+            private_bucket,
+            uid,
+            conversation_id,
+            sorted_chunks,
+            protection_level,
+            sample_rate,
+            owner_storage_write_gate,
+        )
+
     if audio_archive.admitted(uid, 'STOP_PCM') and audio_archive.admitted(uid, 'READ'):
         try:
             raw_paths = verified_pcm_paths(private_bucket, uid, conversation_id, sorted_chunks, sample_rate)
@@ -1218,12 +1222,16 @@ def list_audio_chunks(
                 span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
                 if span is not None:
                     chunk_entry['span'] = span
-                chunks.append(chunk_entry)
+                chunks.extend(
+                    projection_entries(bucket, blob, uid, chunk_entry)
+                    if (blob.metadata or {}).get('framed_receipt')
+                    else [chunk_entry]
+                )
             except ValueError:
                 continue
 
     if regional and regional != private_cloud_sync_bucket:
-        chunks = list({item['path']: item for item in chunks}.values())
+        chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
     sample_clock = source_identity
     if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
         try:
@@ -1425,7 +1433,9 @@ def download_audio_chunks_and_merge(
     }
     timestamps = [aliases.get(timestamp, timestamp) for timestamp in timestamps]
     raw_by_timestamp = {
-        chunk['timestamp']: chunk for chunk in actual_chunks if chunk['path'].startswith(f'raw-live/{uid}/')
+        chunk['timestamp']: chunk
+        for chunk in actual_chunks
+        if chunk['path'].startswith(f'raw-live/{uid}/') or 'raw_offset_samples' in chunk
     }
 
     batch_paths: Dict[str, Dict[str, Any]] = {}
@@ -2559,6 +2569,7 @@ def archive_capture_bytes(
     metadata: Dict[str, Any],
     *,
     data_protection_level: Optional[str] = None,
+    manifest_identity: Optional[str] = None,
 ) -> str:
     """Shared canonical writer: plaintext identity, owner fencing, unchanged payload."""
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
@@ -2567,7 +2578,9 @@ def archive_capture_bytes(
     encrypted = protection == 'enhanced'
     payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
     suffix = '.enc' if encrypted else ''
-    path = f'{prefix}/{uid}/{name}/{digest}.bin{suffix}'
+    if manifest_identity is not None and (prefix != 'audio-outbox' or len(manifest_identity) != 64):
+        raise ValueError('invalid deterministic manifest identity')
+    path = f'{prefix}/{uid}/{name}/{manifest_identity or digest}.bin{suffix}'
     blob = bucket.blob(path)
     blob.metadata = provenance(raw, {**metadata, 'encrypted': str(encrypted).lower()})
     custody_conversation = (

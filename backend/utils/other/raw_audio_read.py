@@ -4,10 +4,12 @@ import hashlib
 import threading
 import time
 from bisect import bisect_right
+from google.cloud.exceptions import NotFound
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
 from utils.other.raw_audio import decode_capture
+from utils.other.audio_frame_table import FRAME_SCHEMA, committed_frames, entries, validate_frames
 from utils.other.audio_raw_read_metrics import (
     ChecksumMismatch,
     CoverageMismatch,
@@ -53,25 +55,31 @@ def list_packs(bucket, uid: str, conversation_id: str):
             continue
         try:
             start, end = float(metadata['capture_start']), float(metadata['capture_end'])
-            if int(metadata['gap_count']) != 0 or end <= start or int(metadata['channels']) != 1:
+            framed = metadata.get('frame_schema') == FRAME_SCHEMA
+            if (not framed and int(metadata['gap_count']) != 0) or end <= start or int(metadata['channels']) != 1:
                 continue
             if metadata['codec'] not in {'opus', 'flac', 'pcm16', 'pcm8'}:
                 continue
             if metadata.get('source_layout', 'mono') != 'mono':
                 continue
-            packs.append(
-                {
-                    'timestamp': start,
-                    'path': blob.name,
-                    'size': blob.size,
-                    'is_batch': False,
-                    'span': {'start': start, 'samples': round((end - start) * 16000), 'sample_rate': 16000},
-                    'raw_end': end,
-                    'generation': getattr(blob, 'generation', None),
-                    'pcm_sha256': metadata.get('pcm_sha256'),
-                }
-            )
-        except (KeyError, ValueError, TypeError):
+            source = {
+                'timestamp': start,
+                'path': blob.name,
+                'size': blob.size,
+                'is_batch': False,
+                'span': {'start': start, 'samples': round((end - start) * 16000), 'sample_rate': 16000},
+                'raw_end': end,
+                'generation': getattr(blob, 'generation', None),
+                'pcm_sha256': metadata.get('pcm_sha256'),
+            }
+            if framed:
+                frames, rate = committed_frames(bucket, blob, uid)
+                if sum(frame['gap_before'] for frame in frames) != int(metadata['gap_count']):
+                    raise CoverageMismatch('capture gap count differs from frame table')
+                packs.extend(entries(frames, rate, source))
+            else:
+                packs.append(source)
+        except (KeyError, ValueError, TypeError, NotFound):
             continue
     result = sorted(packs, key=lambda item: item['timestamp'])
     with _index_lock:
@@ -86,6 +94,11 @@ def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: i
     blob = bucket.blob(path)
     blob.reload(**(download_kwargs or {}))
     metadata = blob.metadata or {}
+    if metadata.get('frame_schema') == FRAME_SCHEMA:
+        frames, rate = committed_frames(bucket, blob, uid)
+        expected = round(validate_frames(frames, rate) * sample_rate / rate) * 2
+    else:
+        expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
     raw = blob.download_as_bytes(**(download_kwargs or {}))
     if metadata.get('encrypted') == 'true':
         try:
@@ -98,7 +111,6 @@ def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: i
         pcm = decode_capture(raw, metadata, sample_rate)
     except Exception as error:
         raise DecodeError('capture decode failed') from error
-    expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
     if abs(len(pcm) - expected) > 2:
         raise CoverageMismatch('capture sample coverage mismatch')
     return pcm
@@ -136,9 +148,10 @@ def verified_pcm_paths(bucket, uid: str, conversation_id: str, chunks, sample_ra
         path = pack['path']
         if path not in decoded:
             decoded[path] = read_pack(bucket, path, uid)
-        offset = round((start - pack['timestamp']) * 16000) * 2
+        offset = (pack.get('raw_offset_samples', 0) + round((start - pack['timestamp']) * 16000)) * 2
         whole_pack_proof = (
-            offset == 0
+            'raw_offset_samples' not in pack
+            and offset == 0
             and len(payload) == len(decoded[path])
             and pack.get('pcm_sha256') == hashlib.sha256(payload).hexdigest()
         )
@@ -169,7 +182,7 @@ def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha25
             except Exception as error:
                 record(error_result(error), (bucket.blob(pack['path']).metadata or {}).get('codec'))
                 raise
-            offset = round((start - pack['timestamp']) * 16000) * 2
+            offset = (pack.get('raw_offset_samples', 0) + round((start - pack['timestamp']) * 16000)) * 2
             selected = pcm[offset : offset + count]
             if len(selected) == count and hashlib.sha256(selected).hexdigest() == expected_sha256:
                 record('ok')
@@ -227,16 +240,23 @@ def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:
                     raw_source_start=pack['timestamp'],
                     span={'start': start / 16000, 'samples': end - start, 'sample_rate': 16000},
                 )
+                if 'raw_offset_samples' in pack:
+                    item['raw_offset_samples'] = pack['raw_offset_samples'] + start - original_start
+                    item.pop('raw_source_start', None)
             result.append(item)
     return result
 
 
 def select_raw_pcm(pcm: bytes, chunk: dict, sample_rate: int) -> bytes:
     """A listing fragment selects exact samples from the unchanged source pack."""
-    if 'raw_source_start' not in chunk:
+    if 'raw_source_start' not in chunk and 'raw_offset_samples' not in chunk:
         return pcm
     span = chunk['span']
-    offset = round((chunk['timestamp'] - chunk['raw_source_start']) * sample_rate) * 2
+    offset = (
+        round(chunk['raw_offset_samples'] * sample_rate / 16000)
+        if 'raw_offset_samples' in chunk
+        else round((chunk['timestamp'] - chunk['raw_source_start']) * sample_rate)
+    ) * 2
     count = round(span['samples'] * sample_rate / span['sample_rate']) * 2
     selected = pcm[offset : offset + count]
     if len(selected) != count:

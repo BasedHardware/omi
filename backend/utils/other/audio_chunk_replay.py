@@ -17,6 +17,10 @@ RECONCILE_MAX_SECONDS = 10.0
 RECONCILE_MAX_ATTEMPTS = 3
 
 
+class AudioChunkContentConflict(ValueError):
+    """Different bytes already occupy an immutable audio projection name."""
+
+
 def _listed_generation(chunk: Mapping[str, Any]) -> Optional[int]:
     generation = chunk.get('generation')
     if not isinstance(generation, int) or isinstance(generation, bool) or generation <= 0:
@@ -67,6 +71,9 @@ def _raw_chunk_object_pcm(
         return None, size
     if len(pcm) % 2:
         return None, size
+    if 'raw_offset_samples' in chunk:
+        offset = chunk['raw_offset_samples'] * 2
+        pcm = pcm[offset : offset + chunk['span']['samples'] * 2]
     return pcm, size
 
 

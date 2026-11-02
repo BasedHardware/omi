@@ -280,6 +280,6 @@ def iter_audio_chunk_pcm(
             with storage.get_storage_chunk_semaphore():
                 pcm = storage.download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
         if pcm:
-            if chunk['path'].startswith(f'raw-live/{uid}/'):
+            if chunk['path'].startswith(f'raw-live/{uid}/') or 'raw_offset_samples' in chunk:
                 pcm = select_raw_pcm(pcm, chunk, sample_rate)
             yield chunk_start(chunk), pcm
