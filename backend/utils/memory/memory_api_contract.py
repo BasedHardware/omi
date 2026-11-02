@@ -56,13 +56,15 @@ def memory_provenance_timestamps(value: Dict[str, Any]) -> Dict[str, Any]:
     for target, source in (('source_at', 'captured_at'), ('extracted_at', 'extracted_at')):
         values = [item.get(source) for item in evidence if isinstance(item, dict) and item.get(source) is not None]
         dated = []
-        for value in values:
+        for raw_stamp in values:
             try:
                 stamp = (
-                    value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                    raw_stamp
+                    if isinstance(raw_stamp, datetime)
+                    else datetime.fromisoformat(str(raw_stamp).replace('Z', '+00:00'))
                 )
                 stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
-                dated.append((stamp.timestamp(), value))
+                dated.append((stamp.timestamp(), raw_stamp))
             except (ValueError, TypeError, OverflowError):
                 continue
         result[target] = min(dated, key=lambda item: item[0])[1] if dated else None
