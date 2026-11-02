@@ -44,7 +44,7 @@ from utils.batch_pipeline.provider_stt import provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
-from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route
+from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route, record_sample_window
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -69,8 +69,12 @@ HELD_REASON_CODE = 'batch_unit_held'
 SAMPLE_SCAN_SECONDS = 600  # a sampled upload is held and classified whole up to this much audio; larger stays legacy
 
 
-def _speech_probe(wav: bytes) -> bytes | None:
-    """Up to 30 s of strict-VAD speech from a unit's first SAMPLE_SCAN_SECONDS as WAV; None when silent."""
+def _speech_windows(wav: bytes) -> list[bytes] | None:
+    """All strict-VAD speech of a unit's first SAMPLE_SCAN_SECONDS as 30 s WAVs; None when silent.
+
+    The first window is the vendor sample. Further windows cover the rest of the speech, the last
+    overlapping its predecessor so every window is a full 30 s.
+    """
     from utils.stt.local_vad import offline_pcm_speech_segments
 
     with wave.open(io.BytesIO(wav), 'rb') as source:
@@ -79,14 +83,18 @@ def _speech_probe(wav: bytes) -> bytes | None:
         pcm = source.readframes(SAMPLE_SCAN_SECONDS * 16000)
     speech = b''.join(
         pcm[int(span['start'] * 16000) * 2 : int(span['end'] * 16000) * 2] for span in offline_pcm_speech_segments(pcm)
-    )[: 30 * 32000]
+    )
     if not speech:
         return None
-    output = io.BytesIO()
-    with wave.open(output, 'wb') as target:
-        target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
-        target.writeframes(speech)
-    return output.getvalue()
+    step = 30 * 32000
+    windows = []
+    for start in [0, *(min(start, len(speech) - step) for start in range(step, len(speech), step))]:
+        output = io.BytesIO()
+        with wave.open(output, 'wb') as target:
+            target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+            target.writeframes(speech[start : start + step])
+        windows.append(output.getvalue())
+    return windows
 
 
 def _sampled_refusal(target: dict, user: dict, evidence) -> None:
@@ -642,13 +650,15 @@ async def accept_upload(
                 privacy_generation=context.generation,
             )
 
-        from utils.stt.batch_language import resolve_language
+        from utils.stt.batch_language import resolve_language, self_language_class
         from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 
         # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
-        # speech must be Parakeet-safe vendor audio LID, so no admitted unit meets the worker's
-        # language barrier. Strict-silent units keep today's own per-unit LID (an unknown answer
-        # preserves the barrier for speech the worker VAD finds); no unit inherits another's language.
+        # speech must be Parakeet-safe vendor audio LID, and every further 30 s of it a Parakeet
+        # language to the self gate, so no admitted unit meets the worker's language barrier or
+        # sends later speech in another language to Parakeet. Strict-silent units keep today's own
+        # per-unit LID (an unknown answer preserves the barrier for speech the worker VAD finds);
+        # no unit inherits another's language.
         queue, decisions, first = [], {}, None
         if sampled:
             speeches = []
@@ -659,7 +669,7 @@ async def accept_upload(
                     return _sampled_refusal(target, user, evidence)
                 queue.append(unit)
                 try:
-                    speeches.append(await run_blocking(sync_executor, _speech_probe, unit.wav))
+                    speeches.append(await run_blocking(sync_executor, _speech_windows, unit.wav))
                 except Exception:
                     return _sampled_refusal(target, user, evidence)  # a VAD failure is not silence
             if all(speech is None for speech in speeches):
@@ -675,7 +685,7 @@ async def accept_upload(
                     sync_executor,
                     resolve_language,
                     input_language,
-                    speech if speech is not None else unit.wav,
+                    speech[0] if speech is not None else unit.wav,
                     surface='batch',
                     cohort_key=uid,
                     before_probe=probe_guard,
@@ -688,6 +698,15 @@ async def accept_upload(
                 # Only vendor audio LID admits: worker self-LID evidence is bound to the unit's first 30 s.
                 if not decision.parakeet_safe or decision.evidence != 'audio_lid':
                     return _sampled_refusal(target, user, evidence)
+                # The vendor heard only this unit's first 30 s of speech; the rest is frozen with it.
+                for window in speech[1:]:
+                    capability = await run_blocking(
+                        sync_executor, self_language_class, window, before_probe=probe_guard
+                    )
+                    probe_guard.raise_if_denied()
+                    record_sample_window(capability)
+                    if capability != 'supported':
+                        return _sampled_refusal(target, user, evidence)
                 first = first or decision
             if first is not None:  # always set here: at least one speech unit passed above
                 record_route('intake', first.language, 'parakeet')

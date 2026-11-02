@@ -158,10 +158,41 @@ SPEECH = b'synthetic-speech-probe-wav'
 
 
 def speaking(monkeypatch, *results):
-    """Strict-VAD speech probes per unit, in order (default: every unit has speech)."""
-    probe = Mock(side_effect=list(results)) if results else Mock(return_value=SPEECH)
-    monkeypatch.setattr(intake, '_speech_probe', probe)
+    """Strict-VAD speech windows per unit, in order (default: every unit has one speech window).
+
+    A bytes result is a unit whose speech fits the vendor sample; pass a list for further windows.
+    """
+    windows = [[result] if isinstance(result, bytes) else result for result in results]
+    probe = Mock(side_effect=windows) if results else Mock(return_value=[SPEECH])
+    monkeypatch.setattr(intake, '_speech_windows', probe)
     return probe
+
+
+def pcm_wav(seconds):
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as target:
+        target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        target.writeframes(b'\x01\x00' * int(16000 * seconds))
+    return body.getvalue()
+
+
+def self_lid(monkeypatch, *languages):
+    """The hosted self gate's top-1 per further window, in order; None is an unavailable gate."""
+    from utils.stt import language_gate
+
+    answers = iter(languages)
+
+    def detect(probe, *, surface):
+        assert surface == 'batch'
+        language = next(answers)
+        with wave.open(io.BytesIO(probe), 'rb') as source:
+            seconds = source.getnframes() / 16000
+        # A low P(supported) is the strict floor's refusal; the continuity check reads the top-1 only.
+        return None if language is None else language_gate.SelfVerdict(language, 0.9, 0.4, seconds)
+
+    gate = Mock(side_effect=detect)
+    monkeypatch.setattr(language_gate, 'self_detect', gate)
+    return gate
 
 
 @pytest.mark.asyncio
@@ -315,19 +346,71 @@ async def test_self_lid_sample_does_not_admit(monkeypatch):
     assert response is None and staged == []
 
 
-def test_speech_probe_concatenates_at_most_thirty_seconds_of_strict_speech(monkeypatch):
+def test_speech_windows_cover_every_strict_speech_second_in_full_thirty_second_windows(monkeypatch):
     from utils.stt import local_vad
 
-    spans = [{'start': 1.0, 'end': 21.0}, {'start': 30.0, 'end': 50.0}]
-    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: spans)
+    # 70 s of speech: the vendor sample, then [30, 60) and a last full window over [40, 70).
+    pcm = b''.join(second.to_bytes(2, 'little') * 16000 for second in range(90))
     body = io.BytesIO()
     with wave.open(body, 'wb') as target:
         target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
-        target.writeframes(b'\x01\x00' * 16000 * 60)
-    with wave.open(io.BytesIO(intake._speech_probe(body.getvalue())), 'rb') as probe:
-        assert probe.getnframes() == 30 * 16000
+        target.writeframes(pcm)
+    spans = [{'start': 1.0, 'end': 21.0}, {'start': 30.0, 'end': 80.0}]
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: spans)
+    speech = pcm[1 * 32000 : 21 * 32000] + pcm[30 * 32000 : 80 * 32000]
+    frames = []
+    for window in intake._speech_windows(body.getvalue()):
+        with wave.open(io.BytesIO(window), 'rb') as source:
+            frames.append(source.readframes(source.getnframes()))
+    assert frames == [speech[: 30 * 32000], speech[30 * 32000 : 60 * 32000], speech[40 * 32000 :]]
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: [{'start': 1.0, 'end': 26.0}])
+    assert len(intake._speech_windows(body.getvalue())) == 1  # speech that fits the sample has no further window
     monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: [])
-    assert intake._speech_probe(body.getvalue()) is None
+    assert intake._speech_windows(body.getvalue()) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('later', [['ja'], ['en', 'zh'], [None], ['und']])
+async def test_unsupported_speech_after_the_vendor_sample_keeps_the_whole_upload_on_legacy(monkeypatch, later):
+    # English in the unit's first 30 s of speech, then a language Parakeet cannot serve (or no
+    # verdict): the unit would be frozen English and its later speech windows sent to Parakeet.
+    speaking(monkeypatch, [SPEECH, *(pcm_wav(30) for _ in later)])
+    gate = self_lid(monkeypatch, *later)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe, contexts = await _upload_all_units(monkeypatch, user_language='en', evidence=evidence)
+    assert response is None and staged == [] and contexts == [] and probe.call_count == 1
+    assert gate.call_count == len(later) and evidence.language_excluded
+
+
+@pytest.mark.asyncio
+async def test_parakeet_languages_after_the_vendor_sample_admit_under_each_windows_own_authority(monkeypatch):
+    speaking(monkeypatch, [SPEECH, pcm_wav(30), pcm_wav(30)], SPEECH)
+    gate = self_lid(monkeypatch, 'en', 'es')
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    consent = Mock(return_value=True)
+    monkeypatch.setattr(funded_processing, 'consent_allows', consent)
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', unit_count=2)
+    assert admitted(response, staged) and probe.call_count == 2 and gate.call_count == 2
+    # The mocked vendor probes never ask the guard; each further window asks it once.
+    assert consent.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_a_refused_further_window_keeps_the_refusal_before_anything_is_staged(monkeypatch):
+    # Consent resets between the vendor sample and the self gate's further window: the client
+    # keeps its audio and retries; the window never leaves the process.
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    consent = iter([True, False])
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: next(consent, False))
+    speaking(monkeypatch, [SPEECH, pcm_wav(30)])
+    gate = self_lid(monkeypatch, 'en')
+
+    def classify(*args, **kwargs):
+        assert kwargs['before_probe']()
+        return decision('en', True)
+
+    response, staged, probe, contexts = await _upload_all_units(monkeypatch, user_language='en', decision=classify)
+    assert response.status_code == 503 and staged == [] and contexts == [] and not gate.called
 
 
 @pytest.mark.asyncio
