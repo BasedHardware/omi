@@ -768,6 +768,18 @@ and ordinary projection capacity can extend them. Watch `release_held` summaries
 (`examined`, `released`, `waiting`, `error`, `elapsed_ms`) and fresh pending age;
 the release pass adds at most one page and its inter-row budget per minute.
 
+The scan cursor lives in the serving process. Instances restart and trade the
+maintenance lease far more often than a time-bounded pass (about 40 rows a
+minute in prod) wraps a held set of ~17k rows, so a cursor that always began at
+the first document name re-examined the same prefix: on 2026-11-02 every row
+with a release attempt sat in the first two name-order deciles and ~4,300
+eligible holds beyond them had never been examined. A new process now starts at
+a random point of the sha256 hex id keyspace; the short page at the end still
+wraps to the first name, so every instance covers the whole set in one wrap.
+`omi_batch_pipeline_projection_release_rows_total{outcome}` (released, waiting,
+error; under the correctness-metrics switch) counts examined rows. With the
+kill switch off the scan starts at the first name, as before.
+
 The eligibility pass costs one query-document read plus two transaction reads
 per examined row, with one further target read for eligible holds, and **two
 writes per release**. For the RCA cohort, one untruncated pass is approximately

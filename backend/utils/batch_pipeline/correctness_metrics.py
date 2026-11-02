@@ -26,6 +26,9 @@ LABELS = Counter(
 CONFLICT_HOLDS = Counter(
     'omi_batch_pipeline_projection_conflict_holds_total', 'Observed assignment conflict holds', ['subtype']
 )
+RELEASE_ROWS = Counter(
+    'omi_batch_pipeline_projection_release_rows_total', 'Held rows examined by the release scan', ['outcome']
+)
 
 
 def record_conflict_hold(subtype: object) -> None:
@@ -33,6 +36,13 @@ def record_conflict_hold(subtype: object) -> None:
 
     if enabled():
         CONFLICT_HOLDS.labels(bounded_sync_assignment_subtype(subtype)).inc()
+
+
+def record_release_rows(counts: dict) -> None:
+    if enabled():
+        for outcome in ('released', 'waiting', 'error'):
+            if counts.get(outcome):
+                RELEASE_ROWS.labels(outcome).inc(counts[outcome])
 
 
 def enabled() -> bool:

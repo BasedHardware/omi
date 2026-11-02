@@ -18,6 +18,7 @@ import math
 import logging
 from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 from uuid import NAMESPACE_URL, uuid5
+import secrets
 
 from config.batch_pipeline import (
     owner_drain_enabled,
@@ -43,7 +44,7 @@ from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
-from utils.batch_pipeline.correctness_metrics import record_labels
+from utils.batch_pipeline.correctness_metrics import record_labels, record_release_rows
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
@@ -72,6 +73,21 @@ OWNER_DRAIN_STEP_ROWS = 128
 CANDIDATE_WAIT_SECONDS = 10.0
 # Held units read per partial-completion scan.
 HELD_PARTIAL_PAGE = 32
+
+
+def release_scan_start() -> str | None:
+    """Where a new process starts the held-release scan.
+
+    Serving instances restart and trade the maintenance lease far more often
+    than one time-bounded pass wraps the held set, so a scan that always began
+    at the first document name re-examined the same prefix forever. Held ids
+    are sha256 hex, so a random hex cursor starts anywhere in the keyspace;
+    the short page at the end still wraps to the first name. With hold
+    recovery off the scan starts at the first name, as before.
+    """
+    return secrets.token_hex(32) if projection_hold_recovery_enabled() else None
+
+
 BATCH_PROJECTION_BLOCK_REASONS = frozenset(
     {
         'intake_binding_mismatch',
@@ -497,7 +513,7 @@ class Projector:
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
         # Resume point of the held-release scan; a short page wraps it.
-        self.release_after: str | None = None
+        self.release_after: str | None = release_scan_start()
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -847,6 +863,7 @@ class Projector:
             now=self.clock(),
             deadline=time.monotonic() + RELEASE_TICK_SECONDS if enabled else None,
         )
+        record_release_rows(counts)
         if counts.get('examined'):
             logger.info(
                 'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d',

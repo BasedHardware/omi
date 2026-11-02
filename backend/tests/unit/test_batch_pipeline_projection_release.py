@@ -203,3 +203,71 @@ def test_held_page_query_is_bounded_and_keyset():
     client, _, query = fresh_client()
     assert held_page_ids(client, 'ns', 5, 'after') == []
     query.start_after.assert_called_once_with({'__name__': 'cursor-doc'})
+
+
+def _restarted_scans(monkeypatch, restarts: int) -> set[str]:
+    """Held ids examined when every pass runs on a fresh process (one page each)."""
+    import hashlib
+    import secrets
+
+    import database.batch_pipeline_projection_release as release
+    from utils.batch_pipeline import projection
+
+    ids = sorted(hashlib.sha256(str(n).encode()).hexdigest() for n in range(200))
+    examined: list[str] = []
+    monkeypatch.setattr(release, 'RELEASE_PAGE', 10)
+    monkeypatch.setattr(
+        release,
+        'held_page_ids',
+        lambda client, namespace, limit, after_id: [i for i in ids if after_id is None or i > after_id][:limit],
+    )
+    monkeypatch.setattr(release.ProjectionReleaseStore, 'release', lambda self, sid, now: examined.append(sid) or False)
+    seeds = iter(hashlib.sha256(f'seed-{n}'.encode()).hexdigest() for n in range(restarts))
+    monkeypatch.setattr(secrets, 'token_hex', lambda nbytes: next(seeds))
+    for _ in range(restarts):
+        projection.Projector(Mock(), Mock()).release_held_scan()
+    return set(examined)
+
+
+def test_restarted_release_scans_reach_rows_past_the_first_page(monkeypatch):
+    """Serving instances restart and trade the lease long before one pass wraps.
+
+    A scan that always restarted at the first document name re-examined the
+    same prefix forever (prod 11-02: every release retry sat in the first 20%
+    of name order); a fresh process starts at a random point instead.
+    """
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', raising=False)
+    examined = _restarted_scans(monkeypatch, restarts=20)
+    assert len(examined) >= 100
+
+
+def test_release_scan_starts_at_the_first_name_when_hold_recovery_is_off(monkeypatch):
+    from utils.batch_pipeline import projection
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    assert projection.Projector(Mock(), Mock()).release_after is None
+
+
+def test_release_scan_seed_stays_inside_the_hex_id_keyspace(monkeypatch):
+    from utils.batch_pipeline import projection
+
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', raising=False)
+    seed = projection.Projector(Mock(), Mock()).release_after
+    assert isinstance(seed, str) and len(seed) == 64
+    assert set(seed) <= set('0123456789abcdef')
+
+
+def test_release_scan_counts_rows_by_outcome(monkeypatch):
+    import database.batch_pipeline_projection_release as release
+    from utils.batch_pipeline import correctness_metrics, projection
+
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'true')
+    monkeypatch.setattr(
+        release,
+        'release_page',
+        lambda *args, **kwargs: ({'released': 2, 'waiting': 5, 'error': 1, 'examined': 8}, None),
+    )
+    before = {o: correctness_metrics.RELEASE_ROWS.labels(o)._value.get() for o in ('released', 'waiting', 'error')}
+    projection.Projector(Mock(), Mock()).release_held_scan()
+    after = {o: correctness_metrics.RELEASE_ROWS.labels(o)._value.get() for o in ('released', 'waiting', 'error')}
+    assert {o: after[o] - before[o] for o in after} == {'released': 2, 'waiting': 5, 'error': 1}
