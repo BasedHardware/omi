@@ -100,6 +100,9 @@ envFrom:
 privateEnv: {}
 
 env:
+  # Production retirement; false restores the old routes only after GPUs are ready.
+  - name: STT_GPU_FLEET_OFF
+    value: "false"
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
@@ -130,6 +133,9 @@ env:
     value: "0"
   - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
     value: "100"
+  # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
+  - name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT
+    value: "0"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED

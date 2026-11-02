@@ -86,6 +86,10 @@ def _probability(value) -> float | None:
 
 def self_detect(probe: bytes, *, surface: str) -> SelfVerdict | None:
     """One bounded call; no retries. `probe` is a WAV of at most 30 s."""
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        return None  # Preserve the caller's vendor LID path without a dead-pool timeout.
     outcome = 'error'
     try:
         base = os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')

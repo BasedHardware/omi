@@ -78,6 +78,8 @@ async def modulate_batch_async(
     diarize: bool = True,
     client: Any = None,
     mark_fallback: bool = False,
+    filename: str = 'audio.wav',
+    content_type: str = 'audio/wav',
 ) -> Tuple[List[Dict[str, Any]], str]:
     """One Velma batch POST awaited on the event loop: no executor thread held, no client retry.
 
@@ -100,7 +102,7 @@ async def modulate_batch_async(
         response = await client.post(
             MODULATE_BATCH_URL,
             headers={'X-API-Key': api_key},
-            files={'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')},
+            files={'upload_file': (filename, BytesIO(audio_bytes), content_type)},
             data={'speaker_diarization': str(diarize).lower()},
             timeout=MODULATE_TIMEOUT,
         )

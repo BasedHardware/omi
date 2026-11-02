@@ -154,6 +154,10 @@ def _window_percent(env, *, strict=False):
 
 def window_pressure_allocation() -> float:
     """Process-start poller activation retains its original un-clamped input."""
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        return 0.0
     return float(os.environ.get('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
 
 
@@ -259,6 +263,10 @@ def account_circuit_cooldown() -> float:
 
 
 def service_models(default: list[str]) -> list[str]:
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        return ['soniox']  # Also build the vendor callback when an old secret/policy omitted it.
     policy = current_listen_policy.get()
     return list(policy.service_models) if policy is not None else default
 

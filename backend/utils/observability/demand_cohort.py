@@ -11,6 +11,12 @@ DEMAND_COHORTS = ('admitted', 'eligible_control', 'ineligible')
 current_demand: ContextVar['DemandTelemetry | None'] = ContextVar('listen_demand', default=None)
 TRANSPORT_ORIGINS = ('initial', 'idle_reopened', 'replacement')
 current_transport_origin: ContextVar[str] = ContextVar('stt_transport_origin', default='initial')
+current_visible_restore: ContextVar[bool] = ContextVar('stt_visible_restore', default=False)
+
+VISIBLE_RESTORE_WIRE_AUDIO = Counter(
+    'omi_listen_visible_restore_wire_audio_seconds_total',
+    'PCM seconds successfully written to batch-only visible Modulate previews',
+)
 
 
 def transport_origin() -> str:
@@ -275,6 +281,7 @@ class WireAudioMeter:
     """Pin at transport creation; call only after a successful binary audio write."""
 
     def __init__(self, provider: str, sample_rate: int, channels: int = 1):
+        self.visible_restore = current_visible_restore.get()
         self.telemetry = current_telemetry()
         self.batch_cohort = getattr(self.telemetry, 'batch_cohort', 'ineligible')
         self.provider = provider
@@ -282,7 +289,14 @@ class WireAudioMeter:
         self.bytes_per_second = 2 * sample_rate * channels
 
     def written(self, data: bytes | str) -> None:
-        if self.telemetry is not None and isinstance(data, bytes) and data and self.bytes_per_second > 0:
+        if self.visible_restore and isinstance(data, bytes) and data and self.bytes_per_second > 0:
+            VISIBLE_RESTORE_WIRE_AUDIO.inc(len(data) / self.bytes_per_second)
+        if (
+            (self.telemetry is not None or self.visible_restore)
+            and isinstance(data, bytes)
+            and data
+            and self.bytes_per_second > 0
+        ):
             record_metric(
                 BATCH_WIRE_AUDIO,
                 {'provider': self.provider, 'batch_cohort': self.batch_cohort, 'origin': self.origin},

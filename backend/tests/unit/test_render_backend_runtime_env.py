@@ -782,7 +782,16 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
 def test_prod_cloud_run_secret_refs_match_approved_bindings():
     # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
     # Preserve resource, env alias and version: aliases can introduce startup dependencies.
-    common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
+    # Lead 2026-11-02 17:42Z approved the existing Soniox key on all four roles
+    # for live GPU retirement, using the existing shared runtime identity.
+    # The independent language-recovery gate remains integration-only.
+    common = {
+        'GOOGLE_CLIENT_SECRET',
+        'ENCRYPTION_SECRET',
+        'MODULATE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'SONIOX_API_KEY',
+    }
     baseline = {
         'backend': common
         | {
@@ -805,8 +814,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
-        # David approved this recovery-only existing-secret binding via ce5485.
-        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY', 'SONIOX_API_KEY'},
+        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
