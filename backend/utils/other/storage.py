@@ -1100,12 +1100,34 @@ def _safe_delete_chunk_blob(blob: Any, expected_generation: Optional[int] = None
         pass
 
 
+def _resolve_generation_for_delete(
+    generations_by_path: Optional[Dict[Any, int]],
+    bucket_name: str,
+    path: str,
+) -> Tuple[bool, Optional[int]]:
+    """Resolve generation for deletion.
+
+    Returns (should_delete, generation).
+    When generations_by_path is None, unconditional deletion is permitted: (True, None).
+    When generations_by_path is provided as a map, fails closed: if the path is not pinned,
+    returns (False, None) to preserve unlisted or concurrently overwritten objects.
+    """
+    if generations_by_path is None:
+        return True, None
+    gen = generations_by_path.get((bucket_name, path))
+    if gen is None:
+        gen = generations_by_path.get(path)
+    if gen is None:
+        return False, None
+    return True, gen
+
+
 def delete_audio_chunks(
     uid: str,
     conversation_id: str,
     timestamps: List[float],
     *,
-    generations_by_path: Optional[Dict[str, int]] = None,
+    generations_by_path: Optional[Dict[Any, int]] = None,
 ) -> None:
     """Delete audio chunks after they've been merged.
 
@@ -1129,7 +1151,7 @@ def _delete_audio_chunks_in(
     conversation_id: str,
     timestamps: List[float],
     *,
-    generations_by_path: Optional[Dict[str, int]] = None,
+    generations_by_path: Optional[Dict[Any, int]] = None,
 ) -> None:
     deleted_batch_paths: set[str] = set()
 
@@ -1144,8 +1166,9 @@ def _delete_audio_chunks_in(
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
             blob = bucket.blob(chunk_path)
             if blob.exists():
-                gen = generations_by_path.get(chunk_path) if generations_by_path else None
-                _safe_delete_chunk_blob(blob, gen)
+                should_del, gen = _resolve_generation_for_delete(generations_by_path, bucket.name, chunk_path)
+                if should_del:
+                    _safe_delete_chunk_blob(blob, gen)
 
         # Try batch blobs: exact single-timestamp batch (e.g. "1000.000.batch.bin")
         for batch_ext in ('.batch.enc', '.batch.bin'):
@@ -1153,9 +1176,10 @@ def _delete_audio_chunks_in(
             if batch_path not in deleted_batch_paths:
                 blob = bucket.blob(batch_path)
                 if blob.exists():
-                    gen = generations_by_path.get(batch_path) if generations_by_path else None
-                    _safe_delete_chunk_blob(blob, gen)
-                    deleted_batch_paths.add(batch_path)
+                    should_del, gen = _resolve_generation_for_delete(generations_by_path, bucket.name, batch_path)
+                    if should_del:
+                        _safe_delete_chunk_blob(blob, gen)
+                        deleted_batch_paths.add(batch_path)
 
     # Scan for range-named batch blobs whose start timestamp matches any requested timestamp
     ts_set = {f'{ts:.3f}' for ts in timestamps}
@@ -1170,9 +1194,10 @@ def _delete_audio_chunks_in(
         if '-' in timestamp_str:
             start_ts = timestamp_str.split('-', 1)[0]
             if start_ts in ts_set:
-                gen = generations_by_path.get(blob.name) if generations_by_path else None
-                _safe_delete_chunk_blob(blob, gen)
-                deleted_batch_paths.add(blob.name)
+                should_del, gen = _resolve_generation_for_delete(generations_by_path, bucket.name, blob.name)
+                if should_del:
+                    _safe_delete_chunk_blob(blob, gen)
+                    deleted_batch_paths.add(blob.name)
 
 
 def list_audio_chunks(
@@ -1278,7 +1303,13 @@ def list_audio_chunks(
     return sorted(chunks, key=lambda x: x['timestamp'])
 
 
-def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
+def delete_conversation_audio_files(
+    uid: str,
+    conversation_id: str,
+    *,
+    merged_into: str | None = None,
+    generations_by_path: Optional[Dict[Any, int]] = None,
+) -> None:
     """Purge canonical and derived conversation objects, including old generations."""
     if os.getenv('BUCKET_CANONICAL_AUDIO') and merged_into:
         with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
@@ -1289,6 +1320,14 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
     for bucket_name in filter(None, bucket_names):
         bucket = _get_storage_client().bucket(bucket_name)
         for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox'):
+            if prefix == 'chunks' and generations_by_path is not None:
+                chunk_prefix = f'chunks/{uid}/{conversation_id}/'
+                for blob in list(bucket.list_blobs(prefix=chunk_prefix)):
+                    should_del, gen = _resolve_generation_for_delete(generations_by_path, bucket_name, blob.name)
+                    if not should_del:
+                        continue
+                    _safe_delete_chunk_blob(blob, gen)
+                continue
             _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
         if bucket_name == private_cloud_sync_bucket:
             # Original sync files may span conversations; deleting a linked

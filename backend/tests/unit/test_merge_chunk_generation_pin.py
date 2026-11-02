@@ -56,7 +56,7 @@ class _MockBucket:
             return self.objects[name]
         return _MockBlob(self, name, data=b'', generation=0)
 
-    def list_blobs(self, prefix=''):
+    def list_blobs(self, prefix='', **kwargs):
         return [b for name, b in list(self.objects.items()) if name.startswith(prefix)]
 
     def get_blob(self, name, retry=None):
@@ -148,3 +148,64 @@ def test_delete_audio_chunks_pins_generation_and_preserves_overwritten_chunks(mo
     # The newer generation 99 blob MUST NOT be deleted
     assert src_path in bucket.objects
     assert bucket.objects[src_path].generation == 99
+
+
+@pytest.mark.parametrize('bucket_name', [PRIVATE, DERIVED])
+def test_copy_audio_chunks_skip_existing_pins_source_and_dest_generation(mock_storage, bucket_name, monkeypatch):
+    """Under skip_existing=True (used in production merge), copy_blob pins source and dest generations."""
+    src_path = f"chunks/{UID}/conv_1/100.000.bin"
+    bucket = mock_storage[bucket_name]
+    bucket.objects[src_path] = _MockBlob(bucket, src_path, data=b"original", generation=55, crc32c='crc-55')
+
+    chunks = [
+        {'path': src_path, 'generation': 55, 'size': 8, 'crc32c': 'crc-55', 'bucket': bucket_name}
+    ]
+    monkeypatch.setattr(merge, 'list_audio_chunks', lambda uid, cid, **kwargs: chunks)
+
+    out_gens = {}
+    conversations = [{'id': 'conv_1', 'started_at': '2026-11-01T00:00:00Z'}]
+    merge._copy_audio_chunks_for_merge(UID, conversations, 'new_conv', skip_existing=True, out_generations=out_gens)
+
+    dest_path = f"chunks/{UID}/new_conv/100.000.bin"
+    # Fresh destination: if_generation_match=0, source_generation=55
+    assert (src_path, dest_path, 55, 0) in bucket.copies
+    assert out_gens.get((bucket_name, src_path)) == 55
+    assert out_gens.get(src_path) == 55
+
+
+@pytest.mark.parametrize('bucket_name', [PRIVATE, DERIVED])
+def test_delete_audio_chunks_fails_closed_when_path_unpinned_in_supplied_map(mock_storage, bucket_name):
+    """When generations_by_path is provided, unpinned paths fail closed (are NOT deleted unconditionally)."""
+    p1 = f"chunks/{UID}/conv_1/100.000.bin"
+    p2 = f"chunks/{UID}/conv_1/101.000.bin"
+    bucket = mock_storage[bucket_name]
+    bucket.objects[p1] = _MockBlob(bucket, p1, data=b"chunk1", generation=10)
+    bucket.objects[p2] = _MockBlob(bucket, p2, data=b"chunk2", generation=20)
+
+    # Supply generation map pinning p1, but omitting p2
+    gens = {(bucket_name, p1): 10}
+    storage.delete_audio_chunks(UID, 'conv_1', [100.0, 101.0], generations_by_path=gens)
+
+    # p1 deleted because pinned generation matched
+    assert p1 not in bucket.objects
+    # p2 preserved because map omitted it (failed closed rather than deleting unconditionally)
+    assert p2 in bucket.objects
+
+
+@pytest.mark.parametrize('bucket_name', [PRIVATE, DERIVED])
+def test_delete_conversation_audio_files_pins_generations_and_preserves_overwritten(mock_storage, bucket_name):
+    """delete_conversation_audio_files pins chunk generations and preserves unpinned/overwritten blobs."""
+    p_pinned = f"chunks/{UID}/conv_1/100.000.bin"
+    p_newer = f"chunks/{UID}/conv_1/101.000.bin"
+    bucket = mock_storage[bucket_name]
+    bucket.objects[p_pinned] = _MockBlob(bucket, p_pinned, data=b"p", generation=10)
+    bucket.objects[p_newer] = _MockBlob(bucket, p_newer, data=b"newer", generation=99)
+
+    # Pinned generation map only pins p_pinned at 10
+    gens = {(bucket_name, p_pinned): 10}
+    storage.delete_conversation_audio_files(UID, 'conv_1', generations_by_path=gens)
+
+    # Pinned blob was deleted
+    assert p_pinned not in bucket.objects
+    # Newer/unpinned blob was preserved
+    assert p_newer in bucket.objects

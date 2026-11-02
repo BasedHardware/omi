@@ -304,7 +304,10 @@ def perform_merge_async(
         # generation per object per run (the 10-16..19 CloneObject burst).
         # The bridge copy skips a destination already holding the same bytes
         # and preconditions concurrent writers on the destination generation.
-        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
+        chunk_generations: Dict[Any, int] = {}
+        merged_audio_files = _copy_audio_chunks_for_merge(
+            uid, sorted_convs, new_conversation_id, skip_existing=True, out_generations=chunk_generations
+        )
 
         # 4. Determine basic fields from source conversations
         # Use earliest conversation's dates. created_at fallback uses
@@ -467,6 +470,7 @@ def perform_merge_async(
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
                 merged_into=new_conversation_id,
+                generations_by_path=chunk_generations,
             )
 
         # 10. Send FCM notification
@@ -669,6 +673,7 @@ def _copy_audio_chunks_for_merge(
     *,
     strict: bool = False,
     skip_existing: bool = False,
+    out_generations: Optional[Dict[Any, int]] = None,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -738,6 +743,9 @@ def _copy_audio_chunks_for_merge(
             target = buckets[name]
             source_blob = target.blob(chunk["path"])
             source_generation = chunk.get("generation")
+            if source_generation is not None and out_generations is not None:
+                out_generations[(name, chunk["path"])] = source_generation
+                out_generations[chunk["path"]] = source_generation
             if not skip_existing:
                 _copy_chunk_with_backoff(uid, target, source_blob, new_path, source_generation=source_generation)
             else:
@@ -1000,6 +1008,7 @@ def _delete_conversation_and_related_data(
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
     merged_into: Optional[str] = None,
+    generations_by_path: Optional[Dict[Any, int]] = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -1093,9 +1102,11 @@ def _delete_conversation_and_related_data(
     try:
         # Delete audio chunks from GCS
         if merged_into:
-            delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
+            delete_conversation_audio_files(
+                uid, conversation_id, merged_into=merged_into, generations_by_path=generations_by_path
+            )
         else:
-            delete_conversation_audio_files(uid, conversation_id)
+            delete_conversation_audio_files(uid, conversation_id, generations_by_path=generations_by_path)
     except Exception as e:
         if merged_into:
             raise
