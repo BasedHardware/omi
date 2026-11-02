@@ -147,7 +147,10 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) + len(self.patches) + len(self.external) > 450:
+        # Conversation patches set record_lane_owner, a batch-privacy authority
+        # field, so the commit-boundary fence appends one token write per owner.
+        fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
+        if len(self.writes) + len(self.patches) + len(self.external) + fence_tokens > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
@@ -640,6 +643,163 @@ def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
         .stream()
     )
     return docs[0].to_dict()['retry_started_at'] if docs else None
+
+
+# 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs
+# (priority, retry_started_at), jobs (state, recovery_state, enqueued_at) and results (projection_state, committed_at).
+TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
+TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
+TIMELINESS_HOLD_SCAN_LIMIT = 20
+TIMELINESS_PROJECTION_SCAN_LIMIT = 50
+
+
+def is_timeliness_hold(job: dict[str, Any], now: float) -> bool:
+    """A deliberate admission refusal (allowance, budget, fair use, daily ceiling) or a live vendor hold."""
+    return is_policy_hold(job, now) or (job.get('compute_decision') or {}).get('outcome') == 'held'
+
+
+def is_terminal_empty(job: dict[str, Any]) -> bool:
+    """Settled empty_asr, failed held, with no recoverable speech: measured held VAD speech exactly 0."""
+    return (
+        job.get('state') == 'quarantined'
+        and job.get('recovery_state') == 'failed_held'
+        and ((job.get('recovery') or {}).get('failure') or {}).get('reason') == 'empty_asr'
+        and job.get('measured_held_vad_speech_seconds') == 0
+    )
+
+
+def timeliness_sample(
+    client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
+) -> dict[str, Any]:
+    """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
+    new cohort, and backlog counts before ``epoch``.
+
+    ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
+    leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
+
+    Holds must never fill a bound: ``ready`` is read through the capacity index with the decision filtered in
+    the query, admission holds park in ``retry`` without ``retry_started_at`` (compute-failure retries are read
+    by that field), and live ``vendor_held`` units are walked apart from active work. Results carry no enqueue
+    time, so the projection leg reads the jobs behind its oldest committed rows; its counts clock from
+    ``committed_at``, a lower bound. ``truncated`` names a leg whose bounded prefix may hide an older unit.
+    """
+    jobs = client.collection(f'{namespace}_jobs')
+    results = client.collection(f'{namespace}_results')
+    due = now - sla
+
+    def first(query, field):
+        docs = list(query.order_by(field).limit(1).stream())
+        return docs[0].to_dict()[field] if docs else None
+
+    def count(query):
+        return int(query.count().get()[0][0].value)
+
+    def walk(query, field):
+        docs = [doc.to_dict() for doc in query.order_by(field).limit(TIMELINESS_HOLD_SCAN_LIMIT).stream()]
+        admitted = [
+            job['enqueued_at'] for job in docs if job['enqueued_at'] >= epoch and not is_timeliness_hold(job, now)
+        ]
+        full = len(docs) == TIMELINESS_HOLD_SCAN_LIMIT
+        # Ordered by admission, the first unheld row is the oldest. Ordered by any other clock, a full page
+        # may hide an older admission behind it.
+        return min(admitted, default=None), full and (not admitted or field != 'enqueued_at')
+
+    def committed_walk(query):
+        rows = list(
+            query.where('committed_at', '>=', epoch)
+            .order_by('committed_at')
+            .limit(TIMELINESS_PROJECTION_SCAN_LIMIT)
+            .stream()
+        )
+        refs = [jobs.document(row.id) for row in rows]
+        admitted = [
+            started
+            for snapshot in (client.get_all(refs, field_paths=['enqueued_at']) if refs else [])
+            for started in [(snapshot.to_dict() or {}).get('enqueued_at')]
+            if isinstance(started, (int, float)) and started >= epoch
+        ]
+        return min(admitted, default=None), len(rows) == TIMELINESS_PROJECTION_SCAN_LIMIT
+
+    walks = [
+        walk(
+            jobs.where('state', 'in', list(TIMELINESS_ACTIVE_STATES)).where('enqueued_at', '>=', epoch), 'enqueued_at'
+        ),
+        walk(jobs.where('state', '==', 'vendor_held').where('enqueued_at', '>=', epoch), 'enqueued_at'),
+    ]
+    for priority in (0, 1, 2):
+        ready = (
+            jobs.where('priority', '==', priority)
+            .where('state', '==', 'ready')
+            .where('merge_pending', '==', True)
+            .where('compute_decision.outcome', 'in', ['unattempted', 'allowed'])
+            .where('available_at', '>=', epoch)
+        )
+        walks.append(walk(ready, 'available_at'))
+        walks.append(
+            walk(jobs.where('priority', '==', priority).where('retry_started_at', '>=', epoch), 'retry_started_at')
+        )
+    projection = results.where('projection_state', 'in', list(PROJECTION_DISCOVERY_STATES))
+    projected, projection_truncated = committed_walk(projection)
+    quarantined = jobs.where('state', '==', 'quarantined')
+    legs = {
+        'quarantined': (quarantined, 'enqueued_at'),
+        # A quarantined projection receipt holds its committed job in the same transaction: the text never
+        # reached the conversation.
+        'assignment_held': (
+            jobs.where('state', '==', 'committed').where('recovery_state', '==', 'held'),
+            'enqueued_at',
+        ),
+        'projection': (projection, 'committed_at'),
+        # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
+        'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
+        # A subset of quarantined, matching is_terminal_empty. Visible only.
+        'terminal_empty': (
+            quarantined.where('recovery_state', '==', 'failed_held')
+            .where('recovery.failure.reason', '==', 'empty_asr')
+            .where('measured_held_vad_speech_seconds', '==', 0),
+            'enqueued_at',
+        ),
+    }
+    over_sla = {
+        leg: count(query.where(field, '>=', epoch).where(field, '<', due)) if due > epoch else 0
+        for leg, (query, field) in legs.items()
+    }
+    if terminal_empty_processed:
+        over_sla['quarantined'] -= over_sla['terminal_empty']
+        docs = [
+            doc.to_dict()
+            for doc in quarantined.where('enqueued_at', '>=', epoch)
+            .order_by('enqueued_at')
+            .limit(TIMELINESS_HOLD_SCAN_LIMIT)
+            .stream()
+        ]
+        kept = [job['enqueued_at'] for job in docs if not is_terminal_empty(job)]
+        # Past a full page of exempt rows the exact count still names a breach, and the last row bounds its age.
+        quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
+    else:
+        quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
+    return {
+        'new_oldest': {
+            'uncommitted': min((started for started, _ in walks if started is not None), default=None),
+            'quarantined': quarantined_oldest,
+            'assignment_held': first(legs['assignment_held'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
+            'projection': projected,
+            'quarantine_held_rows': first(
+                legs['quarantine_held_rows'][0].where('committed_at', '>=', epoch), 'committed_at'
+            ),
+        },
+        'new_over_sla': over_sla,
+        'backlog': {
+            'uncommitted_incl_holds': count(
+                jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)
+            ),
+            **{leg: count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
+        },
+        'truncated': {
+            'uncommitted': any(truncated for _, truncated in walks),
+            'projection': projection_truncated,
+        },
+    }
 
 
 def service_frontier(client: Any, namespace: str, priority: int, *, transaction: Any = None) -> float:
