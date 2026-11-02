@@ -1,6 +1,7 @@
 """Require complete, verified raw coverage before retiring any PCM write."""
 
 import hashlib
+import json
 import threading
 import time
 from bisect import bisect_right
@@ -9,7 +10,7 @@ from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
 from utils.other.raw_audio import decode_capture
-from utils.other.audio_frame_table import FRAME_SCHEMA, committed_frames, entries, validate_frames
+from utils.other.audio_frame_table import FRAME_SCHEMA, committed_frames, entries, validate_frames, receipt_frames
 from utils.other.audio_raw_read_metrics import (
     ChecksumMismatch,
     CoverageMismatch,
@@ -189,6 +190,26 @@ def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha25
                 return selected
     record('identity_mismatch' if matched else 'no_pack')
     return None
+
+
+def pcm_for_projection(bucket, uid: str, metadata: dict, sample_rate: int):
+    """A framed projection points to disjoint spans, never a synthetic wall interval."""
+    try:
+        receipt = json.loads(metadata['framed_receipt'])
+        if sample_rate != receipt['sample_rate']:
+            return None
+        receipt_frames(bucket, uid, receipt)
+        pcm = _read_pack(bucket, receipt['path'], uid, {'if_generation_match': int(receipt['generation'])}, sample_rate)
+        if hashlib.sha256(pcm).hexdigest() != receipt['pcm_sha256'] or receipt['pcm_sha256'] != metadata.get(
+            'pcm_sha256'
+        ):
+            record('identity_mismatch')
+            return None
+    except Exception as error:
+        record(error_result(error))
+        raise
+    record('ok')
+    return pcm
 
 
 def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:

@@ -19,11 +19,13 @@ from utils.other.audio_raw_read_metrics import log_failure
 from utils.other.pcm_frames import align_pcm16_frames
 from utils.other.audio_framed_projection import upload_projection
 from utils.other.audio_frame_table import projection_entries
+from utils.other.audio_frame_playback import group_frame_jobs, read_frame_fragments
 from utils.other.raw_audio_read import (
     list_packs,
     read_pack,
     verified_pcm_paths,
     pcm_for_span,
+    pcm_for_projection,
     invalidate_pack_index,
     uncovered_raw_packs,
     select_raw_pcm,
@@ -1308,12 +1310,21 @@ def download_and_decode_chunk_blob(
             blob = bucket.blob(path)
             blob.reload(**(download_kwargs or {}))
             span = parse_span_blob_metadata(blob.metadata)
-            raw_pcm = pcm_for_span(
-                _get_storage_client().bucket(private_cloud_sync_bucket),
-                uid,
-                path.split('/')[2],
-                span,
-                expected_sha256=(blob.metadata or {}).get('pcm_sha256'),
+            raw_pcm = (
+                pcm_for_projection(
+                    _get_storage_client().bucket(private_cloud_sync_bucket),
+                    uid,
+                    blob.metadata,
+                    sample_rate,
+                )
+                if (blob.metadata or {}).get('framed_receipt')
+                else pcm_for_span(
+                    _get_storage_client().bucket(private_cloud_sync_bucket),
+                    uid,
+                    path.split('/')[2],
+                    span,
+                    expected_sha256=(blob.metadata or {}).get('pcm_sha256'),
+                )
             )
             if raw_pcm is not None:
                 return raw_pcm
@@ -1456,13 +1467,13 @@ def download_audio_chunks_and_merge(
         formatted_timestamp = f'{timestamp:.3f}'
 
         extensions_to_try = [
-            ('opus.enc', True, True),  # (ext, encrypted, opus)
-            ('enc', True, False),
-            ('opus', False, True),
-            ('bin', False, False),
+            'opus.enc',
+            'enc',
+            'opus',
+            'bin',
         ]
 
-        for ext, encrypted, opus in extensions_to_try:
+        for ext in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
             entry = next((item for item in actual_chunks if item['path'] == chunk_path), {})
             if strict_sources:
@@ -1491,34 +1502,9 @@ def download_audio_chunks_and_merge(
                 if pcm_data is not None:
                     return timestamp, pcm_data
                 continue
-            if audio_archive.admitted(uid, 'READ'):
-                raw_pcm = download_and_decode_chunk_blob(source, chunk_path, uid, sample_rate)
-                if raw_pcm is not None:
-                    return timestamp, raw_pcm
-                continue
-            try:
-                chunk_data = source.blob(chunk_path).download_as_bytes()
-            except NotFound:
-                continue
-
-            try:
-                if encrypted:
-                    raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-                else:
-                    raw_data = chunk_data
-
-                if opus:
-                    pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-                    del raw_data
-                else:
-                    pcm_data = raw_data
-
-                return (timestamp, align_pcm16_frames(pcm_data, chunk_path))
-            except Exception as e:
-                logger.warning(
-                    f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
-                )
-                continue
+            raw_pcm = download_and_decode_chunk_blob(source, chunk_path, uid, sample_rate)
+            if raw_pcm is not None:
+                return timestamp, raw_pcm
 
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
@@ -1526,10 +1512,15 @@ def download_audio_chunks_and_merge(
     chunk_results: Dict[float, bytes] = {}
 
     individual_timestamps = [ts for ts in timestamps if ts in raw_by_timestamp or round(ts, 3) not in ts_to_batch_path]
+    individual_timestamps, frame_groups = group_frame_jobs(individual_timestamps, raw_by_timestamp)
     unique_batch_paths = list(set(ts_to_batch_path.values()))
 
     # Build unified job list: ('individual', ts) or ('batch', path)
-    jobs = [('individual', ts) for ts in individual_timestamps] + [('batch', p) for p in unique_batch_paths]
+    jobs = (
+        [('individual', ts) for ts in individual_timestamps]
+        + [('batch', p) for p in unique_batch_paths]
+        + [('framed', p) for p in frame_groups]
+    )
 
     def _submit_job(job: Tuple[str, Any]) -> Tuple[Any, str, Any]:
         kind, key = job
@@ -1540,6 +1531,10 @@ def download_audio_chunks_and_merge(
         try:
             if kind == 'individual':
                 f = storage_executor.submit(download_single_chunk, key)
+            elif kind == 'framed':
+                f = storage_executor.submit(
+                    read_frame_fragments, key, frame_groups[key], sample_rate, _download_and_decode_blob
+                )
             else:
                 f = storage_executor.submit(_download_and_decode_blob, key)
             if chunk_loader is None:
@@ -1565,7 +1560,13 @@ def download_audio_chunks_and_merge(
         for future in done:
             _, kind, key = pending.pop(future)
             try:
-                if kind == 'individual':
+                if kind == 'framed':
+                    fragments = future.result()
+                    if fragments is None:
+                        failed_download = True
+                    else:
+                        chunk_results.update(fragments)
+                elif kind == 'individual':
                     timestamp, pcm_data = future.result()
                     if pcm_data is not None:
                         chunk_results[timestamp] = pcm_data
@@ -1580,7 +1581,10 @@ def download_audio_chunks_and_merge(
                         failed_download = True
             except Exception as e:
                 failed_download = True
-                logger.warning(f"Chunk download failed ({kind}={key}): {e}")
+                if kind == 'framed':
+                    log_failure('other')
+                else:
+                    logger.warning(f"Chunk download failed ({kind}={key}): {e}")
 
         for job in job_iter:
             finfo = _submit_job(job)
