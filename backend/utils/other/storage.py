@@ -18,7 +18,7 @@ from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PC
 from utils.other.audio_raw_read_metrics import log_failure
 from utils.other.pcm_frames import align_pcm16_frames
 from utils.other.audio_framed_projection import upload_projection
-from utils.other.audio_frame_table import projection_entries
+from utils.other.audio_frame_table import has_frame_receipt, projection_entries
 from utils.other.audio_frame_playback import group_frame_jobs, read_frame_fragments
 from utils.other.raw_audio_read import (
     list_packs,
@@ -1239,9 +1239,7 @@ def list_audio_chunks(
                 if span is not None:
                     chunk_entry['span'] = span
                 chunks.extend(
-                    projection_entries(bucket, blob, uid, chunk_entry)
-                    if (getattr(blob, 'metadata', None) or {}).get('framed_receipt')
-                    else [chunk_entry]
+                    projection_entries(bucket, blob, uid, chunk_entry) if has_frame_receipt(blob) else [chunk_entry]
                 )
             except ValueError:
                 continue
@@ -1330,7 +1328,7 @@ def download_and_decode_chunk_blob(
                     blob.metadata,
                     sample_rate,
                 )
-                if (blob.metadata or {}).get('framed_receipt')
+                if has_frame_receipt(blob)
                 else pcm_for_span(
                     _get_storage_client().bucket(private_cloud_sync_bucket),
                     uid,
@@ -1535,6 +1533,11 @@ def download_audio_chunks_and_merge(
         + [('framed', p) for p in frame_groups]
     )
 
+    def download_stored_chunk(path):
+        if path in frame_groups:
+            return read_frame_fragments(path, frame_groups[path], sample_rate, _download_and_decode_blob)
+        return _download_and_decode_blob(path)
+
     def _submit_job(job: Tuple[str, Any]) -> Tuple[Any, str, Any]:
         kind, key = job
         # A supplied loader owns its shared download semaphore and invocation
@@ -1544,12 +1547,8 @@ def download_audio_chunks_and_merge(
         try:
             if kind == 'individual':
                 f = storage_executor.submit(download_single_chunk, key)
-            elif kind == 'framed':
-                f = storage_executor.submit(
-                    read_frame_fragments, key, frame_groups[key], sample_rate, _download_and_decode_blob
-                )
             else:
-                f = storage_executor.submit(_download_and_decode_blob, key)
+                f = storage_executor.submit(download_stored_chunk, key)
             if chunk_loader is None:
                 f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
             return (f, kind, key)

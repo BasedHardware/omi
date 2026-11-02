@@ -131,6 +131,12 @@ def entries(frames: list[dict], rate: int, source: dict[str, Any]) -> list[dict]
     return result
 
 
+def has_frame_receipt(blob) -> bool:
+    """Only actual metadata mappings can declare a framed projection."""
+    metadata = getattr(blob, 'metadata', None)
+    return isinstance(metadata, dict) and 'framed_receipt' in metadata
+
+
 def projection_entries(bucket, blob, uid: str, source: dict) -> list[dict]:
     receipt = json.loads(blob.metadata['framed_receipt'])
     frames, rate = receipt_frames(bucket, uid, receipt)
