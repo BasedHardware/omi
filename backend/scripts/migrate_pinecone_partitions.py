@@ -70,6 +70,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--max-read-units', type=positive, default=10000)
     parser.add_argument('--max-write-units', type=positive, default=10000)
     parser.add_argument('--max-upload-bytes', type=positive, default=100_000_000)
+    parser.add_argument(
+        '--stop-file',
+        type=Path,
+        help='Stop at the next safe point once this file exists; the owned journal resumes with --resume.',
+    )
     parser.add_argument('--emulator-project', help='Only demo-* projects with FIRESTORE_EMULATOR_HOST set.')
     args = parser.parse_args(argv)
     if not args.index or args.max_owners > 10000 or args.max_route_docs > 100000 or args.max_attempts > 3:
@@ -235,6 +240,9 @@ def select_keys(args: argparse.Namespace, db: Any) -> tuple[list[state.Partition
     }
 
 
+WRITE_PATHS = frozenset({'vectors/upsert', 'vectors/update', 'vectors/delete'})
+
+
 class BudgetTransport(PartitionTransport):
     def __init__(self, host: str, api_key: str, args: argparse.Namespace):
         super().__init__(host, api_key)
@@ -252,7 +260,16 @@ class BudgetTransport(PartitionTransport):
         ):
             raise BudgetExceeded('provider budget exhausted; rerun from the owned journal after review')
 
+    def check_stop(self) -> None:
+        stop_file = getattr(self.args, 'stop_file', None)
+        if stop_file is not None and stop_file.exists():
+            raise BudgetExceeded('operator stop requested; rerun from the owned journal with --resume')
+
     def call(self, path: str, payload: dict) -> tuple[dict, dict]:
+        # A write's own request runs inside its durable admission, so a stop
+        # there would mark it uncertain; writes stop in BoundedMigration._write.
+        if path not in WRITE_PATHS:
+            self.check_stop()
         self.check_budget(path, payload)
         self.requests += 1
         if path in {'vectors/upsert', 'vectors/update'}:
@@ -269,8 +286,9 @@ class BudgetTransport(PartitionTransport):
 
 class BoundedMigration(OwnerMigration):
     def _write(self, token: str, path: str, namespace: str, scoped_ids: list[str], **payload: Any) -> int:
-        # Refuse before durable write admission: a budget stop is not an
-        # uncertain provider request and must not poison the route.
+        # Refuse before durable write admission: a budget or requested stop is
+        # not an uncertain provider request and must not poison the route.
+        self.transport.check_stop()
         self.transport.check_budget(path, {'namespace': namespace, **payload})
         return super()._write(token, path, namespace, scoped_ids, **payload)
 
