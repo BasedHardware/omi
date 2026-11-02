@@ -405,6 +405,7 @@ def test_cached_hit_preserves_foreign_wq12_memo_validation(monkeypatch, reads):
 @pytest.mark.parametrize('export_snapshots', [False, True])
 def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypatch, reads, export_snapshots):
     from types import SimpleNamespace
+    from database import privacy_check_metrics as metrics
     from utils.batch_pipeline import retention
 
     item = SimpleNamespace(owner_id=UID, conversation_id='source', privacy_generation=7)
@@ -415,6 +416,7 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
         db = database()
         store = SimpleNamespace(client=db)
         reads.clear()
+        reads_before = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
         with batch_privacy_attempt():
             outputs = []
             for i in range(20):
@@ -424,6 +426,8 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
                 if snapshots is not None:
                     assert snapshots['conversations']['source']['title'] == f'live-{i}'
         counts.append(len(reads))
+        reads_after = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
+        assert reads_after - reads_before == len(reads)
         results.append(outputs)
         if not on:
             assert (

@@ -41,9 +41,10 @@ Unknown schemas and `blocked`, `purging` or `memo_blocked` also disable reuse.
 Token read failures propagate on enforcement; shadow failures are counted and
 leave the original live result/exception intact.
 
-Batch memo entries belong to one sync/pump attempt and close on every exit.
-Every authorizing transaction reads the token in its conflict set. Existing
-transactional legal-hold fences retain both live authority reads. Nontransactional
+Batch memo entries belong to one sync/pump attempt, including inline sync, and
+close on every exit. Transactions reusing a batch memo read the token in their
+conflict set. Existing transactional legal-hold fences retain both live authority
+reads and do not add a privacy-token read. Nontransactional
 provider-STT checks remain live (the deferred admission-write fix in
 `1219b0ed1b22` is retained). Nothing caches query/list tombstone results or
 memory-plane tombstones.
@@ -65,6 +66,9 @@ absence. `record_deletion` invalidates it. These hints remain bounded to 30
 seconds and never authorize reuse without the durable token. No deletion TTL
 cap is raised. Per-session memo entries on listen/pusher are bounded and closed
 on teardown; late executor leaves cannot reuse a closed holder.
+The new negative families use a fixed managed-deployment ceiling of 30 seconds;
+their TTL environment names are not deployment tuning knobs. Optional local
+overrides can only shorten that ceiling. Rollouts use the declared reader levers.
 
 ## Measurement
 
@@ -106,16 +110,20 @@ Unresolved shadow errors or missing candidate coverage block qualification.
    candidate runs **after** live allow/block, never changes it and never exports
    snapshots. Shadow wins if an enforcement lever is also present.
 3. Require **at least 14 days** of all-plane shadow and **zero unexplained
-   `decision_mismatch`**, plus the emulator writer matrix and privacy contracts.
+   `privacy_decision_mismatch_total`**, plus the emulator writer matrix and privacy contracts.
    Count/classify benign concurrent ordering rather than discarding it. Grade
    memo economics against the scope's 30% repeat-key hit-rate bar; a cache with
    insufficient repeat-key traffic has no demonstrated saving.
 4. Infracost owns expansion and the first enforcement decision is due **14 days
    after shadow reaches all planes**. Remove shadow for the qualified cohort,
-   then ramp each independent lever (`bpp_generation_memo`,
-   `legal_hold_fence_cache`, `privacy_session_token`, `tombstone_negative_cache`)
-   to **5% → PASS on two ticks → 100%**, against its own pre-ramp baseline.
-   Keep `privacy_decision_mismatch` clean; any unexplained mismatch stops ramp.
+   then ramp `bpp_generation_memo`, `legal_hold_fence_cache`, and
+   `tombstone_negative_cache` separately to **5% → PASS on two ticks → 100%**,
+   against their own pre-ramp baselines. `privacy_session_token` is a combined
+   session lever: in listen/pusher it enables both external-fence and tombstone
+   candidates even when the family levers are off. Ramp it separately with both
+   families' baselines and coverage; rollback it for a mismatch or regression in
+   either family. Keep `privacy_decision_mismatch_total` clean; any unexplained
+   mismatch stops ramp.
 5. Roll back by turning the new enforcement and shadow levers off. The reader
    path uses the same live Firestore reads in the same order as before; mandatory
    writer tokens remain. There is no data migration to reverse.
@@ -142,3 +150,25 @@ writer families, failed CAS, transaction retry, bulk writes and subtree erasure.
 `test_privacy_shadow_and_session.py` includes deliberate missing-token-bump
 mutations: shadow must report stale allow while returning the live block.
 Run the hermetic listen/sync e2e harness and privacy-contract tests before push.
+
+From the product worktree, create a scratch file listing these unit paths:
+`tests/unit/test_bpp_generation_fence.py`, `tests/unit/test_bpp_generation_memo.py`,
+`tests/unit/test_privacy_shadow_and_session.py`,
+`tests/unit/test_batch_privacy_conversation_fence.py`,
+`tests/unit/test_batch_pipeline_privacy.py`, `tests/unit/test_fsr_wq12_batch_privacy.py`,
+`tests/unit/test_legal_holds.py`, `tests/unit/test_conversation_tombstones.py`,
+and `tests/unit/test_fsr_s4_caches.py`. Run
+`omi-heavy run -- nice -n 19 env BACKEND_UNIT_TEST_FILE_LIST=<scratch-list> BACKEND_PYTEST_WORKERS=1 bash backend/test.sh`.
+Run the full hermetic harness with
+`omi-heavy run -- nice -n 19 bash backend/testing/e2e/run.sh`; retain its default
+timeout and do not supply cloud credentials.
+
+For the writer matrix, `make setup` supplies the pinned Firebase CLI. Start its
+Firestore emulator with a scratch Firebase config on loopback and a `demo-`
+project, then invoke the same `backend/test.sh` contract with
+`BACKEND_PYTEST_MARK_EXPR=integration`, `OMI_ENV_STAGE=local`, and a list containing
+`tests/integration/test_bpp_generation_fence_emulator.py`. Use Firebase
+`emulators:exec --only firestore --config <scratch-config> --project demo-privacy`
+inside `omi-heavy run -- nice -n 19` so emulator shutdown is owned by the harness.
+The test refuses missing/non-loopback `FIRESTORE_EMULATOR_HOST`; do not fall back
+to a cloud project. Verify that the emulator listener has stopped afterward.
