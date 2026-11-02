@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from google.api_core.exceptions import GoogleAPICallError
 from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient
+from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1.types import (
     BatchWriteRequest,
     BatchWriteResponse,
@@ -38,6 +39,44 @@ _USER_FIELDS = frozenset(
 _CONVERSATION_FIELDS = frozenset(
     {'deleted', 'sync_merged_into', 'record_lane_owner', 'uses_custom_stt', 'private_cloud_sync_enabled'}
 )
+_AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_value', 'purging': 'boolean_value'}
+
+
+def _authority_path(path: str) -> tuple[str, ...]:
+    try:
+        return FieldPath.from_api_repr(path).parts
+    except ValueError:
+        raise ValueError('invalid batch privacy authority field path') from None
+
+
+def _validate_authority_write(write: Any) -> None:
+    """Invalidate a decision without silently removing its durable authority."""
+    if write.delete:
+        raise ValueError('batch privacy authority must survive deletion')
+    transforms = [*write.update_transforms, *write.transform.field_transforms]
+    for transform in transforms:
+        if _authority_path(transform.field_path)[0] in _AUTHORITY_STATE_TYPES:
+            raise ValueError('batch privacy authority state requires explicit typed values')
+    if not write.update.name:
+        return
+    fields = write.update.fields
+    if Write.pb(write).HasField('update_mask'):
+        paths = [_authority_path(path) for path in write.update_mask.field_paths]
+        state = set()
+        for path in paths:
+            if path[0] in _AUTHORITY_STATE_TYPES:
+                if len(path) != 1:
+                    raise ValueError('batch privacy authority state cannot be nested')
+                state.add(path[0])
+    else:
+        # A replacement removes every omitted field, even if its payload only
+        # mentions metadata. The epoch writer already supplies all three fields.
+        state = set(_AUTHORITY_STATE_TYPES)
+    for name in state:
+        if name not in fields or Value.pb(fields[name]).WhichOneof('value_type') != _AUTHORITY_STATE_TYPES[name]:
+            raise ValueError('batch privacy authority state cannot be removed or malformed')
+        if name == 'generation' and fields[name].integer_value < 0:
+            raise ValueError('batch privacy authority generation must be nonnegative')
 
 
 def _changes_answer(write: Any, fields: frozenset[str]) -> bool:
@@ -69,8 +108,7 @@ def authority_tokens(writes: Any) -> set[str]:
             # This authority intentionally survives account erasure. Recreating
             # a deleted row with token fields alone would erase block/purge
             # state and its generation. Refuse before any RPC, including bulk.
-            if write.delete:
-                raise ValueError('batch privacy authority must survive deletion')
+            _validate_authority_write(write)
             tokens.add(path)
         elif (family in _ROOT_AUTHORITIES and len(parts) == 7) or (
             family == 'users'

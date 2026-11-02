@@ -51,6 +51,14 @@ def test_all_authority_shapes_share_one_atomic_commit(authority, operation):
         )
     else:
         write = Write(update=Document(name=path, fields={'dynamic': {'boolean_value': True}}))
+        if authority.startswith('batch_pipeline_privacy/') and operation == 'set':
+            write.update.fields.update(
+                {
+                    'generation': {'integer_value': 7},
+                    'blocked': {'boolean_value': False},
+                    'purging': {'boolean_value': False},
+                }
+            )
         if operation in {'merge', 'update'}:
             write.update_mask = {'field_paths': ['dynamic']}
         if operation == 'update':
@@ -107,6 +115,65 @@ async def test_authority_delete_refuses_whole_request_before_transport(asynchron
         'writes': [Write(delete=f'{ROOT}/users/u/conversations/source'), Write(delete=TOKEN)],
     }
     with pytest.raises(ValueError, match='authority must survive deletion'):
+        if asynchronous:
+            await wrapped(None, request=request)
+        else:
+            wrapped(None, request=request)
+    assert called == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.parametrize('bulk', [False, True])
+@pytest.mark.parametrize(
+    'mutation',
+    [
+        'masked_delete',
+        'quoted_delete',
+        'replacement',
+        'nested_state',
+        'null_state',
+        'wrong_generation',
+        'negative_generation',
+        'state_transform',
+        'update_transform',
+    ],
+)
+async def test_authority_state_loss_refuses_whole_request_before_transport(asynchronous, bulk, mutation):
+    write = Write(update=Document(name=TOKEN), update_mask={'field_paths': ['generation', 'blocked', 'purging']})
+    if mutation == 'quoted_delete':
+        write.update_mask.field_paths = ['`generation`', '`blocked`', '`purging`']
+    elif mutation == 'replacement':
+        write = Write(update=Document(name=TOKEN, fields={'dynamic': {'boolean_value': True}}))
+    elif mutation == 'nested_state':
+        write.update_mask.field_paths = ['blocked.nested']
+    elif mutation == 'null_state':
+        write.update_mask.field_paths = ['blocked']
+        write.update.fields['blocked'] = {'null_value': 0}
+    elif mutation in {'wrong_generation', 'negative_generation'}:
+        write.update_mask.field_paths = ['generation']
+        write.update.fields['generation'] = (
+            {'string_value': '7'} if mutation == 'wrong_generation' else {'integer_value': -1}
+        )
+    elif mutation in {'state_transform', 'update_transform'}:
+        transform = {'field_path': 'generation', 'increment': {'integer_value': 1}}
+        if mutation == 'state_transform':
+            write = Write(transform={'document': TOKEN, 'field_transforms': [transform]})
+        else:
+            write.update_mask.field_paths = []
+            write.update_transforms = [transform]
+    called = []
+
+    def transport(*args, **kwargs):
+        called.append(True)
+        raise AssertionError('state-loss request reached transport')
+
+    async def async_transport(*args, **kwargs):
+        return transport(*args, **kwargs)
+
+    wrapped = (fence._wrap_bulk if bulk else fence._wrap_commit)(async_transport if asynchronous else transport)
+    request = {'database': 'db', 'writes': [Write(delete=f'{ROOT}/users/u/conversations/source'), write]}
+    with pytest.raises(ValueError, match='batch privacy authority'):
         if asynchronous:
             await wrapped(None, request=request)
         else:

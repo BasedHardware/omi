@@ -480,23 +480,38 @@ def test_real_account_subtree_wipe_keeps_blocked_token_outside_user_walk(world, 
 
 
 @pytest.mark.parametrize('bulk', [False, True])
-def test_privacy_authority_delete_preserves_blocked_generation_and_purge(world, bulk):
+@pytest.mark.parametrize(
+    'mutation', ['hard_delete', 'masked_delete', 'replacement', 'nested_state', 'null_state', 'transform']
+)
+def test_privacy_authority_delete_preserves_blocked_generation_and_purge(world, bulk, mutation):
     from google.cloud import firestore
 
     w = world
     w.token.set({'generation': 7, 'blocked': True, 'purging': True}, merge=True)
     before = w.token.get().to_dict()
     w.requests.clear()
-    with pytest.raises(ValueError, match='authority must survive deletion'):
+    batch = w.client.batch()
+    batch.delete(w.source)
+    if mutation == 'hard_delete':
+        batch.delete(w.token)
+    elif mutation == 'masked_delete':
+        batch.update(w.token, dict.fromkeys(['generation', 'blocked', 'purging'], firestore.DELETE_FIELD))
+    elif mutation == 'replacement':
+        batch.set(w.token, {'metadata': True})
+    elif mutation == 'nested_state':
+        batch.update(w.token, {'blocked.nested': firestore.DELETE_FIELD})
+    elif mutation == 'null_state':
+        batch.update(w.token, {'blocked': None})
+    else:
+        batch.update(w.token, {'generation': firestore.Increment(1)})
+    with pytest.raises(ValueError, match='batch privacy authority'):
         if bulk:
-            from google.cloud.firestore_v1.types import Write
-
             w.client._firestore_api.batch_write(
                 database=w.client._database_string,
-                writes=[Write(delete=w.source._document_path), Write(delete=w.token._document_path)],
+                writes=batch._write_pbs,
             )
         else:
-            w.token.delete()
+            batch.commit()
     assert w.requests == []
     assert w.token.get().to_dict() == before
     assert w.source.get().exists

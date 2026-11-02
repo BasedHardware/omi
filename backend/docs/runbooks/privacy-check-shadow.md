@@ -21,6 +21,10 @@ cannot preserve those labels.
 Deleting the privacy authority itself is rejected before any RPC, including
 mixed bulk requests: it must survive wipes with its generation/block/purge state.
 Token invalidation must never recreate that authority with only memo fields.
+Authority replacements must supply typed generation, blocked and purging fields.
+Masked writes may update those fields with explicit typed values, but cannot
+delete them, make them nested/malformed, or transform them. Epoch advancement
+and purge completion use the existing transactional authority writers.
 
 Covered authorities: account deletion markers (including grace transitions),
 legal holds and deletion gates, protection/migration fields, speaker consent
