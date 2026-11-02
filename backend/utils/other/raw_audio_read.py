@@ -93,6 +93,14 @@ def list_packs(bucket, uid: str, conversation_id: str):
 def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
     download_kwargs = {'timeout': 10, 'retry': None, **(download_kwargs or {})}
     blob = bucket.blob(path)
+    try:
+        return _decode_pack(bucket, blob, uid, download_kwargs, sample_rate)
+    except Exception as error:
+        record(error_result(error), (blob.metadata or {}).get('codec'))
+        raise
+
+
+def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> bytes:
     blob.reload(**(download_kwargs or {}))
     metadata = blob.metadata or {}
     if metadata.get('frame_schema') == FRAME_SCHEMA:
@@ -118,11 +126,7 @@ def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: i
 
 
 def read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
-    try:
-        pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate)
-    except Exception as error:
-        record(error_result(error), (bucket.blob(path).metadata or {}).get('codec'))
-        raise
+    pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate)
     record('ok')
     return pcm
 
@@ -165,7 +169,8 @@ def verified_pcm_paths(bucket, uid: str, conversation_id: str, chunks, sample_ra
 
 def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha256: str | None = None):
     if not span or span['sample_rate'] != 16000 or not expected_sha256:
-        record('identity_mismatch')
+        # Historical PCM often has no raw identity. This optional lookup is
+        # not a raw read attempt until a covering raw candidate is found.
         return None
     start = float(span['start'])
     count = int(span['samples']) * 2
@@ -178,17 +183,14 @@ def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha25
     for pack in packs:
         if pack['timestamp'] <= start + 0.0001 and pack['raw_end'] >= start + count / 32000 - 0.0001:
             matched = True
-            try:
-                pcm = _read_pack(bucket, pack['path'], uid)
-            except Exception as error:
-                record(error_result(error), (bucket.blob(pack['path']).metadata or {}).get('codec'))
-                raise
+            pcm = _read_pack(bucket, pack['path'], uid)
             offset = (pack.get('raw_offset_samples', 0) + round((start - pack['timestamp']) * 16000)) * 2
             selected = pcm[offset : offset + count]
             if len(selected) == count and hashlib.sha256(selected).hexdigest() == expected_sha256:
                 record('ok')
                 return selected
-    record('identity_mismatch' if matched else 'no_pack')
+    if matched:
+        record('identity_mismatch')
     return None
 
 
@@ -199,15 +201,14 @@ def pcm_for_projection(bucket, uid: str, metadata: dict, sample_rate: int):
         if sample_rate != receipt['sample_rate']:
             return None
         receipt_frames(bucket, uid, receipt)
-        pcm = _read_pack(bucket, receipt['path'], uid, {'if_generation_match': int(receipt['generation'])}, sample_rate)
-        if hashlib.sha256(pcm).hexdigest() != receipt['pcm_sha256'] or receipt['pcm_sha256'] != metadata.get(
-            'pcm_sha256'
-        ):
-            record('identity_mismatch')
-            return None
     except Exception as error:
         record(error_result(error))
         raise
+    # The shared raw read boundary records decode failures with its loaded codec.
+    pcm = _read_pack(bucket, receipt['path'], uid, {'if_generation_match': int(receipt['generation'])}, sample_rate)
+    if hashlib.sha256(pcm).hexdigest() != receipt['pcm_sha256'] or receipt['pcm_sha256'] != metadata.get('pcm_sha256'):
+        record('identity_mismatch')
+        return None
     record('ok')
     return pcm
 
