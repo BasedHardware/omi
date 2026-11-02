@@ -494,6 +494,16 @@ async def test_refused_sample_leaves_the_upload_for_legacy_staging(monkeypatch, 
     assert not os.path.exists(os.path.dirname(seen[0]))
 
 
+def test_repeated_upload_name_links_once_and_keeps_the_list_shape(tmp_path):
+    wal = wal_upload(tmp_path)
+    directory, linked = intake._private_sample_paths([str(wal), str(wal)])
+    try:
+        assert linked[0] == linked[1] and os.path.basename(linked[0]) == wal.name
+        assert open(linked[0], 'rb').read() == b'synthetic-wal'
+    finally:
+        intake.shutil.rmtree(directory)
+
+
 @pytest.mark.asyncio
 async def test_admitted_sample_leaves_no_private_link_behind(monkeypatch, tmp_path):
     speaking(monkeypatch)
