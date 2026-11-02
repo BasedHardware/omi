@@ -147,6 +147,7 @@ def owned(provider, namespace, uid='test-owner'):
 
 @pytest.fixture
 def setup(monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
     monkeypatch.setenv('PINECONE_PARTITIONS_ENABLED', 'true')
     monkeypatch.setattr(migration, 'external_write_fence', lambda *a, **kw: nullcontext())
 
@@ -175,6 +176,20 @@ def setup(monkeypatch):
     }
     runner = migration.OwnerMigration(key, provider, firestore_client=db)
     return key, db, provider, runner
+
+
+@pytest.mark.parametrize('interruption', [KeyboardInterrupt, SystemExit])
+def test_interrupted_copy_retains_uncertain_scope(setup, interruption):
+    key, db, _, runner = setup
+    state.begin_migration(key, 'migration', firestore_client=db)
+    with pytest.raises(interruption):
+        with runner._copy_admission('migration', ['a'], key.partition_namespace, 'copy_upsert'):
+            raise interruption()
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == 0
+    assert route.uncertain_count == 1
+    with pytest.raises(state.PartitionBusy):
+        state.cutover(key, 'migration', route.revision, {}, firestore_client=db)
 
 
 def commit(key, db, receipt):

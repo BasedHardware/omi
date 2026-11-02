@@ -185,7 +185,7 @@ def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replica
 
 
 def test_retirement_is_declared_on_every_prod_routing_runtime_only():
-    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     # The composed document owns runtime identity, independent from chart defaults.
     for environment, config in manifest['environments'].items():
         envs = [config['gke'][name]['env'] for name in ('backend-listen', 'pusher')]
