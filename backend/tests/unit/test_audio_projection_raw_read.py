@@ -61,3 +61,23 @@ def test_playback_merger_and_download_limit_read_one_object_for_two_spans(remote
         (1003.01, second),
     ]
     assert download.call_count == 1
+
+
+def test_optional_forward_archive_keeps_captured_ranges_instead_of_a_synthetic_span(remote, monkeypatch):
+    first, second = b'\x01\x02' * 160, b'\x03\x04' * 160
+    pcm = first + second
+    frames = [frame(first, 1000), frame(second, 1003.01, 1, len(first), True)]
+    receipt = audio_outbox.commit_pcm_window('owner', pcm, 'conversation', 1000, 16000, 'root', 0, frames, framed=True)
+    archive = MagicMock()
+    monkeypatch.setattr(storage.audio_packs, 'enabled', lambda: True)
+    monkeypatch.setattr(storage, '_archive_pusher_capture', archive)
+    storage.upload_audio_chunks_batch(
+        [{'data': pcm, 'timestamp': 1000, 'custody_receipt': receipt.to_dict()}],
+        'owner',
+        'conversation',
+        'standard',
+        sample_rate=16000,
+    )
+    archived = archive.call_args.args[0]
+    assert [item['data'] for item in archived] == [first, second]
+    assert [item['span']['start'] for item in archived] == [1000, 1003.01]
