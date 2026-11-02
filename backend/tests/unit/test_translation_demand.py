@@ -13,7 +13,7 @@ def test_defaults_ship_on_demand_on_with_stop_switches():
     assert config.uid_daily_chars > 0 and config.global_daily_chars > 0
     assert resolve_translation_profile({}).policy_version == 'legacy'
     viewed = viewed_translation_profile(resolve_translation_profile({}), config)
-    assert viewed.providers == (TranslationProvider.gemini,)
+    assert viewed.providers == (TranslationProvider.luna,)
     assert viewed.policy_version == 'viewed_v1'
 
 

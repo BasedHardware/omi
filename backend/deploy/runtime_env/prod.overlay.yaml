@@ -127,8 +127,6 @@ overlay:
           value: http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'off'
-        HOSTED_TRANSLATION_API_URL:
-          value: http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
         DREAM_AGENT_ENABLED:
