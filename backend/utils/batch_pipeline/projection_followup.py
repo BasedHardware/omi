@@ -103,6 +103,8 @@ class ProjectionFollowups:
         if not discover:
             first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
             if first:
+                for segment in first:
+                    self.forget_page(segment)  # Targeted recovery wakes always probe completion.
                 selected = set(first)
                 self.pending = deque(segment for segment in self.pending if segment not in selected)
                 queued = set(self.targeted_pending)
