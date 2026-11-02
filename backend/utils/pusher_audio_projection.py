@@ -102,7 +102,7 @@ class PusherAudioProjection:
         self.inventory: dict[str, Inventory | None] = {}
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
-        state = self.inventory.get(conversation_id)
+        state = self.inventory.pop(conversation_id, None)
         if not force:
             self.finished.discard(conversation_id)
         # A failed refresh keeps a close-time full rebuild due, but cannot

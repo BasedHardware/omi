@@ -494,3 +494,21 @@ def test_seal_retry_does_not_repeat_successful_close_listing(world):
     cache.refresh('c', [world.add(101)])
     assert cache.finish('c') is True
     assert world.stored[0]['chunk_timestamps'] == [100, 101]
+
+
+def test_failed_forced_rebuild_invalidates_inventory_before_later_flush(world, monkeypatch):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    world.add(101)  # Peer upload has not published a Firestore projection yet.
+    listing = storage.list_audio_chunks
+    monkeypatch.setattr(storage, 'list_audio_chunks', MagicMock(side_effect=OSError()))
+    monkeypatch.setattr(db, 'list_audio_chunks', MagicMock(side_effect=OSError()))
+    with pytest.raises(OSError):
+        cache.finish('c')
+    assert not cache.inventory
+    assert cache.close_debt == {'c'}
+    monkeypatch.setattr(storage, 'list_audio_chunks', listing)
+    monkeypatch.setattr(db, 'list_audio_chunks', listing)
+    cache.refresh('c', [world.add(102)])
+    assert len(world.lists) == 2
+    assert world.stored[0]['chunk_timestamps'] == [100, 101, 102]
