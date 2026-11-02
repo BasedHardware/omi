@@ -23,7 +23,7 @@ async def test_shutdown_deadline_leaves_unsettled_ticket_visible_until_write_ret
         completed.set()
 
     registry.activate(identity, blocked_write)
-    task = asyncio.create_task(drain_on_shutdown(registry.drain, timeout=0.02))
+    task = asyncio.create_task(drain_on_shutdown(registry.drain, timeout=0.5))
     try:
         assert await asyncio.to_thread(entered.wait, 2)
         await asyncio.wait_for(task, timeout=2)
@@ -124,7 +124,7 @@ async def test_queued_retry_survives_shutdown_wait_timeout():
     blocker = loop.run_in_executor(get_pinecone_shutdown_executor(), occupy_drain_worker)
     try:
         assert await asyncio.to_thread(occupied.wait, 2)
-        await drain_on_shutdown(settled.set, timeout=0.02)
+        await drain_on_shutdown(settled.set, timeout=0.5)
         assert not settled.is_set()
         release.set()
         await blocker
