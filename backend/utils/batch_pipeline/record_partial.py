@@ -15,6 +15,7 @@ from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.record_partial_audio import digest, inventory_digest, missing_units, union
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC
+from utils.batch_pipeline.record_language import prove_manifest
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import list_audio_chunks
 from utils.observability.reasons import ReasonFamily, reason_label
@@ -315,6 +316,8 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
             'references': refs,
             'context': context,
         }
+        if row.get('server_batch_only') is True:
+            manifest = await run_blocking(sync_executor, prove_manifest, store, artifacts, item, manifest)
         uri = await run_blocking(
             storage_executor,
             artifacts.stage_audio,

@@ -43,7 +43,19 @@ def remote(client, monkeypatch):
     ],
 )
 def test_native_desktop_custody_or_exact_live_rollback(
-    client, test_uid, monkeypatch, remote, consent, disabled, platform, source, mobile_percent, byok
+    client,
+    test_uid,
+    monkeypatch,
+    remote,
+    consent,
+    disabled,
+    platform,
+    source,
+    mobile_percent,
+    byok,
+    language='en',
+    auto_percent='0',
+    learned=None,
 ):
     from config.server_batch import owned
     from database.conversations import prepare_conversation_for_read
@@ -77,6 +89,7 @@ def test_native_desktop_custody_or_exact_live_rollback(
         monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
         monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
         monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', mobile_percent)
+        monkeypatch.setenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', auto_percent)
         monkeypatch.setattr(runtime, 'PUSHER_ENABLED', True)
         if byok:
             monkeypatch.setattr(runtime, 'get_byok_keys', lambda: {'soniox': 'synthetic-test-key'})
@@ -85,13 +98,25 @@ def test_native_desktop_custody_or_exact_live_rollback(
         breaker._state = pusher_client.CircuitState.CLOSED
         breaker._failures.clear()
         breaker._probe_in_progress = False
-        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=language == 'en')
+        if learned is not None:
+            monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+            monkeypatch.setattr(runtime, 'get_live_language_sessions', lambda uid: [learned] * 3)
         user = get_mock_firestore().collection('users').document(test_uid)
         user.update({'private_cloud_sync_enabled': consent, 'data_protection_level': 'standard'})
-        sockets = install_streaming_stt_fake(monkeypatch)
+        if language != 'en':
+            from utils.stt.streaming import STTService
+
+            # Refused auto-language sessions need an allowed multilingual live
+            # provider; the default fake deliberately offers only Parakeet.
+            sockets = install_streaming_stt_fake(
+                monkeypatch, failover_selection=(STTService.modulate, 'multi', 'velma-2')
+            )
+        else:
+            sockets = install_streaming_stt_fake(monkeypatch)
         data = b'\x80' * 480 + b'\x90' * 480 + b'\x70' * 480
         with client.websocket_connect(
-            f'/v4/listen?language=en&sample_rate=8000&codec=pcm8&source={source}&vad_gate=disabled',
+            f'/v4/listen?language={language}&sample_rate=8000&codec=pcm8&source={source}&vad_gate=disabled',
             headers={'Authorization': 'Bearer dev-token', 'X-App-Platform': platform},
         ) as websocket:
             session = receive_until(websocket, is_conversation_session_event)
@@ -105,7 +130,14 @@ def test_native_desktop_custody_or_exact_live_rollback(
         row = user.collection('conversations').document(session['conversation_id']).get().to_dict()
         assert row is not None
         decoded = prepare_conversation_for_read(row, test_uid)
-        if disabled and consent and not byok and (platform in {'macos', 'windows'} or mobile_percent == '100'):
+        language_admitted = language == 'en' or (auto_percent == '100' and learned == {'en': 100})
+        if (
+            disabled
+            and consent
+            and not byok
+            and language_admitted
+            and (platform in {'macos', 'windows'} or mobile_percent == '100')
+        ):
             assert owned(row) and not decoded.get('transcript_segments')
             assert row['has_content']
             assert not sockets
@@ -126,3 +158,27 @@ def test_native_desktop_custody_or_exact_live_rollback(
             assert not owned(row)
     finally:
         peer.close()
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android'])
+@pytest.mark.parametrize(
+    'auto_percent,learned', [('0', {'en': 100}), ('100', {'en': 100}), ('100', {'en': 50, 'ja': 50})]
+)
+def test_auto_mobile_preserves_original_custody_and_exclusions(
+    client, test_uid, monkeypatch, remote, platform, auto_percent, learned
+):
+    test_native_desktop_custody_or_exact_live_rollback(
+        client,
+        test_uid,
+        monkeypatch,
+        remote,
+        True,
+        True,
+        platform,
+        'omi',
+        '100',
+        False,
+        language='auto',
+        auto_percent=auto_percent,
+        learned=learned,
+    )

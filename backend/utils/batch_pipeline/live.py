@@ -31,6 +31,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
 from utils.batch_pipeline.record_barrier import validate_record_tail
+from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
@@ -331,8 +332,8 @@ async def admit_recording(store, pending, *, now=None):
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': conversation_id,
-            # Native record admission already requires a fully supported
-            # declared language profile. Preserve that proof in its manifest.
+            # Declared profiles preserve their proof. Auto capture must replace
+            # these fields with independent whole-unit audio proof below.
             'stt_language': binding.language or '',
             'stt_language_evidence': 'declared',
             'stt_language_confidence': 1.0,
@@ -344,6 +345,8 @@ async def admit_recording(store, pending, *, now=None):
             'references': refs,
             'context': context,
         }
+        if row.get('server_batch_only') is True:
+            manifest = await run_blocking(sync_executor, prove_manifest, store, artifacts, item, manifest)
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
