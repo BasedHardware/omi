@@ -192,3 +192,21 @@ def test_both_gmp_keep_lists_retain_delivery_and_cost_grade_metrics():
         keep = [row['regex'] for row in rules if row['action'] == 'keep' and row['sourceLabels'] == ['__name__']]
         assert keep
         assert all(any(re.fullmatch(pattern, metric) for pattern in keep) for metric in required)
+
+
+def test_malformed_summary_observation_does_not_reject_a_write():
+    write = dict(status='completed', structured={'sections': 7})
+    assert delivery.summary_terminal_outcome({}, write) is None
+    assert write == dict(status='completed', structured={'sections': 7})
+
+
+@pytest.mark.asyncio
+async def test_malformed_provider_reason_preserves_a_successful_result(observed):
+    result = {'synced': True, 'reason': []}
+
+    @delivery.observe_action_export
+    async def terminal():
+        return result
+
+    assert await terminal() is result
+    assert observed == [('action_item_export', 'delivered')]

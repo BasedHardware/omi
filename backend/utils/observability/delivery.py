@@ -37,18 +37,18 @@ def observe_action_export(function: AsyncFunction) -> AsyncFunction:
             raise
         rows = result if isinstance(result, list) else [result[0] if isinstance(result, tuple) and result else result]
         for row in rows:
+            reason = row.get('reason') if isinstance(row, dict) else None
+            reason = reason if isinstance(reason, str) else None
             if not isinstance(row, dict):
                 outcome = 'failed'  # Observation must not turn an opaque result into a new exception.
-            elif row.get('reason') in {
+            elif reason in {
                 'already_exported',
                 'no_default_integration',
                 'integration_not_found',
                 'integration_not_connected',
             }:
                 outcome = 'no_op'
-            elif row.get('reason') in {'lease_lost', 'client_handles_sync'} or (
-                row.get('synced') and row.get('pending_device')
-            ):
+            elif reason in {'lease_lost', 'client_handles_sync'} or (row.get('synced') and row.get('pending_device')):
                 outcome = 'deferred'
             else:
                 outcome = 'delivered' if row.get('synced') else 'failed'
@@ -70,7 +70,12 @@ def summary_terminal_outcome(existing: dict[str, Any], write: dict[str, Any]) ->
         return 'deferred'
     from utils.conversations.summary_delivery import present
 
-    rich = write.get('summary_output_present', present(write.get('structured')))
+    try:
+        rich = write.get('summary_output_present')
+        if rich is None:
+            rich = present(write.get('structured'))
+    except (AttributeError, TypeError, ValueError):
+        return None  # Malformed observation must not reject an otherwise valid write.
     if write.get('discarded') or not rich:
         return 'no_op'
     return (
