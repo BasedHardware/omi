@@ -30,7 +30,7 @@ from database.review_field_states import read_field_state, write_field_state
 from utils import dream_telemetry
 from utils.dream_metrics import record_undo
 from utils.review_projection import sync_conversations
-from config.dream_agent import dream_journal_key, eligible
+from config.dream_agent import canary_uid, dream_journal_key, eligible
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangeDiff, ReviewChangesResponse
 
@@ -304,14 +304,17 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
 
+    # The canary undoes its own fixture every run; it is not an owner decision.
+    counted = uid != canary_uid()
+
     def tracked(change, transitioned=None):
-        if undone and data and not data['change']['undone']:
+        if counted and undone and data and not data['change']['undone']:
             record_undo(change)
         # The main path knows its transaction committed a transition; special paths
         # compare with the pre-read state.
         if transitioned is None:
             transitioned = bool(data) and bool(data['change']['undone']) != undone
-        kind = dream_telemetry.change_kind(data or result) if transitioned else None
+        kind = dream_telemetry.change_kind(data or result) if counted and transitioned else None
         if kind:
             source = data or result
             dream_telemetry.record_outcome(kind, 'undo' if undone else 'redo', applied_at=source.get('created_at'))

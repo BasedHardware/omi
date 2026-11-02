@@ -245,6 +245,7 @@ def test_planner_failure_fails_open(runtime, state_env, monkeypatch):
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
     assert report['status'] == 'complete'
     assert report['levers']['state_pass']['status'] == 'failed'
+    assert report['levers']['state_pass']['failure'] == 'RuntimeError'
     # A failed state pass leaves the weekly cadence due.
     assert runtime.rows[('dream_users', UID)].get('last_state_pass_at') is None
 
@@ -483,3 +484,51 @@ def test_expired_write_does_not_commit(monkeypatch):
     monkeypatch.setattr(profile_db, 'db', Client())
     monkeypatch.setattr(profile_db, 'transactional', lambda fn: fn)
     assert profile_db.write_profile_v2(UID, {}, not_after=time.time() - 1) == 'expired'
+
+
+def test_failure_label_names_the_cause_without_model_text():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as caught:
+        StatePlan.model_validate({'cleanup': 'synthetic-secret', 'synthetic-secret-key': 1})
+    label = dream_state_pass.failure_label(caught.value)
+
+    assert label.startswith('ValidationError ') and 'cleanup:' in label
+    assert 'synthetic-secret' not in label
+    assert dream_state_pass.failure_label(ValueError('dream_input_token_budget')) == (
+        'ValueError dream_input_token_budget'
+    )
+    assert dream_state_pass.failure_label(ValueError('free text from a model')) == 'ValueError'
+
+
+def test_a_failed_state_pass_reports_the_tokens_it_spent(monkeypatch):
+    from database import dream_profile as profile_db
+
+    async def failing_planner(mount, messages):
+        raise ValueError('synthetic_failure')
+
+    monkeypatch.setattr(dream_state_pass, 'people_page', lambda uid, firestore_client=None: [])
+    monkeypatch.setattr(dream_state_pass, 'tasks_page', lambda uid, firestore_client=None: [])
+    monkeypatch.setattr(dream_state_pass, 'memories_page', lambda uid: [])
+    monkeypatch.setattr(dream_state_pass, 'conversation_index', lambda uid, now, firestore_client=None: [])
+    monkeypatch.setattr(profile_db, 'get_profile_v2', lambda uid: None)
+
+    summary = asyncio.run(
+        dream_state_pass.run(
+            'owner',
+            seed={},
+            run_id='r',
+            planner_turn=failing_planner,
+            verify_turn=failing_planner,
+            loop_report={},
+            loop_staged_keys=set(),
+            deadline_seconds=5,
+            verifier_seconds=1,
+            verifier_completion_tokens=1024,
+            tokens=100000,
+            spent=lambda: 777,
+        )
+    )
+
+    assert summary['status'] == 'failed' and summary['total_tokens'] == 777
+    assert summary['failure'] == 'ValueError synthetic_failure'

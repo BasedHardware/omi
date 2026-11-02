@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from google.cloud import firestore
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from database import review_store
 from models.agent_edit import DreamHarnessEdit
@@ -342,6 +342,20 @@ async def check_lines(lines, records, verify_turn, *, tokens, deadline_seconds):
 # --- the pass ------------------------------------------------------------------------------------
 
 
+def failure_label(error: Exception) -> str:
+    """Content-free: the exception class plus schema paths or an error code, never model text."""
+    label = type(error).__name__
+    if isinstance(error, ValidationError):
+        paths = set()
+        for item in error.errors(include_input=False, include_url=False, include_context=False):
+            parts = [part for part in item['loc'] if isinstance(part, str)]
+            # An extra key's name is model-authored.
+            paths.add('.'.join(parts[:-1] if item['type'] == 'extra_forbidden' else parts) + ':' + item['type'])
+        return label + ' ' + ','.join(sorted(paths)[:3])
+    code = str(error)
+    return label + ' ' + code if code.isidentifier() and len(code) <= 48 else label
+
+
 async def run(
     uid: str,
     *,
@@ -389,6 +403,8 @@ async def run(
     except Exception as error:
         logger.warning('event=dream_lever_error lever=state_pass exc=%s', type(error).__name__)
         summary['status'] = 'failed'
+        summary['failure'] = failure_label(error)
+        summary['total_tokens'] = spent()
     doc = summary.pop('_profile_doc', None)
     if summary['status'] != 'ready' or doc is None:
         return summary
