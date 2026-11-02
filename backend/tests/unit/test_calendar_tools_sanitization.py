@@ -522,6 +522,24 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(lambda: self.assertNotIn(self.SENSITIVE, logs.getvalue()))
         self.addCleanup(ct.logger.removeHandler, handler)
 
+    def test_failure_location_logs_only_basename_for_posix_and_windows_paths(self):
+        for filename in (
+            '/home/private-person/calendar_vendor.py',
+            r'C:\Users\private-person\calendar_vendor.py',
+            r'\\private-host\private-share\calendar_vendor.py',
+        ):
+            with self.subTest(filename=filename):
+                try:
+                    exec(compile('raise RuntimeError(message)', filename, 'exec'), {'message': self.SENSITIVE})
+                except RuntimeError as error:
+                    with self.assertLogs(ct.logger, level='ERROR') as logs:
+                        ct._log_failure('Synthetic failure', error)
+                rendered = '\n'.join(logging.Formatter().format(record) for record in logs.records)
+                self.assertIn(' at calendar_vendor.py:1 in <module>', rendered)
+                self.assertNotIn(filename, rendered)
+                self.assertNotIn('private-', rendered)
+                self.assertNotIn(self.SENSITIVE, rendered)
+
     async def test_retry_and_search_failures_log_without_exception_text(self):
         current = {"id": "evt_123", "summary": "Standup", "attendees": []}
 

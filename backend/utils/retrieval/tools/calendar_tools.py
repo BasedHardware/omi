@@ -56,7 +56,8 @@ logger = logging.getLogger(__name__)
 def _log_failure(context: str, error: BaseException) -> None:
     """Log a failure without its message or traceback, which can carry provider or user text."""
     frames = traceback.extract_tb(error.__traceback__)
-    where = f" at {frames[-1].filename.rsplit('/', 1)[-1]}:{frames[-1].lineno} in {frames[-1].name}" if frames else ""
+    filename = frames[-1].filename.replace('\\', '/').rsplit('/', 1)[-1] if frames else ''
+    where = f" at {filename}:{frames[-1].lineno} in {frames[-1].name}" if frames else ""
     logger.error("%s: %s%s", context, sanitize_provider_error(error), where)
 
 
