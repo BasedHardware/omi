@@ -1,20 +1,20 @@
 """Exact-content missing-input repair, without a new projection or ledger owner."""
 
 from dataclasses import fields
+import logging
 import math
 from pathlib import Path
 import time
 
 from database.batch_pipeline_artifact_missing import ArtifactMissingStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
-from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.capture_decode import decode_units
-from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
+from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, lineage_digest
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
-from utils.stt.batch_language import resolve_language
-from config.prerecorded_language import language_class
+
+logger = logging.getLogger(__name__)
 
 
 def _repair_plan(store, uid, content_id, source, should_lock, conversation_id, client_device_id, client_platform):
@@ -32,6 +32,36 @@ def _repair_plan(store, uid, content_id, source, should_lock, conversation_id, c
     ):
         raise ProjectionBlocked('re-upload cannot change original projection binding')
     return protocol, plan
+
+
+def _hold(reason):
+    logger.warning('event=batch_artifact_repair outcome=held reason=%s', reason)
+    error = ProjectionBlocked(f'missing-input repair held: {reason}')
+    setattr(error, 'block_reason', reason)
+    return error
+
+
+def _repair_evidence(store, binding, snapshots, intake_context):
+    """The original projection inputs, from the durable intake record only; holds when absent.
+
+    Admission records a lineage digest and each unit's frozen language decision
+    (lead 6d0246). The retried request must reproduce the digest exactly, and
+    repair replays the recorded decision instead of probing again. A legacy
+    intake has neither, so it holds with phone custody and its audio intact.
+    """
+    intake = store.run(lambda tx: tx.get('intakes', binding.job_id)) or {}
+    digest = intake.get('repair_lineage_sha256')
+    if digest is None:
+        raise _hold('legacy_lineage_unproven')
+    if lineage_digest(intake_context) != digest:
+        raise _hold('lineage_changed')
+    languages = {}
+    for sid in snapshots:
+        proof = (intake.get('repair_languages') or {}).get(sid)
+        if not isinstance(proof, dict) or not isinstance(proof.get('stt_language'), str):
+            raise _hold('language_unproven')
+        languages[sid] = {key: proof.get(key) for key in LANGUAGE_KEYS}
+    return dict(intake_context or {}), languages
 
 
 def _original_unit(jobs, index, unit):
@@ -71,7 +101,7 @@ async def restore_upload(
     `content_id` is the router's HMAC of the complete original bytes/names. Every
     decoded unit must match the original ordered capture/duration boundaries;
     decoder drift or changed binding fails closed, retaining phone custody.
-    Projected siblings are neither staged nor language-probed. Staged repair
+    Projected siblings are not staged, and no unit is language-probed. Staged repair
     inputs stay in the ordinary durable outbox after an uncertain CAS reply.
     """
     protocol, plan = await run_blocking(
@@ -89,6 +119,7 @@ async def restore_upload(
     if plan is None:
         return None
     binding, jobs, snapshots = plan
+    context, languages = await run_blocking(db_executor, _repair_evidence, store, binding, snapshots, intake_context)
     ceiling = max(job['duration_seconds'] for job in jobs)
     iterator = decode(ceiling) if decode is not None else decode_units(paths, max_seconds=ceiling)
     uris, count = {}, 0
@@ -100,29 +131,12 @@ async def restore_upload(
             if sid not in snapshots:
                 continue
             item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
-            guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
-            decision = await run_blocking(
-                sync_executor,
-                resolve_language,
-                binding.language,
-                unit.wav,
-                surface='batch',
-                cohort_key=uid,
-                before_probe=guard,
-                before_self_probe=guard,
-            )
-            guard.raise_if_denied()
-            language = (
-                decision.language
-                if decision.parakeet_safe or language_class(decision.language) == 'unsupported'
-                else 'und'
-            )
             frozen = await run_blocking(
                 sync_executor,
                 with_context,
                 unit.wav,
                 {
-                    **(intake_context or {}),
+                    **context,
                     'owner_id': uid,
                     'job_id': binding.job_id,
                     'content_id': content_id,
@@ -135,10 +149,7 @@ async def restore_upload(
                     'conversation_id': binding.target_conversation_id,
                     'filenames': [Path(path).name for path in paths],
                     'capture_coverage_runs': list(unit.coverage_runs),
-                    'stt_language': language,
-                    'stt_language_evidence': decision.evidence,
-                    'stt_language_confidence': decision.confidence,
-                    'stt_language_probe_seconds': decision.probe_seconds,
+                    **languages[sid],
                 },
             )
             uris[sid] = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)

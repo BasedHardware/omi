@@ -34,6 +34,7 @@ from database.sync_ledger import (
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline.repair_lineage import lineage_digest
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -766,6 +767,8 @@ async def accept_upload(
                 first = first or decision
             if first is not None:  # always set here: at least one speech unit passed above
                 record_route('intake', first.language, 'parakeet')
+        # A missing-input repair replays these exact decisions; it never probes again.
+        repair_languages: dict[str, dict] = {}
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
         ):
@@ -795,6 +798,12 @@ async def accept_upload(
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
                 else 'und' if language_guard_enabled() else input_language
             )
+            repair_languages[item.segment_id] = {
+                'stt_language': frozen_language,
+                'stt_language_evidence': language_decision.evidence,
+                'stt_language_confidence': language_decision.confidence,
+                'stt_language_probe_seconds': language_decision.probe_seconds,
+            }
             frozen = await run_blocking(
                 sync_executor,
                 with_context,
@@ -860,6 +869,8 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
+                'repair_lineage_sha256': lineage_digest(intake_context),
+                'repair_languages': {item.segment_id: repair_languages[item.segment_id] for item in items},
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),

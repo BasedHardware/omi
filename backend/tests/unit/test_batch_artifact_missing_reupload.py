@@ -18,7 +18,16 @@ from tests.unit.test_batch_pipeline_artifact_missing import mark
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, row, ledger_row, PARTIAL_ACCOUNTING
 from utils.sync.content_id import compute_sync_segment_id
 from utils.batch_pipeline.audio import audio_unit, read_context
+from utils.stt import batch_language
 from utils.stt.batch_language import LanguageDecision
+from utils.batch_pipeline.repair_lineage import lineage_digest
+
+ORIGINAL_LANGUAGE = {
+    'stt_language': 'en',
+    'stt_language_evidence': 'audio_lid',
+    'stt_language_confidence': 0.97,
+    'stt_language_probe_seconds': 12.0,
+}
 
 
 def test_batch_checkpoint_is_not_a_legacy_reupload_checkpoint(tmp_path, monkeypatch):
@@ -131,13 +140,26 @@ def test_reupload_never_reclaims_other_content_or_changed_work(setup, change):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('change', ['none', 'boundary', 'extra_unit', 'foreign_device', 'open_intent'])
+@pytest.mark.parametrize(
+    'change',
+    ['none', 'boundary', 'extra_unit', 'foreign_device', 'open_intent', 'lineage_changed', 'no_language', 'legacy'],
+)
 async def test_whole_upload_repairs_only_absent_unit_then_replays_without_staging(setup, monkeypatch, change):
     from database import batch_pipeline_store
-    from utils.batch_pipeline import intake, artifact_reupload
+    from utils.batch_pipeline import intake
     from tests.unit.test_batch_pipeline_intake import upload_arguments
 
     client, store, binding, _ = mark(setup)
+    # The admission record a repair reads its original lineage and language from.
+    if change != 'legacy':
+        intake_key = ('batch_pipeline_prod_intakes', binding.job_id)
+        client.rows[intake_key] = {
+            **client.rows.get(intake_key, {}),
+            'repair_lineage_sha256': lineage_digest(
+                {'recording_session_id': 'original'} if change == 'lineage_changed' else None
+            ),
+            'repair_languages': {} if change == 'no_language' else {'bad': ORIGINAL_LANGUAGE},
+        }
     ProjectionStore(store).complete_partial(binding, 102, PARTIAL_ACCOUNTING)
     monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
@@ -157,7 +179,7 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
 
     artifacts = SimpleNamespace(stage_audio=stage)
     monkeypatch.setattr(intake, 'artifacts_for', lambda store: artifacts)
-    monkeypatch.setattr(artifact_reupload, 'resolve_language', classify)
+    monkeypatch.setattr(batch_language, 'resolve_language', classify)
     units = [audio_unit(1, b'\0\0' * (5 * 16000)), audio_unit(10, b'\0\0' * (5 * 16000))]
     if change == 'boundary':
         units[0] = audio_unit(2, b'\0\0' * (5 * 16000))
@@ -176,12 +198,17 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
         assert response.status_code == 503
         assert row(client)['state'] == 'quarantined' and row(client)['artifact_disposition']['state'] == 'missing'
         assert row(client, 'jobs', 'good') == before_good
+        assert not probes
+        if change in {'lineage_changed', 'no_language', 'legacy'}:
+            assert not staged_ids  # evidence holds before any decode or staging
         return
     assert response.status_code == 202
     body = json.loads(response.body)
     assert body['job_id'] == binding.job_id and body['status'] == 'processing'
-    assert staged_ids == ['bad'] and len(probes) == 1
+    # Repair replays the original language decision; it never probes (paid or self).
+    assert staged_ids == ['bad'] and not probes
     assert contexts[0]['job_id'] == binding.job_id and contexts[0]['segment_id'] == 'bad'
+    assert {key: contexts[0][key] for key in ORIGINAL_LANGUAGE} == ORIGINAL_LANGUAGE
     assert row(client, 'jobs', 'good') == before_good
     assert 'artifact_missing_units' not in ledger_row(client, binding)
 
@@ -190,7 +217,50 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
 
     replay = await intake.accept_upload(**arguments, decode=no_decode)
     assert replay.status_code == 202 and json.loads(replay.body)['job_id'] == binding.job_id
-    assert staged_ids == ['bad'] and len(probes) == 1
+    assert staged_ids == ['bad'] and not probes
+
+
+def evidence_store(intake):
+    tx = SimpleNamespace(get=lambda table, key: deepcopy(intake) if (table, key) == ('intakes', 'job') else None)
+    return SimpleNamespace(run=lambda read: read(tx))
+
+
+BINDING = SimpleNamespace(job_id='job')
+LINEAGE = {'recording_session_id': 'original', 'audio_start_seconds': 1.0, 'filenames': ['a.bin']}
+
+
+def held_reason(store, context):
+    from utils.batch_pipeline.artifact_reupload import _repair_evidence
+
+    with pytest.raises(ProjectionBlocked) as error:
+        _repair_evidence(store, BINDING, {'bad': {}}, context)
+    return error.value.block_reason
+
+
+def test_new_intake_repair_requires_the_exact_original_lineage_and_language():
+    from utils.batch_pipeline.artifact_reupload import _repair_evidence
+
+    intake = {'repair_lineage_sha256': lineage_digest(LINEAGE), 'repair_languages': {'bad': ORIGINAL_LANGUAGE}}
+    store = evidence_store(intake)
+    context, languages = _repair_evidence(store, BINDING, {'bad': {}}, LINEAGE)
+    assert context == LINEAGE and languages == {'bad': ORIGINAL_LANGUAGE}
+    for changed in (
+        {**LINEAGE, 'recording_session_id': 'other'},
+        {**LINEAGE, 'audio_start_seconds': 2.0},
+        {k: v for k, v in LINEAGE.items() if k != 'recording_session_id'},
+        {**LINEAGE, 'capture_evidence_claims': [{'kind': 'synthetic'}]},
+        None,
+    ):
+        assert held_reason(store, changed) == 'lineage_changed'
+    for proofs in ({}, {'bad': None}, {'bad': {'stt_language': None}}):
+        assert held_reason(evidence_store({**intake, 'repair_languages': proofs}), LINEAGE) == 'language_unproven'
+
+
+@pytest.mark.parametrize('intake', [None, {}, {'repair_languages': {'bad': ORIGINAL_LANGUAGE}}])
+def test_legacy_intake_without_a_lineage_digest_always_holds(intake):
+    # The original context lived only in the missing artifact; nothing durable proves it.
+    for context in (LINEAGE, None):
+        assert held_reason(evidence_store(intake), context) == 'legacy_lineage_unproven'
 
 
 @pytest.mark.parametrize('capable', [False, True])
