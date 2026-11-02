@@ -1227,7 +1227,7 @@ def list_audio_chunks(
                     chunk_entry['span'] = span
                 chunks.extend(
                     projection_entries(bucket, blob, uid, chunk_entry)
-                    if (blob.metadata or {}).get('framed_receipt')
+                    if (getattr(blob, 'metadata', None) or {}).get('framed_receipt')
                     else [chunk_entry]
                 )
             except ValueError:
