@@ -551,12 +551,12 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
-WORKER_PROCESSES_DEFAULT = 2
+WORKER_PROCESSES_DEFAULT = 1
 WORKER_PROCESSES_MAX = 3
 
 
 def worker_processes() -> int:
-    """Ship-on independent pump processes sharing the pod's one GPU; ``1`` is the kill switch.
+    """Independent pump processes sharing the pod's one GPU; ``1`` (default) runs no supervisor.
 
     Each process loads its own model chain and keeps its own pump depth and
     decoded-audio bound, so host and device memory scale with the count; the

@@ -69,11 +69,12 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
-  # Ship-on independent pump processes sharing the pod's GPU (1-3), each with
-  # its own model chain, leases and pump depth; 1 is the kill switch (one
-  # process, no supervisor). Counts above 1 take pod resources from
-  # processResources. Two lifted the T4 bench 33.8 -> 45.4 audio-h/GPU-h.
-  processes: 2
+  # Independent pump processes sharing the pod's GPU (1-3), each with its own
+  # model chain, leases and pump depth; 1 runs one process with no supervisor.
+  # Counts above 1 take pod resources from processResources. Two lifted the
+  # 3-CPU T4 bench 33.8 -> 45.4 audio-h/GPU-h but added nothing on top of the
+  # shared embedding trunk there; stays 1 until an 8-vCPU L4 run shows a gain.
+  processes: 1
   # Shared artifact IO pool, including first decode before the GPU lock.
   # 1 disables preparation and restores serial artifact IO.
   ioConcurrency: 5

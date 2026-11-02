@@ -674,9 +674,9 @@ def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expec
 
 @pytest.mark.parametrize(
     'arguments,expected,memory',
-    [((), '2', ('24Gi', '26Gi')), (('--set', 'worker.processes=1'), '1', ('12Gi', '14Gi'))],
+    [((), '1', ('12Gi', '14Gi')), (('--set', 'worker.processes=2'), '2', ('24Gi', '26Gi'))],
 )
-def test_worker_processes_ship_two_size_the_pod_and_one_is_the_kill_switch(arguments, expected, memory):
+def test_worker_processes_default_one_and_two_size_the_pod(arguments, expected, memory):
     result = render(*enabled_arguments(), *arguments)
     assert result.returncode == 0, result.stderr
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')

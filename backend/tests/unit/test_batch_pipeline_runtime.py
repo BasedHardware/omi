@@ -433,8 +433,8 @@ def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
     assert shadow_parity_collectors() == ()
 
 
-@pytest.mark.parametrize('raw,expected', [(None, 2), ('1', 1), ('3', 3), ('0', 1), ('4', 1), ('two', 1)])
-def test_worker_processes_ship_two_and_malformed_never_multiplies_memory(monkeypatch, raw, expected):
+@pytest.mark.parametrize('raw,expected', [(None, 1), ('2', 2), ('1', 1), ('3', 3), ('0', 1), ('4', 1), ('two', 1)])
+def test_worker_processes_default_one_and_malformed_never_multiplies_memory(monkeypatch, raw, expected):
     from config.batch_pipeline import worker_processes
 
     if raw is None:

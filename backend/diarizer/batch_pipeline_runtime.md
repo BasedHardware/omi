@@ -61,12 +61,15 @@ arrivals, so fresh work can wait up to one extra chain.
 
 ### Worker processes per GPU
 
-`BATCH_PIPELINE_WORKER_PROCESSES` (Helm `worker.processes`, default `2`, range
+`BATCH_PIPELINE_WORKER_PROCESSES` (Helm `worker.processes`, default `1`, range
 1-3) runs that many independent pump processes on the pod's one GPU. Much of a
 chain's GPU-lock time is CPU, Python and IO work; a sibling's kernels fill those
-gaps (T4 bench, unchanged chain: 33.8 audio-h/GPU-h with one process, 45.4 with
-two, identical words and speakers). `1` is the kill switch: no supervisor, the
-process above runs exactly as before. Malformed or out-of-range values run one.
+gaps (3-CPU T4 bench, chain before the shared embedding trunk: 33.8
+audio-h/GPU-h with one process, 45.4 with two, identical words and speakers).
+With the shared trunk on, two processes added nothing on that 3-CPU bench (45.1
+vs 48.3 for one), so the default stays `1` (no supervisor, the process above runs
+exactly as before) until an 8-vCPU L4 canary shows a gain. Malformed or
+out-of-range values run one.
 
 The container's process becomes a supervisor that loads no models and touches
 no cloud client. Each child re-executes this module as the unchanged
