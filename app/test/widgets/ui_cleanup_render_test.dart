@@ -10,8 +10,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/search.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/env/env.dart';
@@ -19,6 +25,8 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
+import 'package:omi/pages/search/global_search.dart';
+import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
@@ -80,6 +88,43 @@ final _start = DateTime(2026, 10, 27, 21, 59).millisecondsSinceEpoch ~/ 1000;
 final _recordings = [
   for (final (i, s) in [9, 8, 10].indexed) HeldAudioRecording(id: 'r$i', startedAt: _start + i * 3600, seconds: s * 60),
 ];
+
+/// Search with one short clip among the discarded rows the filter asks for.
+class _ClipSearch extends GlobalSearchSource {
+  @override
+  Future<ApiResult<SearchOverview>> overview() async =>
+      const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
+
+  @override
+  Future<ConversationSearchResult> conversations(String query,
+      {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) async {
+    final started = DateTime(2026, 10, 30, 14, 5);
+    return ConversationSearchResult(items: [
+      if (includeNoise)
+        ServerConversation.fromJson({
+          'id': 'clip',
+          'created_at': started.toUtc().toIso8601String(),
+          'started_at': started.toUtc().toIso8601String(),
+          'finished_at': started.add(const Duration(seconds: 20)).toUtc().toIso8601String(),
+          'structured': {'title': 'TV in the background', 'overview': '', 'emoji': '', 'category': 'other'},
+          'status': 'completed',
+          'discarded': true,
+          'content_kind': 'media',
+          'transcript_segments': [],
+        }),
+    ], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
+  }
+
+  @override
+  Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
+  @override
+  Future<ApiResult<List<DailySummary>>> recaps(String query) async => const ApiSuccess(<DailySummary>[]);
+  @override
+  Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query) async =>
+      const ApiSuccess(<ActionItemWithMetadata>[]);
+  @override
+  Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess(<MemorySearchHit>[]);
+}
 
 Future<void> _snap(WidgetTester tester, GlobalKey boundary, String name) async {
   expect(tester.takeException(), isNull);
@@ -175,6 +220,21 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await _snap(tester, b, '002-mobile-ios-locked-row-choice');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('short clips are found in search, behind their own filter', (tester) async {
+    final b = await pump(
+        tester,
+        ChangeNotifierProvider(
+          create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[]),
+          child: GlobalSearchPage(initialQuery: 'tv', source: _ClipSearch()),
+        ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('global_search_noise_filter')));
+    await tester.pumpAndSettle();
+    expect(find.text('TV in the background'), findsOneWidget);
+    await _snap(tester, b, '003-mobile-ios-search-short-clips-filter');
     debugDefaultTargetPlatformOverride = null;
   });
 }

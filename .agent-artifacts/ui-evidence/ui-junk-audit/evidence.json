@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-questions-and-locked-rows.png",
+      "platform": "mobile-ios",
+      "description": "After: Home above the list shows only Questions for you; recordings waiting for a plan return as locked rows in the list",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-locked-row-choice-sheet.png",
+      "platform": "mobile-ios",
+      "description": "After: tapping a locked row offers Transcribe on this phone or Upgrade (phone option only where the engine runs)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-search-short-clips-filter.png",
+      "platform": "mobile-ios",
+      "description": "After: short clips no longer fold on Home; search finds them under the new Short clips filter",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-made-on-iphone-one-liner.png",
+      "platform": "mobile-ios",
+      "description": "After: on-device provenance is one line; the explanation opens only when tapped",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-live-notes-no-phone-tag.png",
+      "platform": "mobile-ios",
+      "description": "After: live Summary notes without the On this phone tag and caption",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-live-transcript-quiet-line.png",
+      "platform": "mobile-ios",
+      "description": "After: the Recording safely card is one quiet line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-before-home-stack.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): everything that could sit above Home conversations at once",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-before-plan-usage-card.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the waiting card on Plan & Usage, now removed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-before-live-paused-banner.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): the paused upsell on the live page, now removed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
