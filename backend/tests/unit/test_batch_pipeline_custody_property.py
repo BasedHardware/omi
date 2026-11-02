@@ -29,7 +29,10 @@ QUARANTINED = [
     ('quarantined', recovery, None)
     for recovery in (None, 'held', 'prepared', 'running', 'failed_held', 'recovered', 'cancelled')
 ]
-INTENTS = [('quarantined', 'failed_held', intent) for intent in ('speech_redrive', 'terminal_disposition')]
+INTENTS = [
+    ('quarantined', 'failed_held', intent)
+    for intent in ('speech_redrive', 'terminal_disposition', 'silence_disposition')
+]
 UNIT_STATES = IN_FLIGHT + COMMITTED + QUARANTINED + INTENTS
 
 # Recovery states under which a unit's words are still owed (#23932 also marks a committed job `held`
@@ -90,7 +93,8 @@ def upload(units, ledger_kind):
 
 def cases():
     for size in (1, 2):
-        for units in itertools.product(UNIT_STATES, repeat=size):
+        # durable_status reads units as a set (no order dependence), so unordered pairs cover the product.
+        for units in itertools.combinations_with_replacement(UNIT_STATES, size):
             for ledger_kind in LEDGERS:
                 # A completed ledger is the projection's own receipt that every unit landed; it is
                 # authoritative over job rows (test_status_is_durable_and_completed_result_is_authoritative)
