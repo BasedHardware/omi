@@ -357,6 +357,9 @@ def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monk
         return Vendor()(work, language, inspected, service=service)
 
     assert stage(store, Artifacts(), vendor).run('p1').reason == 'processed'
+    # The stage catches vendor exceptions, including assertions in this fake.
+    # Require success so a failed pre-call assertion cannot pass as failed_held.
+    assert job(store, 'p1')['state'] == 'result_ready'
 
 
 @pytest.mark.parametrize('terminal', [False, True])
