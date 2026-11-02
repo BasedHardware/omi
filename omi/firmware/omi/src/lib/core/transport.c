@@ -34,6 +34,7 @@
 #endif
 #include "capture_mute.h"
 #include "capture_mute_gatt.h"
+#include "power_control_gatt.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
@@ -52,6 +53,7 @@ static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
+extern bool is_off;
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 extern bool is_charging;
 #endif
@@ -143,6 +145,40 @@ static struct bt_gatt_exchange_params exchange_params;
 static uint8_t mtu_recheck_attempts = 0;
 K_WORK_DELAYABLE_DEFINE(mtu_recheck_work, mtu_recheck_work_handler);
 
+/* BLE power-off worker: never run the blocking shutdown on the system workqueue. */
+static atomic_t power_off_pending = ATOMIC_INIT(0);
+K_SEM_DEFINE(power_off_sem, 0, 1);
+
+static bool power_control_off_pending(void)
+{
+    return atomic_get(&power_off_pending) != 0;
+}
+
+static int power_control_schedule_off(void)
+{
+    if (atomic_cas(&power_off_pending, 0, 1)) {
+        k_sem_give(&power_off_sem);
+    }
+    return 0;
+}
+
+static void power_off_thread_fn(void *p1, void *p2, void *p3)
+{
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+    while (1) {
+        k_sem_take(&power_off_sem, K_FOREVER);
+        /* Allow the ATT response to be queued before BLE is torn down. */
+        k_msleep(50);
+        LOG_INF("Executing BLE-requested orderly shutdown");
+        turnoff_all();
+    }
+}
+
+K_THREAD_DEFINE(power_off_thread, 2048, power_off_thread_fn, NULL, NULL, NULL, 5, 0, 0);
+/* End BLE power-off worker. */
+
 //
 // Service and Characteristic
 //
@@ -204,6 +240,32 @@ static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
 static struct bt_uuid_128 settings_mute_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10015, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+static struct bt_uuid_128 settings_power_control_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10016, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t settings_power_control_write_handler(struct bt_conn *conn,
+                                                    const struct bt_gatt_attr *attr,
+                                                    const void *buf,
+                                                    uint16_t len,
+                                                    uint16_t offset,
+                                                    uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    ARG_UNUSED(flags);
+    return power_control_gatt_write(buf, len, offset);
+}
+
+static ssize_t settings_power_control_read_handler(struct bt_conn *conn,
+                                                   const struct bt_gatt_attr *attr,
+                                                   void *buf,
+                                                   uint16_t len,
+                                                   uint16_t offset)
+{
+    uint8_t state = power_control_gatt_state(is_off);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &state, sizeof(state));
+}
+
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
     BT_GATT_CHARACTERISTIC(&settings_dim_ratio_characteristic_uuid.uuid,
@@ -231,6 +293,13 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_mute_read_handler,
                            settings_mute_write_handler,
+                           NULL),
+    /* Append to preserve the charging notification's attrs[6]. */
+    BT_GATT_CHARACTERISTIC(&settings_power_control_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_power_control_read_handler,
+                           settings_power_control_write_handler,
                            NULL),
 };
 
@@ -618,6 +687,7 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
     features |= OMI_FEATURE_MIC_GAIN;
     // Persistent capture mute (NVS + BLE). Always present on this firmware.
     features |= OMI_FEATURE_CAPTURE_MUTE;
+    features |= OMI_FEATURE_POWER_CONTROL;
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
 }
