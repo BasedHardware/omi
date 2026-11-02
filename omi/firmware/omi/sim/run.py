@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import signal
 import subprocess
 import sys
@@ -39,6 +40,16 @@ def checked(argv, *, timeout, **kwargs):
                 proc.wait(timeout=3)
 
 
+def clone(url, branch, dest, timeout):
+    """Publish only a finished clone, so an interrupted one can't pass as present."""
+    if dest.exists():
+        return
+    partial = dest.with_name(dest.name + ".partial")
+    shutil.rmtree(partial, ignore_errors=True)
+    checked(["git", "clone", "--depth=1", "--branch", branch, url, partial], timeout=timeout)
+    partial.rename(dest)
+
+
 def inside(cache):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise RuntimeError("native_sim/native/64 needs Linux x86_64 in this runner")
@@ -60,17 +71,13 @@ def inside(cache):
         ZEPHYR_TOOLCHAIN_VARIANT="host",
         ZEPHYR_BASE=str(sdk / "zephyr"),
     )
-    if not (sdk / "nrf").exists():
-        checked(["git", "clone", "--depth=1", "--branch", "v2.9.0",
-                 "https://github.com/nrfconnect/sdk-nrf", sdk / "nrf"], timeout=300)
+    clone("https://github.com/nrfconnect/sdk-nrf", "v2.9.0", sdk / "nrf", 300)
     checked(["git", "-C", sdk / "nrf", "diff", "--exit-code", "HEAD"], timeout=10)
     if subprocess.check_output(["git", "-C", sdk / "nrf", "rev-parse", "HEAD"], text=True).strip() != NCS_SHA:
         raise RuntimeError("NCS manifest is not the expected v2.9.0 revision")
     # Only the pinned NCS Zephyr tree is needed. No radio, bootloader, Nordic
     # binary libraries, signing dependencies or unrelated SDK modules fetched.
-    if not (sdk / "zephyr").exists():
-        checked(["git", "clone", "--depth=1", "--branch", "v3.7.99-ncs2",
-                 "https://github.com/nrfconnect/sdk-zephyr", sdk / "zephyr"], timeout=600)
+    clone("https://github.com/nrfconnect/sdk-zephyr", "v3.7.99-ncs2", sdk / "zephyr", 600)
     if subprocess.check_output(["git", "-C", sdk / "zephyr", "rev-parse", "HEAD"], text=True).strip() != ZEPHYR_SHA:
         raise RuntimeError("unexpected Zephyr revision")
     checked(["git", "-C", sdk / "zephyr", "diff", "--exit-code", "HEAD"], timeout=10)
@@ -110,13 +117,14 @@ def main():
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     cache = args.cache.expanduser().resolve()
-    cache.mkdir(parents=True, exist_ok=True)
     if args.inside:
+        cache.mkdir(parents=True, exist_ok=True)
         inside(cache)
         return
     repo = Path(__file__).resolve().parents[4]
     if cache == repo or repo in cache.parents:
         parser.error("--cache must be outside the checkout")
+    cache.mkdir(parents=True, exist_ok=True)
     name = "omi-cv1-sim-" + uuid.uuid4().hex[:12]
     started = time.monotonic()
     try:

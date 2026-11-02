@@ -39,13 +39,14 @@ For an isolated Colima profile on a Mac, create its home **before** starting
 Colima (v0.10.3 silently ignores a nonexistent `COLIMA_HOME`):
 
 ```sh
+# From the checkout root: run.py bind-mounts it, so the VM mounts it read-only.
 SIM_LAB=/absolute/scratch/cv1-sim
 mkdir -p "$SIM_LAB/colima" "$SIM_LAB/cache"
 export COLIMA_HOME="$SIM_LAB/colima"
 export XDG_CACHE_HOME="$SIM_LAB/cache"
 colima start cv1-sim --cpu 4 --memory 8 --disk 45 --vm-type vz \
   --vz-rosetta=false --activate=false --ssh-config=false \
-  --mount "$SIM_LAB:w"
+  --mount "$SIM_LAB:w" --mount "$PWD"
 export DOCKER_HOST="unix://$COLIMA_HOME/cv1-sim/docker.sock"
 # Only in this disposable VM: replace Colima's old QEMU 7 binfmt handler.
 docker run --privileged --rm \
@@ -68,9 +69,10 @@ Rosetta was unavailable on the spike host; no host software was installed.
 The **unchanged** `tools/cv1/startup_replay.py::observe()` parses the console.
 It requires every existing milestone, including Bluetooth/advertising tokens.
 Those two tokens are explicitly `SIM` stub messages: `CONFIG_BT=n`, the overlay
-disables host HCI, and there is no advertising or BLE test. Stub watchdog and
-microphone tokens are labelled the same way. Other milestones come from the
-actual entrypoint and settings implementation. The report retains all of the
+disables host HCI, and there is no advertising or BLE test. Every driver milestone
+(watchdog, microphone, battery, SD, storage, transport, codec, LED, SPI flash,
+IMU) also comes from a stub, so none of them shows a real driver initialized. What
+actually runs is the entrypoint's order and the settings implementation. The report retains all of the
 parser's independent hardware-health fields as false, and labels its evidence
 `simulated_startup` with a list of the stubs.
 
