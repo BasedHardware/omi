@@ -38,7 +38,7 @@ WORK_DEADLINE_SECONDS = 1380
 EMPTY_POLL_MAX_SECONDS = 60
 
 
-async def launch_job(env: dict):
+async def launch_job(env: dict[str, str]):
     return await asyncio.create_subprocess_exec(
         sys.executable,
         '-m',

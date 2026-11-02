@@ -7,11 +7,13 @@ temporary directory. Storage is bounded by metric cardinality, not job count.
 """
 
 from collections import defaultdict
+from collections.abc import Iterator
 import os
 import tempfile
 
 from prometheus_client import CollectorRegistry, generate_latest, multiprocess
 from prometheus_client.core import Metric
+from prometheus_client.registry import Collector
 
 COUNTERS = frozenset(
     {
@@ -26,17 +28,20 @@ COUNTERS = frozenset(
 )
 
 
-class WorkerPrivacyMetrics:
-    def __init__(self):
-        self._directory = None
-        self._totals = defaultdict(float)
+MetricKey = tuple[str, str, str, tuple[tuple[str, str], ...]]
 
-    def begin_job(self) -> dict:
+
+class WorkerPrivacyMetrics(Collector):
+    def __init__(self):
+        self._directory: tempfile.TemporaryDirectory[str] | None = None
+        self._totals: defaultdict[MetricKey, float] = defaultdict(float)
+
+    def begin_job(self) -> dict[str, str]:
         assert self._directory is None
         self._directory = tempfile.TemporaryDirectory(prefix='sync-worker-privacy-')
         return {**os.environ, 'PROMETHEUS_MULTIPROC_DIR': self._directory.name}
 
-    def _snapshot(self):
+    def _snapshot(self) -> dict[MetricKey, float]:
         if self._directory is None:
             return {}
         registry = CollectorRegistry()
@@ -57,11 +62,11 @@ class WorkerPrivacyMetrics:
             self._directory.cleanup()
             self._directory = None
 
-    def collect(self):
+    def collect(self) -> Iterator[Metric]:
         totals = self._totals.copy()
         for key, value in self._snapshot().items():
             totals[key] += value
-        metrics = {}
+        metrics: dict[str, Metric] = {}
         for (name, documentation, sample, labels), value in totals.items():
             metric = metrics.setdefault(name, Metric(name, documentation, 'counter'))
             metric.add_sample(sample, dict(labels), value)
