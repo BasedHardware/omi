@@ -40,12 +40,33 @@ def decide(*, member=None, neighbor=None, text='Mm-hmm.', model=None):
 
 
 @pytest.mark.parametrize('context', ['occasion_member', 'occasion_neighbor', 'occasion_context'])
-@pytest.mark.parametrize('text', ['Mm-hmm.', 'Coming over there in a second.'])
-def test_related_content_never_has_an_independent_rule_or_model_discard(context, text):
+def test_related_content_never_has_an_independent_rule_or_model_discard(context):
     model = Mock(return_value=True)
-    decision = decide(member=context, text=text, model=model)
+    decision = decide(member=context, text='Coming over there in a second.', model=model)
     assert not decision.discard and decision.reason == context
     model.assert_not_called()
+
+
+@pytest.mark.parametrize('context', ['occasion_member', 'occasion_neighbor', 'occasion_context'])
+@pytest.mark.parametrize(
+    'text,rule', [('Thank you', 'no_content_words'), ("I don't know", 'no_content_words'), ('Yeah.', 'filler_only')]
+)
+def test_content_free_text_is_no_evidence_of_an_occasion(context, text, rule):
+    member = Mock(return_value=context)
+    decision = decide_relevance(
+        trigger=ProcessingTrigger.SYNC_UPDATE,
+        texts=[text],
+        speech_seconds=1,
+        has_photos=False,
+        user_kept=False,
+        exempt=False,
+        trusted_wake_word=False,
+        model_discards=None,
+        calendar_retains=lambda: False,
+        occasion_retains=member,
+    )
+    assert decision.discard and (decision.decided_by, decision.reason) == ('rule', rule)
+    member.assert_not_called()
 
 
 def test_neighbor_content_is_kept_until_absorption_and_isolated_clip_can_discard():
@@ -53,6 +74,7 @@ def test_neighbor_content_is_kept_until_absorption_and_isolated_clip_can_discard
     decision = decide(neighbor=Neighbor('kept', 12, 'before'), text='Coming over there in a second.', model=model)
     assert not decision.discard and decision.reason == 'occasion_neighbor'
     assert decision.neighbor_id == 'kept'
+    assert decide(neighbor=Neighbor('kept', 12, 'before'), text='Mm-hmm.').discard
     assert decide(text='Mm-hmm.').discard
     assert decide(text='Coming over there in a second.', model=model).discard
     model.assert_called_once()

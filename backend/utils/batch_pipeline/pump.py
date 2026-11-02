@@ -8,6 +8,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -21,6 +22,7 @@ from utils.batch_pipeline.contracts import (
     RecoveryWork,
     ValidationFailureWork,
 )
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
@@ -313,6 +315,7 @@ class Pump:
             type(error).__name__,
         )
 
+    @with_batch_privacy_attempt
     async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
         snapshot = (
@@ -485,7 +488,12 @@ class Pump:
                     process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
                     compute = asyncio.create_task(
                         self._run_blocking(
-                            'worker_flight',
+                            # The HPA sizes on worker_flight: idle-only release must not buy a GPU.
+                            (
+                                'worker_flight_deep'
+                                if all(v.item.priority == Priority.DEEP for v in leases)
+                                else 'worker_flight'
+                            ),
                             sync_executor,
                             process,
                             [v.item for v in leases if v.item.segment_id not in skipped],
