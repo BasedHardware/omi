@@ -22,6 +22,9 @@ from utils.sync.backfill import reserve_backfill_speech, retry_after_next_utc_da
 logger = logging.getLogger(__name__)
 # Leave transport/serialization headroom under the running worker's 5s timeout.
 AUTHORIZE_SECONDS = 4.0
+# A worker that advertises a longer client timeout (X-Omi-Admission-Seconds)
+# gets up to this deadline; workers that send nothing keep AUTHORIZE_SECONDS.
+MAX_AUTHORIZE_SECONDS = 8.0
 STAGE_SECONDS = Histogram(
     'omi_batch_compute_admission_stage_seconds',
     'Admission substage wall time including executor wait; bounded stages, no identifiers',
@@ -41,6 +44,17 @@ def admitted_as_byok(job: object) -> bool:
     return isinstance(policy, dict) and policy.get('provider_reason') == 'byok'
 
 
+def deadline_seconds(requested: object) -> float:
+    """One call's deadline: the worker's advertised budget clamped to [AUTHORIZE_SECONDS, MAX_AUTHORIZE_SECONDS]."""
+    try:
+        value = float(requested) if requested is not None else None
+    except (TypeError, ValueError):
+        value = None
+    if value is None or not math.isfinite(value):
+        return AUTHORIZE_SECONDS
+    return min(MAX_AUTHORIZE_SECONDS, max(AUTHORIZE_SECONDS, value))
+
+
 def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchPath) -> tuple[bool, str]:
     """Spend gate with its bounded DispatchReason surfaced for the durable per-unit record."""
     if admitted_as_byok(job):
@@ -48,8 +62,8 @@ def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchP
     return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
 
 
-async def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
-    """Return completed decisions within 4s; unfinished work never gets an allow.
+async def authorize(store, leases: list[dict], *, now: float | None = None, budget: object = None) -> dict:
+    """Return completed decisions within the call's deadline; unfinished work never gets an allow.
 
     Keep leases serial: fresh funding/fair-use is check-then-act, not an atomic
     reservation. Parallel evaluation would widen the existing overshoot risk.
@@ -58,7 +72,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None) -> d
     cannot schedule another stage or mutate this receipt after the deadline.
     """
     current = time.time() if now is None else now
-    deadline = time.monotonic() + AUTHORIZE_SECONDS
+    deadline = time.monotonic() + deadline_seconds(budget)
     allowed, retries, held_reason = [], {lease['segment_id']: 30 for lease in leases}, {}
 
     async def stage(name, fn, *args, **kwargs):

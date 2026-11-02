@@ -262,8 +262,13 @@ async def metrics():
 
 
 @router.post('/authorize-compute', include_in_schema=False)
-async def authorize_compute(body: HeartbeatRequest):
-    return await authorize(body.service().store, [lease.model_dump() for lease in body.leases])
+async def authorize_compute(body: HeartbeatRequest, request: Request):
+    # Workers advertise their client budget in a header so either side may roll first.
+    return await authorize(
+        body.service().store,
+        [lease.model_dump() for lease in body.leases],
+        budget=request.headers.get('x-omi-admission-seconds'),
+    )
 
 
 async def enrichment_response(payload: dict):
