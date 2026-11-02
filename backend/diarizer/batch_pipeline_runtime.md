@@ -16,12 +16,19 @@ Startup requires exactly one visible CUDA GPU with BF16 support. ASR uses
 Parakeet v3 revision `541d1f99c6b0c3cd0b11a95167540bb8edefd82b` in BF16;
 community-1 revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee` stays FP32.
 VAD reuses that pipeline's FP32 segmentation model. There is no FP8 or Nemotron
-routing. The model factory sets `compute_timestamps=true` and
-`greedy.use_cuda_graph_decoder=false` **before** constructing decoding; it also
-disables the runtime graph and asserts actual eager state before and after
-transcription. This closes the timestamp-initialization graph reset found by
-the GPU quality lane. A graph-policy violation quarantines and restarts the
-process. The prior ASR-only benchmark is not joint-image qualification.
+routing. The model factory sets `strategy=greedy_batch` (label-looping TDT),
+`compute_timestamps=true` and `greedy.use_cuda_graph_decoder` to the chosen
+mode **before** constructing decoding, then asserts the actual decoding state
+before and after every transcription. This closes the timestamp-initialization
+graph reset found by the GPU quality lane. CUDA graph decoding
+(`BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED`, Helm `worker.asrCudaGraphsEnabled`,
+**default on**; `false` is the kill switch) replays the same greedy algorithm
+with identical words. On the dev L4 full chain (2026-11-02, paired eager/graphs
+runs) it cut the ASR stage 26% with word edit rate 0 and +0.15 GiB CUDA peak; on
+the T4, where emulated-BF16 encoding dominates ASR, it is within noise. Off
+keeps runtime graphs disabled. NeMo recaptures only when a call exceeds the captured
+batch or frame count. A graph-policy violation, in either direction, quarantines
+and restarts the process.
 
 SIGTERM stops new pulls; the bounded current chain drains with A's 20-second
 lease renewals. Lost leases cannot complete. CUDA synchronizes before any result

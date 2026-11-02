@@ -41,6 +41,9 @@ class ProviderConfig:
     # A waiting lane prepares every leading unit of its flight that fits the
     # shared decode budget, not only the first. Kill switch.
     prepare_flight: bool = True
+    # CUDA graph TDT label-looping decoding: same greedy algorithm and words as
+    # eager; the chosen mode is asserted around every transcription. Kill switch.
+    asr_cuda_graphs: bool = True
 
     def __post_init__(self):
         if self.pool_kind not in {'dedicated_batch', 'shared_live'}:
@@ -111,5 +114,10 @@ def provider_config() -> ProviderConfig:
         prepare_flight=rollout_default_on(
             'BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED',
             os.getenv('BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED', 'true').strip().lower() != 'false',
+        ),
+        # Ship-on: only an explicit 'false' restores asserted eager decoding.
+        asr_cuda_graphs=rollout_default_on(
+            'BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED',
+            os.getenv('BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED', 'true').strip().lower() != 'false',
         ),
     )

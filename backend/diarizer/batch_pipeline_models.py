@@ -47,12 +47,19 @@ from diarizer.batch_pipeline_flight import (
 from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
 from utils.batch_pipeline import leaf_timings
 
+# NeMo label-looping CUDA graph modes; both replay the eager algorithm exactly.
+# "no_graphs" is NeMo's stateful test path and never a production mode.
+_GRAPH_MODES = frozenset({'full_graph', 'no_while_loops'})
 
-def pin_parakeet_decoding(model):
-    """Persist eager decoding across NeMo's first timestamp initialization.
 
-    A one-shot disable_cuda_graphs() is insufficient: transcribe(timestamps=True)
-    rebuilds decoding from cfg. Set both options before that reconstruction.
+def pin_parakeet_decoding(model, *, cuda_graphs):
+    """Persist the chosen decoding mode across NeMo's first timestamp initialization.
+
+    A one-shot toggle is insufficient: transcribe(timestamps=True) rebuilds
+    decoding from cfg. Set every option before that reconstruction. Both modes
+    run batched label-looping greedy TDT (arXiv 2406.06220); graphs only remove
+    per-step kernel launches. NeMo recaptures only when a call exceeds the
+    captured batch or frame count, so varying window counts replay one graph.
     """
     config = deepcopy(model.cfg.decoding)
     # Some checkpoints use a structured DictConfig with initially absent fields.
@@ -64,27 +71,38 @@ def pin_parakeet_decoding(model):
         else nullcontext()
     )
     with editing:
+        config.strategy = 'greedy_batch'
         config.compute_timestamps = True
-        config.greedy.use_cuda_graph_decoder = False
+        config.greedy.use_cuda_graph_decoder = cuda_graphs
     model.change_decoding_strategy(config, verbose=False)
-    model.decoding.decoding.disable_cuda_graphs()
-    assert_eager_decoding(model)
+    if not cuda_graphs:
+        model.decoding.decoding.disable_cuda_graphs()
+    assert_decoding_mode(model, cuda_graphs)
 
 
-def assert_eager_decoding(model):
-    computer = model.decoding.decoding.decoding_computer
-    if computer.allow_cuda_graphs is not False or computer.full_graph is not None:
+def assert_decoding_mode(model, cuda_graphs):
+    # Only GreedyBatchedTDTInfer owns a label-looping computer.
+    computer = getattr(model.decoding.decoding, 'decoding_computer', None)
+    if computer is None:
+        raise RuntimeError('worker CUDA graph policy violated; restart required')
+    mode = getattr(computer.cuda_graphs_mode, 'value', computer.cuda_graphs_mode)
+    if cuda_graphs:
+        actual = computer.allow_cuda_graphs is True and mode in _GRAPH_MODES
+    else:
+        actual = computer.allow_cuda_graphs is False and mode is None and computer.full_graph is None
+    if not actual:
         raise RuntimeError('worker CUDA graph policy violated; restart required')
 
 
 class ParakeetWords:
-    def __init__(self, model, *, enforce_eager=False):
+    def __init__(self, model, *, cuda_graphs=None):
         self.model = model
-        self.enforce_eager = enforce_eager
+        # None skips the assertion (unpinned fakes); a bool is the pinned mode.
+        self.cuda_graphs = cuda_graphs
 
     def transcribe_batch(self, samples):
-        if self.enforce_eager:
-            assert_eager_decoding(self.model)
+        if self.cuda_graphs is not None:
+            assert_decoding_mode(self.model, self.cuda_graphs)
         # NeMo accepts float32 16kHz arrays: no file write, read or second decode.
         hypotheses = self.model.transcribe(
             samples,
@@ -94,8 +112,8 @@ class ParakeetWords:
             num_workers=0,
             verbose=False,
         )
-        if self.enforce_eager:
-            assert_eager_decoding(self.model)
+        if self.cuda_graphs is not None:
+            assert_decoding_mode(self.model, self.cuda_graphs)
         result = []
         for hypothesis in hypotheses:
             entries = hypothesis.timestamp.get('word', [])
@@ -371,8 +389,8 @@ def create_local_worker(
         raise ValueError(
             'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
         )
-    pin_parakeet_decoding(parakeet_model)
-    words = ParakeetWords(parakeet_model, enforce_eager=True)
+    pin_parakeet_decoding(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
+    words = ParakeetWords(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
     flight = (
         FlightPyannote.create(pyannote_model, vad_model, budget_seconds=config.flight_batch_seconds)
         if config.flight_batching

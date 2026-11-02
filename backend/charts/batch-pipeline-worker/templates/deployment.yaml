@@ -156,6 +156,8 @@ spec:
             - {name: BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED, value: {{ .Values.worker.sharedEmbeddingTrunkEnabled | quote }}}
             # Full-unit diarization reuses the VAD pass's raw segmentation scores; "false" is the kill switch.
             - {name: BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED, value: {{ .Values.worker.vadSegmentationReuseEnabled | quote }}}
+            # CUDA-graph TDT decoding, asserted per call; "false" is the kill switch (asserted eager).
+            - {name: BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED, value: {{ .Values.worker.asrCudaGraphsEnabled | quote }}}
             - name: ENCRYPTION_SECRET
               valueFrom:
                 secretKeyRef:

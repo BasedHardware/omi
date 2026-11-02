@@ -648,6 +648,7 @@ def test_shared_embedding_trunk_ships_on_with_helm_kill_switch(arguments, expect
     [
         ('vadSegmentationReuseEnabled', 'BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED'),
         ('prepareFlightEnabled', 'BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED'),
+        ('asrCudaGraphsEnabled', 'BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED'),
     ],
 )
 @pytest.mark.parametrize('kill', [False, True])

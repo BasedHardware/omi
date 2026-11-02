@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 221,
+  "count": 222,
   "names": {
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_ROUTING_PERCENT": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
@@ -62,6 +62,7 @@
     "BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED": {"owner": "batch record lane / gpu efficiency sprint", "review_by": "2026-12-02"},
     "BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED": {"owner": "planscost / gpu efficiency sprint", "review_by": "2026-12-02"},
     "BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED": {"owner": "planscost / gpu efficiency sprint", "review_by": "2026-12-02"},
+    "BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED": {"owner": "planscost / gpu efficiency sprint", "review_by": "2026-12-02"},
     "BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED": {"owner": "dazheng (batch record lane / rollout lead)", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED": {"owner": "dazheng (batch record lane / rollout lead)", "review_by": "2026-11-15"},
