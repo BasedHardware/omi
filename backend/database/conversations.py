@@ -1,6 +1,7 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
+from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
@@ -1120,12 +1121,14 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = None
+    delivery_outcome = None
     summary_changed = False
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt, summary_changed
+        nonlocal summary_receipt, summary_changed, delivery_outcome
         summary_receipt = None
+        delivery_outcome = None
         summary_changed = False
         write_data = copy.deepcopy(conversation_data)
         write_data.pop('record_audio_partial', None)
@@ -1189,6 +1192,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
@@ -1198,6 +1202,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
@@ -1205,10 +1210,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
     run_transactional(db, _write_processing_result)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
-    if summary_changed:
-        _drop_summary_memo(uid)
-
-    summary_delivery.emit(summary_receipt)
+    summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -1251,14 +1253,16 @@ def persist_processing_result_with_lifecycle(
     stale_sync_revision = False
     first_completed = False
     summary_receipt = None
+    delivery_outcome = None
     summary_changed = False
     notes_refresh_state_write = None
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome
         summary_changed = False
         summary_receipt = None
+        delivery_outcome = None
         stale_sync_revision = False
         first_completed = False
         notes_refresh_state_write = None
@@ -1414,6 +1418,7 @@ def persist_processing_result_with_lifecycle(
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
@@ -1431,11 +1436,7 @@ def persist_processing_result_with_lifecycle(
 
     persisted = run_transactional(db, _persist)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
-    if summary_changed:
-        _drop_summary_memo(uid)
-    if persisted:
-
-        summary_delivery.emit(summary_receipt)
+    summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo, persisted)
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1472,13 +1473,12 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
 
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
+    delivery_outcome = summary_terminal_outcome({}, conversation_data)
     created, summary_changed = conversation_recorded_time.create_if_absent(uid, conversation_data, firestore_client=db)
     if not created:
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False
-    if summary_changed:
-        _drop_summary_memo(uid)
-    summary_delivery.emit(summary_receipt)
+    summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
     return True

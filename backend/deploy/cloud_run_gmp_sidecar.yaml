@@ -1,3 +1,4 @@
+# Delivery and People scan counters remain in the shared omi_.* keep-list.
 apiVersion: monitoring.googleapis.com/v1beta
 kind: RunMonitoring
 metadata:
