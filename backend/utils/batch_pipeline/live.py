@@ -16,6 +16,7 @@ import os
 import time
 
 from config.policy import resolve_batch_policy
+from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from database.batch_pipeline_policy import load_job_policy
@@ -147,7 +148,7 @@ def retained_record_units(
     trim_divergent = overlap_trim_enabled()
     unit_frames = (UNIT_SECONDS if partial else 3600) * 16000
     reference_limit = UNIT_REFERENCES if partial else MAX_REFERENCES
-    allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
     references, start, end, previous_pcm = [], None, None, b''
     capture_origin = None
     for chunk in chunks:

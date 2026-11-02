@@ -90,9 +90,14 @@ def admitted(uid: str, phase: str) -> bool:
     return in_rollout_cohort(uid, 'audio-archive') or bucket < percent
 
 
+def derived_audio_bucket() -> str:
+    """Configured rendition storage resource, shared by writers and readers."""
+    return os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+
+
 def regional_bucket(uid: str, legacy: str | None) -> str | None:
     if admitted(uid, 'REGIONAL_CACHE'):
-        configured = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+        configured = derived_audio_bucket()
         if not configured:
             logger.warning('regional audio cache missing BUCKET_AUDIO_DERIVED; retaining legacy bucket')
             return legacy
@@ -118,7 +123,7 @@ def regional_chunk_bucket(uid: str, legacy: str) -> str:
     """
     if not uid or not _phase_enabled('REGIONAL_CACHE'):
         return legacy
-    configured = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+    configured = derived_audio_bucket()
     if not configured:
         return legacy
     return configured if cohort_bucket(uid, 'audio-archive', bits=64) < _regional_chunks_percent() else legacy

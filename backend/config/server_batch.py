@@ -170,6 +170,9 @@ def request_eligible(host, *, existing_capture: bool = False) -> bool:
 
 def request_reason(host, *, existing_capture: bool = False) -> str | None:
     """A learned profile selects the cohort, never the recognizer language proof."""
+    # Cap-paused bootstrap has no request yet and cannot own batch custody.
+    if getattr(host, 'request', None) is None:
+        return 'not_enabled'
     language = request_language(host)
     profile = getattr(host, 'language_profile', None)
     primary = getattr(profile, 'primary', None)

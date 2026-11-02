@@ -6,8 +6,8 @@ of audio must pass both independent classifiers. Refusal freezes
 """
 
 import json
-import os
 
+from config.audio_archive import derived_audio_bucket
 from config.server_batch import AUTO_LANGUAGES
 from config.stt_provider_policy import normalized_stt_language
 from utils.batch_pipeline.audio import audio_unit
@@ -69,7 +69,7 @@ async def prove_manifest(store, artifacts, item, manifest):
     if normalized_stt_language(manifest['context'].get('stt_language')) not in AUTO_LANGUAGES:
         return manifest
     await run_blocking(db_executor, artifacts.authorize, item)
-    allowed = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
     key = artifacts.key_for_owner(item.owner_id)
     wav = await run_blocking(
         storage_executor,
