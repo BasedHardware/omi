@@ -12,6 +12,7 @@ import {
   liveDates,
   liveWindow,
   mergeLiveDoc,
+  estimatedServices,
   meteredUsd,
   parseLiveDoc,
 } from "../../lib/wall-live";
@@ -130,9 +131,18 @@ const READ_METHODS = new Set<string>(RATES.fsReadMethods);
 const WRITE_METHODS = new Set<string>(RATES.fsWriteMethods);
 const GCS_A_METHODS = new Set<string>(RATES.gcsAMethods);
 
-/** Metered quantities for [start, end): Cloud Run instance-seconds (managed
- * Prometheus, `increase` over the window), Firestore requests by method,
- * GCS operations by class, and logging bytes ingested. */
+/** Metered quantities for [start, end): Cloud Run billable instance-seconds,
+ * Firestore requests by method, GCS operations by class, and logging bytes.
+ *
+ * Cloud Run `container/billable_instance_time` is a DELTA metric: each sample
+ * is the billable seconds of its interval, not a cumulative counter. The window
+ * total is therefore `sum_over_time`. `increase()` treats every downward step
+ * as a counter reset and overstates it (ro-prod, 2026-11-02: backend-sync 24h
+ * 1,024 instance-hours with increase vs 809 with sum_over_time).
+ *
+ * Cloud Run jobs and worker pools are not metered here; they stay in the fixed
+ * carry constant (`carryDay`), subtracted from nothing. `seen` records whether
+ * Monitoring returned any series per family: an empty family is unavailable. */
 export async function quantitiesFor(
   start: number,
   end: number,
@@ -140,7 +150,7 @@ export async function quantitiesFor(
 ): Promise<LiveQuantities> {
   const windowSeconds = Math.round((end - start) / 1000);
   const cr = await gmpVector(
-    `sum by (service_name) (increase(run_googleapis_com:container_billable_instance_time{monitored_resource="cloud_run_revision"}[${windowSeconds}s]))`,
+    `sum by (service_name) (sum_over_time(run_googleapis_com:container_billable_instance_time{monitored_resource="cloud_run_revision"}[${windowSeconds}s]))`,
     end,
     bearer
   );
@@ -150,13 +160,15 @@ export async function quantitiesFor(
 
   let fsReads = 0;
   let fsWrites = 0;
-  for (const s of await monitoringSeries(
-    "firestore.googleapis.com/api/request_count",
-    start,
-    end,
-    bearer
-  )) {
-    if (!("database_id" in s.labels)) continue;
+  const fsSeries = (
+    await monitoringSeries(
+      "firestore.googleapis.com/api/request_count",
+      start,
+      end,
+      bearer
+    )
+  ).filter((s) => "database_id" in s.labels);
+  for (const s of fsSeries) {
     const method = s.labels.api_method ?? "";
     if (READ_METHODS.has(method)) fsReads += s.value;
     else if (WRITE_METHODS.has(method)) fsWrites += s.value;
@@ -164,27 +176,41 @@ export async function quantitiesFor(
 
   let gcsA = 0;
   let gcsB = 0;
-  for (const s of await monitoringSeries(
+  const gcsSeries = await monitoringSeries(
     "storage.googleapis.com/api/request_count",
     start,
     end,
     bearer
-  )) {
+  );
+  for (const s of gcsSeries) {
     if ((s.labels.response_code ?? "").match(/^[45]/)) continue;
     if (GCS_A_METHODS.has(s.labels.method ?? "")) gcsA += s.value;
     else gcsB += s.value;
   }
 
   let logBytes = 0;
-  for (const s of await monitoringSeries(
+  const logSeries = await monitoringSeries(
     "logging.googleapis.com/billing/bytes_ingested",
     start,
     end,
     bearer
-  ))
-    logBytes += s.value;
+  );
+  for (const s of logSeries) logBytes += s.value;
 
-  return { crInstanceSeconds, fsReads, fsWrites, gcsA, gcsB, logBytes };
+  return {
+    crInstanceSeconds,
+    fsReads,
+    fsWrites,
+    gcsA,
+    gcsB,
+    logBytes,
+    seen: {
+      cloudRun: cr.length > 0,
+      firestore: fsSeries.length > 0,
+      gcs: gcsSeries.length > 0,
+      logging: logSeries.length > 0,
+    },
+  };
 }
 
 async function writeDoc(produced: LiveDay[], now: number) {
@@ -206,25 +232,49 @@ async function writeDoc(produced: LiveDay[], now: number) {
 export async function main(now = Date.now()) {
   const bearer = await token();
   const produced: LiveDay[] = [];
+  const unavailable: { date: string; families: string[] }[] = [];
   for (const date of liveDates(now)) {
     const window = liveWindow(date, now);
     if (!window) continue;
     const quantities = await quantitiesFor(window.start, window.end, bearer);
+    const metered = meteredUsd(quantities);
+    if (!metered) {
+      // An empty family is unavailable, never $0: the day is not written, so
+      // the previous good reading stays and its state turns stale or missing.
+      unavailable.push({
+        date,
+        families: Object.entries(quantities.seen)
+          .filter(([, ok]) => !ok)
+          .map(([name]) => name),
+      });
+      continue;
+    }
     produced.push({
       date,
       queryEnd: new Date(window.end).toISOString(),
       fraction: window.fraction,
-      metered: meteredUsd(quantities),
+      metered,
       producedAt: new Date(now).toISOString(),
+      estimated: estimatedServices(quantities),
     });
   }
-  if (!produced.length) return;
+  if (!produced.length) {
+    console.info(
+      JSON.stringify({
+        event: "wall_live_run",
+        outcome: "unavailable",
+        unavailable,
+      })
+    );
+    return;
+  }
   await writeDoc(produced, now);
   // Totals and dates only: no account, query or response detail.
   console.info(
     JSON.stringify({
       event: "wall_live_run",
       outcome: "written",
+      unavailable,
       days: produced.map((d) => ({
         date: d.date,
         fraction: Math.round(d.fraction * 10000) / 10000,

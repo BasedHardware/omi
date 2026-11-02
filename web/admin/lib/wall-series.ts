@@ -72,6 +72,7 @@ import { LiveDoc } from "./wall-live";
 import { readLiveDoc } from "./wall-live-store";
 import {
   liveCostDays,
+  liveDayStates,
   reconcileLive,
   spliceCostDays,
   trailingMean,
@@ -857,15 +858,26 @@ export function healthFrames(
   // Settled days through D−2, live (metered) days for D−1 and today, each day
   // in exactly one source (`spliceCostDays` throws on a double count).
   const sonioxRate = vendor.sonioxRate7d ?? null;
+  // One settled end for both sources (review r1): the newest settled day the
+  // billing read actually returned on or before the cutoff. Live days are
+  // every metered day after it, so a midnight-straddling read cannot leave a
+  // day in neither source.
+  const settledEnd =
+    days.filter((d) => d.date <= cutoff).at(-1)?.date ?? cutoff;
   const spliced = spliceCostDays(
     days,
     liveCostDays(
       legs.live ?? null,
-      trailingMean(days.slice(-VARIABLE_MARGIN_RUN_DAYS)),
+      trailingMean(
+        days
+          .filter((d) => d.date <= settledEnd)
+          .slice(-VARIABLE_MARGIN_RUN_DAYS)
+      ),
       now.getTime(),
-      sonioxRate
+      sonioxRate,
+      settledEnd
     ),
-    cutoff
+    settledEnd
   );
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
@@ -1003,14 +1015,27 @@ export function healthFrames(
     v == null ? "n/a" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`;
   // The headline margin is the live estimate (marked est.); the settled D−2
   // figure and its variance from the stored live days sit under it.
+  // Producer state for today and yesterday: a stale or missing day is named,
+  // never shown as a silent fresh value; an estimated Cloud Run size is named.
+  const liveStates = liveDayStates(legs.live ?? null, now.getTime());
+  const liveFlags = liveStates
+    .filter((s) => s.state === "stale" || s.state === "missing")
+    .map((s) => `${s.date} ${s.state}`);
+  const liveEstimated = Array.from(
+    new Set(liveStates.flatMap((s) => s.estimated))
+  );
   const marginLiveStatus =
-    liveDayCount === 0
+    (liveDayCount === 0
       ? "Live estimate unavailable: no fresh metered day"
       : `Live est. through ${liveHead?.date ?? "—"}${
           liveHead && liveHead.date > cutoff ? "" : " (settled only)"
         } · settled D-2: ${pct(recon.settledPct)}, variance ${pp(
           recon.variancePp
-        )}`;
+        )}`) +
+    (liveFlags.length ? ` · producer ${liveFlags.join(", ")}` : "") +
+    (liveEstimated.length
+      ? ` · Cloud Run default size (est.): ${liveEstimated.join(", ")}`
+      : "");
   return {
     cost,
     costPerMau,

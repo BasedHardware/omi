@@ -35,6 +35,14 @@ export interface LiveQuantities {
   gcsB: number;
   /** Logging bytes ingested in the window. */
   logBytes: number;
+  /** Whether Monitoring returned at least one series for each metered family.
+   * An empty result is unavailable, never a zero reading (review r1). */
+  seen: {
+    cloudRun: boolean;
+    firestore: boolean;
+    gcs: boolean;
+    logging: boolean;
+  };
 }
 export interface MeteredUsd {
   cloudRun: number;
@@ -52,19 +60,39 @@ export interface LiveDay {
   /** USD for the covered window, unscaled. */
   metered: MeteredUsd;
   producedAt: string;
+  /** Cloud Run services priced by the default size because they have no entry
+   * in `crSpecs`: an estimate, named on the status line. */
+  estimated?: string[];
 }
 export interface LiveDoc {
   days: Record<string, LiveDay>;
+  /** When the producer last wrote this document. A stale run makes every live
+   * day stale, including a closed one (a dead job must not look fresh). */
+  runAt?: string;
+}
+
+const hasSpec = (svc: string) =>
+  Object.prototype.hasOwnProperty.call(RATES.crSpecs, svc);
+
+/** Cloud Run services with no calibrated size: priced at the default size and
+ * flagged as estimated (never silently). */
+export function estimatedServices(q: LiveQuantities): string[] {
+  return Object.keys(q.crInstanceSeconds)
+    .filter((svc) => !hasSpec(svc))
+    .sort();
 }
 
 /** Metered USD for one window from its quantities and the calibrated unit
- * rates (the marginmeter `margin.py` formulas, ported). */
-export function meteredUsd(q: LiveQuantities): MeteredUsd {
+ * rates (the marginmeter `margin.py` formulas, ported). Null when any metered
+ * family returned no series: that day is unavailable, not $0. */
+export function meteredUsd(q: LiveQuantities): MeteredUsd | null {
+  if (!q.seen.cloudRun || !q.seen.firestore || !q.seen.gcs || !q.seen.logging)
+    return null;
   const cloudRun = Object.entries(q.crInstanceSeconds).reduce(
     (sum, [svc, isec]) => {
-      const spec =
-        (RATES.crSpecs as Record<string, { vcpu: number; gib: number }>)[svc] ??
-        RATES.crDefaultSpec;
+      const spec = hasSpec(svc)
+        ? (RATES.crSpecs as Record<string, { vcpu: number; gib: number }>)[svc]
+        : RATES.crDefaultSpec;
       return sum + isec * (spec.vcpu * RATES.crVcpuS + spec.gib * RATES.crGibS);
     },
     0
@@ -109,7 +137,7 @@ export function mergeLiveDoc(
   for (const d of produced) days[d.date] = d;
   const oldest = isoOf(now - LIVE_KEEP_DAYS * DAY_MS);
   for (const key of Object.keys(days)) if (key < oldest) delete days[key];
-  return { days };
+  return { days, runAt: new Date(now).toISOString() };
 }
 
 /** Parse a stored document defensively: anything malformed is no document. */
@@ -134,7 +162,14 @@ export function parseLiveDoc(raw: unknown): LiveDoc | null {
     )
       out[date] = v as LiveDay;
   }
-  return { days: out };
+  const runAt = (raw as { runAt?: unknown }).runAt;
+  return {
+    days: out,
+    runAt:
+      typeof runAt === "string" && !Number.isNaN(Date.parse(runAt))
+        ? runAt
+        : undefined,
+  };
 }
 
 export const isWeekendDay = (date: string) => {

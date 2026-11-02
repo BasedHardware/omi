@@ -21,9 +21,12 @@ import {
 /** A partial day is used only while its producer run is this fresh. */
 export const LIVE_STALE_MS = 20 * 60_000;
 
-/** Element-wise mean of the given settled days (the trailing window). Numeric
- * fields average over the days that carry a number; a field null on every day
- * stays null; booleans and strings keep the last day's value. */
+/** Trailing-window basis for the settled days. Every numeric field is the SUM
+ * over the window divided by the window's day count, a null day counting as
+ * zero. A cash posting (a $399 Modulate top-up on one day) therefore becomes
+ * its share of the window, about $57/day over seven days, not $399/day
+ * (review r1). A field null on every day stays null; booleans and strings keep
+ * the last day's value. */
 export function trailingMean(days: CostDay[]): CostDay | null {
   if (days.length === 0) return null;
   const last = days[days.length - 1] as unknown as Record<string, unknown>;
@@ -32,16 +35,49 @@ export function trailingMean(days: CostDay[]): CostDay | null {
     const vals = days.map(
       (d) => (d as unknown as Record<string, unknown>)[key]
     );
-    const nums = vals.filter((v): v is number => typeof v === "number");
-    if (nums.length && vals.every((v) => v == null || typeof v === "number"))
-      out[key] = nums.reduce((s, v) => s + v, 0) / nums.length;
+    if (vals.every((v) => v == null || typeof v === "number"))
+      out[key] =
+        vals.reduce<number>((s, v) => s + (typeof v === "number" ? v : 0), 0) /
+        days.length;
   }
   return out as unknown as CostDay;
 }
 
+/** The producer's document state for each live UTC day (today and yesterday):
+ * fresh, early (a partial day before LIVE_MIN_FRACTION), missing, or stale
+ * (the producer's last run is older than LIVE_STALE_MS, so every day is). */
+export type LiveState = "fresh" | "early" | "missing" | "stale";
+export function liveDayStates(
+  doc: LiveDoc | null,
+  now: number
+): { date: string; state: LiveState; estimated: string[] }[] {
+  const runFresh = liveRunFresh(doc, now);
+  return liveDates(now).map((date) => {
+    const day = doc?.days[date];
+    const estimated = day?.estimated ?? [];
+    if (!runFresh) return { date, state: "stale", estimated };
+    if (!day) return { date, state: "missing", estimated };
+    if (day.fraction < 1 && day.fraction < LIVE_MIN_FRACTION)
+      return { date, state: "early", estimated };
+    // A partial day whose own value is old (the run skipped it) is stale.
+    if (day.fraction < 1 && now - Date.parse(day.producedAt) > LIVE_STALE_MS)
+      return { date, state: "stale", estimated };
+    return { date, state: "fresh", estimated };
+  });
+}
+
+/** The producer's last run is recent enough to trust its values. */
+export function liveRunFresh(doc: LiveDoc | null, now: number): boolean {
+  if (!doc?.runAt) return false;
+  return now - Date.parse(doc.runAt) <= LIVE_STALE_MS;
+}
+
 /** One live UTC day as a cost day. Metered lines are scaled from the covered
  * window to a full day; the other GCP lines are calibration constants; the
- * Soniox line is the measured 7-day rate; everything else is the base mean. */
+ * Soniox line is the measured 7-day rate; the dev project is metered nowhere,
+ * so its trailing settled rate rides in the gcp total and is removed again by
+ * the margin (dev stays out of margin and shows on its own line). Everything
+ * else is the trailing base. */
 export function liveCostDay(
   live: LiveDay,
   base: CostDay,
@@ -53,7 +89,8 @@ export function liveCostDay(
   const gcpMetered = (m.cloudRun + m.firestore + m.gcs + m.logging) * scale;
   const gke = weekend ? RATES.gkePoolsDay.weekend : RATES.gkePoolsDay.weekday;
   const carry = weekend ? RATES.carryDay.weekend : RATES.carryDay.weekday;
-  const gcp = gcpMetered + gke + carry;
+  const dev = Math.max(0, base.gcpDev ?? 0);
+  const gcp = gcpMetered + gke + carry + dev;
   const vertexReserved = RATES.vertexReservedDay;
   const vertexLlm = vertexReserved + RATES.vertexPaygoDay;
   const soniox = sonioxRate ?? base.sttSonioxUsd;
@@ -74,7 +111,7 @@ export function liveCostDay(
     gcp,
     vertexLlm,
     vertexReserved,
-    gcpDev: 0,
+    gcpDev: dev,
     oneTime: 0,
     anthropic: base.anthropic,
     stt,
@@ -89,20 +126,32 @@ export function liveCostDay(
   };
 }
 
-/** The live days the margin may use right now: yesterday (closed) and today
- * (partial, from LIVE_MIN_FRACTION of the day, and only while its producer run
- * is fresh). A stale or missing producer value is simply absent. */
+/** The live days the margin may use: those in the document after the settled
+ * end (`settledEnd`, default: yesterday and today only) and up to today. A
+ * closed day is used while the producer run is fresh; a partial day also needs
+ * LIVE_MIN_FRACTION of data and its own fresh value. A dead producer makes every
+ * live day absent (its state is named by `liveDayStates`), never a silent $0. */
 export function liveCostDays(
   doc: LiveDoc | null,
   base: CostDay | null,
   now: number,
-  sonioxRate: number | null
+  sonioxRate: number | null,
+  settledEnd?: string
 ): CostDay[] {
-  if (!doc || !base) return [];
+  if (!doc || !base || !liveRunFresh(doc, now)) return [];
+  const [yesterday, today] = liveDates(now);
+  // Default lower bound: D-2, so only yesterday and today are read.
+  const lower =
+    settledEnd ??
+    new Date(Date.parse(`${yesterday}T00:00:00Z`) - DAY_MS)
+      .toISOString()
+      .slice(0, 10);
+  const dates = Object.keys(doc.days)
+    .filter((d) => d <= today && d > lower)
+    .sort();
   const out: CostDay[] = [];
-  for (const date of liveDates(now)) {
+  for (const date of dates) {
     const day = doc.days[date];
-    if (!day) continue;
     const closed = day.fraction >= 1;
     if (!closed) {
       if (day.fraction < LIVE_MIN_FRACTION) continue;

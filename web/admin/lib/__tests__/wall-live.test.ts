@@ -16,12 +16,14 @@ import {
   LiveDoc,
   liveWindow,
   mergeLiveDoc,
+  estimatedServices,
   meteredUsd,
   parseLiveDoc,
 } from "../wall-live";
 import {
   liveCostDay,
   liveCostDays,
+  liveDayStates,
   reconcileLive,
   spliceCostDays,
   trailingMean,
@@ -150,6 +152,7 @@ describe("liveCostDays: freshness and the partial-day rule", () => {
   const now = at("2026-11-01", 6); // 06:00 UTC on 11-01
   const base = trailingMean(settledDays("2026-10-30", 7))!;
   const doc = (days: LiveDay[]): LiveDoc => ({
+    runAt: new Date(now).toISOString(),
     days: Object.fromEntries(days.map((d) => [d.date, d])),
   });
 
@@ -190,8 +193,10 @@ describe("producer math and document", () => {
       gcsA: 1_000_000,
       gcsB: 1_000_000,
       logBytes: 1e9,
+      seen: { cloudRun: true, firestore: true, gcs: true, logging: true },
     });
     const backend = RATES.crSpecs.backend;
+    if (!m) throw new Error("all families seen: metering must return");
     expect(m.cloudRun).toBeCloseTo(
       1000 * (backend.vcpu * RATES.crVcpuS + backend.gib * RATES.crGibS) +
         100 *
@@ -346,6 +351,7 @@ describe("margin scope: dev GCP out, Modulate at cash, OpenRouter in", () => {
     const base = trailingMean(settled)!;
     const now = at("2026-11-01", 6);
     const doc: LiveDoc = {
+      runAt: new Date(now).toISOString(),
       days: {
         "2026-10-31": liveDay("2026-10-31", 1, now - 60_000, 10),
         "2026-11-01": liveDay("2026-11-01", 6 / 24, now - 60_000, 10),
@@ -355,5 +361,119 @@ describe("margin scope: dev GCP out, Modulate at cash, OpenRouter in", () => {
     const points = variableMarginSeries(spliced, () => 60_000, {});
     expect(points.at(-1)!.date).toBe("2026-11-01");
     expect(points.at(-1)!.marginPct).not.toBeNull();
+  });
+});
+
+describe("Luna r1 fixes: unavailable metering, pricing flags, trailing basis, dev, freshness, midnight", () => {
+  const seenAll = { cloudRun: true, firestore: true, gcs: true, logging: true };
+  const q = (over: Partial<Parameters<typeof meteredUsd>[0]> = {}) => ({
+    crInstanceSeconds: { backend: 1000 },
+    fsReads: 1,
+    fsWrites: 1,
+    gcsA: 1,
+    gcsB: 1,
+    logBytes: 1,
+    seen: seenAll,
+    ...over,
+  });
+
+  it("an empty Monitoring series is unavailable, never a $0 reading", () => {
+    expect(meteredUsd(q({ seen: { ...seenAll, cloudRun: false } }))).toBeNull();
+    expect(
+      meteredUsd(q({ seen: { ...seenAll, firestore: false } }))
+    ).toBeNull();
+    expect(meteredUsd(q({ seen: { ...seenAll, logging: false } }))).toBeNull();
+    expect(meteredUsd(q())).not.toBeNull();
+  });
+
+  it("names unmapped Cloud Run services as estimated instead of pricing them silently", () => {
+    expect(
+      estimatedServices(
+        q({ crInstanceSeconds: { backend: 1, "no-such-svc": 1 } })
+      )
+    ).toEqual(["no-such-svc"]);
+    expect(estimatedServices(q())).toEqual([]);
+  });
+
+  it("a $399 cash top-up on one of seven days is about $57/day, not $399/day", () => {
+    const days = settledDays("2026-10-30", 7).map((d, i) => ({
+      ...d,
+      modulateCashUsd: i === 3 ? 399 : 0,
+    }));
+    const base = trailingMean(days)!;
+    expect(base.modulateCashUsd).toBeCloseTo(399 / 7, 6);
+  });
+
+  it("live days keep the trailing settled dev rate on the dev line, and dev stays out of margin", () => {
+    const base = trailingMean(settledDays("2026-10-30", 7))!;
+    const live = liveCostDay(
+      liveDay("2026-10-31", 1, Date.now(), 10),
+      base,
+      500
+    );
+    expect(live.gcpDev).toBeCloseTo(base.gcpDev, 6);
+    expect(live.gcpDev).toBeGreaterThan(0);
+    const scope = variableCostDay(live);
+    expect(scope.gcpDev).toBeCloseTo(base.gcpDev, 6);
+    // Dev is added into live gcp and removed again by the margin, so margin
+    // GCP equals the metered prod window only.
+    expect(scope.gcp).toBeCloseTo(
+      live.gcp - base.gcpDev + live.vertexLlm - live.vertexReserved,
+      6
+    );
+  });
+
+  it("a closed day whose producer is stale is not used and its state says so", () => {
+    const now = at("2026-11-01", 6);
+    const dead = liveDay("2026-10-31", 1, now, 10);
+    // The producer's last run is 3 hours old: a dead job, not a closed day.
+    const doc: LiveDoc = {
+      runAt: new Date(now - 3 * 3_600_000).toISOString(),
+      days: { [dead.date]: dead },
+    };
+    expect(
+      liveCostDays(doc, trailingMean(settledDays("2026-10-30", 7)), now, 500)
+    ).toHaveLength(0);
+    const states = liveDayStates(doc, now);
+    expect(states.find((s) => s.date === "2026-10-31")!.state).toBe("stale");
+  });
+
+  it("settled ending at D-3 with live D-2 and D-1: no day falls in neither source", () => {
+    const settled = settledDays("2026-10-29", 14); // billing newest day is D-3
+    const now = at("2026-11-01", 6);
+    const doc: LiveDoc = {
+      runAt: new Date(now).toISOString(),
+      days: {
+        "2026-10-30": liveDay("2026-10-30", 1, now, 10),
+        "2026-10-31": liveDay("2026-10-31", 1, now, 10),
+      },
+    };
+    const live = liveCostDays(
+      doc,
+      trailingMean(settled.slice(-7)),
+      now,
+      500,
+      "2026-10-29"
+    );
+    const spliced = spliceCostDays(settled, live, "2026-10-29");
+    const dates = spliced.map((d) => d.date);
+    for (let i = 1; i < dates.length; i++)
+      expect(shift(dates[i - 1], 1)).toBe(dates[i]);
+    expect(dates.at(-1)).toBe("2026-10-31");
+  });
+});
+
+describe("liveDayStates: the status names stale and missing live days", () => {
+  it("a closed day the producer skipped reads missing, a partial day with an old value reads stale", () => {
+    const now = at("2026-11-01", 6);
+    const doc: LiveDoc = {
+      runAt: new Date(now).toISOString(),
+      days: {
+        "2026-11-01": liveDay("2026-11-01", 6 / 24, now - 3_600_000, 10),
+      },
+    };
+    const states = liveDayStates(doc, now);
+    expect(states.find((s) => s.date === "2026-10-31")!.state).toBe("missing");
+    expect(states.find((s) => s.date === "2026-11-01")!.state).toBe("stale");
   });
 });

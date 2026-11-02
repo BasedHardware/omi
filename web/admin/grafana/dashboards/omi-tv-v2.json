@@ -6738,7 +6738,7 @@
     {
       "type": "timeseries",
       "title": "Unit economics",
-      "description": "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR \u00f7 that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D\u22122 \u00f7 the window's average daily cost-active users (any cost in the 30 days; the latest point is the All-in cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. Revenue / user keeps its qualified-MAU denominator.",
+      "description": "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR \u00f7 that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). TWO DENOMINATORS, NOT A MARGIN: revenue per qualified user (Revenue / qualified user, \u00f7 qualified MAU) and all-in cost per cost-active user (All-in cost / cost-active user, \u00f7 the 30-day average of users with any cost). The users differ, so the gap between the lines is not a per-user margin. Cost = all-in 30-day cost through D\u22122; a day with no book snapshot breaks the revenue line rather than being drawn.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -6767,7 +6767,7 @@
             },
             {
               "selector": "arpmau",
-              "text": "Revenue / user",
+              "text": "Revenue / qualified user",
               "type": "number"
             }
           ]
@@ -6795,7 +6795,7 @@
             },
             {
               "selector": "costPerMau",
-              "text": "All-in cost / user",
+              "text": "All-in cost / cost-active user",
               "type": "number"
             }
           ]
@@ -6839,12 +6839,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Revenue / user"
+              "options": "Revenue / qualified user"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Revenue / user"
+                "value": "Revenue / qualified user"
               },
               {
                 "id": "color",
@@ -6858,12 +6858,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "All-in cost / user"
+              "options": "All-in cost / cost-active user"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "All-in cost / user"
+                "value": "All-in cost / cost-active user"
               },
               {
                 "id": "color",
@@ -6893,8 +6893,8 @@
           "options": {
             "indexByName": {
               "date": 0,
-              "Revenue / user": 1,
-              "All-in cost / user": 2
+              "Revenue / qualified user": 1,
+              "All-in cost / cost-active user": 2
             },
             "excludeByName": {},
             "renameByName": {}

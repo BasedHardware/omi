@@ -404,11 +404,11 @@ def columns():
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
         (10, chart("Unit economics",
-                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D−2 ÷ the window's average daily cost-active users (any cost in the 30 days; the latest point is the All-in cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. Revenue / user keeps its qualified-MAU denominator.",
-                   [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / user", "number")], "A"),
-                    target("health", "costPerMau", [DATE, ("costPerMau", "All-in cost / user", "number")], "B")],
+                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). TWO DENOMINATORS, NOT A MARGIN: revenue per qualified user (Revenue / qualified user, ÷ qualified MAU) and all-in cost per cost-active user (All-in cost / cost-active user, ÷ the 30-day average of users with any cost). The users differ, so the gap between the lines is not a per-user margin. Cost = all-in 30-day cost through D−2; a day with no book snapshot breaks the revenue line rather than being drawn.",
+                   [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / qualified user", "number")], "A"),
+                    target("health", "costPerMau", [DATE, ("costPerMau", "All-in cost / cost-active user", "number")], "B")],
                    unit="currencyUSD", decimals=2, time_from="35d", soft_min=None,  # the crossover is the story
-                   overrides=[color("Revenue / user", REVENUE), color("All-in cost / user", COST["OpenAI"])],
+                   overrides=[color("Revenue / qualified user", REVENUE), color("All-in cost / cost-active user", COST["OpenAI"])],
                    extra=disconnect_after(1.5))),  # any missing book day is a gap
         (1, data_through()),
     ]

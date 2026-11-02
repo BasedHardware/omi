@@ -6,8 +6,13 @@
 #
 # Required grants (David applies; not granted by the agent):
 #   - roles/monitoring.viewer on project based-hardware for the job service account
-#   - roles/datastore.user on based-hardware (writes admin_stats_payload_cache/wall-live:v1)
 #   - roles/run.invoker on this job for the scheduler identity
+# No project-level Firestore role is requested (review r1). The job's current
+# write (admin_stats_payload_cache/wall-live:v1 in Firestore) needs datastore
+# access that the narrow set does not give: it cannot write until the live
+# document moves to a BigQuery table written by the finops-writer path (see the
+# report). Until then the run fails at the write, and the margin shows the last
+# stored state (stale or missing), never a fabricated value.
 apiVersion: run.googleapis.com/v1
 kind: Job
 metadata:
