@@ -200,10 +200,15 @@ def get_screen_activity_page(
 def observed_device_coverage(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Observed bounds are not acknowledgements of complete capture or sync."""
     devices: Dict[str, Dict[str, Any]] = {}
+    moments: Dict[str, Tuple[str, str]] = {}
     for row in rows:
         device = str(row.get('clientDeviceId') or row.get('deviceName') or 'unknown')
         stamp = row.get('timestamp')
         if not isinstance(stamp, str) or not stamp:
+            continue
+        try:
+            stamp_key = normalize_screen_activity_timestamp(stamp)
+        except ValueError:
             continue
         bounds = devices.setdefault(
             device,
@@ -214,8 +219,12 @@ def observed_device_coverage(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 'synced_through': None,
             },
         )
-        bounds['first_observed_at'] = min(bounds['first_observed_at'], stamp)
-        bounds['last_observed_at'] = max(bounds['last_observed_at'], stamp)
+        first, last = moments.setdefault(device, (stamp_key, stamp_key))
+        if stamp_key < first:
+            bounds['first_observed_at'] = stamp
+        if stamp_key > last:
+            bounds['last_observed_at'] = stamp
+        moments[device] = (min(first, stamp_key), max(last, stamp_key))
     return [devices[key] for key in sorted(devices)]
 
 

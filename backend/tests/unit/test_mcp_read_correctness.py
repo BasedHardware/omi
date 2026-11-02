@@ -666,3 +666,14 @@ def test_shared_mcp_memory_list_projects_source_time(monkeypatch):
     result = memories.memories_page_core(OWNER, limit=10, updated_after=NOW, cursor_kind='get_memories')
     assert result['memories'][0]['source_at'] == row['evidence'][0]['captured_at']
     assert result['memories'][0]['extracted_at'] is None
+
+
+def test_device_observation_bounds_compare_instants_across_dst_offsets():
+    rows = [
+        {'timestamp': '2026-11-01T01:50:00-04:00', 'clientDeviceId': 'synthetic'},
+        {'timestamp': '2026-11-01T01:10:00-05:00', 'clientDeviceId': 'synthetic'},
+    ]
+    coverage = other.screen_activity_db.observed_device_coverage(list(reversed(rows)))[0]
+    assert coverage['first_observed_at'] == rows[0]['timestamp']
+    assert coverage['last_observed_at'] == rows[1]['timestamp']
+    assert coverage['synced_through'] is None
