@@ -703,7 +703,106 @@ def test_payoff_order_reorders_a_deep_backlog(queue):
         ('heavy', now - timedelta(days=2)),
         ('fruitful', now - timedelta(days=1)),
     ]
-    assert dream_scheduler.payoff_order(rows, now, firestore_client=queue) == ['fruitful', 'heavy', 'light']
+    assert dream_scheduler.payoff_order(rows, now, firestore_client=queue) == ['fruitful', 'light', 'heavy']
+
+
+def test_payoff_stratified_window_reaches_stranded_yielders(queue, monkeypatch):
+    rows = [(f'owner-{index}', NOW - timedelta(hours=160) + timedelta(minutes=index)) for index in range(4348)]
+    for uid, _ in rows:
+        queue.rows[('dream_users', uid)] = {'score': 8500, 'size_bucket': 'heavy'}
+    # A single recent edit outranks the capped score-only population, even
+    # outside the old head.
+    queue.rows[('dream_users', rows[2326][0])] = {'score': 4, 'last_yield': 1, 'size_bucket': 'light'}
+    fetched = []
+    original = queue.get_all
+
+    def get_all(refs, **kwargs):
+        assert len(refs) <= dream_scheduler.DISCOVERY_TRANSACTION_ROWS
+        fetched.extend(ref.id for ref in refs)
+        return original(refs, **kwargs)
+
+    monkeypatch.setattr(queue, 'get_all', get_all)
+    ranked = dream_scheduler.payoff_order(rows, NOW, firestore_client=queue)
+    assert ranked[0] == rows[2326][0]
+    assert len(fetched) == len(set(fetched)) == 1000
+    assert fetched[:300] == [uid for uid, _ in rows[:300]]
+    assert rows[4347][0] in fetched
+    assert any(2000 <= int(uid.split('-')[1]) <= 2400 for uid in fetched)
+    fetched_set = set(fetched)
+    assert ranked[1000:] == [uid for uid, _ in rows if uid not in fetched_set]
+    assert sorted(ranked) == sorted(uid for uid, _ in rows)
+
+
+@pytest.mark.parametrize('count', [0, 1, 299, 300, 999, 1000, 1001])
+def test_payoff_window_small_queues_keep_fifo_ties(queue, count):
+    rows = [(f'owner-{index}', NOW - timedelta(days=1) + timedelta(seconds=index)) for index in range(count)]
+    assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == [uid for uid, _ in rows]
+
+
+def test_payoff_clamps_existing_pre_epoch_due_without_aging_priority(queue):
+    rows = [
+        ('sentinel', dream_scheduler.EPOCH - timedelta(minutes=6)),
+        ('aged', NOW - timedelta(days=31)),
+        ('productive', NOW - timedelta(days=1)),
+    ]
+    queue.rows[('dream_users', 'productive')] = {'last_yield': 1}
+    assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == ['aged', 'productive', 'sentinel']
+
+
+def test_payoff_caps_yield_and_score_and_ignores_heavy_size(queue):
+    rows = [(uid, NOW - timedelta(hours=1)) for uid in ['capped', 'extreme', 'heavy', 'light']]
+    queue.rows[('dream_users', 'capped')] = {'score': 10, 'last_yield': 10}
+    queue.rows[('dream_users', 'extreme')] = {'score': 8500, 'last_yield': 999}
+    queue.rows[('dream_users', 'heavy')] = {'score': 0, 'last_yield': -10, 'size_bucket': 'heavy'}
+    queue.rows[('dream_users', 'light')] = {'score': -10, 'last_yield': 0, 'size_bucket': 'light'}
+    assert dream_scheduler.payoff_order(rows, NOW, firestore_client=queue) == [uid for uid, _ in rows]
+
+
+def test_first_dirty_writes_cannot_create_pre_epoch_due(queue):
+    before = datetime.now(timezone.utc)
+    for _ in range(6):
+        assert dream_store.mark_dirty(QUEUE_UID, [('conversations', 'synthetic')])
+    due = queue.rows[('dream_due', QUEUE_UID)]['due_at']
+    assert before <= due <= datetime.now(timezone.utc)
+    assert queue.rows[('dream_users', QUEUE_UID)]['score'] == 6
+
+
+@pytest.mark.parametrize('arm', ['off', 'shadow', 'serve'])
+def test_payoff_lever_shadow_records_new_window_without_serving_it(queue, monkeypatch, arm):
+    rows = [(f'owner-{index}', NOW - timedelta(days=2) + timedelta(seconds=index)) for index in range(4348)]
+    queue.rows[('dream_users', rows[-1][0])] = {'last_yield': 10}
+    monkeypatch.setenv(dream_levers.PAYOFF_ORDER_MODE_ENV, arm)
+
+    async def run_blocking(_executor, fn, selected, now):
+        return fn(selected, NOW, firestore_client=queue)
+
+    monkeypatch.setattr(dream_agent, 'run_blocking', run_blocking)
+    page = [uid for uid, _ in rows]
+    sweep = {}
+    ordered = asyncio.run(dream_agent._payoff_order(rows, page, sweep))
+    assert sweep['payoff_order'] == arm
+    if arm == 'off':
+        assert 'reordered' not in sweep and ordered == page
+    else:
+        ranked = dream_scheduler.payoff_order(rows, NOW, firestore_client=queue)
+        assert sweep['reordered'] == sum(before != after for before, after in zip(page, ranked)) > 0
+        assert ordered == (ranked if arm == 'serve' else page)
+
+
+@pytest.mark.parametrize('arm', ['shadow', 'serve'])
+def test_payoff_read_error_fails_open(queue, monkeypatch, arm):
+    def broken(*args, **kwargs):
+        raise RuntimeError('synthetic read failure')
+
+    async def run_blocking(_executor, fn, selected, now):
+        return fn(selected, NOW, firestore_client=queue)
+
+    monkeypatch.setenv(dream_levers.PAYOFF_ORDER_MODE_ENV, arm)
+    monkeypatch.setattr(queue, 'get_all', broken)
+    monkeypatch.setattr(dream_agent, 'run_blocking', run_blocking)
+    rows = [('first', NOW), ('second', NOW)]
+    page = [uid for uid, _ in rows]
+    assert asyncio.run(dream_agent._payoff_order(rows, page, {})) == page
 
 
 def test_discovery_parking_fails_open(monkeypatch):
