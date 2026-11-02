@@ -11,7 +11,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -644,17 +644,29 @@ def _execution_matches(owner: dict, job_id: str, epoch: int, token: Optional[str
     )
 
 
-def worker_candidates(*, limit: int = 100, firestore_client: Any = None) -> list[dict[str, Any]]:
-    """One equality index; never scan non-cohort owners or the pending backlog."""
+def worker_candidates(*, limit: int = 100, firestore_client: Any = None) -> Iterator[dict[str, Any]]:
+    """Page available owners lazily, including past a filtered first page.
+
+    Cohort/legacy policy can change after admission, leaving available owners
+    that claim must skip. A fixed prefix would permanently hide later owners.
+    Stop fetching as soon as the caller claims one; never scan pending jobs.
+    """
     _require_production()
     client = firestore_client or get_firestore_client()
-    docs = (
+    page_size = max(1, min(limit, 100))
+    query = (
         client.collection(COLLECTION)
         .where(filter=FieldFilter('worker_available', '==', True))
-        .limit(max(1, min(limit, 100)))
-        .stream()
+        .order_by('__name__')
+        .limit(page_size)
     )
-    return [{'uid': doc.id, **_data(doc)} for doc in docs]
+    while True:
+        docs = list(query.stream())
+        for doc in docs:
+            yield {'uid': doc.id, **_data(doc)}
+        if len(docs) < page_size:
+            return
+        query = query.start_after(docs[-1])
 
 
 def claim_worker(
