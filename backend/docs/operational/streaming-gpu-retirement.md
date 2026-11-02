@@ -20,6 +20,11 @@ Only the rollout lead executes these steps. Run from the reviewed product
 worktree after its PR is merged. Preserve serving image digests and Helm revision
 numbers before changing anything. Do not change node pools or storage here.
 
+Require batch admission and `SERVER_BATCH_ONLY_MOBILE_PERCENT=100` to be
+serving first, then measure residual vendor demand and confirm credits and
+concurrency before enabling the retirement route. A later batch rollback
+retains vendor routing and must be budgeted for the full streaming fallback.
+
 1. Deploy the reviewed image/config to Cloud Run, listen and pusher with the
    canonical rollout train, first using its dry-run. Verify the actual serving
    Cloud Run revisions and every ready GKE pod receive `STT_GPU_FLEET_OFF=true`
