@@ -2929,6 +2929,7 @@ _add(
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
             'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
+            'memo_site': ('other', 'closed telemetry site; does not alter the Firestore query shape'),
         },
     )
 )
