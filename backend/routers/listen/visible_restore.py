@@ -29,6 +29,10 @@ class VisibleRestore:
         self.generation = 0
         self.captured_samples = 0
         self.buffer_start_sample = 0
+        self.stream_offset: float | None = None
+        self.epoch: Any = None
+        self.opening: asyncio.Task[Any] | None = None
+        self.next_open_at = 0.0
         self.retired: list[Any] = []
         self._close_lock = asyncio.Lock()
 
@@ -50,6 +54,8 @@ class VisibleRestore:
     def close(self):
         socket, self.socket = self.socket, None
         self.generation += 1
+        self.stream_offset = None
+        self.epoch = None
         if self.opened_at is not None:
             OMI_LISTEN_VISIBLE_RESTORE_SECONDS_TOTAL.inc(max(0, time.monotonic() - self.opened_at))
             self.opened_at = None
@@ -70,6 +76,23 @@ class VisibleRestore:
             while self.retired:
                 await abort_replay_socket(self.retired.pop(), timeout=2)
 
+    async def shutdown(self):
+        self.close()
+        task, self.opening = self.opening, None
+        if task is not None and task is not asyncio.current_task():
+            if not task.done() and not task.cancelling():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await self.drain()
+
+    async def _open_background(self):
+        try:
+            await self.receiver._open_deferred_stream()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.fail()  # An optional preview task cannot end raw capture.
+
     def fail(self):
         if not self.failed:
             self.failed = True
@@ -82,6 +105,7 @@ class VisibleRestore:
 
         if not self.visible() or self.failed:
             return False
+        generation = self.generation
         await self.drain()
         if self.socket is not None:
             if not live_stt_socket_is_dead(self.socket):
@@ -94,31 +118,45 @@ class VisibleRestore:
             await admission.refresh(force=False)
             if not admission.allowed(STTService.modulate):
                 return False
+        if generation != self.generation or not self.visible():
+            return False
         receiver.host.stt_service = STTService.modulate
         receiver.host.stt_model = 'velma-2'
         _, callback, epoch = receiver._build_stt_callbacks()
-        if epoch is not None:
-            # Fresh visible intervals must keep the original capture clock,
-            # rather than placing each reopened provider's words at time zero.
-            epoch.replay_origin_sample = receiver._stt_buffer_start_sample
-        generation = self.generation
-        offset = self.buffer_start_sample / receiver.host.request.sample_rate if epoch is None else 0
 
         def preview(segments):
-            if generation == self.generation and self.visible() and not self.failed:
-                if offset:
+            if generation == self.generation and self.visible() and not self.failed and self.stream_offset is not None:
+                if epoch is None and self.stream_offset:
                     segments = [
-                        {**segment, 'start': segment.get('start', 0) + offset, 'end': segment.get('end', 0) + offset}
+                        {
+                            **segment,
+                            'start': segment.get('start', 0) + self.stream_offset,
+                            'end': segment.get('end', 0) + self.stream_offset,
+                        }
                         for segment in segments
                     ]
                 callback(segments)
 
         token = current_visible_restore.set(True)
+        raw = None
+        adopted = False
         try:
-            raw = await asyncio.wait_for(
-                process_audio_modulate(preview, receiver.host.request.sample_rate, receiver.host.stt_language),
-                timeout=10,
-            )
+            # Same-task timeout keeps candidate ownership explicit on cancellation.
+            async with asyncio.timeout(10):
+                raw = await process_audio_modulate(
+                    preview, receiver.host.request.sample_rate, receiver.host.stt_language
+                )
+            if generation != self.generation or not self.visible():
+                return False
+            self.socket = receiver._wrap_legacy_stt_socket(raw, epoch)
+            self.epoch = epoch
+            self.stream_offset = None  # Pin to the first frame actually forwarded.
+            receiver.stt_socket = self.socket
+            adopted = True
+            receiver._record_selected_epoch(epoch, self.socket)
+            self.opened_at = time.monotonic()
+            OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL.labels(outcome='opened').inc()
+            return True
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -126,19 +164,12 @@ class VisibleRestore:
             return False
         finally:
             current_visible_restore.reset(token)
-        # A visibility/kill-switch change while the dial was in flight wins.
-        if generation != self.generation or not self.visible():
-            await abort_replay_socket(raw, timeout=2)
-            return False
-        self.socket = receiver._wrap_legacy_stt_socket(raw, epoch)
-        receiver.stt_socket = self.socket
-        receiver._record_selected_epoch(epoch, self.socket)
-        self.opened_at = time.monotonic()
-        OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL.labels(outcome='opened').inc()
-        return True
+            if raw is not None and not adopted:
+                await abort_replay_socket(raw, timeout=2)
 
     async def flush(self, buffer: bytearray) -> None:
         from utils.stt.streaming import STTService
+        from routers.listen.receiver import live_stt_socket_is_dead
 
         receiver = self.receiver
         self.buffer_start_sample = self.captured_samples
@@ -147,7 +178,15 @@ class VisibleRestore:
             if not self.visible():
                 self.close()
                 return
-            if not buffer or not await receiver._open_deferred_stream():
+            if not buffer or self.failed:
+                return
+            if self.socket is None:
+                if (self.opening is None or self.opening.done()) and time.monotonic() >= self.next_open_at:
+                    self.next_open_at = time.monotonic() + 1
+                    self.opening = receiver.host.spawn(self._open_background(), name='visible_restore_open')
+                return  # Never await a vendor/cap dial in the capture receive loop.
+            if live_stt_socket_is_dead(self.socket):
+                self.fail()
                 return
             admission = getattr(receiver, 'cap_admission', None)
             if admission is not None and not admission.packet_allowed(
@@ -156,6 +195,10 @@ class VisibleRestore:
                 self.close()
                 return
             start = receiver._stt_buffer_start_sample
+            if self.stream_offset is None:
+                self.stream_offset = self.buffer_start_sample / receiver.host.request.sample_rate
+                if self.epoch is not None:
+                    self.epoch.replay_origin_sample = start
             accepted = (
                 self.socket.send(bytes(buffer), start_sample=start)
                 if start is not None
@@ -189,8 +232,7 @@ class VisibleRestore:
                 if await self.receiver.host.wait(1):
                     return
         finally:
-            self.close()
-            await self.drain()
+            await self.shutdown()
 
 
 def attach_visible_restore(receiver: Any) -> None:

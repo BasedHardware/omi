@@ -1204,8 +1204,7 @@ class ListenReceiver(ReplayFilterMixin):
     async def _drain_stt_sockets(self) -> None:
         restore = getattr(self, 'visible_restore', None)
         if restore is not None:
-            restore.close()
-            await restore.drain()
+            await restore.shutdown()
         self._resilient_closing = True
         if (recovery := getattr(self, 'recovery', None)) is not None:
             recovery.mark_client_leaving()

@@ -27,6 +27,7 @@ def harness(monkeypatch):
         state=SimpleNamespace(active=True),
         stt_service=STTService.soniox,
         stt_language='en',
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
     )
     callback = Mock()
     raw = SimpleNamespace(send=Mock(return_value=True), finish=Mock(), is_connection_dead=False)
@@ -60,10 +61,44 @@ def observe(h, visible, foreground=True):
     h.restore.observe({'foreground': foreground, 'transcript_visible': visible})
 
 
-async def flush(h, data=b'\x01\x00' * 160):
+async def flush(h, data=b'\x01\x00' * 160, *, settle=True):
+    # Most unit cases inspect a ready provider. The nonblocking-dial regression
+    # below and the real WebSocket harness exercise production scheduling.
+    if settle and h.restore.visible() and not h.restore.failed:
+        await h.receiver._open_deferred_stream()
     buffer = bytearray(data)
     await ListenReceiver._flush_stt_buffer(h.receiver, buffer)
     assert buffer == b''
+
+
+@pytest.mark.asyncio
+async def test_receive_flush_returns_while_dial_is_blocked_and_hide_wins(harness):
+    h = harness
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def dial(*args):
+        started.set()
+        await release.wait()
+        return h.raw
+
+    h.dial.side_effect = dial
+    observe(h, True)
+    h.now[0] += 15
+    try:
+        await asyncio.wait_for(flush(h, settle=False), timeout=1)
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert h.restore.opening is not None and not h.restore.opening.done()
+        # These are sequential receive-loop steps, after flush has returned.
+        observe(h, False)
+        await asyncio.wait_for(flush(h, settle=False), timeout=1)
+        release.set()
+        await asyncio.wait_for(h.restore.opening, timeout=1)
+        h.raw.send.assert_not_called()
+        assert h.receiver.stt_socket is None
+        assert h.host.state.active
+    finally:
+        release.set()
+        await h.restore.shutdown()
 
 
 @pytest.mark.asyncio
