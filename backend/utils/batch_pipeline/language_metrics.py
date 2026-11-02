@@ -13,6 +13,20 @@ ROUTES = Counter(
     'Batch speech routing by declared language capability, never transcript content',
     ['surface', 'language_class', 'route'],
 )
+SAMPLE_WINDOWS = Counter(
+    'omi_batch_admission_sample_window_total',
+    "Speech after a vendor-admitted sample, by the self gate's top-1 capability (unavailable: no verdict)",
+    ['language_class'],
+)
+
+
+def record_sample_window(capability: str) -> None:
+    if capability not in {'supported', 'unsupported', 'unknown', 'unavailable'}:
+        raise ValueError('closed sample window capability required')
+    try:
+        SAMPLE_WINDOWS.labels(capability).inc()
+    except Exception:
+        pass  # Admission must not depend on the telemetry exporter.
 
 
 def record_route(surface: str, language: str | None, route: str, *, segment_id: str | None = None) -> None:
