@@ -238,7 +238,7 @@ def cached_list_response(
         ttl = VERSIONED_TTL_SECONDS
     elif response is not None and route in {'/v1/dev/user/conversations', '/v1/dev/user/memories'}:
         ttl = polling_cache.adaptive_ttl(_redis(), request, uid, context, query)
-        if ttl > TTL_SECONDS and response is not None:
+        if ttl > TTL_SECONDS:
             response.headers['X-Omi-List-Cache'] = f'fast-poller; max-age={ttl}'
     identity = {
         'collection_version': version,

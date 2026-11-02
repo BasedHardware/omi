@@ -6,22 +6,23 @@ outcomes stay shared by origin and cache paths.
 """
 
 from fastapi import HTTPException
+from typing import Any, Callable
 from utils import external_polling_cache as polling_cache
-from utils import external_list_reads as external_lists
 
 
 def read_conversation_item(
-    conversation_id,
-    include_transcript,
-    auth,
-    request,
+    conversation_id: str,
+    include_transcript: bool,
+    auth: Any,
+    request: Any,
     *,
-    conversations_db,
-    check_transcript,
-    populate_speaker_names,
-    populate_folder_names,
-    audit,
-):
+    conversations_db: Any,
+    cache_client: Callable[[], Any],
+    check_transcript: Callable[..., Any],
+    populate_speaker_names: Callable[..., Any],
+    populate_folder_names: Callable[..., Any],
+    audit: Callable[..., Any],
+) -> dict[str, Any]:
     uid = auth.uid
     status = 500
     returned_count = None
@@ -30,7 +31,7 @@ def read_conversation_item(
             check_transcript(auth, request=request)
 
         negative_key = polling_cache.negative_key(request, uid, auth, conversation_id)
-        if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+        if negative_key and polling_cache.missing(cache_client(), negative_key):
             raise HTTPException(
                 404,
                 detail='Conversation ID not found or unknown conversation sub-route',
@@ -38,7 +39,7 @@ def read_conversation_item(
             )
         conversation = conversations_db.get_conversation(uid, conversation_id)
         if conversation is None and negative_key:
-            polling_cache.remember_missing(external_lists._redis(), negative_key)
+            polling_cache.remember_missing(cache_client(), negative_key)
         if not conversation or conversation.get('deleted', False):
             status = 404
             returned_count = 0

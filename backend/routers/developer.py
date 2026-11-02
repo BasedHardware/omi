@@ -1738,6 +1738,7 @@ def get_conversation_endpoint(
         uid,
         request,
         conversations_db=conversations_db,
+        cache_client=external_lists._redis,
         check_transcript=check_conversation_transcript_read_limit,
         populate_speaker_names=populate_speaker_names,
         populate_folder_names=populate_folder_names,
