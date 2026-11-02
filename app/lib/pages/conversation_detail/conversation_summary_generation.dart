@@ -65,9 +65,8 @@ bool conversationHasRequestedSummary(ServerConversation conversation, String? ap
 }
 
 /// The production [PreferredSummaryAppWrite]: `PUT` for a template, `DELETE` for Omi.
-Future<bool> writeServerPreferredSummaryApp(String? appId) => appId == null || appId == 'omi-default-summary'
-    ? clearPreferredSummarizationAppServer()
-    : setPreferredSummarizationAppServer(appId);
+Future<bool> writeServerPreferredSummaryApp(String? appId) =>
+    appId == null ? clearPreferredSummarizationAppServer() : setPreferredSummarizationAppServer(appId);
 
 /// Installed summary templates that work on conversations; throws when the list cannot be read.
 Future<List<App>> fetchInstalledSummaryApps() async {
