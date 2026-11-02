@@ -22,6 +22,10 @@ MAX_SOURCE_BYTES = 256 * 1024 * 1024
 MAX_REFERENCES = 4096
 
 
+class InvalidRetainedManifest(ValueError):
+    """The stored manifest itself can never materialize; a retry reads the same bytes."""
+
+
 def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
         raise ValueError('invalid retained audio size')
@@ -97,7 +101,7 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         or manifest.get('capture_at') != item.capture_at
         or not 1 <= len(manifest.get('references', [])) <= MAX_REFERENCES
     ):
-        raise ValueError('retained audio manifest binding mismatch')
+        raise InvalidRetainedManifest('retained audio manifest binding mismatch')
     pcm = bytearray(round(item.duration_seconds * 16000) * 2)
     previous = 0
     previous_key, previous_source = None, b''
@@ -113,9 +117,9 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
             previous_key, previous_source = source_key if pinned else None, source
         start, offset, frames = ref['start_frame'], ref['offset_frame'], ref['frames']
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:
-            raise ValueError('invalid retained audio slice')
+            raise InvalidRetainedManifest('invalid retained audio slice')
         if (offset + frames) * 2 > len(source) or (start + frames) * 2 > len(pcm):
-            raise ValueError('retained audio slice exceeds capture')
+            raise InvalidRetainedManifest('retained audio slice exceeds capture')
         pcm[start * 2 : (start + frames) * 2] = source[offset * 2 : (offset + frames) * 2]
         previous = start + frames
     return with_context(audio_unit(item.capture_at, bytes(pcm)).wav, manifest['context'])
