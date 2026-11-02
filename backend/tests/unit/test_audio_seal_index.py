@@ -1,6 +1,8 @@
 """Seal CAS behavior with versioning off and per-part receipt independence."""
 
 from contextlib import nullcontext
+import inspect
+from google.cloud.storage.blob import Blob as SDKBlob
 
 import pytest
 
@@ -81,6 +83,26 @@ def test_oversized_frame_manifest_never_issues_an_unreadable_receipt(remote, mon
         part(remote)
     assert len(remote.list_blobs('raw-live/')) == 1
     assert not remote.list_blobs('audio-outbox/')
+
+
+def test_seal_download_arguments_match_the_pinned_sdk_without_constructing_a_client(remote, monkeypatch):
+    blob_type = type(remote.blob('probe'))
+    original = blob_type.download_as_bytes
+    signature = inspect.signature(SDKBlob.download_as_bytes)
+
+    def checked(blob, **kwargs):
+        signature.bind(blob, **kwargs)
+        if blob.name.endswith('seal.json'):
+            assert blob.chunk_size is None
+        return original(blob, **kwargs)
+
+    monkeypatch.setattr(blob_type, 'download_as_bytes', checked)
+    index = writer(remote)
+    index.begin('conversation')
+    receipt, frames = part(remote)
+    index.add(receipt.to_dict(), frames)
+    index.seal('conversation')
+    assert seals.sealed_entries(remote, 'owner', 'conversation')
 
 
 def test_part_cap_seals_deterministically_without_releasing_or_holding_receipts(remote, monkeypatch):

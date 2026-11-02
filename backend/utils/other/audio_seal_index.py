@@ -36,7 +36,8 @@ def _read(bucket, uid: str, path: str) -> tuple[dict[str, Any], int]:
     blob = bucket.blob(path)
     # SDK's single-shot GET stamps blob.generation from X-goog-generation.
     # No range retry may splice generations while versioning is disabled.
-    raw = blob.download_as_bytes(single_shot_download=True, timeout=10, retry=None)
+    blob.chunk_size = None
+    raw = blob.download_as_bytes(timeout=10, retry=None)
     if not blob.generation or len(raw) > MAX_INDEX_BYTES:
         raise ValueError('seal GET has no generation or exceeds bound')
     if len(raw) < 41 or raw[:8] != b'OMISEAL1' or raw[8:9] not in (b'E', b'P'):
