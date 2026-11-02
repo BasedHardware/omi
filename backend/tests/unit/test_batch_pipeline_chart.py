@@ -135,7 +135,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'worker_release': 'synthetic-worker',
         'namespace': 'synthetic',
     }
-    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '64'}
+    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
     assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
     assert chain['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'}
     assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
@@ -329,7 +329,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         # namespace's chain metric covers the whole fleet, so both targets
         # double: each pool HPA buys half of either demand instead of buying
         # it twice.
-        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '128'}
+        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '64'}
         assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']

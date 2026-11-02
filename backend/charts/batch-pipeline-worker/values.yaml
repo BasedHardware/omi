@@ -133,12 +133,13 @@ autoscaling:
   # occupancy keeps capacity through healthy drains where backlog reads low but
   # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
   # replica dominance over the ready-only answer whenever backlog exceeds the
-  # per-worker target). 64, not 16: at 25% the ready count flaps 0 <-> 128
+  # per-worker target). 32, not 16: at 25% the ready count flaps 0 <-> 128
   # minute to minute and the floor drains each burst in about two minutes, so 16
   # bought nodes that arrived after the work was done and the 1800s window held
-  # them (batchretune 2026-11-02 replay: mean 4.7 vs 7.7 replicas, no minute
-  # above 0.7 chain s/s per worker).
-  targetQueuedUnitsPerWorker: 64
+  # them. Ready stays the fast path for a sustained load step, since backlog
+  # only builds when capacity is short; the chain rate is smoothed over 10m
+  # (batchretune 2026-11-02 replay: mean 4.9 vs 7.7 replicas).
+  targetQueuedUnitsPerWorker: 32
   # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
   # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
   targetChainBusyPerWorker: "0.5"

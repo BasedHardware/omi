@@ -315,7 +315,7 @@ scheduling proof.
 
 The scaler sizes on the **higher of two signals** (max-of-two, batchdesign
 2026-11-01 PR-2): the incumbent admissible-ready backlog
-(`targetQueuedUnitsPerWorker=64`) and GPU-chain occupancy — the external metric
+(`targetQueuedUnitsPerWorker=32`) and GPU-chain occupancy — the external metric
 `omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet `worker_flight` busy
 seconds per second (10m rate, one series per pod) at `targetChainBusyPerWorker=0.5` (~89% of the measured
 healthy per-worker chain ceiling 0.56; hpafit 2026-11-01). Occupancy alone sheds
@@ -329,11 +329,15 @@ minutes and replica counts at or above the ready-only answer whenever backlog
 exceeds the per-worker target. Both signals are minute-scale sawtooths at 25%
 (ready flaps 0 <-> 128 units; 2m chain demand spikes to 5.8 s/s while the 10m
 rate stays under 3), and the 1800s window holds the highest recommendation it
-saw, so the ready target is 64 rather than 16 and the chain rule rates over 10m.
-Two scrape jobs read every worker pod, so the rule takes one series per pod
-before summing; without that, demand reads double. The batchretune replay over
-2026-11-01T23:41Z..02:41Z holds a mean of 4.7 replicas with no minute above 0.7
-chain s/s per worker, against 11 for the 16-unit, 2m, undeduplicated shape
+saw, so the ready target is 32 rather than 16 and the chain rule rates over 10m.
+The smoothed chain rate answers a sustained load step late; the ready backlog,
+which only builds when capacity is short, stays the fast path (step model 1.1 ->
+5.8 chain s/s: worst backlog wait 3.4 min vs 2.8 min before). Two scrape jobs
+read every worker pod, so the rule takes one series per pod before summing;
+without that, demand reads double. The batchretune replay over
+2026-11-01T23:41Z..02:41Z holds a mean of 4.9 replicas with no minute above 0.85
+chain s/s per worker, sheds from 12 to 5 within an hour, and compares with 12 for
+the 16-unit, 2m, undeduplicated shape
 (`test_batch_pipeline_hpa_retune_replay.py`). Scale-down sheds one pod per 600s after a 1800s
 window so a stockout never costs a warm on-demand node it cannot re-obtain; the
 admissible-count adapter rule stays installed so rollback is a values revert

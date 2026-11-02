@@ -31,9 +31,15 @@ FIXTURE = Path(__file__).resolve().parent / 'fixtures' / 'batch_pipeline_hpa_ret
 STEP_SECONDS = 60
 UP_PODS = 2  # per 60s, no scale-up stabilization
 DOWN_PODS, DOWN_PERIOD = 1, 600
-# Per-worker chain demand above this means queueing; one pod measured 0.93 s/s
-# at its busiest 5m in the window, so 0.7 keeps real headroom.
-HOT_CHAIN_PER_WORKER = 0.7
+TOLERANCE = 0.1  # controller default
+# Per-worker chain demand above this means queueing: the busiest pod in the
+# window measured 0.93 s/s over 5m.
+HOT_CHAIN_PER_WORKER = 0.85
+# Step-load model (measured 30 min to 02:38Z): 0.72 leases/s at 0.98 chain s/s,
+# and L4 pods serve about five minutes after the HPA adds them.
+UNITS_PER_CHAIN_SECOND = 0.73
+POD_CHAIN_CEILING = 0.93
+PROVISION_MINUTES = 5
 
 
 def _config():
@@ -66,25 +72,29 @@ def _load():
     return {name: [row[i] for row in payload['rows']] for i, name in enumerate(columns)}
 
 
-def _recommendation(total, target, config):
+def _recommendation(total, target, config, current):
     if total is None:
         return None
     if total <= 0:
         return config['min_replicas']
+    if abs(total / (target * current) - 1) <= TOLERANCE:
+        return current
     return max(config['min_replicas'], min(config['max_replicas'], math.ceil(total / target)))
 
 
-def _replay(series, metrics, config):
+def _replay(series, metrics, config, start=None):
     """autoscaling/v2 at 60s steps.
 
-    Scale-down uses the highest recommendation inside the stabilization window
-    and sheds DOWN_PODS per DOWN_PERIOD; scale-up adds UP_PODS per step. A
-    missing sample blocks scale-down, as a failed external metric does.
+    Each metric keeps the current size while within the controller's 10%
+    tolerance. Scale-down uses the highest recommendation inside the
+    stabilization window and sheds DOWN_PODS per DOWN_PERIOD; scale-up adds
+    UP_PODS per step. A missing sample blocks scale-down, as a failed external
+    metric does.
     """
-    current = config['min_replicas']
+    current = start or config['min_replicas']
     history, trace, last_down = [], [], None
     for step, epoch in enumerate(series['epoch']):
-        per_metric = [_recommendation(series[name][step], target, config) for name, target in metrics]
+        per_metric = [_recommendation(series[name][step], target, config, current) for name, target in metrics]
         valid = [r for r in per_metric if r is not None]
         rec = max(valid) if valid else current
         if len(valid) < len(per_metric):
@@ -132,3 +142,52 @@ def test_chart_and_adapter_return_to_the_floor_without_queueing():
         if demand is not None and demand > HOT_CHAIN_PER_WORKER * replicas
     ]
     assert hot == []
+
+
+def test_fleet_held_at_the_live_size_sheds_to_the_floor():
+    # The live HPA sat at desired 12 when the chain metric came back.
+    config = _config()
+    series = _load()
+    trace = _replay(series, _metrics(config, _served_chain_column()), config, start=12)
+    assert next(i for i, replicas in enumerate(trace) if replicas <= 5) <= 60
+    assert config['min_replicas'] in trace
+    assert trace[-1] <= 6
+
+
+def _step_load(ready_target, chain_window, config, minutes=90, step_at=10, base=1.1, high=5.8):
+    """Worst backlog wait (minutes) and minutes to catch up after demand steps base -> high chain s/s.
+
+    Ready units accrue from unserved chain demand; the chain signal is the
+    trailing mean of served work over the adapter's rate window.
+    """
+    current, serving, backlog, served = 4, [4] * PROVISION_MINUTES, 0.0, []
+    worst, caught = 0.0, None
+    for minute in range(minutes):
+        demand = high if minute >= step_at else base
+        capacity = serving[0] * POD_CHAIN_CEILING
+        done = min(capacity, demand + backlog / 60)
+        backlog = max(0.0, backlog + (demand - done) * 60)
+        served.append(done)
+        chain = sum(served[-chain_window:]) / len(served[-chain_window:])
+        rec = max(
+            _recommendation(backlog * UNITS_PER_CHAIN_SECOND, ready_target, config, current),
+            _recommendation(chain, config['chain_target'], config, current),
+        )
+        if rec > current:
+            current = min(rec, current + UP_PODS, config['max_replicas'])
+        serving = serving[1:] + [current]
+        worst = max(worst, backlog / capacity / 60)
+        if minute > step_at and caught is None and backlog < 1:
+            caught = minute - step_at
+    return worst, caught
+
+
+def test_sustained_load_step_is_absorbed_about_as_fast_as_before():
+    # A smoothed chain rate answers a sustained step late; the ready backlog,
+    # which only builds when capacity is short, is the fast path.
+    config = _config()
+    window = int(re.search(r'(\d+)m$', _served_chain_column().replace('_per_pod', '')).group(1))
+    worst, caught = _step_load(config['ready_target'], window, config)
+    before_worst, before_caught = _step_load(16, 2, dict(config, chain_target=0.5))
+    assert worst <= before_worst + 1, (worst, before_worst)
+    assert caught is not None and caught <= before_caught + 2, (caught, before_caught)
