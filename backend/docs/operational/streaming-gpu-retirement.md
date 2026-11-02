@@ -21,6 +21,17 @@ Only the rollout lead executes these steps. Run from the reviewed product
 worktree after its PR is merged. Preserve serving image digests and Helm revision
 numbers before changing anything. Do not change node pools or storage here.
 
+Capture these non-secret capacity values before retirement and retain them in
+the operator record. They must be positive; if a value is missing or already
+zero, stop and recover the last approved warm baseline instead of guessing.
+
+```bash
+GPUFLEET_PARAKEET_ROLLBACK_MIN=$(kubectl -n prod-omi-backend get hpa prod-omi-parakeet -o jsonpath='{.spec.minReplicas}')
+GPUFLEET_PARAKEET_ROLLBACK_REPLICAS=$(kubectl -n prod-omi-backend get deployment prod-omi-parakeet -o jsonpath='{.spec.replicas}')
+GPUFLEET_VAD_ROLLBACK_MIN=$(kubectl -n prod-omi-backend get hpa prod-omi-vad -o jsonpath='{.spec.minReplicas}')
+GPUFLEET_VAD_ROLLBACK_REPLICAS=$(kubectl -n prod-omi-backend get deployment prod-omi-vad -o jsonpath='{.spec.replicas}')
+```
+
 Require batch admission and `SERVER_BATCH_ONLY_MOBILE_PERCENT=100` to be
 serving first, then measure residual vendor demand and confirm credits and
 concurrency before enabling the retirement route. A later batch rollback
@@ -66,7 +77,7 @@ peak throughput and latency qualification; average audio-hours do not prove it.
 
    ```bash
    helm upgrade prod-omi-incluster-guards backend/charts/incluster-guards -n prod-omi-backend --reuse-values --set parakeetSuspended=true --wait --timeout 5m
-   kubectl -n prod-omi-backend get cronjob prod-omi-incluster-guards -o jsonpath='{.spec.suspend}{" active="}{.status.active}{"\n"}'
+   kubectl -n prod-omi-backend get cronjob prod-omi-incluster-guards -o jsonpath='{.spec.suspend}{"\n"}{range .status.active[*]}active{"\n"}{end}'
    ```
 
    Wait until `.status.active` is empty: suspension does not cancel a running
@@ -75,6 +86,9 @@ peak throughput and latency qualification; average audio-hours do not prove it.
    Rollback: after restoring ready GPU capacity, apply
    `--set parakeetSuspended=false`. This does not suspend the independent batch
    guard or its rollback actuator.
+
+   The check prints only the suspended state and an `active` marker for each
+   remaining Job. Do not print full active references or workload objects.
 
 4. Apply the VAD and Parakeet off overlays **only after steps 1–3 pass**:
 
@@ -94,10 +108,10 @@ peak throughput and latency qualification; average audio-hours do not prove it.
 5. Capacity rollback (keep routing on vendors while doing this):
 
    ```bash
-   helm upgrade prod-omi-parakeet backend/charts/parakeet -n prod-omi-backend --reuse-values --set maintenanceMode=false --set autoscaling.minReplicas=7 --wait --timeout 30m
-   kubectl -n prod-omi-backend scale deployment prod-omi-parakeet --replicas=7
-   helm upgrade prod-omi-vad backend/charts/vad -n prod-omi-backend --reuse-values --set maintenanceMode=false --set autoscaling.minReplicas=1 --wait --timeout 15m
-   kubectl -n prod-omi-backend scale deployment prod-omi-vad --replicas=2
+   helm upgrade prod-omi-parakeet backend/charts/parakeet -n prod-omi-backend --reuse-values --set maintenanceMode=false --set autoscaling.minReplicas="${GPUFLEET_PARAKEET_ROLLBACK_MIN:?capture the warm baseline first}" --wait --timeout 30m
+   kubectl -n prod-omi-backend scale deployment prod-omi-parakeet --replicas="${GPUFLEET_PARAKEET_ROLLBACK_REPLICAS:?capture the warm baseline first}"
+   helm upgrade prod-omi-vad backend/charts/vad -n prod-omi-backend --reuse-values --set maintenanceMode=false --set autoscaling.minReplicas="${GPUFLEET_VAD_ROLLBACK_MIN:?capture the warm baseline first}" --wait --timeout 15m
+   kubectl -n prod-omi-backend scale deployment prod-omi-vad --replicas="${GPUFLEET_VAD_ROLLBACK_REPLICAS:?capture the warm baseline first}"
    kubectl -n prod-omi-backend rollout status deployment/prod-omi-parakeet --timeout=30m
    kubectl -n prod-omi-backend rollout status deployment/prod-omi-vad --timeout=15m
    ```
@@ -110,6 +124,12 @@ peak throughput and latency qualification; average audio-hours do not prove it.
    has no bounded recovery time in the observed L4 stockout**; vendors remain
    the safe rollback route while capacity is unavailable. VAD cold starts
    have historically taken about 4–6 minutes after a node is available.
+
+After zero, keep the off overlays on subsequent GPU-chart upgrades and persist
+the intended maintenance/suspended-guard state in the owning production
+configuration. A later warm-baseline apply can revive the workloads or floor
+writer. Make that persistence change only after the caller rollout and drain
+gates pass; it must preserve the ordering above.
 
 Keep `VAD_GATE_MODE=active`: that streaming gate uses process-local Silero ONNX,
 not `prod-omi-vad`. Disabling it can increase vendor audio and does not save the
