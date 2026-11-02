@@ -7315,7 +7315,12 @@ proposal supported by synthetic tests, not labeled evidence about held audio.
 `false` stops new Soniox calls without substituting another Modulate attempt.
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to 60 and can only
 lower that hard per-unit cap. Company-funded allowance, privacy, original
-ledger and single paid-intent fences apply. No paid POST is retried. The result
+ledger and single paid-intent fences apply. Recovery HTTP requests have at most
+three attempts with 1s/2s backoff within the existing 120s deadline. A paid
+transcription POST retries only an explicit 429 refusal; a transport error or
+5xx on that POST is uncertain and remains held. Uploads and reads may retry
+transient 429/5xx/transport errors; polls keep the same transcription id.
+Credit/authentication refusals and malformed responses do not retry. The result
 may register its artifact only under the running epoch-3 Soniox intent
 for the language-guarded Modulate recovery route. Legacy multilingual redrive
 retains its epoch-2 contract. Both paths require the current privacy generation,
