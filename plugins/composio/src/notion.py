@@ -271,7 +271,7 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         background_tasks.add_task(extract_all_pages, access_token, uid)
         return templates.TemplateResponse("notion_success.html", {"request": request})
     except Exception as e:
-        logger.error(f"Error in notion_callback: {type(e).__name__}")
+        logger.error(f"Error in notion_callback: {type(e).__name__}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to complete Notion OAuth")
 
 
@@ -322,8 +322,9 @@ async def search_notion(request: NotionSearchRequest):
         return response.json()
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error searching Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error searching Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error searching Notion workspace"
         )
 
 
@@ -350,8 +351,9 @@ async def get_blocks(
         return response.json()
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error getting blocks from Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error getting blocks from Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error retrieving blocks from Notion"
         )
 
 
@@ -390,8 +392,9 @@ async def get_page(
         return {"page": page_data, "blocks": blocks_data}
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error getting page from Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error getting page from Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error retrieving page from Notion"
         )
 
 
@@ -439,8 +442,9 @@ async def extract_memories(uid: str, block_type: str = Form("page"), block_id: s
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported block type: {block_type}")
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error extracting memories from Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error extracting memories from Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error extracting memories from Notion"
         )
 
 
