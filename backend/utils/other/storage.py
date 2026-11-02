@@ -1153,9 +1153,11 @@ def list_audio_chunks(
     max_count: Optional[int] = None,
     source_identity: bool = False,
     require_archive: bool = False,
+    include_archive: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    List all audio chunks for a conversation. ``require_archive``: a failed raw-archive listing raises.
+    List conversation chunks; ``include_archive=False`` selects encoded inventory only.
+    ``require_archive``: a failed raw-archive listing raises.
 
     Returns:
         List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
@@ -1191,7 +1193,7 @@ def list_audio_chunks(
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({item['path']: item for item in chunks}.values())
     sample_clock = source_identity
-    if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
+    if include_archive and audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
         try:
             packs = list_packs(bucket, uid, conversation_id)
             raw_chunks = uncovered_raw_packs(packs, chunks)

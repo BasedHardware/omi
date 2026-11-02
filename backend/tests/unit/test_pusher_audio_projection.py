@@ -190,7 +190,7 @@ def test_failure_keeps_full_close_rebuild_due(world, monkeypatch):
 
 
 @pytest.mark.parametrize('rollback', [True, False])
-def test_kill_switch_and_archive_overlay_keep_per_flush_listing(world, monkeypatch, rollback):
+def test_kill_switch_keeps_listing_while_archive_recomputes_overlays(world, monkeypatch, rollback):
     if rollback:
         monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
     else:
@@ -199,9 +199,9 @@ def test_kill_switch_and_archive_overlay_keep_per_flush_listing(world, monkeypat
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     cache.refresh('c', [world.add(101)])
-    assert len(world.lists) == 2
-    assert not world.gets
-    assert not cache.inventory
+    assert len(world.lists) == (2 if rollback else 1)
+    assert len(world.gets) == (0 if rollback else 1)
+    assert bool(cache.inventory) is not rollback
 
 
 def test_bounded_state_and_missing_inventory_fail_toward_listing(world, monkeypatch):
@@ -512,3 +512,87 @@ def test_failed_forced_rebuild_invalidates_inventory_before_later_flush(world, m
     cache.refresh('c', [world.add(102)])
     assert len(world.lists) == 2
     assert world.stored[0]['chunk_timestamps'] == [100, 101, 102]
+
+
+def raw_pack(start, end, name='pack', generation=9):
+    return {
+        'timestamp': start,
+        'path': f'raw-live/u/c/{name}.flac',
+        'size': 123,
+        'is_batch': False,
+        'span': {'start': start, 'samples': round((end - start) * 16000), 'sample_rate': 16000},
+        'raw_end': end,
+        'generation': generation,
+        'pcm_sha256': 'digest',
+    }
+
+
+def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_list(world, monkeypatch):
+    # READ is on by default in production: this must be an optimization there,
+    # not just when tests disable the archive phase.
+    monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+    packs = [raw_pack(100.0004, 104.0004)]
+    pack_index = MagicMock(side_effect=lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', pack_index)
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100.0004)])
+    packs.append(raw_pack(104.0004, 106.0004, 'new-tail', 10))
+    cache.refresh('c', [world.add(102.0004)])
+    assert len(world.lists) == 1
+    assert pack_index.call_count == 2  # Existing raw index is consulted each time.
+    assert all(c['path'].startswith('chunks/') for c in cache.inventory['c'].chunks)
+    expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
+    assert world.stored == expected
+    timestamps = world.stored[0]['chunk_timestamps']
+    assert len(timestamps) == 5  # two encoded parts + split raw bridge/tail + new pack
+    assert max(timestamps) >= 104
+
+
+def test_stop_pcm_raw_only_flushes_refresh_pack_projection_without_encoded_lists(world, monkeypatch):
+    monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+    packs = [raw_pack(100, 101, 'first')]
+    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    cache = projection.PusherAudioProjection('u')
+    assert cache.refresh('c', [packs[0]['path']]) is True
+    assert cache.inventory['c'].chunks == []
+    packs.append(raw_pack(101, 102, 'second', 10))
+    assert cache.refresh('c', [packs[1]['path']]) is True
+    assert len(world.lists) == 1
+    assert not world.gets  # Raw metadata comes from the unchanged pack index.
+    assert world.stored[0]['chunk_timestamps'] == [100, 101]
+    expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
+    assert world.stored == expected
+    assert cache.finish('c') is True
+    assert not cache.close_debt
+
+
+def test_archive_index_failure_uses_full_legacy_fallback_without_caching(world, monkeypatch):
+    monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+    packs = [raw_pack(100, 106)]
+    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    before = deepcopy(world.stored)
+    monkeypatch.setattr(storage, 'list_packs', MagicMock(side_effect=OSError()))
+    assert cache.refresh('c', [world.add(102)]) is True
+    fallback = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
+    assert world.stored == fallback
+    assert world.stored != before
+    assert not cache.inventory.get('c')
+    assert cache.close_debt == {'c'}
+    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    cache.refresh('c', [world.add(103)])
+    expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
+    assert world.stored == expected
+
+
+def test_closing_flush_counts_as_final_discovery_without_second_listing(world):
+    cache = projection.PusherAudioProjection('u')
+    assert cache.refresh('c', [world.add(100)], force=True) is True
+    assert not cache.inventory
+    assert not cache.close_debt
+    assert cache.finish('c') is None
+    assert len(world.lists) == 1
+    cache.refresh('c', [world.add(101)])  # Later audio reopens the obligation.
+    assert cache.close_debt == {'c'}
+    assert cache.finish('c') is True

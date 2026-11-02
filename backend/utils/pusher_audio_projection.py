@@ -65,14 +65,20 @@ def get_uploaded_audio_chunks(uid: str, conversation_id: str, paths: List[str]) 
     A missing/unknown object refuses the incremental projection.
     """
     prefix = f'chunks/{uid}/{conversation_id}/'
-    names = storage._chunk_bucket_names(storage.private_cloud_sync_bucket)
+    names = list(
+        dict.fromkeys(
+            name for name in (storage.private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()) if name
+        )
+    )
     chunks = []
     for path in dict.fromkeys(paths):
+        if path.startswith(f'raw-live/{uid}/{conversation_id}/') and audio_archive.admitted(uid, 'READ'):
+            continue  # The existing pack index supplies authoritative raw spans.
         if not path.startswith(prefix) or '/' in path[len(prefix) :]:
             raise ValueError('projection requires an encoded conversation chunk')
         entry = None
         for name in reversed(names):
-            blob = storage._get_storage_client().bucket(name).get_blob(path)
+            blob = storage.chunk_source_bucket(name).get_blob(path)
             if blob is not None:
                 entry = audio_chunk_entry(blob, source_identity=True, primary_bucket=storage.private_cloud_sync_bucket)
                 break
@@ -89,8 +95,8 @@ def get_uploaded_audio_chunks(uid: str, conversation_id: str, paths: List[str]) 
 class PusherAudioProjection:
     """Socket-owned metadata only. Loss, eviction and ambiguity mean full rebuild.
 
-    Archive overlays can subtract/split encoded coverage and are not append-only.
-    Keep their existing listing path until the manifest-first reader owns them.
+    Cache encoded inventory only. Recompute raw coverage overlays from the
+    existing pack index every flush; those fragments are not append-only.
     """
 
     def __init__(self, uid: str):
@@ -101,29 +107,36 @@ class PusherAudioProjection:
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
 
+    def projected_chunks(self, conversation_id: str, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not audio_archive.admitted(self.uid, 'READ'):
+            return chunks
+        packs = storage.list_packs(storage.get_private_cloud_sync_bucket(), self.uid, conversation_id)
+        return sorted([*chunks, *storage.uncovered_raw_packs(packs, chunks)], key=lambda chunk: chunk['timestamp'])
+
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.pop(conversation_id, None)
-        if not force:
-            self.finished.discard(conversation_id)
+        self.finished.discard(conversation_id)
         # A failed refresh keeps a close-time full rebuild due, but cannot
         # lend an old inventory to the next flush.
         self.has_uploaded_paths = self.has_uploaded_paths or bool(paths)
         if enabled() and len(self.close_debt) < MAX_CONVERSATIONS:
             self.close_debt.add(conversation_id)
-        incremental = enabled() and (bool(paths) or force) and not audio_archive.admitted(self.uid, 'READ')
+        incremental = enabled() and (bool(paths) or force)
         if incremental and paths and (conversation_id in self.inventory or len(self.inventory) < MAX_CONVERSATIONS):
             self.inventory[conversation_id] = None
         now = time.monotonic()
         chunks = None
         expected = None
+        listed_at = now
         if incremental and state is not None and paths and not force and now - state.listed_at < REFRESH_SECONDS:
             try:
                 new_chunks = get_uploaded_audio_chunks(self.uid, conversation_id, paths)
                 # A replay, overwrite or equal-clock sibling needs the full
                 # listing order, including cross-bucket tie precedence.
-                if all(chunk['timestamp'] > state.chunks[-1]['timestamp'] for chunk in new_chunks):
+                if all(not state.chunks or chunk['timestamp'] > state.chunks[-1]['timestamp'] for chunk in new_chunks):
                     chunks = [*state.chunks, *sorted(new_chunks, key=lambda chunk: chunk['timestamp'])]
                     expected = state.files
+                    listed_at = state.listed_at
             except Exception:
                 # Point-read failures must rebuild, never silently reuse stale files.
                 record_fallback(
@@ -136,6 +149,7 @@ class PusherAudioProjection:
         # One optimistic attempt, then a full rebuild if another writer changed
         # the document. No cache TTL is advanced by an incremental append.
         for _ in range(2):
+            raw_complete = True
             if chunks is None:
                 if enabled():
                     # Snapshot before discovery: a full rebuild must not
@@ -149,18 +163,43 @@ class PusherAudioProjection:
                     expected = owner.get('audio_files') or []
                 else:
                     expected = None
-                if incremental and paths:
-                    chunks = storage.list_audio_chunks(self.uid, conversation_id, source_identity=True)
+                if enabled():
+                    chunks = storage.list_audio_chunks(
+                        self.uid, conversation_id, source_identity=True, include_archive=False
+                    )
+                    try:
+                        listed = self.projected_chunks(conversation_id, chunks)
+                    except Exception:
+                        # Preserve main's full-list fallback on a broken raw
+                        # index, but never cache that incomplete discovery.
+                        raw_complete = False
+                        listed = chunks
+                        record_fallback(
+                            component='pusher',
+                            from_mode='raw_audio',
+                            to_mode='encoded_audio_projection',
+                            reason='other',
+                            outcome='degraded',
+                        )
                     files = conversations_db.create_audio_files_from_chunks(
-                        self.uid, conversation_id, listed_chunks=chunks
+                        self.uid, conversation_id, listed_chunks=listed
                     )
                 else:
                     files = conversations_db.create_audio_files_from_chunks(self.uid, conversation_id)
                 listed_at = time.monotonic()
                 mode = 'full'
             else:
-                files = conversations_db.create_audio_files_from_chunks(self.uid, conversation_id, listed_chunks=chunks)
-                listed_at = state.listed_at
+                # Raw fragments can shrink or split as encoded coverage grows;
+                # re-derive them, never append yesterday's projected fragments.
+                try:
+                    listed = self.projected_chunks(conversation_id, chunks)
+                except Exception:
+                    # An incremental encoded view is not a full fallback.
+                    # Rediscover encoded siblings before matching main's
+                    # raw-index failure behavior.
+                    chunks = None
+                    continue
+                files = conversations_db.create_audio_files_from_chunks(self.uid, conversation_id, listed_chunks=listed)
                 mode = 'incremental'
             PROJECTIONS.labels(mode=mode).inc()
             if not files:
@@ -184,9 +223,15 @@ class PusherAudioProjection:
                 continue
             if (
                 applied
+                and raw_complete
                 and incremental
-                and chunks
-                and len(chunks) + sum(len(item.chunks) for item in self.inventory.values() if item is not None)
+                and chunks is not None
+                and sum(len(af.get('chunk_timestamps') or []) for af in payload)
+                + sum(
+                    sum(len(af.get('chunk_timestamps') or []) for af in item.files)
+                    for item in self.inventory.values()
+                    if item is not None
+                )
                 <= MAX_CHUNKS
                 and all(af.get('source_fingerprint') for af in payload)
                 and all(chunk.get('span') and chunk.get('is_batch') and chunk.get('generation') for chunk in chunks)
@@ -195,6 +240,13 @@ class PusherAudioProjection:
                 self.inventory[conversation_id] = Inventory(chunks, payload, listed_at)
             else:
                 self.inventory.pop(conversation_id, None)
+            if applied and force and enabled():
+                # A closing batch already rebuilt the prefix: its close scan
+                # must not immediately repeat that same full discovery.
+                self.close_debt.discard(conversation_id)
+                self.inventory.pop(conversation_id, None)
+                if len(self.finished) < MAX_CONVERSATIONS:
+                    self.finished.add(conversation_id)
             return applied
         raise RuntimeError('audio projection refresh exhausted')
 

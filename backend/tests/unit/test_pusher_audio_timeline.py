@@ -23,6 +23,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+from utils import pusher_audio_projection
 from database import record_audio as record_audio_db
 import utils.pusher_protocol as pusher_protocol
 from utils.metrics import OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL
@@ -110,7 +111,7 @@ RATE = 16000
 @pytest.fixture
 def env(monkeypatch):
     monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
-    monkeypatch.setattr(pusher.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     # Preserve timeline v2's historical emergency-rollback contract. The
     # default durable path is exercised by test_audio_durable_outbox.py.
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
@@ -135,8 +136,8 @@ def env(monkeypatch):
         return True
 
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
-    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update)
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, cid: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update)
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, cid: [])
     return uploads
 
 
@@ -761,7 +762,7 @@ async def test_upload_metric_counts_span_and_spanless_objects_once_each(env, mon
 def _observe_record_owner(monkeypatch):
     audio = MagicMock()
     audio.model_dump.return_value = {'id': 'synthetic-audio'}
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *_: [audio])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *_: [audio])
 
     def update(uid, cid, data, *, record_owner_out=None):
         assert set(data) == {'audio_files'}  # The pre-existing metadata write.
@@ -769,7 +770,7 @@ def _observe_record_owner(monkeypatch):
             record_owner_out[cid] = 'batch_live_v1'
         return True
 
-    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update)
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update)
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *_: None)
     monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', lambda *_: None)
 
@@ -814,7 +815,9 @@ async def test_dark_unowned_close_adds_no_seal_and_failed_upload_never_seals(env
 async def test_owned_close_drains_when_dark_using_existing_audio_metadata_snapshot(env, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     _observe_record_owner(monkeypatch)
-    monkeypatch.setattr(pusher.conversations_db, 'get_conversation', lambda *_: pytest.fail('extra ownership read'))
+    monkeypatch.setattr(
+        pusher_audio_projection.conversations_db, 'get_conversation', lambda *_: pytest.fail('extra ownership read')
+    )
     sealed = []
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid))
     await _run(FakeWebSocket([_conversation('owned'), _audio(100, b'\x01\x00' * RATE)]))

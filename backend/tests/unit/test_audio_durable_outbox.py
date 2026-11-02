@@ -106,7 +106,7 @@ class Bucket:
 @pytest.fixture
 def remote(monkeypatch):
     monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
-    monkeypatch.setattr(pusher.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     bucket = Bucket()
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
     monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
@@ -882,7 +882,7 @@ async def test_pusher_projects_verified_receipts_in_capture_order(remote, monkey
         return ['projected']
 
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
     payloads = [b'\x01\x00' * 160, b'\x02\x00' * 160]
     frames = [struct.pack('<I', 103) + b'conversation']
     frames.extend(struct.pack('<Id', 101, 1000 + i * 0.01) + pcm for i, pcm in enumerate(payloads))
@@ -909,7 +909,7 @@ async def test_legacy_arrival_jitter_keeps_one_spanless_projection_and_exact_rec
         blob.data = chunks[0]['data']
 
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
     payloads = [struct.pack('<16000h', *[value] * 16000) for value in (1, 2, 3)]
     frames = [struct.pack('<I', 103) + b'conversation']
     frames += [struct.pack('<Id', 101, start) + pcm for start, pcm in zip((1000, 1001.02, 1002.01), payloads)]
@@ -984,7 +984,7 @@ async def test_v2_projection_trims_replays_and_custody_windows_hold_the_accepted
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     projected = []
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', lambda chunks, *a, **kw: projected.extend(chunks))
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
     first = b'\x01\x00' * 16000
     replay = b'\x09\x00' * 8000 + b'\x02\x00' * 8000
     frames = [struct.pack('<I', 103) + b'conversation']
@@ -1024,7 +1024,7 @@ def test_sixty_custody_packs_and_projected_minute_publish_one_audio_file(remote)
     _legacy_chunk(remote, 1000, pcm * 60, '1000.000-1059.000')
     chunks = storage.list_audio_chunks('owner', 'conversation')
     assert len(chunks) == 1 and chunks[0]['span']['samples'] == 60 * 16000
-    files = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
+    files = pusher_audio_projection.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
     assert len(files) == 1 and files[0].duration == 60
     assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000]) == pcm * 60
 
@@ -1036,7 +1036,7 @@ def test_partial_raw_overlap_serves_only_uncovered_bytes_and_keeps_legacy_identi
     _legacy_chunk(remote, 1001, accepted_middle)
     chunks = storage.list_audio_chunks('owner', 'conversation')
     assert [chunk['timestamp'] for chunk in chunks] == [1000, 1001, 1002]
-    files = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
+    files = pusher_audio_projection.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
     assert len(files) == 1 and files[0].duration == 3
     expected = parts[0] + accepted_middle + parts[2]
     assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000, 1001, 1002]) == expected
@@ -1090,7 +1090,7 @@ def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remo
         {**chunk, 'timestamp': chunk.get('legacy_timestamp', chunk['timestamp'])}
         for chunk in storage.list_audio_chunks('owner', 'conversation', source_identity=True)
     ]
-    old_file = pusher.conversations_db._finalize_audio_file_group(
+    old_file = pusher_audio_projection.conversations_db._finalize_audio_file_group(
         'owner', 'conversation', legacy_sources, []
     ).model_dump()
     assert old_file['chunk_timestamps'] == [1000] and old_file['source_fingerprint']
@@ -1126,7 +1126,8 @@ def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remo
     )
     assert built == prefix
     current = [
-        item.model_dump() for item in pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
+        item.model_dump()
+        for item in pusher_audio_projection.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
     ]
     assert old_file['id'] in retain_aliases(current, [old_file])[0]['legacy_ids']
     replaced = deepcopy(chunks)
@@ -1170,7 +1171,7 @@ def inline_session(remote, monkeypatch):
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
     monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', set_record_upload_pending)
     monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', mark_record_upload_failed)
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
     barrier = PusherRecordBarrier('owner')
     monkeypatch.setattr(pusher, 'PusherRecordBarrier', lambda _: barrier)
     projected = []
@@ -1294,11 +1295,13 @@ async def test_invalid_argument_projection_keeps_custody_and_allows_seal(inline_
     fail = AsyncMock(wraps=barrier.fail_recording)
     monkeypatch.setattr(barrier, 'fail_recording', fail)
     audio_file = SimpleNamespace(model_dump=lambda: {'id': 'synthetic-audio'})
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [audio_file])
+    monkeypatch.setattr(
+        pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a: [audio_file]
+    )
     sensitive = 'A' * 28 + ' person@example.test conversations/private-conversation/jobs/private-job'
     rejection = InvalidArgument(sensitive, error_info=ErrorInfo(reason=sensitive))
     update = MagicMock(side_effect=rejection)
-    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update)
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update)
     before = audio_outbox_metrics.CUSTODY_FAILURES.labels(stage='projection', reason='invalid_argument')._value.get()
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     with caplog.at_level(logging.INFO, logger='routers.pusher'):
@@ -2035,7 +2038,7 @@ async def test_transient_projection_failure_requeues_and_then_lands(remote, monk
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=flaky_upload))
     audio_files_calls = MagicMock(return_value=[])
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', audio_files_calls)
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', audio_files_calls)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=None))
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
@@ -2348,7 +2351,9 @@ async def test_wrapped_probe_valueerror_is_transient_and_retries(remote, monkeyp
         return []
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=probe_error_then_success))
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
+    )
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=None))
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))

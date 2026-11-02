@@ -20,7 +20,6 @@ from starlette.websockets import WebSocketState
 from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
-import database.conversations as conversations_db
 from database import users as users_db
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
@@ -574,7 +573,13 @@ async def _run_websocket_util_trigger(
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
-                applied = await run_blocking(storage_executor, audio_projection.refresh, conv_id, uploaded_paths)
+                applied = await run_blocking(
+                    storage_executor,
+                    audio_projection.refresh,
+                    conv_id,
+                    uploaded_paths,
+                    force=not websocket_active or conv_id in record_close_requests,
+                )
                 if applied:
                     schedule_person_voice_learning_retry(uid, conv_id)
                     if len(identity_refreshed) < 128:
@@ -952,7 +957,13 @@ async def _run_websocket_util_trigger(
                     v2_flushed_runs.append((timestamp, batch['end'], hashlib.sha256(chunk_data).hexdigest()))
                 del chunks_to_upload
                 try:
-                    applied = await run_blocking(storage_executor, audio_projection.refresh, conv_id, uploaded_paths)
+                    applied = await run_blocking(
+                        storage_executor,
+                        audio_projection.refresh,
+                        conv_id,
+                        uploaded_paths,
+                        force=not websocket_active or conv_id in record_close_requests,
+                    )
                     if applied:
                         schedule_person_voice_learning_retry(uid, conv_id)
                         if len(identity_refreshed) < 128:
