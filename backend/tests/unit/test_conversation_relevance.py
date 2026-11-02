@@ -322,3 +322,13 @@ def test_neighbor_is_checked_before_a_rule_can_discard():
     )
     assert decision.reason == 'filler_only'
     lookup.assert_called_once()
+
+
+def test_repeated_outro_rule_uses_existing_recoverable_relevance_path():
+    decision, model, _ = _decide(texts=['Thanks for watching.'] * 3)
+    assert decision.discard and decision.reason == 'repeated_asr_outro'
+    model.assert_not_called()
+    restored, _, _ = _decide(texts=['Thanks for watching.'] * 3, user_kept=True)
+    assert not restored.discard
+    rescued, _, _ = _decide(texts=['Thanks for watching.'] * 3, calendar=MagicMock(return_value=True))
+    assert not rescued.discard and rescued.reason == 'calendar_overlap'
