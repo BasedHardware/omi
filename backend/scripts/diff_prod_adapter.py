@@ -48,7 +48,9 @@ BATCH_PIPELINE_CHAIN_RULE: dict[str, Any] = {
     },
     'metricsQuery': (
         'sum by (namespace) (\n'
-        '  rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[2m])\n'
+        '  max by (namespace, pod) (\n'
+        '    rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[10m])\n'
+        '  )\n'
         '  and on (namespace, pod)\n'
         '  (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)\n'
         ')'

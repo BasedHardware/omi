@@ -315,9 +315,9 @@ scheduling proof.
 
 The scaler sizes on the **higher of two signals** (max-of-two, batchdesign
 2026-11-01 PR-2): the incumbent admissible-ready backlog
-(`targetQueuedUnitsPerWorker=16`) and GPU-chain occupancy — the external metric
+(`targetQueuedUnitsPerWorker=64`) and GPU-chain occupancy — the external metric
 `omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet `worker_flight` busy
-seconds per second at `targetChainBusyPerWorker=0.5` (~89% of the measured
+seconds per second (10m rate, one series per pod) at `targetChainBusyPerWorker=0.5` (~89% of the measured
 healthy per-worker chain ceiling 0.56; hpafit 2026-11-01). Occupancy alone sheds
 lanes whenever claims bind rather than flights: through a claim-chain wedge the
 ready backlog is real work that converts the moment the wedge clears, so the
@@ -326,7 +326,15 @@ the reverse dividend — through a healthy drain the backlog reads low while
 flights are real, and the 24h replay shows the chain signal covering hours the
 ready-only answer starves (37 minutes), with the combined replay at 0 starved
 minutes and replica counts at or above the ready-only answer whenever backlog
-exceeds 16 units per worker. Scale-down sheds one pod per 600s after a 1800s
+exceeds the per-worker target. Both signals are minute-scale sawtooths at 25%
+(ready flaps 0 <-> 128 units; 2m chain demand spikes to 5.8 s/s while the 10m
+rate stays under 3), and the 1800s window holds the highest recommendation it
+saw, so the ready target is 64 rather than 16 and the chain rule rates over 10m.
+Two scrape jobs read every worker pod, so the rule takes one series per pod
+before summing; without that, demand reads double. The batchretune replay over
+2026-11-01T23:41Z..02:41Z holds a mean of 4.7 replicas with no minute above 0.7
+chain s/s per worker, against 11 for the 16-unit, 2m, undeduplicated shape
+(`test_batch_pipeline_hpa_retune_replay.py`). Scale-down sheds one pod per 600s after a 1800s
 window so a stockout never costs a warm on-demand node it cannot re-obtain; the
 admissible-count adapter rule stays installed so rollback is a values revert
 without an adapter redeploy. The targets remain provisional pending throughput
