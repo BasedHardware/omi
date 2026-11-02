@@ -12,6 +12,15 @@ The report path must not already exist. `quick-host` discovers this checkout, va
 
 If a config is supplied to quick-host, it must select the checkout containing this entrypoint; a different root is rejected rather than attributing these tests to another checkout.
 
+## Boot the real entrypoint without hardware (Linux simulation)
+
+See [CV1 native_sim startup](../../omi/sim/README.md) for the separate Docker-backed
+target and one-command build/boot check. It uses this directory's unchanged
+startup milestone parser; simulated driver milestones are explicitly labelled.
+Macs require a Linux VM plus x86_64 execution support. This is startup evidence,
+not RF, PDM/mic analog, SD integrity, power, MCUboot, OTA or network-core coverage;
+BLE is stubbed out.
+
 ## Compile active application objects without signing
 
 Copy `checkout.config.example.json` to a local file outside Git and set this checkout plus existing NCS2.9.0 SDK and Nordic toolchain paths. The included lock describes the bench-compatible SDK/tool profile; unsupported/missing dependencies fail explicitly rather than install. Run:

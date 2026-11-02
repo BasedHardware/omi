@@ -19,7 +19,9 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/core/storage.h"
 #endif
+#ifndef CONFIG_OMI_NATIVE_SIM
 #include <hal/nrf_reset.h>
+#endif
 
 #include "imu.h"
 #include "lib/core/sd_card.h"
@@ -40,6 +42,9 @@ bool blink_toggle = false;
 
 static void print_reset_reason(void)
 {
+#ifdef CONFIG_OMI_NATIVE_SIM
+    printk("SIM: reset reason unavailable (no Nordic reset peripheral)\n");
+#else
     uint32_t reas;
 
     reas = nrf_reset_resetreas_get(NRF_RESET);
@@ -60,6 +65,7 @@ static void print_reset_reason(void)
     } else {
         printk("Power-on-reset\n");
     }
+#endif
 }
 
 static void codec_handler(uint8_t *data, size_t len)
