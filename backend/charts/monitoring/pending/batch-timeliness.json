@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|projection\"})",
+          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"})",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -119,7 +119,7 @@
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "A batch audio unit admitted after the timeliness epoch has not reached its owner within 2 hours (target: most audio within 30 minutes).",
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
-      "scope": "omi_batch_timeliness_new_oldest_age_seconds from the batch worker queue sample, legs uncommitted (policy holds skipped), quarantined (held, prepared, running, failed_held) and projection. sibling_held and backlog counts are visible but never alarm. Alert-only: no rollback or ramp guard reads it.",
+      "scope": "omi_batch_timeliness_new_oldest_age_seconds from the batch worker queue sample, legs uncommitted (policy holds skipped), quarantined (held, prepared, running, failed_held), assignment_held (committed, projection receipt quarantined) and projection. quarantine_held_rows and backlog counts are visible but never alarm. Alert-only: no rollback or ramp guard reads it.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
       "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
@@ -262,6 +262,139 @@
     },
     "labels": {
       "alert_identity": "omi-batch-timeliness-sample-stale",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-batch-timeliness-scan-blind",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch timeliness",
+    "title": "Batch timeliness walk blind for 30 minutes",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_timeliness_scan_truncated{leg=\"uncommitted\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-02T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A bounded timeliness walk has been full for 30 minutes, so an older unpublished unit may be unmeasured and the 2h alarm could miss it.",
+      "user_impact": "A late batch transcript could go unnoticed in the blind leg.",
+      "scope": "omi_batch_timeliness_scan_truncated{leg=\"uncommitted\"}: the vendor-held or retry walk is full of holds or pre-epoch units. Projection truncation is informational: siblings of one upload share an admission time, so the oldest committed rows already carry it.",
+      "verification": "Count the leg with the batch custody census (counts only, ro-prod) and compare its oldest admission time with the gauge.",
+      "safe_next_action": "If the blind leg holds real late work, treat it as a 2h breach. If it is deliberate holds, record that and widen the bound in code.",
+      "runbook": "backend/charts/monitoring/batch-projection/README.md",
+      "threshold": "$A > 0 for 30m",
+      "evaluated_bad": "Synthetic: the vendor-held walk returns 20 live holds for 30 minutes.",
+      "evaluated_good": "Synthetic: every walk ends before its bound."
+    },
+    "labels": {
+      "alert_identity": "omi-batch-timeliness-scan-blind",
       "component": "batch-pipeline",
       "impact": "product",
       "severity": "warning",

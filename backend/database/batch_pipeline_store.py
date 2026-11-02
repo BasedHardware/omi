@@ -645,11 +645,12 @@ def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
     return docs[0].to_dict()['retry_started_at'] if docs else None
 
 
-# 2-hour timeliness alarm (David, 2026-11-02). Every query rides an existing index: jobs (state, enqueued_at),
-# the capacity index, jobs (priority, retry_started_at) and results (projection_state, committed_at).
-TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready', 'vendor_held')
-TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry')
+# 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs
+# (priority, retry_started_at), jobs (state, recovery_state, enqueued_at) and results (projection_state, committed_at).
+TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
+TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
 TIMELINESS_HOLD_SCAN_LIMIT = 20
+TIMELINESS_PROJECTION_SCAN_LIMIT = 50
 
 
 def is_timeliness_hold(job: dict[str, Any], now: float) -> bool:
@@ -658,14 +659,14 @@ def is_timeliness_hold(job: dict[str, Any], now: float) -> bool:
 
 
 def timeliness_sample(client: Any, namespace: str, epoch: float, now: float, sla: float) -> dict[str, Any]:
-    """Unpublished units by wait leg: oldest clock admitted/committed at or after ``epoch``, counts past
-    ``sla`` for the new cohort, and backlog counts before ``epoch``.
+    """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
+    new cohort, and backlog counts before ``epoch``.
 
-    Uncommitted and quarantined legs clock from ``enqueued_at``. Results carry no enqueue time, so the
-    projection legs clock from ``committed_at``, a lower bound on the unit's wait. Admission policy holds
-    must never fill a bound: ``ready`` is read through the capacity index with the decision filtered in the
-    query, and holds park in ``retry`` without ``retry_started_at``, so compute-failure retries are read by
-    that field. ``truncated`` says a bounded prefix held only holds or pre-epoch units.
+    Holds must never fill a bound: ``ready`` is read through the capacity index with the decision filtered in
+    the query, admission holds park in ``retry`` without ``retry_started_at`` (compute-failure retries are read
+    by that field), and live ``vendor_held`` units are walked apart from active work. Results carry no enqueue
+    time, so the projection leg reads the jobs behind its oldest committed rows; its counts clock from
+    ``committed_at``, a lower bound. ``truncated`` names a leg whose bounded prefix may hide an older unit.
     """
     jobs = client.collection(f'{namespace}_jobs')
     results = client.collection(f'{namespace}_results')
@@ -685,8 +686,27 @@ def timeliness_sample(client: Any, namespace: str, epoch: float, now: float, sla
         ]
         return min(admitted, default=None), not admitted and len(docs) == TIMELINESS_HOLD_SCAN_LIMIT
 
+    def committed_walk(query):
+        rows = list(
+            query.where('committed_at', '>=', epoch)
+            .order_by('committed_at')
+            .limit(TIMELINESS_PROJECTION_SCAN_LIMIT)
+            .stream()
+        )
+        refs = [jobs.document(row.id) for row in rows]
+        admitted = [
+            started
+            for snapshot in (client.get_all(refs, field_paths=['enqueued_at']) if refs else [])
+            for started in [(snapshot.to_dict() or {}).get('enqueued_at')]
+            if isinstance(started, (int, float)) and started >= epoch
+        ]
+        return min(admitted, default=None), len(rows) == TIMELINESS_PROJECTION_SCAN_LIMIT
+
     walks = [
-        walk(jobs.where('state', 'in', list(TIMELINESS_ACTIVE_STATES)).where('enqueued_at', '>=', epoch), 'enqueued_at')
+        walk(
+            jobs.where('state', 'in', list(TIMELINESS_ACTIVE_STATES)).where('enqueued_at', '>=', epoch), 'enqueued_at'
+        ),
+        walk(jobs.where('state', '==', 'vendor_held').where('enqueued_at', '>=', epoch), 'enqueued_at'),
     ]
     for priority in (0, 1, 2):
         ready = (
@@ -700,33 +720,44 @@ def timeliness_sample(client: Any, namespace: str, epoch: float, now: float, sla
         walks.append(
             walk(jobs.where('priority', '==', priority).where('retry_started_at', '>=', epoch), 'retry_started_at')
         )
-    quarantined = jobs.where('state', '==', 'quarantined')
     projection = results.where('projection_state', 'in', list(PROJECTION_DISCOVERY_STATES))
-    held = results.where('projection_state', '==', 'quarantine_held')
-    new_over = {}
-    for leg, query, field in (
-        ('quarantined', quarantined, 'enqueued_at'),
-        ('projection', projection, 'committed_at'),
-        ('sibling_held', held, 'committed_at'),
-    ):
-        new_over[leg] = count(query.where(field, '>=', epoch).where(field, '<', due)) if due > epoch else 0
+    projected, projection_truncated = committed_walk(projection)
+    legs = {
+        'quarantined': (jobs.where('state', '==', 'quarantined'), 'enqueued_at'),
+        # A quarantined projection receipt holds its committed job in the same transaction: the text never
+        # reached the conversation.
+        'assignment_held': (
+            jobs.where('state', '==', 'committed').where('recovery_state', '==', 'held'),
+            'enqueued_at',
+        ),
+        'projection': (projection, 'committed_at'),
+        # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
+        'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
+    }
     return {
         'new_oldest': {
             'uncommitted': min((started for started, _ in walks if started is not None), default=None),
-            'quarantined': first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at'),
-            'projection': first(projection.where('committed_at', '>=', epoch), 'committed_at'),
-            'sibling_held': first(held.where('committed_at', '>=', epoch), 'committed_at'),
+            'quarantined': first(legs['quarantined'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
+            'assignment_held': first(legs['assignment_held'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
+            'projection': projected,
+            'quarantine_held_rows': first(
+                legs['quarantine_held_rows'][0].where('committed_at', '>=', epoch), 'committed_at'
+            ),
         },
-        'new_over_sla': new_over,
+        'new_over_sla': {
+            leg: count(query.where(field, '>=', epoch).where(field, '<', due)) if due > epoch else 0
+            for leg, (query, field) in legs.items()
+        },
         'backlog': {
             'uncommitted_incl_holds': count(
                 jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)
             ),
-            'quarantined': count(quarantined.where('enqueued_at', '<', epoch)),
-            'projection': count(projection.where('committed_at', '<', epoch)),
-            'sibling_held': count(held.where('committed_at', '<', epoch)),
+            **{leg: count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
         },
-        'truncated': any(truncated for _, truncated in walks),
+        'truncated': {
+            'uncommitted': any(truncated for _, truncated in walks),
+            'projection': projection_truncated,
+        },
     }
 
 

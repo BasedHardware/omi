@@ -61,7 +61,8 @@ class QueueMetrics:
         )
         self.timeliness_truncated = Gauge(
             'omi_batch_timeliness_scan_truncated',
-            '1 when the bounded uncommitted walk saw only policy holds, so an older unit may be unmeasured',
+            '1 when a leg\'s bounded walk may hide an older unpublished unit',
+            ['leg'],
             registry=registry,
         )
         self.timeliness_observed_at = Gauge(
@@ -240,7 +241,8 @@ class QueueMetrics:
             self.timeliness_over_sla.labels(leg).set(units)
         for leg, units in sample['backlog'].items():
             self.timeliness_backlog.labels(leg).set(units)
-        self.timeliness_truncated.set(1 if sample['truncated'] else 0)
+        for leg, truncated in sample['truncated'].items():
+            self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
         self.timeliness_observed_at.set(now)
         self.timeliness_samples.labels('ok').inc()
 

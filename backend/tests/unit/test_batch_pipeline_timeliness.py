@@ -23,14 +23,20 @@ class _Count:
 
 class _Doc:
     def __init__(self, data):
+        self.id = data['id']
         self._data = data
 
     def to_dict(self):
         return dict(self._data)
 
 
+class _Ref:
+    def __init__(self, rows, doc_id):
+        self.rows, self.id = rows, doc_id
+
+
 class _Query:
-    """The slice of the Firestore query API the sample uses: where, order_by, limit, stream, count."""
+    """The slice of the Firestore query API the sample uses: where, order_by, limit, stream, count, document."""
 
     def __init__(self, rows, filters=(), order=None, limit=None):
         self.rows, self.filters, self.order, self._limit = rows, filters, order, limit
@@ -43,6 +49,9 @@ class _Query:
 
     def limit(self, n):
         return _Query(self.rows, self.filters, self.order, n)
+
+    def document(self, doc_id):
+        return _Ref(self.rows, doc_id)
 
     def _match(self, row):
         ops = {
@@ -75,10 +84,17 @@ class _Query:
 
 class _Client:
     def __init__(self, jobs=(), results=()):
-        self.tables = {'ns_jobs': list(jobs), 'ns_results': list(results)}
+        self.tables = {
+            name: [{'id': f'{name}-{i}', **row} for i, row in enumerate(rows)]
+            for name, rows in (('ns_jobs', jobs), ('ns_results', results))
+        }
 
     def collection(self, name):
         return _Query(self.tables[name])
+
+    def get_all(self, refs, field_paths=None):
+        by_id = {row['id']: row for ref in refs[:1] for row in ref.rows}
+        return [_Doc(by_id[ref.id]) for ref in refs if ref.id in by_id]
 
 
 def _sample(jobs=(), results=(), now=NOW):
@@ -92,19 +108,48 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
             {'state': 'quarantined', 'recovery_state': 'failed_held', 'enqueued_at': EPOCH + 600},
             {'state': 'quarantined', 'recovery_state': 'prepared', 'enqueued_at': NOW - 600},
             {'state': 'committed', 'enqueued_at': EPOCH + 60},
+            {'state': 'committed', 'recovery_state': 'held', 'enqueued_at': EPOCH + 120},
+            {'state': 'committed', 'recovery_state': 'held', 'enqueued_at': EPOCH - 120},
+            {'state': 'committed', 'recovery_state': 'recovered', 'enqueued_at': EPOCH + 30},
         ],
         results=[
             {'projection_state': 'quarantine_held', 'committed_at': EPOCH - 3600},
             {'projection_state': 'quarantine_held', 'committed_at': EPOCH + 900},
-            {'projection_state': 'pending', 'committed_at': NOW - 60},
             {'projection_state': 'completed', 'committed_at': EPOCH + 30},
         ],
     )
     assert sample['new_oldest']['quarantined'] == EPOCH + 600
-    assert sample['new_over_sla'] == {'quarantined': 1, 'projection': 0, 'sibling_held': 1}
-    assert sample['backlog'] == {'uncommitted_incl_holds': 0, 'quarantined': 1, 'projection': 0, 'sibling_held': 1}
-    assert sample['new_oldest']['projection'] == NOW - 60
+    assert sample['new_oldest']['assignment_held'] == EPOCH + 120
+    assert sample['new_over_sla'] == {
+        'quarantined': 1,
+        'assignment_held': 1,
+        'projection': 0,
+        'quarantine_held_rows': 1,
+    }
+    assert sample['backlog'] == {
+        'uncommitted_incl_holds': 0,
+        'quarantined': 1,
+        'assignment_held': 1,
+        'projection': 0,
+        'quarantine_held_rows': 1,
+    }
+    assert sample['new_oldest']['projection'] is None
     assert sample['new_oldest']['uncommitted'] is None
+
+
+def test_projection_clocks_from_admission_not_commit():
+    # 1h59m to commit plus 1h59m unprojected must read as about 4h, not 1h59m.
+    jobs = [
+        {'id': 'slow', 'state': 'committed', 'enqueued_at': NOW - 4 * 3600},
+        {'id': 'old', 'state': 'committed', 'enqueued_at': EPOCH - 60},
+    ]
+    results = [
+        {'id': 'slow', 'projection_state': 'pending', 'committed_at': NOW - 7140},
+        {'id': 'old', 'projection_state': 'ready', 'committed_at': EPOCH + 30},
+    ]
+    sample = _sample(jobs=jobs, results=results)
+    assert sample['new_oldest']['projection'] == NOW - 4 * 3600
+    assert sample['truncated']['projection'] is False
 
 
 def test_policy_holds_never_fill_the_bound_and_compute_retries_are_measured():
@@ -114,13 +159,22 @@ def test_policy_holds_never_fill_the_bound_and_compute_retries_are_measured():
     failing = {'state': 'retry', 'priority': 1, 'enqueued_at': EPOCH + 200, 'retry_started_at': EPOCH + 900}
     sample = _sample(jobs=holds + [failing, {'state': 'leased', 'enqueued_at': EPOCH + 300}])
     assert sample['new_oldest']['uncommitted'] == EPOCH + 200
-    assert sample['truncated'] is False
+    assert sample['truncated']['uncommitted'] is False
     assert sample['backlog']['uncommitted_incl_holds'] == 0
     # A pre-epoch unit that starts failing after the epoch stays backlog.
     late = {'state': 'retry', 'priority': 2, 'enqueued_at': EPOCH - 60, 'retry_started_at': EPOCH + 60}
     sample = _sample(jobs=[late])
     assert sample['new_oldest']['uncommitted'] is None
     assert sample['backlog']['uncommitted_incl_holds'] == 1
+
+
+def test_vendor_holds_never_hide_active_work():
+    vendor = {'state': 'vendor_held', 'compute_decision': {'outcome': 'held', 'reason': 'vendor'}}
+    holds = [{**vendor, 'enqueued_at': EPOCH + i} for i in range(TIMELINESS_HOLD_SCAN_LIMIT * 2)]
+    sample = _sample(jobs=holds + [{'state': 'result_ready', 'enqueued_at': EPOCH + 500}])
+    assert sample['new_oldest']['uncommitted'] == EPOCH + 500
+    # The vendor walk itself is blind past its bound, and says so.
+    assert sample['truncated']['uncommitted'] is True
 
 
 def _ready(at, outcome='unattempted'):
@@ -138,7 +192,7 @@ def test_holds_back_in_ready_never_fill_the_bound():
     holds = [_ready(EPOCH + i, 'held') for i in range(TIMELINESS_HOLD_SCAN_LIMIT * 2)]
     sample = _sample(jobs=holds + [_ready(EPOCH + 999)])
     assert sample['new_oldest']['uncommitted'] == EPOCH + 999
-    assert sample['truncated'] is False
+    assert sample['truncated']['uncommitted'] is False
     assert sample['backlog']['uncommitted_incl_holds'] == 0
 
 
@@ -148,12 +202,12 @@ def test_a_prefix_of_only_pre_epoch_retries_reports_truncation():
     rows.append({**late, 'enqueued_at': EPOCH + 5, 'retry_started_at': EPOCH + 999})
     sample = _sample(jobs=rows)
     assert sample['new_oldest']['uncommitted'] is None
-    assert sample['truncated'] is True
+    assert sample['truncated']['uncommitted'] is True
 
 
 def test_no_new_unit_can_breach_before_two_hours_after_the_epoch():
     sample = _sample(jobs=[{'state': 'quarantined', 'enqueued_at': EPOCH + 10}], now=EPOCH + SLA - 1)
-    assert sample['new_over_sla'] == {'quarantined': 0, 'projection': 0, 'sibling_held': 0}
+    assert set(sample['new_over_sla'].values()) == {0}
 
 
 def _store(sample):
@@ -163,10 +217,22 @@ def _store(sample):
 
 
 SAMPLE = {
-    'new_oldest': {'uncommitted': None, 'quarantined': NOW - 9000, 'projection': NOW - 60, 'sibling_held': None},
-    'new_over_sla': {'quarantined': 1, 'projection': 0, 'sibling_held': 0},
-    'backlog': {'uncommitted_incl_holds': 370, 'quarantined': 596, 'projection': 7, 'sibling_held': 6384},
-    'truncated': False,
+    'new_oldest': {
+        'uncommitted': None,
+        'quarantined': NOW - 9000,
+        'projection': NOW - 60,
+        'assignment_held': None,
+        'quarantine_held_rows': None,
+    },
+    'new_over_sla': {'quarantined': 1, 'projection': 0, 'assignment_held': 0, 'quarantine_held_rows': 0},
+    'backlog': {
+        'uncommitted_incl_holds': 370,
+        'quarantined': 596,
+        'projection': 7,
+        'assignment_held': 5434,
+        'quarantine_held_rows': 16921,
+    },
+    'truncated': {'uncommitted': True, 'projection': False},
 }
 
 
@@ -180,7 +246,9 @@ def test_gauges_counter_and_cadence(monkeypatch):
     assert value('omi_batch_timeliness_new_oldest_age_seconds', {'leg': 'quarantined'}) == 9000
     assert value('omi_batch_timeliness_new_oldest_age_seconds', {'leg': 'uncommitted'}) == 0
     assert value('omi_batch_timeliness_new_over_sla_units', {'leg': 'quarantined'}) == 1
-    assert value('omi_batch_timeliness_backlog_units', {'leg': 'sibling_held'}) == 6384
+    assert value('omi_batch_timeliness_backlog_units', {'leg': 'assignment_held'}) == 5434
+    assert value('omi_batch_timeliness_scan_truncated', {'leg': 'uncommitted'}) == 1
+    assert value('omi_batch_timeliness_scan_truncated', {'leg': 'projection'}) == 0
     assert value('omi_batch_timeliness_observed_at_seconds') == NOW
     assert value('omi_batch_timeliness_samples_total', {'outcome': 'ok'}) == 1
     metrics.refresh_timeliness(store, NOW + 60)
@@ -213,15 +281,17 @@ def test_kill_switch_skips_firestore_and_counts_disabled(monkeypatch):
     assert not registry.get_sample_value('omi_batch_timeliness_observed_at_seconds')
 
 
-def test_rule_alarms_on_new_legs_only_and_stays_agent_tier():
+def test_rules_alarm_on_new_legs_flag_blindness_and_stay_agent_tier():
     rules = {rule['uid']: rule for rule in json.loads(PENDING.read_text(encoding='utf-8'))}
     alarm = rules['omi-batch-unit-unpublished-2h']
     exprs = [q['model'].get('expr') or q['model'].get('expression') for q in alarm['data']]
-    assert 'leg=~"uncommitted|quarantined|projection"' in exprs[0]
-    assert 'sibling_held' not in exprs[0] and 'backlog' not in ' '.join(exprs)
+    assert 'leg=~"uncommitted|quarantined|assignment_held|projection"' in exprs[0]
+    assert 'quarantine_held_rows' not in exprs[0] and 'backlog' not in ' '.join(exprs)
     assert '$A > 7200 && $B < 900' in exprs
-    stale = rules['omi-batch-timeliness-sample-stale']
-    assert stale['noDataState'] == 'Alerting'
+    assert rules['omi-batch-timeliness-sample-stale']['noDataState'] == 'Alerting'
+    blind = rules['omi-batch-timeliness-scan-blind']
+    assert 'omi_batch_timeliness_scan_truncated' in blind['data'][0]['model']['expr']
+    assert blind['for'] == '30m'
     for rule in rules.values():
         assert rule['labels']['tier'] == 'agent'
         assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']

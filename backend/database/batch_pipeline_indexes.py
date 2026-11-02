@@ -48,4 +48,14 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
+    # 2-hour timeliness alarm: committed units whose projection receipt is quarantined (job recovery_state held).
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_timeliness_assignment_held',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('recovery_state'), _asc('enqueued_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
 )
