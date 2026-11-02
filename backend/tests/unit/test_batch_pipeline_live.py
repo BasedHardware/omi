@@ -259,6 +259,37 @@ def test_projection_replaces_provisional_instead_of_appending_and_keeps_id():
     assert survivors[0]['speaker_id_scope'] == 'final:batch:unit'
 
 
+RULE_DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript', 'trigger': 'sync_update'}
+
+
+def test_projection_text_supersedes_an_automatic_discard():
+    original = recording(transcript_segments=[], discarded=True, relevance_decision=dict(RULE_DISCARD))
+    result, _ = replace_record(original, incoming(), {'start': 100, 'end': 102})
+    assert result['discarded'] is False and result['relevance_decision'] is None
+    assert [s['id'] for s in result['transcript_segments']] == ['new']
+    assert original['discarded'] is True
+
+
+def test_projection_without_new_text_keeps_the_automatic_discard():
+    original = recording(discarded=True, relevance_decision=dict(RULE_DISCARD))
+    result, new = replace_record(original, incoming(), {'start': 100, 'end': 102, 'preserve_existing': True})
+    assert not new
+    assert result['discarded'] is True and result['relevance_decision'] == RULE_DISCARD
+
+
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'discarded': True},
+        {'discarded': True, 'relevance_decision': dict(RULE_DISCARD), 'sync_relevance_user_kept': False},
+        {'discarded': True, 'relevance_decision': {**RULE_DISCARD, 'verdict': 'keep'}},
+    ],
+)
+def test_projection_never_overrides_a_user_discard(changes):
+    with pytest.raises(SyncAssignmentConflict, match='discarded'):
+        replace_record(recording(**changes), incoming(), {'start': 100, 'end': 102})
+
+
 def test_projection_waits_for_finalize_without_mutating_provisional():
     original = recording(status='processing')
     with pytest.raises(SyncAssignmentConflict, match='finalize'):
