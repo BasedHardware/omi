@@ -7,6 +7,13 @@
       "description": "Real candidate backend summary on fresh iPhone simulator account, third generation",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-automatic-default-summary.png",
+      "platform": "mobile-ios",
+      "description": "New conversation automatically summarized after real Set Default on simulator",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
