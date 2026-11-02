@@ -56,7 +56,9 @@ struct device {
 static const struct device fake_device = {"host"};
 #define DEVICE_DT_GET(n) (&fake_device)
 #define DT_NODELABEL(n) n
+// clang-format off: local and CI versions disagree on a brace in a macro body.
 #define GPIO_DT_SPEC_GET_OR(...) {.port = &fake_device, .pin = 0}
+// clang-format on
 struct gpio_dt_spec {
     const struct device *port;
     int pin;
