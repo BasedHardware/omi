@@ -101,8 +101,12 @@ class WorkflowTests(unittest.TestCase):
         base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT,
                               capture_output=True, text=True, check=True).stdout.strip()
         for filename in self.calls.values():
-            baseline = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
-                                      cwd=ROOT, capture_output=True, text=True, check=True).stdout
+            shown = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
+                                   cwd=ROOT, capture_output=True, text=True)
+            if shown.returncode != 0:
+                # A workflow this PR adds has no earlier budget to keep; ci-budget.yaml covers it.
+                continue
+            baseline = shown.stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
             self.assertEqual(set(before), set(after), filename)
             for name in before:

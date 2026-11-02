@@ -1,6 +1,14 @@
 name: Dart Device SDK
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - "sdks/device/dart/**"
@@ -23,6 +31,8 @@ jobs:
         working-directory: sdks/device/dart
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       # The Hygiene manifest runner has no Flutter toolchain, so this Flutter
       # package runs its own suite, like sdk-cpp.yml and sdk-rust.yml.
       - uses: subosito/flutter-action@v2
