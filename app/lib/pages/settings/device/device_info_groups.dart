@@ -18,11 +18,13 @@ class DeviceInfoGroups extends StatelessWidget {
     required this.pairedDevice,
     required this.isDeviceConnected,
     this.rayBanCameraStatus,
+    this.onRenameDevice,
   });
 
   final BtDevice? pairedDevice;
   final bool isDeviceConnected;
   final Future<String>? rayBanCameraStatus;
+  final void Function(BtDevice device)? onRenameDevice;
 
   static String _truncate(String value) {
     if (value.length > 12) return '${value.substring(0, 5)}•••${value.substring(value.length - 4)}';
@@ -78,7 +80,15 @@ class DeviceInfoGroups extends StatelessWidget {
           header: l10n.deviceInfoSection,
           children: [
             if (_known(device?.name))
-              _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
+              onRenameDevice != null && device != null
+                  ? OmiSettingsRow(
+                      leading: const FaIcon(FontAwesomeIcons.microchip),
+                      title: l10n.deviceName,
+                      value: device.name,
+                      showChevron: true,
+                      onTap: () => onRenameDevice!(device),
+                    )
+                  : _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
             if (isRayBan) ...[
               OmiSettingsRow(
                 leading: const FaIcon(FontAwesomeIcons.microphone),
