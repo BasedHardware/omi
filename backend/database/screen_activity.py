@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Tuple, Union, cast
 
 from google.cloud import firestore
 
-from models.screen_activity import ScreenActivityCoverage
+from models.screen_activity import ScreenActivityCoverage, ScreenDeviceCoverage
 
 from ._client import data_plane_db as db
 import logging
@@ -262,7 +262,7 @@ def get_screen_activity_summary(
         last_observed_at=rows[-1].get('timestamp') if rows else None,
     )
 
-    coverage.devices = observed_device_coverage(rows)
+    coverage.devices = [ScreenDeviceCoverage.model_validate(device) for device in observed_device_coverage(rows)]
 
     apps: Dict[str, Dict[str, Any]] = {}
     for row in rows:
