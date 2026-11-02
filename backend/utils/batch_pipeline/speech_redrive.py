@@ -417,6 +417,12 @@ def prepared_independent_one(
     if not sync_allowed(uid, item.duration_seconds, 'soniox', lane='batch', path=DispatchPath.QUARANTINE):
         return 'allowance_held'
     require_provider_environment(PrerecordedSTTService.SONIOX)
+    # The Soniox gate re-checks this same scoped bound. Check it before the CAS
+    # so a policy refusal holds the unit instead of spending its only intent.
+    from utils.stt.soniox_batch import takeover_admitted
+
+    if not takeover_admitted(duration, max_seconds):
+        return 'independent_budget_held'
     started = (
         protocol.start_duration_limited(sid, token, clock(), audio_uri=item.audio_uri, audio_seconds=duration)
         if reopen
@@ -429,7 +435,9 @@ def prepared_independent_one(
         return 'running_held'
     payload, failure, billable = None, None, False
     try:
-        payload = independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
+        payload = independent_stt(
+            item, audio, MultilingualEmpty(duration, spans, worker), takeover_max_seconds=max_seconds
+        )
         if result_outcome(payload) != 'success' or not payload.get('words'):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
     except BatchPrivacyBlocked:
