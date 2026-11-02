@@ -52,9 +52,9 @@ def test_state_matches_the_benchmark_template_line_for_line():
             'Earlier conversations in the same stretch, oldest first (each began within 30 minutes of the previous '
             'one ending; A continues this stretch):\n- 18:30 Grocery run: Picked up bread.',
             'Conversation A\nTitle: Dinner at home\nSummary: Two friends cook pasta.',
-            "End of A's transcript (last part):\nUser: Pass the salt.\nSpeaker 1: Here you go.",
+            "End of A's transcript (last part):\nYou: Pass the salt.\nSpeaker A: Here you go.",
             'Conversation B\nTitle: Evening walk\nSummary: The same friends walk to the park.',
-            "Start of B's transcript (first part):\nSpeaker 1: Nice night for a walk.\nUser: Let us take the long way.",
+            "Start of B's transcript (first part):\nSpeaker A: Nice night for a walk.\nYou: Let us take the long way.",
         ]
     )
     assert state == expected
@@ -84,15 +84,15 @@ def test_tail_and_head_keep_whole_lines_within_the_excerpt_budget():
     tail = transcript_tail(segments, limit=200)
     head = transcript_head(segments, limit=200)
     assert len(tail) <= 200 and len(head) <= 200
-    assert tail.splitlines()[-1].startswith('Speaker 1: line 199')
-    assert head.splitlines()[0].startswith('Speaker 1: line 0')
-    assert all(line.startswith('Speaker 1: line ') for line in tail.splitlines() + head.splitlines())
+    assert tail.splitlines()[-1].startswith('Speaker A: line 199')
+    assert head.splitlines()[0].startswith('Speaker A: line 0')
+    assert all(line.startswith('Speaker A: line ') for line in tail.splitlines() + head.splitlines())
 
 
 def test_one_oversized_line_is_cut_rather_than_dropped():
     segments = _segments((None, 'q' * 5000))
     assert len(transcript_tail(segments)) == 2500
-    assert transcript_head(segments).startswith('User: qqq')
+    assert transcript_head(segments).startswith('You: qqq')
 
 
 def test_question_is_wording_a_noul():

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -373,7 +374,7 @@ class _ConversationRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      conversation.structured.title,
+                      presentableConversationTitleOrFallback(conversation, context.l10n),
                       style: OmiType.body,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -183,7 +183,6 @@ class TestActionItemsTextTimezone:
 class TestMemoryDateTimezone:
     def test_service_memory_timestamp_uses_turnless_user_clock(self, monkeypatch, user_tz):
         user_tz(HO_CHI_MINH)
-        monkeypatch.setattr(memories_svc, "belief_model_enabled", lambda: False)
         monkeypatch.setattr(
             memories_svc,
             "MemoryService",
@@ -193,7 +192,6 @@ class TestMemoryDateTimezone:
         assert f"Sat 26 Sep 2026, 14:18 {HO_CHI_MINH} (UTC+07:00)" in out
 
     def test_memory_tool_timestamp_uses_turn_zone(self, monkeypatch):
-        monkeypatch.setattr(memory_tools, "belief_model_enabled", lambda: False)
         monkeypatch.setattr(
             memory_tools,
             "MemoryService",

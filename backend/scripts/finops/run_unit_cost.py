@@ -6,8 +6,9 @@
 What it does, in order:
   1. picks a run directory and records a manifest (window, identities, settlement)
   2. pulls the raw inputs for the window (GCP billing export, gateway ledger, users snapshot,
-     hourly_usage transcription seconds, Prometheus VAD hours, OpenAI/Anthropic invoices,
-     Stripe subscription book, PostHog DAU)
+     hourly_usage transcription seconds, Prometheus VAD hours + per-provider speech seconds,
+     OpenAI/Anthropic invoices, Stripe subscription book, PostHog DAU, the Soniox org-balance
+     snapshot and the Modulate modelled volume line)
   3. assembles the allocation (backend/scripts/finops/assemble_unit_cost.py)
   4. validates: every variable pool must reconcile within --recon-tolerance-pct, the window
      must be settled, and no raw uid may appear in any output
@@ -129,11 +130,11 @@ def validate(derived: pathlib.Path, raw: pathlib.Path, tol_pct: float, dates: li
         "llm_openai",
         "llm_anthropic",
         "stt_vendor_low",
-        "stt_soniox_measured",
-        "stt_deepgram_measured",
         "gcp_total_export",
         "one_time",
     }
+    # Measured STT pools are absent: those rows publish the invoice itself and
+    # carry a null delta, so they are not a pool-versus-allocation check.
     failures = []
     for r in recon:
         if r["pool"] not in variable:
@@ -194,7 +195,7 @@ def main() -> None:
     ap.add_argument(
         "--skip",
         default="",
-        help="comma-separated pulls to skip: gcp,ledger,users,stt,prom,providers,mercury,stripe,posthog",
+        help="comma-separated pulls to skip: gcp,ledger,users,stt,prom,modulate,providers,mercury,stripe,balance,posthog",
     )
     ap.add_argument("--recon-tolerance-pct", type=float, default=0.5)
     ap.add_argument("--allow-unsettled", action="store_true")
@@ -232,12 +233,32 @@ def main() -> None:
             sh([str(HERE / "pull_hourly_usage.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "stt")
         if "prom" not in skip:
             sh([str(HERE / "pull_prometheus.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "prom")
+        if "modulate" not in skip and "prom" not in skip:
+            # measured-volume modelled line; derives from the prom artifact above
+            sh(
+                [str(HERE / "pull_modulate_modelled.py"), "--start", start, "--end", end, "--raw", str(raw)],
+                log,
+                "modulate",
+                required=False,
+            )
         if "providers" not in skip:
             sh([str(HERE / "pull_providers.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "providers")
         if "mercury" not in skip:
             sh([str(HERE / "pull_mercury.py"), "--end", end, "--raw", str(raw)], log, "mercury")
         if "stripe" not in skip:
-            sh([str(HERE / "pull_stripe.py"), "--raw", str(raw)], log, "stripe", required=False)
+            sh(
+                [str(HERE / "pull_stripe.py"), "--raw", str(raw), "--end", end],
+                log,
+                "stripe",
+                required=False,
+            )
+        if "balance" not in skip:
+            sh(
+                [str(HERE / "pull_vendor_balance.py"), "--raw", str(raw)],
+                log,
+                "balance",
+                required=False,
+            )
         if "posthog" not in skip:
             # denominator colour only; the allocation does not depend on it
             nxt = (dt.date.fromisoformat(end) + dt.timedelta(days=1)).isoformat()
@@ -251,14 +272,31 @@ def main() -> None:
     # Provider stderr normally stays in pull.log. Surface optional skips in Cloud Logging too.
     stt_invoice = raw / "stt_vendor_cost_daily.json"
     if stt_invoice.exists():
-        skipped = json.loads(stt_invoice.read_text()).get("skipped", [])
+        stt_payload = json.loads(stt_invoice.read_text())
+        skipped = stt_payload.get("skipped", [])
         for provider in ("soniox", "deepgram"):
             if provider in skipped:
                 sys.stderr.write("WARNING: %s measured STT unavailable; see pull.log\n" % provider)
+            if provider in (stt_payload.get("incomplete") or {}):
+                sys.stderr.write(
+                    "WARNING: %s measured STT incomplete; unclassified line items; see pull.log\n" % provider
+                )
 
     mercury_invoice = raw / "mercury_vendor_spend_daily.json"
     if mercury_invoice.exists() and json.loads(mercury_invoice.read_text()).get("status") == "skipped":
         sys.stderr.write("WARNING: Mercury vendor spend unavailable; see pull.log\n")
+
+    stripe_fees = raw / "stripe_fee_daily.json"
+    if stripe_fees.exists() and json.loads(stripe_fees.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Stripe fee line unavailable; see pull.log\n")
+
+    vendor_balance = raw / "vendor_balance_snapshot.json"
+    if vendor_balance.exists() and json.loads(vendor_balance.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Soniox balance snapshot unavailable; see pull.log\n")
+
+    modulate_modelled = raw / "stt_modulate_modelled_daily.json"
+    if modulate_modelled.exists() and json.loads(modulate_modelled.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Modulate modelled STT line unavailable; see pull.log\n")
 
     cws = a.cohort_window_start
     with open(run / "assembly_output.md", "w") as fh:
@@ -331,7 +369,13 @@ def main() -> None:
     summary = json.load(open(derived / "day_summary.json"))["days"]
     print("Omi unit cost %s..%s  (run %s)" % (start, end, run_id))
     worst = max(
-        (abs(float(r["delta_pct"])) for r in recon if r["pool"] not in ("llm_openai_ledger_coverage",)), default=0.0
+        (
+            abs(float(r["delta_pct"]))
+            for r in recon
+            if r["pool"] not in ("llm_openai_ledger_coverage", "stt_soniox_measured", "stt_deepgram_measured")
+            and r["delta_pct"] not in ("", None)
+        ),
+        default=0.0,
     )
     print(
         "reconciliation: worst |delta| %.4f%% (tolerance %.2f%%)  |  %s"

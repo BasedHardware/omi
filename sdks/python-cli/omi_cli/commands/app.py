@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 import typer
+from rich.markup import escape
 
 from omi_cli import webhook_events as events_mod
 from omi_cli import webhook_target
@@ -231,7 +232,8 @@ def send_event(
             }
         )
         if note:
-            ctx.renderer.info(note)
+            # The note quotes the receiver's reply; print it as text, not Rich markup.
+            ctx.renderer.info(escape(note))
         if ok:
             ctx.renderer.success("Delivery accepted.")
 

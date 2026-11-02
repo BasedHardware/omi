@@ -15,8 +15,23 @@ final class ProactivityRetirementMigrationTests: XCTestCase {
     }
     var migrator = DatabaseMigrator()
     ContextBucketSchema.registerMigration(on: &migrator, defaults: defaults, ownerID: "fixture")
-    JITTriggerMirrorSchema.registerMigration(on: &migrator)
     try migrator.migrate(queue)
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          CREATE TABLE jit_knowledge_ledger_mirror_receipts (
+            ownerID TEXT PRIMARY KEY, generation INTEGER, commitSequence INTEGER, epochID TEXT,
+            contentRevision TEXT, rowCount INTEGER, aliasCount INTEGER, updatedAt TEXT
+          );
+          CREATE TABLE jit_knowledge_ledger_mirror_members (
+            ownerID TEXT, memoryID TEXT, itemRevision INTEGER, status TEXT, sourceState TEXT,
+            canonicalMemoryID TEXT, contentPurged INTEGER
+          );
+          CREATE TABLE jit_knowledge_ledger_mirror_aliases (
+            ownerID TEXT, aliasMemoryID TEXT, canonicalMemoryID TEXT, sourceMemoryID TEXT, reason TEXT
+          )
+          """)
+    }
     let kept = ["proactive_extractions", "focus_sessions", "memories", "live_notes", "goals"]
     try queue.write { db in
       try db.execute(

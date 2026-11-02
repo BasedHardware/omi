@@ -1,0 +1,27 @@
+{
+  "schema": "record-trace/1",
+  "name": "reconnect_finalize_only_batch_live",
+  "source": "unsealed-rca 2026-10-30 path 1, both outbox modes: a finalize-only session must seal a batch_live_v1 row from the persisted owner",
+  "row": {
+    "record_lane_owner": "batch_live_v1"
+  },
+  "durable": [
+    false,
+    true
+  ],
+  "sessions": [
+    {
+      "frames": [
+        "conversation",
+        "finalize"
+      ],
+      "upload": "ok"
+    }
+  ],
+  "expect": {
+    "sealed": true,
+    "upload_failed": false,
+    "open_tokens": 0,
+    "admissible": true
+  }
+}

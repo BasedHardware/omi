@@ -1,0 +1,106 @@
+name: Role Images
+
+# Plan B B2 (named by David 2026-10-21): build every role image from one SHA and
+# probe it, so a role image is known to import before any deploy opts into it.
+# backend/Dockerfile.roles targets get runtime_image_contracts.py's offline
+# dependency probe; listen-edge gets an HTTP health, identity and drain probe.
+# Each run records image size and cold-start import time in the job summary.
+# Build-and-probe only: nothing here authenticates to a registry or pushes. PRs
+# build on the public python:3.11-slim base (PRs carry no GCP credential); the
+# gcp_backend.yml build-only train builds on the private base and publishes.
+on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
+  pull_request:
+    paths:
+      - "backend/Dockerfile.roles"
+      - "backend/pylock.runtime.toml"
+      - "backend/pusher/pylock.toml"
+      - "backend/runtime_images.json"
+      - "backend/scripts/runtime_image_contracts.py"
+      - "backend/scripts/role_images.py"
+      - "backend/edge/**"
+      - "backend/utils/stt/assets/silero_vad.onnx"
+      - ".dockerignore"
+      - ".github/workflows/role_images.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".dockerignore"
+      - ".github/workflows/role_images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: role-images-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: true
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+  PUBLIC_PYTHON_BASE: python:3.11-slim
+  MANIFEST: role-images.json
+
+jobs:
+  roles:
+    name: python role images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+          persist-credentials: false
+      - name: Free runner disk for five image builds
+        run: rm -rf /opt/hostedtoolcache
+      - name: Build backend/Dockerfile.roles targets
+        env:
+          # main also builds today's backend/Dockerfile as the size and cold-start baseline.
+          BASELINE: ${{ github.event_name == 'push' && '--baseline' || '' }}
+        run: >-
+          python3 backend/scripts/role_images.py build
+          --sha "${{ inputs.nightly_main_sha || github.sha }}" --base "$PUBLIC_PYTHON_BASE" --manifest "$MANIFEST" $BASELINE
+          --images backend-api,backend-workers,backend-realtime,backend-gateway,backend-pusher
+      - name: Dependency probe per role image
+        run: python3 backend/scripts/role_images.py verify --manifest "$MANIFEST"
+      - name: Measure size and cold-start import
+        run: python3 backend/scripts/role_images.py measure --manifest "$MANIFEST"
+      - name: Report
+        if: always()
+        run: |
+          test -f "$MANIFEST" || exit 0
+          python3 backend/scripts/role_images.py summary --manifest "$MANIFEST" >> "$GITHUB_STEP_SUMMARY"
+          cat "$MANIFEST"
+
+  edge:
+    name: listen-edge image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+          persist-credentials: false
+      - name: Build backend/edge/Dockerfile
+        run: python3 backend/scripts/role_images.py build --sha "${{ inputs.nightly_main_sha || github.sha }}" --images listen-edge --manifest "$MANIFEST"
+      - name: Health, identity and drain probe
+        run: python3 backend/scripts/role_images.py verify --manifest "$MANIFEST"
+      - name: Measure size
+        run: python3 backend/scripts/role_images.py measure --manifest "$MANIFEST"
+      - name: Report
+        if: always()
+        run: |
+          test -f "$MANIFEST" || exit 0
+          python3 backend/scripts/role_images.py summary --manifest "$MANIFEST" >> "$GITHUB_STEP_SUMMARY"
+          cat "$MANIFEST"

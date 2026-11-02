@@ -1,0 +1,3 @@
+{
+  "change": "Recordings refused by the server now recover automatically without repeated Try Again prompts. Device settings shows how much is catching up in its stat tiles, and On the Way lists it by day, with a plain detail list for support"
+}

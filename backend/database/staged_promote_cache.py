@@ -17,7 +17,7 @@ from prometheus_client import Counter
 from database import redis_db
 from utils.observability.fallback import record_fallback
 
-TTL_SECONDS = 90
+TTL_SECONDS = 3600
 VERSION_TTL_SECONDS = 7 * 86400
 OPERATIONS = Counter(
     'omi_staged_promote_empty_cache_total',
@@ -148,6 +148,7 @@ def invalidate(uid: str) -> None:
 def load_projection(uid: str, generation: int, loader) -> list[dict]:
     if os.getenv('OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED', '').strip().lower() == 'false':
         return loader()
+    long_ttl = os.getenv('OMI_STAGED_PROMOTE_LONG_TTL_ENABLED', '').strip().lower() != 'false'
     key: str | None = None
     try:
         client = _redis()
@@ -159,6 +160,10 @@ def load_projection(uid: str, generation: int, loader) -> list[dict]:
         if version:
             token = version.decode() if isinstance(version, bytes) else str(version)
             key = f'{version_key}:{generation}:{token}'
+            if long_ttl:
+                # Separate markers make disabling the lever immediately stop
+                # reading existing hour-long entries. Writers fence both forms.
+                key += ':hour'
             if client.get(key) in (b'1', '1') and client.get(version_key) == version:
                 OPERATIONS.labels(outcome='hit').inc()
                 return []
@@ -173,13 +178,14 @@ def load_projection(uid: str, generation: int, loader) -> list[dict]:
     OPERATIONS.labels(outcome='miss').inc()
     # Expiry belongs to the origin projection, never completion or queue time.
     # PXAT also prevents socket delay after SET from extending that deadline.
-    expires_ms = int((time.time() + TTL_SECONDS) * 1000)
+    ttl = TTL_SECONDS if long_ttl else 90
+    expires_ms = int((time.time() + ttl) * 1000)
     started = time.monotonic()
     items = loader()
     if items:
         return items
     try:
-        if time.monotonic() - started >= TTL_SECONDS or time.time() * 1000 >= expires_ms:
+        if time.monotonic() - started >= ttl or time.time() * 1000 >= expires_ms:
             OPERATIONS.labels(outcome='expired').inc()
         elif client.get(version_key) != version:
             OPERATIONS.labels(outcome='version_changed').inc()

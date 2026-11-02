@@ -28,8 +28,10 @@ from pydantic import (
     StrictBool,
     StrictInt,
     StringConstraints,
+    model_validator,
 )
 
+from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 
 CLIENT_PROCESSING_SCHEMA_VERSION = 1
@@ -186,10 +188,18 @@ class ProjectedStructure(BaseModel):
 
     title: _Heading
     overview: _Overview = ''
-    emoji: _Emoji = '🧠'
+    # Routed through the shared emoji policy below: an omitted, empty, or
+    # sentinel 🧠 emoji is stamped with the category's emoji (💬 for other),
+    # never the "unset" brain sentinel a client sent as if a model chose it.
+    emoji: _Emoji = ''
     category: CategoryEnum = CategoryEnum.other
     sections: list[ProjectedSection] = Field(default_factory=list[ProjectedSection], max_length=12)
     events: list[ProjectedEvent] = Field(default_factory=list[ProjectedEvent], max_length=12)
+
+    @model_validator(mode='after')
+    def _emoji_through_shared_fallback(self) -> 'ProjectedStructure':
+        self.emoji = fallback_emoji(self.emoji, self.category)
+        return self
 
 
 class ProjectionProvenance(BaseModel):

@@ -219,6 +219,59 @@ def _install_streams(service, service_mod, *, canonical, historical, statuses=No
     return service_mod.read_canonical_scan_page, updated_mock, created_mock
 
 
+@pytest.mark.parametrize('cursor_mode', [False, True])
+def test_demand_sized_raw_scan_preserves_mixed_pages_without_index_gate(service_mod, monkeypatch, cursor_mode):
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'false')
+    canonical = [_dated_memory(service_mod, f'c-{i:03}', day=1000 - i * 2) for i in range(120)]
+    historical = [_dated_historical(service_mod, f'h-{i:03}', day=999 - i * 2) for i in range(120)]
+
+    def run(enabled):
+        monkeypatch.setenv('OMI_CANONICAL_DEMAND_WINDOW_ENABLED', 'true' if enabled else 'false')
+        service = service_mod.MemoryService(db_client=_Db())
+        scan, _, _ = _install_streams(service, service_mod, canonical=canonical, historical=historical)
+        if cursor_mode:
+            cursor, rows = None, []
+            for _ in range(3):
+                page = service.read_page('uid-test', limit=10, cursor=cursor)
+                assert not page.truncated
+                rows.extend(memory.model_dump() for memory in page.memories)
+                cursor = page.next_cursor
+                assert cursor is not None
+        else:
+            rows = [memory.model_dump() for memory in service.read('uid-test', limit=10, offset=13)]
+        return rows, sum(call.kwargs['limit'] for call in scan.call_args_list)
+
+    old_rows, old_reads = run(False)
+    new_rows, new_reads = run(True)
+    assert new_rows == old_rows
+    assert new_reads < old_reads
+
+
+def test_demand_scan_refills_filtered_prefix_and_retains_last_page(service_mod, monkeypatch):
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'false')
+    service = service_mod.MemoryService(db_client=_Db())
+    visible = [_dated_memory(service_mod, f'c-{i:03}', day=100 - i) for i in range(6)]
+    slots = [(None, (datetime(2026, 12, 1, tzinfo=timezone.utc), f'filtered-{i}')) for i in range(23)]
+    slots += [(memory, _scan_cursor_for(memory)) for memory in visible]
+
+    def run(enabled):
+        monkeypatch.setenv('OMI_CANONICAL_DEMAND_WINDOW_ENABLED', 'true' if enabled else 'false')
+        _install_streams(service, service_mod, canonical=[], historical=[])
+
+        def scan(_uid, *, limit, start_after=None, **kwargs):
+            start = 0 if start_after is None else next(i + 1 for i, slot in enumerate(slots) if slot[1] == start_after)
+            return slots[start : start + limit], start + limit >= len(slots)
+
+        service_mod.read_canonical_scan_page = MagicMock(side_effect=scan)
+        page = service.read_page('uid-test', limit=10)
+        assert not page.truncated and page.next_cursor is None
+        if enabled:
+            assert [call.kwargs['limit'] for call in service_mod.read_canonical_scan_page.call_args_list] == [11, 50]
+        return [memory.model_dump() for memory in page.memories]
+
+    assert run(True) == run(False) == [memory.model_dump() for memory in visible]
+
+
 def test_cursor_pages_beyond_6000_historical_with_bounded_calls_no_cap(service_mod):
     service = service_mod.MemoryService(db_client=_Db())
     historical = [_dated_historical(service_mod, f"h-{index:04d}", day=7000 - index) for index in range(6500)]

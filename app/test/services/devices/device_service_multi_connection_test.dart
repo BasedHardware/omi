@@ -120,6 +120,12 @@ void main() {
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    // Forget and user disconnects disarm native saved reconnect before releasing the transport.
+    const configureSavedReconnect = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.configureSavedReconnect';
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMessageHandler(
+        configureSavedReconnect, (_) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]));
+    addTearDown(() => messenger.setMockMessageHandler(configureSavedReconnect, null));
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     transports = {};

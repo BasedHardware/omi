@@ -240,7 +240,7 @@ actor GeminiClient {
 
     /// True for transient backend-capacity failures (rate limit, quota, overload,
     /// 5xx, network blips) — retryable and not an app bug. Drives both retry
-    /// decisions and Sentry noise suppression (these flood without being actionable).
+    /// decisions and noise suppression (these flood without being actionable).
     var isTransient: Bool {
       switch self {
       case .apiError(let message, _):
@@ -277,7 +277,7 @@ actor GeminiClient {
       }
     }
 
-    /// Expected product/account states should not page Sentry. They are useful in
+    /// Expected product/account states are not production errors. They are useful in
     /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
     var isExpectedProductState: Bool {
       switch self {

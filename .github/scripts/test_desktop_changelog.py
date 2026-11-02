@@ -11,6 +11,9 @@ on every platform.
 from __future__ import annotations
 
 import importlib.util
+import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 import unittest.mock
@@ -226,6 +229,65 @@ class MergeBoundaryAgreementTests(unittest.TestCase):
             has_tree_user_facing_fragment=False,
         )
         self.assertEqual(code, 1)
+
+
+@unittest.skipUnless(shutil.which("git"), "git binary required for the diff gate fixtures")
+class RenamePairingTests(unittest.TestCase):
+    """Integration sync 15: a new fragment identical to a deleted one paired as R100 and vanished."""
+
+    OLD_FRAGMENT = "desktop/macos/changelog/unreleased/20260901-old.json"
+    NEW_FRAGMENT = "desktop/macos/changelog/unreleased/20261021-new.json"
+    SOURCE = "desktop/macos/Desktop/Sources/AppDelegate.swift"
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name)
+        # checker.run_git uses the process cwd and environment; drop GIT_* so a hook's
+        # GIT_DIR cannot point the checker at the outer repository.
+        clean_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        env_patch = unittest.mock.patch.dict(os.environ, clean_env, clear=True)
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+        previous_cwd = os.getcwd()
+        os.chdir(self.repo)
+        self.addCleanup(os.chdir, previous_cwd)
+        self.git("init", "-q")
+        # Force rename detection so these fixtures fail without --no-renames on any host config.
+        self.git("config", "diff.renames", "true")
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(
+            ["git", "-c", "user.email=desktop-changelog-test@example.invalid", "-c", "user.name=desktop-changelog-test", *args],
+            text=True,
+            cwd=self.repo,
+        ).strip()
+
+    def commit(self, files: dict[str, str]) -> str:
+        for name, content in files.items():
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "fixture")
+        return self.git("rev-parse", "HEAD")
+
+    def test_new_fragment_identical_to_deleted_one_counts_as_added(self) -> None:
+        base = self.commit({self.SOURCE: "// v1\n", self.OLD_FRAGMENT: '{"kind": "none"}\n'})
+        self.git("rm", "-q", self.OLD_FRAGMENT)
+        head = self.commit({self.SOURCE: "// v2\n", self.NEW_FRAGMENT: '{"kind": "none"}\n'})
+
+        self.assertEqual(checker.added_unreleased_fragment_paths(base, head), [self.NEW_FRAGMENT])
+        self.assertTrue(checker.has_new_unreleased_fragment(base, head))
+
+    def test_renamed_desktop_source_still_requires_a_changelog(self) -> None:
+        base = self.commit({self.SOURCE: "// v1\n"})
+        renamed = "desktop/macos/Desktop/Sources/AppLifecycle.swift"
+        self.git("mv", self.SOURCE, renamed)
+        head = self.commit({})
+
+        requiring = [path for path in checker.changed_files(base, head) if checker.is_desktop_change_requiring_changelog(path)]
+        self.assertEqual(requiring, [renamed])
 
 
 class NoneKindFragmentIOTests(unittest.TestCase):

@@ -95,6 +95,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "users:budget_choice": (6, 60),  # Shared GET/PUT ceiling before monthly usage reads.
     # A plans sheet opens on user intent; bound accidental polling before provider reads.
     "storefront:plans": (12, 60),
+    # Each attempt looks up a promotion code; a low ceiling stops code guessing.
+    "payments:redeem_code": (10, 3600),
     "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
@@ -105,6 +107,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # the worst case below the :create ceiling while allowing real exploration.
     "conversations:reprocess": (10, 3600),
     "conversations:merge": (5, 3600),
+    # Episodes: "Wrap up now" and Undo on a captured item; no model call.
+    "episodes:write": (60, 3600),
     # From-segments: on-device-STT upload path (segments already transcribed, so
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
@@ -138,7 +142,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
-    # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
+    # Frame request metadata is cheap, but uploads carry bounded pixel bytes.
     "frame_requests:read": (120, 3600),
     "frame_requests:write": (120, 3600),
     "frame_requests:upload": (30, 3600),

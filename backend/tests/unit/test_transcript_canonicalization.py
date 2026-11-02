@@ -194,7 +194,7 @@ def test_assign_padded_person_id_stores_canonical_and_late_finalize_renders_alic
     assert models[0].person_id == _CANONICAL_PERSON_ID
     assert stored_transcript_is_canonical(models) is True
     assert _render(models) == 'Alice: I agree'
-    assert 'Speaker 0:' not in _render(models)
+    assert 'Speaker' not in _render(models)
 
     client_digest = transcript_sha256([{'text': _AGREED, 'person_id': _CANONICAL_PERSON_ID}])
     bound = _late_finalize(assigned, client_digest)
@@ -253,7 +253,7 @@ def test_legacy_noncanonical_row_drops_the_projection() -> None:
     # The trap: the client helper still strips, so a naive bind would accept.
     alice_digest = transcript_sha256([{'text': _AGREED, 'person_id': _CANONICAL_PERSON_ID}])
     assert transcript_sha256([legacy]) == alice_digest
-    assert _render([legacy]) == 'Speaker 0: I agree'
+    assert _render([legacy]) == 'Speaker A: I agree'
     assert 'Alice:' not in _render([legacy])
 
     # Same outcome through the late-finalize helper on a decoded legacy dict.
@@ -385,8 +385,8 @@ def test_empty_speaker_07_is_stored_hashed_and_rendered() -> None:
     bound = transcript_sha256_for_binding(models)
     assert bound is not None
     assert bound != without_empty
-    assert 'Speaker 7:' in _render(models)
-    assert 'Speaker 7:' not in _render(_as_models(stored[:1]))
+    assert 'Speaker B:' in _render(models)
+    assert 'Speaker B:' not in _render(_as_models(stored[:1]))
     assert _late_finalize(stored, without_empty) is None
     assert _late_finalize(stored, bound) == bound
 
@@ -409,7 +409,7 @@ def test_empty_text_padded_person_id_drops_the_projection() -> None:
     assert legacy.person_id == _PADDED_PERSON_ID
     assert stored_transcript_is_canonical([legacy]) is False
     assert transcript_sha256_for_binding([legacy]) is None
-    assert _render([legacy]) == 'Speaker 0:'
+    assert _render([legacy]) == 'Speaker A:'
     assert 'Alice:' not in _render([legacy])
     alice_digest = transcript_sha256([{'text': '', 'person_id': _CANONICAL_PERSON_ID}])
     assert transcript_sha256([legacy]) == alice_digest

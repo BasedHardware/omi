@@ -18,7 +18,6 @@ from database.durable_queue import (
 from database.durable_queue_age import QUEUE_AGE_SAMPLERS, sample_store_wide_oldest_ready_ages
 from utils.durable_queue_metrics import publish_sampled_queue_oldest_ready_ages
 from utils.metrics import OMI_QUEUE_NAMES, generate_latest
-from utils.memory.daily_memory_sweep_queue import drain_sweep_uids
 
 NOW = datetime(2026, 9, 3, 12, tzinfo=timezone.utc)
 POLICY = QueuePolicy(max_attempts=3, base_backoff_seconds=1, max_backoff_seconds=8)
@@ -110,20 +109,6 @@ def test_failures_are_never_acked():
     assert results[0].outcome.kind != OutcomeKind.ACK
 
 
-def test_daily_sweep_poison_uid_does_not_block_the_uid_behind_it():
-    processed: list[str] = []
-
-    def process(uid: str) -> ProcessOutcome:
-        processed.append(uid)
-        if uid == 'poison':
-            raise RuntimeError('malformed payload')
-        return ProcessOutcome.ack()
-
-    acked = drain_sweep_uids(['poison', 'healthy'], process)
-    assert processed == ['poison', 'healthy']
-    assert acked == ['healthy']
-
-
 def test_daily_sweep_age_gauge_reflects_oldest_ready_item():
     age = oldest_ready_age_seconds([NOW - timedelta(hours=2), NOW - timedelta(minutes=3)], now=NOW)
     assert age == 2 * 3600
@@ -185,7 +170,6 @@ def test_store_wide_age_is_min_created_at_across_the_bounded_page():
     )
     assert ages['memory_outbox'] == 4 * 3600
     assert ages['daily_summary_hour_groups'] == 0.0
-    assert ages['daily_memory_sweep'] == 0.0
     assert ages['conversation_finalization_jobs'] == 12.0
 
 
@@ -200,7 +184,6 @@ def test_sampler_failure_leaves_the_queue_absent():
         finalization_summary={'oldest_nonterminal_age_seconds': 1},
     )
     assert 'memory_outbox' not in ages
-    assert ages['daily_memory_sweep'] == 0.0
     assert ages['conversation_finalization_jobs'] == 1.0
 
 

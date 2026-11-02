@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-episode-membership-waits-for-enrichment",
+  "violated_contract": "A conversation that belongs to the live occasion must be a member of the live episode from the moment intake persists it, so Home folds it under the live episode row; membership may not wait for the conversation's own enrichment to finalize.",
+  "canonical_prevention": "Join at the boundary that creates the visible row (sync intake persistence), keep the finalize-time join only as an idempotent safety net, and cover both boundaries plus the started-before-episode grace in unit tests against the episode service.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_episodes_service.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/episodes/", "backend/utils/sync/"],
+  "status": "open"
+}

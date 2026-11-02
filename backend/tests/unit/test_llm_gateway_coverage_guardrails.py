@@ -107,7 +107,6 @@ KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
         ('llm_gateway/gateway/config_loader.py', 'get_model', 'feature'),
         ('llm_gateway/gateway/config_loader.py', 'get_provider', 'feature'),
         ('utils/llm/clients.py', '_get_model_config', 'feature'),
-        ('utils/memory/belief_backfill.py', 'get_llm', 'BELIEF_BACKFILL_LLM_FEATURE'),
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
@@ -280,8 +279,6 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
 def test_only_background_flex_routes_allow_the_documented_flex_timeout():
     config = load_gateway_config(prod_mode=True)
 
-    assert config.route_artifacts['route.memory_conflict.model_config.001'].timeouts.request_ms == 120_000
-    assert config.route_artifacts['route.memory_conflict_flex.model_config.001'].timeouts.request_ms == 900_000
     assert config.route_artifacts['route.memory_l2_flex.model_config.001'].timeouts.request_ms == 900_000
     assert config.route_artifacts['route.x_memory_extraction_flex.model_config.001'].timeouts.request_ms == 900_000
 

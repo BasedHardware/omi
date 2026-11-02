@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/review_item_sheet.dart';
@@ -28,6 +31,16 @@ const _speaker = ReviewItem(
     start: 0,
     end: 5,
     candidates: [PersonRef(personId: 'bela', name: 'Béla')],
+  ),
+);
+
+const _samePerson = ReviewItem(
+  itemId: 'same_person:ab',
+  kind: ReviewItemKind.samePerson,
+  samePerson: SamePersonItem(
+    left: EntitySummary(entityId: 'person:a', type: EntityType.person, name: 'Sam'),
+    right: EntitySummary(entityId: 'person:b', type: EntityType.person, name: 'Samuel'),
+    reason: 'Same voice',
   ),
 );
 
@@ -59,6 +72,7 @@ Future<ReviewProvider> _provider(List<ReviewItem> items, List<(String, Map<Strin
     isEligible: () => true,
     reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
     loadItems: () async => ApiSuccess(ReviewItemsResponse(items: items, remainingToday: items.length)),
+    loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
     sendAnswer: (item, answer) async {
       sent.add((item.itemId, answer.toJson(item.kind)));
       return const ApiSuccess(0);
@@ -107,6 +121,31 @@ void main() {
     expect(provider.items, isEmpty);
   });
 
+  for (final item in [_speaker, _samePerson, _proposal]) {
+    testWidgets('a 409 uses neutral copy for ${item.kind.name}', (tester) async {
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [item], remainingToday: 3)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
+        sendAnswer: (_, __) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)),
+      );
+      await provider.load();
+      await tester.pumpWidget(_host(provider, ReviewQuestionCard(item: item)));
+      final label = switch (item.kind) {
+        ReviewItemKind.speaker => 'Béla',
+        ReviewItemKind.samePerson => 'Yes',
+        _ => 'Apply',
+      };
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(find.text('This question is out of date, so nothing changed.'), findsOneWidget);
+      expect(provider.lastAnswerConflict, isTrue);
+      expect(provider.items, isEmpty);
+      expect(provider.remainingToday, 3);
+    });
+  }
+
   testWidgets('the suggestion sheet shows the current and suggested values and the reason', (tester) async {
     final sent = <(String, Map<String, dynamic>)>[];
     final provider = await _provider([_memoryProposal], sent);
@@ -139,24 +178,37 @@ void main() {
     expect((sent.single.$2['task'] as Map)['dismiss_reason'], 'not_mine');
   });
 
-  testWidgets('the Home entry shows the fallback while Review is off, and hides when caught up', (tester) async {
+  testWidgets('the Home entry draws nothing while Review is off, and hides when caught up', (tester) async {
     final off = ReviewProvider(
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])));
     await off.load();
-    await tester.pumpWidget(_host(off, const ReviewEntryCard(fallback: Text('old card'))));
-    expect(find.text('old card'), findsOneWidget);
+    await tester.pumpWidget(_host(off, const ReviewEntryCard()));
+    expect(find.byKey(const Key('review_entry_card')), findsNothing);
 
     final empty = await _provider(const [], []);
-    await tester.pumpWidget(_host(empty, const ReviewEntryCard(fallback: Text('old card'))));
+    await tester.pumpWidget(_host(empty, const ReviewEntryCard()));
     // Caught up: nothing on Home; Recent Changes lives in Activity behind the bell.
-    expect(find.text('old card'), findsNothing);
     expect(find.byKey(const Key('review_entry_card')), findsNothing);
     expect(find.text('Recent Changes'), findsNothing);
 
     final some = await _provider([_task], []);
-    await tester.pumpWidget(_host(some, const ReviewEntryCard(fallback: Text('old card'))));
+    await tester.pumpWidget(_host(some, const ReviewEntryCard()));
     expect(find.byKey(const Key('review_entry_card')), findsOneWidget);
+  });
+
+  testWidgets('on launch, before Review availability is known, Home draws nothing', (tester) async {
+    final pending = Completer<ApiResult<ReviewItemsResponse>>();
+    final launching = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () => pending.future,
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])));
+    expect(launching.availability, ReviewAvailability.unknown);
+    await tester.pumpWidget(_host(launching, const ReviewEntryCard()));
+    await tester.pump();
+    expect(find.byKey(const Key('review_entry_card')), findsNothing);
   });
 }

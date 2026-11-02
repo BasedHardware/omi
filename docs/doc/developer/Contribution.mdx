@@ -1,22 +1,20 @@
 ---
-title: "Contribution Guide"
+title: "Contribution guide"
 icon: "code-pull-request"
-description: "Contribute to Omi and earn rewards! Some tasks have paid bounties."
+description: "How to contribute to Omi: product fit, the PR quality bar, and how the community works."
 ---
 
 ## Will this be accepted?
 
 Before you write code, check product fit:
 
-- Read [`PRODUCT.md`](https://github.com/BasedHardware/Omi/blob/main/PRODUCT.md) — memory-first loop, one shared chat mind, trust over cleverness, integrations harness, taste floor.
+- Read [`PRODUCT.md`](https://github.com/BasedHardware/Omi/blob/main/PRODUCT.md): memory-first loop, one shared chat mind, trust over cleverness, integrations harness, taste floor.
 - Check the [product invariant registry](https://github.com/BasedHardware/Omi/tree/main/product/invariants). Locked invariants (for example one shared transcript across notch and main chat) are binding; PRs that touch their paths must name the invariant ID.
 - **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
 
-Maintainers declining a PR for direction or taste will cite an invariant ID or open a proposed invariant the same week — so “project direction” stays written down, not tribal.
+When maintainers decline a PR for direction or taste, they cite an invariant ID or open a proposed invariant the same week. Project direction stays written down.
 
----
-
-## How to Contribute
+## How to contribute
 
 <Steps>
   <Step title="Fork the Repository">
@@ -26,17 +24,98 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
     Clone your fork, create a branch, and implement your changes.
   </Step>
   <Step title="Test Your Changes">
-    Add focused tests and include the commands or manual steps you used to verify the change. Before pushing, draft the PR body and run
-    `make preflight`, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md` to validate invariant citations and any required failure-class declaration. Use `scripts/pr-preflight --suggest` before drafting the body to get the paste-ready invariant section and failure-class guidance. The manifest-backed checks are identical locally and in CI.
+    Add focused tests. Record the commands or manual steps you used to verify the change.
+
+    Before you push, run `make preflight`. Then draft the PR body and run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md` to check invariant citations and any required failure-class declaration. Run `scripts/pr-preflight --suggest` before you draft the body to get the paste-ready invariant section and failure-class guidance. The manifest-backed checks are identical locally and in CI.
   </Step>
   <Step title="Create a Pull Request">
     Submit a PR and specify which issue it relates to. Name any product invariants your change affects.
   </Step>
 </Steps>
 
----
+## What we want most
 
-## Mobile capture changes
+- **Bug reports with reproductions.** An issue with logs, steps, or a failing test is often more valuable than a rushed fix.
+- **Apps and integrations** built on the platform. See [Apps](/doc/developer/apps/Introduction) and [open-sourcing your app](/doc/developer/apps/OpenSource).
+- **Community ports.** Windows/Linux clients, new device integrations, firmware variants.
+- **Core PRs** remain welcome under the quality bar below.
+
+Core work is occasionally posted as a [paid bounty](/doc/contribute/bounties) with a public proof spec.
+
+## Recognition
+
+Contributors who land significant work get the **Contributor role in Discord**, and the team occasionally sends hardware or credits to standout contributors. Contributors who consistently ship strong work may be invited to work more closely with the team.
+
+## Pull request quality bar
+
+Good PRs are easy to review and come with evidence that the change works.
+
+- **Bug fixes** include the regression test that would have caught the bug.
+- **Small features** can go straight to a PR when well scoped: test the core path and the main error path.
+- **Large or ambiguous features** start as an issue so maintainers can agree on scope first.
+- **Show your verification.** List the commands you ran and what they showed. "It compiles" is not evidence; exercising the real user-facing path is.
+- **Tests in CI are hermetic**: no live services, no network. Live validation is welcome as extra evidence, never as the only proof.
+- **Name product invariants** you touch (for example `INV-CHAT-1`) in the PR body.
+- **Run `make preflight`** before pushing, then `scripts/pr-preflight --pr-body-file <draft>` to validate the PR body.
+
+The repository has more specific rules for some kinds of change. Your agent or `make preflight` will point you to the relevant one; the details are below.
+
+<AccordionGroup>
+  <Accordion title="Fix classification and new checks">
+
+**Classify reactive fixes.** A `fix:` commit responds to a triggering defect
+and must declare `Failure-Class: FC-<slug> | new | none` in its PR body. A
+`harden:` commit strengthens a boundary or contract without a triggering
+incident; it may cite a class but needs no declaration. The validator is
+offline and required; its `report` command is advisory and only identifies
+classes eligible for a maintainer to mark `dormant`.
+
+**Keep instance fixes compact.** An existing-class declaration replaces the
+root-cause and durable-guard narrative. Provide that extended narrative only
+when declaring `new`, changing a class's canonical prevention primitive or
+owner, or making a registry-only lifecycle transition. An instance-fix PR never
+edits registry data. To mark a class dormant, a separate registry-only PR sets
+`status` to `dormant` with a UTC ISO-8601 `dormant_since`. When `report` flags a
+recurrence after that timestamp, merge a separate registry-only reopen PR that
+sets `status` to `open` and removes `dormant_since`, then classify the instance
+fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
+use `scripts/failure-class prepare` or `explain` for the exact field and
+relevant context.
+
+**Prefer primitives to guards.** Before adding a check or ratchet, answer in
+the PR body: "Why isn't this a shared primitive instead?" A new guard must
+cite the real merged PR or incident it would have caught; no real instance
+means the check does not land.
+
+  </Accordion>
+  <Accordion title="CI on fork PRs and the backend gate">
+
+**CI on fork PRs**: fork PRs run the cheap checks (Hygiene, Formatting, metadata, affected backend/Python units, Static Contracts, and OpenAPI). App PRs also run `Dart Analyze & Tests` (the analyzer ratchet and regular Flutter tests), including forks without `ci:full`. `Mobile Release Eligibility` fails if selected Flutter coverage did not run and pass. Once maintainers require that status on main, app PRs cannot merge without passing Flutter coverage. Generated-file checks, iOS compile, Android compile and JVM tests, emulator acceptance, seeded journeys, slow backend guardrails, and the Windows Python ACL check still wait for full CI on fork PRs. When a contribution is ready for full review, ask a maintainer to add the `ci:full` label, then use **Re-run all jobs** on the PR's latest commit. CI reads the current labels on rerun; adding a label alone does not start new workflows or cancel an in-flight run. The label persists across new commits, which then get full CI automatically. Heavy aggregate checks name this flow when coverage is deferred.
+
+**Backend hermetic gate**: every PR reports `Backend Hermetic Merge Gate`. Affected full-tier PRs run the backend E2E harness; emulator gauntlets run for their integration inputs, main, and nightly. A cheap-tier fork reports deferral instead of a green heavy-check verdict.
+
+**Behavioral tests execute production behavior.** Source-string assertions are
+static tripwires only; they do not prove lifecycle, concurrency, or integration
+behavior.
+
+  </Accordion>
+  <Accordion title="Local checks, PR metadata, and CI budget">
+
+**Fast local deterministic checks**: run `make preflight`. Selection includes staged, unstaged, and untracked files; commit-based checks still need a final run after committing. New deterministic diff-scoped checks belong in `.github/checks-manifest.yaml`, never directly in workflow YAML.
+
+**PR metadata contract check**: draft the body, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`.
+Use `scripts/pr-preflight --suggest` when you need the paste-ready invariant section. Once the branch has a PR,
+`scripts/pr-preflight` reads its current body automatically with `gh` (or set `OMI_PR_BODY_FILE`). Pre-push runs these
+same contracts. When editing only the PR body, use
+`scripts/pr-preflight --metadata-only --pr-body-file /path/to/draft-pr-body.md`.
+This runs every applicable metadata-dependent check and reports all failures together.
+CI uses this mode for title, body, and label edits; code updates still run the full preflight.
+Metadata success validates the PR description and does not replace the source-code verdict.
+
+**CI budget**: when adding or changing a workflow or job, run `python3 .github/scripts/check_ci_budget.py --refresh`, then review `.github/ci-budget.yaml`. Set a p50 runtime budget, expected PR runs per day, owner, and rationale for new jobs. A wider trigger, larger matrix, runner change, or raised budget needs an explicit budget and rationale edit in the same PR. After CI diet changes merge, re-seed measured fields with `--refresh --reseed --seed-dayruns <dayruns.tsv> --seed-dayjobs <dayjobs.tsv>` and review the diff. The checked-in caps cover PR Linux and macOS runner minutes per day and internal time-to-signal. The weekly audit samples completed PR runs with `GITHUB_TOKEN`, publishes a report artifact, and updates one tracking issue on overrun or insufficient samples.
+
+  </Accordion>
+  <Accordion title="Mobile capture and BLE changes">
 
 The [capture ownership contract](https://github.com/BasedHardware/Omi/blob/main/app/lib/services/capture/OWNERSHIP.md)
 defines constructor seams, session generations and staged recovery/foreground
@@ -50,52 +129,8 @@ For native BLE changes, distinguish a connected radio from device audio setup.
 The [device lifecycle architecture](https://github.com/BasedHardware/omi/blob/main/app/lib/services/devices/ARCHITECTURE.md)
 describes late readiness after a launch timeout and the Limitless regression path.
 
-## Pull Request Quality
-
-Good PRs are easy to review and come with evidence that the change works.
-
-- **Bug fixes** include the regression test that would have caught the bug.
-- **Classify reactive fixes.** A `fix:` commit responds to a triggering defect
-  and must declare `Failure-Class: FC-<slug> | new | none` in its PR body. A
-  `harden:` commit strengthens a boundary or contract without a triggering
-  incident; it may cite a class but needs no declaration. The validator is
-  offline and required; its `report` command is advisory and only identifies
-  classes eligible for a maintainer to mark `dormant`.
-- **Keep instance fixes compact.** An existing-class declaration replaces the
-  root-cause and durable-guard narrative. Provide that extended narrative only
-  when declaring `new`, changing a class's canonical prevention primitive or
-  owner, or making a registry-only lifecycle transition. An instance-fix PR never
-  edits registry data. To mark a class dormant, a separate registry-only PR sets
-  `status` to `dormant` with a UTC ISO-8601 `dormant_since`. When `report` flags a
-  recurrence after that timestamp, merge a separate registry-only reopen PR that
-  sets `status` to `open` and removes `dormant_since`, then classify the instance
-  fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
-  use `scripts/failure-class prepare` or `explain` for the exact field and
-  relevant context.
-- **Prefer primitives to guards.** Before adding a check or ratchet, answer in
-  the PR body: “Why isn't this a shared primitive instead?” A new guard must
-  cite the real merged PR or incident it would have caught; no real instance
-  means the check does not land.
-- **Small features** can go straight to PR when they are well scoped: test the core path and the main error path, and describe any manual verification you did.
-- **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
-- **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
-- **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
-- **CI on fork PRs** — fork PRs run the cheap checks (Hygiene, Formatting, metadata, affected backend/Python units, Static Contracts, and OpenAPI). App PRs also run `Dart Analyze & Tests` (the analyzer ratchet and regular Flutter tests), including forks without `ci:full`. `Mobile Release Eligibility` fails if selected Flutter coverage did not run and pass. Once maintainers require that status on main, app PRs cannot merge without passing Flutter coverage. Generated-file checks, iOS compile, Android compile and JVM tests, emulator acceptance, seeded journeys, slow backend guardrails, and the Windows Python ACL check still wait for full CI on fork PRs. When a contribution is ready for full review, ask a maintainer to add the `ci:full` label, then use **Re-run all jobs** on the PR's latest commit. CI reads the current labels on rerun; adding a label alone does not start new workflows or cancel an in-flight run. The label persists across new commits, which then get full CI automatically. Heavy aggregate checks name this flow when coverage is deferred.
-- **Backend hermetic gate** — every PR reports `Backend Hermetic Merge Gate`. Affected full-tier PRs run the backend E2E harness; emulator gauntlets run for their integration inputs, main, and nightly. A cheap-tier fork reports deferral instead of a green heavy-check verdict.
-- **Behavioral tests execute production behavior.** Source-string assertions are
-  static tripwires only; they do not prove lifecycle, concurrency, or integration
-  behavior.
-- **Product invariants** — if you touch paths listed on a locked invariant, name the ID (for example `INV-CHAT-1`) in the PR body.
-- **Fast local deterministic checks** — run `make preflight`. Selection includes staged, unstaged, and untracked files; commit-based checks still need a final run after committing. New deterministic diff-scoped checks belong in `.github/checks-manifest.yaml`, never directly in workflow YAML.
-- **CI budget** — when adding or changing a workflow or job, run `python3 .github/scripts/check_ci_budget.py --refresh`, then review `.github/ci-budget.yaml`. Set a p50 runtime budget, expected PR runs per day, owner, and rationale for new jobs. A wider trigger, larger matrix, runner change, or raised budget needs an explicit budget and rationale edit in the same PR. After CI diet changes merge, re-seed measured fields with `--refresh --reseed --seed-dayruns <dayruns.tsv> --seed-dayjobs <dayjobs.tsv>` and review the diff. The checked-in caps cover PR Linux and macOS runner minutes per day and internal time-to-signal. The weekly audit samples completed PR runs with `GITHUB_TOKEN`, publishes a report artifact, and updates one tracking issue on overrun or insufficient samples.
-- **PR metadata contract check** — draft the body, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`.
-  Use `scripts/pr-preflight --suggest` when you need the paste-ready invariant section. Once the branch has a PR,
-  `scripts/pr-preflight` reads its current body automatically with `gh` (or set `OMI_PR_BODY_FILE`). Pre-push runs these
-  same contracts. When editing only the PR body, use
-  `scripts/pr-preflight --metadata-only --pr-body-file /path/to/draft-pr-body.md`.
-  This runs every applicable metadata-dependent check and reports all failures together.
-  CI uses this mode for title, body, and label edits; code updates still run the full preflight.
-  Metadata success validates the PR description and does not replace the source-code verdict.
+  </Accordion>
+  <Accordion title="Released-client compatibility">
 
 Backend compatibility checks cover adopted released-client shapes in
 `contracts/client-compat/`. Preserve fields and request forms those clients use;
@@ -104,6 +139,9 @@ field: restore compatibility or version the endpoint, rather than editing a
 historical fixture. Replay uses synthetic records in the existing backend E2E
 suite; a successful build tag alone is not proof of store distribution.
 
+  </Accordion>
+  <Accordion title="Typed mobile analytics">
+
 For typed mobile analytics, add events and executable consumer references to
 `contracts/analytics/events.json`, then run
 `python3 scripts/check_event_registry.py --write` and commit the generated Dart
@@ -111,109 +149,30 @@ API and tracking plan. Preserve emitted names and properties during migration.
 The raw-call check covers adopted files; new and existing unadopted files stay
 unrestricted. See `app/lib/utils/analytics/registry/REGISTRY.md` for batch tests.
 
+  </Accordion>
+</AccordionGroup>
+
 ### Contributing with an AI agent
 
 Omi is built to be agent-friendly. If you use an AI coding agent, it will automatically pick up [`AGENTS.md`](https://github.com/BasedHardware/Omi/blob/main/AGENTS.md) at the repo root (plus per-component guides in `backend/`, `app/`, and `desktop/macos/`). The root guide routes to component instructions and repository conventions. The PR quality requirements above apply to all contributions; maintainer-machine instructions apply only when using those machines.
 
----
+## Documentation contributions
 
-## Documentation Contributions
+Docs live in the [GitHub docs folder](https://github.com/BasedHardware/Omi/tree/main/docs) and sync with [docs.omi.me](https://docs.omi.me). The docs have a style guide and deterministic checks (broken links, navigation, generated pages). See [`docs/AGENTS.md`](https://github.com/BasedHardware/Omi/blob/main/docs/AGENTS.md) before writing.
 
-Docs contributions are just as important as code contributions! Our docs are located in the [GitHub docs folder](https://github.com/BasedHardware/Omi/tree/main/docs) and sync in real-time with [docs.omi.me](https://docs.omi.me).
-
-<Tip>
-You can edit docs directly from GitHub: Fork the repo → [click the edit icon](https://share.cleanshot.com/dkBSffGr) → click "Preview" → create a pull request.
-</Tip>
-
----
-
-## Contribution Rewards
-
-Get rewarded for approved PRs with significant contributions:
+## Get started
 
 <CardGroup cols={2}>
-  <Card title="1 PR" icon="gift">
-    Free DevKit device (necklace or glasses, depending on contribution area)
+  <Card title="Development setup" icon="wrench" href="/doc/developer/AppSetup">
+    Run the app, backend, and firmware locally
   </Card>
-  <Card title="2 PRs" icon="coins">
-    $100 of transcription credits
+  <Card title="Bounties" icon="money-bill" href="/doc/contribute/bounties">
+    Team-posted paid tasks with a proof spec
   </Card>
-  <Card title="5 PRs" icon="star">
-    $500 of transcription credits + special Contributor role in Discord
+  <Card title="Community & code of conduct" icon="users" href="/doc/contribute/community">
+    Discord, conduct, and contacts
   </Card>
-  <Card title="10 PRs" icon="plane">
-    Trip to hang out with the Based Hardware team
-  </Card>
-</CardGroup>
-
-### What Qualifies as a Significant Contribution?
-
-<AccordionGroup>
-  <Accordion title="Time Investment" icon="clock">
-    Something you spent 5+ hours on. Can be multiple smaller contributions that add up.
-  </Accordion>
-  <Accordion title="Impact" icon="bolt">
-    Either a new feature or a major bug fix.
-  </Accordion>
-  <Accordion title="Quality" icon="check">
-    Quality code with clear explanations, focused tests, and verification notes.
-  </Accordion>
-</AccordionGroup>
-
-<Info>
-To claim your reward, email [team@basedhardware.com](mailto:team@basedhardware.com) with:
-- List of your contributions
-- Your address
-- Email and phone number
-</Info>
-
----
-
-## Paid Bounties
-
-Get paid to improve AI wearables!
-
-<Card title="View Paid Bounties" icon="money-bill" href="https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22">
-  Browse open issues with the "Paid Bounty" label
-</Card>
-
-### Bounty Rules
-
-| Rule | Description |
-|------|-------------|
-| Code must be merged | Your code must be merged into the master branch |
-| Eligibility | Bounty eligibility is solely at our discretion |
-| Locking a task | You can "lock" a bounty task, but only after your first PR is merged |
-| Claiming payment | Email [team@basedhardware.com](mailto:team@basedhardware.com) with bounty link + PayPal account |
-
-### No Bounties Available?
-
-If there are no paid bounties available, you can suggest your own:
-
-<Steps>
-  <Step title="Browse Open Issues">
-    Filter by [open issues](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue) without the "bounty" label.
-  </Step>
-  <Step title="Suggest a Bounty">
-    Comment on the issue and ping @josancamon19 or @kodjima33 with your bounty suggestion.
-  </Step>
-</Steps>
-
----
-
-## Get Started
-
-<CardGroup cols={2}>
   <Card title="GitHub Issues" icon="github" href="https://github.com/BasedHardware/Omi/issues">
-    Browse all open issues
-  </Card>
-  <Card title="Paid Bounties" icon="money-bill" href="https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22">
-    View issues with bounties
-  </Card>
-  <Card title="Discord" icon="discord" href="http://discord.omi.me">
-    Join the community
-  </Card>
-  <Card title="Documentation" icon="book" href="https://github.com/BasedHardware/Omi/tree/main/docs">
-    Contribute to docs
+    Browse open issues
   </Card>
 </CardGroup>

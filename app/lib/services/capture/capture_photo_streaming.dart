@@ -57,7 +57,8 @@ extension _CapturePhotoStreaming on CaptureController {
             id: tempId,
             emit: (payload) async {
               if (generation != _photoStreamGeneration) return;
-              if (_socket?.state == SocketServiceState.connected) {
+              if (_socket?.state == SocketServiceState.connected &&
+                  !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
                 _socket?.send(payload);
               }
             },

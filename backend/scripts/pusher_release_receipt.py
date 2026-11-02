@@ -16,6 +16,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,29 +24,17 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "backend") not in sys.path:
+    sys.path.insert(0, str(ROOT / "backend"))
+
+# One fingerprint for writer and verifier: the dev qualification records
+# exactly what the production promotion recomputes.
+from scripts.verify_pusher_promotion_evidence import contract_fingerprint  # noqa: E402
+
 DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 SHA_RE = re.compile(r"^[a-f0-9]{40}$")
 RECEIPT_SCHEMA_VERSION = 1
 QUALIFICATION_SCHEMA_VERSION = 2
-CONTRACT_FILES = (
-    ROOT / "backend/scripts/pusher_release_receipt.py",
-    ROOT / "backend/scripts/pusher_semantic_probe.py",
-    ROOT / "backend/scripts/pusher_prod_canary.py",
-    ROOT / "backend/scripts/verify_pusher_live_alert_route.py",
-    ROOT / "backend/scripts/runtime_env_capability_contracts.py",
-    ROOT / "backend/scripts/runtime_env_validation/manifest.py",
-    ROOT / "backend/scripts/validate-backend-runtime-env.py",
-    ROOT / "backend/config/memory_rollout.py",
-    ROOT / "backend/deploy/runtime_env/_base.yaml",
-    ROOT / "backend/deploy/runtime_env/dev.overlay.yaml",
-    ROOT / "backend/deploy/runtime_env/prod.overlay.yaml",
-    ROOT / "backend/deploy/runtime_env.yaml",
-    ROOT / "backend/scripts/verify_pusher_promotion_evidence.py",
-    ROOT / "backend/testing/release_fixtures/transcription-release-probe.json",
-    ROOT / "backend/testing/release_fixtures/transcription-release-probe.wav",
-    ROOT / ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
-    ROOT / ".github/workflows/gcp_backend_pusher.yml",
-)
 
 
 class ReceiptError(ValueError):
@@ -55,12 +44,6 @@ class ReceiptError(ValueError):
 def _canonical_sha256(value: Any) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     return "sha256:" + hashlib.sha256(payload).hexdigest()
-
-
-def contract_fingerprint() -> str:
-    return _canonical_sha256(
-        {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in CONTRACT_FILES}
-    )
 
 
 def _run_json(command: list[str]) -> dict[str, Any]:
@@ -215,7 +198,7 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
             if http_get is not None:
                 http_get.setdefault("scheme", "HTTP")
     # The API server marshals env value with omitempty, so a Helm-rendered
-    # `value: ""` (e.g. FREE_TIER_LOCAL_PROCESSING_COHORT from an unset repo
+    # `value: ""` (e.g. an optional ConfigMap entry from an unset repo
     # variable) is stored and read back as {name} without the value key. Strip
     # the empty value key from the rendered projection before hashing, the same
     # way this projection already normalizes probe defaults and quantities.

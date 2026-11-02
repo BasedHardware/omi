@@ -9,15 +9,57 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// The one-tap ChatGPT path: opens Omi's approved listing in the ChatGPT app (or the browser). The
 /// person approves there; the caller reloads its state when the app comes back to the foreground.
-Future<void> showChatGptConnectSheet(BuildContext context) {
-  return showOmiSheet<void>(
+///
+/// When ChatGPT already holds a grant that is missing access ([AgentConnections.chatGptNeedsReconnect]),
+/// the sheet also offers Disconnect, so a partial grant can always be revoked from the app. Resolves
+/// `true` after a disconnect.
+Future<bool?> showChatGptConnectSheet(
+  BuildContext context, {
+  AgentConnectService? service,
+  AgentConnections? connections,
+}) {
+  return showOmiSheet<bool>(
     context: context,
-    builder: (context) => const ChatGptConnectSheet(),
+    builder: (context) => ChatGptConnectSheet(service: service, connections: connections),
   );
 }
 
-class ChatGptConnectSheet extends StatelessWidget {
-  const ChatGptConnectSheet({super.key});
+class ChatGptConnectSheet extends StatefulWidget {
+  const ChatGptConnectSheet({super.key, this.service, this.connections});
+
+  final AgentConnectService? service;
+  final AgentConnections? connections;
+
+  @override
+  State<ChatGptConnectSheet> createState() => _ChatGptConnectSheetState();
+}
+
+class _ChatGptConnectSheetState extends State<ChatGptConnectSheet> {
+  bool _disconnecting = false;
+
+  Future<void> _disconnect() async {
+    final service = widget.service;
+    final connections = widget.connections;
+    if (service == null || connections == null) return;
+    final l10n = context.l10n;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.disconnectChatGptQuestion,
+      message: l10n.disconnectChatGptMessage,
+      confirmLabel: l10n.disconnect,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _disconnecting = true);
+    try {
+      await service.disconnectChatGpt(connections);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _disconnecting = false);
+      OmiFeedback.error(context, l10n.connectAgentActionFailed, actionLabel: l10n.tryAgain, onAction: _disconnect);
+    }
+  }
 
   Future<void> _open(BuildContext context) async {
     final opened = await launchUrl(chatGptDirectoryUrl, mode: LaunchMode.externalApplication);
@@ -32,6 +74,7 @@ class ChatGptConnectSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final canDisconnect = widget.service != null && (widget.connections?.chatGptConnected ?? false);
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -71,6 +114,16 @@ class ChatGptConnectSheet extends StatelessWidget {
             expand: true,
             onPressed: () => _open(context),
           ),
+          if (canDisconnect) ...[
+            const SizedBox(height: OmiSpacing.xs),
+            OmiButton.destructive(
+              key: const ValueKey('connect_chatgpt_disconnect'),
+              label: l10n.disconnectChatGpt,
+              expand: true,
+              isLoading: _disconnecting,
+              onPressed: _disconnecting ? null : _disconnect,
+            ),
+          ],
           const SizedBox(height: OmiSpacing.md),
         ],
       ),

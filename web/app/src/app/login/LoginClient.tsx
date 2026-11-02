@@ -14,6 +14,7 @@ import { isFirebaseAuthConfigured } from '@/lib/firebase';
 import { safeNextPath } from '@/lib/loginNext';
 import {
   claimReferralTrial,
+  ReferralClaimError,
   navigateToDesktopDownload,
   parseReferralEnvironment,
 } from '@/lib/referrals';
@@ -75,9 +76,30 @@ export function LoginClient() {
   const [error, setError] = useState<string | null>(null);
   const [referralClaimFailure, setReferralClaimFailure] = useState<string | null>(null);
   const referralClaimStarted = useRef(false);
+  const [canRetryReferral, setCanRetryReferral] = useState(false);
+  const claimAttempt = useRef(0);
+  const claimMounted = useRef(true);
+  const claimOwner = useRef<{
+    uid: string | null;
+    code: string | null;
+    environment: string | null;
+  }>({ uid: null, code: null, environment: null });
   const referralCode = searchParams.get('referral');
   const referralEnvironment = parseReferralEnvironment(searchParams.get('environment'));
   const isReferralFlow = Boolean(referralCode && referralEnvironment);
+  claimOwner.current = {
+    uid: user?.uid ?? null,
+    code: referralCode,
+    environment: referralEnvironment,
+  };
+  useEffect(() => {
+    claimMounted.current = true;
+    return () => {
+      claimMounted.current = false;
+      claimAttempt.current++;
+      referralClaimStarted.current = false;
+    };
+  }, []);
   const afterLogin = safeNextPath(searchParams.get('next'));
   const signInUnavailable = !isFirebaseAuthConfigured;
   const statusMessage =
@@ -97,27 +119,49 @@ export function LoginClient() {
   }, []);
 
   const finishReferral = useCallback(async () => {
-    if (!referralCode || !referralEnvironment || referralClaimStarted.current) {
+    const uid = user?.uid;
+    if (!uid || !referralCode || !referralEnvironment || referralClaimStarted.current)
       return;
-    }
     referralClaimStarted.current = true;
+    setReferralClaimFailure(null);
+    setCanRetryReferral(false);
+    const attempt = ++claimAttempt.current;
+    const isCurrent = () =>
+      claimMounted.current &&
+      claimAttempt.current === attempt &&
+      claimOwner.current.uid === uid &&
+      claimOwner.current.code === referralCode &&
+      claimOwner.current.environment === referralEnvironment;
     try {
-      const result = await claimReferralTrial(referralCode, referralEnvironment);
-      PostHogManager.track('Referral Signup Completed', {
-        claimed: result.claimed,
+      const result = await claimReferralTrial(referralCode, referralEnvironment, {
+        isCurrent,
       });
+      if (!isCurrent()) return;
+      PostHogManager.track('Referral Signup Completed', { claimed: result.claimed });
       if (!result.claimed) {
-        referralClaimStarted.current = false;
         setReferralClaimFailure('This free month is only available to new accounts.');
         return;
       }
       navigateToDesktopDownload();
     } catch (claimError) {
-      referralClaimStarted.current = false;
-      setReferralClaimFailure('We could not apply this referral. Please try again.');
-      console.error(claimError);
+      if (!isCurrent()) return;
+      const retryable =
+        !(claimError instanceof ReferralClaimError) || claimError.retryable;
+      setCanRetryReferral(retryable);
+      setReferralClaimFailure(
+        retryable
+          ? 'We could not apply this referral. Please try again.'
+          : 'This referral could not be applied to your account. You can continue to Omi.',
+      );
     }
-  }, [referralCode, referralEnvironment]);
+  }, [user?.uid, referralCode, referralEnvironment]);
+
+  useEffect(() => {
+    claimAttempt.current++;
+    referralClaimStarted.current = false;
+    setReferralClaimFailure(null);
+    setCanRetryReferral(false);
+  }, [user?.uid, referralCode, referralEnvironment]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -179,6 +223,18 @@ export function LoginClient() {
             Referral unavailable
           </h1>
           <p className="mt-2 text-sm text-text-tertiary">{referralClaimFailure}</p>
+          {canRetryReferral && (
+            <button
+              type="button"
+              onClick={() => {
+                referralClaimStarted.current = false;
+                void finishReferral();
+              }}
+              className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-white px-5 font-medium text-black hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              Try again
+            </button>
+          )}
           <a
             href="https://macos.omi.me"
             className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-white px-5 font-medium text-black hover:bg-gray-100"
@@ -259,7 +315,7 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.1 }}
               className="mb-1 text-center font-display text-2xl font-semibold text-text-primary"
             >
-              {isReferralFlow ? 'One free month of Pro' : 'Omi'}
+              {isReferralFlow ? 'One free month of Omi Pro' : 'Omi'}
             </motion.h1>
 
             {/* Tagline */}

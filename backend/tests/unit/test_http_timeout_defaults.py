@@ -17,10 +17,13 @@ explicit ``timeout=``. If you have a legitimate unbounded call, set
 """
 
 import ast
+from collections import deque
 import os
 import re
 import shutil
 import subprocess
+
+import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UTILS_DIR = os.path.join(BACKEND_DIR, 'utils')
@@ -35,6 +38,22 @@ def _has_timeout(node: ast.Call) -> bool:
     return any(kw.arg == 'timeout' for kw in node.keywords)
 
 
+def _call_nodes(tree: ast.AST):
+    """Keep every call and its order without walking names/constants/contexts."""
+    pending = deque([tree])
+    while pending:
+        node = pending.popleft()
+        if isinstance(node, ast.Call):
+            yield node
+        # These grammar leaves cannot contain another call. In particular,
+        # keep all other expressions, decorators, annotations and defaults.
+        pending.extend(
+            child
+            for child in ast.iter_child_nodes(node)
+            if child._fields and not isinstance(child, (ast.Name, ast.Constant))
+        )
+
+
 def _violations_in_file(filepath: str) -> list:
     with open(filepath, 'rb') as f:
         source_bytes = f.read()
@@ -47,8 +66,8 @@ def _violations_in_file(filepath: str) -> list:
 
     found = []
 
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or _has_timeout(node):
+    for node in _call_nodes(tree):
+        if _has_timeout(node):
             continue
         func = node.func
         # httpx.<one-shot>(...) with no timeout
@@ -77,6 +96,21 @@ def _candidate_files():
             raise RuntimeError(result.stderr.decode('utf-8', errors='replace'))
         return [path.decode() for path in result.stdout.split(b'\0') if path]
 
+    if shutil.which('git'):
+        # Checkout runners always have Git but need not have ripgrep. Use its
+        # native scanner rather than reading every Python file in this process.
+        # --no-index also includes untracked/ignored files and works outside a
+        # checkout; the broader name prefilter leaves the AST rule unchanged.
+        result = subprocess.run(
+            ['git', 'grep', '--no-index', '-l', '-z', '-E', 'httpx|OpenAI', '--', '*.py'],
+            cwd=UTILS_DIR,
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode not in (0, 1):
+            raise RuntimeError(result.stderr.decode('utf-8', errors='replace'))
+        return [os.path.join(UTILS_DIR, path.decode()) for path in result.stdout.split(b'\0') if path]
+
     return [
         os.path.join(root, name)
         for root, _dirs, files in os.walk(UTILS_DIR)
@@ -98,3 +132,49 @@ def test_utils_outbound_calls_pin_timeout():
         "default). Pass timeout=<seconds>, or timeout=None to opt out on purpose:\n"
         + "\n".join(f"  {f}: {hits}" for f, hits in sorted(offenders.items()))
     )
+
+
+@pytest.mark.parametrize(
+    'source, expected',
+    [
+        ('OpenAI()', [(1, 'OpenAI()')]),
+        ('AsyncOpenAI(timeout=2)', []),
+        ('httpx.get("url")', [(1, 'httpx.get')]),
+        ('httpx.post("url", timeout=0.1)', []),
+        ('def f():\n    return {"x": httpx.get("url")}', [(2, 'httpx.get')]),
+        ('nested(OpenAI(), httpx.get("url"))', [(1, 'OpenAI()'), (1, 'httpx.get')]),
+        ('text = "OpenAI()"\nnamespace.OpenAI()', []),
+        ('hint = "httpx.get("\nℎttpx.get("url")', [(2, 'httpx.get')]),
+        ('@decorator(OpenAI())\ndef f(x=AsyncOpenAI()):\n    return x', [(2, 'AsyncOpenAI()'), (1, 'OpenAI()')]),
+    ],
+)
+def test_timeout_guard_retains_ast_call_coverage(tmp_path, source, expected):
+    path = tmp_path / 'example.py'
+    path.write_text(source, encoding='utf-8')
+    assert _violations_in_file(str(path)) == expected
+
+
+def test_git_fallback_includes_hidden_untracked_and_ignored_python(tmp_path, monkeypatch):
+    directory = tmp_path / 'utils'
+    (directory / '.hidden').mkdir(parents=True)
+    (directory / 'sub dir').mkdir()
+    (directory / '.gitignore').write_text('ignored.py\n', encoding='utf-8')
+    expected = [directory / '.hidden' / 'client.py', directory / 'sub dir' / 'client.py', directory / 'ignored.py']
+    for path in expected:
+        path.write_text('OpenAI()\n', encoding='utf-8')
+    (directory / 'notes.txt').write_text('OpenAI()\n', encoding='utf-8')
+    (directory / 'plain.py').write_text('value = 1\n', encoding='utf-8')
+    original_which = shutil.which
+    monkeypatch.setattr(shutil, 'which', lambda name: None if name == 'rg' else original_which(name))
+    monkeypatch.setitem(globals(), 'UTILS_DIR', str(directory))
+    assert set(_candidate_files()) == {str(path) for path in expected}
+
+
+def test_python_fallback_remains_available_without_search_binaries(tmp_path, monkeypatch):
+    directory = tmp_path / 'utils'
+    directory.mkdir()
+    path = directory / 'client.py'
+    path.write_text('OpenAI()\n', encoding='utf-8')
+    monkeypatch.setattr(shutil, 'which', lambda name: None)
+    monkeypatch.setitem(globals(), 'UTILS_DIR', str(directory))
+    assert _candidate_files() == [str(path)]

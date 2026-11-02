@@ -66,7 +66,7 @@ final class ConversationSummaryCompositionTests: XCTestCase {
     XCTAssertFalse(rendered.contains("Blank heading must stay hidden"))
     XCTAssertFalse(rendered.contains("##"))
 
-    // Drive the actual focusable timestamp, independent of its text width or spacing below prose.
+    // Drive the section's actual focusable sources control through a real event pair.
     let sourceButton = try XCTUnwrap(
       descendants(NSView.self, from: host).first {
         String(describing: type(of: $0)) == "_FocusRingView"

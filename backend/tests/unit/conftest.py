@@ -1,8 +1,10 @@
 """Shared unit-test fallbacks for optional import-time dependencies."""
 
+import atexit
 from contextlib import contextmanager
 import importlib.util
 import os
+import shutil
 import tempfile
 
 # Unit tests never build a real Google client from the developer's or agent's ambient credentials:
@@ -10,8 +12,10 @@ import tempfile
 # on agent hosts). ADC points at a file google-auth rejects without any network call, and gcloud
 # gets an empty config, so an accidental client fails at once instead of authenticating.
 # Integration suites keep their configured credentials; emulator-backed runs are left alone.
+# Every pytest process (each xdist worker included) makes its own stub dir and removes it at exit.
 if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
     _no_credentials_dir = tempfile.mkdtemp(prefix='omi-unit-no-adc-')
+    atexit.register(shutil.rmtree, _no_credentials_dir, ignore_errors=True)
     _no_credentials_file = os.path.join(_no_credentials_dir, 'adc.json')
     with open(_no_credentials_file, 'w', encoding='utf-8') as handle:
         handle.write('{"type": "omi_unit_tests_have_no_google_credentials"}')
@@ -27,6 +31,17 @@ import pytest
 
 # Capture the pure resolver boundary before legacy suites replace package objects.
 import config.rollout_cohorts as _rollout_cohorts
+
+
+@pytest.fixture(scope='session', autouse=True)
+def legacy_offline_spend_policy():
+    # Component fixtures have fake storage/providers but no funded subscription.
+    # Keep billing admission explicit: the offline spend contract suite unsets
+    # this value to test the production default; boundary tests enable it.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
+        yield
+
 
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
@@ -259,7 +274,20 @@ def _reset_live_stt_fleet_health():
         # starts with closed family circuits, including account quarantine.
         from utils.stt import streaming
 
-        with streaming._family_circuits_lock:
+        # Import-isolation stubs register a bare streaming module. They have no
+        # family circuits to reset, and touching the missing lock fails the next file.
+        lock = getattr(streaming, '_family_circuits_lock', None)
+        circuits = (
+            getattr(streaming, '_parakeet_circuit', None),
+            getattr(streaming, '_deepgram_circuit', None),
+            getattr(streaming, '_modulate_circuit', None),
+            getattr(streaming, '_soniox_circuit', None),
+        )
+        identity = getattr(streaming, '_family_circuits_identity', None)
+        if lock is None or identity is None or any(circuit is None for circuit in circuits):
+            yield
+            return
+        with lock:
             for circuit in (
                 streaming._parakeet_circuit,
                 streaming._deepgram_circuit,

@@ -14,10 +14,12 @@ from android_startup_smoke import apk_identity, assert_healthy, run_smoke, scree
 
 class StartupTests(unittest.TestCase):
     def test_survival_is_not_enough_without_rendered_first_run_screen(self):
-        for ui in ("", "Startup failed", "Recovering Omi", "Splash screen"):
+        # "Get Started" belongs to the welcome page retired in #23352; a dump
+        # carrying it must no longer pass the first-run screen assertion.
+        for ui in ("", "Startup failed", "Recovering Omi", "Splash screen", "Get Started"):
             with self.subTest(ui=ui), self.assertRaisesRegex(ValueError, "render"):
                 assert_healthy("", "com.friend.ios.dev", "12", "12", "boot", "boot", ui)
-        assert_healthy("", "com.friend.ios.dev", "12", "12", "boot", "boot", "Get Started")
+        assert_healthy("", "com.friend.ios.dev", "12", "12", "boot", "boot", "Speak. Transcribe. Summarize.")
 
     def test_native_fatal_dart_fatal_anr_or_restart_fail(self):
         for log in (
@@ -26,13 +28,13 @@ class StartupTests(unittest.TestCase):
             "Unhandled Exception: boot failed",
         ):
             with self.subTest(log=log), self.assertRaisesRegex(ValueError, "exception|ANR"):
-                assert_healthy(log, "com.friend.ios.dev", "12", "12", "boot", "boot", "Get Started")
+                assert_healthy(log, "com.friend.ios.dev", "12", "12", "boot", "boot", "Speak. Transcribe. Summarize.")
         for pid, current_pid, boot in (("", "", "boot"), ("12", "13", "boot"), ("12", "12", "new-boot")):
             with self.subTest(pid=pid), self.assertRaises(ValueError):
-                assert_healthy("", "com.friend.ios.dev", pid, current_pid, "boot", boot, "Get Started")
+                assert_healthy("", "com.friend.ios.dev", pid, current_pid, "boot", boot, "Speak. Transcribe. Summarize.")
 
     def test_multiline_accessibility_capture_and_failed_or_wrong_app_probe(self):
-        xml = '<screen package="com.friend.ios.dev"><node description="multi\nline"/><node description="Get Started"/></screen>'
+        xml = '<screen package="com.friend.ios.dev"><node description="multi\nline"/><node description="Speak. Transcribe. Summarize."/></screen>'
         dump = "INSTRUMENTATION_RESULT: screen=" + xml + "\nINSTRUMENTATION_CODE: -1"
         self.assertEqual(screen_from_instrumentation(dump, "com.friend.ios.dev"), xml)
         for invalid in (
@@ -86,7 +88,7 @@ class StartupTests(unittest.TestCase):
                     if command == ("shell", "pm", "path", "com.omi.fgsprobe"):
                         return "package:/data/app/probe.apk"
                     if command[:4] == ("shell", "am", "instrument", "-w"):
-                        return 'INSTRUMENTATION_RESULT: screen=<screen package="com.friend.ios.dev">Get Started</screen>\nINSTRUMENTATION_CODE: -1'
+                        return 'INSTRUMENTATION_RESULT: screen=<screen package="com.friend.ios.dev">Speak. Transcribe. Summarize.</screen>\nINSTRUMENTATION_CODE: -1'
                     if command[0] == "logcat" and "-d" in command:
                         return "Process: com.friend.ios.dev, PID: 12" if fatal else ""
                     return ""

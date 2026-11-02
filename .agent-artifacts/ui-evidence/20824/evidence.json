@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-meeting-brief-calendar-enabled.png",
+      "platform": "desktop-macos",
+      "description": "Live pilot app with Meeting Briefs enabled after the Calendar grant; permissions and settings proof only, not a source-matched card",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-desktop-macos-meeting-brief-card-fixture.png",
+      "platform": "desktop-macos",
+      "description": "Meeting brief card rendered from synthetic, cited test data; a UI fixture, not a live matched calendar meeting",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-meeting-brief-live-card.png",
+      "platform": "desktop-macos",
+      "description": "Live source-matched brief card in the pilot bundle against production: the prior meeting was linked to the same system-calendar event and shown before its next occurrence (Decided + Open question)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-desktop-macos-meeting-brief-live-source.png",
+      "platform": "desktop-macos",
+      "description": "Clicking the Decided line opens the source conversation with the transcript focused on the cited segment",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

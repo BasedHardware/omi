@@ -100,10 +100,20 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 
 
 @tool
-def search_files_tool(question: str, file_ids: Optional[List[str]] = None, config: RunnableConfig = None) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+def search_files_tool(
+    question: str,
+    file_ids: Optional[List[str]] = None,
+    start_seconds: Optional[float] = None,
+    end_seconds: Optional[float] = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+) -> str:
     """
     Search and ask questions about files attached to the current chat session.
-    Use this when the user asks about documents, images, PDFs, or any files they've uploaded.
+    Use this when the user asks about documents, images, videos, PDFs, or any files they've uploaded.
+
+    A video is stored as one numbered image of a few frames plus its audio transcript. To look
+    closer at part of a video (what happened at 0:12, a detail that changes), pass
+    start_seconds and end_seconds; that answers from up to six frames inside the span.
 
     The conversation history shows which files are attached to which messages in the format:
     [Files attached: X file(s), IDs: file_id_1, file_id_2, ...]
@@ -118,6 +128,8 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
     Args:
         question: The specific question to ask about the files
         file_ids: Optional list of specific file IDs to search. If not provided, searches all session files.
+        start_seconds: Optional start of a video span to look at closely.
+        end_seconds: Optional end of that span (defaults to start_seconds + 5).
 
     Returns:
         Answer based on the file contents
@@ -171,7 +183,12 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
 
         # Use FileChatTool to query files
         fc_tool = FileChatTool(uid, chat_session_id)
-        answer = fc_tool.process_chat_with_file(question, file_ids_to_search)
+        video_window = None
+        if start_seconds is not None or end_seconds is not None:
+            start = max(0.0, float(start_seconds if start_seconds is not None else max(0.0, (end_seconds or 0) - 5)))
+            end = max(start, float(end_seconds if end_seconds is not None else start + 5))
+            video_window = (start, end)
+        answer = fc_tool.process_chat_with_file(question, file_ids_to_search, video_window)
 
         return answer
 

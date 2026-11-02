@@ -20,7 +20,7 @@ MCP events are captured through a dedicated PostHog client configured with
 `POSTHOG_EVENTS_API_KEY`; when that key is unset, capture falls back to the
 generic event client (`POSTHOG_PROJECT_API_KEY`, then `POSTHOG_API_KEY`). The
 events key is scoped to MCP only — non-MCP integration events never use it,
-and feature-flag/JIT decisions always use `POSTHOG_PROJECT_API_KEY` directly.
+and server-side feature-flag decisions use `POSTHOG_PROJECT_API_KEY` directly.
 
 ## `mcp_request` structured log
 

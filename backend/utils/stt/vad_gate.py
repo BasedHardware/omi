@@ -12,7 +12,7 @@ Modes (VAD_GATE_MODE env var):
 """
 
 import audioop
-from utils.stt_cap_dispatch import suppress_socket_audio
+from utils.stt_cap_dispatch import suppress_socket_audio, set_cap_capture
 
 import logging
 import os
@@ -32,6 +32,7 @@ from utils.metrics import (
     OMI_VAD_GATE_SESSIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_loop import listen_loop_metrics_enabled, record_vad_windows
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.socket import STTSocket
 from utils.stt.local_vad import (
@@ -200,6 +201,13 @@ class VADStreamingGate:
         self._vad_context: np.ndarray[Any, Any]
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
         self._vad_inference_lock = threading.Lock()
+        self._count_vad_windows = listen_loop_metrics_enabled()
+        # D2 edge shadow (utils/stt/edge_shadow.py): None unless this session
+        # is mirrored. Windows scored since this gate (re)started, and the
+        # probabilities of the last chunk when tapped.
+        self.edge_tap: Any = None
+        self._vad_windows_scored = 0
+        self._tap_probs: Optional[List[float]] = None
         start = VAD_GATE_SPEECH_THRESHOLD if speech_threshold is None else speech_threshold
         cont = start if continue_threshold is None else continue_threshold
         self._speech_threshold = start
@@ -271,6 +279,10 @@ class VADStreamingGate:
             self._vad_state, self._vad_context = make_fresh_state()
             self._vad_buffer = np.array([], dtype=np.float32)
             self._pcm_remainder = b''
+            self._vad_windows_scored = 0
+            if self.edge_tap is not None:
+                # Fresh VAD state: to the edge this is a new gate.
+                self.edge_tap = self.edge_tap.renew()
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0  # type: ignore[reportPrivateUsage]  # sync internal mapper cursor
             logger.info(
@@ -321,6 +333,18 @@ class VADStreamingGate:
 
         return data_int16.astype(np.float32) / 32768.0
 
+    def _report_to_edge(self, report: Callable[[], None]) -> None:
+        """Run an edge-shadow report; a failure detaches the tap, never the gate."""
+        try:
+            report()
+        except Exception:
+            logger.warning('edge shadow tap failed; detaching session=%s', self.session_id)
+            self.edge_tap = None
+
+    def decision_params(self) -> Tuple[float, float, float]:
+        """(start threshold, continue threshold, hangover ms) for the edge shadow."""
+        return self._speech_threshold, self._continue_threshold, self._hangover_ms
+
     def _decision_threshold(self) -> float:
         """Start threshold in SILENCE; continue threshold once speech is established."""
         if self._state in (GateState.SPEECH, GateState.HANGOVER):
@@ -337,6 +361,8 @@ class VADStreamingGate:
         Buffers samples across chunks to handle cases where chunk size < window size.
         """
         with self._vad_inference_lock:
+            started = time.perf_counter() if self._count_vad_windows else 0.0
+            windows = 0
             float_data = self._convert_for_vad(pcm_data)
 
             # Always append to buffer for cross-chunk accumulation
@@ -355,6 +381,9 @@ class VADStreamingGate:
                     prob, self._vad_state, self._vad_context = run_vad_window(
                         window, self._vad_state, self._vad_context
                     )
+                    windows += 1
+                    if self._tap_probs is not None:
+                        self._tap_probs.append(prob)
                     if prob > threshold:
                         is_speech = True
                     else:
@@ -365,6 +394,9 @@ class VADStreamingGate:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
             self._last_vad_mixed = is_speech and saw_silence
+            self._vad_windows_scored += windows
+            if self._count_vad_windows:
+                record_vad_windows(windows, time.perf_counter() - started)
             return is_speech
 
     def process_audio(
@@ -400,10 +432,23 @@ class VADStreamingGate:
         self._audio_cursor_ms += chunk_ms
 
         vad_pcm = pcm_data
+        scored_copy = False
         if score_pcm is not None and len(score_pcm) == len(pcm_data):
             vad_pcm = score_pcm
+            scored_copy = True
         self._last_vad_mixed = False
-        is_speech = self._run_vad(vad_pcm)
+        tap = self.edge_tap
+        if tap is None:
+            is_speech = self._run_vad(vad_pcm)
+        else:
+            first_ordinal = self._vad_windows_scored
+            self._tap_probs = []
+            try:
+                is_speech = self._run_vad(vad_pcm)
+                probs = self._tap_probs
+            finally:
+                self._tap_probs = None
+            self._report_to_edge(lambda: tap.chunk(self, start_sample, first_ordinal, probs, agc=scored_copy))
         if start_sample is not None and n_samples > 0:
             self._speech_frames.append(
                 (start_sample, start_sample + n_samples, None if self._last_vad_mixed else is_speech)
@@ -534,6 +579,10 @@ class VADStreamingGate:
             if is_speech:
                 # Transition: SILENCE → SPEECH
                 self._state = GateState.SPEECH
+                tap = self.edge_tap
+                preroll_start = self._pre_roll[0][1]
+                if tap is not None and start_sample is not None and preroll_start is not None:
+                    self._report_to_edge(lambda: tap.opened(start_sample, preroll_start))
                 # Emit pre-roll + current chunk
                 pre_roll_audio = b''.join(chunk for chunk, _ in self._pre_roll)
                 send_spans = self._spans_of(self._pre_roll)
@@ -796,11 +845,12 @@ class GatedSTTSocket(STTSocket):
 
     def send(self, data: bytes, wall_time: Optional[float] = None, start_sample: Optional[int] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
-        if suppress_socket_audio(self._conn, data):
+        if suppress_socket_audio(self._conn, data, start_sample=start_sample):
             return True
         if self.is_connection_dead:
             return False
         if self._gate is None:
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(self._counted(data))
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
                 self._send_tracker.send_path = 'direct_recorded'
@@ -821,6 +871,7 @@ class GatedSTTSocket(STTSocket):
             )
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(data)
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
                 self._send_tracker.send_path = 'direct_recorded'
@@ -834,9 +885,11 @@ class GatedSTTSocket(STTSocket):
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(self._counted(data))
             sent_spans = ((start_sample, len(data) // 2),) if start_sample is not None else ()
         elif gate_out.audio_to_send:
+            set_cap_capture(self._conn, gate_out.audio_to_send, gate_out.send_spans)
             accepted = self._conn.send(self._counted(gate_out.audio_to_send))
             sent_spans = gate_out.send_spans
         else:
@@ -888,6 +941,7 @@ class GatedSTTSocket(STTSocket):
         if not data:
             return True
         self._idle_send_spans = spans
+        set_cap_capture(self._conn, data, spans)
         accepted = self._conn.send(data)
         if accepted and self._send_tracker is not None and spans:
             self._send_tracker.note_accepted_spans(spans)

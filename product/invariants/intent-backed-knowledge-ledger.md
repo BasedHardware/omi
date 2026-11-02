@@ -31,46 +31,39 @@ silently bypass, the currently locked tiered lifecycle.
   user-knowledge writer.
 - Send screen pixels for interpretation until text/vector retrieval identifies
   a relevant frame, except the one policy-compliant conversation keyframe.
-- Delete legacy readers, writers, schedules, indexes, or rollback seams before
-  consumer adoption and zero-read/zero-write evidence exists.
+- Delete compatibility readers, writers, schedules, indexes, or rollback seams
+  only when their owning decision explicitly retires the path or consumer
+  adoption and zero-read/zero-write evidence exists. The JIT retrieval and
+  first-open paths were explicitly retired on 2026-10-18; stored ledger data
+  remains available to export and privacy-deletion paths.
 
 ## Surfaces
 
 - Canonical memory models, apply transaction, evidence, outbox, privacy,
   deletion, export, and released adapters
-- Conversation finalization, chat tools, daily summary, integrations, MCP, and
-  developer APIs
-- Mobile, macOS, Windows, web, Rewind, evidence rendering, and trigger compiler
+- Conversation finalization, supported chat tools, daily summary,
+  integrations, MCP, and developer APIs
+- Mobile, macOS, Windows, web, Rewind, evidence rendering, and supported trigger
+  flows
 - Runtime schedules, deploy manifests, indexes, runbooks, and migration tools
 
 ## Foundation contract tests
 
 These tests make the contract executable. The agent preference tool is the
-first scoped production writer on the intent-backed path; the conversation
-test separately prevents that activation from silently crossing the passive
-capture cutover gate.
+first scoped production writer on the intent-backed path. JIT retrieval,
+first-open processing, and entity-timeline test suites were retired with the
+2026-10-18 JIT kill; eager extraction and canonical memory lifecycle coverage
+remain in scope.
 
 - `backend/tests/unit/test_knowledge_ledger.py` — durable intent-backed schema,
   bounded deterministic renderers, and third-party isolation
 - `backend/tests/unit/test_knowledge_ledger_migration.py` — deterministic
   migration/resume decisions and fail-closed Short-term adjudication
-- `backend/tests/unit/test_conversation_jit_processing.py` — released capture
-  remains intact while optional retrieval is card then bounded window
-- `backend/tests/unit/test_jit_memory_save_policy.py` — explicit save precision,
-  provenance retention, and secret/third-party rejection
-- `backend/tests/unit/test_entity_timeline_tools.py` and
-  `backend/tests/unit/test_entity_timeline_source_readers.py` — explicit
-  source/history authority, exact owner-scoped entity aliases, deterministic
-  collision suppression, multi-source merge, partial-source disclosure, and
-  content minimization
 - `backend/tests/unit/test_atomicity_lifecycle_regressions.py` — agent preference
   writes use retry-stable ledger provenance and fail closed without user authority
 - `backend/tests/unit/test_universal_memory_service.py` and
   `backend/tests/unit/test_memory_apply_store.py` — standalone closed-row
   reopen policy, privacy fences, exact retry, and duplicate-tail receipt
-- `backend/tests/unit/test_jit_retrieval_eval.py` and
-  `backend/tests/unit/test_jit_proactivity_eval.py` — deterministic Phase-0
-  metric contracts without claiming rollout thresholds
 
 ## Path globs
 

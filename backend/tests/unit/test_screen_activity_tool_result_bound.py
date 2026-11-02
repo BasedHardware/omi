@@ -51,6 +51,7 @@ def sa():
         "database": _pkg("database"),
         "utils": _pkg("utils"),
         "utils.llm": _pkg("utils.llm"),
+        "utils.ladder_v1": _leaf("utils.ladder_v1", ["feature_allowed"]),
         "utils.retrieval": _pkg("utils.retrieval"),
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
         # Leaf modules screen_activity_tools binds at import.

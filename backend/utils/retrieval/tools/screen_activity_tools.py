@@ -11,8 +11,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 from utils.model_text import (
     UNTRUSTED_LEGEND,
+    ContextWindow,
+    DisplayClock,
+    ToolTimeError,
     count_header,
     format_instant,
+    format_span,
+    parse_tool_time,
     truncation_note,
     untrusted_block,
 )
@@ -99,6 +104,28 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return agent_config_context.get()
     except LookupError:
         return None
+
+
+def _chat_context_window(config: Any, clock: DisplayClock) -> ContextWindow:
+    """The chat turn's window: the attached chat timeframe when the client sent one, else the last 24 hours.
+
+    Harness tool rule 1: a time-range tool defaults to the run's context window. Chat shows the
+    model local times labelled with their zone, so naive scope bounds are read in that zone.
+    """
+    cfg: Dict[str, Any] = cast(Optional[Dict[str, Any]], config) or _agent_config() or {}
+    configurable: Any = cfg.get('configurable')
+    scope: Any = cast(Dict[str, Any], configurable).get('chat_scope') if isinstance(configurable, dict) else None
+    if isinstance(scope, dict):
+        bounds = cast(Dict[str, Any], scope)
+        start, end = bounds.get('start_date'), bounds.get('end_date')
+    else:
+        start = end = None
+    if start or end:
+        try:
+            return ContextWindow.from_bounds(start, end, label='chat timeframe', naive_tz=clock.tz)
+        except ToolTimeError:
+            logger.warning('screen activity: unreadable chat_scope dates; using the last 24 hours')
+    return ContextWindow.trailing_day()
 
 
 def _get_uid(config: RunnableConfig) -> Optional[str]:
@@ -388,8 +415,8 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
 
 @tool
 def get_screen_activity_tool(
-    start_date: str,
-    end_date: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     app_filter: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
@@ -403,8 +430,10 @@ def get_screen_activity_tool(
     Requires the Omi desktop app to be installed and running.
 
     Args:
-        start_date: Start of the range (ISO format with timezone, e.g. "2025-01-15T00:00:00+00:00")
-        end_date: End of the range (ISO format with timezone)
+        start_date: Optional start of the range, ISO 8601 (e.g. "2025-01-15T00:00:00-08:00"). Offsets are
+            converted; a time without an offset is in the user's timezone. Omit start_date and end_date to use
+            the attached chat timeframe, or the last 24 hours.
+        end_date: Optional end of the range, same format.
         app_filter: Optional app name to filter to a single application
 
     Returns:
@@ -420,10 +449,11 @@ def get_screen_activity_tool(
     clock = clock_for_config(config or _agent_config(), uid)
 
     try:
-        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    except ValueError:
-        return "Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM."
+        start_dt, end_dt = _chat_context_window(config, clock).resolve(
+            start_date, end_date, naive_tz=clock.tz, start_field='start_date', end_field='end_date'
+        )
+    except ToolTimeError as error:
+        return f"Error: {error}"
 
     try:
         summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
@@ -443,7 +473,7 @@ def get_screen_activity_tool(
     coverage = summary.get('coverage') or {}
     rows_truncated = coverage.get('truncated') is True
     result = (
-        f"Screen Activity Summary ({total} synced screen observations):\n"
+        f"Screen Activity Summary ({total} synced screen observations, {format_span(start_dt, end_dt, clock)}):\n"
         "Observations are sampled, not measured usage durations or proof of intent. "
         "Capture and sync completeness are unknown.\n"
     )
@@ -624,6 +654,13 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 def _screen_vectors_disabled(uid: str) -> bool:
     """Server-owned account opt-out; absent configuration preserves existing accounts."""
+    from config.ladder_v1 import enabled
+
+    if enabled('LADDER_V1_PRO_GATES_ENABLED'):
+        from utils import ladder_v1
+
+        if ladder_v1.feature_allowed(uid, 'screen_context') is False:
+            return True
     tokens = _parse_csv_tokens(os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS'))
     return uid in tokens or '*' in tokens
 
@@ -655,8 +692,9 @@ def search_screen_activity_tool(
 
     Args:
         query: Natural language description of what to search for in screen content
-        start_date: Optional start date filter (ISO format with timezone)
-        end_date: Optional end date filter (ISO format with timezone)
+        start_date: Optional start date filter, ISO 8601; offsets are converted and a time without an
+            offset is in the user's timezone
+        end_date: Optional end date filter, same format
         limit: Number of results to return (default 10, max 20)
 
     Returns:
@@ -670,19 +708,16 @@ def search_screen_activity_tool(
 
     limit = max(1, min(limit, 20))
 
-    # Parse optional date filters to unix timestamps
-    start_ts = None
-    end_ts = None
-    if start_date:
-        try:
-            start_ts = int(datetime.fromisoformat(start_date.replace('Z', '+00:00')).timestamp())
-        except ValueError:
-            pass
-    if end_date:
-        try:
-            end_ts = int(datetime.fromisoformat(end_date.replace('Z', '+00:00')).timestamp())
-        except ValueError:
-            pass
+    # Parse optional date filters to unix timestamps. An unreadable date is an error, never a
+    # silently unfiltered search.
+    clock = clock_for_config(config or _agent_config(), uid)
+    try:
+        start_dt = parse_tool_time(start_date, field='start_date', naive_tz=clock.tz)
+        end_dt = parse_tool_time(end_date, field='end_date', naive_tz=clock.tz)
+    except ToolTimeError as error:
+        return f"Error: {error}"
+    start_ts = int(start_dt.timestamp()) if start_dt else None
+    end_ts = int(end_dt.timestamp()) if end_dt else None
 
     fallback_enabled = _env_flag_enabled('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', default=True)
     reason = None
@@ -725,7 +760,6 @@ def search_screen_activity_tool(
     ts_by_id = {sid: m.get('timestamp', 0) for sid, m in zip(screenshot_ids, valid_matches)}
 
     docs_by_id = {m['screenshot_id']: m['keyword_doc'] for m in valid_matches if 'keyword_doc' in m}
-    clock = clock_for_config(config or _agent_config(), uid)
     evidence_references = _evidence_references(config)
     result = (
         count_header(

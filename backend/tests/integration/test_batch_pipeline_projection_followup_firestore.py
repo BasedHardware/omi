@@ -241,3 +241,31 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
             await asyncio.gather(*list(restarted.tasks.values()))
     assert batch.ledger.get().to_dict() == completed
     assert len(lane.published) == published
+
+
+@pytest.mark.asyncio
+async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, monkeypatch):
+    from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
+    from database import batch_pipeline_projection_claim as claims
+    from utils.batch_pipeline.projection_followup import ProjectionFollowups
+    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed(('head', 'sibling'))
+    for item in batch.items:
+        superseded_anchor(lane, item, merged=True)
+    lane.finish(batch, 0)
+    lane.finish(batch, 1)
+    for sid in batch.ids:
+        lane.projector.persist(sid)
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    runner = ProjectionFollowups(lane.projector)
+    await runner.run(batch.ids[0])
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.published[0]['superseded_segments'] == 2
+    assert not lane.tasks and not list(lane.user.collection('hourly_usage').stream())
+    assert all(
+        lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed' for sid in batch.ids
+    )

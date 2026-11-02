@@ -363,3 +363,28 @@ class TestCalendarLinkPairing:
             ('Sarah Chen', None),
             (None, 'sarah@acme.com'),
         ]
+
+
+def test_open_messaging_chat_through_an_in_person_conversation_is_not_a_meeting():
+    """2026-10-22: a Telegram chat with a colleague stayed open on the Mac through an in-person
+    dinner; its contact card's emails became the "meeting" roster and named the wrong person."""
+    rows = [
+        {
+            'appName': 'Telegram',
+            'windowTitle': 'Alex K | Marketing',
+            'ocrText': 'alex@example.com\nalex.k@example.org\nphoto\nyesterday',
+        }
+    ] * 12
+    context = context_from_screen_activity(rows, started_at=CONVERSATION_START, finished_at=CONVERSATION_END)
+    assert context is None
+
+
+def test_messaging_chat_beside_a_real_call_adds_no_participants():
+    rows = [
+        {'appName': 'Telegram', 'windowTitle': 'Alex Kim', 'ocrText': 'see you soon'},
+    ] * 8 + [
+        {'appName': 'Telegram', 'windowTitle': 'Blair Ortiz', 'ocrText': 'Mute\nEnd Call'},
+    ]
+    context = context_from_screen_activity(rows, started_at=CONVERSATION_START, finished_at=CONVERSATION_END)
+    assert context is not None
+    assert [p.name for p in context.participants] == ['Blair Ortiz']

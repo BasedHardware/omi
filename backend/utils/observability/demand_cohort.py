@@ -5,17 +5,33 @@ from time import monotonic
 
 from prometheus_client import Counter, Histogram
 
+from utils.observability.soniox_idle_arm import IdleArmLedger, session_ledger
+
 DEMAND_COHORTS = ('admitted', 'eligible_control', 'ineligible')
 current_demand: ContextVar['DemandTelemetry | None'] = ContextVar('listen_demand', default=None)
+TRANSPORT_ORIGINS = ('initial', 'idle_reopened', 'replacement')
+current_transport_origin: ContextVar[str] = ContextVar('stt_transport_origin', default='initial')
+
+
+def transport_origin() -> str:
+    origin = current_transport_origin.get()
+    return origin if origin in TRANSPORT_ORIGINS else 'initial'
+
+
 WIRE_AUDIO = Counter(
     'omi_stt_provider_wire_audio_seconds_total',
     'Listen PCM seconds successfully written to paid transports, including each replay write',
-    ['provider', 'demand_cohort'],
+    ['provider', 'demand_cohort', 'origin'],
+)
+SONIOX_CONNECTED = Counter(
+    'omi_soniox_connected_seconds_total',
+    'Wall seconds a Soniox real-time websocket was open (the vendor bills this, keepalive silence included)',
+    ['demand_cohort', 'origin'],
 )
 BATCH_WIRE_AUDIO = Counter(
     'omi_batch_live_stt_provider_wire_audio_seconds_total',
     'Successful paid transport PCM seconds including replay, pinned to batch preview admission',
-    ['provider', 'batch_cohort'],
+    ['provider', 'batch_cohort', 'origin'],
 )
 BATCH_CAPTURE_AUDIO = Counter(
     'omi_batch_live_stt_capture_audio_seconds_total',
@@ -27,10 +43,23 @@ CAPTURE_AUDIO = Counter(
     'Decoded listen capture seconds before VAD or replay',
     ['demand_cohort'],
 )
+# Why a session was ineligible: the first failing admission condition, in the
+# order capture_demand_admission checks them. ~300/10m ineligible sessions were
+# the only cohort hitting chain_exhausted (2026-10-21, lead ruling f12e4a) and
+# the cohort alone could not say which exclusion they share. 'none' for the
+# eligible cohorts.
+INELIGIBLE_REASONS = (
+    'recovery_off',
+    'unmanaged_chain',  # byok, multichannel or custom STT
+    'onboarding',
+    'phone_call',
+    'language_unqualified',
+    'no_profile',
+)
 EXHAUSTED_SESSIONS = Counter(
     'omi_listen_demand_exhausted_sessions_total',
     'Completed backend-STT sessions with or without an exhausted selection/recovery hop',
-    ['demand_cohort', 'outcome'],
+    ['demand_cohort', 'outcome', 'ineligible_reason'],
 )
 FAILURE_DETAIL = Counter(
     'omi_listen_demand_failure_detail_total',
@@ -113,12 +142,23 @@ try:
     for _cohort in DEMAND_COHORTS:
         BATCH_CAPTURE_AUDIO.labels(batch_cohort=_cohort)
         CAPTURE_AUDIO.labels(demand_cohort=_cohort)
-        for _provider in ('soniox', 'modulate', 'deepgram'):
-            BATCH_WIRE_AUDIO.labels(provider=_provider, batch_cohort=_cohort)
-            WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort)
-        for _reason in ('first_text_deadline', 'capacity_full', 'other'):
+        for _origin in TRANSPORT_ORIGINS:
+            SONIOX_CONNECTED.labels(demand_cohort=_cohort, origin=_origin)
+            for _provider in ('soniox', 'modulate', 'deepgram'):
+                BATCH_WIRE_AUDIO.labels(provider=_provider, batch_cohort=_cohort, origin=_origin)
+                WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort, origin=_origin)
+        for _reason in (
+            'first_text_deadline',
+            'capacity_full',
+            'replay_ring_overflow',
+            'gate_unavailable',
+            'send_queue_full',
+            'replay_send_stalled',
+            'delivery_expired',
+            'other',
+        ):
             _subtypes = (
-                ('buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout', 'unknown')
+                ('buffer_cap', 'span_cap', 'admission', 'queue_timeout', 'unknown')
                 if _reason == 'capacity_full'
                 else ('none',)
             )
@@ -128,7 +168,11 @@ try:
                         demand_cohort=_cohort, reason=_reason, capacity_subtype=_subtype, outcome=_outcome
                     )
         for _outcome in ('yes', 'no'):
-            EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome)
+            # A batch preview can move an admitted session into the ineligible
+            # cohort after admission, with no exclusion reason: that series
+            # reads 'none' too, so it needs its zero child.
+            for _reason in (*INELIGIBLE_REASONS, 'none') if _cohort == 'ineligible' else ('none',):
+                EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome, ineligible_reason=_reason)
         for _trigger in ('first_output', 'visible_return'):
             OUTPUT_LATENCY.labels(demand_cohort=_cohort, trigger=_trigger)
             for _outcome in ('started', 'delivered', 'no_output'):
@@ -138,10 +182,15 @@ except Exception:
 
 
 class DemandTelemetry:
-    def __init__(self, cohort: str):
+    def __init__(self, cohort: str, ineligible_reason: str | None = None):
         if cohort not in DEMAND_COHORTS:
             raise ValueError('invalid demand cohort')
         self.cohort = cohort
+        # Bounded: a reason only exists for the ineligible cohort, and only from
+        # the closed set; anything else reads 'none'.
+        self.ineligible_reason = (
+            ineligible_reason if cohort == 'ineligible' and ineligible_reason in INELIGIBLE_REASONS else 'none'
+        )
         self.batch_cohort = 'ineligible'
         self.exhausted = False
         self.finished = False
@@ -149,6 +198,8 @@ class DemandTelemetry:
         self.first_output = False
         self.visible_at: float | None = None
         self.visibility: str | None = None
+        # Soniox idle cohort ledger (utils.observability.soniox_idle_arm), set at admission.
+        self.idle_arm: IdleArmLedger | None = None
 
     def capture(self, seconds: float) -> None:
         if seconds > 0:
@@ -156,6 +207,8 @@ class DemandTelemetry:
                 self.first_audio_at = monotonic()
                 self.output_event('first_output', 'started')
             record_metric(CAPTURE_AUDIO, {'demand_cohort': self.cohort}, seconds)
+            if self.idle_arm is not None:
+                self.idle_arm.add_capture(seconds)
             record_metric(BATCH_CAPTURE_AUDIO, {'batch_cohort': self.batch_cohort}, seconds)
 
     def observe_visibility(self, payload) -> None:
@@ -182,6 +235,8 @@ class DemandTelemetry:
                 max(0, now - self.first_audio_at),
                 observe=True,
             )
+            if self.idle_arm is not None:
+                self.idle_arm.first_output(max(0, now - self.first_audio_at))
             self.first_output = True
             self.output_event('first_output', 'delivered')
         if self.visible_at is not None:
@@ -206,7 +261,13 @@ class DemandTelemetry:
                 self.output_event('visible_return', 'no_output')
                 self.visible_at = None
             record_metric(
-                EXHAUSTED_SESSIONS, {'demand_cohort': self.cohort, 'outcome': 'yes' if self.exhausted else 'no'}, 1
+                EXHAUSTED_SESSIONS,
+                {
+                    'demand_cohort': self.cohort,
+                    'outcome': 'yes' if self.exhausted else 'no',
+                    'ineligible_reason': self.ineligible_reason,
+                },
+                1,
             )
 
 
@@ -217,20 +278,57 @@ class WireAudioMeter:
         self.telemetry = current_telemetry()
         self.batch_cohort = getattr(self.telemetry, 'batch_cohort', 'ineligible')
         self.provider = provider
+        self.origin = transport_origin()
         self.bytes_per_second = 2 * sample_rate * channels
 
     def written(self, data: bytes | str) -> None:
         if self.telemetry is not None and isinstance(data, bytes) and data and self.bytes_per_second > 0:
             record_metric(
                 BATCH_WIRE_AUDIO,
-                {'provider': self.provider, 'batch_cohort': self.batch_cohort},
+                {'provider': self.provider, 'batch_cohort': self.batch_cohort, 'origin': self.origin},
                 len(data) / self.bytes_per_second,
             )
             record_metric(
                 WIRE_AUDIO,
-                {'provider': self.provider, 'demand_cohort': cohort_label(self.telemetry)},
+                {'provider': self.provider, 'demand_cohort': cohort_label(self.telemetry), 'origin': self.origin},
                 len(data) / self.bytes_per_second,
             )
+            ledger = session_ledger(self.telemetry) if self.provider == 'soniox' else None
+            if ledger is not None:
+                ledger.add_wire(len(data) / self.bytes_per_second)
+
+
+class ConnectedSecondsMeter:
+    """Billed stream time for one paid transport, flushed incrementally so rates stay smooth.
+
+    Pin at transport creation; ``flush`` from the writer's wake-ups and once with
+    ``close=True`` when the websocket ends. Seconds are counted exactly once.
+    """
+
+    FLUSH_SECONDS = 5.0
+
+    def __init__(self, metric=None):
+        self.metric = SONIOX_CONNECTED if metric is None else metric
+        telemetry = current_telemetry()
+        self.cohort = cohort_label(telemetry)
+        self.ledger = session_ledger(telemetry) if metric is None else None
+        self.origin = transport_origin()
+        self.accounted_at = monotonic()
+        self.closed = False
+
+    def flush(self, *, close: bool = False) -> None:
+        if self.closed:
+            return
+        now = monotonic()
+        elapsed = now - self.accounted_at
+        if not close and elapsed < self.FLUSH_SECONDS:
+            return
+        self.accounted_at = now
+        self.closed = close
+        if elapsed > 0:
+            record_metric(self.metric, {'demand_cohort': self.cohort, 'origin': self.origin}, elapsed)
+            if self.ledger is not None:
+                self.ledger.add_connected(elapsed)
 
 
 class MeteredSyncTransport:
@@ -249,6 +347,13 @@ class MeteredSyncTransport:
         return result
 
 
+def create_connected_meter():
+    try:
+        return ConnectedSecondsMeter()
+    except Exception:
+        return None
+
+
 def create_wire_meter(provider: str, sample_rate: int, channels: int = 1):
     try:
         return WireAudioMeter(provider, sample_rate, channels)
@@ -256,9 +361,9 @@ def create_wire_meter(provider: str, sample_rate: int, channels: int = 1):
         return None
 
 
-def attach_demand_telemetry(host, cohort: str):
+def attach_demand_telemetry(host, cohort: str, ineligible_reason: str | None = None):
     try:
-        telemetry = DemandTelemetry(cohort)
+        telemetry = DemandTelemetry(cohort, ineligible_reason)
         host.demand_telemetry = telemetry
         current_demand.set(telemetry)
         return telemetry

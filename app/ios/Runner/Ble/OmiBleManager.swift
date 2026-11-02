@@ -49,11 +49,24 @@ final class OmiBleManager: NSObject {
     /// Discovered services per peripheral, keyed by peripheral UUID.
     private var discoveredServices: [String: [CBService]] = [:]
 
-    /// Pending read completions keyed by "peripheralUuid:serviceUuid:charUuid".
-    private var readCompletions: [String: (Result<FlutterStandardTypedData, Error>) -> Void] = [:]
-
-    /// Pending write completions keyed by "peripheralUuid:serviceUuid:charUuid".
-    private var writeCompletions: [String: (Result<Void, Error>) -> Void] = [:]
+    /// Pending GATT read/write requests, FIFO per "peripheralUuid:serviceUuid:charUuid".
+    /// CoreBluetooth allows one outstanding read or write per characteristic, so only the
+    /// head is issued; the next is issued when the head completes, fails or times out
+    /// (`gattOperationTimeout`). A second request no longer overwrites the first.
+    private struct PendingGattOperation<T> {
+        let id: UInt64
+        let issue: () -> Void
+        let completion: (Result<T, Error>) -> Void
+    }
+    private var readCompletions: [String: [PendingGattOperation<FlutterStandardTypedData>]] = [:]
+    private var writeCompletions: [String: [PendingGattOperation<Void>]] = [:]
+    private var nextGattOperationId: UInt64 = 0
+    static let gattOperationTimeout: TimeInterval = 10
+    /// After a timeout CoreBluetooth still owes that op's reply. Until it arrives (or this
+    /// grace passes) the next op is not issued, and the late reply is not handed to it.
+    static let gattLateReplyGrace: TimeInterval = 5
+    private var lateReadReply: Set<String> = []
+    private var lateWriteReply: Set<String> = []
 
     private struct NotificationRequest {
         let characteristic: CBCharacteristic
@@ -91,30 +104,50 @@ final class OmiBleManager: NSObject {
     /// Tracks peripherals that have connected at least once (for reconnection counting).
     private var everConnected: Set<String> = []
     // Authorized by Dart's persisted pairing, never by scan discovery.
-    private var savedReconnect: Set<String> = []
+    private var reconnectIntent = OmiSavedReconnectIntent()
+    private var savedReconnect: Set<String> { reconnectIntent.saved }
+    private var connectPendingSince: [String: Int64] = [:]
+    private var savedScanTargets: Set<String> = []
+    private var scanObservations: [String: Int] = [:]
+    private var diagnosticScanTargets: Set<String> = []
+    private var diagnosticScanTasks: [String: DispatchWorkItem] = [:]
+    private var diagnosticScanStarted: Set<String> = []
+    private var savedScanTasks: [String: DispatchWorkItem] = [:]
+    private var pausedSavedScanTargets: Set<String> = []
+    // Cache misses scan for five seconds per minute; known targets keep an OS connect.
+    private static let reconnectServices = ["19B10000-E8F2-537E-4F6C-D104768A1214", "632DE001-604C-446B-A80F-7963E950F3FB", "00001910-0000-1000-8000-00805F9B34FB", "03D5D5C4-A86C-11EE-9D89-8F2089A49E7E", "4FAFC201-1FB5-459E-8FCC-C5C9C331914B", "1A3FD0E7-B1F3-AC9E-2E49-B647B2C4F8DA"]
     private var savedRetryAttempts: [String: Int] = [:]
     private var savedRetryTasks: [String: DispatchWorkItem] = [:]
+    // Terminal setup failures must cool down across transport release, scans and foreground re-entry.
+    private var savedSetupRetryAfter: [String: TimeInterval] = [:]
+    private var savedConnectRetryAfter: [String: TimeInterval] = [:]
     private var savedOutageStarted: [String: Date] = [:]
     private var savedRetryTelemetry: [String: OmiSavedReconnectTelemetry] = [:]
 
     func configureSavedReconnect(uuid: String, enabled: Bool) {
+        reconnectIntent.configure(uuid, enabled: enabled)
         if enabled {
-            savedReconnect.insert(uuid)
+            logBle(uuid: uuid, event: "reconnect_intent", detail: "enabled")
+            // Intent owns the radio even when Dart's connected mirror is stale.
+            reconcileSavedReconnect(uuid, source: "intent_authorized")
         } else {
-            savedReconnect.remove(uuid)
+            logBle(uuid: uuid, event: "reconnect_intent", detail: "disabled_by_policy_or_target_change")
+            endSavedScan(uuid, reason: "intent_disabled")
             savedRetryTasks.removeValue(forKey: uuid)?.cancel()
             savedRetryTelemetry.removeValue(forKey: uuid)
             savedRetryAttempts.removeValue(forKey: uuid)
+            savedSetupRetryAfter.removeValue(forKey: uuid)
+            savedConnectRetryAfter.removeValue(forKey: uuid)
             savedOutageStarted.removeValue(forKey: uuid)
         }
     }
 
     private func reportSavedReconnect(_ uuid: String, result: String) {
-        guard savedReconnect.contains(uuid), (savedRetryAttempts[uuid] ?? 0) > 0 else { return }
+        guard savedReconnect.contains(uuid), savedOutageStarted[uuid] != nil else { return }
         guard savedRetryTelemetry[uuid, default: OmiSavedReconnectTelemetry()].admit(result) else { return }
         let elapsed = Int64(max(0, Date().timeIntervalSince(savedOutageStarted[uuid] ?? Date()) * 1000))
         logBle(uuid: uuid, event: "saved_pendant_reconnect", detail: result)
-        flutterApi?.onSavedReconnect(peripheralUuid: uuid, attempt: Int64(savedRetryAttempts[uuid] ?? 0),
+        flutterApi?.onSavedReconnect(peripheralUuid: uuid, attempt: Int64((savedRetryAttempts[uuid] ?? 0) + 1),
                                     result: result, disconnectedMs: elapsed) { _ in }
     }
 
@@ -122,19 +155,130 @@ final class OmiBleManager: NSObject {
         guard savedReconnect.contains(uuid), shouldAutoReconnect(uuid: uuid, pairingLost: false),
               savedRetryTasks[uuid] == nil else { return }
         savedOutageStarted[uuid] = savedOutageStarted[uuid] ?? Date()
-        let attempt = (savedRetryAttempts[uuid] ?? 0) + 1
+        let delay = max(OmiBleConnectionPolicy.savedRetryDelay(attempt: savedRetryAttempts[uuid] ?? 0),
+                        setupRetryRemaining(uuid))
         let task = DispatchWorkItem { [weak self, weak peripheral] in
             guard let self, let peripheral else { return }
             self.savedRetryTasks.removeValue(forKey: uuid)
             guard self.savedReconnect.contains(uuid), self.shouldAutoReconnect(uuid: uuid, pairingLost: false),
                   self.centralManager.state == .poweredOn, self.peripherals[uuid] === peripheral,
                   peripheral.state != .connected else { return }
-            self.savedRetryAttempts[uuid] = attempt
-            self.reportSavedReconnect(uuid, result: "attempted")
-            self.centralManager.connect(peripheral, options: nil)
+            self.endSavedScan(uuid, reason: "retry_connect")
+            self.issueConnect(peripheral, uuid: uuid, source: "saved_retry")
         }
         savedRetryTasks[uuid] = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + OmiBleConnectionPolicy.savedRetryDelay(attempt: attempt), execute: task)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
+        // Submit now, before suspension. CoreBluetooth owns any setup cooldown.
+        if centralManager.state == .poweredOn,
+           peripherals[uuid] === peripheral, peripheral.state != .connected {
+            issueConnect(peripheral, uuid: uuid, source: "saved_retry_pending")
+        }
+    }
+
+    private func setupRetryRemaining(_ uuid: String) -> TimeInterval {
+        max(0, (savedSetupRetryAfter[uuid] ?? 0) - ProcessInfo.processInfo.systemUptime)
+    }
+
+    private func issueConnect(_ peripheral: CBPeripheral, uuid: String, source: String) {
+        if savedReconnect.contains(uuid), connectPendingSince[uuid] == nil {
+            // Native scan/restoration/retry paths need the same bounded GATT
+            // readiness recovery as an explicit Flutter manageDevice request.
+            failedReadyRequests.remove(uuid)
+            readyRequests.insert(uuid)
+            discoveryRetries[uuid] = 0
+            savedOutageStarted[uuid] = savedOutageStarted[uuid] ?? Date()
+            reportSavedReconnect(uuid, result: "attempted")
+        }
+        let since = connectPendingSince[uuid] ?? CheckedIntegerConversion.epochMs()
+        connectPendingSince[uuid] = since
+        // Discovery is fresh evidence to retry a radio failure immediately.
+        // A failed GATT setup still retains its separate cooldown.
+        let radioDelay = source == "scan_result" ? 0
+            : max(0, (savedConnectRetryAfter[uuid] ?? 0) - ProcessInfo.processInfo.systemUptime)
+        let startDelay = max(setupRetryRemaining(uuid), radioDelay)
+        logBle(uuid: uuid, event: "connect_requested", detail: "source=\(source),state=\(peripheral.state.rawValue),pending_since_ms=\(since),start_delay_s=\(startDelay)")
+        // The OS owns this delay too: a suspended app timer cannot strand GATT
+        // recovery, and repeated foreground/scan requests cannot skip its deadline.
+        centralManager.connect(peripheral, options: startDelay > 0
+            ? [CBConnectPeripheralOptionStartDelayKey: NSNumber(value: startDelay)] : nil)
+        // One five-second observation window per outage, never a connect timeout.
+        if savedReconnect.contains(uuid), diagnosticScanStarted.insert(uuid).inserted {
+            diagnosticScanTargets.insert(uuid)
+            scanObservations[uuid] = 0
+            logBle(uuid: uuid, event: "reconnect_scan_started", detail: "diagnostic:5s:service_filtered")
+            updateReconnectScan()
+            let task = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.diagnosticScanTasks.removeValue(forKey: uuid)
+                self.diagnosticScanTargets.remove(uuid)
+                self.logBle(uuid: uuid, event: "reconnect_scan_ended", detail: "diagnostic_window:seen=\(self.scanObservations[uuid] ?? 0),pending_since_ms=\(self.connectPendingSince[uuid] ?? 0)")
+                self.updateReconnectScan()
+            }
+            diagnosticScanTasks[uuid] = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: task)
+        }
+    }
+
+    private func reconcileSavedReconnect(_ uuid: String, source: String) {
+        guard centralManager.state == .poweredOn else { return }
+        let found = peripherals[uuid] ?? UUID(uuidString: uuid).flatMap {
+            centralManager.retrievePeripherals(withIdentifiers: [$0]).first
+        }
+        switch reconnectIntent.action(uuid, poweredOn: centralManager.state == .poweredOn, state: found?.state) {
+        case .suppressed, .waitForAdapter: return
+        case .connected:
+            endSavedScan(uuid, reason: "connected")
+        case .scan:
+            if savedScanTargets.insert(uuid).inserted { runSavedScanWindow(uuid) }
+        case .connect, .keepPending:
+            guard let found else { return }
+            found.delegate = self
+            peripherals[uuid] = found
+            if savedScanTargets.contains(uuid) { endSavedScan(uuid, reason: "peripheral_retrieved") }
+            // Reissue on restore/adapter-on; never cancel an OS-owned pending connect.
+            issueConnect(found, uuid: uuid, source: source)
+        }
+    }
+
+    private func runSavedScanWindow(_ uuid: String) {
+        guard savedScanTargets.contains(uuid) else { return }
+        pausedSavedScanTargets.remove(uuid)
+        scanObservations[uuid] = 0
+        logBle(uuid: uuid, event: "reconnect_scan_started", detail: "cache_miss:service_filtered:5s_per_minute")
+        updateReconnectScan()
+        let task = DispatchWorkItem { [weak self] in
+            guard let self, self.savedScanTargets.contains(uuid) else { return }
+            self.pausedSavedScanTargets.insert(uuid)
+            self.logBle(uuid: uuid, event: "reconnect_scan_ended", detail: "duty_cycle_pause:seen=\(self.scanObservations[uuid] ?? 0)")
+            self.updateReconnectScan()
+            let resume = DispatchWorkItem { [weak self] in self?.runSavedScanWindow(uuid) }
+            self.savedScanTasks[uuid] = resume
+            DispatchQueue.main.asyncAfter(deadline: .now() + OmiBleConnectionPolicy.savedScanRest, execute: resume)
+        }
+        savedScanTasks[uuid] = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + OmiBleConnectionPolicy.savedScanWindow, execute: task)
+    }
+
+    private func endSavedScan(_ uuid: String, reason: String) {
+        savedScanTasks.removeValue(forKey: uuid)?.cancel()
+        pausedSavedScanTargets.remove(uuid)
+        let scanning = savedScanTargets.remove(uuid) != nil
+        let observing = diagnosticScanTargets.remove(uuid) != nil
+        diagnosticScanTasks.removeValue(forKey: uuid)?.cancel()
+        if scanning || observing {
+            logBle(uuid: uuid, event: "reconnect_scan_ended", detail: "\(reason):seen=\(scanObservations[uuid] ?? 0)")
+            updateReconnectScan()
+        }
+    }
+
+    private func updateReconnectScan() {
+        guard centralManager.state == .poweredOn, !isScanning else { return }
+        if savedScanTargets.subtracting(pausedSavedScanTargets).isEmpty && diagnosticScanTargets.isEmpty {
+            centralManager.stopScan()
+        } else {
+            centralManager.scanForPeripherals(withServices: Self.reconnectServices.map { CBUUID(string: $0) },
+                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+        }
     }
 
     /// Characteristic discovery callbacks arrive once per service and may overlap.
@@ -144,7 +288,7 @@ final class OmiBleManager: NSObject {
     /// Monotonic start time of the latest GATT discovery. Retain it on errors so
     /// a late callback cannot clear the retry bound for a newer attempt.
     private var discoveryStartedAt: [String: TimeInterval] = [:]
-    /// One retry is allowed per explicit Flutter connection request.
+    /// One retry is allowed per readiness request, including native saved reconnects.
     private var readyRequests: Set<String> = []
     private var failedReadyRequests: Set<String> = []
     private var discoveryRetries: [String: Int] = [:]
@@ -204,6 +348,7 @@ final class OmiBleManager: NSObject {
     private override init() {
         super.init()
         let defaults = UserDefaults.standard
+        manuallyDisconnected = reconnectIntent.blocked
         if defaults.bool(forKey: "ble_diagnostics_run_open") {
             appendLifecycleEvent("previous_run_unclean")
         }
@@ -281,6 +426,7 @@ final class OmiBleManager: NSObject {
         scanTimer?.invalidate()
         scanTimer = nil
         centralManager.stopScan()
+        updateReconnectScan() // UI timeout cannot revoke a saved cache-miss scan.
     }
 
     // MARK: - Connection
@@ -288,6 +434,7 @@ final class OmiBleManager: NSObject {
     func connectPeripheral(uuid: String) {
         // A reset owns this peripheral until a native disconnect and fresh discovery.
         manuallyDisconnected.remove(uuid)
+        reconnectIntent.resume(uuid)
         pairingLostBlocked.remove(uuid)
 
         if savedReconnect.contains(uuid), centralManager.state != .poweredOn {
@@ -312,6 +459,11 @@ final class OmiBleManager: NSObject {
             readyRequests.insert(uuid)
             discoveryRetries[uuid] = 0
             let completedServices = completedBleServices(for: peripheral)
+            if savedReconnect.contains(uuid), let recovery = captureReconnects[uuid],
+               recovery.stage == .finished, recovery.disconnected {
+                // Capture's budget is spent; link recovery still belongs to the saved pairing.
+                captureReconnects.removeValue(forKey: uuid)
+            }
             switch OmiBleConnectionPolicy.readyRecoveryAction(
                 peripheralState: peripheral.state,
                 nativeReady: readyNotified.contains(uuid),
@@ -326,6 +478,7 @@ final class OmiBleManager: NSObject {
                 if let recovery = captureReconnects[uuid], recovery.stage == .finished {
                     recovery.requestResume(settled: peripheral.state == .disconnected,
                         schedule: { delay, task in
+                            self.logBle(uuid: uuid, event: "connect_cancelled", detail: "capture_resume_settlement")
                             self.centralManager.cancelPeripheralConnection(peripheral)
                             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
                         }
@@ -363,15 +516,15 @@ final class OmiBleManager: NSObject {
                 // Restoration or didConnect already started the GATT work.
                 scheduleDiscoveryRetry(for: peripheral, uuid: uuid)
             case .connect:
-                centralManager.connect(peripheral, options: nil)
+                issueConnect(peripheral, uuid: uuid, source: "manage_device")
             }
             return
         }
         logBle(uuid: uuid, event: "connect_peripheral_missing", detail: "retrieve_empty")
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "peripheral_not_found") { _ in }
-        // A restored identifier can be absent from CoreBluetooth's cache. Bound
-        // discovery to five seconds; only the explicitly saved UUID can connect.
-        if savedReconnect.contains(uuid), !isScanning { startScan(timeout: 5, serviceUuids: []) }
+        // A restored identifier can be absent from CoreBluetooth's cache.
+        // Retain a filtered native scan until this saved UUID is found.
+        if savedReconnect.contains(uuid) { reconcileSavedReconnect(uuid, source: "cache_miss") }
     }
 
     private func discoverServices(for peripheral: CBPeripheral, uuid: String) {
@@ -417,7 +570,7 @@ final class OmiBleManager: NSObject {
             // after the retry starts. CoreBluetooth provides no attempt ID, so
             // only the retry's deadline can declare terminal failure.
             guard reason == "timeout" else { return }
-            reportDiscoveryFailure(uuid: uuid, reason: reason)
+            reportDiscoveryFailure(peripheral: peripheral, uuid: uuid, reason: reason)
             return
         }
         discoveryRetries[uuid] = 1
@@ -426,8 +579,23 @@ final class OmiBleManager: NSObject {
         discoverServices(for: peripheral, uuid: uuid)
     }
 
-    private func reportDiscoveryFailure(uuid: String, reason: String) {
+    private func reportDiscoveryFailure(peripheral: CBPeripheral, uuid: String, reason: String) {
         guard failedReadyRequests.insert(uuid).inserted else { return }
+        if savedReconnect.contains(uuid) {
+            savedRetryAttempts[uuid, default: 0] += 1
+            let delay = OmiBleConnectionPolicy.savedRetryDelay(attempt: savedRetryAttempts[uuid] ?? 0)
+            savedSetupRetryAfter[uuid] = ProcessInfo.processInfo.systemUptime + delay
+            logBle(uuid: uuid, event: "reconnect_setup_backoff", detail: "delay_s=\(delay)")
+
+            // A connected CoreBluetooth link with failed GATT discovery does not
+            // produce didDisconnect on its own. Retire that unusable link so the
+            // saved target's disconnect callback can submit a delayed OS reconnect
+            // while the app is still allowed to run in the background.
+            if peripheral.state == .connected, shouldAutoReconnect(uuid: uuid, pairingLost: false) {
+                logBle(uuid: uuid, event: "reconnect_discovery_reset", detail: reason)
+                centralManager.cancelPeripheralConnection(peripheral)
+            }
+        }
         finishReadyRequest(uuid: uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
         logBle(uuid: uuid, event: "discovery_failed", detail: reason)
@@ -481,6 +649,8 @@ final class OmiBleManager: NSObject {
         reportSavedReconnect(uuid, result: "connected")
         savedRetryTasks.removeValue(forKey: uuid)?.cancel()
         savedRetryAttempts[uuid] = 0
+        savedSetupRetryAfter.removeValue(forKey: uuid)
+        savedConnectRetryAfter.removeValue(forKey: uuid)
         savedOutageStarted.removeValue(forKey: uuid)
         savedRetryTelemetry.removeValue(forKey: uuid)
         let fresh = source == "discovery" && freshConnections.contains(uuid)
@@ -501,24 +671,43 @@ final class OmiBleManager: NSObject {
     }
 
     func disconnectPeripheral(uuid: String) {
-        savedReconnect.remove(uuid)
+        let keepReconnect = reconnectIntent.releaseTransport(uuid)
         savedRetryTasks.removeValue(forKey: uuid)?.cancel()
-        persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
-        manuallyDisconnected.insert(uuid)
+        if keepReconnect {
+            logBle(uuid: uuid, event: "transport_released", detail: "saved_reconnect_retained")
+        } else {
+            endSavedScan(uuid, reason: "manual_disconnect_or_retirement")
+            connectPendingSince.removeValue(forKey: uuid)
+            diagnosticScanStarted.remove(uuid)
+            persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
+            manuallyDisconnected.insert(uuid)
+            finishReadyRequest(uuid: uuid)
+        }
         setCaptureAuthorized(uuid: uuid, authorized: false)
         captureReconnects.removeValue(forKey: uuid)?.finish(false)
         pairingLostBlocked.remove(uuid)
-        finishReadyRequest(uuid: uuid)
-        guard let peripheral = peripherals[uuid] else { return }
+        guard let peripheral = peripherals[uuid] else {
+            if keepReconnect { reconcileSavedReconnect(uuid, source: "transport_release") }
+            return
+        }
+        if keepReconnect, peripheral.state != .connected {
+            // A released Dart transport must not cancel the OS's pending connect
+            // or cache-miss scan. A future transport adopts readiness normally.
+            reconcileSavedReconnect(uuid, source: "transport_release")
+            return
+        }
+        logBle(uuid: uuid, event: "connect_cancelled", detail: keepReconnect ? "transport_recovery" : "manual_disconnect_or_retirement")
         centralManager.cancelPeripheralConnection(peripheral)
     }
 
+    /// Called only by applicationWillTerminate. Saved requests remain owned by
+    /// CoreBluetooth; durable user suppression belongs to disconnectPeripheral.
     func disconnectAllPeripherals() {
-        for (uuid, peripheral) in peripherals {
-            persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
-            manuallyDisconnected.insert(uuid)
-            reconnectDiagnostics.removeValue(forKey: uuid)
+        for uuid in reconnectIntent.terminationTargets(Set(peripherals.keys)) {
+            guard let peripheral = peripherals[uuid] else { continue }
+            manuallyDisconnected.insert(uuid) // Process-local callback fence only.
             finishReadyRequest(uuid: uuid)
+            logBle(uuid: uuid, event: "connect_cancelled", detail: "process_termination_unsaved")
             centralManager.cancelPeripheralConnection(peripheral)
         }
     }
@@ -547,7 +736,10 @@ final class OmiBleManager: NSObject {
             if peripheral.state == .connected { continue }
             NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
             peripheral.delegate = self
-            centralManager.connect(peripheral, options: nil)
+            issueConnect(peripheral, uuid: uuid, source: "foreground")
+        }
+        for uuid in savedReconnect where peripherals[uuid] == nil {
+            reconcileSavedReconnect(uuid, source: "foreground_missing")
         }
     }
 
@@ -565,9 +757,51 @@ final class OmiBleManager: NSObject {
         }
 
         let key = "\(peripheralUuid):\(serviceUuid):\(characteristicUuid)".lowercased()
-        readCompletions[key] = completion
+        nextGattOperationId &+= 1
+        let wasIdle = readCompletions[key, default: []].isEmpty && !lateReadReply.contains(key)
+        readCompletions[key, default: []].append(PendingGattOperation(
+            id: nextGattOperationId,
+            issue: { [weak self] in self?.peripherals[peripheralUuid]?.readValue(for: characteristic) },
+            completion: completion
+        ))
+        if wasIdle { issueNextRead(key) }
+    }
 
-        peripherals[peripheralUuid]?.readValue(for: characteristic)
+    /// Issues the queue head and arms its timeout; a timed-out head is failed and the next issued.
+    private func issueNextRead(_ key: String) {
+        guard let head = readCompletions[key]?.first else { return }
+        let operationId = head.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattOperationTimeout) { [weak self] in
+            guard let self, var queue = self.readCompletions[key], queue.first?.id == operationId else { return }
+            let pending = queue.removeFirst()
+            self.readCompletions[key] = queue.isEmpty ? nil : queue
+            NSLog("[OmiBle] ble_op_timeout read \(key)")
+            pending.completion(.failure(PigeonError(code: "TIMEOUT", message: "Characteristic read timed out", details: nil)))
+            self.lateReadReply.insert(key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattLateReplyGrace) { [weak self] in
+                guard let self, self.lateReadReply.remove(key) != nil else { return }
+                self.issueNextRead(key)
+            }
+        }
+        head.issue()
+    }
+
+    private func issueNextWrite(_ key: String) {
+        guard let head = writeCompletions[key]?.first else { return }
+        let operationId = head.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattOperationTimeout) { [weak self] in
+            guard let self, var queue = self.writeCompletions[key], queue.first?.id == operationId else { return }
+            let pending = queue.removeFirst()
+            self.writeCompletions[key] = queue.isEmpty ? nil : queue
+            NSLog("[OmiBle] ble_op_timeout write \(key)")
+            pending.completion(.failure(PigeonError(code: "TIMEOUT", message: "Characteristic write timed out", details: nil)))
+            self.lateWriteReply.insert(key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattLateReplyGrace) { [weak self] in
+                guard let self, self.lateWriteReply.remove(key) != nil else { return }
+                self.issueNextWrite(key)
+            }
+        }
+        head.issue()
     }
 
     func writeCharacteristic(
@@ -586,14 +820,22 @@ final class OmiBleManager: NSObject {
         let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
 
         if writeType == .withResponse {
-            writeCompletions[key] = completion
+            nextGattOperationId &+= 1
+            let wasIdle = writeCompletions[key, default: []].isEmpty && !lateWriteReply.contains(key)
+            let payload = data.data
+            writeCompletions[key, default: []].append(PendingGattOperation(
+                id: nextGattOperationId,
+                issue: { [weak self] in
+                    self?.peripherals[peripheralUuid]?.writeValue(payload, for: characteristic, type: .withResponse)
+                },
+                completion: completion
+            ))
+            if wasIdle { issueNextWrite(key) }
+            return
         }
 
         peripherals[peripheralUuid]?.writeValue(data.data, for: characteristic, type: writeType)
-
-        if writeType == .withoutResponse {
-            completion(.success(()))
-        }
+        completion(.success(()))
     }
 
     func subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String,
@@ -652,7 +894,11 @@ final class OmiBleManager: NSObject {
 
     func setCaptureAuthorized(uuid: String, authorized: Bool) {
         captureSession(uuid).authorize(authorized)
-        if !authorized { captureReconnects[uuid]?.finish(false) }
+        if !authorized {
+            // End capture work without cancelling the independent link request.
+            captureReconnects.removeValue(forKey: uuid)?.finish(false)
+            logBle(uuid: uuid, event: "capture_authorization_revoked", detail: "saved_reconnect_retained=\(savedReconnect.contains(uuid)),pending_since_ms=\(connectPendingSince[uuid] ?? 0)")
+        }
     }
 
     private let ingressPolicyDecoder = CaptureAdmissionPolicyDecoder()
@@ -713,7 +959,7 @@ final class OmiBleManager: NSObject {
             connect: { [weak self, weak peripheral] in
                 guard let self, let peripheral else { return }
                 // Never adopt cached readiness here: disconnect has been observed.
-                self.centralManager.connect(peripheral, options: nil)
+                self.issueConnect(peripheral, uuid: uuid, source: "native_recovery")
             },
             reportLink: { [weak self] connected in
                 guard let self, !connected else { return }
@@ -724,14 +970,21 @@ final class OmiBleManager: NSObject {
         )
         captureReconnects[uuid] = recovery
         logBle(uuid: uuid, event: "capture_reconnect_requested", detail: "")
+        logBle(uuid: uuid, event: "connect_cancelled", detail: "capture_recovery_reset")
         centralManager.cancelPeripheralConnection(peripheral)
         DispatchQueue.main.asyncAfter(deadline: .now() + OmiCaptureHealth.Policy.reconnectTimeout) { [weak self, weak recovery] in
             guard let self, let recovery, self.captureReconnects[uuid] === recovery,
                   recovery.stage != .finished else { return }
             self.logBle(uuid: uuid, event: "capture_reconnect_failed", detail: "timeout")
-            // Retain the tombstone until the radio callback, preventing an
-            // automatic reconnect outside the durable budget.
+            // Keep the cancellation fence only until the physical down callback.
+            // A spent capture budget cannot revoke a saved link's pending connect.
             recovery.finish(false)
+            if self.savedReconnect.contains(uuid), recovery.disconnected {
+                if self.captureReconnects[uuid] === recovery { self.captureReconnects.removeValue(forKey: uuid) }
+                if let peripheral = self.peripherals[uuid], peripheral.state == .disconnected {
+                    self.scheduleSavedRetry(peripheral, uuid: uuid)
+                }
+            }
         }
     }
 
@@ -1098,6 +1351,11 @@ final class OmiBleManager: NSObject {
             "firmware_diagnostics": defaults.array(forKey: "ble_diagnostics_firmware_\(uuid)") ?? [],
             "lifecycle_events": defaults.array(forKey: "ble_diagnostics_lifecycle") ?? [],
             "ble_log": defaults.array(forKey: "ble_diagnostics_log_\(uuid)") ?? [],
+            "connect_pending_since_ms": connectPendingSince[uuid] ?? 0,
+            "saved_reconnect_enabled": savedReconnect.contains(uuid),
+            "reconnect_suppressed": manuallyDisconnected.contains(uuid) || pairingLostBlocked.contains(uuid),
+            "reconnect_scan_active": savedScanTargets.contains(uuid) || diagnosticScanTargets.contains(uuid),
+            "reconnect_scan_results_seen": scanObservations[uuid] ?? 0,
             "capture_health": captureSnapshots[uuid] ?? [:],
             "capture_health_history": defaults.array(forKey: "ble_capture_health_\(uuid)") ?? [],
             "counters_since": defaults.object(forKey: "ble_diagnostics_counters_since_\(uuid)") ?? NSNull(),
@@ -1151,6 +1409,9 @@ final class OmiBleManager: NSObject {
     private func markPairingLost(uuid: String) {
         pairingLostBlocked.insert(uuid)
         manuallyDisconnected.insert(uuid)
+        reconnectIntent.suppress(uuid)
+        endSavedScan(uuid, reason: "pairing_lost")
+        logBle(uuid: uuid, event: "connect_cancelled", detail: "pairing_lost_requires_user_recovery")
     }
 
     private func shouldAutoReconnect(uuid: String, pairingLost: Bool) -> Bool {
@@ -1391,13 +1652,15 @@ final class OmiBleManager: NSObject {
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
         for key in completionKeys {
-            readCompletions[key]?(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil)))
-            readCompletions.removeValue(forKey: key)
+            let pending = readCompletions.removeValue(forKey: key) ?? []
+            pending.forEach { $0.completion(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil))) }
         }
+        lateReadReply = lateReadReply.filter { !$0.hasPrefix(peripheralUuid.lowercased()) }
+        lateWriteReply = lateWriteReply.filter { !$0.hasPrefix(peripheralUuid.lowercased()) }
         let writeKeys = writeCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
         for key in writeKeys {
-            writeCompletions[key]?(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil)))
-            writeCompletions.removeValue(forKey: key)
+            let pending = writeCompletions.removeValue(forKey: key) ?? []
+            pending.forEach { $0.completion(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil))) }
         }
     }
 }
@@ -1415,7 +1678,18 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         if central.state == .poweredOn {
             for uuid in savedReconnect where shouldAutoReconnect(uuid: uuid, pairingLost: false) {
-                connectPeripheral(uuid: uuid)
+                reconcileSavedReconnect(uuid, source: "adapter_on")
+            }
+            // Legacy/restored owners may precede Dart's first saved-intent configuration.
+            for uuid in everConnected.subtracting(savedReconnect) where shouldAutoReconnect(uuid: uuid, pairingLost: false) {
+                if let peripheral = peripherals[uuid], peripheral.state != .connected {
+                    issueConnect(peripheral, uuid: uuid, source: "adapter_on_restored")
+                }
+            }
+            updateReconnectScan()
+        } else {
+            for uuid in savedReconnect {
+                logBle(uuid: uuid, event: "reconnect_waiting", detail: "adapter=\(state)")
             }
         }
 
@@ -1443,6 +1717,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
+                if !shouldAutoReconnect(uuid: uuid, pairingLost: false) {
+                    // The process may have died after persisting the user's block
+                    // but before cancelling the OS request. Retire that restored
+                    // request too, including an already-connected restored link.
+                    logBle(uuid: uuid, event: "connect_cancelled", detail: "restored_user_or_pairing_block")
+                    central.cancelPeripheralConnection(peripheral)
+                    continue
+                }
                 // State-restored peripherals have already connected in a prior
                 // process lifetime; count a later connection as a reconnect.
                 everConnected.insert(uuid)
@@ -1457,11 +1739,16 @@ extension OmiBleManager: CBCentralManagerDelegate {
                     } else {
                         discoverServices(for: peripheral, uuid: uuid)
                     }
-                } else if !pairingLostBlocked.contains(uuid) {
-                    central.connect(peripheral, options: nil)
+                } else if shouldAutoReconnect(uuid: uuid, pairingLost: false) {
+                    if central.state == .poweredOn { issueConnect(peripheral, uuid: uuid, source: "state_restoration") }
+                } else {
+                    logBle(uuid: uuid, event: "reconnect_suppressed", detail: "restored_user_or_pairing_block")
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }
+        }
+        if central.state == .poweredOn {
+            for uuid in savedReconnect { reconcileSavedReconnect(uuid, source: "restoration_saved_target") }
         }
     }
 
@@ -1469,6 +1756,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         peripheral.delegate = self
         peripherals[uuid] = peripheral
+        for target in savedScanTargets.union(diagnosticScanTargets) {
+            scanObservations[target, default: 0] += 1
+            if scanObservations[target] == 1 || target == uuid {
+                logBle(uuid: target, event: "reconnect_scan_result", detail: "saved_target=\(target == uuid),rssi=\(RSSI.intValue)")
+            }
+        }
 
         let serviceUuids = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID])?.map { $0.uuidString } ?? []
 
@@ -1484,14 +1777,20 @@ extension OmiBleManager: CBCentralManagerDelegate {
         )
 
         flutterApi?.onPeripheralDiscovered(peripheral: blePeripheral) { _ in }
-        if savedReconnect.contains(uuid), shouldAutoReconnect(uuid: uuid, pairingLost: false), peripheral.state == .disconnected {
-            connectPeripheral(uuid: uuid)
+        if savedReconnect.contains(uuid), shouldAutoReconnect(uuid: uuid, pairingLost: false),
+           peripheral.state == .disconnected || peripheral.state == .connecting {
+            savedRetryTasks.removeValue(forKey: uuid)?.cancel()
+            endSavedScan(uuid, reason: "saved_target_discovered")
+            issueConnect(peripheral, uuid: uuid, source: "scan_result")
         }
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         let uuid = peripheralUuidString(peripheral)
         guard peripherals[uuid] === peripheral else { return }
+        logBle(uuid: uuid, event: "connect_completed", detail: "pending_since_ms=\(connectPendingSince.removeValue(forKey: uuid) ?? 0)")
+        endSavedScan(uuid, reason: "connected")
+        diagnosticScanStarted.remove(uuid)
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
 
         // Track reconnections (not first connect)
@@ -1536,22 +1835,27 @@ extension OmiBleManager: CBCentralManagerDelegate {
         guard OmiCaptureReconnect.acceptsDownCallback(
             currentOwner: peripherals[uuid] === peripheral, connected: peripheral.state == .connected
         ) else { return }
+        savedRetryTasks.removeValue(forKey: uuid)?.cancel()
+        logBle(uuid: uuid, event: "connect_down_callback", detail: "pending_since_ms=\(connectPendingSince.removeValue(forKey: uuid) ?? 0)")
+        let isManual = manuallyDisconnected.contains(uuid)
+        let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
+            || pairingRecoveryInFlight.remove(uuid) != nil
+        if pairingLost { markPairingLost(uuid: uuid) }
+        if !isManual, savedReconnect.contains(uuid) {
+            savedRetryAttempts[uuid, default: 0] += 1
+            savedConnectRetryAfter[uuid] = ProcessInfo.processInfo.systemUptime
+                + OmiBleConnectionPolicy.savedRetryDelay(attempt: savedRetryAttempts[uuid] ?? 0)
+        }
         if let recovery = captureReconnects[uuid] {
             cleanupPeripheral(uuid)
             recovery.finish(false)
             recovery.settleResume(true)
             if captureReconnects[uuid] === recovery { captureReconnects.removeValue(forKey: uuid) }
+            scheduleSavedRetry(peripheral, uuid: uuid)
             return
         }
-        let isManual = manuallyDisconnected.contains(uuid)
-        let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
-            || pairingRecoveryInFlight.remove(uuid) != nil
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
-
-        if pairingLost {
-            markPairingLost(uuid: uuid)
-        }
 
         if !isManual {
             let reason = Self.bleReasonString(from: error)
@@ -1580,7 +1884,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self, self.shouldAutoReconnect(uuid: uuid, pairingLost: false),
                       self.centralManager.state == .poweredOn else { return }
-                self.centralManager.connect(peripheral, options: nil)
+                self.issueConnect(peripheral, uuid: uuid, source: "native_recovery")
             }
         }
     }
@@ -1590,6 +1894,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
         guard OmiCaptureReconnect.acceptsDownCallback(
             currentOwner: peripherals[uuid] === peripheral, connected: peripheral.state == .connected
         ) else { return }
+        savedRetryTasks.removeValue(forKey: uuid)?.cancel()
+        logBle(uuid: uuid, event: "connect_down_callback", detail: "pending_since_ms=\(connectPendingSince.removeValue(forKey: uuid) ?? 0)")
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
             || pairingRecoveryInFlight.remove(uuid) != nil
@@ -1614,6 +1920,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
             if recovery.stage == .finished {
                 recovery.settleResume(true)
                 if captureReconnects[uuid] === recovery { captureReconnects.removeValue(forKey: uuid) }
+                scheduleSavedRetry(peripheral, uuid: uuid)
             }
             return
         }
@@ -1624,7 +1931,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
         if savedReconnect.contains(uuid) {
             reportSavedReconnect(uuid, result: pairingLost ? "failed:pairing_lost" : "failed:disconnected")
-            scheduleSavedRetry(peripheral, uuid: uuid)
+            if shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), central.state == .poweredOn {
+                // Establish the OS request in this callback, before iOS can suspend us.
+                issueConnect(peripheral, uuid: uuid, source: "unexpected_disconnect")
+            }
             return
         }
 
@@ -1635,7 +1945,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 guard let self = self, self.shouldAutoReconnect(uuid: uuid, pairingLost: false),
                       self.centralManager.state == .poweredOn else { return }
                 // iOS handles this at the BLE chipset level — zero CPU/radio cost while waiting
-                self.centralManager.connect(peripheral, options: nil)
+                self.issueConnect(peripheral, uuid: uuid, source: "native_recovery")
             }
         }
     }
@@ -1720,9 +2030,19 @@ extension OmiBleManager: CBPeripheralDelegate {
         let charUuid = fullUuidString(characteristic.uuid)
         let key = "\(uuid):\(serviceUuid):\(charUuid)".lowercased()
 
+        // A timed-out read's late reply belongs to no waiter: issue the next op instead.
+        // On a notifying characteristic it is indistinguishable from a notification.
+        let lateReply = lateReadReply.remove(key) != nil
+        if lateReply {
+            DispatchQueue.main.async { [weak self] in self?.issueNextRead(key) }
+            if !characteristic.isNotifying { return }
+        }
+
         // Handle pending read completion
-        if let completion = readCompletions[key] {
-            readCompletions.removeValue(forKey: key)
+        if !lateReply, var queue = readCompletions[key], !queue.isEmpty {
+            let completion = queue.removeFirst().completion
+            readCompletions[key] = queue.isEmpty ? nil : queue
+            defer { issueNextRead(key) }
             if let error = error {
                 completion(.failure(error))
             } else {
@@ -1805,8 +2125,12 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         let key = "\(uuid):\(fullUuidString(service.uuid)):\(fullUuidString(characteristic.uuid))".lowercased()
 
-        if let completion = writeCompletions[key] {
-            writeCompletions.removeValue(forKey: key)
+        if lateWriteReply.remove(key) != nil {
+            DispatchQueue.main.async { [weak self] in self?.issueNextWrite(key) }
+        } else if var queue = writeCompletions[key], !queue.isEmpty {
+            let completion = queue.removeFirst().completion
+            writeCompletions[key] = queue.isEmpty ? nil : queue
+            defer { issueNextWrite(key) }
             if let error = error {
                 completion(.failure(error))
             } else {
@@ -1841,7 +2165,7 @@ extension OmiBleManager: CBPeripheralDelegate {
     private func beginPairingRecovery(for peripheral: CBPeripheral, uuid: String) {
         guard pairingRecoveryInFlight.insert(uuid).inserted else { return }
         NSLog("[OmiBle] GATT authentication failed for \(uuid); pairing recovery required")
-        manuallyDisconnected.insert(uuid)
+        markPairingLost(uuid: uuid)
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "pairing_lost") { _ in }
         centralManager.cancelPeripheralConnection(peripheral)
     }

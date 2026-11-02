@@ -65,7 +65,6 @@ cursor), `desktop_dispatches` / `desktop_artifact_deliveries` /
 | `candidate_integration_outbox` | `database/candidates.py`, `utils/task_intelligence/candidate_service.py` | Y — per-item claim | N — `failed` is retried forever; no DL | P — doc id = `candidate_id`; `set` overwrites | N | N | Y |
 | `conversation_finalization_jobs` | `database/conversation_finalization_jobs.py` | Y — per-job lease | Y — Cloud Tasks attempt fence → `dead_letter` + `last_failure_code` | Y — seed `(uid, conversation_id, revision)` | N | Y — `listen_finalization_oldest_nonterminal_age_seconds` (not `omi_queue_*`) | Y |
 | daily-summary hour-group loop | `utils/other/notifications.py` | N — one hour-group exception aborts later hours (#12530) | N | P — per-uid per-day Redis lock | N | N | N — top-level `except` logs and returns |
-| daily memory sweep | `utils/memory/daily_memory_sweep_inventory.py`, `daily_memory_sweep.py` | P — per-UID with page cap (#12533) | P — retry collection, not a typed DL | Y — receipts / invocation fences | P — retries first | N | P |
 
 ### Other durable work found (not the seven named in the brief)
 
@@ -90,7 +89,7 @@ outside `FC-batch-fault-domain-head-of-line-poison`'s four sibling incidents.
 |---|---|---|
 | Notification settings sync (`NotificationSettingsSyncCoordinator`) | `Desktop/Sources/ProactiveAssistants/Services/NotificationSettingsSyncCoordinator.swift` | UserDefaults pending flag + revision; not a multi-row batch outbox. There is no `NotificationSettingsSyncQueue` type. |
 | Canonical capture outbox (`StagedTaskStorage` + `CandidateOutboxRetryPolicy`) | `Rewind/Core/StagedTaskStorage.swift`, `TaskExtraction/ScreenCandidateAdapter.swift` | App-local GRDB; already has poison-row policy. Substrate for this language would be a third implementation. |
-| Suggested / dashboard / JIT feedback outboxes | `SuggestedTasksStore.swift`, `DashboardIntelligenceStore.swift`, `JITTriggerFeedbackClient.swift` | UserDefaults JSON blobs, owner-scoped, UI attribution |
+| Suggested / dashboard outboxes | `SuggestedTasksStore.swift`, `DashboardIntelligenceStore.swift` | UserDefaults JSON blobs, owner-scoped, UI attribution |
 | Kernel journal / chat-first deferral drivers | `Chat/KernelJournalBackendSyncDriver.swift`, `Chat/ChatFirstDeferralOutboxDriver.swift` | Transport only; durable store is the agent SQLite outboxes above |
 | WAL cloud sync, screen activity, transcription retry, action-item unsynced | `WAL/WALService.swift`, `ScreenActivitySyncService.swift`, `TranscriptionRetryService.swift`, `Stores/TasksStore.swift` | Domain-specific file/GRDB pipelines, not ordered batch outboxes |
 | In-memory: `ChatMessageRatingQueue`, `DeviceCommandQueue` | Chat / Bluetooth | Not durable |
@@ -143,8 +142,6 @@ Remaining exceptions, called out because they must not change product semantics:
   failure never aborts later hours; `send_daily_summary_notification` returns
   a typed non-success outcome when any hour rejects, including per-user send
   failures and an hour whose every timezone-chunk read failed.
-- Daily-sweep cleanup **and** the #12533 per-UID process loop drain through
-  `drain_sweep_uids` in `daily_memory_sweep_queue.py`.
 - Kernel SQLite outboxes publish oldest-ready age through
   `getJournalObservability`'s store-wide `MIN(created_at_ms)` union, not
   `omi_queue_*`.

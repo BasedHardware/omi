@@ -23,7 +23,7 @@ final class CallAudioSessionTrackerTests: XCTestCase {
           bundleID: bundle, pid: pid, isRunningInput: input, isRunningOutput: output)
       ],
       defaultInputDeviceID: device,
-      browserWindowTitles: titles)
+      browserWindows: (titles).map { CallAudioBrowserWindow(bundleID: "com.google.chrome", title: $0) })
   }
 
   func testHelperProcessesAreCountedUnderTheirApp() {
@@ -46,7 +46,7 @@ final class CallAudioSessionTrackerTests: XCTestCase {
             bundleID: "com.hnc.Discord.helper", pid: 2, isRunningInput: false, isRunningOutput: helperOut),
         ],
         defaultInputDeviceID: 1,
-        browserWindowTitles: [])
+        browserWindows: [])
     }
     tracker.ingest(discord(true, true, false), at: at(0))
     tracker.ingest(discord(true, true, false), at: at(90))
@@ -235,34 +235,35 @@ final class CallAudioSessionTrackerTests: XCTestCase {
 }
 
 final class MeetingCallObservationTests: XCTestCase {
-  func testDetectionKeepsTodaySemanticsIncludingThePre144Fallback() {
+  func testDetectionRequiresAudioCorroborationAndKeepsPre144Fallback() {
     let zoom = CallAudioSnapshot(
       processes: [
         CallAudioProcessSnapshot(bundleID: "us.zoom.xos", pid: 1, isRunningInput: true, isRunningOutput: true)
       ],
       defaultInputDeviceID: 1,
-      browserWindowTitles: [])
+      browserWindows: [])
     let titleOnly = CallAudioSnapshot(
       processes: [],
       defaultInputDeviceID: 1,
-      browserWindowTitles: ["Meet - abc-defg-hij"])
+      browserWindows: (["Meet - abc-defg-hij"]).map { CallAudioBrowserWindow(bundleID: "com.google.chrome", title: $0) }
+    )
     let browserMic = CallAudioSnapshot(
       processes: [
         CallAudioProcessSnapshot(
           bundleID: "com.google.chrome.helper", pid: 2, isRunningInput: true, isRunningOutput: true)
       ],
       defaultInputDeviceID: 1,
-      browserWindowTitles: [])
-    let quiet = CallAudioSnapshot(processes: [], defaultInputDeviceID: 1, browserWindowTitles: [])
+      browserWindows: [])
+    let quiet = CallAudioSnapshot(processes: [], defaultInputDeviceID: 1, browserWindows: [])
 
     XCTAssertTrue(
       MeetingCallObservation.isDetected(snapshot: zoom, mode: .always, processInputAPIAvailable: true))
     XCTAssertFalse(
       MeetingCallObservation.isDetected(snapshot: titleOnly, mode: .always, processInputAPIAvailable: true))
-    XCTAssertTrue(
+    XCTAssertFalse(
       MeetingCallObservation.isDetected(
         snapshot: titleOnly, mode: .onlyMeetings, processInputAPIAvailable: true))
-    XCTAssertTrue(
+    XCTAssertFalse(
       MeetingCallObservation.isDetected(snapshot: browserMic, mode: .always, processInputAPIAvailable: true))
     XCTAssertFalse(
       MeetingCallObservation.isDetected(snapshot: quiet, mode: .onlyMeetings, processInputAPIAvailable: true))
@@ -298,7 +299,8 @@ final class MeetingCallObservationTests: XCTestCase {
           bundleID: "com.google.chrome.helper", pid: 5, isRunningInput: true, isRunningOutput: true),
       ],
       defaultInputDeviceID: 1,
-      browserWindowTitles: ["Meet - abc-defg-hij"])
+      browserWindows: (["Meet - abc-defg-hij"]).map { CallAudioBrowserWindow(bundleID: "com.google.chrome", title: $0) }
+    )
     let identities = MeetingCallObservation.identities(
       snapshot: snapshot,
       processInputAPIAvailable: true,
@@ -315,7 +317,7 @@ final class MeetingCallObservationTests: XCTestCase {
         CallAudioProcessSnapshot(bundleID: "com.hnc.discord", pid: 7, isRunningInput: true, isRunningOutput: false),
       ],
       defaultInputDeviceID: 1,
-      browserWindowTitles: [])
+      browserWindows: [])
     XCTAssertTrue(
       MeetingCallObservation.isDetected(snapshot: snapshot, mode: .onlyMeetings, processInputAPIAvailable: true))
     let identities = MeetingCallObservation.identities(
@@ -364,7 +366,7 @@ final class MeetingCallCadenceAndRotationTests: XCTestCase {
         CallAudioProcessSnapshot(bundleID: bundle, pid: 7, isRunningInput: input, isRunningOutput: output)
       ],
       defaultInputDeviceID: 3,
-      browserWindowTitles: titles)
+      browserWindows: (titles).map { CallAudioBrowserWindow(bundleID: "com.google.chrome", title: $0) })
   }
 
   func testCadenceIsOneSecondOnlyWhileACallSurfaceHoldsTheMic() throws {
@@ -372,7 +374,7 @@ final class MeetingCallCadenceAndRotationTests: XCTestCase {
     defer { suite.remove() }
     XCTAssertEqual(detector.pollInterval, 4)
 
-    detector.applySnapshot(CallAudioSnapshot(processes: [], defaultInputDeviceID: 3, browserWindowTitles: []))
+    detector.applySnapshot(CallAudioSnapshot(processes: [], defaultInputDeviceID: 3, browserWindows: []))
     XCTAssertEqual(detector.pollInterval, 4)
 
     detector.applySnapshot(audio("us.zoom.xos", input: true, output: true))
@@ -400,7 +402,9 @@ final class MeetingCallCadenceAndRotationTests: XCTestCase {
 
     now = Date(timeIntervalSince1970: 5_000)
     detector.applySnapshot(audio("us.zoom.xos", input: true, output: true))
-    now = now.addingTimeInterval(40)
+    now += MeetingDetectionTiming.confirmationPeriod
+    detector.applySnapshot(audio("us.zoom.xos", input: true, output: true))
+    now = now.addingTimeInterval(40 - MeetingDetectionTiming.confirmationPeriod)
     detector.applySnapshot(audio("us.zoom.xos", input: false, output: false))
     now = now.addingTimeInterval(4)
     detector.applySnapshot(audio("us.zoom.xos", input: false, output: false))
@@ -425,7 +429,9 @@ final class MeetingCallCadenceAndRotationTests: XCTestCase {
     defer { suite.remove() }
 
     detector.applySnapshot(audio("us.zoom.xos", input: true, output: true))
-    now = now.addingTimeInterval(40)
+    now += MeetingDetectionTiming.confirmationPeriod
+    detector.applySnapshot(audio("us.zoom.xos", input: true, output: true))
+    now = now.addingTimeInterval(40 - MeetingDetectionTiming.confirmationPeriod)
     detector.applySnapshot(audio("us.zoom.xos", input: false, output: false))
     now = now.addingTimeInterval(9)
     detector.applySnapshot(audio("us.zoom.xos", input: false, output: false))
@@ -449,6 +455,8 @@ final class MeetingCallCadenceAndRotationTests: XCTestCase {
     let title = ["Meet - abc-defg-hij"]
 
     detector.applySnapshot(audio("com.google.chrome.helper", input: true, output: true, titles: title))
+    now += MeetingDetectionTiming.confirmationPeriod
+    detector.applySnapshot(audio("com.google.chrome.helper", input: true, output: true, titles: title))
     now = now.addingTimeInterval(4)
     detector.applySnapshot(audio("com.google.chrome.helper", input: false, output: true, titles: title))
     now = now.addingTimeInterval(4)
@@ -469,6 +477,8 @@ final class MeetingCallCadenceAndRotationTests: XCTestCase {
       onChange: { edges.append($0) })
     defer { suite.remove() }
 
+    detector.applySnapshot(audio("com.tinyspeck.slackmacgap", input: true, output: true))
+    now += MeetingDetectionTiming.confirmationPeriod
     detector.applySnapshot(audio("com.tinyspeck.slackmacgap", input: true, output: true))
     now = now.addingTimeInterval(10)
     detector.applySnapshot(audio("com.tinyspeck.slackmacgap", input: false, output: false))
@@ -516,7 +526,7 @@ final class CallAppAudioDailyLedgerTests: XCTestCase {
           bundleID: "us.zoom.xos", pid: 9, isRunningInput: input, isRunningOutput: output)
       ],
       defaultInputDeviceID: 1,
-      browserWindowTitles: [])
+      browserWindows: [])
   }
 
   private func ledger() -> CallAppAudioDailyLedger {
@@ -564,7 +574,7 @@ final class CallAppAudioDailyLedgerTests: XCTestCase {
           bundleID: "com.google.chrome.helper", pid: 3, isRunningInput: false, isRunningOutput: true)
       ],
       defaultInputDeviceID: 1,
-      browserWindowTitles: [])
+      browserWindows: [])
     tracker.ingest(
       CallAudioSnapshot(
         processes: [
@@ -572,7 +582,7 @@ final class CallAppAudioDailyLedgerTests: XCTestCase {
             bundleID: "com.google.chrome.helper", pid: 3, isRunningInput: true, isRunningOutput: true)
         ],
         defaultInputDeviceID: 1,
-        browserWindowTitles: []),
+        browserWindows: []),
       at: day(26))
     tracker.ingest(mute, at: day(26).addingTimeInterval(1))
     tracker.ingest(mute, at: day(26).addingTimeInterval(4))
@@ -700,7 +710,7 @@ final class MeetingDetectorAudioSummaryFlushTests: XCTestCase {
             bundleID: "us.zoom.xos", pid: 1, isRunningInput: true, isRunningOutput: true)
         ],
         defaultInputDeviceID: 1,
-        browserWindowTitles: []),
+        browserWindows: []),
       at: yesterday)
     _ = ledger.ingest(
       CallAudioSnapshot(
@@ -709,7 +719,7 @@ final class MeetingDetectorAudioSummaryFlushTests: XCTestCase {
             bundleID: "us.zoom.xos", pid: 1, isRunningInput: false, isRunningOutput: false)
         ],
         defaultInputDeviceID: 1,
-        browserWindowTitles: []),
+        browserWindows: []),
       at: yesterday.addingTimeInterval(120))
 
     var emitted: [CallAppAudioSummary] = []
@@ -718,7 +728,7 @@ final class MeetingDetectorAudioSummaryFlushTests: XCTestCase {
       mode: .always,
       processInputAPIAvailable: true,
       snapshot: {
-        CallAudioSnapshot(processes: [], defaultInputDeviceID: 1, browserWindowTitles: [])
+        CallAudioSnapshot(processes: [], defaultInputDeviceID: 1, browserWindows: [])
       },
       now: { today },
       audioLedgerDefaults: defaults,

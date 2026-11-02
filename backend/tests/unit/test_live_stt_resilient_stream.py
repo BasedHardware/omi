@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
+from config.live_stt_replay import DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
 from config.stt_provider_policy import provider_for_service
 from routers.listen import receiver as listen_receiver
 from routers.listen.receiver import ListenReceiver
@@ -230,10 +231,10 @@ async def test_window_ring_limit_with_pending_speech_replays_before_current_chun
     await listener._flush_stt_buffer(bytearray(b'B\x00' * 2), force=True)
     if listener._replay_recovery_task is not None:
         await listener._replay_recovery_task
-    assert raw.failure == 'capacity_full'
+    assert raw.failure == 'replay_ring_overflow'
     assert old.finished
-    assert live_stt_terminal_reason(old, 'connection_lost') == 'capacity_full'
-    assert listener._pending_live_failover.reason == 'capacity_full'
+    assert live_stt_terminal_reason(old, 'connection_lost') == 'replay_ring_overflow'
+    assert listener._pending_live_failover.reason == 'replay_ring_overflow'
     assert replayed == [(0, b'A\x00' * 6 + b'B\x00' * 2)]
     assert new.sent == replayed
     assert ring.snapshot() == ((0, b'A\x00' * 6), (6, b'B\x00' * 2))
@@ -478,7 +479,7 @@ def test_whitespace_text_and_stale_candidate_tokens_never_release_the_episode():
 
 
 @pytest.mark.asyncio
-async def test_transient_soniox_reentry_replays_newest_twenty_second_prefix(monkeypatch):
+async def test_transient_soniox_reentry_replays_newest_prefix_inside_the_wall(monkeypatch):
     monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
     listener = receiver(monkeypatch)
     ring = listener._resilient_audio
@@ -501,9 +502,11 @@ async def test_transient_soniox_reentry_replays_newest_twenty_second_prefix(monk
         assert await listener._failover_stt_socket()
     assert len(dialed) == 1
     assert listener.recovery.dial_attempts == 2
-    assert dialed[0].sent == [(230, b'R\x00' * 40)]
-    assert ring.buffered_bytes == 80
-    assert ring.capture_bounds == (230, 270)
+    # The 20s wall less the held-back margin, at this fixture's 2 Hz rate.
+    prefix_samples = int((20.0 - DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS) * 2)
+    assert dialed[0].sent == [(270 - prefix_samples, b'R\x00' * prefix_samples)]
+    assert ring.buffered_bytes == prefix_samples * 2
+    assert ring.capture_bounds == (270 - prefix_samples, 270)
 
 
 @pytest.mark.asyncio

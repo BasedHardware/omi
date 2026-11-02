@@ -1,0 +1,10 @@
+{
+  "state": "paused",
+  "title": "Chat is paused",
+  "body": "You’ve used this month’s budget. Capture, saved content and on-device transcription and summaries continue.",
+  "reset_at": 1793491200,
+  "reset_line": "Chat is back on Nov 1.",
+  "trigger": "usage_budget",
+  "upgrade_plan": null,
+  "upgrade_label": null
+}

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:omi/services/integrations/connection_read.dart';
 
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -32,6 +33,7 @@ class IntegrationProvider extends ChangeNotifier {
   final Duration statusTimeout;
   final Set<String> _statusErrors = {};
   int _readGeneration = 0;
+  final _activeReads = <ConnectionRead<IntegrationResponse?>>{};
 
   final Map<String, bool> _integrations = {};
   bool _isLoading = false;
@@ -56,18 +58,18 @@ class IntegrationProvider extends ChangeNotifier {
 
   bool _isCurrent(int generation) => generation == _sessionGeneration;
 
-  Future<void> loadFromBackend({bool forceRefresh = false}) {
+  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false}) {
     final existing = _inFlightLoad;
     if (existing != null && !forceRefresh) return existing;
     late final Future<void> started;
-    started = _loadFromBackendBody(++_readGeneration).whenComplete(() {
+    started = _loadFromBackendBody(++_readGeneration, silent: silent).whenComplete(() {
       if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
     _inFlightLoad = started;
     return started;
   }
 
-  Future<void> _loadFromBackendBody(int readGeneration) async {
+  Future<void> _loadFromBackendBody(int readGeneration, {required bool silent}) async {
     final generation = _sessionGeneration;
     bool isCurrent() => _isCurrent(generation) && readGeneration == _readGeneration;
     final syncAttempt = ProductTelemetry.instance.start(
@@ -81,16 +83,24 @@ class IntegrationProvider extends ChangeNotifier {
       syncAttempt.complete(outcome, failure: failure);
     }
 
-    _isLoading = true;
-    notifyListeners();
+    if (!silent) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       final keys = trackedAppKeys;
       // A malformed or unresponsive service must not strand all other rows.
       final responses = await Future.wait(keys.map((key) async {
         try {
-          final response = await Future.sync(() => _fetchStatus(key)).timeout(statusTimeout);
-          return response?.appKey == key ? response : null;
+          final read = ConnectionRead(() => _fetchStatus(key), statusTimeout);
+          _activeReads.add(read);
+          try {
+            final response = await read.future;
+            return response?.appKey == key ? response : null;
+          } finally {
+            _activeReads.remove(read);
+          }
         } catch (_) {
           return null;
         }
@@ -193,6 +203,10 @@ class IntegrationProvider extends ChangeNotifier {
   void clearUserData() {
     _sessionGeneration++;
     _readGeneration++;
+    for (final read in _activeReads) {
+      read.cancel();
+    }
+    _activeReads.clear();
     _statusErrors.clear();
     _inFlightLoad = null;
     _integrations.clear();
@@ -203,5 +217,16 @@ class IntegrationProvider extends ChangeNotifier {
       _persistPref(prefKeyFor(key), false);
     }
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _sessionGeneration++;
+    _readGeneration++;
+    for (final read in _activeReads) {
+      read.cancel();
+    }
+    _activeReads.clear();
+    super.dispose();
   }
 }

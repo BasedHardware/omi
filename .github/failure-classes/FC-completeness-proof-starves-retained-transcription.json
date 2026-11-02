@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-completeness-proof-starves-retained-transcription",
+  "violated_contract": "A finalized recording whose tail cannot be proved complete must still transcribe stored audio after 30 minutes, explicitly partial. Conflating transcript availability with complete-tail proof permanently starves retained audio, including recordings above the proof walk's reference or unit caps.",
+  "canonical_prevention": "Keep complete seals strict and add a separate partial barrier, guarded by fresh producer-death proof and the same transactional privacy and payer authority. Serialize bounded worker pages, persist sample-exact recognized coverage and recognize only newly stored frames on late fills. Preserve existing text and edits; count partial finishes separately from complete and unfinished rows.",
+  "canonical_prevention_artifact": [
+    "backend/config/record_partial.py",
+    "backend/database/record_partial.py",
+    "backend/tests/unit/test_record_partial.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/batch_pipeline/", "backend/database/record_partial.py"],
+  "status": "open"
+}

@@ -153,14 +153,21 @@ def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> 
 
     These components are additive to GCP/LLM invoices, NOT to gross_total (which
     already contains a modelled STT allowance). Missing provider means unknown,
-    not zero. The existing loader replaces these rows with the rest of each date.
+    not zero. A provider listed under ``incomplete`` has unclassified positive
+    dollars and is not measured. There is no second figure to reconcile against
+    the accepted invoice, so ``delta_pct`` is null and is not a measured-zero
+    claim. The existing loader replaces these rows with the rest of each date.
     """
     import json
 
     path = raw / "stt_vendor_cost_daily.json"
     if not path.exists():
         return [], []
-    providers = json.loads(path.read_text())["providers"]
+    payload = json.loads(path.read_text())
+    providers = payload["providers"]
+    incomplete = payload.get("incomplete") or {}
+    if set(providers) & set(incomplete):
+        raise ValueError("incomplete STT invoice cannot be published as measured")
     longs, recon = [], []
     for provider in ("soniox", "deepgram"):
         if provider not in providers:
@@ -168,10 +175,14 @@ def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> 
         for day in dates:
             if day not in providers[provider]:
                 raise ValueError("measured STT invoice missing requested date")
-            amount = money(providers[provider][day])
+            day_value = providers[provider][day]
+            if isinstance(day_value, dict):
+                raise ValueError("incomplete STT invoice cannot be published as measured")
+            amount = money(day_value)
             if not amount.is_finite() or amount < 0:
                 raise ValueError("invalid measured STT invoice amount")
             component = "stt_%s_measured" % provider
+            published = float(amount)
             longs.append(
                 {
                     "date": day,
@@ -179,7 +190,7 @@ def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> 
                     "segment": "all",
                     "component": component,
                     "method": "measured",
-                    "usd": float(amount),
+                    "usd": published,
                     "users": 0,
                     "usd_per_user_day": None,
                 }
@@ -188,11 +199,12 @@ def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> 
                 {
                     "date": day,
                     "pool": component,
-                    "pool_usd": float(amount),
-                    "allocated_usd": float(amount),
-                    "delta_pct": 0.0,
+                    "pool_usd": published,
+                    "allocated_usd": published,
+                    "delta_pct": None,
                     "invoice_source": provider + "_usage_api",
-                    "note": "company total only; allocated_usd is published total, not user allocation; "
+                    "note": "company total only; allocated_usd is the accepted invoice, not a user allocation; "
+                    "delta_pct is not claimed because there is no separate allocation to compare; "
                     "do not add to modelled gross_total/stt_vendor_low",
                     "inputs_settled": settled_through is None or day <= settled_through,
                 }

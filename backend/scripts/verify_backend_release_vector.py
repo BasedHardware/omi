@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Read-only verification of a converged Cloud Run and backend-listen release vector."""
+"""Read-only verification of a converged Cloud Run and backend-listen release vector.
+
+Serving verification treats the service-level ``latestReadyRevisionName``
+pointer as converged once it names the expected revision. Right after a
+promotion the Cloud Run control plane can leave that aggregate pointer on the
+previous revision for minutes even though the promoted revision is itself
+Ready and serves 100% of traffic (gcp_backend.yml runs 40788118426 and
+40795861405 both failed and rolled back on that lag). When the pointer
+mismatch is the only serving error, the verifier polls a bounded window for
+the pointer to converge instead of failing the deploy; every other mismatch
+-- traffic, image, revision readiness -- still fails immediately.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +18,20 @@ import argparse
 import json
 import subprocess
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+LISTENER_SERVICE = 'backend-listen'
 MIN_CLOUD_RUN_TIMEOUT_SECONDS = 300
+DEFAULT_LATEST_READY_WAIT_SECONDS = 300.0
+DEFAULT_LATEST_READY_POLL_INTERVAL_SECONDS = 10.0
+# Every gcloud/kubectl query is a bounded subprocess call so a stalled query
+# fails the verification instead of holding the deploy (and its deployment
+# lock) open past the caller's wait budget.
+QUERY_TIMEOUT_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -28,6 +47,12 @@ class DeploymentExpectation:
     revisions: Mapping[str, str]
     listener_deployment: str
     listener_service: str
+    # Per-service immutable refs for services a deploy moved onto a role image
+    # (deploy-backend-stack service_images); every other service expects `image`.
+    service_images: Mapping[str, str] = field(default_factory=dict)
+
+    def image_for(self, service: str) -> str:
+        return self.service_images.get(service, self.image)
 
 
 def build_expectation(
@@ -40,6 +65,7 @@ def build_expectation(
     environment: str,
     short_sha: str | None = None,
     expected_image: str | None = None,
+    service_images: Mapping[str, str] | None = None,
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -71,6 +97,12 @@ def build_expectation(
         resolved_short_sha = normalized_sha[:7]
     if expected_image is not None and not expected_image.strip():
         raise ValueError('expected image must not be empty')
+    service_images = dict(service_images or {})
+    unknown = sorted(set(service_images) - {*CLOUD_RUN_SERVICES, LISTENER_SERVICE})
+    if unknown:
+        raise ValueError(f'service images name unknown services: {unknown}')
+    if any('@sha256:' not in ref for ref in service_images.values()):
+        raise ValueError('service images must be digest references')
     suffix = f'{resolved_short_sha}-{deploy_run_id}-{deploy_run_attempt}'
     return DeploymentExpectation(
         commit_sha=normalized_sha,
@@ -86,6 +118,7 @@ def build_expectation(
         revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
+        service_images=service_images,
     )
 
 
@@ -93,7 +126,7 @@ def build_read_only_commands(
     expectation: DeploymentExpectation,
     *,
     include_listener: bool = True,
-    include_candidate_revisions: bool = False,
+    include_revision_documents: bool = False,
 ) -> dict[str, list[str]]:
     commands = {
         f'cloud_run/{service}': [
@@ -108,7 +141,7 @@ def build_read_only_commands(
         ]
         for service in CLOUD_RUN_SERVICES
     }
-    if include_candidate_revisions:
+    if include_revision_documents:
         commands.update(
             {
                 f'cloud_run_revision/{service}': [
@@ -181,7 +214,16 @@ def assert_commands_are_read_only(commands: Mapping[str, Sequence[str]]) -> None
 def collect_documents(commands: Mapping[str, Sequence[str]]) -> dict[str, Mapping[str, Any]]:
     documents: dict[str, Mapping[str, Any]] = {}
     for name, command in commands.items():
-        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=QUERY_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f'{name} query timed out after {QUERY_TIMEOUT_SECONDS}s') from exc
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip() or f'exit code {completed.returncode}'
             raise RuntimeError(f'{name} query failed: {detail}')
@@ -212,7 +254,7 @@ def evaluate(
                 evaluate_cloud_run_service(
                     service,
                     expected_revision,
-                    expectation.image,
+                    expectation.image_for(service),
                     document,
                     expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
@@ -231,6 +273,10 @@ def evaluate(
             else:
                 errors.extend(evaluator(expectation, document))
     return errors
+
+
+def _latest_ready_error(service: str, expected_revision: str) -> str:
+    return f'cloud_run/{service}: latest ready revision is not {expected_revision}'
 
 
 def evaluate_cloud_run_service(
@@ -254,18 +300,17 @@ def evaluate_cloud_run_service(
         errors.append(f'cloud_run/{service}: latest created revision is not {expected_revision}')
     if require_serving_traffic:
         if status.get('latestReadyRevisionName') != expected_revision:
-            errors.append(f'cloud_run/{service}: latest ready revision is not {expected_revision}')
+            errors.append(_latest_ready_error(service, expected_revision))
+            # A promotion that already shifted traffic can leave the
+            # service-level latestReadyRevisionName aggregate on the previous
+            # revision for minutes while the expected revision itself is Ready.
+            # The revision's own Ready condition is the witness that gates the
+            # bounded poll in main(); a pointer mismatch on a not-Ready
+            # revision stays an immediate failure.
+            if _revision_ready_status(expected_revision_document) != 'True':
+                errors.append(f'cloud_run/{service}: expected revision is not Ready')
     else:
-        revision_status = _mapping(_mapping(expected_revision_document).get('status'))
-        ready_condition = next(
-            (
-                condition
-                for condition in _list(revision_status.get('conditions'))
-                if _mapping(condition).get('type') == 'Ready'
-            ),
-            None,
-        )
-        if _mapping(ready_condition).get('status') != 'True':
+        if _revision_ready_status(expected_revision_document) != 'True':
             errors.append(f'cloud_run/{service}: expected revision is not Ready')
     if image != expected_image:
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
@@ -297,8 +342,8 @@ def evaluate_listener_deployment(expectation: DeploymentExpectation, document: M
     errors: list[str] = []
     if metadata.get('name') != expectation.listener_deployment:
         errors.append(f'gke/deployment: name is not {expectation.listener_deployment}')
-    if image != expectation.image:
-        errors.append(f'gke/deployment: template image is not {expectation.image}')
+    if image != expectation.image_for(LISTENER_SERVICE):
+        errors.append(f'gke/deployment: template image is not {expectation.image_for(LISTENER_SERVICE)}')
     if not template_spec.get('serviceAccountName'):
         errors.append('gke/deployment: service account is missing')
     if not isinstance(desired, int) or desired < 1 or status.get('availableReplicas') != desired:
@@ -341,6 +386,108 @@ def evaluate_listener_endpoints(expectation: DeploymentExpectation, document: Ma
     return ['gke/endpointslices: no ready endpoint for backend-listen service']
 
 
+def partition_latest_ready_lag(
+    expectation: DeploymentExpectation, errors: Sequence[str]
+) -> tuple[list[str], list[str]]:
+    """Split serving errors into pointer-lag services and every other error.
+
+    Only an exact latest-ready pointer error counts as lag; mixed results keep
+    the other errors so the caller fails immediately instead of polling.
+    """
+    pointer_errors = {
+        _latest_ready_error(service, revision): service for service, revision in expectation.revisions.items()
+    }
+    lagging: list[str] = []
+    others: list[str] = []
+    for error in errors:
+        service = pointer_errors.get(error)
+        if service is None:
+            others.append(error)
+        else:
+            lagging.append(service)
+    return lagging, others
+
+
+@dataclass(frozen=True)
+class LatestReadyPoll:
+    documents: Mapping[str, Mapping[str, Any]]
+    converged: bool
+    timed_out: bool
+    elapsed_seconds: float
+
+
+def poll_latest_ready_convergence(
+    expectation: DeploymentExpectation,
+    documents: Mapping[str, Mapping[str, Any]],
+    lagging: Sequence[str],
+    *,
+    wait_seconds: float,
+    interval_seconds: float,
+    include_listener: bool = True,
+    collector: Callable[[Mapping[str, Sequence[str]]], dict[str, Mapping[str, Any]]] | None = None,
+) -> LatestReadyPoll:
+    """Wait a bounded window for lagging latestReadyRevisionName pointers to converge.
+
+    Callers reach this only when the pointer mismatch is the sole serving error,
+    so each lagging service's expected revision is already proven Ready (its own
+    revision document) and serving 100% of traffic. Each round re-reads just the
+    lagging services and re-runs the full serving evaluation: a converged
+    pointer passes, and any new non-pointer mismatch aborts the poll
+    immediately. When the window expires with pointer-only errors still
+    standing, the poll reports ``timed_out`` and the caller fails verification.
+    Each query carries its own subprocess timeout, so a stalled gcloud fails
+    closed instead of holding the deploy past the window.
+    """
+    resolve = collector or collect_documents
+    poll_commands = build_read_only_commands(expectation, include_listener=False, include_revision_documents=True)
+    wanted = {
+        name: command
+        for name, command in poll_commands.items()
+        if name
+        in {f'cloud_run/{service}' for service in lagging} | {f'cloud_run_revision/{service}' for service in lagging}
+    }
+    started = time.monotonic()
+    deadline = started + wait_seconds
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return LatestReadyPoll(
+                documents, converged=False, timed_out=True, elapsed_seconds=time.monotonic() - started
+            )
+        time.sleep(min(interval_seconds, remaining))
+        documents = {**documents, **resolve(wanted)}
+        errors = evaluate(expectation, documents, include_listener=include_listener)
+        lagging_now, others = partition_latest_ready_lag(expectation, errors)
+        if not others and not lagging_now:
+            return LatestReadyPoll(
+                documents, converged=True, timed_out=False, elapsed_seconds=time.monotonic() - started
+            )
+        if others:
+            return LatestReadyPoll(
+                documents, converged=False, timed_out=False, elapsed_seconds=time.monotonic() - started
+            )
+
+
+def _latest_ready_timeout_errors(
+    expectation: DeploymentExpectation,
+    documents: Mapping[str, Mapping[str, Any]],
+    *,
+    wait_seconds: float,
+) -> list[str]:
+    errors: list[str] = []
+    for service, expected_revision in expectation.revisions.items():
+        status = _mapping(_mapping(documents.get(f'cloud_run/{service}')).get('status'))
+        observed = status.get('latestReadyRevisionName')
+        if observed == expected_revision:
+            continue
+        errors.append(
+            f'cloud_run/{service}: latest ready revision is still {observed!r}, not {expected_revision}, '
+            f'after waiting {wait_seconds:g}s; the expected revision is Ready and serves 100% of traffic, '
+            'so the service-level latestReadyRevisionName pointer did not converge'
+        )
+    return errors
+
+
 def evidence(
     expectation: DeploymentExpectation,
     documents: Mapping[str, Mapping[str, Any]],
@@ -348,6 +495,7 @@ def evidence(
     *,
     require_serving_traffic: bool = True,
     include_listener: bool = True,
+    latest_ready_poll: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     cloud_run: dict[str, dict[str, Any]] = {}
     for service in CLOUD_RUN_SERVICES:
@@ -366,8 +514,9 @@ def evidence(
                 for entry in _list(status.get('traffic'))
             ],
         }
-        if not require_serving_traffic:
-            revision_status = _mapping(_mapping(documents.get(f'cloud_run_revision/{service}', {})).get('status'))
+        revision_document = documents.get(f'cloud_run_revision/{service}')
+        if revision_document is not None:
+            revision_status = _mapping(_mapping(revision_document).get('status'))
             ready_condition = next(
                 (
                     condition
@@ -396,6 +545,11 @@ def evidence(
         'result': 'pass' if not errors else 'fail',
         'errors': list(errors),
     }
+    if expectation.service_images:
+        # Only a role-image opt-in records per-service refs; the default vector is unchanged.
+        report['release_vector']['service_images'] = dict(expectation.service_images)
+    if latest_ready_poll is not None:
+        report['latest_ready_lag_poll'] = dict(latest_ready_poll)
     if include_listener:
         deployment = documents.get('gke/deployment', {})
         deployment_spec = _mapping(deployment.get('spec'))
@@ -404,7 +558,7 @@ def evidence(
         containers = _list(template_spec.get('containers'))
         report['release_vector']['backend_listen'] = {
             'deployment': expectation.listener_deployment,
-            'image': expectation.image,
+            'image': expectation.image_for(LISTENER_SERVICE),
         }
         report['gke_listener'] = {
             'deployment': expectation.listener_deployment,
@@ -425,6 +579,19 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 
 def _list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
+
+
+def _revision_ready_status(revision_document: Mapping[str, Any] | None) -> Any:
+    revision_status = _mapping(_mapping(revision_document).get('status'))
+    ready_condition = next(
+        (
+            condition
+            for condition in _list(revision_status.get('conditions'))
+            if _mapping(condition).get('type') == 'Ready'
+        ),
+        None,
+    )
+    return _mapping(ready_condition).get('status')
 
 
 def _container_env(containers: Sequence[Any]) -> dict[str, str]:
@@ -475,6 +642,13 @@ def main() -> int:
         help='immutable image reference recorded by a release-ring deployment',
     )
     parser.add_argument(
+        '--service-image',
+        action='append',
+        default=[],
+        metavar='SERVICE=REF',
+        help='digest a deploy moved SERVICE onto (deploy-backend-stack service_images); repeatable',
+    )
+    parser.add_argument(
         '--candidate',
         action='store_true',
         help='verify a ready no-traffic candidate release vector before promotion',
@@ -484,9 +658,29 @@ def main() -> int:
         action='store_true',
         help='verify only Cloud Run; candidate mode accepts no traffic and serving mode requires 100% traffic',
     )
+    parser.add_argument(
+        '--latest-ready-wait-seconds',
+        type=float,
+        default=DEFAULT_LATEST_READY_WAIT_SECONDS,
+        help=(
+            'serving mode: seconds to wait for a lagging service-level latestReadyRevisionName '
+            'pointer to converge when the expected revision is Ready and serves 100% of traffic; '
+            '0 disables the wait'
+        ),
+    )
+    parser.add_argument(
+        '--latest-ready-poll-interval-seconds',
+        type=float,
+        default=DEFAULT_LATEST_READY_POLL_INTERVAL_SECONDS,
+        help='serving mode: seconds between latestReadyRevisionName convergence polls',
+    )
     parser.add_argument('--evidence-path', type=Path)
     args = parser.parse_args()
     try:
+        if args.latest_ready_wait_seconds < 0:
+            raise ValueError('latest-ready wait must not be negative')
+        if args.latest_ready_poll_interval_seconds <= 0:
+            raise ValueError('latest-ready poll interval must be positive')
         expectation = build_expectation(
             commit_sha=args.commit_sha,
             short_sha=args.short_sha,
@@ -496,20 +690,56 @@ def main() -> int:
             region=args.region,
             environment=args.environment,
             expected_image=args.expected_image,
+            service_images=dict(item.split('=', 1) for item in args.service_image),
         )
         commands = build_read_only_commands(
             expectation,
             include_listener=not args.cloud_run_only,
-            include_candidate_revisions=args.candidate,
+            include_revision_documents=True,
         )
         assert_commands_are_read_only(commands)
         documents = collect_documents(commands)
+        require_serving_traffic = not args.candidate
+        include_listener = not args.cloud_run_only
         errors = evaluate(
             expectation,
             documents,
-            require_serving_traffic=not args.candidate,
-            include_listener=not args.cloud_run_only,
+            require_serving_traffic=require_serving_traffic,
+            include_listener=include_listener,
         )
+        latest_ready_poll: dict[str, Any] | None = None
+        if require_serving_traffic and errors and args.latest_ready_wait_seconds > 0:
+            lagging, others = partition_latest_ready_lag(expectation, errors)
+            if lagging and not others:
+                poll = poll_latest_ready_convergence(
+                    expectation,
+                    documents,
+                    lagging,
+                    wait_seconds=args.latest_ready_wait_seconds,
+                    interval_seconds=args.latest_ready_poll_interval_seconds,
+                    include_listener=include_listener,
+                )
+                documents = poll.documents
+                errors = evaluate(
+                    expectation,
+                    documents,
+                    require_serving_traffic=True,
+                    include_listener=include_listener,
+                )
+                latest_ready_poll = {
+                    'services': sorted(lagging),
+                    'wait_seconds': args.latest_ready_wait_seconds,
+                    'poll_interval_seconds': args.latest_ready_poll_interval_seconds,
+                    'converged': poll.converged,
+                    'timed_out': poll.timed_out,
+                    'elapsed_seconds': round(poll.elapsed_seconds, 3),
+                }
+                if poll.timed_out:
+                    errors.extend(
+                        _latest_ready_timeout_errors(
+                            expectation, documents, wait_seconds=args.latest_ready_wait_seconds
+                        )
+                    )
     except (RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
         return 1
@@ -520,6 +750,7 @@ def main() -> int:
             errors,
             require_serving_traffic=not args.candidate,
             include_listener=not args.cloud_run_only,
+            latest_ready_poll=latest_ready_poll,
         ),
         indent=2,
         sort_keys=True,

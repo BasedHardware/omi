@@ -3,13 +3,20 @@
 import hashlib
 import threading
 import time
+from bisect import bisect_right
+from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
 from utils.other.raw_audio import decode_capture
 
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
-_INDEX_TTL = 5
+# Pack writes invalidate their conversation's entry proactively
+# (invalidate_pack_index), so the TTL only bounds cross-instance staleness,
+# and staleness always fails safe: a missing pack keeps the PCM write (proof
+# path) or falls back to PCM (read path). 120 s amortizes the per-read-session
+# list over the ~6-60 s flush cadence instead of listing once per flush.
+_INDEX_TTL = 120
 _MAX_INDEXES = 128
 
 
@@ -31,11 +38,16 @@ def list_packs(bucket, uid: str, conversation_id: str):
         if index >= 10000:
             raise TimeoutError('raw capture index budget exhausted')
         metadata = blob.metadata or {}
+        if metadata.get('clock_source') == 'arrival_estimate':
+            # Legacy pusher clocks cannot position independent raw packs on a
+            # capture timeline. Keep them recoverable by immutable receipt;
+            # ordinary playback uses the legacy continuous PCM projection.
+            continue
         try:
             start, end = float(metadata['capture_start']), float(metadata['capture_end'])
             if int(metadata['gap_count']) != 0 or end <= start or int(metadata['channels']) != 1:
                 continue
-            if metadata['codec'] not in {'opus', 'flac'}:
+            if metadata['codec'] not in {'opus', 'flac', 'pcm16', 'pcm8'}:
                 continue
             if metadata.get('source_layout', 'mono') != 'mono':
                 continue
@@ -113,8 +125,8 @@ def verified_pcm_paths(bucket, uid: str, conversation_id: str, chunks, sample_ra
     return verified
 
 
-def pcm_for_span(bucket, uid: str, conversation_id: str, span):
-    if not span or span['sample_rate'] != 16000:
+def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha256: str | None = None):
+    if not span or span['sample_rate'] != 16000 or not expected_sha256:
         return None
     start = float(span['start'])
     count = int(span['samples']) * 2
@@ -123,6 +135,72 @@ def pcm_for_span(bucket, uid: str, conversation_id: str, span):
             pcm = read_pack(bucket, pack['path'], uid)
             offset = round((start - pack['timestamp']) * 16000) * 2
             selected = pcm[offset : offset + count]
-            if len(selected) == count:
+            if len(selected) == count and hashlib.sha256(selected).hexdigest() == expected_sha256:
                 return selected
     return None
+
+
+def uncovered_raw_packs(packs: list[dict], chunks: list[dict]) -> list[dict]:
+    """Project only uncovered raw intervals; never infer coverage from blob size."""
+    covered: list[tuple[int, int]] = []
+    unknown = []
+    for item in chunks:
+        span = chunk_span(item)
+        if span and span_valid(span['start'], span['start'] + span['samples'] / span['sample_rate']):
+            covered.append(
+                (round(span['start'] * 16000), round((span['start'] + span['samples'] / span['sample_rate']) * 16000))
+            )
+        else:
+            unknown.append(item['timestamp'])
+    union: list[tuple[int, int]] = []
+    for start, end in sorted(covered):
+        if union and start <= union[-1][1]:
+            union[-1] = (union[-1][0], max(union[-1][1], end))
+        else:
+            union.append((start, end))
+    ends = [end for _, end in union]
+    result = []
+    raw_cursor = None
+    for pack in packs:
+        # Keep historical selection for spanless legacy entries: their encoded
+        # size is not proof of sample coverage.
+        if any(pack['timestamp'] <= stamp < pack['raw_end'] for stamp in unknown):
+            continue
+        original_start = round(pack['timestamp'] * 16000)
+        original_end = original_start + pack['span']['samples']
+        cursor = max(original_start, raw_cursor) if raw_cursor is not None else original_start
+        remaining = []
+        index = bisect_right(ends, cursor)
+        while index < len(union) and union[index][0] < original_end and cursor < original_end:
+            lo, hi = union[index]
+            if lo > cursor:
+                remaining.append((cursor, min(lo, original_end)))
+            cursor = max(cursor, hi)
+            index += 1
+        if cursor < original_end:
+            remaining.append((cursor, original_end))
+        raw_cursor = max(raw_cursor or original_end, original_end)
+        for start, end in remaining:
+            item = dict(pack)
+            if start != original_start or end != original_end:
+                item.update(
+                    timestamp=start / 16000,
+                    raw_end=end / 16000,
+                    raw_source_start=pack['timestamp'],
+                    span={'start': start / 16000, 'samples': end - start, 'sample_rate': 16000},
+                )
+            result.append(item)
+    return result
+
+
+def select_raw_pcm(pcm: bytes, chunk: dict, sample_rate: int) -> bytes:
+    """A listing fragment selects exact samples from the unchanged source pack."""
+    if 'raw_source_start' not in chunk:
+        return pcm
+    span = chunk['span']
+    offset = round((chunk['timestamp'] - chunk['raw_source_start']) * sample_rate) * 2
+    count = round(span['samples'] * sample_rate / span['sample_rate']) * 2
+    selected = pcm[offset : offset + count]
+    if len(selected) != count:
+        raise ValueError('raw playback fragment has incomplete sample coverage')
+    return selected

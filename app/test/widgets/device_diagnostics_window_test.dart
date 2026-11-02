@@ -80,8 +80,8 @@ void main() {
     mockedChannels.clear();
   });
 
-  Future<void> pumpPage(WidgetTester tester) async {
-    final provider = DeviceProvider();
+  Future<void> pumpPage(WidgetTester tester, {DeviceProvider? deviceProvider}) async {
+    final provider = deviceProvider ?? DeviceProvider();
     addTearDown(provider.dispose);
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -114,6 +114,31 @@ void main() {
   }
 
   Color? textColor(WidgetTester tester, String text) => tester.widget<Text>(find.text(text)).style?.color;
+
+  testWidgets('Right Now shows no battery reading while the pendant is disconnected', (tester) async {
+    mockBleHostApi('getDeviceDiagnostics', diagnostics(const [], connectedAt: 0));
+    mockBleHostApi('getExtendedDeviceDiagnostics', '{}');
+    // The last level seen before the link dropped; the provider keeps it after disconnecting.
+    final provider = DeviceProvider()..batteryLevel = 73;
+    expect(provider.isConnected, isFalse);
+
+    await pumpPage(tester, deviceProvider: provider);
+
+    expect(find.text('Right Now'), findsOneWidget);
+    expect(find.text('73%'), findsNothing);
+  });
+
+  testWidgets('Right Now shows the battery while the pendant is connected', (tester) async {
+    mockBleHostApi('getDeviceDiagnostics', diagnostics(const []));
+    mockBleHostApi('getExtendedDeviceDiagnostics', '{}');
+    final provider = DeviceProvider()
+      ..batteryLevel = 73
+      ..isConnected = true;
+
+    await pumpPage(tester, deviceProvider: provider);
+
+    expect(find.text('73%'), findsOneWidget);
+  });
 
   testWidgets('Last 7 Days leads with the window counts and keeps lifetime in the footnote', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch;

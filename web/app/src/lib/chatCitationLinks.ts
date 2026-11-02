@@ -1,3 +1,4 @@
+import { presentableNoteTitle } from '@omi/note-shared/note-sources.mjs';
 import type { Element, Root, RootContent } from 'hast';
 
 export interface ChatCitationSource {
@@ -34,9 +35,10 @@ export function normalizeChatCitations(
     const id = item.id.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    // Display repair for legacy titles (`[s01234]`, `Speaker_00`); cards carry no transcript.
     const title =
-      typeof item.structured?.title === 'string' && item.structured.title.trim()
-        ? item.structured.title.trim()
+      typeof item.structured?.title === 'string'
+        ? presentableNoteTitle(item.structured.title).trim() || 'Untitled conversation'
         : 'Untitled conversation';
     const emoji =
       typeof item.structured?.emoji === 'string' && item.structured.emoji.trim()

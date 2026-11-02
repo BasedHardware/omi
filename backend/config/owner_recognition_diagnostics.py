@@ -16,7 +16,7 @@ REASONS = frozenset('''other enqueued no_prints unplaced queue_full already_labe
     stale_generation rejected manual_decision voice_capacity embedding_budget authority_unavailable rejector_tail_reserved
     profile_invalid profile_ineligible profile_missing profile_failed profile_loaded evidence_pending extraction_failed cancelled
     comparison published scores_disabled scores_generated scores_failed flush_failed rollover finalized drain
-    disabled empty_transcript private_cloud_disabled endpoint_unconfigured no_audio no_eligible all_short
+    disabled batch_authoritative empty_transcript private_cloud_disabled endpoint_unconfigured no_audio no_eligible all_short
     no_vectors global_manifest_ambiguity zero_text_window invalid_text_window uncovered_window
     manifest_unvalidated capture_coverage_hole placement_deadline no_proven_window listing_limit
     inventory_metadata_invalid manifest_inventory_invalid inventory_count_mismatch inventory_pair_mismatch

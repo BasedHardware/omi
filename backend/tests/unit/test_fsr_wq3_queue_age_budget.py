@@ -3,9 +3,11 @@
 from dataclasses import dataclass, replace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from prometheus_client import generate_latest
 
 from config import firestore_read_levers as levers
 from database import durable_queue_age as ages
@@ -87,9 +89,6 @@ def billed_reads():
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch):
-    # Registration belongs to the integrator, so exercise the real gate with
-    # that one pending config addition applied only inside this fixture.
-    monkeypatch.setattr(levers, 'KNOWN_LEVERS', levers.KNOWN_LEVERS | {'queue_age_sample_budget'})
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"queue_age_sample_budget":100}')
     monkeypatch.delenv('FSR_QUEUE_AGE_MIN_PUBLISH_SECONDS', raising=False)
     monkeypatch.setattr(ages, '_sample_cache', None)
@@ -278,6 +277,96 @@ def test_cache_hits_do_not_refresh_fresh_scan_timestamp(isolated):
     )
     assert ages.QUEUE_AGE_SAMPLE_TIMESTAMP._value.get() == timestamp == NOW.timestamp()
     assert gauge() == 1
+
+
+@pytest.mark.parametrize('tick_seconds', [30, 300])
+def test_fresh_scan_timestamp_age_bounded_by_600_seconds_plus_scan_time(monkeypatch, isolated, tick_seconds):
+    scan_seconds = 37
+    client = Client([row(1)])
+    scan_status_page = ages._sample_status_page
+    expected_timestamp = None
+
+    def slow_scan(*args, **kwargs):
+        isolated.value += scan_seconds
+        if expected_timestamp is not None:
+            # Include the interval while a fresh scan is still in flight.
+            assert NOW.timestamp() + isolated.value - expected_timestamp <= 600 + scan_seconds
+        return scan_status_page(*args, **kwargs)
+
+    monkeypatch.setattr(ages, '_sample_status_page', slow_scan)
+    last_scan_started = None
+    for _ in range(61):
+        started = isolated.value
+        queries_before = client.queries
+        ages.publish_all_queue_oldest_ready_ages(
+            now=NOW + timedelta(seconds=started), firestore_client=client, finalization_summary={}
+        )
+        if client.queries > queries_before:
+            last_scan_started = started
+            expected_timestamp = NOW.timestamp() + started
+        timestamp = ages.QUEUE_AGE_SAMPLE_TIMESTAMP._value.get()
+        assert timestamp == expected_timestamp  # cache hits never advance freshness
+        assert 0 <= NOW.timestamp() + isolated.value - timestamp <= 600 + scan_seconds
+        assert started - last_scan_started < 300
+        # The periodic loop sleeps after publishing, so scan time adds to cadence.
+        isolated.value += tick_seconds
+    assert client.queries >= 3  # includes expiry and multiple fresh scans
+
+
+@pytest.mark.parametrize('initial_age', [None, 0, 50])
+def test_wedged_scan_exposes_unknown_until_fresh_scan_completes(monkeypatch, isolated, initial_age):
+    client = Client([] if initial_age == 0 else [row(initial_age or 1)])
+    if initial_age is not None:
+        publish(client)
+        assert gauge() == initial_age
+    previous_timestamp = ages.QUEUE_AGE_SAMPLE_TIMESTAMP._value.get()
+    entered, release = Event(), Event()
+    scan_status_page = ages._sample_status_page
+
+    def wedged_scan(*args, **kwargs):
+        entered.set()
+        assert release.wait(timeout=5), 'test did not release the blocked scan'
+        return scan_status_page(*args, **kwargs)
+
+    monkeypatch.setattr(ages, '_sample_status_page', wedged_scan)
+    isolated.value = 300
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(
+            ages.publish_all_queue_oldest_ready_ages,
+            now=NOW + timedelta(seconds=300),
+            firestore_client=client,
+            finalization_summary={},
+        )
+        try:
+            assert entered.wait(timeout=2), 'scan did not start'
+            for elapsed in (300, 900, 1800):
+                isolated.value = elapsed
+                exported = generate_latest(OMI_QUEUE_OLDEST_READY_AGE_SECONDS).decode()
+                assert f'omi_queue_oldest_ready_age_seconds{{queue="{QUEUE}"}}' not in exported
+                assert OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=QUEUE)._value.get() == 1
+                assert ages.QUEUE_AGE_SAMPLE_TIMESTAMP._value.get() == previous_timestamp
+                assert not pending.done()
+        finally:
+            release.set()
+        pending.result(timeout=2)
+    assert ages.QUEUE_AGE_SAMPLE_TIMESTAMP._value.get() == NOW.timestamp() + 300
+    assert OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=QUEUE)._value.get() == 0
+
+
+@pytest.mark.parametrize('raw', [None, '', '{}', '{"singleton_loops":100}'])
+def test_registered_budget_lever_stays_off_when_key_absent(monkeypatch, raw):
+    if raw is None:
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    else:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    assert levers.lever_percent('queue_age_sample_budget') == 0
+    assert not levers.lever_enabled('queue_age_sample_budget', 'publisher')
+    assert not ages._sample_budget_enabled()
+    client = Client([row(30000)] * 450)
+    publish(client)
+    publish(client)
+    assert client.queries == 6  # no cache and no first-page early stop
+    assert ages._sample_cache is None
 
 
 def test_concurrent_ticks_share_one_fresh_scan():

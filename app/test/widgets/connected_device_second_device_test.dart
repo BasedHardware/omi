@@ -15,7 +15,10 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/services.dart';
+
+import '../support/typed_conversation_screen.dart' show inertPendingWorkStore;
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -105,6 +108,14 @@ void main() {
   });
 
   setUp(() async {
+    // The Device page refreshes server pending work on open; keep it off the network.
+    final previousStore = PendingWorkStore.instance;
+    final store = inertPendingWorkStore();
+    PendingWorkStore.instance = store;
+    addTearDown(() {
+      PendingWorkStore.instance = previousStore;
+      store.dispose();
+    });
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();

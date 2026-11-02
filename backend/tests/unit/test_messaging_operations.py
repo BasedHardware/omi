@@ -3,6 +3,7 @@
 import copy
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -11,6 +12,7 @@ import pytest
 from scripts import messaging_operations as ops
 from utils.messaging import maintenance
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 IMAGE = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
 CHANNELS = ['projects/based-hardware/notificationChannels/123']
 
@@ -284,11 +286,36 @@ def test_existing_log_alert_is_replaced_by_threshold_preserving_condition_identi
 
 
 @pytest.mark.parametrize(
-    'image', ['latest', 'gcr.io/based-hardware/backend:main', 'gcr.io/other/backend@sha256:' + 'a' * 64]
+    'image',
+    [
+        'latest',
+        'gcr.io/based-hardware/backend:main',
+        'gcr.io/other/backend@sha256:' + 'a' * 64,
+        # Plan B B3: only the fat backend image or its workers role image runs the job.
+        'gcr.io/based-hardware-dev/backend-workers@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/backend-api@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/pusher@sha256:' + 'a' * 64,
+        'us-docker.pkg.dev/based-hardware/backend-workers@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/backend-workers:aaaaaaa',
+    ],
 )
 def test_job_rejects_unpinned_or_foreign_images(image):
     with pytest.raises(ValueError):
         ops.desired_job(image)
+
+
+@pytest.mark.parametrize('image', [IMAGE, 'gcr.io/based-hardware/backend-workers@sha256:' + 'a' * 64])
+def test_job_admits_the_backend_image_and_its_workers_role_digest(image):
+    assert ops.desired_job(image)['template']['template']['containers'][0]['image'] == image
+
+
+def test_job_images_follow_the_runtime_image_registry():
+    registry = json.loads((BACKEND_DIR / 'runtime_images.json').read_text(encoding='utf-8'))
+    spec = registry['services']['messaging-maintenance']
+    assert ops.MAINTENANCE_JOB_IMAGES == (spec['current_image'], spec['image'])
+    assert spec['role'] == 'workers'
+    workers = next(image for image in registry['images'] if image['name'] == spec['image'])
+    assert 'utils.messaging.maintenance' in workers['entrypoints']
 
 
 def test_maintenance_failure_is_redacted_and_nonzero(monkeypatch, caplog):

@@ -1,5 +1,8 @@
 import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/ui/format/speaker_names.dart';
+import 'package:omi/utils/constants.dart';
 
 /// The facts the conversation header states, computed apart from the widgets
 /// so the rules stay testable.
@@ -18,20 +21,18 @@ abstract final class ConversationDetailMeta {
     String? Function(String personId)? personName,
     ConversationSpeakers? speakers,
   }) {
-    final named = <String>[];
+    final named = EpisodePresentation.participants(segments, const [], SpeakerNames.contextFreeL10n(),
+        ownerLabel: you, personName: personName);
     final unnamedIds = <int>{};
-    if (segments.any((segment) => segment.isUser)) named.add(you);
     for (final segment in segments) {
-      if (segment.isUser) continue;
+      if (segment.isUser || segment.speakerId == omiSpeakerId) continue;
       final personId = segment.personId;
       final name = personId == null ? null : personName?.call(personId)?.trim();
       if (name == null || name.isEmpty) {
         unnamedIds.add(segment.speakerId);
-      } else if (!named.contains(name)) {
-        named.add(name);
       }
     }
-    if (speakers == null || !speakers.countable) {
+    if (speakers == null || !speakers.countable || unnamedIds.length > SpeakerNames.maxUnnamedVoices) {
       return (named: named, unnamed: 0, uncounted: unnamedIds.isNotEmpty);
     }
     final participants = speakers.participantSpeakerIds.toSet();

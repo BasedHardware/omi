@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-probe-held-by-ownership-gate",
+  "violated_contract": "The fixed non-human release-probe identity exists so deploy gates exercise the full terminal desktop path end to end; its Free-plan account state (expired desktop trial, no paid plan, no BYOK) is incidental, never a reason to deny. A gate on that path that forgets the documented probe exemption silently holds the probe's traffic, and the deploy that carries the release blocks itself: the canary finalization probe times out with zero transcripts while the real denial happened minutes earlier at listen admission, far from the symptom. The gate worked exactly as designed for every human account, which is why the failure only appears once a rollout widens admission to the whole fleet.",
+  "canonical_prevention": "Every gate that can deny the terminal desktop path consults the shared probe predicate at its denial boundary, the same convention as the chat-quota, question-quota and managed-plan-gate exemptions for this identity. A regression test pins the resolver's answer for the exact uid under the blocking account state and asserts an ordinary uid in the identical situation stays blocked, so the exemption cannot silently widen to real accounts.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_transcription_allowance.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/release_probe.py",
+    "backend/utils/subscription.py",
+    "backend/utils/stt_cap_dispatch.py",
+    "backend/routers/desktop_proxy.py"
+  ],
+  "status": "open"
+}

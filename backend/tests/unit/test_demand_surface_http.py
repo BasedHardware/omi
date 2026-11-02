@@ -72,8 +72,7 @@ def test_surface_auth_retains_security_fences_without_registration_or_recovery(e
     _, users, _ = endpoint
     auth = users.auth
     monkeypatch.setattr(auth, 'verify_token', lambda _: 'synthetic-owner')
-    admission, deletion, cutover, byok = Mock(), Mock(), Mock(), Mock()
-    monkeypatch.setattr(auth, 'enforce_jit_qa_uid', admission)
+    deletion, cutover, byok = Mock(), Mock(), Mock()
     monkeypatch.setattr(auth, 'enforce_account_deletion_http_access', deletion)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', cutover)
     monkeypatch.setattr(auth, 'validate_byok_request', byok)
@@ -83,7 +82,6 @@ def test_surface_auth_retains_security_fences_without_registration_or_recovery(e
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', recovery)
     request = SimpleNamespace(url=SimpleNamespace(path='/v1/users/client-state'))
     assert auth.get_current_user_uid(authorization='Bearer synthetic-token', request=request) == 'synthetic-owner'
-    admission.assert_called_once_with('synthetic-owner')
     deletion.assert_called_once_with('synthetic-owner')
     cutover.assert_called_once_with('synthetic-owner', request)
     byok.assert_called_once_with('synthetic-owner')
@@ -112,9 +110,7 @@ async def test_websocket_surface_signal_uses_the_executor_only_when_enabled(
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true' if enabled else 'false')
     monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
     monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
-    monkeypatch.setattr(
-        module, 'resolve_ondemand_config', lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False)
-    )
+    monkeypatch.setattr(module, 'resolve_ondemand_config', lambda: SimpleNamespace(gate_enabled=False))
     receiver = module.ListenReceiver.__new__(module.ListenReceiver)
     receiver.host = SimpleNamespace(
         state=SimpleNamespace(realtime_demand=Mock(observe=Mock(return_value=True))), session_id='synthetic-socket'
@@ -143,9 +139,7 @@ async def test_released_listen_state_remains_telemetry_with_all_server_flags_on(
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
     monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
     monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
-    monkeypatch.setattr(
-        module, 'resolve_ondemand_config', lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False)
-    )
+    monkeypatch.setattr(module, 'resolve_ondemand_config', lambda: SimpleNamespace(gate_enabled=False))
     receiver = module.ListenReceiver.__new__(module.ListenReceiver)
     receiver.host = SimpleNamespace(
         request=SimpleNamespace(uid='synthetic-owner'),

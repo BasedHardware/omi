@@ -1,107 +1,118 @@
 ---
 title: "Omi DevKit 2"
 icon: "microchip"
-description: "DevKit 2 builds on DevKit 1 with 8GB onboard storage, a speaker, and a programmable button. This enables standalone recording mode while maintaining the necklace form factor."
+description: "The second Omi dev kit: a Xiao nRF52840 necklace with a removable microSD card, speaker, and battery-powered standalone recording."
 ---
+
+<Warning>
+**Legacy device.** DevKit 2 is no longer the current development hardware. The consumer Omi (CV1) is. This page is kept for builders who already own a DevKit 2. It is not manufactured or supported as a product; hardware questions go to [Discord](https://discord.omi.me).
+</Warning>
 
 ## Overview
 
-DevKit 2 is the upgraded version of the Omi wearable, adding significant new capabilities while keeping the familiar necklace form factor.
+DevKit 2 is a necklace-form-factor dev kit built on the Seeed Xiao nRF52840 (Sense). It streams audio to the Omi app over BLE and, unlike DevKit 1, can record standalone to a **removable microSD card** (FAT/exFAT; bring your own card) and sync through the app afterwards. It has a small speaker and a 250 mAh 1S LiPo battery charged over USB-C.
+
+| Component | Specification |
+|-----------|---------------|
+| Processor | Seeed Xiao nRF52840 Sense (`xiao_ble_sense`) |
+| Storage | Removable microSD card over SPI (FAT/exFAT) |
+| Speaker | Yes (enabled in DevKit 2 firmware) |
+| Battery | 250 mAh 1S LiPo, charged over USB-C |
+| Button | Single multi-function button (see below) |
+
+<Note>
+Standalone recordings still need the Omi app for transcription. The device records audio; processing happens on the phone or backend.
+</Note>
+
+## Button, LEDs, and power
+
+The firmware source is the authority for device behavior in this table (`omi/firmware/devkit/src/button.c`, `main.c`):
+
+| Interaction | What happens |
+|-------------|--------------|
+| **Single tap** | Sends a BLE button event to the app. The app maps it to voice-question mode: tap to start asking, tap again to send. |
+| **Double tap** | Sends a BLE button event. The app's action is configurable in **Settings → Device Settings** (end & save conversation is the default). |
+| **Hold 3 seconds** | Device powers off (short haptic pulse, LEDs off). |
+| **Any press while off** | Powers the device on. Don't hold it. A 3-second hold after waking turns the device straight back off. |
+
+There is no power switch and no push-to-talk mode: a long hold always means power off.
+
+| LED | Meaning |
+|-----|---------|
+| Solid blue | On and connected to the phone |
+| Solid red | On, not connected |
+| Blinking green (with red or blue) | USB cable plugged in |
+| All off | Powered off |
+
+Boot briefly blinks red, green, blue, then white.
+
+## Install firmware
 
 <CardGroup cols={2}>
-  <Card title="8GB Storage" icon="hard-drive">
-    Onboard storage for standalone recording
+  <Card title="OTA via the Omi app" icon="mobile">
+    The default path: pair the DevKit in the app and accept the update prompt (Nordic DFU over BLE)
   </Card>
-  <Card title="Built-in Speaker" icon="volume-high">
-    Audio feedback and notifications
+  <Card title="UF2 drag-and-drop" icon="terminal" href="/doc/get_started/Flash_device">
+    Double-click RST, drop the `.uf2` on the XIAO-SENSE drive
   </Card>
-  <Card title="Programmable Button" icon="circle-play">
-    Replaces on/off switch for more control
+  <Card title="Pre-built firmware" icon="download" href="https://github.com/BasedHardware/omi/releases?q=release_firmware+DK2">
+    GitHub Releases tagged `DK2`
   </Card>
-  <Card title="Standalone Mode" icon="wifi-slash">
-    Record without phone connection
+  <Card title="Compile from source" icon="code" href="/doc/developer/firmware/Compile_firmware">
+    nRF Connect SDK v2.7.0, preset `build_xiao_ble_sense_devkitv2-adafruit`
   </Card>
 </CardGroup>
 
-<Info>
-See the [announcement on X](https://twitter.com/kodjima33/status/1821324066651041837) for more details about the new features.
-</Info>
+## Testing device storage over BLE
 
----
+Standalone recordings land on the microSD card as `audio/a01.txt`, `audio/a02.txt`, and so on. The app imports them automatically when it reconnects. To read or clear them yourself, use the storage service:
 
-## What's New in DevKit 2
+| Characteristic | UUID | Use |
+|----------------|------|-----|
+| Command | `30295781-4301-EABD-2904-2849ADFEAE43` | Subscribe to notifications, then write commands |
+| File sizes | `30295782-4301-EABD-2904-2849ADFEAE43` | Read two little-endian 32-bit file sizes (8 bytes) |
 
-| Feature | DevKit 1 | DevKit 2 |
-|---------|----------|----------|
-| Processor | Xiao nRF52840 | Xiao nRF52840 |
-| Storage | None | 8GB onboard |
-| Speaker | No | Yes |
-| Button | On/Off switch | Programmable button |
-| Standalone Recording | No | Yes |
-| Form Factor | Necklace | Necklace |
+Commands are 6 bytes, `[command, file, offset_1, offset_2, offset_3, offset_4]`, with a big-endian byte offset. A 2-byte `[command, file]` form leaves the offset at zero. File numbers start at 1.
 
-<Note>
-While DevKit 2 can record in standalone mode, you still need to connect it to the Omi app for transcription processing.
-</Note>
+| Command | Code | Meaning |
+|---------|------|---------|
+| Read | `0` | Stream file `n` from the offset, rounded down to a multiple of 440 bytes |
+| Clear | `1` | Clear file 1. The firmware ignores the file number. |
+| Clear all | `2` | Clear the audio directory |
+| Stop | `3` | Stop the current transfer |
+| Heartbeat | `50` | Keep the session alive while reading |
 
----
+Replies arrive as notifications on the command characteristic. A one-byte notification is a status. Anything longer is audio, up to 440 bytes per notification:
 
-## How to Get It
+| Status | Meaning |
+|--------|---------|
+| `0` | Command accepted |
+| `100` | Transfer finished |
+| `200` | File cleared |
+| `3` | File number out of range |
+| `4` | File is empty |
+| `5` | Offset is past the end of the file |
+| `6` | Invalid command |
 
-<Card title="Order DevKit 2" icon="cart-shopping" href="https://omi.me/products/omi-dev-kit-2">
-  Purchase an assembled DevKit 2 from the official Based Hardware store
-</Card>
+Helper scripts for discovery, listing, downloading, decoding, and deleting live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit). Button events over the button characteristic are `1` single tap, `2` double tap, and `5` release. A long press powers the device off and is not reported.
 
----
+## Getting a DevKit 2
 
-## Firmware
+DevKit 2 is no longer sold. For new hardware see [Omi (CV1)](/doc/hardware/OmiConsumer) or build a [DevKit 1](/doc/assembly/Build_the_device) from parts.
 
-The recommended way to update your device is through the Omi app's built-in OTA (Over-The-Air) update feature.
-
-<Steps>
-  <Step title="Install the Omi App">
-    Download from the [Apple App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) or [Google Play Store](https://play.google.com/store/apps/details?id=com.friend.ios)
-  </Step>
-  <Step title="Connect Your Device">
-    Pair your DevKit 2 via Bluetooth
-  </Step>
-  <Step title="Check for Updates">
-    The app will notify you when firmware updates are available
-  </Step>
-</Steps>
-
-### Manual Firmware Update
-
-<AccordionGroup>
-  <Accordion title="Download Pre-built Firmware" icon="download">
-    Download a pre-built firmware version from the [Omi GitHub Releases](https://github.com/BasedHardware/omi/releases?q=release_firmware+DK2).
-
-    Look for releases tagged with `DK2` for DevKit 2 compatibility.
-  </Accordion>
-  <Accordion title="Compile Firmware Yourself" icon="code">
-    For advanced users who want to customize the firmware:
-
-    <Card title="Firmware Compilation Guide" icon="terminal" href="/doc/developer/firmware/Compile_firmware">
-      Learn how to build firmware from source
-    </Card>
-  </Accordion>
-</AccordionGroup>
-
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="DevKit 1" icon="microchip" href="/doc/hardware/DevKit1">
-    Original DevKit version
+  <Card title="Omi (CV1)" icon="circle-dot" href="/doc/hardware/OmiConsumer">
+    Current consumer hardware
   </Card>
-  <Card title="Omi Consumer" icon="circle-dot" href="/doc/hardware/OmiConsumer">
-    Consumer version of Omi
+  <Card title="DevKit 1" icon="circuit-board" href="/doc/hardware/DevKit1">
+    The first dev kit (also legacy)
   </Card>
-  <Card title="Firmware Guide" icon="code" href="/doc/developer/firmware/Compile_firmware">
-    Compile custom firmware
+  <Card title="Flash firmware" icon="bolt" href="/doc/get_started/Flash_device">
+    Update and recovery flows
   </Card>
-  <Card title="App Setup" icon="mobile" href="/doc/get_started/introduction">
-    Get started with the Omi app
+  <Card title="BLE Protocol" icon="bluetooth" href="/doc/developer/Protocol">
+    The device ↔ app protocol
   </Card>
 </CardGroup>

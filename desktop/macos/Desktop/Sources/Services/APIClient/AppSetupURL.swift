@@ -16,6 +16,22 @@ import Foundation
 /// signature depends on. Any `uid` the base already carries is dropped so the
 /// handed-off value is unambiguous.
 enum AppSetupURL {
+  /// A launch capability belongs to one fresh read and its original account.
+  /// Failure or an account change must never fall back to cached credentials.
+  @MainActor
+  static func freshDetails<Value>(
+    currentUID: () -> String?, load: @MainActor () async throws -> Value
+  ) async -> Value? {
+    guard let uid = currentUID() else { return nil }
+    do {
+      let value = try await load()
+      guard !Task.isCancelled, currentUID() == uid else { return nil }
+      return value
+    } catch {
+      return nil
+    }
+  }
+
   static func withUID(_ base: String, uid: String) -> URL? {
     guard !base.isEmpty, var components = URLComponents(string: base) else { return nil }
     var uidComponents = URLComponents()

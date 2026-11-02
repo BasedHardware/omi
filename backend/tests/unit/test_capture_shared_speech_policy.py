@@ -37,6 +37,8 @@ def row(cid, source='omi', device='pendant', offset=0):
         'discarded': False,
         'started_at': T0 + timedelta(seconds=offset),
         'finished_at': T0 + timedelta(seconds=300),
+        'recorded_start': T0 + timedelta(seconds=offset),
+        'recorded_end': T0 + timedelta(seconds=300),
         'external_data': {},
         'transcript_segments': [
             {'start': start - offset, 'end': start - offset + 8, 'text': text}
@@ -53,7 +55,6 @@ def store(monkeypatch):
     monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', '100')
     monkeypatch.setenv('CAPTURE_GROUP_CONTAINMENT_MODE', 'off')
-    monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'off')
     for key in (
         'CROSS_DEVICE_GROUP_MIN_WORDS',
         'CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS',
@@ -116,6 +117,7 @@ def test_same_full_text_outside_overlap_cannot_authorize_new_fold(store, monkeyp
     first, second = row('a'), row('b', 'desktop', 'mac')
     second['started_at'] = T0 + timedelta(seconds=150)
     second['finished_at'] = T0 + timedelta(seconds=320)
+    second.update(recorded_start=second['started_at'], recorded_end=second['finished_at'])
     # Full-transcript trigrams agree, but speech occurred before/after shared time.
     second['transcript_segments'] = deepcopy(first['transcript_segments'])
     store.rows.update({path('a'): first, path('b'): second})
@@ -157,9 +159,8 @@ def test_on_preserves_existing_folds_and_other_accounts(store, monkeypatch):
     assert not store.rows[path('other', 'different-owner')].get('capture_group')
 
 
-def test_on_does_not_allow_complementary_call_policy_to_bypass_speech(store, monkeypatch):
+def test_on_requires_shared_speech_to_create_a_capture_group(store, monkeypatch):
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
-    monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'on')
     first, second = row('a'), row('b', 'desktop', 'mac')
     second['external_data']['conversation_role'] = 'meeting'
     second['transcript_segments'] = []

@@ -1,8 +1,9 @@
 """Fold a finished pendant conversation into the preceding one when Jev says same occasion.
 
 Live capture splits on two minutes of silence, so one evening can become seven
-rows. The durable finalizer calls ``smart_merge_step`` after it owns the
-fanout claim and before any derived effect of the new conversation (N) runs.
+rows. The default-on pre-notes boundary calls ``absorb_before_notes`` after
+relevance admission. Rollback calls ``smart_merge_step`` behind the durable
+fanout claim. Neither path runs an absorbed conversation's derived effects.
 Modes (``CONVERSATION_SMART_MERGE_MODE``; unset or blank means ``merge``, an
 unrecognized value means ``off``):
 
@@ -12,7 +13,8 @@ unrecognized value means ``off``):
 - ``merge``: as shadow, and at ``p_same >= MERGE_THRESHOLD`` absorb N into P:
   P keeps its id and gains N's transcript; N becomes a redirect tombstone
   (``database/smart_merge.py``); N's derived effects never run; P is refreshed
-  once per absorb (``ProcessingTrigger.SMART_MERGE``).
+  through a bounded durable quiet window (``ProcessingTrigger.SMART_MERGE``).
+  Raw survivors retain ``SYNC_UPDATE`` relevance on their first full run.
 
 Fail-open: before the absorb commits, any error, timeout or missing answer
 keeps N separate and its finalization continues unchanged. After the absorb
@@ -45,15 +47,12 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
-    SmartMergeWallclockGapMode,
+    smart_merge_flatten_chain_repair_enabled,
     smart_merge_flatten_enabled,
     smart_merge_mode,
-    smart_merge_uid_allowed,
-    smart_merge_wallclock_gap_mode,
 )
 from config.jev_decisions import JEV_MODEL
-from config.desktop_pendant_call_link import call_link_mode, capture_windows, desktop_meeting, without_capture_metadata
-from database import capture_groups as capture_groups_db
+from config.merge_before_processing import enabled as merge_before_processing_enabled
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -61,8 +60,12 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
+from utils.sync import processing_hold
+from utils.enrichment import outbox as enrichment_outbox
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.summary_delivery import PROCESS_CONTEXT, present as summary_present
 from config.merge_ancestry import flatten_updates
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
@@ -90,13 +93,14 @@ from utils.conversations.smart_merge_policy import (
     valid_fragment_id,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import lifecycle_executor, run_blocking
 from utils.llm.jev_client import ask_jev
+from utils.sync.repeat_work_metrics import conversation_scope
+from utils.metrics_smart_merge import record_merge_processing_stage
 from utils.metrics import (
     record_conversation_smart_merge,
     record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh,
-    record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
@@ -135,21 +139,41 @@ async def smart_merge_step(
     if initial_row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
         return False
     if is_donor(initial_row):
-        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
+        await run_blocking(lifecycle_executor(uid), finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
         return False
     return await run_blocking(
-        postprocess_executor, decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
+        lifecycle_executor(uid), decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
     )
 
 
+@conversation_scope
 def decide_and_apply(
-    uid: str, conversation_id: str, *, mode: SmartMergeMode, trigger: ProcessingTrigger, owner: str
+    uid: str,
+    conversation_id: str,
+    *,
+    mode: SmartMergeMode,
+    trigger: ProcessingTrigger,
+    owner: str,
+    before_processing: bool = False,
+    finalization_fence: tuple[str, int, int] | None = None,
+    processing_owner: str | None = None,
+    donor_digest: str | None = None,
 ) -> bool:
     try:
-        plan = _decide(uid, conversation_id, mode=mode, trigger=trigger, owner=owner)
+        early = {'before_processing': True} if before_processing else {}
+        plan = _decide(uid, conversation_id, mode=mode, trigger=trigger, owner=owner, **early)
+        if plan is not None:
+            if (
+                before_processing
+                and donor_digest is not None
+                and plan.record.get('donor_content_digest') != donor_digest
+            ):
+                return False
+            plan.finalization_fence = finalization_fence
+            plan.processing_owner = processing_owner
     except Exception as error:
         # Never let the optional step change the finalization outcome.
         logger.warning(
@@ -163,6 +187,56 @@ def decide_and_apply(
     if plan is None:
         return False
     return _absorb(uid, conversation_id, plan, mode=mode, owner=owner)
+
+
+def absorb_before_notes(
+    uid: str,
+    conversation_id: str,
+    *,
+    trigger: ProcessingTrigger,
+    owner: str,
+    finalization_fence: tuple[str, int, int] | None = None,
+    donor_digest: str | None = None,
+) -> str | None:
+    """Absorb a kept raw row; never run a donor's notes, tasks or memories.
+
+    A stored redirect always wins over this caller's stale in-memory transcript.
+    An already enriched row is never newly admitted as a donor on this path.
+    """
+    row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
+    if not row:
+        return None
+    if row.get('sync_merged_into'):
+        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if not canonical:
+            raise SmartMergeIncomplete('redirect_unresolved')
+        if is_donor(row):
+            finish_absorb(uid, conversation_id, owner=owner, resumed=True)
+        return canonical
+    if donor_digest is not None and processing_hold.content_snapshot(row)['digest'] != donor_digest:
+        return None  # The relevance decision covered a different transcript.
+    if row.get('finalization_job_id') and finalization_fence is None:
+        return None  # A sync callback cannot borrow a live finalization lease.
+    context = PROCESS_CONTEXT.get() or {}
+    mode = smart_merge_mode()
+    if mode is SmartMergeMode.OFF:
+        return None
+    if decide_and_apply(
+        uid,
+        conversation_id,
+        mode=mode,
+        trigger=trigger,
+        owner=owner,
+        before_processing=True,
+        finalization_fence=finalization_fence,
+        processing_owner=context.get('owner') if context.get('claimed') else None,
+        donor_digest=donor_digest,
+    ):
+        donor = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
+        if not donor or not donor.get('sync_merged_into'):
+            raise SmartMergeIncomplete('donor_redirect_missing')
+        return str(donor['sync_merged_into'])
+    return None
 
 
 # --------------------------------------------------------------------------- decision
@@ -181,7 +255,11 @@ class _MergePlan:
         last_fragment_id: Optional[str] = None,
         wallclock_gap: bool = False,
         admission_path: Optional[str] = None,
+        donor_notes_present: bool | None = None,
     ):
+        self.donor_notes_present = donor_notes_present
+        self.finalization_fence: tuple[str, int, int] | None = None
+        self.processing_owner: str | None = None
         self.survivor_id = survivor_id
         self.expected_revision = expected_revision
         self.record = record
@@ -279,8 +357,10 @@ def _pair_state(
         if last is None:
             return None
         last_row = last_fragment_row if isinstance(last_fragment_row, Mapping) else survivor
-        a = replace(last, started_at=last_row['created_at'], finished_at=last_row['finished_at'])
-        b = replace(b, started_at=new_row['created_at'])
+        recorded = fragment_of(last_row)
+        if recorded is None:
+            return None
+        a = replace(last, started_at=recorded.started_at, finished_at=recorded.finished_at)
         candidates = [fragment for fragment in fragments if fragment.id != last.id]
         a_segments = (
             fragment_segments(survivor, survivor_segments, last)
@@ -318,247 +398,27 @@ def _normalize_p_same(p_same: Any) -> Optional[float]:
     return p_same
 
 
-def _wallclock_shadow_emit(
-    would: str,
-    reason: str,
-    p_same: Optional[float],
-    gap_wall: Optional[float],
-    gap_legacy: Optional[float],
+def _decide(
     uid: str,
     conversation_id: str,
-    survivor_id: str,
-) -> None:
-    record_conversation_smart_merge_wallclock_shadow(would, reason)
-    logger.info(
-        'event=smart_merge_wallclock_shadow would=%s reason=%s p_same=%s gap_wall_s=%s gap_legacy_s=%s uid=%s conversation=%s candidate=%s',
-        would,
-        reason,
-        p_same,
-        gap_wall,
-        gap_legacy,
-        uid,
-        conversation_id,
-        survivor_id,
-    )
-
-
-def _wallclock_shadow(
-    uid: str,
-    conversation_id: str,
-    survivor: Mapping[str, Any],
-    survivor_segments: Sequence[Mapping[str, Any]],
-    new_row: Mapping[str, Any],
-    new_segments: Sequence[Mapping[str, Any]],
-    rows: Sequence[Mapping[str, Any]],
-    survivor_id: str,
-    legacy_gap: Optional[float],
-    load_last_fragment_row: Any,
-) -> None:
-    """What the corrected wall-clock policy would do for a pair the legacy gate
-    skipped. Legacy stays authoritative: this only observes — one extra Jev
-    question at most, one bounded log line and counter, never a write."""
-    corrected: Optional[PairCheck] = None
-    last_fragment_row: Optional[Mapping[str, Any]] = None
-    try:
-        last_fragment_row = load_last_fragment_row()
-        corrected = check_pair(
-            survivor,
-            survivor_segments,
-            new_row,
-            new_segments,
-            wallclock_gap=True,
-            last_fragment_row=last_fragment_row,
-        )
-        if not corrected.same_recording:
-            return
-        if corrected.reason is not None:
-            _wallclock_shadow_emit(
-                'skip', corrected.reason, None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
-            )
-            return
-        built = _pair_state(
-            uid,
-            new_row,
-            new_segments,
-            survivor,
-            survivor_segments,
-            rows,
-            survivor_id,
-            same_recording=True,
-            last_fragment_row=last_fragment_row,
-        )
-        p_same = _normalize_p_same(_ask(built[0])) if built is not None else None
-    except Exception:
-        if corrected is not None and corrected.same_recording and corrected.reason is None:
-            _wallclock_shadow_emit(
-                'skip', 'jev_unavailable', None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
-            )
-        return
-    if p_same is None:
-        would, reason = 'skip', 'jev_unavailable'
-    elif p_same >= MERGE_THRESHOLD:
-        would, reason = 'merge', 'jev_same'
-    else:
-        would, reason = 'kept', 'jev_different'
-    _wallclock_shadow_emit(would, reason, p_same, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id)
-
-
-def _continue_call_group(
-    uid: str,
-    new_row: Mapping[str, Any],
-    predecessor: Mapping[str, Any],
-    context: Sequence[Mapping[str, Any]],
     *,
     mode: SmartMergeMode,
-) -> None:
-    """Join a Jev-confirmed continuation; never absorb a grouped transcript.
-
-    Relax only automatic capture metadata, after verifying every member. All
-    other eligibility checks run unchanged, and stored transcript fingerprints,
-    windows and group revision fence the decision in the join transaction.
-    """
-    link_mode = call_link_mode(uid)
-    if link_mode == 'off':
-        return
-    predecessor_id, new_id = str(predecessor['id']), str(new_row['id'])
-    snapshots = {}
-    fingerprints = {}
-    for cid in (predecessor_id, new_id):
-        row, fingerprint = conversations_db.get_conversation_for_capture_check(uid, cid)
-        if not row:
-            return
-        snapshots[cid] = dict(row, id=cid)
-        fingerprints[cid] = fingerprint
-    previous, new = snapshots[predecessor_id], snapshots[new_id]
-    expected_windows = capture_windows(previous, new)
-    if expected_windows is None:
-        return
-    group = previous.get('capture_group') or {}
-    members = {m['id'] for m in group.get('members', [])}
-    if not group.get('id') or predecessor_id not in members or new_id in members:
-        return
-    for cid in sorted(members - {predecessor_id}):
-        row = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-        if not row:
-            return
-        snapshots[cid] = dict(row, id=cid)
-    desktops = [cid for cid in members if desktop_meeting(snapshots[cid])]
-    if len(desktops) != 1 or any(snapshots[cid].get('source') != 'omi' for cid in members - set(desktops)):
-        return
-    desktop_id = desktops[0]
-
-    def guard(row: Mapping[str, Any]) -> bool:
-        cid = str(row.get('id'))
-        # Only verified original group members may ignore automatic pointers.
-        pointer = (row.get('external_data') or {}).get('duplicate_capture_of')
-        if cid in members and pointer and pointer not in members:
-            return False
-        checked = without_capture_metadata(row) if cid in members else row
-        # Fence the metadata that informed the pre-Jev policy as well as text.
-        policy_fields = (
-            'source',
-            'client_device_id',
-            'is_locked',
-            'uses_custom_stt',
-            'created_at',
-            'relevance_decision',
-            'smart_merge',
-            'sync_content_revision',
-            'sync_merged_from',
-        )
-        if cid in (predecessor_id, new_id) and any(row.get(key) != snapshots[cid].get(key) for key in policy_fields):
-            return False
-        return (
-            not user_managed(checked)
-            and not row.get('deleted')
-            and not row.get('discarded')
-            and row.get('status') == 'completed'
-        )
-
-    def join_guard(current_rows: Mapping[str, Any], transaction: Any, client: Any) -> bool:
-        return all(
-            guard(dict(row or {}, id=cid)) for cid, row in current_rows.items()
-        ) and not smart_merge_db.has_intervening_discarded(
-            uid, current_rows[predecessor_id], current_rows[new_id], transaction=transaction, firestore_client=client
-        )
-
-    if not all(guard(row) for row in snapshots.values()):
-        return
-    previous_plain = without_capture_metadata(previous)
-    previous_segments, new_segments = _segments(previous), _segments(new)
-    if new_conversation_skip(new, new_segments, capture_end=True) is not None:
-        return
-    if smart_merge_db.has_intervening_discarded(uid, previous, new):
-        return
-    wall_mode = smart_merge_wallclock_gap_mode()
-    check = check_pair(
-        previous_plain, previous_segments, new, new_segments, wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON
-    )
-    if check.reason is not None:
-        if wall_mode is SmartMergeWallclockGapMode.SHADOW:
-            _wallclock_shadow(
-                uid,
-                new_id,
-                previous_plain,
-                previous_segments,
-                new,
-                new_segments,
-                context,
-                predecessor_id,
-                check.gap_seconds,
-                lambda: None,
-            )
-        return
-    built = _pair_state(
-        uid,
-        new,
-        new_segments,
-        previous_plain,
-        previous_segments,
-        context,
-        predecessor_id,
-        same_recording=check.same_recording,
-        last_fragment_row=None,
-    )
-    p_same = _normalize_p_same(_ask(built[0])) if built else None
-    same = p_same is not None and p_same >= MERGE_THRESHOLD
-    decision, reason = 'keep', 'jev_unavailable' if p_same is None else 'jev_different'
-    if same:
-        decision, reason = 'would_link', 'jev_same'
-        if link_mode == 'on' and mode is SmartMergeMode.MERGE:
-            joined = capture_groups_db.join_capture_group(
-                uid,
-                predecessor_id,
-                new_id,
-                {'method': 'desktop_pendant_call_continuation'},
-                expected_windows=expected_windows,
-                expected_fingerprints=fingerprints,
-                call_primary_id=desktop_id,
-                continuation_from=predecessor_id,
-                expected_group_revision=group.get('revision'),
-                join_guard=join_guard,
-            )
-            decision, reason = ('linked', 'jev_same') if joined else ('keep', 'conflict')
-    logger.info(
-        'event=desktop_pendant_call_link role=omi overlap_seconds=0.0 overlap_ratio=0.000 candidate_count=1 decision=%s reason=%s',
-        decision,
-        reason,
-    )
-
-
-def _decide(
-    uid: str, conversation_id: str, *, mode: SmartMergeMode, trigger: ProcessingTrigger, owner: str
+    trigger: ProcessingTrigger,
+    owner: str,
+    before_processing: bool = False,
 ) -> Optional[_MergePlan]:
     """Ask (or reuse) the decision; a plan only in merge mode at or above the threshold."""
-    if not smart_merge_uid_allowed(uid):
-        _skip(mode, SkipReason.UID_NOT_ALLOWED, uid, conversation_id)
-        return None
     new_row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not new_row:
         return None
     new_row = dict(new_row, id=conversation_id)
     new_segments = _segments(new_row)
-    reason = new_conversation_skip(new_row, new_segments, capture_end=trigger is ProcessingTrigger.CAPTURE_END)
+    reason = new_conversation_skip(
+        new_row,
+        new_segments,
+        capture_end=trigger is ProcessingTrigger.CAPTURE_END or before_processing,
+        before_processing=before_processing,
+    )
     if reason is None and not isinstance(new_row.get('created_at'), datetime):
         reason = SkipReason.CONVERSATION_NOT_ELIGIBLE
     if reason is not None:
@@ -571,19 +431,6 @@ def _decide(
     survivor_meta = next((row for row in rows if partition(row) == partition(new_row)), None)
     if survivor_meta is None:
         _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
-        return None
-    if survivor_meta.get('capture_group') and call_link_mode(uid) != 'off':
-        try:
-            _continue_call_group(uid, new_row, survivor_meta, rows, mode=mode)
-        except Exception:
-            record_fallback(
-                component='conversation_finalization',
-                from_mode='duplicate_capture_check',
-                to_mode='separate_captures',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
         return None
     reason = predecessor_status_skip(survivor_meta)
     if reason is not None:
@@ -608,11 +455,13 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
+    if not merge_allowed(uid, survivor, new_row):
+        _skip(mode, 'boundary', uid, conversation_id)
+        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None
-    wall_mode = smart_merge_wallclock_gap_mode()
-    newest = newest_wallclock_fragment(survivor) if wall_mode is not SmartMergeWallclockGapMode.OFF else None
+    newest = newest_wallclock_fragment(survivor)
     last_fragment_id = (
         newest.id if newest is not None and newest.id != survivor_id and valid_fragment_id(newest.id) else None
     )
@@ -626,29 +475,15 @@ def _decide(
     last_fragment_row: Optional[Mapping[str, Any]] = None
     check = check_pair(survivor, survivor_segments, new_row, new_segments)
     if check.reason is not None:
-        if wall_mode is SmartMergeWallclockGapMode.ON:
-            last_fragment_row = _last_fragment_row()
-            check = check_pair(
-                survivor,
-                survivor_segments,
-                new_row,
-                new_segments,
-                wallclock_gap=True,
-                last_fragment_row=last_fragment_row,
-            )
-        elif wall_mode is SmartMergeWallclockGapMode.SHADOW:
-            _wallclock_shadow(
-                uid,
-                conversation_id,
-                survivor,
-                survivor_segments,
-                new_row,
-                new_segments,
-                rows,
-                survivor_id,
-                check.gap_seconds,
-                _last_fragment_row,
-            )
+        last_fragment_row = _last_fragment_row()
+        check = check_pair(
+            survivor,
+            survivor_segments,
+            new_row,
+            new_segments,
+            wallclock_gap=True,
+            last_fragment_row=last_fragment_row,
+        )
     if check.reason is not None:
         _skip(mode, check.reason, uid, conversation_id, check.gap_seconds)
         return None
@@ -656,6 +491,13 @@ def _decide(
     stored = new_row.get(DECISION_FIELD)
     prior: Mapping[str, Any] = stored if isinstance(stored, Mapping) else {}
     reuse = prior.get('candidate_id') == survivor_id and prior.get('question_version') == QUESTION_VERSION
+    if before_processing:
+        reuse = (
+            reuse
+            and prior.get('donor_sync_revision') == new_row.get('sync_content_revision')
+            and prior.get('survivor_revision') == revision(survivor)
+            and prior.get('donor_content_digest') == processing_hold.content_snapshot(new_row)['digest']
+        )
     if reuse and check.same_recording:
         prior_gap = prior.get('gap_seconds')
         reuse = (
@@ -693,7 +535,7 @@ def _decide(
     reason = 'jev_unavailable' if p_same is None else ('jev_same' if same else 'jev_different')
 
     def record(decision: str, why: str) -> dict[str, Any]:
-        return _decision_record(
+        result = _decision_record(
             mode=mode,
             decision=decision,
             reason=why,
@@ -703,6 +545,14 @@ def _decide(
             stretch_count=stretch_count,
             state_hash=state_hash,
         )
+        if before_processing:
+            result.update(
+                processing_stage='before_notes',
+                donor_sync_revision=new_row.get('sync_content_revision'),
+                donor_content_digest=processing_hold.content_snapshot(new_row)['digest'],
+                survivor_revision=revision(survivor),
+            )
+        return result
 
     if mode is SmartMergeMode.SHADOW or not same:
         decision = (SHADOW_WOULD_MERGE if same else SHADOW_KEEP) if mode is SmartMergeMode.SHADOW else KEPT
@@ -715,11 +565,7 @@ def _decide(
             gap_seconds=check.gap_seconds,
             p_same=None if reuse else p_same,
         )
-        gap_path = (
-            f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
-            if wall_mode is SmartMergeWallclockGapMode.ON
-            else ''
-        )
+        gap_path = f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
         logger.info(
             'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s%s',
             mode.value,
@@ -744,11 +590,10 @@ def _decide(
         expected_survivor_sync_revision=survivor.get('sync_content_revision'),
         expected_donor_sync_revision=new_row.get('sync_content_revision'),
         same_recording=check.same_recording,
-        last_fragment_id=last_fragment_id if wall_mode is SmartMergeWallclockGapMode.ON else None,
-        wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON,
-        admission_path=(
-            ('wallclock' if check.same_recording else 'legacy') if wall_mode is SmartMergeWallclockGapMode.ON else None
-        ),
+        last_fragment_id=last_fragment_id,
+        wallclock_gap=True,
+        admission_path='wallclock' if check.same_recording else 'legacy',
+        donor_notes_present=summary_present(new_row.get('structured')),
     )
 
 
@@ -758,6 +603,7 @@ def _decide(
 def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMergeMode, owner: str) -> bool:
     merged_at = datetime.now(timezone.utc)
     flattened_count = 0
+    size_suffix = ''
     admission_path = plan.admission_path
 
     def payloads(
@@ -769,7 +615,16 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         last_fragment_row: Optional[Mapping[str, Any]],
     ) -> tuple[Optional[str], Optional[dict], Optional[dict], Mapping[str, dict]]:
         nonlocal admission_path
-        reason = new_conversation_skip(donor, donor_segments, capture_end=True)
+        reason = new_conversation_skip(
+            donor,
+            donor_segments,
+            capture_end=True,
+            before_processing=plan.record.get('processing_stage') == 'before_notes',
+        )
+        if reason is None and plan.record.get('processing_stage') == 'before_notes':
+            digest = processing_hold.content_snapshot({'transcript_segments': donor_segments})['digest']
+            if digest != plan.record.get('donor_content_digest'):
+                reason = SkipReason.FLATTEN_CONTENT_CHANGED
         if reason is None:
             check = check_pair(
                 survivor,
@@ -790,7 +645,11 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         if not smart_merge_flatten_enabled():
             return None, survivor_update, donor_update, {}
         flat_reason, union, ancestor_updates = flatten_updates(
-            survivor, {str(donor['id']): donor}, ancestor_rows, user_managed=user_managed
+            survivor,
+            {str(donor['id']): donor},
+            ancestor_rows,
+            user_managed=user_managed,
+            chain_repair=smart_merge_flatten_chain_repair_enabled(),
         )
         if flat_reason is not None:
             return flat_reason, None, None, {}
@@ -807,9 +666,14 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             expected_survivor_sync_revision=plan.expected_survivor_sync_revision,
             expected_donor_sync_revision=plan.expected_donor_sync_revision,
             last_fragment_id=plan.last_fragment_id,
+            finalization_fence=plan.finalization_fence,
+            processing_owner=plan.processing_owner,
+            before_processing=plan.record.get('processing_stage') == 'before_notes',
         )
         outcome, reason, audit = result.outcome, result.reason, result.audit
         flattened_count = result.flattened_ancestor_count
+        if result.projected_size_bucket is not None:
+            size_suffix = f' projected_size_bucket={result.projected_size_bucket}'
         if smart_merge_flatten_enabled():
             if outcome == 'absorbed':
                 record_smart_merge_flatten('absorbed', 'none')
@@ -846,13 +710,14 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             conversation_id,
             plan.survivor_id,
             flattened_count,
-            f' gap_path={admission_path}' if admission_path else '',
+            (f' gap_path={admission_path}' if admission_path else '') + size_suffix,
         )
         return False
 
     record_conversation_smart_merge(
         mode=mode.value, decision='merge', reason='absorbed', gap_seconds=plan.gap, p_same=plan.record.get('p_same')
     )
+    record_merge_processing_stage(plan.record.get('processing_stage') == 'before_notes', plan.donor_notes_present)
     if outcome == 'absorbed' and audit != 'none':
         record_conversation_smart_merge_audit(audit)
         logger.info('event=smart_merge_audit outcome=%s uid=%s', audit, uid)
@@ -872,7 +737,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         conversation_id,
         plan.survivor_id,
         flattened_count,
-        f' gap_path={admission_path}' if admission_path else '',
+        (f' gap_path={admission_path}' if admission_path else '') + size_suffix,
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True
@@ -899,6 +764,9 @@ _INCOMPLETE_CODES = frozenset(
         'refresh_completion_fenced',
         'processing_checkpoint_fenced',
         'donor_cleanup_deferred',
+        'redirect_unresolved',
+        'donor_redirect_missing',
+        'refresh_handoff_changed',
         'flatten_cleanup_source_invalid',
     }
 )
@@ -1011,8 +879,24 @@ def _cleanup_flattened_ancestors(uid: str, donor_id: str, donor: Mapping[str, An
         _cleanup_donor(uid, source_id, source, survivor_id)
 
 
-def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
+def refresh_survivor(
+    uid: str, survivor_id: str, *, owner: str, settled: bool = False, skip_processing: bool = False
+) -> None:
     """Regenerate the survivor once for its current revision, under a short lease."""
+    if processing_hold.owns_runtime() and not settled:
+        row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
+        if row and not row.get('deleted') and processing_hold.enabled_for(row) and processing_hold.sync_sourced(row):
+            if not refresh_owed(row) or int(smart_merge_state(row).get('delegated_revision') or 0) >= revision(row):
+                return
+            # Persist the obligation before acknowledging the merge. Further
+            # absorbs may proceed while this durable worker waits for quiet.
+            hold_args: dict[str, Any] = {'sync_hold': True}
+            if (row.get(processing_hold.FIELD) or {}).get('merge_first') and merge_before_processing_enabled():
+                hold_args['merge_hold'] = True
+            enrichment_outbox.mark(uid, survivor_id, row.get('language') or 'en', **hold_args)
+            if not smart_merge_db.delegate_survivor_refresh(uid, survivor_id, revision=revision(row)):
+                raise SmartMergeIncomplete('refresh_handoff_changed')
+            return
     # Job ids survive lease expiry and redelivery. Each invocation needs its own
     # token so a late failure cannot release a newer delivery of the same job.
     owner = f'{owner}:{uuid4().hex}'
@@ -1026,7 +910,7 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
             raise SmartMergeIncomplete('refresh_lease_busy')
         return
     try:
-        _refresh_claimed(uid, survivor_id, claimed, owner=owner)
+        _refresh_claimed(uid, survivor_id, claimed, owner=owner, skip_processing=skip_processing)
     except Exception:
         # A failed refresh must not park the owed refresh behind its own lease for
         # REFRESH_LEASE_SECONDS; compare-and-release so another owner's lease survives.
@@ -1039,24 +923,40 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
         raise
 
 
-def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) -> None:
+def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, skip_processing: bool = False) -> None:
     row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not row or row.get('deleted') or revision(row) != claimed:
         if row and not row.get('deleted'):
             raise SmartMergeIncomplete('survivor_changed_before_refresh')
+        return
+    if skip_processing:
+        # Unchanged/immaterial/capped content still settles the merge ledger.
+        # Use both revision fences before releasing the owed refresh.
+        if not smart_merge_db.checkpoint_survivor_processing(
+            uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
+        ) or not smart_merge_db.complete_survivor_refresh(uid, survivor_id, owner=owner, revision=claimed):
+            raise SmartMergeIncomplete('refresh_completion_fenced')
         return
     processed = deserialize_conversation(row)
     state = smart_merge_state(row)
     if int(state.get('processed_revision') or 0) < claimed or state.get('processed_sync_revision') != row.get(
         'sync_content_revision'
     ):
+        from utils.sync.repeat_work_metrics import record_survivor_refresh
+
+        record_survivor_refresh(uid, survivor_id, row.get('episode_id'))
         persistence = {'owned': True}
         try:
             processed = process_conversation(
                 uid,
                 processed.language or 'en',
                 processed,
-                trigger=ProcessingTrigger.SMART_MERGE,
+                trigger=(
+                    ProcessingTrigger.SYNC_UPDATE
+                    if (row.get(processing_hold.FIELD) or {}).get('merge_first')
+                    and not summary_present(row.get('structured'))
+                    else ProcessingTrigger.SMART_MERGE
+                ),
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 smart_merge_refresh=(claimed, owner),
             )
@@ -1064,6 +964,15 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
             record_conversation_smart_merge_refresh('failed')
             raise
         if not persistence['owned']:
+            context = PROCESS_CONTEXT.get()
+            if context and context.get('hold_budget_denied_at_max'):
+                # Funding denial at the terminal hold cap settles the survivor
+                # refresh ledger without pretending processing persisted.
+                if not smart_merge_db.checkpoint_survivor_processing(
+                    uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
+                ) or not smart_merge_db.complete_survivor_refresh(uid, survivor_id, owner=owner, revision=claimed):
+                    raise SmartMergeIncomplete('refresh_completion_fenced')
+                return
             # Deleted, or a sync append moved the transcript on; the next decision
             # against this survivor pays the refresh it still owes.
             record_conversation_smart_merge_refresh('fenced')

@@ -1,0 +1,103 @@
+[
+  {
+    "displayName": "Record seals: backlog or stale sweeper",
+    "enabled": true,
+    "combiner": "OR",
+    "conditions": [
+      {
+        "displayName": "Every observed cycle nonempty for two hours",
+        "conditionThreshold": {
+          "filter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_nonempty_runs\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "600s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0.999,
+          "duration": "7200s",
+          "trigger": {
+            "count": 1
+          },
+          "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE",
+          "denominatorFilter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_runs\"",
+          "denominatorAggregations": [
+            {
+              "alignmentPeriod": "600s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ]
+        }
+      },
+      {
+        "displayName": "old_runs",
+        "conditionThreshold": {
+          "filter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_old_runs\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "600s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
+          }
+        }
+      },
+      {
+        "displayName": "No successful cycle for 30 minutes",
+        "conditionAbsent": {
+          "filter": "resource.type=\"k8s_container\" AND metric.type=\"logging.googleapis.com/user/omi_record_seal_runs\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "600s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "duration": "1800s",
+          "trigger": {
+            "count": 1
+          }
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Unsealed record_pending sample is nonempty for two hours, an observed unsealed finish is over four hours old, or no successful sweep for 30 minutes. Sample counts/ages are lower bounds at the 128-job discovery cap. Inspect aggregate dispositions and CronJob status; never clear upload_failed or attest producers stopped. Lead owns worker-image/chart deploy and kill switch. See backend/deploy/record-seal-sweeper/README.md."
+    }
+  },
+  {
+    "displayName": "Record seals: bare producer token requires operator",
+    "enabled": true,
+    "combiner": "OR",
+    "conditions": [
+      {
+        "displayName": "Any bare token skip",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"sweeper\" AND jsonPayload.logger=\"record-seal-sweeper\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_sweep\\\"\" AND jsonPayload.message=~\"\\\"bare_token_skips\\\": [1-9][0-9]*\""
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "A pre-identity producer token was skipped. Only an explicitly authorized operator can attest producers stopped. Do not print IDs or token maps. See backend/deploy/record-seal-sweeper/README.md."
+    }
+  }
+]

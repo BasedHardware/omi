@@ -28,6 +28,7 @@ _MIN_FRAGMENT = 3
 _MESSAGING_APPS = frozenset(
     {'telegram', 'slack', 'discord', 'whatsapp', 'messages', 'signal', 'wechat', 'messenger', 'line', 'mail'}
 )
+MESSAGING_APPS = _MESSAGING_APPS
 _CALL_TITLES = ('Google Meet call', 'Zoom call', 'Microsoft Teams call')
 
 

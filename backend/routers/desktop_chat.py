@@ -694,14 +694,14 @@ def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
 
 
-_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'jit_requires_gateway', 'circuit_open'})
+_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'circuit_open'})
 
 
 def _log_desktop_chat_unavailable(*, reason: str, request_id: str) -> None:
     """Record why this router returned HTTP 503.
 
     The 2026-09-09 desktop-chat outage returned 503 in ~105ms with no traceback
-    and no coded reason, so operators could not tell metering, JIT, and circuit
+    and no coded reason, so operators could not tell metering and circuit
     open apart. Log one warning with a closed reason plus request_id. Never log
     request/response bodies, UIDs, or prompts.
     """
@@ -1780,32 +1780,9 @@ async def _chat_completions_unobserved(
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
-    x_omi_jit_contract_version: str | None = None,
-    x_omi_jit_run_id: str | None = None,
-    x_omi_jit_max_attempts: str | None = None,
-    x_omi_jit_max_output_tokens: str | None = None,
-    x_omi_jit_max_input_tokens: str | None = None,
-    x_omi_jit_max_spend_micro_usd: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     if x_omi_chat_contract_version not in {None, '1'}:
         raise HTTPException(status_code=426, detail='Unsupported chat contract version')
-    # Direct unit callers invoke the FastAPI endpoint without dependency
-    # injection, so omitted Header defaults arrive as Param objects.  Treat
-    # those as absent just as the HTTP adapter does; only actual strings may
-    # activate the explicit JIT qualification capability.
-    jit_header_values = tuple(
-        value if isinstance(value, str) else None
-        for value in (
-            x_omi_jit_contract_version,
-            x_omi_jit_run_id,
-            x_omi_jit_max_attempts,
-            x_omi_jit_max_output_tokens,
-            x_omi_jit_max_input_tokens,
-            x_omi_jit_max_spend_micro_usd,
-        )
-    )
-    if any(value is not None for value in jit_header_values):
-        raise HTTPException(status_code=410, detail={'error': 'feature_retired'})
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1987,12 +1964,6 @@ async def chat_completions(
     x_app_version: str | None = Header(None, alias='X-App-Version'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
-    x_omi_jit_contract_version: str | None = Header(None, alias='X-Omi-Jit-Contract-Version'),
-    x_omi_jit_run_id: str | None = Header(None, alias='X-Omi-Jit-Run-Id'),
-    x_omi_jit_max_attempts: str | None = Header(None, alias='X-Omi-Jit-Max-Attempts'),
-    x_omi_jit_max_output_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Output-Tokens'),
-    x_omi_jit_max_input_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Input-Tokens'),
-    x_omi_jit_max_spend_micro_usd: str | None = Header(None, alias='X-Omi-Jit-Max-Spend-Micro-Usd'),
     user_agent: str | None = Header(None, alias='User-Agent'),
 ) -> JSONResponse | StreamingResponse:
     attempt = ClientJourneyAttempt(
@@ -2015,12 +1986,6 @@ async def chat_completions(
             x_app_platform=x_app_platform,
             x_omi_chat_contract_version=x_omi_chat_contract_version,
             x_omi_request_id=x_omi_request_id,
-            x_omi_jit_contract_version=x_omi_jit_contract_version,
-            x_omi_jit_run_id=x_omi_jit_run_id,
-            x_omi_jit_max_attempts=x_omi_jit_max_attempts,
-            x_omi_jit_max_output_tokens=x_omi_jit_max_output_tokens,
-            x_omi_jit_max_input_tokens=x_omi_jit_max_input_tokens,
-            x_omi_jit_max_spend_micro_usd=x_omi_jit_max_spend_micro_usd,
         )
     except asyncio.CancelledError:
         attempt.cancel()
