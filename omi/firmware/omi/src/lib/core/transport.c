@@ -124,6 +124,17 @@ static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      void *buf,
                                                      uint16_t len,
                                                      uint16_t offset);
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags);
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset);
 static int notify_charging_status(struct bt_conn *conn, bool force_notify);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
@@ -135,6 +146,7 @@ static void update_mtu(struct bt_conn *conn);
 static void update_conn_params(struct bt_conn *conn);
 static void schedule_mtu_recheck(void);
 static void mtu_recheck_work_handler(struct k_work *work);
+static void adv_name_update_work_handler(struct k_work *work);
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
 
 // --- GATT Exchange MTU Params ---
@@ -266,6 +278,9 @@ static ssize_t settings_power_control_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &state, sizeof(state));
 }
 
+static struct bt_uuid_128 settings_device_name_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10014, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
     BT_GATT_CHARACTERISTIC(&settings_dim_ratio_characteristic_uuid.uuid,
@@ -300,6 +315,12 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_power_control_read_handler,
                            settings_power_control_write_handler,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&settings_device_name_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_device_name_read_handler,
+                           settings_device_name_write_handler,
                            NULL),
 };
 
@@ -468,13 +489,109 @@ static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
-// Scan response data
-static const struct bt_data bt_sd[] = {
-    BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
-};
+/* BLE RX publishes only pending bytes. HCI calls consume a worker-local snapshot. */
+static char adv_device_name[MAX_DEVICE_NAME_LEN] = CONFIG_BT_DEVICE_NAME;
+static struct k_spinlock adv_name_lock;
+static struct k_work_delayable adv_name_update_work;
+static uint32_t adv_name_generation;
+static bool adv_name_pending;
+static uint8_t adv_name_retries;
+#define ADV_NAME_RETRY_LIMIT 5
+#define ADV_NAME_RETRY_MS 100
+
+static int apply_advertising_name(bool start)
+{
+    char snapshot[MAX_DEVICE_NAME_LEN];
+    k_spinlock_key_t key = k_spin_lock(&adv_name_lock);
+    memcpy(snapshot, adv_device_name, sizeof(snapshot));
+    uint32_t generation = adv_name_generation;
+    k_spin_unlock(&adv_name_lock, key);
+
+    /* The name and length stay immutable for both synchronous Bluetooth calls. */
+    const struct bt_data scan_response[] = {
+        BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
+        BT_DATA(BT_DATA_NAME_COMPLETE, snapshot, strlen(snapshot)),
+    };
+#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
+    int err = bt_set_name(snapshot);
+    if (err) {
+        return err;
+    }
+#endif
+    int result;
+    if (start) {
+        result = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), scan_response, ARRAY_SIZE(scan_response));
+    } else {
+        result = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), scan_response, ARRAY_SIZE(scan_response));
+    }
+    if (!result) {
+        key = k_spin_lock(&adv_name_lock);
+        /* A write during HCI must retain its pending update and scheduled work. */
+        if (generation == adv_name_generation) {
+            adv_name_pending = false;
+        }
+        k_spin_unlock(&adv_name_lock, key);
+    }
+    return result;
+}
+
+static void adv_name_update_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    int err = apply_advertising_name(false);
+    bool retry = false;
+    k_spinlock_key_t key = k_spin_lock(&adv_name_lock);
+    if (err == -EAGAIN && adv_name_pending && adv_name_retries < ADV_NAME_RETRY_LIMIT) {
+        ++adv_name_retries;
+        retry = true;
+    }
+    k_spin_unlock(&adv_name_lock, key);
+    if (retry) {
+        k_work_reschedule(&adv_name_update_work, K_MSEC(ADV_NAME_RETRY_MS));
+        return;
+    }
+    if (err) {
+        /* Retain pending state for disconnect or next boot, but stop retrying. */
+        LOG_WRN("Failed to update advertising name (err %d)", err);
+    }
+}
+
+static void stage_advertising_name(const char *name)
+{
+    const char *resolved = (name != NULL && name[0] != '\0') ? name : CONFIG_BT_DEVICE_NAME;
+    k_spinlock_key_t key = k_spin_lock(&adv_name_lock);
+    strncpy(adv_device_name, resolved, sizeof(adv_device_name) - 1);
+    adv_device_name[sizeof(adv_device_name) - 1] = '\0';
+    ++adv_name_generation;
+    adv_name_pending = true;
+    adv_name_retries = 0;
+    k_spin_unlock(&adv_name_lock, key);
+}
+
+static void update_advertising_name(const char *name)
+{
+    stage_advertising_name(name);
+    /* HCI calls must run outside Bluetooth RX. A running work item may be
+     * resubmitted, so an update arriving during HCI is applied on the next run. */
+    k_work_reschedule(&adv_name_update_work, K_NO_WAIT);
+}
+
+static void advertising_name_disconnected(void)
+{
+    k_spinlock_key_t key = k_spin_lock(&adv_name_lock);
+    bool pending = adv_name_pending;
+    if (pending) {
+        adv_name_retries = 0;
+    }
+    k_spin_unlock(&adv_name_lock, key);
+    if (pending) {
+        /* RX callback precedes host advertising resume. Defer HCI and allow a
+         * bounded retry window if resume has not completed on the first run. */
+        k_work_reschedule(&adv_name_update_work, K_MSEC(ADV_NAME_RETRY_MS));
+    }
+}
 
 //
 // State and Characteristics
@@ -655,6 +772,58 @@ static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &charging_status, sizeof(charging_status));
 }
 
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags)
+{
+    if (offset != 0) {
+        LOG_WRN("Invalid offset for device name write: %u", offset);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+
+    if (len > MAX_DEVICE_NAME_PAYLOAD_LEN) {
+        LOG_WRN("Invalid length for device name write: %u (max %u)", len, MAX_DEVICE_NAME_PAYLOAD_LEN);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    if (len > 0 && memchr(buf, '\0', len) != NULL) {
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+    char new_name[MAX_DEVICE_NAME_LEN] = {0};
+    if (len > 0) {
+        memcpy(new_name, buf, len);
+        new_name[len] = '\0';
+    }
+
+    LOG_INF("Received new device name: %s", new_name);
+    int err = app_settings_save_device_name(new_name);
+    if (err) {
+        LOG_ERR("Failed to save device name setting: %d", err);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+
+    update_advertising_name(new_name);
+
+    return len;
+}
+
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset)
+{
+    const char *name = app_settings_get_device_name();
+    if (name == NULL || strlen(name) == 0) {
+        name = "";
+    }
+    LOG_INF("Reading device name: %s", name);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));
+}
+
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
@@ -685,6 +854,7 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
     features |= OMI_FEATURE_LED_DIMMING;
     // Mic gain control is always enabled.
     features |= OMI_FEATURE_MIC_GAIN;
+    features |= OMI_FEATURE_DEVICE_NAME;
     // Persistent capture mute (NVS + BLE). Always present on this firmware.
     features |= OMI_FEATURE_CAPTURE_MUTE;
     features |= OMI_FEATURE_POWER_CONTROL;
@@ -931,6 +1101,8 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     k_sem_init(&audio_tx_sem,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
                CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
+    /* Start the retry window after callback cleanup, just before host resume. */
+    advertising_name_disconnected();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -1730,6 +1902,7 @@ int transport_start()
 #endif
 
     // Start advertising
+    k_work_init_delayable(&adv_name_update_work, adv_name_update_work_handler);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
@@ -1741,7 +1914,8 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
-    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    stage_advertising_name(app_settings_get_device_name());
+    err = apply_advertising_name(true);
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d), continuing without BLE", err);
         // Non-fatal: continue with pusher and ring buffer so offline recording works
