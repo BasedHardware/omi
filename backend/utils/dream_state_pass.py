@@ -133,6 +133,14 @@ class StatePlan(Strict):
         plan._dropped, plan._overflow = dropped, overflow
         return plan
 
+    @property
+    def dropped(self) -> int:
+        return self._dropped
+
+    @property
+    def overflow(self) -> int:
+        return self._overflow
+
 
 def mode() -> tuple[str, bool]:
     """('off'|'shadow', would_serve). Serving is a later change, so serve runs as shadow."""
@@ -295,8 +303,8 @@ def plan_edits(plan: StatePlan) -> tuple[list[DreamHarnessEdit], dict[str, int]]
         'capped': 0,
         'merge_evidence_rejected': 0,
         'invalid': 0,
-        'plan_dropped': plan._dropped,
-        'plan_overflow': plan._overflow,
+        'plan_dropped': plan.dropped,
+        'plan_overflow': plan.overflow,
     }
     edits: list[DreamHarnessEdit] = []
     merges = 0
