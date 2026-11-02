@@ -35,7 +35,10 @@ def identity_token(audience: str) -> str:
     from google.auth.transport.requests import Request
     from google.oauth2.id_token import fetch_id_token
 
-    return fetch_id_token(Request(), audience)
+    token = fetch_id_token(Request(), audience)
+    if not isinstance(token, str) or not token:
+        raise RuntimeError('Workload Identity did not return an ID token')
+    return token
 
 
 class WorkerClient:

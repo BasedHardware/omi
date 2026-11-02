@@ -81,18 +81,18 @@ def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TraceContextMiddleware)
 
-    @app.get('/health')
     async def health():
         runtime = app.state.runtime
         healthy = time.monotonic() - runtime.last_tick < 60
         return JSONResponse({'healthy': healthy}, status_code=200 if healthy else 503)
 
-    @app.get('/ready')
     async def ready():
         runtime = app.state.runtime
         available = runtime.connected and not runtime.stop.is_set()
         return JSONResponse({'ready': available}, status_code=200 if available else 503)
 
+    app.add_api_route('/health', health, methods=['GET'])
+    app.add_api_route('/ready', ready, methods=['GET'])
     return app
 
 
