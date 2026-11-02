@@ -377,7 +377,7 @@ def skip_count(route, surface='prerecorded'):
 def test_confident_supported_shadow_verdict_skips_the_vendor_probe_by_default(monkeypatch):
     wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.996))
     before = skip_count('parakeet')
-    decision = lid.resolve_language('multi', wav())
+    decision = lid.resolve_language('multi', wav(), confident_skip=True)
     assert decision.evidence == 'self_lid' and decision.language == 'en' and decision.parakeet_safe
     assert wire.vendor_calls == [] and len(wire.gate_calls) == 1
     assert skip_count('parakeet') == before + 1
@@ -404,24 +404,24 @@ def test_unsupported_top_language_skips_the_vendor_probe_onto_the_multilingual_r
 def test_ambiguous_shadow_verdict_keeps_the_vendor_probe(monkeypatch, self_gate):
     wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=self_gate)
     seconds = self_gate['audio_seconds']
-    decision = lid.resolve_language('multi', wav(seconds))
+    decision = lid.resolve_language('multi', wav(seconds), confident_skip=True)
     assert decision.evidence == 'audio_lid' and decision.language == 'ja'
     assert len(wire.vendor_calls) == 1
 
 
 def test_unavailable_self_gate_keeps_the_vendor_probe(monkeypatch):
     wire = Wire(monkeypatch, vendor=('ja', 0.99), self_status=503)
-    assert lid.resolve_language('multi', wav()).evidence == 'audio_lid'
+    assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'audio_lid'
     assert len(wire.vendor_calls) == 1
 
 
 def test_unsupported_mode_skips_only_toward_the_multilingual_route(monkeypatch):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', 'unsupported')
     wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.996))
-    assert lid.resolve_language('multi', wav()).evidence == 'audio_lid'
+    assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'audio_lid'
     assert len(wire.vendor_calls) == 1
     wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ko', 0.02))
-    decision = lid.resolve_language('multi', wav())
+    decision = lid.resolve_language('multi', wav(), confident_skip=True)
     assert decision.evidence == 'self_lid' and not decision.parakeet_safe
     assert wire.vendor_calls == []
 
@@ -431,7 +431,7 @@ def test_kill_switch_restores_the_vendor_probe(monkeypatch, raw):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', raw)
     for self_gate in (gate_body('en', 0.996), gate_body('ja', 0.01)):
         wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=self_gate)
-        assert lid.resolve_language('multi', wav()).evidence == 'audio_lid'
+        assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'audio_lid'
         assert len(wire.vendor_calls) == 1
 
 
@@ -451,8 +451,21 @@ def test_malformed_skip_mode_keeps_only_the_safe_direction(monkeypatch, raw, mod
 def test_batch_surface_never_skips_the_vendor_probe(monkeypatch):
     # Sampled batch admission accepts only vendor audio_lid evidence; a skip there would refuse the upload.
     wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('en', 0.996))
-    assert lid.resolve_language('multi', wav(), surface='batch').evidence == 'audio_lid'
+    assert lid.resolve_language('multi', wav(), surface='batch', confident_skip=True).evidence == 'audio_lid'
     assert len(wire.vendor_calls) == 1
+
+
+@pytest.mark.parametrize('self_gate', [gate_body('en', 0.996), gate_body('ja', 0.01)])
+def test_only_legacy_sync_files_skip_not_chat_voice_or_recovery_bytes(monkeypatch, self_gate):
+    # The disagreement rate behind the skip was measured on legacy sync segments only.
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=self_gate)
+    before = skip_count('parakeet') + skip_count('multilingual') + skip_count('audit')
+    assert lid.resolve_language('multi', wav()).evidence == 'audio_lid'
+    monkeypatch.setattr(stt, 'ModulatePrerecordedProvider', Mock())
+    monkeypatch.setattr(stt, 'ParakeetPrerecordedProvider', Mock(side_effect=AssertionError('vendor said ja')))
+    stt.prerecorded_from_bytes(wav(), language='multi')
+    assert len(wire.vendor_calls) == 2
+    assert skip_count('parakeet') + skip_count('multilingual') + skip_count('audit') == before
 
 
 def test_audit_sample_still_pays_the_vendor_probe_and_records_the_shadow_pair(monkeypatch):
@@ -460,7 +473,7 @@ def test_audit_sample_still_pays_the_vendor_probe_and_records_the_shadow_pair(mo
     wire = Wire(monkeypatch, vendor=('ja', 0.97), self_gate=gate_body('en', 0.995))
     before_audit = skip_count('audit')
     before_pair = shadow_count(vendor_route='multilingual', vendor_bucket='ja')
-    decision = lid.resolve_language('multi', wav())
+    decision = lid.resolve_language('multi', wav(), confident_skip=True)
     assert decision.evidence == 'audio_lid' and decision.language == 'ja'
     assert len(wire.vendor_calls) == 1
     assert skip_count('audit') == before_audit + 1
@@ -478,5 +491,5 @@ def test_enforced_cohort_is_unchanged_by_the_skip(monkeypatch):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
     wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.996))
     before = skip_count('parakeet')
-    assert lid.resolve_language('multi', wav()).evidence == 'self_lid'
+    assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'self_lid'
     assert wire.vendor_calls == [] and skip_count('parakeet') == before

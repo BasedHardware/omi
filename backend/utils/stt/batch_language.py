@@ -317,15 +317,16 @@ def _confident_skip_audited(audio: bytes) -> bool:
     return int.from_bytes(digest[:8], 'big') % 100 < CONFIDENT_SKIP_AUDIT_PERCENT
 
 
-def _confident_skip_route(surface: str, verdict: language_gate.SelfVerdict | None) -> str | None:
+def _confident_skip_route(verdict: language_gate.SelfVerdict | None) -> str | None:
     """The route a confident shadow verdict decides on its own, or None to ask the vendor.
 
-    Legacy sync only: sampled batch admission requires vendor audio_lid evidence. A self-parakeet
-    verdict clears the enforced gate's floor (prod shadow 24 h to 11-02 04:55Z: the vendor called
-    0.07% of them an unsupported language at >= 0.9). An unsupported top-1 can only move speech to
-    the multilingual route. Anything in between keeps the vendor probe.
+    Legacy sync segments only (resolve_file): the disagreement rate below was measured there, and
+    sampled batch admission requires vendor audio_lid evidence. A self-parakeet verdict clears the
+    enforced gate's floor (prod shadow 24 h to 11-02 04:55Z: the vendor called 0.07% of them an
+    unsupported language at >= 0.9). An unsupported top-1 can only move speech to the multilingual
+    route. Anything in between keeps the vendor probe.
     """
-    if surface != 'prerecorded' or verdict is None:
+    if verdict is None:
         return None
     mode = language_gate_confident_skip()
     if mode == 'off':
@@ -343,6 +344,7 @@ def resolve_language(
     before_self_probe=None,
     surface='prerecorded',
     cohort_key=None,
+    confident_skip=False,
     **audio_options,
 ) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
@@ -355,7 +357,7 @@ def resolve_language(
     )
     if enforced:
         language_gate.record_enforced(surface, verdict)
-    skip = None if enforced else _confident_skip_route(surface, verdict)
+    skip = _confident_skip_route(verdict) if confident_skip and surface == 'prerecorded' and not enforced else None
     if skip is not None and _confident_skip_audited(audio):
         language_gate.record_confident_skip(surface, 'audit')
         skip = None
@@ -406,7 +408,9 @@ def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
-        decision = resolve_language(language, body, before_probe=before_probe, cohort_key=cohort_key)
+        decision = resolve_language(
+            language, body, before_probe=before_probe, cohort_key=cohort_key, confident_skip=True
+        )
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
     return select_decision(language, decision, selector)
