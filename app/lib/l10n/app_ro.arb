@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Așteaptă Omi-ul",
     "syncDetailsWaitingOnPhone": "Așteaptă pe acest telefon",
     "syncDetailsTranscribing": "Se transcrie pe Omi",
-    "syncDetailsForSupport": "Pentru asistență",
     "syncDetailsAudioFiles": "Fișiere audio",
     "syncDetailsServerJobs": "Joburi pe server (finalizate / total)",
     "syncDetailsCopy": "Copiază detaliile pentru asistență",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Până la {time} · notițe complete la final",
     "liveTranscribedUpTo": "Transcris până la {time}",
     "liveAudioSaved": "{duration} salvate",
-    "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă."
+    "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.",
+    "searchNoiseFilter": "Clipuri scurte"
 }

@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Omi वर प्रतीक्षेत",
     "syncDetailsWaitingOnPhone": "या फोनवर प्रतीक्षेत",
     "syncDetailsTranscribing": "Omi वर ट्रान्सक्राइब होत आहे",
-    "syncDetailsForSupport": "सपोर्टसाठी",
     "syncDetailsAudioFiles": "ऑडिओ फाइल्स",
     "syncDetailsServerJobs": "सर्व्हर जॉब्स (पूर्ण / एकूण)",
     "syncDetailsCopy": "सपोर्टसाठी तपशील कॉपी करा",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
     "liveAudioSaved": "{duration} जतन केले",
-    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील."
+    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.",
+    "searchNoiseFilter": "लहान क्लिप"
 }

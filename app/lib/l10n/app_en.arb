@@ -16219,10 +16219,6 @@
     "@syncDetailsTranscribing": {
         "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
     },
-    "syncDetailsForSupport": "For support",
-    "@syncDetailsForSupport": {
-        "description": "Sync details section header for raw technical counts meant for customer support."
-    },
     "syncDetailsAudioFiles": "Audio files",
     "@syncDetailsAudioFiles": {
         "description": "Sync details row label: number of raw audio files the app holds."
@@ -18161,5 +18157,9 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
+    },
+    "searchNoiseFilter": "Short clips",
+    "@searchNoiseFilter": {
+        "description": "Search filter chip: show only short clips (noise or media) that Home hides"
     }
 }

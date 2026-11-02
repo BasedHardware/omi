@@ -13480,9 +13480,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsTranscribing => 'Atšifrē Omi';
 
   @override
-  String get syncDetailsForSupport => 'Atbalstam';
-
-  @override
   String get syncDetailsAudioFiles => 'Audio faili';
 
   @override
@@ -14884,4 +14881,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
+
+  @override
+  String get searchNoiseFilter => 'Īsi klipi';
 }

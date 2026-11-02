@@ -13242,9 +13242,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omi 正在转录';
 
   @override
-  String get syncDetailsForSupport => '供支持团队使用';
-
-  @override
   String get syncDetailsAudioFiles => '音频文件';
 
   @override
@@ -14620,4 +14617,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
+
+  @override
+  String get searchNoiseFilter => '短片段';
 }

@@ -13500,9 +13500,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncDetailsTranscribing => 'Átírás az Omin';
 
   @override
-  String get syncDetailsForSupport => 'Az ügyfélszolgálatnak';
-
-  @override
   String get syncDetailsAudioFiles => 'Hangfájlok';
 
   @override
@@ -14909,4 +14906,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
+
+  @override
+  String get searchNoiseFilter => 'Rövid klipek';
 }

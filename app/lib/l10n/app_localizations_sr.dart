@@ -13457,9 +13457,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncDetailsTranscribing => 'Транскрипција на Omi';
 
   @override
-  String get syncDetailsForSupport => 'За подршку';
-
-  @override
   String get syncDetailsAudioFiles => 'Аудио датотеке';
 
   @override
@@ -14857,4 +14854,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорници и коначни транскрипт појавиће се овде током отпремања.';
+
+  @override
+  String get searchNoiseFilter => 'Кратки клипови';
 }

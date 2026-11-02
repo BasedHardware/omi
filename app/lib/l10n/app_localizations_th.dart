@@ -13381,9 +13381,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsTranscribing => 'กำลังถอดเสียงบน Omi';
 
   @override
-  String get syncDetailsForSupport => 'สำหรับฝ่ายสนับสนุน';
-
-  @override
   String get syncDetailsAudioFiles => 'ไฟล์เสียง';
 
   @override
@@ -14777,4 +14774,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
+
+  @override
+  String get searchNoiseFilter => 'คลิปสั้น';
 }

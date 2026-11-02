@@ -13520,9 +13520,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get syncDetailsTranscribing => 'Trascrizione su Omi';
 
   @override
-  String get syncDetailsForSupport => 'Per l\'assistenza';
-
-  @override
   String get syncDetailsAudioFiles => 'File audio';
 
   @override
@@ -14927,4 +14924,7 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get liveAudioSavedDetail =>
       'Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.';
+
+  @override
+  String get searchNoiseFilter => 'Clip brevi';
 }

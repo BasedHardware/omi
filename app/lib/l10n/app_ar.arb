@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "في انتظار Omi",
     "syncDetailsWaitingOnPhone": "في انتظار هذا الهاتف",
     "syncDetailsTranscribing": "جارٍ النسخ في Omi",
-    "syncDetailsForSupport": "للدعم",
     "syncDetailsAudioFiles": "ملفات صوتية",
     "syncDetailsServerJobs": "مهام الخادم (المكتملة / الإجمالي)",
     "syncDetailsCopy": "نسخ التفاصيل للدعم",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "يغطي حتى {time} · الملاحظات الكاملة عند الانتهاء",
     "liveTranscribedUpTo": "تم النسخ حتى {time}",
     "liveAudioSaved": "تم حفظ {duration}",
-    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع."
+    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.",
+    "searchNoiseFilter": "مقاطع قصيرة"
 }

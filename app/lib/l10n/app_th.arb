@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "รอจาก Omi",
     "syncDetailsWaitingOnPhone": "รอจากโทรศัพท์เครื่องนี้",
     "syncDetailsTranscribing": "กำลังถอดเสียงบน Omi",
-    "syncDetailsForSupport": "สำหรับฝ่ายสนับสนุน",
     "syncDetailsAudioFiles": "ไฟล์เสียง",
     "syncDetailsServerJobs": "งานบนเซิร์ฟเวอร์ (เสร็จ / ทั้งหมด)",
     "syncDetailsCopy": "คัดลอกรายละเอียดสำหรับฝ่ายสนับสนุน",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "ครอบคลุมถึง {time} · บันทึกฉบับเต็มเมื่อจบ",
     "liveTranscribedUpTo": "ถอดความถึง {time}",
     "liveAudioSaved": "บันทึกแล้ว {duration}",
-    "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด"
+    "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด",
+    "searchNoiseFilter": "คลิปสั้น"
 }

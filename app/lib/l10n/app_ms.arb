@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Menunggu Omi anda",
     "syncDetailsWaitingOnPhone": "Menunggu telefon ini",
     "syncDetailsTranscribing": "Mentranskripsi di Omi",
-    "syncDetailsForSupport": "Untuk sokongan",
     "syncDetailsAudioFiles": "Fail audio",
     "syncDetailsServerJobs": "Tugas pelayan (selesai / jumlah)",
     "syncDetailsCopy": "Salin butiran untuk sokongan",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Meliputi sehingga {time} · nota penuh apabila selesai",
     "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
     "liveAudioSaved": "{duration} disimpan",
-    "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik."
+    "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.",
+    "searchNoiseFilter": "Klip pendek"
 }

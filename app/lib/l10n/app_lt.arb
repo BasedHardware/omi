@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Laukia Omi",
     "syncDetailsWaitingOnPhone": "Laukia šiame telefone",
     "syncDetailsTranscribing": "Transkribuojama Omi",
-    "syncDetailsForSupport": "Palaikymo komandai",
     "syncDetailsAudioFiles": "Garso failai",
     "syncDetailsServerJobs": "Serverio užduotys (atlikta / iš viso)",
     "syncDetailsCopy": "Kopijuoti informaciją palaikymo komandai",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Iki {time} · pilnos pastabos pabaigoje",
     "liveTranscribedUpTo": "Transkribuota iki {time}",
     "liveAudioSaved": "Išsaugota {duration}",
-    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant."
+    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.",
+    "searchNoiseFilter": "Trumpi klipai"
 }

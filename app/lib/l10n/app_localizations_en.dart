@@ -13433,9 +13433,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDetailsTranscribing => 'Transcribing on Omi';
 
   @override
-  String get syncDetailsForSupport => 'For support';
-
-  @override
   String get syncDetailsAudioFiles => 'Audio files';
 
   @override
@@ -14835,4 +14832,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
+
+  @override
+  String get searchNoiseFilter => 'Short clips';
 }

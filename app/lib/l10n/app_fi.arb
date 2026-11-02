@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Odottaa Omia",
     "syncDetailsWaitingOnPhone": "Odottaa tässä puhelimessa",
     "syncDetailsTranscribing": "Litteroidaan Omissa",
-    "syncDetailsForSupport": "Tukea varten",
     "syncDetailsAudioFiles": "Äänitiedostot",
     "syncDetailsServerJobs": "Palvelintyöt (valmis / yhteensä)",
     "syncDetailsCopy": "Kopioi tiedot tukea varten",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",
     "liveAudioSaved": "{duration} tallennettu",
-    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä."
+    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.",
+    "searchNoiseFilter": "Lyhyet klipit"
 }

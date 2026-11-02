@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "等待 Omi 传输",
     "syncDetailsWaitingOnPhone": "等待此手机上传",
     "syncDetailsTranscribing": "Omi 正在转录",
-    "syncDetailsForSupport": "供支持团队使用",
     "syncDetailsAudioFiles": "音频文件",
     "syncDetailsServerJobs": "服务器任务 (已完成 / 总数)",
     "syncDetailsCopy": "复制详情以供支持团队使用",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "涵盖至 {time} · 结束后提供完整笔记",
     "liveTranscribedUpTo": "已转录至 {time}",
     "liveAudioSaved": "已保存 {duration}",
-    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。"
+    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。",
+    "searchNoiseFilter": "短片段"
 }

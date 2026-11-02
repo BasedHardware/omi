@@ -4158,7 +4158,6 @@
     "syncDetailsWaitingOnOmi": "Omi'de bekliyor",
     "syncDetailsWaitingOnPhone": "Bu telefonda bekliyor",
     "syncDetailsTranscribing": "Omi'de yazıya dökülüyor",
-    "syncDetailsForSupport": "Destek için",
     "syncDetailsAudioFiles": "Ses dosyaları",
     "syncDetailsServerJobs": "Sunucu işleri (biten / toplam)",
     "syncDetailsCopy": "Destek için ayrıntıları kopyala",
@@ -4536,5 +4535,6 @@
     "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
     "liveAudioSaved": "{duration} kaydedildi",
-    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür."
+    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür.",
+    "searchNoiseFilter": "Kısa klipler"
 }

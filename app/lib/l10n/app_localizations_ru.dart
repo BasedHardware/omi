@@ -13494,9 +13494,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncDetailsTranscribing => 'Расшифровывается в Omi';
 
   @override
-  String get syncDetailsForSupport => 'Для поддержки';
-
-  @override
   String get syncDetailsAudioFiles => 'Аудиофайлы';
 
   @override
@@ -14898,4 +14895,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
+
+  @override
+  String get searchNoiseFilter => 'Короткие клипы';
 }

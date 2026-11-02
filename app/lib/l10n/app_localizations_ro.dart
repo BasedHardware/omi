@@ -13505,9 +13505,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncDetailsTranscribing => 'Se transcrie pe Omi';
 
   @override
-  String get syncDetailsForSupport => 'Pentru asistență';
-
-  @override
   String get syncDetailsAudioFiles => 'Fișiere audio';
 
   @override
@@ -14913,4 +14910,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
+
+  @override
+  String get searchNoiseFilter => 'Clipuri scurte';
 }

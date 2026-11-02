@@ -13471,9 +13471,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncDetailsTranscribing => 'Transkribuojama Omi';
 
   @override
-  String get syncDetailsForSupport => 'Palaikymo komandai';
-
-  @override
   String get syncDetailsAudioFiles => 'Garso failai';
 
   @override
@@ -14872,4 +14869,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
+
+  @override
+  String get searchNoiseFilter => 'Trumpi klipai';
 }

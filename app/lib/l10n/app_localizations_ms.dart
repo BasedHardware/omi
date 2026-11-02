@@ -13479,9 +13479,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
 
   @override
-  String get syncDetailsForSupport => 'Untuk sokongan';
-
-  @override
   String get syncDetailsAudioFiles => 'Fail audio';
 
   @override
@@ -14887,4 +14884,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
+
+  @override
+  String get searchNoiseFilter => 'Klip pendek';
 }

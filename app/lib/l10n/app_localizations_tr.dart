@@ -13462,9 +13462,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omi\'de yazıya dökülüyor';
 
   @override
-  String get syncDetailsForSupport => 'Destek için';
-
-  @override
   String get syncDetailsAudioFiles => 'Ses dosyaları';
 
   @override
@@ -14863,4 +14860,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
+
+  @override
+  String get searchNoiseFilter => 'Kısa klipler';
 }

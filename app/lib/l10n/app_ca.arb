@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Esperant l'Omi",
     "syncDetailsWaitingOnPhone": "Esperant aquest mòbil",
     "syncDetailsTranscribing": "Transcrivint a Omi",
-    "syncDetailsForSupport": "Per a assistència",
     "syncDetailsAudioFiles": "Fitxers d'àudio",
     "syncDetailsServerJobs": "Tasques del servidor (fetes / total)",
     "syncDetailsCopy": "Copia els detalls per a assistència",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",
     "liveTranscribedUpTo": "Transcrit fins a les {time}",
     "liveAudioSaved": "{duration} desats",
-    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi."
+    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.",
+    "searchNoiseFilter": "Clips curts"
 }

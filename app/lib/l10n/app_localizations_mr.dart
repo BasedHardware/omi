@@ -13453,9 +13453,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omi वर ट्रान्सक्राइब होत आहे';
 
   @override
-  String get syncDetailsForSupport => 'सपोर्टसाठी';
-
-  @override
   String get syncDetailsAudioFiles => 'ऑडिओ फाइल्स';
 
   @override
@@ -14858,4 +14855,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.';
+
+  @override
+  String get searchNoiseFilter => 'लहान क्लिप';
 }

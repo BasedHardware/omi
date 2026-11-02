@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Čeka na Omi",
     "syncDetailsWaitingOnPhone": "Čeka na ovom telefonu",
     "syncDetailsTranscribing": "Transkripcija na Omi",
-    "syncDetailsForSupport": "Za podršku",
     "syncDetailsAudioFiles": "Audio datoteke",
     "syncDetailsServerJobs": "Poslovi na serveru (gotovo / ukupno)",
     "syncDetailsCopy": "Kopiraj detalje za podršku",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
     "liveTranscribedUpTo": "Transkribovano do {time}",
     "liveAudioSaved": "Sačuvano {duration}",
-    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tokom otpremanja."
+    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.",
+    "searchNoiseFilter": "Kratki klipovi"
 }

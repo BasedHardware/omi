@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Omi లో వేచి ఉంది",
     "syncDetailsWaitingOnPhone": "ఈ ఫోన్‌లో వేచి ఉంది",
     "syncDetailsTranscribing": "Omi లో ట్రాన్స్క్రైబ్ అవుతోంది",
-    "syncDetailsForSupport": "సపోర్ట్ కోసం",
     "syncDetailsAudioFiles": "ఆడియో ఫైళ్లు",
     "syncDetailsServerJobs": "సర్వర్ జాబ్‌లు (పూర్తైనవి / మొత్తం)",
     "syncDetailsCopy": "సపోర్ట్ కోసం వివరాలను కాపీ చేయండి",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "{time} వరకు · ముగిశాక పూర్తి నోట్స్",
     "liveTranscribedUpTo": "{time} వరకు ట్రాన్స్‌క్రైబ్ అయింది",
     "liveAudioSaved": "{duration} సేవ్ అయింది",
-    "liveAudioSavedDetail": "అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి."
+    "liveAudioSavedDetail": "అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.",
+    "searchNoiseFilter": "చిన్న క్లిప్‌లు"
 }

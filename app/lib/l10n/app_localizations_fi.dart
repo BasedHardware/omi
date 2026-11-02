@@ -13452,9 +13452,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsTranscribing => 'Litteroidaan Omissa';
 
   @override
-  String get syncDetailsForSupport => 'Tukea varten';
-
-  @override
   String get syncDetailsAudioFiles => 'Äänitiedostot';
 
   @override
@@ -14854,4 +14851,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
+
+  @override
+  String get searchNoiseFilter => 'Lyhyet klipit';
 }

@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Esperando a tu Omi",
     "syncDetailsWaitingOnPhone": "Esperando a este teléfono",
     "syncDetailsTranscribing": "Transcribiendo en Omi",
-    "syncDetailsForSupport": "Para soporte",
     "syncDetailsAudioFiles": "Archivos de audio",
     "syncDetailsServerJobs": "Tareas del servidor (hechas / total)",
     "syncDetailsCopy": "Copiar detalles para soporte",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Cubre hasta las {time} · notas completas al terminar",
     "liveTranscribedUpTo": "Transcrito hasta las {time}",
     "liveAudioSaved": "{duration} guardados",
-    "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba."
+    "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba.",
+    "searchNoiseFilter": "Clips cortos"
 }

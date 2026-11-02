@@ -13533,9 +13533,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncDetailsTranscribing => 'Απομαγνητοφώνηση στο Omi';
 
   @override
-  String get syncDetailsForSupport => 'Για την υποστήριξη';
-
-  @override
   String get syncDetailsAudioFiles => 'Αρχεία ήχου';
 
   @override
@@ -14950,4 +14947,7 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get liveAudioSavedDetail =>
       'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
+
+  @override
+  String get searchNoiseFilter => 'Σύντομα κλιπ';
 }

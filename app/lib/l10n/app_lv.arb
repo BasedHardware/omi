@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Gaida Omi",
     "syncDetailsWaitingOnPhone": "Gaida šajā tālrunī",
     "syncDetailsTranscribing": "Atšifrē Omi",
-    "syncDetailsForSupport": "Atbalstam",
     "syncDetailsAudioFiles": "Audio faili",
     "syncDetailsServerJobs": "Servera uzdevumi (pabeigti / kopā)",
     "syncDetailsCopy": "Kopēt informāciju atbalstam",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
     "liveAudioSaved": "Saglabāts {duration}",
-    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā."
+    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.",
+    "searchNoiseFilter": "Īsi klipi"
 }

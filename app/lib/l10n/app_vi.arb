@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Đang chờ trên Omi",
     "syncDetailsWaitingOnPhone": "Đang chờ trên điện thoại này",
     "syncDetailsTranscribing": "Đang phiên âm trên Omi",
-    "syncDetailsForSupport": "Dành cho hỗ trợ",
     "syncDetailsAudioFiles": "Tệp âm thanh",
     "syncDetailsServerJobs": "Tác vụ máy chủ (xong / tổng)",
     "syncDetailsCopy": "Sao chép chi tiết cho bộ phận hỗ trợ",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
     "liveTranscribedUpTo": "Đã chép đến {time}",
     "liveAudioSaved": "Đã lưu {duration}",
-    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên."
+    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.",
+    "searchNoiseFilter": "Đoạn ngắn"
 }

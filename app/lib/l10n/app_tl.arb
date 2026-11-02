@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Naghihintay sa Omi mo",
     "syncDetailsWaitingOnPhone": "Naghihintay sa phone na ito",
     "syncDetailsTranscribing": "Tina-transcribe sa Omi",
-    "syncDetailsForSupport": "Para sa support",
     "syncDetailsAudioFiles": "Mga audio file",
     "syncDetailsServerJobs": "Mga server job (tapos / kabuuan)",
     "syncDetailsCopy": "Kopyahin ang mga detalye para sa support",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
     "liveAudioSaved": "{duration} na-save",
-    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload."
+    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.",
+    "searchNoiseFilter": "Maiikling clip"
 }

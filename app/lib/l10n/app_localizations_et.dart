@@ -13442,9 +13442,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omi transkribeerib';
 
   @override
-  String get syncDetailsForSupport => 'Klienditoele';
-
-  @override
   String get syncDetailsAudioFiles => 'Helifailid';
 
   @override
@@ -14843,4 +14840,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
+
+  @override
+  String get searchNoiseFilter => 'Lühiklipid';
 }

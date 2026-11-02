@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Omi-তে অপেক্ষমাণ",
     "syncDetailsWaitingOnPhone": "এই ফোনে অপেক্ষমাণ",
     "syncDetailsTranscribing": "Omi-তে ট্রান্সক্রাইব হচ্ছে",
-    "syncDetailsForSupport": "সাপোর্টের জন্য",
     "syncDetailsAudioFiles": "অডিও ফাইল",
     "syncDetailsServerJobs": "সার্ভার জব (সম্পন্ন / মোট)",
     "syncDetailsCopy": "সাপোর্টের জন্য বিবরণ কপি করুন",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "{time} পর্যন্ত · শেষ হলে সম্পূর্ণ নোট",
     "liveTranscribedUpTo": "{time} পর্যন্ত ট্রান্সক্রাইব হয়েছে",
     "liveAudioSaved": "{duration} সংরক্ষিত",
-    "liveAudioSavedDetail": "আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।"
+    "liveAudioSavedDetail": "আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।",
+    "searchNoiseFilter": "ছোট ক্লিপ"
 }

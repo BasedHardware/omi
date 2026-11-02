@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Omi側で待機中",
     "syncDetailsWaitingOnPhone": "このスマホで待機中",
     "syncDetailsTranscribing": "Omiで文字起こし中",
-    "syncDetailsForSupport": "サポート用",
     "syncDetailsAudioFiles": "音声ファイル",
     "syncDetailsServerJobs": "サーバージョブ (完了 / 合計)",
     "syncDetailsCopy": "サポート用に詳細をコピー",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
     "liveAudioSaved": "{duration}を保存済み",
-    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。"
+    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。",
+    "searchNoiseFilter": "短いクリップ"
 }

@@ -34,7 +34,7 @@ class _ScriptedSource extends GlobalSearchSource {
 
   @override
   Future<ConversationSearchResult> conversations(String query,
-          {String? speakerId, DateTime? startDate, DateTime? endDate}) =>
+          {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) =>
       onConversations?.call(query) ?? Future.value(_empty);
 
   @override

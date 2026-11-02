@@ -13260,9 +13260,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omiで文字起こし中';
 
   @override
-  String get syncDetailsForSupport => 'サポート用';
-
-  @override
   String get syncDetailsAudioFiles => '音声ファイル';
 
   @override
@@ -14639,4 +14636,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
+
+  @override
+  String get searchNoiseFilter => '短いクリップ';
 }

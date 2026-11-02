@@ -13517,9 +13517,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncDetailsTranscribing => 'Transcrivint a Omi';
 
   @override
-  String get syncDetailsForSupport => 'Per a assistència';
-
-  @override
   String get syncDetailsAudioFiles => 'Fitxers d\'àudio';
 
   @override
@@ -14925,4 +14922,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
+
+  @override
+  String get searchNoiseFilter => 'Clips curts';
 }

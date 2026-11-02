@@ -23925,12 +23925,6 @@ abstract class AppLocalizations {
   /// **'Transcribing on Omi'**
   String get syncDetailsTranscribing;
 
-  /// Sync details section header for raw technical counts meant for customer support.
-  ///
-  /// In en, this message translates to:
-  /// **'For support'**
-  String get syncDetailsForSupport;
-
   /// Sync details row label: number of raw audio files the app holds.
   ///
   /// In en, this message translates to:
@@ -26198,6 +26192,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
+
+  /// Search filter chip: show only short clips (noise or media) that Home hides
+  ///
+  /// In en, this message translates to:
+  /// **'Short clips'**
+  String get searchNoiseFilter;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

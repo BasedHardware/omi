@@ -4165,7 +4165,6 @@
     "syncDetailsWaitingOnOmi": "Venter på din Omi",
     "syncDetailsWaitingOnPhone": "Venter på denne telefon",
     "syncDetailsTranscribing": "Transskriberer på Omi",
-    "syncDetailsForSupport": "Til support",
     "syncDetailsAudioFiles": "Lydfiler",
     "syncDetailsServerJobs": "Serverjobs (færdige / i alt)",
     "syncDetailsCopy": "Kopiér detaljer til support",
@@ -4543,5 +4542,6 @@
     "episodeCoversUpTo": "Dækker frem til {time} · fulde noter, når det er slut",
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
     "liveAudioSaved": "{duration} gemt",
-    "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload."
+    "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload.",
+    "searchNoiseFilter": "Korte klip"
 }

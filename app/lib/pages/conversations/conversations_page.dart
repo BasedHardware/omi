@@ -675,6 +675,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               SliverToBoxAdapter(
                 child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
               ),
+              const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
+              const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard()),
               // Opt-in from Developer Settings. Hidden, the row is not mounted, so nothing is fetched.

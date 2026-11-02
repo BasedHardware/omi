@@ -110,20 +110,15 @@ class _StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final captionStyle = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
-    final content = Row(
-      mainAxisSize: MainAxisSize.min,
+    // Wraps rather than overflows when a caption is long or the text size is large.
+    final content = Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: OmiSpacing.xxs,
       children: [
         Text(label, style: captionStyle),
-        const SizedBox(width: OmiSpacing.xxs),
         Text(value, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-        if (caption != null) ...[
-          const SizedBox(width: OmiSpacing.xxs),
-          Text(caption!, style: captionStyle),
-        ],
-        if (secondCaption != null) ...[
-          const SizedBox(width: OmiSpacing.xxs),
-          Text(secondCaption!, style: captionStyle),
-        ],
+        if (caption != null) Text(caption!, style: captionStyle),
+        if (secondCaption != null) Text(secondCaption!, style: captionStyle),
         if (onTap != null)
           Icon(
             Icons.chevron_right,

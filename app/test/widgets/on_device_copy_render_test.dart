@@ -12,20 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/plan_storefront.dart';
-import 'package:omi/models/subscription.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
@@ -233,6 +219,10 @@ void main() {
           'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.liveHoursUsed));
     await shoot(tester, '08-summary-made-on-iphone-ios.png',
         home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value, onRedo: () {})));
+    expect(find.textContaining("You reached this month's limit"), findsNothing);
+    // The details sit behind the one-liner until it is tapped.
+    await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+    await tester.pump();
     expect(find.textContaining("You reached this month's limit"), findsOneWidget);
   });
 
@@ -242,6 +232,9 @@ void main() {
           'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.liveHoursUsed));
     await shoot(tester, '09-summary-by-omi-cloud-ios.png',
         home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value)));
+    // The details sit behind the one-liner until it is tapped.
+    await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+    await tester.pump();
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 
@@ -376,6 +369,9 @@ void main() {
       platform: TargetPlatform.android,
       home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value)),
     );
+    // The details sit behind the one-liner until it is tapped.
+    await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+    await tester.pump();
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 

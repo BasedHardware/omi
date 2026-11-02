@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Αναμονή για το Omi σας",
     "syncDetailsWaitingOnPhone": "Αναμονή για αυτό το τηλέφωνο",
     "syncDetailsTranscribing": "Απομαγνητοφώνηση στο Omi",
-    "syncDetailsForSupport": "Για την υποστήριξη",
     "syncDetailsAudioFiles": "Αρχεία ήχου",
     "syncDetailsServerJobs": "Εργασίες διακομιστή (ολοκληρωμένες / σύνολο)",
     "syncDetailsCopy": "Αντιγραφή λεπτομερειών για υποστήριξη",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",
     "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",
     "liveAudioSaved": "Αποθηκεύτηκαν {duration}",
-    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση."
+    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.",
+    "searchNoiseFilter": "Σύντομα κλιπ"
 }

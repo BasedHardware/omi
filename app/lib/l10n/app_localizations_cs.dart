@@ -13449,9 +13449,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncDetailsTranscribing => 'Přepisuje se v Omi';
 
   @override
-  String get syncDetailsForSupport => 'Pro podporu';
-
-  @override
   String get syncDetailsAudioFiles => 'Zvukové soubory';
 
   @override
@@ -14848,4 +14845,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
+
+  @override
+  String get searchNoiseFilter => 'Krátké klipy';
 }

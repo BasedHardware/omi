@@ -13373,9 +13373,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncDetailsTranscribing => 'جارٍ النسخ في Omi';
 
   @override
-  String get syncDetailsForSupport => 'للدعم';
-
-  @override
   String get syncDetailsAudioFiles => 'ملفات صوتية';
 
   @override
@@ -14764,4 +14761,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.';
+
+  @override
+  String get searchNoiseFilter => 'مقاطع قصيرة';
 }

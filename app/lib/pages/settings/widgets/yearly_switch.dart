@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -18,10 +17,10 @@ import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Monthly to yearly on the same plan, at the plan's yearly price (backend `utils/yearly_switch.py`).
-/// Offered in Plans & Billing and, past the first paid month, as one quiet Home row. The confirm
-/// sheet shows Stripe's preview: what is charged today, the plan and the renewal date.
+/// Offered in Plans & Billing. The confirm sheet shows Stripe's preview: what is charged today, the
+/// plan and the renewal date.
 
-enum YearlySwitchSurface { home, plans }
+enum YearlySwitchSurface { plans }
 
 typedef YearlySwitchLoader = Future<wire.GeneratedYearlySwitchResponse?> Function({bool preview});
 
@@ -71,9 +70,6 @@ void _emitShown(YearlySwitchSurface surface) => const TypedEvents()
 
 void _emitOpened(YearlySwitchSurface surface) => const TypedEvents()
     .emit(SubscriptionYearlySwitchOpened(surface: SubscriptionYearlySwitchOpenedSurface.values.byName(surface.name)));
-
-void _emitDismissed(YearlySwitchSurface surface) => const TypedEvents().emit(
-    SubscriptionYearlySwitchDismissed(surface: SubscriptionYearlySwitchDismissedSurface.values.byName(surface.name)));
 
 void _emitFailed(YearlySwitchSurface surface, SubscriptionYearlySwitchFailedReason reason) =>
     const TypedEvents().emit(SubscriptionYearlySwitchFailed(

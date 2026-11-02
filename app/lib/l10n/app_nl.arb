@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Wacht op je Omi",
     "syncDetailsWaitingOnPhone": "Wacht op deze telefoon",
     "syncDetailsTranscribing": "Transcriberen op Omi",
-    "syncDetailsForSupport": "Voor support",
     "syncDetailsAudioFiles": "Audiobestanden",
     "syncDetailsServerJobs": "Serverjobs (klaar / totaal)",
     "syncDetailsCopy": "Details kopiëren voor support",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
-    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden."
+    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
+    "searchNoiseFilter": "Korte clips"
 }

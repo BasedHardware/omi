@@ -214,8 +214,9 @@ void main() {
       await pumpWithServerWork(tester, _FakeSync(), store);
 
       expect(find.text('All recordings are synced'), findsNothing);
-      expect(find.text('Processing'), findsOneWidget, reason: 'the summarizing conversation, on its day');
-      expect(find.text('Transcribing…'), findsOneWidget, reason: 'the undated sync job');
+      expect(find.text('Transcribing…'), findsNWidgets(2),
+          reason: 'the summarizing conversation' 's day and the sync job');
+      expect(find.text('No date'), findsOneWidget, reason: 'the sync job has no start of its own');
     });
 
     testWidgets('a server sync job the phone is uploading itself is not listed twice', (tester) async {
@@ -233,16 +234,17 @@ void main() {
       ]);
       await pumpWithServerWork(tester, _FakeSync(wals: [_wal('too-old', 3, WalStatus.outsideRecoveryWindow)]), store);
 
-      expect(find.text('1 recording need attention'), findsOneWidget);
-      expect(find.text('Transcribing…'), findsOneWidget, reason: 'nothing on the phone is uploading the job');
+      expect(find.text('All recordings are synced'), findsNothing);
+      expect(find.text('No date'), findsOneWidget, reason: 'nothing on the phone is uploading the job');
     });
 
-    testWidgets('shows how close each recording is to done', (tester) async {
+    testWidgets('a day still holding audio on the device reads as next, not as transcribing', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
       await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded), device]));
 
-      expect(find.text('Transcribing…'), findsOneWidget);
-      expect(find.text('On your device'), findsOneWidget);
+      expect(find.textContaining('2 recordings'), findsOneWidget);
+      expect(find.text('Next'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsNothing);
     });
 
     testWidgets('a lagging device twin is not listed once its phone copy moved', (tester) async {
@@ -278,7 +280,8 @@ void main() {
         device: 'pendant',
       );
       await _pumpPage(tester, _FakeSync(wals: [b, a]));
-      expect(find.text('Waiting to sync'), findsOneWidget);
+      expect(find.text('1 recording · 2m'), findsOneWidget);
+      expect(find.text('Next'), findsOneWidget);
     });
 
     test('a device drain in progress lists the recording once, not its copied pieces too', () {
@@ -334,7 +337,6 @@ void main() {
             device: 'pendant',
           );
       await _pumpPage(tester, _FakeSync(wals: [rest, piece(_baseSeconds), piece(_baseSeconds + 150)]));
-      expect(find.text('10m catching up'), findsOneWidget);
       expect(find.text('1 recording · 10m'), findsOneWidget);
     });
 
@@ -372,18 +374,18 @@ void main() {
       expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [source, copied])), isFalse);
     });
 
-    testWidgets('keeps refused recordings one row away, as the attention line', (tester) async {
+    testWidgets('a refused recording earns no attention line the user cannot act on', (tester) async {
       await _pumpPage(
         tester,
         _FakeSync(wals: [_wal('ready', 5, WalStatus.miss), _wal('too-old', 3, WalStatus.outsideRecoveryWindow)]),
       );
-      expect(find.text('1 recording need attention'), findsOneWidget);
+      expect(find.byKey(const Key('on_the_way_days')), findsOneWidget);
+      expect(find.byKey(const Key('on_the_way_user_action')), findsNothing);
     });
 
     testWidgets('refused recordings alone are never reported as all synced', (tester) async {
       await _pumpPage(tester, _FakeSync(wals: [_wal('too-old', 3, WalStatus.outsideRecoveryWindow)]));
       expect(find.text('All recordings are synced'), findsNothing);
-      expect(find.text('1 recording need attention'), findsOneWidget);
     });
 
     testWidgets('a sync with no recording listed yet still reads as in progress', (tester) async {
@@ -412,8 +414,8 @@ void main() {
         _FakeSync(wals: [uploaded]),
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
-      expect(find.text('Processing'), findsOneWidget);
-      expect(find.text('Transcribing…'), findsNothing);
+      expect(find.textContaining('1 recording'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsOneWidget);
     });
 
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
@@ -436,8 +438,8 @@ void main() {
         _FakeSync(wals: [safety]),
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
-      expect(find.text('Processing'), findsOneWidget);
-      expect(find.text('Waiting to sync'), findsNothing);
+      expect(find.textContaining('1 recording'), findsOneWidget);
+      expect(find.text('Next'), findsNothing, reason: 'its audio is not waiting as a second recording');
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
@@ -457,7 +459,8 @@ void main() {
       );
       await _pumpPage(tester, _FakeSync(wals: [next, done]));
       expect(find.text('Transcribing…'), findsNothing);
-      expect(find.text('Waiting to sync'), findsOneWidget);
+      expect(find.textContaining('1 recording'), findsOneWidget);
+      expect(find.text('Next'), findsOneWidget);
     });
 
     testWidgets('a transfer with no recording listed yet still reads as in progress', (tester) async {

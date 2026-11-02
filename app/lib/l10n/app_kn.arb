@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Omi ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
     "syncDetailsWaitingOnPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
     "syncDetailsTranscribing": "Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ",
-    "syncDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ",
     "syncDetailsAudioFiles": "ಆಡಿಯೊ ಫೈಲ್‌ಗಳು",
     "syncDetailsServerJobs": "ಸರ್ವರ್ ಜಾಬ್‌ಗಳು (ಪೂರ್ಣ / ಒಟ್ಟು)",
     "syncDetailsCopy": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "{time} ವರೆಗೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
     "liveTranscribedUpTo": "{time} ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ",
     "liveAudioSaved": "{duration} ಉಳಿಸಲಾಗಿದೆ",
-    "liveAudioSavedDetail": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ."
+    "liveAudioSavedDetail": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.",
+    "searchNoiseFilter": "ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳು"
 }

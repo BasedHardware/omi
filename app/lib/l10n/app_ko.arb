@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Omi에서 대기 중",
     "syncDetailsWaitingOnPhone": "이 휴대폰에서 대기 중",
     "syncDetailsTranscribing": "Omi에서 텍스트 변환 중",
-    "syncDetailsForSupport": "지원팀용",
     "syncDetailsAudioFiles": "오디오 파일",
     "syncDetailsServerJobs": "서버 작업 (완료 / 전체)",
     "syncDetailsCopy": "지원팀용 상세 정보 복사",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",
     "liveTranscribedUpTo": "{time}까지 변환됨",
     "liveAudioSaved": "{duration} 저장됨",
-    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다."
+    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.",
+    "searchNoiseFilter": "짧은 클립"
 }

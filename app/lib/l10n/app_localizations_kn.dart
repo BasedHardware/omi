@@ -13488,9 +13488,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ';
 
   @override
-  String get syncDetailsForSupport => 'ಬೆಂಬಲಕ್ಕಾಗಿ';
-
-  @override
   String get syncDetailsAudioFiles => 'ಆಡಿಯೊ ಫೈಲ್‌ಗಳು';
 
   @override
@@ -14899,4 +14896,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
+
+  @override
+  String get searchNoiseFilter => 'ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳು';
 }

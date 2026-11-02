@@ -13265,9 +13265,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
 
   @override
-  String get syncDetailsForSupport => '지원팀용';
-
-  @override
   String get syncDetailsAudioFiles => '오디오 파일';
 
   @override
@@ -14645,4 +14642,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
+
+  @override
+  String get searchNoiseFilter => '짧은 클립';
 }

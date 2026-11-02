@@ -4219,7 +4219,6 @@
     "syncDetailsWaitingOnOmi": "Az Omira vár",
     "syncDetailsWaitingOnPhone": "Ezen a telefonon vár",
     "syncDetailsTranscribing": "Átírás az Omin",
-    "syncDetailsForSupport": "Az ügyfélszolgálatnak",
     "syncDetailsAudioFiles": "Hangfájlok",
     "syncDetailsServerJobs": "Szerverfeladatok (kész / összes)",
     "syncDetailsCopy": "Részletek másolása az ügyfélszolgálatnak",
@@ -4597,5 +4596,6 @@
     "episodeCoversUpTo": "{time}-ig · teljes jegyzetek a végén",
     "liveTranscribedUpTo": "Átírva eddig: {time}",
     "liveAudioSaved": "{duration} mentve",
-    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg."
+    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg.",
+    "searchNoiseFilter": "Rövid klipek"
 }

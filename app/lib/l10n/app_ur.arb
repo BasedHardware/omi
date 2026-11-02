@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Omi پر منتظر",
     "syncDetailsWaitingOnPhone": "اس فون پر منتظر",
     "syncDetailsTranscribing": "Omi پر ٹرانسکرائب ہو رہا ہے",
-    "syncDetailsForSupport": "سپورٹ کے لیے",
     "syncDetailsAudioFiles": "آڈیو فائلیں",
     "syncDetailsServerJobs": "سرور جابز (مکمل / کل)",
     "syncDetailsCopy": "سپورٹ کے لیے تفصیلات کاپی کریں",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
     "liveAudioSaved": "{duration} محفوظ",
-    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔"
+    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔",
+    "searchNoiseFilter": "مختصر کلپس"
 }

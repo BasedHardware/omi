@@ -85,13 +85,11 @@ Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterabl
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
-  @override
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
-  @override
   bool showDiscardedConversations = false;
 
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;

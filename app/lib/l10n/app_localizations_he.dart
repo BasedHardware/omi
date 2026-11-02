@@ -13352,9 +13352,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsTranscribing => 'מתמלל ב-Omi';
 
   @override
-  String get syncDetailsForSupport => 'לתמיכה';
-
-  @override
   String get syncDetailsAudioFiles => 'קובצי אודיו';
 
   @override
@@ -14741,4 +14738,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
+
+  @override
+  String get searchNoiseFilter => 'קטעים קצרים';
 }

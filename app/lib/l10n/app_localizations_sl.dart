@@ -13478,9 +13478,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get syncDetailsTranscribing => 'Prepisovanje v Omi';
 
   @override
-  String get syncDetailsForSupport => 'Za podporo';
-
-  @override
   String get syncDetailsAudioFiles => 'Zvočne datoteke';
 
   @override
@@ -14878,4 +14875,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
+
+  @override
+  String get searchNoiseFilter => 'Kratki posnetki';
 }

@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "Чакае на Omi",
     "syncDetailsWaitingOnPhone": "Чакае на гэтым тэлефоне",
     "syncDetailsTranscribing": "Расшыфроўваецца ў Omi",
-    "syncDetailsForSupport": "Для падтрымкі",
     "syncDetailsAudioFiles": "Аўдыяфайлы",
     "syncDetailsServerJobs": "Заданні сервера (гатова / усяго)",
     "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
     "liveAudioSaved": "Захавана {duration}",
-    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі."
+    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі.",
+    "searchNoiseFilter": "Кароткія кліпы"
 }

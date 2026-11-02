@@ -11546,7 +11546,6 @@
     "syncDetailsWaitingOnOmi": "در انتظار Omi",
     "syncDetailsWaitingOnPhone": "در انتظار این گوشی",
     "syncDetailsTranscribing": "در حال رونویسی در Omi",
-    "syncDetailsForSupport": "برای پشتیبانی",
     "syncDetailsAudioFiles": "فایل‌های صوتی",
     "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
     "syncDetailsCopy": "کپی جزئیات برای پشتیبانی",
@@ -11927,5 +11926,6 @@
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
     "liveTranscribedUpTo": "رونویسی تا {time}",
     "liveAudioSaved": "{duration} ذخیره شد",
-    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند."
+    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "searchNoiseFilter": "کلیپ‌های کوتاه"
 }

@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "Čeká na Omi",
     "syncDetailsWaitingOnPhone": "Čeká v tomto telefonu",
     "syncDetailsTranscribing": "Přepisuje se v Omi",
-    "syncDetailsForSupport": "Pro podporu",
     "syncDetailsAudioFiles": "Zvukové soubory",
     "syncDetailsServerJobs": "Úlohy serveru (hotovo / celkem)",
     "syncDetailsCopy": "Zkopírovat podrobnosti pro podporu",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Pokrývá do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Přepsáno do {time}",
     "liveAudioSaved": "Uloženo {duration}",
-    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání."
+    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání.",
+    "searchNoiseFilter": "Krátké klipy"
 }

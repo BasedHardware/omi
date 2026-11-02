@@ -4123,7 +4123,6 @@
     "syncDetailsWaitingOnOmi": "In attesa del tuo Omi",
     "syncDetailsWaitingOnPhone": "In attesa di questo telefono",
     "syncDetailsTranscribing": "Trascrizione su Omi",
-    "syncDetailsForSupport": "Per l'assistenza",
     "syncDetailsAudioFiles": "File audio",
     "syncDetailsServerJobs": "Job del server (completati / totale)",
     "syncDetailsCopy": "Copia i dettagli per l'assistenza",
@@ -4501,5 +4500,6 @@
     "episodeCoversUpTo": "Fino alle {time} · note complete alla fine",
     "liveTranscribedUpTo": "Trascritto fino alle {time}",
     "liveAudioSaved": "{duration} salvati",
-    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento."
+    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.",
+    "searchNoiseFilter": "Clip brevi"
 }

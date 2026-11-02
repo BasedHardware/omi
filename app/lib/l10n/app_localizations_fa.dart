@@ -13444,9 +13444,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncDetailsTranscribing => 'در حال رونویسی در Omi';
 
   @override
-  String get syncDetailsForSupport => 'برای پشتیبانی';
-
-  @override
   String get syncDetailsAudioFiles => 'فایل‌های صوتی';
 
   @override
@@ -14845,4 +14842,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get searchNoiseFilter => 'کلیپ‌های کوتاه';
 }

@@ -84,7 +84,7 @@ void main() {
 
   testWidgets('phone choice is offered only when this phone can run the engine and is not already on', (tester) async {
     expect(heldAudioPhoneEligible(phone()), isTrue);
-    expect(heldAudioPhoneEligible(phone(phase: OnDeviceModelPhase.unsupportedDevice)), isFalse);
+    expect(heldAudioPhoneEligible(phone(phase: OnDeviceModelPhase.unsupported)), isFalse);
   });
 
   testWidgets('save-live-hours stays for a paid owner on a capable phone', (tester) async {

@@ -13484,9 +13484,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncDetailsTranscribing => 'Transcriberen op Omi';
 
   @override
-  String get syncDetailsForSupport => 'Voor support';
-
-  @override
   String get syncDetailsAudioFiles => 'Audiobestanden';
 
   @override
@@ -14889,4 +14886,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.';
+
+  @override
+  String get searchNoiseFilter => 'Korte clips';
 }

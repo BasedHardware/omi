@@ -13554,9 +13554,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
 
   @override
-  String get syncDetailsForSupport => 'Para sa support';
-
-  @override
   String get syncDetailsAudioFiles => 'Mga audio file';
 
   @override
@@ -14969,4 +14966,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
+
+  @override
+  String get searchNoiseFilter => 'Maiikling clip';
 }
