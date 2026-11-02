@@ -146,6 +146,22 @@ def test_transaction_retry_helper_is_not_the_caller(client, transport, monkeypat
     assert _by_caller('users/memories', 'set', caller) == before + 1
 
 
+def test_privacy_token_wrapper_preserves_writer_attribution(client, transport, monkeypatch):
+    from database.batch_privacy_write_fence import _wrap_commit
+
+    monkeypatch.setattr(FirestoreClient, 'commit', _wrap_commit(FirestoreClient.commit))
+    caller = f'{__name__}:test_privacy_token_wrapper_preserves_writer_attribution'
+    before = _by_caller('users/conversations', 'set', caller)
+    ref = client.collection('users').document('u1').collection('conversations').document('c1')
+
+    ref.set({'deleted': True})
+
+    assert _by_caller('users/conversations', 'set', caller) == before + 1
+    assert len(transport.requests) == 1
+    # The attribution check exercises a real augmented Commit, including its token.
+    assert len(transport.requests[0].writes) == 2
+
+
 def test_generic_write_helper_names_its_caller(client, transport):
     # A helper registered as (module, function) plumbing is skipped like a plumbing module.
     def _cas(ref):
