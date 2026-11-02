@@ -135,3 +135,20 @@ async def test_pusher_disconnect_seals_frames_and_existing_pcm_projection_paths(
     root, _ = seals._read(remote, 'owner', seals.index_path('owner', 'conversation'))
     receipts = [item for part in root['parts'].values() for item in part['receipts']]
     assert receipts[0]['projections'] == [blob.name for blob in remote.list_blobs('chunks/')]
+
+
+@pytest.mark.asyncio
+async def test_legacy_writer_invalidates_an_existing_seal_without_inventing_capture_positions(remote, monkeypatch):
+    index = writer(remote)
+    index.begin('conversation')
+    receipt, frames = part(remote)
+    index.add(receipt.to_dict(), frames)
+    index.seal('conversation')
+    assert seals.sealed_entries(remote, 'owner', 'conversation')
+    _window_harness(remote, monkeypatch)
+    monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '100')
+    sock = Socket(_audio_frames('conversation', [b'\x03\x04' * 160], start=2000))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert len(_sent_receipts(sock)) == 1
+    with pytest.raises(ValueError):
+        seals.sealed_entries(remote, 'owner', 'conversation')

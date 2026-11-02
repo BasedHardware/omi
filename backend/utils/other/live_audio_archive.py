@@ -87,6 +87,8 @@ class LiveAudioArchive:
             if conversation_id not in self.seal_index.active:
                 await run_blocking(storage_executor, self.seal_index.begin, conversation_id)
             self.seal_index.accept(conversation_id, samples)
+            if getattr(self.host, 'is_multi_channel', False):
+                self.seal_index.failed.add(conversation_id)
         pack = self.packs.get(channel)
         if pack is not None and (
             pack.boundary(conversation_id, timestamp, len(raw))

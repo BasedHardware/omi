@@ -444,7 +444,8 @@ async def _run_websocket_util_trigger(
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
-    framed_audio = durable_audio and audio_timeline_v2 and sample_rate == 16000 and framed_pack(uid)
+    index_audio = durable_audio and framed_pack(uid)
+    framed_audio = index_audio and audio_timeline_v2 and sample_rate == 16000
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
@@ -459,7 +460,7 @@ async def _run_websocket_util_trigger(
         await run_blocking(
             storage_executor, create_seal_index, audio_storage, uid, custody_root, cached_protection_level
         )
-        if framed_audio
+        if index_audio
         else None
     )
 
@@ -1237,7 +1238,12 @@ async def _run_websocket_util_trigger(
                     framed=framed_audio,
                 )
                 if seal_index and receipt and receipt.conversation_id:
-                    await run_blocking(storage_executor, seal_index.try_add, receipt.to_dict(), list(receipt_frames))
+                    if framed_audio:
+                        await run_blocking(
+                            storage_executor, seal_index.try_add, receipt.to_dict(), list(receipt_frames)
+                        )
+                    else:
+                        seal_index.failed.add(receipt.conversation_id)
                 return receipt
             except BaseException:
                 # A failed/cancelled dispatch can have committed remotely. The
@@ -1613,6 +1619,8 @@ async def _run_websocket_util_trigger(
                         await run_blocking(storage_executor, seal_index.begin, current_conversation_id)
                     if seal_index and current_conversation_id:
                         seal_index.accept(current_conversation_id, len(audio_data) // 2)
+                        if not framed_audio:
+                            seal_index.failed.add(current_conversation_id)
                     if (
                         framed_audio
                         and private_cloud_sync_buffer

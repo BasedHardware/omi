@@ -222,15 +222,19 @@ class ConversationSealIndex:
 
 
 def create_seal_index(storage, uid: str, source: str, protection=None):
+    bucket = storage.get_private_cloud_sync_bucket()
+
+    def baseline(conversation_id):
+        storage.invalidate_pack_index(bucket, uid, conversation_id)
+        return storage.list_audio_chunks(uid, conversation_id, source_identity=True, require_archive=True)
+
     return ConversationSealIndex(
-        storage.get_private_cloud_sync_bucket(),
+        bucket,
         uid,
         source,
         protection or storage.users_db.get_data_protection_level(uid),
         storage.owner_storage_write_gate,
-        lambda conversation_id: storage.list_audio_chunks(
-            uid, conversation_id, source_identity=True, require_archive=True
-        ),
+        baseline,
         lambda conversation_id: not storage.conversation_tombstones.is_deleted(uid, conversation_id),
     )
 
