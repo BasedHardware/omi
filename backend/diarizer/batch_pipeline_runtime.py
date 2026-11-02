@@ -21,6 +21,7 @@ import urllib.request
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 from prometheus_client.metrics_core import Metric
 from prometheus_client.parser import text_string_to_metric_families
+from prometheus_client.registry import Collector
 
 from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
@@ -337,11 +338,11 @@ class SupervisorState:
         return all(status == 200 for status, _ in self.probe(self.children, '/ready'))
 
 
-class _Families:
-    def __init__(self, families: list):
+class _Families(Collector):
+    def __init__(self, families: list[Metric]):
         self.families = families
 
-    def collect(self):
+    def collect(self) -> list[Metric]:
         return self.families
 
 
