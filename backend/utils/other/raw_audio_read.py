@@ -8,6 +8,14 @@ from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
 from utils.other.raw_audio import decode_capture
+from utils.other.audio_raw_read_metrics import (
+    ChecksumMismatch,
+    CoverageMismatch,
+    DecodeError,
+    DecryptError,
+    error_result,
+    record,
+)
 
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
@@ -73,20 +81,40 @@ def list_packs(bucket, uid: str, conversation_id: str):
     return result
 
 
-def read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
+def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
     download_kwargs = {'timeout': 10, 'retry': None, **(download_kwargs or {})}
     blob = bucket.blob(path)
+    try:
+        return _decode_pack(blob, uid, download_kwargs, sample_rate)
+    except Exception as error:
+        record(error_result(error), (blob.metadata or {}).get('codec'))
+        raise
+
+
+def _decode_pack(blob, uid: str, download_kwargs, sample_rate: int) -> bytes:
     blob.reload(**(download_kwargs or {}))
     metadata = blob.metadata or {}
     raw = blob.download_as_bytes(**(download_kwargs or {}))
     if metadata.get('encrypted') == 'true':
-        raw = encryption.decrypt_audio_file(raw, uid)
+        try:
+            raw = encryption.decrypt_audio_file(raw, uid)
+        except Exception as error:
+            raise DecryptError('capture decrypt failed') from error
     if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
-        raise ValueError('capture checksum mismatch')
-    pcm = decode_capture(raw, metadata, sample_rate)
+        raise ChecksumMismatch('capture checksum mismatch')
+    try:
+        pcm = decode_capture(raw, metadata, sample_rate)
+    except Exception as error:
+        raise DecodeError('capture decode failed') from error
     expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
     if abs(len(pcm) - expected) > 2:
-        raise ValueError('capture sample coverage mismatch')
+        raise CoverageMismatch('capture sample coverage mismatch')
+    return pcm
+
+
+def read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
+    pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate)
+    record('ok')
     return pcm
 
 
@@ -127,16 +155,28 @@ def verified_pcm_paths(bucket, uid: str, conversation_id: str, chunks, sample_ra
 
 def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha256: str | None = None):
     if not span or span['sample_rate'] != 16000 or not expected_sha256:
+        # Historical PCM often has no raw identity. This optional lookup is
+        # not a raw read attempt until a covering raw candidate is found.
         return None
     start = float(span['start'])
     count = int(span['samples']) * 2
-    for pack in list_packs(bucket, uid, conversation_id):
+    matched = False
+    try:
+        packs = list_packs(bucket, uid, conversation_id)
+    except Exception as error:
+        record(error_result(error))
+        raise
+    for pack in packs:
         if pack['timestamp'] <= start + 0.0001 and pack['raw_end'] >= start + count / 32000 - 0.0001:
-            pcm = read_pack(bucket, pack['path'], uid)
+            matched = True
+            pcm = _read_pack(bucket, pack['path'], uid)
             offset = round((start - pack['timestamp']) * 16000) * 2
             selected = pcm[offset : offset + count]
             if len(selected) == count and hashlib.sha256(selected).hexdigest() == expected_sha256:
+                record('ok')
                 return selected
+    if matched:
+        record('identity_mismatch')
     return None
 
 

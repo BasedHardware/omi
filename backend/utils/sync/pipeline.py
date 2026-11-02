@@ -14,6 +14,7 @@ from utils.enrichment.admission import run_created_webhook as _run_conversation_
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
@@ -2322,6 +2323,12 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
 
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
+    names = [file.filename for file in files if file.filename]
+    if len(set(names)) != len(names):
+        # Each body is written to its own name, so a repeat would overwrite an
+        # earlier body before anything can keep it. Refuse before writing: a
+        # request-level 400 makes the app retry each retained file on its own.
+        raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Repeated sync filename'})
     directory = f'syncing/{uid}/{job_id}/'
     os.makedirs(directory, exist_ok=True)
     paths = []
@@ -2568,6 +2575,7 @@ async def _resolve_safety_wal_target(
 
 @sync_attempt
 @sync_snapshot_resolve_job
+@with_batch_privacy_attempt
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,

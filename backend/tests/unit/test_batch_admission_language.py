@@ -3,6 +3,7 @@
 from copy import deepcopy
 import hashlib
 import io
+import os
 from types import SimpleNamespace
 import wave
 from unittest.mock import Mock
@@ -476,6 +477,63 @@ async def test_refused_sample_probe_keeps_the_refusal_instead_of_legacy(monkeypa
     assert probe.call_count == 1
     assert response is not None and response.status_code == 503 and staged == []
     excluded.assert_not_called()
+
+
+def destructive_decode(monkeypatch):
+    """WAL decode deletes every input it reads (utils.sync.files.decode_files_to_wav)."""
+    seen = []
+
+    def decode_for_intake(paths, max_seconds, *args, **kwargs):
+        seen.extend(paths)
+        for path in paths:
+            os.remove(path)
+        yield audio_unit(100, b'\x01\x00' * 16000)
+
+    monkeypatch.setattr(intake, 'decode_for_intake', decode_for_intake)
+    return seen
+
+
+def wal_upload(tmp_path):
+    path = tmp_path / 'audio_omi_pcm16_16000_1_fs160_1761955200.bin'
+    path.write_bytes(b'synthetic-wal')
+    return path
+
+
+@pytest.mark.asyncio
+async def test_refused_sample_leaves_the_upload_for_legacy_staging(monkeypatch, tmp_path):
+    speaking(monkeypatch)
+    seen = destructive_decode(monkeypatch)
+    wal = wal_upload(tmp_path)
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', mode='on', decision=decision('ja', False), paths=[str(wal)]
+    )
+    assert response is None and staged == []
+    # Legacy stages these exact bytes next; a consumed file answered 503 sync_dispatch_unavailable on every retry.
+    assert wal.read_bytes() == b'synthetic-wal'
+    assert seen != [str(wal)] and [os.path.basename(path) for path in seen] == [wal.name]
+    assert not os.path.exists(os.path.dirname(seen[0]))
+
+
+@pytest.mark.asyncio
+async def test_repeated_upload_name_is_never_acknowledged(monkeypatch, tmp_path):
+    # Two bodies under one name share one router file: the first is already overwritten.
+    speaking(monkeypatch)
+    seen = destructive_decode(monkeypatch)
+    wal = wal_upload(tmp_path)
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', paths=[str(wal), str(wal)])
+    assert response is not None and response.status_code == 503 and staged == [] and seen == []
+    assert not probe.called and wal.read_bytes() == b'synthetic-wal'
+
+
+@pytest.mark.asyncio
+async def test_admitted_sample_leaves_no_private_link_behind(monkeypatch, tmp_path):
+    speaking(monkeypatch)
+    seen = destructive_decode(monkeypatch)
+    wal = wal_upload(tmp_path)
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', paths=[str(wal)])
+    assert admitted(response, staged)
+    # The router's own finally still removes the caller's file; the private link is intake's.
+    assert wal.exists() and not os.path.exists(os.path.dirname(seen[0]))
 
 
 @pytest.mark.asyncio

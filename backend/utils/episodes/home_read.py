@@ -23,7 +23,7 @@ from utils.episodes.policy import utc
 from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
-from utils.conversations.fragment_visibility import is_relevance_discarded, is_user_curated
+from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_user_curated
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,7 @@ MEMBER_FIELDS = [
     'starred',
     'folder_user_set',
     'summary_blocked_reason',
+    *SETTLING_FIELDS,
 ]
 
 
@@ -235,7 +236,11 @@ def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
 
     List only: search, a direct link and Show discarded still reach it, and nothing is stored.
     """
-    if not home_hide_below_floor_rows_enabled() or row.get('summary_blocked_reason') != 'content_below_floor':
+    if not home_hide_below_floor_rows_enabled():
+        return False
+    decision = row.get('relevance_decision')
+    floor_decision = isinstance(decision, dict) and decision.get('reason') == 'content_below_floor'
+    if row.get('summary_blocked_reason') != 'content_below_floor' and not floor_decision:
         return False
     if is_user_curated(row) or (row.get('status') or 'completed') != 'completed':
         return False

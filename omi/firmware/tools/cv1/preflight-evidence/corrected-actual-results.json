@@ -1,0 +1,40 @@
+[
+  {
+    "label": "app-baseline",
+    "eligible_for_live_identity_gate": true,
+    "error_codes": [],
+    "network_metadata": []
+  },
+  {
+    "label": "restore-baseline",
+    "eligible_for_live_identity_gate": true,
+    "error_codes": [],
+    "network_metadata": [
+      {
+        "role": "network_full",
+        "public_key_sha256": "f681aa213503faec007bee001252e461c1357bcafd72794333eab785e464f808",
+        "matches_installed_provision_metadata": true,
+        "enforcement": "integrity_only",
+        "signature_rejection_proven": false
+      }
+    ]
+  },
+  {
+    "label": "restore-candidate",
+    "eligible_for_live_identity_gate": false,
+    "error_codes": [
+      "restore_hash",
+      "network_review",
+      "restore_hash"
+    ],
+    "network_metadata": [
+      {
+        "role": "network_full",
+        "public_key_sha256": "76d48548dbdbf2e645db20cb2a35aa77fe0aa416a425487cca75968fc90004dd",
+        "matches_installed_provision_metadata": false,
+        "enforcement": "integrity_only",
+        "signature_rejection_proven": false
+      }
+    ]
+  }
+]

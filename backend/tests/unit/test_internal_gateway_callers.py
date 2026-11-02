@@ -14,7 +14,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 IN_CLUSTER_EMBEDDING = 'http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080'
-IN_CLUSTER_NLLB = 'http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080'
 IN_CLUSTER_VAD = 'http://prod-omi-vad.prod-omi-backend.svc.cluster.local:8080/v1/vad'
 IN_CLUSTER_PUSHER = 'http://prod-omi-pusher.prod-omi-backend.svc.cluster.local:8080'
 
@@ -34,7 +33,8 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
     ]
     in_cluster = env == 'prod'
     gke_embedding = IN_CLUSTER_EMBEDDING if in_cluster else f'http://{ip}/diarizer'
-    gke_translation = IN_CLUSTER_NLLB if in_cluster else f'http://{ip}/nllb'
+    # Prod NLLB is retired (translation runs on Luna), so prod binds no translation URL.
+    gke_translation = None if in_cluster else f'http://{ip}/nllb'
     gke_vad = IN_CLUSTER_VAD if in_cluster else f'http://{ip}/vad/v1/vad'
     for source in (manifest, overlay):
         for host in ('backend-listen', 'pusher'):
@@ -45,7 +45,7 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
             assert values['HOSTED_SPEAKER_EMBEDDING_API_URL']['value'] == f'http://{ip}/diarizer'
             assert values['HOSTED_PARAKEET_API_URL']['value'] == f'http://parakeet.{domain}'
         listen = source['gke']['backend-listen']['env']
-        assert listen['HOSTED_TRANSLATION_API_URL']['value'] == gke_translation
+        assert listen.get('HOSTED_TRANSLATION_API_URL', {}).get('value') == gke_translation
         assert listen['HOSTED_PARAKEET_API_URL']['value'] == f'http://parakeet.{domain}'
     for chart in ('backend-listen', 'pusher'):
         assert _chart(chart, env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == gke_embedding
@@ -53,7 +53,7 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
     # drift from main, so its speaker-embedding URL stays on the gateway.
     assert _chart('parakeet', env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == f'http://{ip}/diarizer'
     listen_chart = _chart('backend-listen', env)
-    assert listen_chart['HOSTED_TRANSLATION_API_URL'] == gke_translation
+    assert listen_chart.get('HOSTED_TRANSLATION_API_URL') == gke_translation
     assert listen_chart['HOSTED_VAD_API_URL'] == gke_vad
     assert listen_chart['HOSTED_PARAKEET_API_URL'] == f'http://parakeet.{domain}'
     assert _chart('pusher', env)['HOSTED_PARAKEET_API_URL'] == f'http://parakeet.{domain}'
@@ -72,7 +72,7 @@ def test_prod_in_cluster_callers_stay_off_internal_alb_routes():
     assert listen_chart['HOSTED_PUSHER_API_URL'] == IN_CLUSTER_PUSHER
     assert listen_chart['HOSTED_VAD_API_URL'] == IN_CLUSTER_VAD
     assert listen_chart['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
-    assert listen_chart['HOSTED_TRANSLATION_API_URL'] == IN_CLUSTER_NLLB
+    assert 'HOSTED_TRANSLATION_API_URL' not in listen_chart
     assert _chart('pusher', 'prod')['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
     assert _chart('parakeet', 'prod')['HOSTED_SPEAKER_EMBEDDING_API_URL'] == 'http://172.16.160.20/diarizer'
     # The reviewed diarizer-batch cohort stage still binds pusher and Cloud Run to the
