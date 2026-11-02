@@ -89,13 +89,18 @@ def test_seed_and_drive_drain_the_backlog_through_the_real_scheduler(world):
         deadline_s=60.0,
         now=lambda: 1_000_000.0,
     )
-    assert stats['completed'] == stats['leased'] == 30
+    assert stats['settled'] == stats['leased'] == 30
     assert stats['errors'] == {}
     assert stats['drain_leased_per_s'] > 0
     assert stats['pull_calls'] >= stats['nonempty_pulls'] >= 1
     assert 1 <= stats['leases_per_nonempty_pull'] <= 8
     for item in items:
-        assert sim.rows[('jobs', item.segment_id)]['state'] == 'result_ready'
+        job = sim.rows[('jobs', item.segment_id)]
+        # Never result_ready: serving's merge loop must have nothing of the bench's to commit or project.
+        assert job['state'] == 'retry' and 'result' not in job
+        assert job['available_at'] >= 1_000_000.0 + claim_bench.SETTLE_PARK_S  # not due again during the run
+        assert job['attempt'] == 0  # refunded, so no quarantine-ceiling charge either
+    assert not [key for key in sim.rows if key[0] == 'results']
 
 
 def test_drive_stops_at_its_deadline_and_reports_partial_progress(world):
@@ -115,7 +120,7 @@ def test_drive_stops_at_its_deadline_and_reports_partial_progress(world):
         deadline_s=0.5,
         now=lambda: 1_000_000.0,
     )
-    assert stats['completed'] == 3
+    assert stats['settled'] == 3
     assert stats['timed_out'] is True
 
 
@@ -137,7 +142,7 @@ def test_a_foreign_unit_is_released_untouched_and_ends_the_run(world):
         accept=lambda item: claim_bench.bench_owner(item.owner_id, RUN),
     )
     assert stats['foreign'] == 1
-    assert stats['completed'] == 0
+    assert stats['settled'] == 0
     job = sim.rows[('jobs', foreign[0].segment_id)]
     # Handed back the way a shutdown refund is: due again after defer's 1 s floor, no result written.
     assert job['state'] == 'retry' and job['available_at'] <= 1_000_001.0 and 'result' not in job
@@ -147,7 +152,7 @@ def test_a_foreign_unit_is_released_untouched_and_ends_the_run(world):
 def test_merge_combines_processes_on_one_wall_clock_axis():
     part = {
         'leased': 10,
-        'completed': 10,
+        'settled': 10,
         'rejected': 0,
         'nonempty_pulls': 2,
         'errors': {'Busy': 1},
@@ -156,7 +161,7 @@ def test_merge_combines_processes_on_one_wall_clock_axis():
         'pull_calls': 20,
         'pull_wall_s': 4.0,
         'pull_p95_s': 0.4,
-        'complete_p95_s': 0.1,
+        'settle_p95_s': 0.1,
     }
     a = {**part, 'lease_times': [100.0 + i for i in range(10)]}
     b = {**part, 'lease_times': [100.5 + i for i in range(10)], 'errors': {'Busy': 2, 'Other': 1}}
@@ -194,12 +199,13 @@ def test_cleanup_deletes_only_documents_derived_from_this_run():
     owners = [claim_bench.owner_id(RUN, i) for i in range(2)]
     expected = (
         {('batch_pipeline_prod_jobs', item.segment_id) for item in items}
+        | {('batch_pipeline_prod_results', item.segment_id) for item in items}
         | {('batch_pipeline_prod_queues', f'{int(Priority.FRESH)}_{owner_key(uid)}') for uid in owners}
         | {('batch_pipeline_prod_owners', owner_key(uid)) for uid in owners}
         | {('users', uid) for uid in owners}
     )
     assert set(client.deleted) == expected
-    assert counts == {'jobs': 4, 'queues': 2, 'owners': 2, 'users': 2}
+    assert counts == {'jobs': 4, 'results': 4, 'queues': 2, 'owners': 2, 'users': 2}
     # Shared scheduler documents are never touched.
     assert not any(name.endswith(('_control', '_pull_claims')) for name, _ in client.deleted)
 

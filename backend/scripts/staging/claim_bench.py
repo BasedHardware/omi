@@ -2,10 +2,12 @@
 
 Seeds pseudo-owners (``lg-<run>-oNNNN``) and their fresh units through the real
 ``Scheduler.enqueue``, then drives N lanes of the real ``Scheduler.pull`` (multi-lease, shard
-spread, privacy fence) and ``complete`` until the backlog drains. The lanes stand in for the
-GPU workers' pump lanes (two per worker), so the rate it reports is the claim path with the GPU
-taken out; ``--hold`` adds a fixed flight time per lease. Admission, heartbeats and the ordered
-merge are not exercised: they run outside the claim lane.
+spread, privacy fence) until the backlog drains. Each lease settles with a lease-fenced refund
+``defer`` parked for a day, never ``complete``: no unit reaches ``result_ready``, so staging's
+serving loop never merges or projects bench work. The lanes stand in for the GPU workers' pump
+lanes (two per worker), so the rate it reports is the claim path with the GPU taken out;
+``--hold`` adds a fixed flight time per lease. Admission, heartbeats and the ordered merge are
+not exercised: they run outside the claim lane.
 
     python -m scripts.staging.claim_bench run --run-id cb1 --owners 64 --units 16 --lanes 32
     python -m scripts.staging.claim_bench cleanup --run-id cb1 --owners 64 --units 16
@@ -30,7 +32,7 @@ from threading import Event, Lock, Thread
 import time
 from typing import Callable
 
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 NAMESPACE = 'batch_pipeline_prod'  # staging runs prod code paths against its own database
@@ -39,6 +41,7 @@ MAX_OWNERS = 512
 MAX_UNITS = 512
 EMPTY_PULL_SLEEP_S = 0.05
 IDLE_STOP_S = 10.0
+SETTLE_PARK_S = 86400  # defer's ceiling: a settled unit is never due again before cleanup
 SEED_ATTEMPTS = 8
 ERROR_SLEEP_S = 0.2
 MAX_ERRORS = 500
@@ -132,15 +135,15 @@ def drive(
     idle_stop_s: float = IDLE_STOP_S,
     accept: Callable[[WorkItem], bool] = lambda item: True,
 ) -> dict:
-    """Run ``lanes`` pull/complete loops until ``total`` units complete, the deadline passes, or
+    """Run ``lanes`` pull/settle loops until ``total`` units settle, the deadline passes, or
     (after the first lease) no lane in this process has leased for ``idle_stop_s``: with several
     processes, each drains its share and stops once the shared backlog is empty."""
     lock = Lock()
     done = Event()
     pulls: list[float] = []
-    completes: list[float] = []
+    settles: list[float] = []
     lease_times: list[float] = []  # wall-clock, so processes merge on one axis
-    counts = {'leased': 0, 'completed': 0, 'rejected': 0, 'foreign': 0, 'nonempty_pulls': 0}
+    counts = {'leased': 0, 'settled': 0, 'rejected': 0, 'foreign': 0, 'nonempty_pulls': 0}
     errors: dict[str, int] = {}
     started = time.monotonic()
     deadline = started + deadline_s
@@ -191,18 +194,20 @@ def drive(
                     continue
                 if hold:
                     time.sleep(hold)
-                result = WorkResult(lease.item.segment_id, f'gs://claim-bench.invalid/result/{lease.item.segment_id}')
                 t1 = time.monotonic()
                 try:
-                    accepted = scheduler.complete(result, lease.token, now())
+                    # Settle with a refund defer parked past the run, never ``complete``: a
+                    # result_ready job is merge work, and staging's serving loop would commit and
+                    # project it. One lease-fenced job transaction, as complete costs.
+                    accepted = scheduler.defer(lease.item.segment_id, lease.token, now(), retry_after=SETTLE_PARK_S)
                 except Exception as error:
                     with lock:
                         errors[type(error).__name__] = errors.get(type(error).__name__, 0) + 1
                     continue
                 with lock:
-                    completes.append(time.monotonic() - t1)
-                    counts['completed' if accepted else 'rejected'] += 1
-                    if counts['completed'] >= total:
+                    settles.append(time.monotonic() - t1)
+                    counts['settled' if accepted else 'rejected'] += 1
+                    if counts['settled'] >= total:
                         done.set()
 
     threads = [Thread(target=lane, args=(i,), daemon=True) for i in range(lanes)]
@@ -215,14 +220,14 @@ def drive(
         **counts,
         'lanes': lanes,
         'wall_s': round(wall, 3),
-        'timed_out': counts['completed'] < total,
+        'timed_out': counts['settled'] < total,
         'errors': errors,
         'pull_calls': len(pulls),
         'pull_wall_s': round(sum(pulls), 3),
         'pull_p50_s': _quantile(pulls, 0.5),
         'pull_p95_s': _quantile(pulls, 0.95),
-        'complete_p50_s': _quantile(completes, 0.5),
-        'complete_p95_s': _quantile(completes, 0.95),
+        'settle_p50_s': _quantile(settles, 0.5),
+        'settle_p95_s': _quantile(settles, 0.95),
         'lease_times': lease_times,
         **_rates(counts, wall, lease_times, pulls),
     }
@@ -254,7 +259,7 @@ def merge(parts: list[dict], total: int) -> dict:
     """Combine per-process drive results (each lane offset distinct) into one fleet result."""
     counts = {
         key: sum(part.get(key, 0) for part in parts)
-        for key in ('leased', 'completed', 'rejected', 'foreign', 'nonempty_pulls')
+        for key in ('leased', 'settled', 'rejected', 'foreign', 'nonempty_pulls')
     }
     errors: dict[str, int] = {}
     for part in parts:
@@ -271,19 +276,20 @@ def merge(parts: list[dict], total: int) -> dict:
         'lanes': sum(part['lanes'] for part in parts),
         'processes': len(parts),
         'wall_s': wall,
-        'timed_out': counts['completed'] < total,
+        'timed_out': counts['settled'] < total,
         'errors': errors,
         'pull_calls': pull_calls,
         'pull_wall_s': round(pull_wall, 3),
         'pull_p95_s_max': max((part['pull_p95_s'] or 0.0) for part in parts),
-        'complete_p95_s_max': max((part['complete_p95_s'] or 0.0) for part in parts),
+        'settle_p95_s_max': max((part['settle_p95_s'] or 0.0) for part in parts),
         **rates,
     }
 
 
 def cleanup(client, namespace: str, run_id: str, *, owners: int, units: int) -> dict:
-    """Delete this run's documents by derived id: jobs, owner queues and fences, pseudo-users."""
-    counts = {'jobs': 0, 'queues': 0, 'owners': 0, 'users': 0}
+    """Delete this run's documents by derived id: jobs, any result rows, owner queues and fences,
+    pseudo-users. Settling never writes a result; the result delete is a backstop."""
+    counts = {'jobs': 0, 'results': 0, 'queues': 0, 'owners': 0, 'users': 0}
     for o in range(owners):
         uid = owner_id(run_id, o)
         if not bench_owner(uid, run_id):
@@ -292,6 +298,8 @@ def cleanup(client, namespace: str, run_id: str, *, owners: int, units: int) -> 
         for u in range(units):
             client.collection(f'{namespace}_jobs').document(segment_id(run_id, o, u)).delete()
             counts['jobs'] += 1
+            client.collection(f'{namespace}_results').document(segment_id(run_id, o, u)).delete()
+            counts['results'] += 1
         client.collection(f'{namespace}_queues').document(f'{int(Priority.FRESH)}_{key}').delete()
         counts['queues'] += 1
         client.collection(f'{namespace}_owners').document(key).delete()
