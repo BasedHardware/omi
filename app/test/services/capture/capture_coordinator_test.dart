@@ -55,6 +55,8 @@ CaptureEnvironment environment(
 class HarnessPorts {
   String? snapshot = CaptureCoordinatorState.idle().encode();
   bool muted = false;
+  bool deviceMuted = false;
+  bool? reconnectMuted;
   bool batch = false;
   bool batchSuspended = false;
   bool permitPhone = true;
@@ -156,6 +158,11 @@ class HarnessPorts {
         },
         runStage: (stage) async {
           await _record('stage:${stage.runtimeType}');
+          if (stage is PersistDeviceMuteStage) deviceMuted = stage.muted;
+          if (stage is ResolveDeviceMuteStage) {
+            muted = reconnectMuted ?? muted;
+            return DeviceMuteResolved(muted);
+          }
           if (stage is UpdateRecordingDeviceStage) devicePresent = stage.device != null;
           if (stage is StopDeviceSessionStage && stage.cleanDevice) devicePresent = false;
           if ((stage is StartDeviceSessionStage ||
@@ -661,6 +668,39 @@ Future<List<ScriptStep>> shrinkEffects(List<ScriptStep> failing, String failure,
 }
 
 void main() {
+  for (final batch in [false, true]) {
+    for (final deviceMuted in [false, true]) {
+      test('reconnect commits resolved phase before transport: batch $batch, muted $deviceMuted', () async {
+        final fake = HarnessPorts()
+          ..batch = batch
+          ..muted = !deviceMuted
+          ..reconnectMuted = deviceMuted;
+        late CaptureCoordinator coordinator;
+        coordinator = CaptureCoordinator(
+          ports: fake.ports,
+          readEnvironment: () => environment(coordinator.state, muted: fake.muted, batch: fake.batch),
+        );
+        final outcome = await coordinator.dispatch(DeviceStartRequested(device: pendant));
+        outcome.throwIfFailed();
+        final expectedPhase = batch
+            ? (deviceMuted ? CapturePhase.pendantBatchPaused : CapturePhase.pendantBatchLive)
+            : (deviceMuted ? CapturePhase.pendantPaused : CapturePhase.pendantLive);
+        expect(coordinator.state.phase, expectedPhase);
+        expect(outcome.result, isNull);
+        expect(fake.ble, !deviceMuted);
+        final key = coordinator.state.active!.sessionKey;
+        final next = deviceMuted
+            ? await coordinator.dispatch(const DeviceResumeRequested())
+            : await coordinator.dispatch(const DevicePauseRequested());
+        next.throwIfFailed();
+        expect(fake.muted, !deviceMuted);
+        expect(fake.ble, deviceMuted);
+        expect(coordinator.state.active!.sessionKey, key);
+        coordinator.dispose();
+      });
+    }
+  }
+
   test(
     '128 seeded effect-port sequences inject held, failed and superseded effects across the event alphabet',
     () async {
@@ -1513,6 +1553,7 @@ void main() {
     await coordinator.dispatch(const PauseCaptureRequested());
     expect(coordinator.state.phase, CapturePhase.pendantBatchPaused);
     expect(fake.muted, isTrue);
+    expect(fake.deviceMuted, isTrue);
     expect(fake.nativeBatchBin, isTrue);
     final before = coordinator.state.encode();
     final id = fake.recordingId;
@@ -1523,6 +1564,7 @@ void main() {
     expect(result.result, isFalse);
     expect(coordinator.state.encode(), before);
     expect(fake.muted, isTrue);
+    expect(fake.deviceMuted, isTrue);
     expect(fake.nativeBatchBin, isTrue);
     expect(fake.recordingId, id);
     expect(fake.snapshot, before);
@@ -1758,10 +1800,12 @@ void main() {
     final pause = coordinator.dispatch(const DevicePauseRequested());
     final drop = coordinator.dispatch(const DeviceUpdated(null));
     await Future<void>.delayed(Duration.zero);
-    expect(fake.log.last, 'policy:true');
+    expect(fake.log.last, 'stage:PersistDeviceMuteStage');
+    expect(fake.muted, isFalse, reason: 'local pause waits for the device acknowledgement');
     held.complete();
     expect((await pause).failed, isFalse);
     expect((await drop).failed, isFalse);
+    expect(fake.deviceMuted, isTrue);
     expect(coordinator.state.phase, CapturePhase.idle);
     expect(fake.ble, isFalse);
     expect(fake.socket, isFalse);
