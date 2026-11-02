@@ -311,13 +311,13 @@ void main() {
   test('the default summary template is saved locally; null is Omi', () {
     final provider = summaryProvider(summaryConversation());
     addTearDown(provider.dispose);
-    expect(provider.defaultSummaryTemplateAppId, isNull);
+    expect(provider.defaultSummaryTemplateAppId, 'omi-default-summary');
     provider.setDefaultSummaryTemplateAppId('pg');
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     final otherUser = summaryProvider(summaryConversation());
     addTearDown(otherUser.dispose);
     SharedPreferencesUtil().uid = 'someone-else';
-    expect(otherUser.defaultSummaryTemplateAppId, isNull, reason: 'the default is per signed-in user');
+    expect(otherUser.defaultSummaryTemplateAppId, 'omi-default-summary', reason: 'the default is per signed-in user');
     SharedPreferencesUtil().uid = '';
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     provider.setDefaultSummaryTemplateAppId(null);
