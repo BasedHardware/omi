@@ -457,7 +457,12 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
         # protection level is read live below. It does not export full rows.
         # Staging/enrichment callers requesting snapshots retain the exact walk.
         decision_only = (
-            snapshots is None and current_attempt() is not None and lever_enabled('bpp_generation_memo', item.owner_id)
+            snapshots is None
+            and current_attempt() is not None
+            and (
+                lever_enabled('bpp_generation_memo', item.owner_id)
+                or lever_enabled('privacy_checks_shadow', item.owner_id)
+            )
         )
         generation = assert_batch_write_allowed(
             store.client,
