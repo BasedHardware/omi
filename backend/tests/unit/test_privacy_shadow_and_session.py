@@ -68,6 +68,38 @@ def test_counters_measure_live_check_reads_walks_and_absent_user_default(world):
     assert metrics.WALKS.labels('live')._value.get() == walks + 1
 
 
+def test_instrumentation_preserves_closed_historical_sdk_caller_labels(world, monkeypatch):
+    from database import firestore_document_probe as probe
+
+    db, _, _, _ = world
+    original = StrictFirestoreDocument.get
+    callers = []
+
+    def get(reference, **kwargs):
+        callers.append(probe.call_site())
+        return original(reference, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    check(db)
+    assert callers == ['database.batch_pipeline_privacy:read'] * 5
+    callers.clear()
+    assert external(db)
+    assert not tombstones.is_deleted(UID, 'source')
+    assert callers == [
+        'database.legal_holds:external_write_fence',
+        'database.legal_holds:external_write_fence',
+        'database.conversation_tombstones:is_deleted',
+    ]
+    assert metrics.current_read_caller() is None
+    callers.clear()
+    enable(monkeypatch, 'batch_privacy_memoize')
+    transaction = db.transaction()
+    privacy.assert_batch_write_allowed(
+        db, transaction, UID, conversation_ids=['source'], memo=privacy.BatchPrivacyMemo(db, transaction)
+    )
+    assert callers == ['database.batch_pipeline_privacy:get'] * 5
+
+
 def test_shadow_detects_unfenced_writer_and_keeps_live_block(world, monkeypatch):
     db, _, _, _ = world
     enable(monkeypatch, 'privacy_checks_shadow', 'bpp_generation_memo')

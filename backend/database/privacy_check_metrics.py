@@ -48,6 +48,13 @@ CENSUS = Histogram(
 )
 
 _MODE: ContextVar[str] = ContextVar('privacy_metrics_mode', default='live')
+_READ_CALLER: ContextVar[str | None] = ContextVar('privacy_read_caller', default=None)
+_READ_CALLERS = {
+    'batch': 'database.batch_pipeline_privacy:read',
+    'external': 'database.legal_holds:external_write_fence',
+    'tombstone': 'database.conversation_tombstones:is_deleted',
+    'deletion_marker': 'database.account_deletion_marker:_s4_read_deletion_status',
+}
 _SESSION: ContextVar['SessionCensus | None'] = ContextVar('privacy_metrics_session', default=None)
 _LOG_LOCK = threading.Lock()
 _LOG_AT = {}
@@ -92,16 +99,27 @@ def memo_result(family, result):
         pass
 
 
-def read_snapshot(family, reference, **kwargs):
+def read_snapshot(family, reference, *, memo_read=False, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
     _count(family, 'reads')
+    caller = (
+        'database.batch_pipeline_privacy:get' if family == 'batch' and memo_read else _READ_CALLERS[_family(family)]
+    )
+    caller_token = _READ_CALLER.set(caller)
     try:
         snapshot = reference.get(**kwargs)
     except BaseException:
         _read_result(family, 'error')
         raise
+    finally:
+        _READ_CALLER.reset(caller_token)
     _read_result(family, 'hit' if snapshot.exists else 'miss')
     return snapshot
+
+
+def current_read_caller():
+    """Only the closed names above may override SDK attribution."""
+    return _READ_CALLER.get()
 
 
 def _read_result(family, result):

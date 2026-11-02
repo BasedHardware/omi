@@ -60,6 +60,10 @@ on teardown; late executor leaves cannot reuse a closed holder.
 ## Measurement
 
 All labels are closed enums with no owner, conversation, job or session IDs.
+Point reads retain their historical SDK caller labels through a closed privacy
+override, so adding the instrumentation does not move the baseline into a
+generic helper bucket. Aggregate billed-read probes still include shadow work;
+use the separate live/shadow counters when measuring the live decision path.
 
 | Metric | Meaning |
 | --- | --- |

@@ -80,7 +80,9 @@ class BatchPrivacyMemo:
 
     def get(self, reference):
         if reference.path not in self.snapshots:
-            self.snapshots[reference.path] = metrics.read_snapshot('batch', reference, transaction=self.transaction)
+            self.snapshots[reference.path] = metrics.read_snapshot(
+                'batch', reference, transaction=self.transaction, memo_read=True
+            )
         return self.snapshots[reference.path]
 
 
