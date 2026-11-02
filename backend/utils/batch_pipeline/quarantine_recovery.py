@@ -375,7 +375,11 @@ class QuarantineRecovery:
                 or ((job.get('worker_failure') or {}).get('reason') == 'unsupported_language')
             )
             if not self.protocol.start(
-                segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
+                segment_id,
+                token,
+                self.clock(),
+                provider='modulate' if multilingual else 'legacy_sync',
+                local_silence=local_payload is not None,
             ):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
