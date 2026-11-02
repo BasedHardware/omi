@@ -331,10 +331,11 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
                 continue
             else:
                 status = 'qualification_failed'
-            atomic_json(
-                journal_path, {**journal, 'status': status, 'error_type': type(error).__name__, 'attempt': attempt}
-            )
-            return {**result, 'status': status, 'error_type': type(error).__name__}
+            # These exceptions carry only fixed messages written in our own code,
+            # never provider text, so the reason is safe to keep for diagnosis.
+            failure = {'error_type': type(error).__name__, 'reason': str(error)[:200]}
+            atomic_json(journal_path, {**journal, 'status': status, **failure, 'attempt': attempt})
+            return {**result, 'status': status, **failure}
         except Exception as error:
             atomic_json(
                 journal_path, {**journal, 'status': 'stopped', 'error_type': type(error).__name__, 'attempt': attempt}
