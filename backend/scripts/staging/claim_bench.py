@@ -13,8 +13,9 @@ not exercised: they run outside the claim lane.
     python -m scripts.staging.claim_bench cleanup --run-id cb1 --owners 64 --units 16
 
 Runs only inside the staging runtime (staging fence, ``staging`` database). Prints JSON event
-lines with counts, rates and latencies only. ``run`` cleans up its own documents unless
-``--keep``; ``cleanup`` repeats that by derived document id, never by query.
+lines with counts, rates and latencies only. ``run`` always cleans up its own documents (a parked
+unit left behind would come due after a day and become live staging work); ``cleanup`` repeats
+that by derived document id, never by query, for a run that died before its own cleanup.
 """
 
 from __future__ import annotations
@@ -404,10 +405,7 @@ def run(args) -> int:
             **result,
         )
     finally:
-        if not args.keep:
-            _emit(
-                'claim_bench_cleanup', **cleanup(client, NAMESPACE, args.run_id, owners=args.owners, units=args.units)
-            )
+        _emit('claim_bench_cleanup', **cleanup(client, NAMESPACE, args.run_id, owners=args.owners, units=args.units))
     return 0
 
 
@@ -427,7 +425,6 @@ def main(argv=None) -> int:
     r.add_argument('--duration', type=float, default=120.0)
     r.add_argument('--seconds', type=float, default=600.0)
     r.add_argument('--seed-threads', type=int, default=16)
-    r.add_argument('--keep', action='store_true')
     args = parser.parse_args(argv)
     if not RUN_ID_RE.fullmatch(args.run_id):
         raise SystemExit('run id must match ^cb[a-z0-9]{1,20}$')

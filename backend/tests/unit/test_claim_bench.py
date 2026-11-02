@@ -210,6 +210,12 @@ def test_cleanup_deletes_only_documents_derived_from_this_run():
     assert not any(name.endswith(('_control', '_pull_claims')) for name, _ in client.deleted)
 
 
+def test_run_has_no_mode_that_skips_cleanup():
+    # A parked unit left behind comes due after a day and turns into live staging work.
+    with pytest.raises(SystemExit):
+        claim_bench.main(['run', '--run-id', RUN, '--owners', '1', '--units', '1', '--keep'])
+
+
 def test_run_refuses_outside_the_staging_runtime(monkeypatch):
     monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
