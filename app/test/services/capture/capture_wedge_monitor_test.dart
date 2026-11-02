@@ -6,6 +6,13 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 
 void main() {
+  test('isCaptureSourceInScope includes rayban_meta alongside omi and friend_com', () {
+    expect(CaptureWedgeMonitor.isCaptureSourceInScope('omi'), isTrue);
+    expect(CaptureWedgeMonitor.isCaptureSourceInScope('friend_com'), isTrue);
+    expect(CaptureWedgeMonitor.isCaptureSourceInScope('rayban_meta'), isTrue);
+    expect(CaptureWedgeMonitor.isCaptureSourceInScope('phone_mic'), isFalse);
+    expect(CaptureWedgeMonitor.isCaptureSourceInScope(null), isFalse);
+  });
   late DateTime now;
   late List<({String event, Map<String, Object> properties})> events;
   late List<String> retriedDevices;
