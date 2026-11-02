@@ -44,7 +44,7 @@ def admitted_as_byok(job: object) -> bool:
     return isinstance(policy, dict) and policy.get('provider_reason') == 'byok'
 
 
-def deadline_seconds(requested: object) -> float:
+def deadline_seconds(requested: str | float | None) -> float:
     """One call's deadline: the worker's advertised budget clamped to [AUTHORIZE_SECONDS, MAX_AUTHORIZE_SECONDS]."""
     try:
         value = float(requested) if requested is not None else None
@@ -62,7 +62,7 @@ def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchP
     return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
 
 
-async def authorize(store, leases: list[dict], *, now: float | None = None, budget: object = None) -> dict:
+async def authorize(store, leases: list[dict], *, now: float | None = None, budget: str | float | None = None) -> dict:
     """Return completed decisions within the call's deadline; unfinished work never gets an allow.
 
     Keep leases serial: fresh funding/fair-use is check-then-act, not an atomic

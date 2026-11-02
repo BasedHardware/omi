@@ -287,9 +287,12 @@ class Pump:
         unevaluated (never allowed) while the other calls' decisions stand.
         """
         allowed, retry_after, held_reason = [], {}, {}
+        authorize = self.authorize_compute
+        if authorize is None:
+            return {'allowed': allowed, 'retry_after': retry_after, 'held_reason': held_reason}
         for start in range(0, len(leases), ADMISSION_LEASES_PER_CALL):
             try:
-                part = self.authorize_compute(leases[start : start + ADMISSION_LEASES_PER_CALL]) or {}
+                part = authorize(leases[start : start + ADMISSION_LEASES_PER_CALL]) or {}
                 part_allowed = list(part.get('allowed') or [])
                 part_retry = dict(part.get('retry_after') or {})
                 part_held = dict(part.get('held_reason') or {})
