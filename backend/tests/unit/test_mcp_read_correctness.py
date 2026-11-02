@@ -100,7 +100,7 @@ def test_updated_filter_runs_before_the_old_200_row_scan(monkeypatch):
     read = MagicMock(return_value=(rows, 237))
     monkeypatch.setattr(memories, 'read_filtered_mcp_memories', read)
     result = memories.memories_page_core(OWNER, limit=20, updated_after=NOW, cursor_kind='test')
-    assert result['memories'] == rows
+    assert result['memories'] == [{**rows[0], 'source_at': None, 'extracted_at': None}]
     assert not result['has_more'] and not result['scan_truncated']
     assert result['scanned_count'] == 237 and result['matched_count'] == 1
     assert read.call_args.kwargs['filters']['updated_after'] == NOW

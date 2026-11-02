@@ -47,6 +47,28 @@ def _payload(value: BaseModel | Dict[str, Any]) -> Dict[str, Any]:
     return dict(value)
 
 
+def memory_provenance_timestamps(value: Dict[str, Any]) -> Dict[str, Any]:
+    """Expose only timestamp provenance; never infer extraction from capture."""
+    result: Dict[str, Any] = {}
+    # Source time is independent of storage insertion and later product edits.
+    # Legacy rows without provenance stay explicitly unknown.
+    evidence = value.get('evidence') or []
+    for target, source in (('source_at', 'captured_at'), ('extracted_at', 'extracted_at')):
+        values = [item.get(source) for item in evidence if isinstance(item, dict) and item.get(source) is not None]
+        dated = []
+        for value in values:
+            try:
+                stamp = (
+                    value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                )
+                stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
+                dated.append((stamp.timestamp(), value))
+            except (ValueError, TypeError, OverflowError):
+                continue
+        result[target] = min(dated, key=lambda item: item[0])[1] if dated else None
+    return result
+
+
 def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExposure) -> Dict[str, Any]:
     """Serialize one memory for the requested API exposure."""
     payload = _payload(value)
@@ -61,22 +83,7 @@ def memory_api_payload(value: BaseModel | Dict[str, Any], exposure: MemoryApiExp
             payload["layer"] = tier
     for field in BELIEF_VIEW_FIELDS:
         payload.pop(field, None)
-    # Source time is independent of storage insertion and later product edits.
-    # Legacy rows without provenance stay explicitly unknown.
-    evidence = payload.get('evidence') or []
-    for target, source in (('source_at', 'captured_at'), ('extracted_at', 'extracted_at')):
-        values = [item.get(source) for item in evidence if isinstance(item, dict) and item.get(source) is not None]
-        dated = []
-        for value in values:
-            try:
-                stamp = (
-                    value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-                )
-                stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
-                dated.append((stamp.timestamp(), value))
-            except (ValueError, TypeError, OverflowError):
-                continue
-        payload[target] = min(dated, key=lambda item: item[0])[1] if dated else None
+    payload.update(memory_provenance_timestamps(payload))
     return payload
 
 
