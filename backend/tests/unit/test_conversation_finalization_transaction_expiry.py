@@ -55,6 +55,23 @@ class _FakeDocumentReference:
         return self._client.photos_collection
 
 
+class _FakeDeletionMarkerRef:
+    """account_deletions/{uid}: exists only when a test registered a marker."""
+
+    def __init__(self, client: '_FinalizationFakeClient', doc_id: str):
+        self._client = client
+        self.id = doc_id
+
+    @property
+    def exists(self) -> bool:
+        store = self._client.account_deletion_documents.get(self.id)
+        return store is not None
+
+    def get(self, transaction=None) -> '_FakeSnapshot':
+        data = self._client.account_deletion_documents.get(self.id)
+        return _FakeSnapshot(data, doc_id=self.id)
+
+
 class _FakePhotosCollection:
     def limit(self, _count: int):
         return self
@@ -90,10 +107,13 @@ class _FakeUsersRoot:
 
 
 class _FakeCollectionReference:
-    def __init__(self, client: '_FinalizationFakeClient'):
+    def __init__(self, client: '_FinalizationFakeClient', kind: str | None = None):
         self._client = client
+        self.kind = kind
 
-    def document(self, doc_id: str) -> _FakeDocumentReference:
+    def document(self, doc_id: str) -> '_FakeDocumentReference':
+        if self.kind == 'account_deletions':
+            return _FakeDeletionMarkerRef(self._client, doc_id)
         return _FakeDocumentReference(self._client, doc_id)
 
 
@@ -140,6 +160,9 @@ class _FinalizationFakeClient:
     def __init__(self, document: Dict[str, Any] | None, commit_errors: List[BaseException] | None = None):
         self.document = document
         self.commit_errors = list(commit_errors or [])
+        # Main's claim fence reads account_deletions/{uid}; no test here sets a
+        # deletion marker, so the collection serves a missing document.
+        self.account_deletion_documents: Dict[str, Dict[str, Any] | None] = {}
         self.commits: List[Dict[str, Any] | None] = []
         self.transactions: List[_FakeTransaction] = []
         self.photos_collection = _FakePhotosCollection()
@@ -149,6 +172,8 @@ class _FinalizationFakeClient:
     def collection(self, _collection_id: str) -> Any:
         if _collection_id == 'users':
             return _FakeUsersRoot(self)
+        if _collection_id == 'account_deletions':
+            return _FakeCollectionReference(self, kind='account_deletions')
         return _FakeCollectionReference(self)
 
     def transaction(self) -> _FakeTransaction:

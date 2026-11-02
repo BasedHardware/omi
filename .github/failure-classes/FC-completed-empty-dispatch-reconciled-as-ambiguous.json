@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-completed-empty-dispatch-reconciled-as-ambiguous",
+  "violated_contract": "A provider dispatch whose fenced result checkpoint proves it completed with no words is a definitive outcome; held-audio recovery must settle it as a transcribed, no-content piece with no usage and no retry. Routing it through the ambiguous-call reconciliation path (cooldown, ingest-proof lookup, one re-dispatch) turns the second identical empty reply into a terminal failed_reconciliation that retains the audio forever and pins the owner's held-audio summary. The converse must also hold: that checkpoint may only be written for a reply the provider positively reported as success with zero words, so a malformed 2xx body (error envelope, partial or mistyped payload) must never be checkpointed as empty and then settled and purged.",
+  "canonical_prevention": "Classify a dispatch outcome from the persisted provider checkpoint rather than the local reply flag: a dispatched receipt carrying provider_empty with provider_completed_at settles in place as transcribed/has_content=False/seconds=0, on the same pass and when a later pass resumes it, under its own closed reconciliation outcome; only a dispatch with no completion checkpoint remains ambiguous. Each prerecorded adapter the recovery dispatch can reach raises on a 2xx body that is not the provider's success shape (Parakeet requires both text and segments with their contract types; Modulate requires an utterances list and, when it is empty, text as a string or duration_ms as a number beside it), so the completion checkpoint is only ever written for a validated empty verdict and a malformed body leaves the dispatch ambiguous. Cover single-piece, resume, mixed-sibling, genuinely ambiguous and malformed-body holds, including exactly-once summary settlement.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_cap_hold_recovery.py",
+    "backend/tests/unit/test_sync_cap_reconciliation_metrics.py",
+    "backend/tests/unit/test_parakeet_prerecorded.py",
+    "backend/tests/unit/test_modulate_prerecorded_language.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/cap_hold_recovery.py",
+    "backend/utils/sync/cap_recovery_provider.py",
+    "backend/utils/stt/pre_recorded.py",
+    "backend/utils/observability/stt_cap_dispatch.py"
+  ],
+  "status": "open"
+}

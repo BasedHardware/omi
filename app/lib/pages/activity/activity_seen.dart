@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 
 /// Whether Activity holds something worth a dot on Home's bell.
 ///
@@ -20,6 +21,11 @@ class ActivitySeen {
   static ActivitySeen instance = ActivitySeen();
 
   static const _key = 'activityDelightSeenAtMs';
+
+  /// When each recap arrived, for [observe]. A recap without a server creation time is left out:
+  /// its stand-in time is the parse time, which would relight the bell on every refresh.
+  static Iterable<DateTime> recapArrivals(Iterable<DailySummary> recaps) =>
+      recaps.where((r) => r.createdAtKnown).map((r) => r.createdAt);
 
   final String Function() _owner;
   final int Function()? _readOverride;

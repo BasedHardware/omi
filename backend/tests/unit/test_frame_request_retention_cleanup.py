@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -133,43 +132,31 @@ def _plain_transactions(monkeypatch):
     monkeypatch.setattr(frame_requests.firestore, "transactional", lambda function: function)
 
 
-def test_expired_vision_output_is_stripped_but_paid_tombstone_never_expires(monkeypatch):
+def test_expired_historical_vision_output_is_stripped_and_receipt_retained(monkeypatch):
     now = datetime(2026, 8, 24, tzinfo=timezone.utc)
     client = _Client()
-    authority_key = "stable-session-turn"
-    receipt_id = hashlib.sha256(authority_key.encode("utf-8")).hexdigest()
+    receipt_id = "historical-vision-receipt"
     receipt = _Reference(
         receipt_id,
         {
             "request_id": "frame-1",
             "account_generation": 7,
-            "state": "invoked",
-            "created_at": now,
-            "lease_expires_at": now + timedelta(minutes=5),
+            "state": "completed",
+            "created_at": now - timedelta(days=1),
+            "completed_at": now,
+            "description": "historical derived private description",
+            "output_expires_at": now + timedelta(seconds=frame_requests.FRAME_REQUEST_MAX_TTL_SECONDS),
         },
         path_prefix="users/uid-1/frame_vision_receipts",
     )
-    client.collections[frame_requests.FRAME_VISION_RECEIPTS_COLLECTION] = _Collection(
-        frame_requests.FRAME_VISION_RECEIPTS_COLLECTION
-    )
-    client.collections[frame_requests.FRAME_VISION_RECEIPTS_COLLECTION].rows[receipt_id] = receipt
+    collection = _Collection(frame_requests.FRAME_VISION_RECEIPTS_COLLECTION)
+    collection.rows[receipt_id] = receipt
+    client.collections[frame_requests.FRAME_VISION_RECEIPTS_COLLECTION] = collection
     monkeypatch.setattr(
         frame_requests,
         "FRAME_VISION_OUTPUT_EXPIRY_QUERY",
         _Spec(lambda values: lambda row: row.get("output_expires_at", now + timedelta(days=99)) <= values["now"]),
     )
-
-    frame_requests.complete_frame_vision_invocation(
-        "uid-1",
-        authority_key,
-        request_id="frame-1",
-        account_generation=7,
-        description="derived private description",
-        now=now,
-        firestore_client=client,
-    )
-    assert receipt.row["output_expires_at"] == now + timedelta(seconds=frame_requests.FRAME_REQUEST_MAX_TTL_SECONDS)
-    assert receipt.row["output_expires_at"] <= now + timedelta(days=7)
 
     page = frame_requests.cleanup_expired_frame_vision_outputs(
         "uid-1",
@@ -185,23 +172,6 @@ def test_expired_vision_output_is_stripped_but_paid_tombstone_never_expires(monk
     assert "description" not in receipt.row
     assert "completed_at" not in receipt.row
     assert "output_expires_at" not in receipt.row
-    same_request = frame_requests.reserve_frame_vision_invocation(
-        "uid-1",
-        authority_key,
-        request_id="frame-1",
-        account_generation=7,
-        firestore_client=client,
-    )
-    assert same_request["state"] == "payload_expired"
-    assert same_request.get("reserved") is not True
-    with pytest.raises(PermissionError):
-        frame_requests.reserve_frame_vision_invocation(
-            "uid-1",
-            authority_key,
-            request_id="frame-2",
-            account_generation=7,
-            firestore_client=client,
-        )
 
 
 def test_terminal_metadata_cleanup_pages_without_touching_pending_or_attached(monkeypatch):

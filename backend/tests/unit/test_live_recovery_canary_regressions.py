@@ -133,7 +133,9 @@ async def test_stalled_paid_writer_keeps_bounded_capacity_failure(monkeypatch, p
             actual._stt_buffer_start_sample = n * 640
             await actual._flush_stt_buffer(bytearray(b'\x01\x00' * 640), force=True)
         await until(lambda: actual.stt_socket.is_connection_dead)
-        assert actual.stt_socket.typed_death_reason == 'capacity_full'
+        # The stalled paid writer let a live frame's delivery deadline pass:
+        # a local bound (delivery_expired), never destination capacity.
+        assert actual.stt_socket.typed_death_reason == 'delivery_expired'
         await actual._monitor_stt_death()
         assert actual.host.state.stt_terminal_failure
         assert raw._send_queue.high_water <= 2
@@ -274,7 +276,7 @@ async def test_enqueue_capacity_cause_is_preserved_without_changing_flag_off(mon
 async def test_window_first_text_over_thirty_seconds_can_include_answered_silence(monkeypatch):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
     scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
-    before_sum = WINDOW_FIRST_TEXT._sum.get()
+    before_sum = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get()
     try:
         sample = await _settled_fragment_silence(actual, clock, sample, 8)
         sample = await _fragment_frame(actual, clock, sample, speech=True)
@@ -290,7 +292,7 @@ async def test_window_first_text_over_thirty_seconds_can_include_answered_silenc
         resumed = previous.raw._deadline_speech_at
         sample = await _settled_fragment_silence(actual, clock, sample, 125)
         assert [segment['text'] for segment in base.emitted] == ['Resumed.']
-        assert WINDOW_FIRST_TEXT._sum.get() - before_sum > 30
+        assert WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() - before_sum > 30
         assert clock[0] - first_speech > 30
         assert clock[0] - resumed < 12
         assert scheduled == [12, 12]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -165,6 +166,16 @@ def test_firestore_malformed_document_labels_are_bounded():
     assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
 
 
+def test_sync_budget_deferral_reasons_keep_their_exact_labels():
+    # The handler-budget deferral records these reasons; if they are not
+    # allowlisted they collapse to ``other`` and an uncertain replacement
+    # create becomes indistinguishable from a marker timeout in metrics.
+    assert fallback_mod.bucket_reason('enqueue_uncertain') == 'enqueue_uncertain'
+    assert fallback_mod.bucket_reason('marker_timeout') == 'marker_timeout'
+    assert fallback_mod.bucket_reason('acquire_unsettled') == 'acquire_unsettled'
+    assert fallback_mod.bucket_reason('marker_clear_failed') == 'marker_clear_failed'
+
+
 def test_web_search_security_reasons_keep_their_exact_labels():
     # The Anthropic web-search gate records these reasons; if they are not
     # allowlisted they all collapse to ``other`` and the security withhold
@@ -307,12 +318,12 @@ def test_replay_diagnostics_are_bounded_log_values_not_metric_labels(monkeypatch
         component='stt_live_session',
         from_mode='parakeet',
         to_mode='soniox',
-        reason='capacity_full',
+        reason='replay_ring_overflow',
         outcome='recovered',
-        capacity_subtype='replay_ring_cap',
         replay_diagnostics=diagnostics,
     )
     labels, _ = counter.increments[0]
+    assert labels['reason'] == 'replay_ring_overflow'
     assert set(labels) == {'component', 'from_mode', 'to_mode', 'reason', 'outcome'}
     line = caplog.records[-1].message
     assert 'un_emitted_capture_seconds=86400.000' in line
@@ -377,3 +388,33 @@ def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, c
         first_text_diagnostics=diagnostic,
     )
     assert 'vad_admitted_seconds' not in caplog.records[-1].message
+
+
+def test_connection_lost_log_carries_bounded_transport_cause(caplog):
+    record_fallback = fallback_mod.record_fallback
+    caplog.set_level(logging.WARNING)
+    record_fallback(
+        component='stt_selection',
+        from_mode='soniox',
+        to_mode='unavailable',
+        reason='connection_lost',
+        outcome='exhausted',
+        connection_cause='keepalive_timeout',
+    )
+    record_fallback(
+        component='stt_selection',
+        from_mode='soniox',
+        to_mode='unavailable',
+        reason='connection_lost',
+        outcome='exhausted',
+        connection_cause='private_free_text',
+    )
+    source = SimpleNamespace(normalized_death_reason=None, typed_death_reason=None, death_reason='ws recv closed: x')
+    source.connection_cause = 'abnormal_close'
+    hop = PendingLiveFailover.from_socket(source, 'modulate', 'parakeet')
+    hop.note_failure(None)
+    lines = [r.getMessage() for r in caplog.records if 'reason=connection_lost' in r.getMessage()]
+    assert lines[0].endswith('outcome=exhausted cause=keepalive_timeout')
+    assert lines[1].endswith('outcome=exhausted cause=other')
+    assert lines[2].endswith('from=modulate to=parakeet reason=connection_lost outcome=exhausted cause=abnormal_close')
+    assert 'private' not in caplog.text and 'ws recv closed' not in caplog.text

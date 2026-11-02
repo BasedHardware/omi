@@ -8,10 +8,11 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/nllb_translation/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+COPY backend/nllb_translation/main.py .
+COPY backend/omi_logging.py ./omi_logging.py
 
 EXPOSE 8080
 

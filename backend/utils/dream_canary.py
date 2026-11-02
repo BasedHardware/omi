@@ -235,7 +235,7 @@ async def check():
     if skipped:
         try:
             async with asyncio.timeout(3):
-                consecutive = await run_blocking(db_executor, dream_canary.failure_count)
+                consecutive = await run_blocking(db_executor, dream_canary.reset_failures)
         except Exception:
             consecutive = 0
         status = 'skipped'

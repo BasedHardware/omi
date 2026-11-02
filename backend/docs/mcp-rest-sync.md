@@ -95,3 +95,111 @@ characters. When output is clipped, the additive `truncated` field is
 `true`; `speaker_name` is populated on each segment, and `apps_results` is
 preserved. List/search responses stay lean: no transcript, no photos, and
 `apps_results` projected from the card field paths.
+
+## Read correctness and coverage (wave 2)
+
+Date-filtered MCP tools and REST conversation list/search, screen activity and
+summary routes accept optional `timezone`: an IANA name (for example
+`Asia/Ho_Chi_Minh`) or `profile` to resolve `time_zone` from the owner's profile.
+**Omitting it preserves UTC** for released clients that construct UTC day windows;
+this is the existing documented sync contract and is pinned by
+`test_mcp_search_date_utc.py`. New local-day callers should pass `profile`.
+Date-only bounds include the entire selected local end day, including DST
+transitions. Aware REST datetime bounds remain exact instants; explicit timezone
+interprets naive bounds locally. Returned timestamp fields use ISO 8601 offsets,
+except screen activity retains its released formatting unless timezone or timestamp_format=iso_offset is supplied. MCP keeps exact stored strings; REST keeps its existing datetime-model normalization without adding an offset.
+Daily-summary date labels identify stored recaps; timezone does not regenerate or
+rebucket their prose. `timezone` on the read response identifies the window used
+for recording counts and missing-day classification. Historic recap creation
+zones were not persisted and cannot be reconstructed reliably.
+
+`get_memories(updated_after=...)` queries persisted `updated_at` before applying
+the universal memory policies. Positive reviewed/manual and non-default category
+filters also use indexed candidate predicates when no timestamp predicate is
+present. Missing legacy booleans/categories retain their released defaults and
+are checked after hydration. Canonical lineage/privacy/eligibility and historical
+suppression are unchanged. Legacy records without `updated_at` remain outside
+an `updated_after` window; without that filter the created-only leg is included.
+New composite indexes are declared in the registry and generated manifest. While
+an index builds, the bounded single-field fallback retains the timestamp bound,
+rechecks every predicate, and emits fallback telemetry. A candidate set above
+5000 rows per store returns `memory_filter_window_exceeded`, never a successful
+partial empty page. Narrow the filter. Unfiltered `created_desc` and `manual_first`
+retain released bounded source-window semantics: one first batch (100 rows for a
+20-item request; at most 200), sorted within that newest-updated window. They
+never scan all stores or fail solely because an account exceeds 5000 memories.
+`scan_truncated=true`, `source_window_limit` and `coverage` explicitly identify
+unknown global ordering/exhaustion; `more_in_window` and offset cursors describe
+only the materialized window. The REST array reports `X-Scan-Truncated: true`.
+Use `updated_desc` with a cursor for larger exports.
+`scanned_count` on the indexed path counts deduplicated candidates before policy
+filtering (the default bounded path counts source rows after universal policy); `matched_count` counts eligible matches in the materialized filtered
+window.
+`more_in_window` counts known matches already scanned; keyset pages additionally
+return `more_in_window_known=false` when their continuation contains unexamined
+candidates. `has_more` on that path means that a resumable candidate cursor exists,
+not that another eligible match has already been proved.
+
+`get_conversations_by_ids` accepts 1–20 IDs, shrinks transcript and structured
+text budgets evenly, preserves request order, and returns `omitted_ids`,
+`next_ids`, and `next_cursor` when metadata still cannot fit. Resume with the
+same IDs/filters and cursor, or request `next_ids` directly. `not_found` contains
+only missing IDs; short ID prefixes receive a `use the full id` hint. Prefix
+lookup is not enabled. Each item keeps the released nested `conversation` and
+adds the same flat card as list/search. Optional `fields` (array or comma-separated
+names; `id` retained) selects card fields; `summary_only=true` on detail tools
+omits transcripts. `truncated_fields` names clipped structured fields. Locked
+items retain their existing paid-plan error and never expose transcript content.
+Cards add nullable `source`, `is_call`, `call_platform`, `calendar_event_id` from
+stored source/calendar context (including `external_data.calendar_meeting_context`).
+Unknown call identity remains null. A linked calendar event alone does not prove
+a remote call. Action items add stored provenance or `manual`, `chat`, `unknown`
+when no conversation identity exists; no provenance is guessed from task prose.
+
+Screen `group_by=app|hour|day` aggregates the window server-side, independently
+of raw-page `limit`. A supplied group cursor is ignored with a `note`; groups have no next cursor. `coverage` reports a 5000-row
+bound, scanned count, first/last observations and `complete_window`; truncation
+is explicit. With no timezone, timestamp strings and `YYYY-MM-DD HH:00` hour labels retain the released format. Explicit `timezone` (including UTC) or `timestamp_format=iso_offset` opts into ISO offsets. Capture/sync completeness remains
+unknown. These are observation counts and bounded observation seconds, not
+proof of device usage duration. Raw mode remains cursor-paginated.
+
+Daily summary reads expose `status` and `generated_at`. With **both** date bounds,
+pagination counts calendar days, including stub rows: `no_recordings` (past day,
+zero non-discarded recordings), `not_generated` (past day with recordings),
+`failed` (persisted generation failure), or `pending` (generation marker or current/
+future date). Stub `generated_at` is null. Failures before a generation marker was
+persisted cannot be inferred historically and appear as `not_generated`.
+Without both bounds, the released list still pages stored summaries only.
+The generation schedule and automatic after-midnight regeneration are unchanged.
+
+Newly generated recaps derive `action_items`, `action_items_count` and
+`action_items_created` from **one created-in-window task read**. Historical recaps
+expose `action_items_coverage=legacy_conversation_subset` and preserve the old
+counter as `stored_action_items_created` when it differs; the payload counters
+always equal the array length. Memories deliberately have two meanings:
+`memories_created` counts stored creations (including rows ineligible for the
+review card); `memories_learned` is the existing at-most-three review selection
+from at most 600 newest-updated universal memories. `memories_learned_count` and
+`memories_learned_coverage` expose the actual selection and its bound. An empty
+review card is not evidence that no memories were stored. Legacy producers
+without a recorded review payload are labeled `not_recorded_by_legacy_producer`;
+existing legacy review selections have unknown coverage rather than a fabricated
+scan bound.
+
+`total_conversations` uses a Firestore aggregation over non-discarded recordings
+whose `started_at` falls in the local day, with no list limit; existing recaps'
+counts are corrected on read. `summarized_conversations` labels the producer's
+bounded prompt subset. Duration/highlights/locations still describe that subset.
+The count fallback scans at most 10000 projections and fails explicitly above
+that bound while its index is unavailable.
+
+New `watching_minutes` is the clipped union of consecutive capture intervals per
+device, capped at five minutes per gap and 1440 minutes per local day. Its unit is
+`minutes` and basis is `screen_observation_interval_union`; `watching_coverage`
+exposes the 5000-observation bound and unknown unsynced capture coverage. It is
+an **observation estimate**: stored desktop usage totals contain no intervals,
+so actual elapsed watching time across devices cannot be recovered from them.
+Their sum remains `reported_device_watching_minutes`. Historical values are
+clamped and explicitly labeled `legacy_device_counter_sum_clamped; interval
+union unavailable`, with unknown coverage; they are not claimed reconstructed.
+No historical documents are rewritten by these reads.

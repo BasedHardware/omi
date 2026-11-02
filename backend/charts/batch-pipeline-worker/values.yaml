@@ -1,0 +1,166 @@
+# Rendering defaults creates no resources. Enabling this release only drains
+# durable admitted work; the lead separately controls backend admission cohorts.
+enabled: false
+recordSealRules:
+  partialEnabled: true
+  overlapTrimEnabled: true
+  uploadFailedRepairEnabled: true
+image:
+  repository: ""
+  digest: ""
+serviceAccountName: ""
+gcpServiceAccount: ""
+namespace: batch_pipeline_prod
+stage: prod
+dataPlaneProject: ""
+bucket: ""
+secretName: ""
+replicaCount: 1
+# Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
+nodeSelector:
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+# Borrow idle on-demand L4 nodes from other pools (L4 stockout, l4capacity
+# 2026-11-01). When on, a separate `<release>-borrow` Deployment with its own
+# HPA (min 1, max maxReplicas, same queue metric) runs only on `pools`, at a
+# negative PriorityClass so the owning workload (default priority 0) preempts
+# it, with a short grace so the owner gets the GPU back in minutes, not the OD
+# worker's 1500s drain. A freed node then passes straight to a borrower instead
+# of returning to GCE. The OD deployment, its HPA and its drain are unchanged.
+# Each pool must be on-demand g2-standard-8 + L4 whose only taint the worker
+# tolerates. Outside a stockout the min-1 borrower can make the autoscaler buy
+# one owner-pool node, so turn this off once OD scale-ups succeed again.
+borrowedNodePools:
+  enabled: false
+  pools: []
+  maxReplicas: 3
+  # A preempted borrower stops within this bound; its leases retry elsewhere.
+  terminationGracePeriodSeconds: 120
+  # In [-10, 0): below pods without a class (0), and not below the cluster
+  # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
+  priority: -1
+worker:
+  # Fenced per-shard pulls and worker affinity; false restores legacy selection.
+  shardSpreadEnabled: true
+  # One shard transaction leases up to the pull batch; false leases one per transaction.
+  pullMultiLeaseEnabled: true
+  # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
+  contentionRetryEnabled: true
+  # null preserves the runtime's stage-dependent profiling default.
+  stageProfilingEnabled: null
+  # Same original-lane/owner policy as CPU admission. Non-live widening is
+  # blocked by #22352 and needs separate approval; these defaults are inert.
+  capDispatchEnforcement: false
+  capDispatchCohort: ""
+  capDispatchLanes: live
+  ladderBudgetEnforcement: false
+  # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
+  apiUrl: ""
+  audience: ""
+  batchSize: 8
+  # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
+  pipelineDepth: 2
+  # Shared artifact IO pool, including first decode before the GPU lock.
+  # 1 disables preparation and restores serial artifact IO.
+  ioConcurrency: 5
+  shadowPercent: 0
+  shadowPaidRecoveryPerHour: 200
+  shadowRecoveryApiUrl: ""
+  # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
+  # restores full sampling (the silence qualification reads this evidence).
+  strictVadShadowPercent: 10
+  unitSeconds: 3600
+  paddedSeconds: 272
+  # Pack pyannote segmentation/embedding forwards across one flight's units.
+  # Dark until the L4 paired run passes (diarizer/batch_pipeline_flight_qualify.py).
+  flightBatchingEnabled: false
+  flightBatchSeconds: 1800
+  emptyAsrRecoveryEnabled: false
+  # Activation follows the CPU role's separately approved secret-access change.
+  independentLanguageRecoveryEnabled: false
+  emptyAsrDispositionEnabled: false
+  # Kill switch for context retry and positive-VAD custody; ship on.
+  emptyAsrSafetyNetEnabled: true
+  headPriorityEnabled: false
+  workerSilenceDispositionEnabled: false
+  workerValidationDispositionEnabled: true
+  # Ship-on speech-only diarization; false restores full-unit diarization.
+  diarizeSpeechOnlyEnabled: true
+  # Default off until a paired run on the prod pyannote revision qualifies it
+  # (see backend/diarizer/batch_pipeline_runtime.md).
+  shortSpeechSingleEnabled: false
+  correctnessMetricsEnabled: false
+resources:
+  # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
+  # Round peak + max(1Gi, 20%) / max(2Gi, 40%) up for request / limit.
+  requests:
+    cpu: "4"
+    memory: 12Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "8"
+    memory: 14Gi
+    nvidia.com/gpu: "1"
+autoscaling:
+  # Enable only after scoped admissible-count series/adapter and target qualify.
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 6
+  # Total min/max above are divided equally between pool-pinned HPAs when on.
+  # The original deployment name stays on OD; a -spot deployment shares its
+  # queue metric scope but has a distinct pod selector and PodMonitoring.
+  # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
+  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
+  balancedPools:
+    enabled: false
+    onDemandNodePool: batch-pipeline-pool
+    spotNodePool: batch-pipeline-pool-spot
+  # External metrics from the supplied Prometheus adapter rules must be installed
+  # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
+  # Max-of-two (batchdesign 2026-11-01 PR-2): the HPA keeps the admissible-ready
+  # backlog target AND adds GPU-chain occupancy, sizing on the higher
+  # recommendation. The ready count holds capacity through claim-chain wedges
+  # (occupancy alone sheds lanes whenever claims bind rather than flights);
+  # occupancy keeps capacity through healthy drains where backlog reads low but
+  # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
+  # replica dominance over the ready-only answer whenever backlog exceeds the
+  # per-worker target). 32, not 16: at 25% the ready count flaps 0 <-> 128
+  # minute to minute and the floor drains each burst in about two minutes, so 16
+  # bought nodes that arrived after the work was done and the 1800s window held
+  # them. Ready stays the fast path for a sustained load step, since backlog
+  # only builds when capacity is short; the chain rate is smoothed over 10m
+  # (batchretune 2026-11-02 replay: mean 4.9 vs 7.7 replicas).
+  targetQueuedUnitsPerWorker: 32
+  # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
+  # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
+  targetChainBusyPerWorker: "0.5"
+  # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
+  scaleDownStabilizationSeconds: 1800
+podMonitoring:
+  enabled: true
+recordSealRepair:
+  # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
+  enabled: true
+  runtimeEnabled: true
+  mode: apply
+  workers: 8
+  rowSeconds: 270
+  # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
+  # Refresh this map per ramp rung with --reuse-values; no worker restart.
+  serverFlags: {}
+recordSealSweeper:
+  # Ship on with the worker release; false removes the CronJob and its pods-list RBAC.
+  enabled: true
+  # Runtime kill switch affects new Jobs; terminate an active Job for an immediate stop.
+  runtimeEnabled: true
+  # Lead can observe one in-cluster plan cycle before the apply train.
+  mode: apply

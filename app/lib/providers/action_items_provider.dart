@@ -4,12 +4,14 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/http/api/task_suggestions.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
+import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -19,6 +21,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
+import 'package:omi/providers/task_suggestions_controller.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   int limit,
@@ -53,6 +56,7 @@ class ActionItemsProvider extends ChangeNotifier {
     CreateActionItemRequest? createActionItemRequest,
     UpdateDueDateRequest? updateDueDateRequest,
     api.ActionItemsApi? actionItemsApi,
+    TaskSuggestionsApi? taskSuggestionsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
@@ -60,8 +64,14 @@ class ActionItemsProvider extends ChangeNotifier {
         _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
         _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
         _actionItemsApi = actionItemsApi {
+    suggestions = taskSuggestionsApi == null
+        ? null
+        : TaskSuggestionsController(api: taskSuggestionsApi, onTaskSaved: receiveSavedTask);
+    suggestions?.addListener(notifyListeners);
     unawaited(_preload());
   }
+
+  late final TaskSuggestionsController? suggestions;
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
@@ -77,8 +87,13 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _homeDayLoaded = false;
   List<ActionItemWithMetadata> _homeDayItems = [];
 
-  List<ActionItemWithMetadata> _actionItems = [];
+  TaskCategorizationList _actionItems = TaskCategorizationList();
   int _sessionGeneration = 0;
+  int _taskWriteRevision = 0;
+  bool _disposed = false;
+  // Only server-page identities advance pagination. Optimistic/point-read rows
+  // may be visible (including after Undo) without occupying a loaded page slot.
+  final Set<String> _loadedTaskPageIds = {};
 
   bool _isLoading = false;
   bool _isFetching = false;
@@ -89,6 +104,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   // UI filter: show completed tasks view
   bool _showCompletedView = false;
+  bool _completedViewWasAutoRevealed = false;
 
   // Date range filter
   DateTime? _startDate;
@@ -112,6 +128,14 @@ class ActionItemsProvider extends ChangeNotifier {
   // IDs of action items that have been optimistically deleted but whose server
   // delete may still be in flight. Guarded against re-insertion by fetch/load.
   final Set<String> _pendingDeletionIds = {};
+
+  // An omitted row does not acknowledge an outstanding delete. A later complete
+  // read may retire suppression only after all older projection reads settle.
+  // See docs/task-list-reconciliation.md for the shared deletion lifecycle.
+  final Map<String, int> _deletionAcknowledgedAtRead = {};
+  int _listReadOrdinal = 0;
+  int _latestTaskListRead = 0;
+  final Set<int> _activeListReads = {};
 
   // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
   // from every list, not yet deleted on the server.
@@ -234,7 +258,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<void> _preload() async {
+    final generation = _sessionGeneration;
     await ensureLoaded(showShimmer: true);
+    if (generation != _sessionGeneration || _disposed) return;
     await _migrateCategoryOrderFromPrefs();
   }
 
@@ -244,12 +270,12 @@ class ActionItemsProvider extends ChangeNotifier {
 
     final existingLoad = _initialLoad;
     if (existingLoad != null) return existingLoad;
-
+    final generation = _sessionGeneration;
     final load = fetchActionItems(showShimmer: showShimmer).then((loaded) {
-      _initialLoadCompleted = loaded;
+      if (generation == _sessionGeneration && loaded) _initialLoadCompleted = true;
     });
     _initialLoad = load.whenComplete(() {
-      _initialLoad = null;
+      if (generation == _sessionGeneration) _initialLoad = null;
     });
     return _initialLoad!;
   }
@@ -260,9 +286,9 @@ class ActionItemsProvider extends ChangeNotifier {
     final existing = _homeTodayLoad;
     if (existing != null) return existing;
     if (_homeDayLoaded) return Future.value();
-
+    final generation = _sessionGeneration;
     final load = _fetchHomeTodayTasks(now: now ?? DateTime.now()).whenComplete(() {
-      _homeTodayLoad = null;
+      if (generation == _sessionGeneration) _homeTodayLoad = null;
     });
     _homeTodayLoad = load;
     return load;
@@ -270,6 +296,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<void> _fetchHomeTodayTasks({required DateTime now}) async {
     final generation = _sessionGeneration;
+    final writeRevision = _taskWriteRevision;
+    final readOrdinal = ++_listReadOrdinal;
+    _activeListReads.add(readOrdinal);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
@@ -280,7 +309,7 @@ class ActionItemsProvider extends ChangeNotifier {
         dueStartDate: sevenDaysAgo,
         dueEndDate: startOfTomorrow.subtract(const Duration(microseconds: 1)),
       );
-      if (response != null && generation == _sessionGeneration) {
+      if (response != null && generation == _sessionGeneration && writeRevision == _taskWriteRevision) {
         _homeDayItems = _pendingDeletionIds.isEmpty
             ? List.of(response.actionItems)
             : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
@@ -289,6 +318,8 @@ class ActionItemsProvider extends ChangeNotifier {
       }
     } catch (e) {
       Logger.debug('Error fetching home today tasks: $e');
+    } finally {
+      _activeListReads.remove(readOrdinal);
     }
     notifyListeners();
   }
@@ -371,44 +402,68 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     final generation = _sessionGeneration;
+    final writeRevision = _taskWriteRevision;
+    final readOrdinal = ++_listReadOrdinal;
+    _latestTaskListRead = readOrdinal;
+    _activeListReads.add(readOrdinal);
+    final query = (includeCompleted: _includeCompleted, startDate: _startDate, endDate: _endDate);
+    bool ownsQuery() =>
+        !_disposed &&
+        generation == _sessionGeneration &&
+        readOrdinal == _latestTaskListRead &&
+        writeRevision == _taskWriteRevision &&
+        query == (includeCompleted: _includeCompleted, startDate: _startDate, endDate: _endDate);
     var decodedPageIsComplete = true;
     var loaded = false;
-    if (showShimmer) {
-      setLoading(true);
-    } else {
-      setFetching(true);
-    }
+    _isLoading = showShimmer || (!_initialLoadCompleted && _actionItems.isEmpty);
+    _isFetching = !_isLoading;
+    notifyListeners();
 
     try {
       final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
-        completed: _includeCompleted ? null : false,
-        startDate: _startDate,
-        endDate: _endDate,
+        completed: query.includeCompleted ? null : false,
+        startDate: query.startDate,
+        endDate: query.endDate,
         onTyped: (result) {
+          if (!ownsQuery()) return;
           _projectTypedList(result);
           if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
             decodedPageIsComplete = rejectedRows == 0 && !truncated;
           }
         },
       );
-      if (response != null && generation == _sessionGeneration) {
+      if (response != null && ownsQuery()) {
         _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
-        await _applyFetchedActionItems(response, decodedPageIsComplete: decodedPageIsComplete);
+        await _applyFetchedActionItems(
+          response,
+          decodedPageIsComplete: decodedPageIsComplete,
+          readOrdinal: readOrdinal,
+        );
         loaded = true;
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
     } finally {
-      if (showShimmer) {
-        setLoading(false);
-      } else {
-        setFetching(false);
+      _activeListReads.remove(readOrdinal);
+      if (!_disposed && generation == _sessionGeneration && readOrdinal == _latestTaskListRead) {
+        _isLoading = false;
+        _isFetching = false;
+        notifyListeners();
       }
     }
 
-    notifyListeners();
+    // A point-read receipt can invalidate the first snapshot before the Tasks
+    // page opens. Retry that initial read so existing tasks are not stranded
+    // behind the single acknowledged row. Outages do not cause retry loops.
+    if (!_disposed &&
+        generation == _sessionGeneration &&
+        readOrdinal == _latestTaskListRead &&
+        writeRevision != _taskWriteRevision &&
+        !_initialLoadCompleted) {
+      return fetchActionItems(showShimmer: showShimmer);
+    }
     return loaded;
   }
 
@@ -424,7 +479,11 @@ class ActionItemsProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _applyFetchedActionItems(ActionItemsResponse response, {required bool decodedPageIsComplete}) async {
+  Future<void> _applyFetchedActionItems(
+    ActionItemsResponse response, {
+    required bool decodedPageIsComplete,
+    required int readOrdinal,
+  }) async {
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -432,20 +491,31 @@ class ActionItemsProvider extends ChangeNotifier {
     // in-place: the response list may be unmodifiable, and aliasing it
     // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
     // and retire tombstones prematurely.
-    _actionItems = _pendingDeletionIds.isEmpty
-        ? List.of(response.actionItems)
-        : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
-    // Lazily retire tombstones once the server confirms the item is gone:
-    // any ID still tracked as pending-deletion that did not appear in the
-    // fresh server response can be cleared, because subsequent refreshes
-    // will no longer see it.
+    _actionItems = TaskCategorizationList(response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)));
+    _loadedTaskPageIds
+      ..clear()
+      ..addAll(serverIds);
+    _initialLoadCompleted = true;
+    // Only a read started after acknowledgement can confirm absence. Keep the
+    // tombstone while older Tasks, pagination or Home reads could still apply.
     if (_pendingDeletionIds.isNotEmpty &&
         !response.hasMore &&
         !hasActiveFilter &&
         _includeCompleted &&
         decodedPageIsComplete &&
-        !response.truncated) {
-      _pendingDeletionIds.removeWhere((id) => !_stagedDeletes.containsKey(id) && !serverIds.contains(id));
+        !response.truncated &&
+        !_activeListReads.any((ordinal) => ordinal < readOrdinal)) {
+      _pendingDeletionIds.removeWhere((id) {
+        final acknowledgedAt = _deletionAcknowledgedAtRead[id];
+        if (_stagedDeletes.containsKey(id) ||
+            acknowledgedAt == null ||
+            readOrdinal <= acknowledgedAt ||
+            serverIds.contains(id)) {
+          return false;
+        }
+        _deletionAcknowledgedAtRead.remove(id);
+        return true;
+      });
     }
     _hasMore = response.hasMore;
     // A rejected wire row or a staged delete is still present on the server.
@@ -456,14 +526,27 @@ class ActionItemsProvider extends ChangeNotifier {
       SiriIntegration.current.queueUpsertTasks(_actionItems);
     }
 
+    _revealNewIncompleteTasks();
     if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
       _showCompletedView = true;
+      _completedViewWasAutoRevealed = true;
+    }
+  }
+
+  void _revealNewIncompleteTasks() {
+    if (_completedViewWasAutoRevealed && _actionItems.any((item) => !item.completed)) {
+      _showCompletedView = false;
+      _completedViewWasAutoRevealed = false;
     }
   }
 
   Future<void> loadMoreActionItems() async {
-    if (_isFetching || !_hasMore) return;
+    if (_isLoading || _isFetching || !_hasMore) return;
     final generation = _sessionGeneration;
+    final queryOwner = _latestTaskListRead;
+    final writeRevision = _taskWriteRevision;
+    final readOrdinal = ++_listReadOrdinal;
+    _activeListReads.add(readOrdinal);
 
     setFetching(true);
 
@@ -471,7 +554,7 @@ class ActionItemsProvider extends ChangeNotifier {
       var decodedPageIsComplete = true;
       final response = await _fetchActionItemsPage(
         limit: 50,
-        offset: _actionItems.length,
+        offset: _actionItems.where((item) => _loadedTaskPageIds.contains(item.id)).length,
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
@@ -482,7 +565,11 @@ class ActionItemsProvider extends ChangeNotifier {
         },
       );
 
-      if (response != null && generation == _sessionGeneration) {
+      if (response != null &&
+          generation == _sessionGeneration &&
+          writeRevision == _taskWriteRevision &&
+          queryOwner == _latestTaskListRead) {
+        _loadedTaskPageIds.addAll(response.actionItems.map((item) => item.id));
         _loadedPageSetComplete =
             _loadedPageSetComplete && decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
         // An optimistic delete shortens the visible list before the server removes the row.
@@ -492,6 +579,7 @@ class ActionItemsProvider extends ChangeNotifier {
             .where((item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id))
             .toList();
         _actionItems.addAll(filtered);
+        _revealNewIncompleteTasks();
         _hasMore = response.hasMore;
         if (!_hasMore &&
             !hasActiveFilter &&
@@ -506,10 +594,9 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
     } finally {
-      setFetching(false);
+      _activeListReads.remove(readOrdinal);
+      if (generation == _sessionGeneration && queryOwner == _latestTaskListRead) setFetching(false);
     }
-
-    notifyListeners();
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
@@ -760,6 +847,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
       } else {
+        _deletionAcknowledgedAtRead[item.id] = _listReadOrdinal;
         SiriIntegration.current.queueDelete('task', item.id);
       }
       // On success, the tombstone is intentionally retained: a refresh that
@@ -804,6 +892,7 @@ class ActionItemsProvider extends ChangeNotifier {
     if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == id)) {
       _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
     }
+    _revealNewIncompleteTasks();
     notifyListeners();
     SiriIntegration.current.queueUpsertTasks([staged.item], restoreDeleted: true);
     return true;
@@ -831,6 +920,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
     } else {
+      _deletionAcknowledgedAtRead[id] = _listReadOrdinal;
       SiriIntegration.current.queueDelete('task', id);
     }
     return success;
@@ -842,6 +932,7 @@ class ActionItemsProvider extends ChangeNotifier {
   void _restoreDeletedItem(ActionItemWithMetadata item, int index) {
     if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) return;
     _actionItems.insert(index.clamp(0, _actionItems.length), item);
+    _revealNewIncompleteTasks();
     notifyListeners();
   }
 
@@ -875,14 +966,10 @@ class ActionItemsProvider extends ChangeNotifier {
       if (generation != _sessionGeneration) return null;
 
       if (newItem != null) {
-        final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
-        if (index != -1) {
-          _actionItems[index] = newItem;
-          notifyListeners();
-        }
+        _actionItems.removeWhere((item) => item.id == optimisticItem.id);
+        _receiveCanonicalTask(newItem);
         // Direct sync to Apple Reminders — no FCM roundtrip needed
         _syncToAppleRemindersIfNeeded(newItem);
-        SiriIntegration.current.queueUpsertTasks([newItem]);
         return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
@@ -897,6 +984,44 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error creating action item: $e');
       return null;
     }
+  }
+
+  /// Read the acknowledged identity, independently of the filtered/cached list.
+  /// An old list response cannot overwrite this newer canonical write.
+  Future<bool> receiveSavedTask(String id) async {
+    final generation = _sessionGeneration;
+    final typedApi = _actionItemsApi;
+    if (typedApi == null || _disposed) return false;
+    final result = await typedApi.getById(id);
+    if (_disposed || generation != _sessionGeneration) return false;
+    if (result case ApiSuccess(:final data)) {
+      if (data.id != id) return false;
+      _receiveCanonicalTask(data);
+      return true;
+    }
+    return false;
+  }
+
+  void _receiveCanonicalTask(ActionItemWithMetadata item) {
+    _taskWriteRevision++;
+    if (_pendingDeletionIds.contains(item.id)) return;
+    // An explicit Add Task gesture should reveal its new incomplete task,
+    // including when the reader was previously browsing Completed.
+    if (!item.completed) {
+      _showCompletedView = false;
+      _completedViewWasAutoRevealed = false;
+    }
+    final index = _actionItems.indexWhere((existing) => existing.id == item.id);
+    if (index < 0) {
+      _actionItems.insert(0, item);
+    } else {
+      _actionItems[index] = item;
+    }
+    _homeDayItems.removeWhere((existing) => existing.id == item.id);
+    if (filterTodayTasks([item], now: DateTime.now()).isNotEmpty) _homeDayItems.insert(0, item);
+    _listViewState = ApiViewState(phase: ApiViewPhase.data, data: _actionItems);
+    SiriIntegration.current.queueUpsertTasks([item]);
+    notifyListeners();
   }
 
   /// Directly create an Apple Reminder without waiting for FCM roundtrip.
@@ -1034,25 +1159,34 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void toggleCompletedActionItems() {
     _includeCompleted = !_includeCompleted;
+    _resetTaskQueryPages();
     fetchActionItems(showShimmer: true);
     // TODO: Add analytics for completed action items toggle
   }
 
   void toggleShowCompletedView() {
     _showCompletedView = !_showCompletedView;
+    _completedViewWasAutoRevealed = false;
     notifyListeners();
   }
 
   void setDateRangeFilter(DateTime? startDate, DateTime? endDate) {
+    if ((_startDate, _endDate) != (startDate, endDate)) _resetTaskQueryPages();
     _startDate = startDate;
     _endDate = endDate;
     fetchActionItems(showShimmer: true);
   }
 
   void clearDateRangeFilter() {
-    _startDate = null;
-    _endDate = null;
-    fetchActionItems(showShimmer: true);
+    setDateRangeFilter(null, null);
+  }
+
+  void _resetTaskQueryPages() {
+    _actionItems = TaskCategorizationList();
+    _loadedTaskPageIds.clear();
+    _loadedPageSetComplete = false;
+    _hasMore = true;
+    _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   }
 
   Future<void> refreshActionItems() async {
@@ -1073,7 +1207,7 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> forceRefreshActionItems() async {
     _refreshDebounceTimer?.cancel();
     _lastRefreshTime = DateTime.now();
-    await _fetchNewActionItems();
+    await Future.wait([_fetchNewActionItems(), if (suggestions != null) suggestions!.load()]);
   }
 
   Future<void> _fetchNewActionItems() async {
@@ -1155,16 +1289,36 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _taskWriteRevision++;
     _sessionGeneration++;
-    _actionItems = [];
+    _initialLoad = null;
+    _initialLoadCompleted = false;
+    _isLoading = false;
+    _isFetching = false;
+    _latestTaskListRead = 0;
+    _listViewState = const ApiViewState(phase: ApiViewPhase.data);
+    _startDate = null;
+    _endDate = null;
+    _includeCompleted = true;
+    _hasMore = true;
+    _searchQuery = '';
+    _isSelectionMode = false;
+    _actionItems = TaskCategorizationList();
+    _loadedTaskPageIds.clear();
+    _showCompletedView = false;
+    _completedViewWasAutoRevealed = false;
     _loadedPageSetComplete = false;
     _homeDayItems = [];
     _homeDayLoaded = false;
     _homeTodayLoad = null;
     _selectedItems = {};
     _stagedDeletes.clear();
+    _pendingDeletionIds.clear();
+    _deletionAcknowledgedAtRead.clear();
+    _activeListReads.clear();
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();
+    suggestions?.reset();
     notifyListeners();
   }
 
@@ -1199,7 +1353,12 @@ class ActionItemsProvider extends ChangeNotifier {
       _deleteAppleReminderIfLinked(item);
     }
 
-    final deleted = await _bulkDeleteActionItemsRequest(ids);
+    List<String>? deleted;
+    try {
+      deleted = await _bulkDeleteActionItemsRequest(ids);
+    } catch (e) {
+      Logger.debug('Error bulk deleting action items: $e');
+    }
     if (generation != _sessionGeneration) return false;
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
@@ -1209,8 +1368,7 @@ class ActionItemsProvider extends ChangeNotifier {
       // Re-insert rows at their original positions, oldest index first.
       final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
-        final idx = entry.key.clamp(0, _actionItems.length);
-        _actionItems.insert(idx, entry.value);
+        _restoreDeletedItem(entry.value, entry.key);
       }
       _isSelectionMode = wasInSelection;
       _selectedItems = ids.toSet();
@@ -1223,6 +1381,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
     final deletedIDs = deleted.toSet();
     for (final id in deletedIDs) {
+      _deletionAcknowledgedAtRead[id] = _listReadOrdinal;
       SiriIntegration.current.queueDelete('task', id);
     }
     if (deletedIDs.length != ids.length) {
@@ -1230,7 +1389,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final entries = snapshot.entries.where((entry) => !deletedIDs.contains(entry.value.id)).toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
-        _actionItems.insert(entry.key.clamp(0, _actionItems.length), entry.value);
+        _restoreDeletedItem(entry.value, entry.key);
       }
       notifyListeners();
     }
@@ -1305,6 +1464,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    suggestions?.removeListener(notifyListeners);
+    suggestions?.dispose();
     _refreshDebounceTimer?.cancel();
     _sortDebounce?.cancel();
     _indentDebounce?.cancel();

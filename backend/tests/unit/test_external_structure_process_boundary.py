@@ -179,7 +179,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.memory.rejected_memory_feedback', AutoMockModule('utils.memory.rejected_memory_feedback'))
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Main's action-items seam now imports the real task_source_validation
+    # submodule; point the stub's __path__ at the actual package so submodule
+    # imports resolve instead of vanishing behind an empty namespace.
+    from pathlib import Path as _Path
+
+    task_intelligence.__path__ = [str(_Path(__file__).resolve().parents[2] / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)

@@ -22,6 +22,7 @@ from models.speaker_tag_prompts import (
 from models.transcript_segment import legacy_conversation_segment_id
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
+from utils.speaker_tag_prompts.keys import ignored_voice_key
 from utils.speaker_tag_prompts.owner_confirmation import (
     FIELD,
     MAX_SECONDS,
@@ -327,7 +328,7 @@ def select_prompts(
         for run in _runs(segments, decided_segments):
             if (
                 not run.text
-                or f'{conversation_id}:{run.speaker_id}' in ignored
+                or ignored_voice_key(conversation_id, run.speaker_id) in ignored
                 or str(run.speaker_id) in decided_speakers
                 or run.duration < MIN_CLIP_SECONDS
                 or _clip_overlaps_other_speaker(segments, run)
@@ -393,7 +394,7 @@ def select_prompts(
                 [
                     run
                     for run in complete_owner_runs(conversation)
-                    if f'{conversation_id}:{run.speaker_id}' not in ignored
+                    if ignored_voice_key(conversation_id, run.speaker_id) not in ignored
                 ],
             )
             if owner is not None:

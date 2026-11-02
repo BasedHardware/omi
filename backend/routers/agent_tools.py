@@ -13,13 +13,12 @@ from utils.messaging.contracts import Principal
 from utils.messaging.projection import ToolProjection
 
 from utils.executors import db_executor, run_blocking
-from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout, resolve_jit_rollout_sync
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
-from utils.retrieval.agentic import agent_config_context, CORE_TOOLS, JIT_ONLY_TOOL_NAMES
+from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tools.app_tools import load_app_tools
 
@@ -66,12 +65,8 @@ def _tool_schema(t) -> dict:
 def list_tools(uid: str = Depends(get_current_user_uid)):
     """Return all available tool definitions for a user."""
     tools = []
-    jit_tools_enabled = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY).permits_work
-
     core_projection = ToolProjection.build(CORE_TOOLS, (), (), principal=Principal(uid))
     for t in core_projection.registry.values():
-        if t.name in JIT_ONLY_TOOL_NAMES and not jit_tools_enabled:
-            continue
         tools.append(_tool_schema(t))
 
     degraded = False
@@ -124,15 +119,6 @@ async def execute_tool_for_principal(body: ExecuteToolRequest, principal: Princi
     """Internal broker seam. The caller authenticates the task token before entry."""
     uid = principal.uid
     principal.authorize(uid, body.tool_name)
-    if body.tool_name in JIT_ONLY_TOOL_NAMES:
-        rollout = await resolve_jit_rollout(
-            uid,
-            stage=JITDecisionStage.READ_ONLY,
-            force_refresh=True,
-        )
-        if not rollout.permits_work:
-            raise HTTPException(status_code=404, detail=f"Tool '{body.tool_name}' not found")
-
     # Set up agent_config_context so tools can resolve the UID
     config = {
         "configurable": {

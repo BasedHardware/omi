@@ -17,21 +17,22 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
     ]['prod']
     binding = manifest['gke']['pusher']['env'] if host == 'pusher' else manifest['cloud_run']['services'][host]['env']
     stages = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())
-    keys = tuple(stages['A'])
+    keys = tuple(key for key in stages['A'] if host == 'pusher' or not key.endswith('_UID_ALLOWLIST'))
     selected = {key: binding[key]['value'] for key in keys}
-    assert selected == stages['C']
+    assert selected == {key: stages['E'][key] for key in keys}
     assert selected == {key: manifest['gke']['pusher']['env'][key]['value'] for key in keys}
     for key, value in selected.items():
         monkeypatch.setenv(key, value)
-    uid = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
-    assert selected['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'] == uid
+    uid = 'synthetic-rollout-member'
+    monkeypatch.setattr(flags, 'in_rollout_cohort', lambda owner, name: owner == uid)
+    assert ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST' in binding) == (host == 'pusher')
     assert flags.enabled_for(uid)
     assert not flags.enabled_for('synthetic-outside-cohort')
     assert flags.authoritative_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == 'true')
     assert flags.sync_enabled_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == 'true')
     assert selected['TRANSCRIPTION_FINAL_PASS_BACKEND'] == 'pyannote'
     assert selected['HOSTED_DIARIZATION_API_URL'] == 'http://172.16.160.20/diarizer-batch'
-    assert binding['TRANSCRIPTION_SHADOW_UID_ALLOWLIST']['value'] == uid
+    assert ('TRANSCRIPTION_SHADOW_UID_ALLOWLIST' in binding) == (host == 'pusher')
     assert binding['TRANSCRIPTION_SHADOW_PERCENT']['value'] == selected['TRANSCRIPTION_FINAL_PASS_PERCENT']
     if host == 'pusher':
         chart = yaml.load(
@@ -63,6 +64,7 @@ def test_prepared_cohort_does_not_enable_integration_or_dev():
         ('B', '0', 'true', '1'),
         ('C', '1', 'true', '80'),
         ('D', '5', 'true', '400'),
+        ('E', '5', 'true', '1200'),
     ],
 )
 def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, authoritative, cap):
@@ -72,14 +74,30 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
     assert values['TRANSCRIPTION_FINAL_PASS_PERCENT'] == values['TRANSCRIPTION_SHADOW_PERCENT'] == percent
     assert values['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == authoritative
     assert values['TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS'] == cap
+    sync_audio_cap = {'D': '50', 'E': '150'}.get(stage, '10')
+    sync_request_cap = {'D': '5000', 'E': '15000'}.get(stage, '1000')
+    assert values['TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS'] == sync_audio_cap
+    assert values['TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS'] == sync_request_cap
     assert values['TRANSCRIPTION_SHADOW_ENABLED'] == 'true'
     assert values['TRANSCRIPTION_SHADOW_KILL_SWITCH'] == 'false'
     assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == ('false' if stage == 'A' else 'true')
-    assert flags.sync_enabled_for(values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST']) == (stage != 'A')
+    uid = 'synthetic-rollout-member'
+    monkeypatch.setattr(flags, 'in_rollout_cohort', lambda owner, name: owner == uid)
+    assert flags.sync_enabled_for(uid) == (stage != 'A')
     assert values['TRANSCRIPTION_SHADOW_UID_ALLOWLIST'] == values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST']
-    assert flags.enabled_for(values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'])
+    assert flags.enabled_for(uid)
     if percent == '0':
         assert not flags.enabled_for('synthetic-outside-cohort')
     else:
         assert float(cap) >= 6300 * float(percent) / 100
-        assert 140 * float(percent) / 5 * 0.06 < 24
+        assert 142 * float(percent) / 5 * 0.042 < 24
+        diarizer_values = yaml.safe_load(
+            (ROOT / 'backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml').read_text()
+        )['autoscaling']
+        scale_up_step = max(
+            policy['value'] for policy in diarizer_values['behavior']['scaleUp']['policies'] if policy['type'] == 'Pods'
+        )
+        assert diarizer_values['maxReplicas'] == 18
+        assert scale_up_step == 3
+        projected_peak_replicas = 5 * float(percent) / 5
+        assert projected_peak_replicas <= 18 - 3

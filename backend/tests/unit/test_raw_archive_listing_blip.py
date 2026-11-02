@@ -639,7 +639,7 @@ def test_pcm_for_span_lets_the_listing_fault_propagate(listing_bucket, monkeypat
     monkeypatch.setattr(raw_audio_read, 'list_packs', lambda *args: (_ for _ in ()).throw(ServiceUnavailable('503')))
     span = {'start': 1.0, 'samples': 16000, 'sample_rate': 16000}
     with pytest.raises(ServiceUnavailable):
-        raw_audio_read.pcm_for_span(listing_bucket, *_CONV, span)
+        raw_audio_read.pcm_for_span(listing_bucket, *_CONV, span, expected_sha256='x' * 64)
 
 
 def test_sdk_default_retry_still_replays_the_availability_set():

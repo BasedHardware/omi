@@ -98,8 +98,8 @@ def test_declared_english_only(declared, multi, expected, qualified):
 def test_lane_meter_counts_flag_off_and_switches_once():
     now = [0.0]
     meter = LiveLaneMeter(lambda: now[0])
-    vendor = DEMAND_LANE_SECONDS.labels(lane='vendor', reason='baseline')
-    cheap = DEMAND_LANE_SECONDS.labels(lane='parakeet', reason='hidden')
+    vendor = DEMAND_LANE_SECONDS.labels(lane='vendor', reason='baseline', demand_cohort='ineligible')
+    cheap = DEMAND_LANE_SECONDS.labels(lane='parakeet', reason='hidden', demand_cohort='ineligible')
     switches = DEMAND_SWITCHES.labels(from_lane='vendor', to_lane='parakeet', reason='hidden')
     before_switches = switches._value.get()
     before_vendor, before_cheap = vendor._value.get(), cheap._value.get()

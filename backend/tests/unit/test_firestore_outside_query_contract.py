@@ -98,17 +98,9 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
             want = not profile.name.startswith(('operational-', 'maintenance-'))
             assert profile.serving is want, (key, profile.name)
     assert (
-        outside.DRIVERS['utils.memory.belief_backfill._default_item_reader'].profiles[0].name.startswith('operational-')
-    )
-    assert (
         outside.DRIVERS['services.users.data_export_iterators.iter_user_subcollection']
         .profiles[0]
         .name.startswith('export-')
-    )
-    assert (
-        outside.DRIVERS['utils.memory.daily_memory_sweep_inventory._seed_registry']
-        .profiles[0]
-        .name.startswith('maintenance-')
     )
 
 
@@ -126,12 +118,6 @@ def test_nested_export_records_the_child_query(outside_results):
 
 
 def test_state_fixtures_reach_fenced_claims_feedback_and_keyframes(outside_results):
-    claim = outside_results['utils.memory.daily_memory_sweep._invoke_model_once_claimed'].shapes
-    assert any(
-        {predicate.field for predicate in shape.filters}
-        == {'uid', 'account_generation', 'source_generation', 'sweep_generation', 'window_id'}
-        for shape in claim
-    )
     feedback = outside_results['utils.feedback_context.resolve_chat_context'].shapes
     assert any(
         {'chat_session_id', 'created_at'} == {predicate.field for predicate in shape.filters} for shape in feedback

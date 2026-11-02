@@ -87,6 +87,7 @@ def _loaded_notifications() -> Iterator[Tuple[ModuleType, ModuleType, ModuleType
             'utils.executors',
             db_executor=object(),
             postprocess_executor=object(),
+            open_loops_executor=object(),
             run_blocking=_fake_run_blocking,
         ),
         'utils.llm.external_integrations': _module(

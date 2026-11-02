@@ -125,29 +125,62 @@ class SyncTransferForegroundServiceTest {
     }
 
     @Test
-    fun `queued stop uses its own id when a later start was already accepted`() {
+    fun `a stale queued stop does not terminate a later accepted start`() {
         val context = RuntimeEnvironment.getApplication()
         assertTrue(SyncTransferForegroundService.start(context))
         val firstStart = shadowOf(context).getNextStartedService()
         SyncTransferForegroundService.stop(context)
         val staleStop = shadowOf(context).getNextStartedService()
-        // Android has accepted the newer start before it delivers the old stop.
+        // The later start() resets cancellationRequested synchronously, before
+        // the system delivers the queued stop above to onStartCommand.
         assertTrue(SyncTransferForegroundService.start(context))
         val laterStart = shadowOf(context).getNextStartedService()
         val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
         val service = controller.get()
         service.onStartCommand(firstStart, 0, 1)
-        val unscopedStopId = shadowOf(service).stopSelfId
+        // The stale stop's own action is ACTION_STOP, but cancellationRequested
+        // is already false, so it must not call stopSelfResult -- an id-based
+        // staleness check on this intent could race against the OS still
+        // believing it to be the most recently delivered command.
         service.onStartCommand(staleStop, 0, 2)
-        assertEquals(2, shadowOf(service).stopSelfResultId)
-        assertEquals(unscopedStopId, shadowOf(service).stopSelfId)
+        assertEquals(0, shadowOf(service).stopSelfResultId)
         assertFalse(shadowOf(service).isForegroundStopped)
         assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
         service.onStartCommand(laterStart, 0, 3)
         assertNotNull(shadowOf(service).lastForegroundNotification)
         assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
-        // Robolectric records stop IDs; Android's ActivityManager decides whether
-        // that ID is stale. The companion emulator probe verifies its real result.
+        controller.destroy()
+        assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+    }
+
+    @Test
+    fun `one hundred queued start-stop pairs cannot terminate the final accepted start`() {
+        // The emulator probe's burst case: every command below is sent on the
+        // main thread before any of them is delivered, so the final start()
+        // has already cleared cancellationRequested when the first one lands.
+        val context = RuntimeEnvironment.getApplication()
+        val queued = ArrayList<Intent>()
+        repeat(100) {
+            assertTrue(SyncTransferForegroundService.start(context))
+            queued.add(shadowOf(context).getNextStartedService())
+            SyncTransferForegroundService.stop(context)
+            queued.add(shadowOf(context).getNextStartedService())
+        }
+        assertTrue(SyncTransferForegroundService.start(context))
+        queued.add(shadowOf(context).getNextStartedService())
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        val service = controller.get()
+        queued.forEachIndexed { index, intent ->
+            assertEquals(android.app.Service.START_NOT_STICKY, service.onStartCommand(intent, 0, index + 1))
+        }
+        assertEquals(0, shadowOf(service).stopSelfResultId)
+        assertFalse(shadowOf(service).isForegroundStopped)
+        assertNotNull(shadowOf(service).lastForegroundNotification)
+        assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+        // Only the transfer's own later stop ends it.
+        SyncTransferForegroundService.stop(context)
+        service.onStartCommand(shadowOf(context).getNextStartedService(), 0, queued.size + 1)
+        assertEquals(queued.size + 1, shadowOf(service).stopSelfResultId)
         controller.destroy()
         assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
     }

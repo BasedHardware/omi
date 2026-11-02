@@ -54,6 +54,7 @@ from google.api_core.exceptions import Aborted, InvalidArgument, PermissionDenie
 
 from database import conversations as conversations_db
 from database import recording_sessions
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from database.firestore_transaction_retry import (
     run_with_transaction_contention_retry,
 )
@@ -621,7 +622,10 @@ def test_cleanup_boundary_uses_the_shared_transient_classifier(contending_store,
     _drained_expired_id(contending_store)
 
     assert _cleanup(store=contending_store) is False
-    assert consulted and isinstance(consulted[0], InvalidArgument)
+    # Merged stack: the exhausted budget surfaces its typed exhaustion (with
+    # the raw InvalidArgument chained as __cause__), which is what the shared
+    # transient classifier consults.
+    assert consulted and isinstance(consulted[0], FirestoreContentionExhausted)
 
 
 def test_cleanup_transient_arm_is_deliberately_mode_independent(contending_store, monkeypatch):
@@ -710,10 +714,13 @@ def test_unbounded_expired_burst_escapes_the_seam_for_the_boundary(contending_st
     _seed_generation(contending_store)
     _drained_expired_id(contending_store)
 
-    with pytest.raises(InvalidArgument):
+    # Merged stack: the drained seam surfaces the budget's typed exhaustion
+    # (raw InvalidArgument chained as __cause__) instead of the raw type.
+    with pytest.raises(FirestoreContentionExhausted) as excinfo:
         recording_sessions.tombstone_and_delete_empty_conversation(
             'uid', 'conversation', 'recording', firestore_client=contending_store
         )
+    assert isinstance(excinfo.value.__cause__, InvalidArgument)
     # The seam consumed only its restart budget; nothing was written.
     assert _CONVERSATION_PATH in contending_store.documents
     assert contending_store.commits == []

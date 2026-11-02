@@ -84,7 +84,10 @@ describe('Account billing keeps paid identity separate from the allowance', () =
     expect(await screen.findByRole('heading', { name: 'Plus' })).toBeTruthy();
     expect(screen.getByText('12.5 h used of 25 h')).toBeTruthy();
     expect(screen.queryByText('Unlimited conversations')).toBeNull();
-    expect(mocks.opened).toHaveBeenCalledExactlyOnceWith('usage_page', 'plus');
+    // Finding the rendered heading does not await the paywall's passive effect.
+    await waitFor(() =>
+      expect(mocks.opened).toHaveBeenCalledExactlyOnceWith('usage_page', 'plus'),
+    );
     fireEvent.click(screen.getByRole('button', { name: /Unlimited Annual/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Change Plan' }));
     await waitFor(() => expect(mocks.upgrade).toHaveBeenCalledWith('price_unlimited'));
@@ -93,7 +96,9 @@ describe('Account billing keeps paid identity separate from the allowance', () =
       'year',
       'usage_page',
     );
-    expect(mocks.succeeded).toHaveBeenCalledExactlyOnceWith('unlimited_v2', 'year');
+    await waitFor(() =>
+      expect(mocks.succeeded).toHaveBeenCalledExactlyOnceWith('unlimited_v2', 'year'),
+    );
   });
 
   it('does not record a paywall when prices load while usage is visible', async () => {

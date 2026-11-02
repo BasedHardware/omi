@@ -488,14 +488,25 @@ async def _gateway_post(url: str, *, headers: dict[str, str], payload: Mapping[s
 
 
 def _gateway_error(result: httpx.Response) -> DesktopGeminiGatewayError:
+    failure_class = None
     try:
         body = result.json()
-        message = str(body.get('error', {}).get('message') or body.get('detail') or 'gateway request failed')
+        error = body.get('error', {}) if isinstance(body, Mapping) else {}
+        if not isinstance(error, Mapping):
+            error = {}
+        failure_class = error.get('failure_class')
+        message = str(error.get('message') or 'gateway request failed')
     except ValueError:
         message = 'gateway request failed'
     status = result.status_code
     code = (
-        'provider_rate_limited' if status == 429 else 'provider_unavailable' if status >= 500 else 'provider_rejected'
+        'provider_timeout'
+        if status >= 500 and failure_class == 'timeout_before_output'
+        else (
+            'provider_rate_limited'
+            if status == 429
+            else 'provider_unavailable' if status >= 500 else 'provider_rejected'
+        )
     )
     return DesktopGeminiGatewayError(status_code=status, code=code, message=message)
 
@@ -794,7 +805,9 @@ def company_paid_via_gateway(model: str, action: str) -> bool:
 
 
 def _gateway_error_response(error: DesktopGeminiGatewayError, telemetry, envelope: ProxyEnvelope):
-    if error.status_code == 429:
+    if error.code == 'provider_timeout':
+        status_code, retryable, retry_after = 504, False, None
+    elif error.status_code == 429:
         status_code, retryable, retry_after = 429, True, 30
     elif error.status_code >= 500:
         status_code, retryable, retry_after = 503, True, envelope.provider_unavailable_retry_after
@@ -873,11 +886,16 @@ async def proxy_company_paid_via_gateway(
                     else:
                         telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
                 except DesktopGeminiGatewayError as error:
-                    status_code = 503 if error.status_code >= 500 else error.status_code
+                    status_code = (
+                        504
+                        if error.code == 'provider_timeout'
+                        else (503 if error.status_code >= 500 else error.status_code)
+                    )
                     telemetry.complete(
                         outcome=error.code,
                         status_code=status_code,
-                        retryable=error.status_code == 429 or error.status_code >= 500,
+                        retryable=error.code != 'provider_timeout'
+                        and (error.status_code == 429 or error.status_code >= 500),
                         upstream_status=error.status_code,
                         phase='gateway',
                     )

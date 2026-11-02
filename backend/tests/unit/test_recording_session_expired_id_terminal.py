@@ -642,7 +642,7 @@ def test_drained_expired_id_still_raises_in_enforce_mode(contending_store, monke
     _seed_session(contending_store)
     _drained_commit_side_expiry(contending_store)
 
-    with pytest.raises(InvalidArgument):
+    with pytest.raises(FirestoreContentionExhausted):
         lifecycle_service.renew_live_recording_session_lease(
             'uid', 'session', 'conversation', firestore_client=contending_store
         )
@@ -652,7 +652,7 @@ def test_drained_open_raises_in_enforce_mode(contending_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
     _drained_commit_side_expiry(contending_store)
 
-    with pytest.raises(InvalidArgument):
+    with pytest.raises(FirestoreContentionExhausted):
         lifecycle_service.open_recording_session('uid', 'session', 'conversation', firestore_client=contending_store)
 
 
@@ -661,7 +661,7 @@ def test_drained_event_raises_in_enforce_mode(contending_store, monkeypatch):
     _seed_session(contending_store)
     _drained_commit_side_expiry(contending_store)
 
-    with pytest.raises(InvalidArgument):
+    with pytest.raises(FirestoreContentionExhausted):
         lifecycle_service.record_recording_session_event(
             'uid', 'session', 'conversation', 'completed', firestore_client=contending_store
         )

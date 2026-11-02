@@ -7,9 +7,11 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/day_tasks_page.dart';
@@ -239,9 +241,54 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
 
     expect(find.byType(DayConversationsPage), findsOneWidget);
-    expect(bounds, hasLength(1));
-    expect(bounds.first.start, DateTime(2026, 7, 15));
-    expect(bounds.first.end, DateTime(2026, 7, 16).subtract(const Duration(microseconds: 1)));
+    // One read for the recap's background section, one for the day page; same day both times.
+    expect(bounds, hasLength(2));
+    for (final b in bounds) {
+      expect(b.start, DateTime(2026, 7, 15));
+      expect(b.end, DateTime(2026, 7, 16).subtract(const Duration(microseconds: 1)));
+    }
+  });
+
+  testWidgets('the recap lists the day\'s background conversations that Home leaves out', (tester) async {
+    ServerConversation convo(String id, String title, {String? salience, int minutes = 20}) {
+      final start = DateTime(2026, 7, 15, 9);
+      return ServerConversation(
+        id: id,
+        speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
+        createdAt: start,
+        structured: Structured(title, '', salience: salience),
+        startedAt: start,
+        finishedAt: start.add(Duration(minutes: minutes)),
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-bg',
+          summary: _summary(locations: const []),
+          dayConversationsFetcher: ({required endDate, limit = 50, offset = 0, required startDate}) async => (
+            items: [
+              convo('a', 'TV in the background', salience: 'background', minutes: 29),
+              convo('b', 'Planning the offsite', salience: 'highlight'),
+            ],
+            ok: true,
+            truncated: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('recap_background_section')), 200);
+
+    expect(find.text('In the background'), findsOneWidget);
+    expect(find.text('TV in the background'), findsOneWidget);
+    expect(find.text('29m'), findsOneWidget);
+    expect(find.text('Planning the offsite'), findsNothing);
   });
 
   testWidgets('the tasks stat opens the day tasks page with the recap-day bounds', (tester) async {

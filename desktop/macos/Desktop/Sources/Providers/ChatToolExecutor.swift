@@ -580,17 +580,6 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
-    // JIT knowledge-ledger tools — generic passthrough to the Python backend's
-    // /v1/agent/execute-tool endpoint. These have no bespoke typed REST route:
-    // the backend re-validates the JIT rollout server-side on every call, so
-    // this client dispatch is UX-only, not an authorization boundary.
-    case .searchKnowledge, .readPlaybook, .searchHistoricalFacts, .getEntityTimelineTool,
-      .savePlaybook, .createStandingTrigger, .closeFact:
-      return await executeAgentLedgerTool(
-        toolCall,
-        expectedOwnerID: expectedOwnerID,
-        api: backendAPIClient)
-
     case .getProductKb:
       return ProductKnowledgeTool.execute(arguments: toolCall.arguments)
 
@@ -842,7 +831,7 @@ class ChatToolExecutor {
     toolName: String
   ) -> PhysicalExecutionPrecondition {
     switch toolName {
-    case "capture_screen", "get_screenshot", "look_at_frame", "show_rewind_evidence":
+    case "capture_screen", "get_screenshot", "show_rewind_evidence":
       if isChatScreenshotSharingEnabled {
         return .satisfied
       }
@@ -1280,7 +1269,7 @@ class ChatToolExecutor {
       }
     } catch {
       logError("Tool execute_sql failed", error: error)
-      return "SQL Error: The local database could not complete that query."
+      return "Error: The local database could not complete that query."
     }
   }
 
@@ -1853,6 +1842,7 @@ class ChatToolExecutor {
 
   struct SemanticSearchDependencies: Sendable {
     var runtime: LocalEmbeddingRuntime = .makeDefault()
+    var policy: ScreenEmbeddingPolicy? = nil
     var legacySearch:
       @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
         query, start, end, app, topK in
@@ -1887,7 +1877,8 @@ class ChatToolExecutor {
 
     do {
       let runtime = dependencies.runtime
-      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime) { engine in
+      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime, policy: dependencies.policy) {
+        engine in
         guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
           throw LocalMutationAuthorizationError.revoked
         }
@@ -1991,7 +1982,7 @@ class ChatToolExecutor {
         lines.joined(separator: "\n"), references: references)
     } catch {
       logError("Tool semantic_search failed", error: error)
-      return "Failed to search: \(error.localizedDescription). "
+      return "Error: Failed to search: \(error.localizedDescription). "
         + "For recent-work or document/page/file location, call get_work_context instead of querying screenshots.ocrText."
     }
   }
@@ -2061,6 +2052,9 @@ class ChatToolExecutor {
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerID) else {
+      return authorizedOwnerChangedResult()
+    }
     guard let query = args["query"] as? String, !query.isEmpty else {
       return "Error: query is required"
     }
@@ -2087,7 +2081,7 @@ class ChatToolExecutor {
       // instead of the old staged-first/action-fallback guessing that returned an
       // unrelated task when action_item and staged_task rowids collided.
       let queryEmbedding = try await EmbeddingService.shared.embed(
-        text: query, taskType: "RETRIEVAL_QUERY")
+        text: query, taskType: "RETRIEVAL_QUERY", authorization: authorization)
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
       // Search the in-memory index (action_items + staged_tasks share this index)
@@ -3831,35 +3825,6 @@ class ChatToolExecutor {
       return toolFailureEnvelope(
         code: "backend_tool_unreachable",
         message: "Error calling backend: \(error.localizedDescription)")
-    }
-  }
-
-  /// Generic passthrough for the JIT-gated knowledge-ledger tools (search_knowledge,
-  /// read_playbook, search_historical_facts, get_entity_timeline_tool, save_playbook,
-  /// create_standing_trigger, close_fact). Unlike the typed `/v1/tools/*` routes above,
-  /// these share one backend contract — `POST /v1/agent/execute-tool` with
-  /// `{tool_name, params}` — so there is no bespoke per-tool Swift wrapper. The backend
-  /// re-validates the JIT rollout for `tool_name` on every call regardless of whether the
-  /// manifest advertised it, so this dispatch is a UX convenience, not an authorization
-  /// decision.
-  private static func executeAgentLedgerTool(
-    _ toolCall: ToolCall,
-    expectedOwnerID: String?,
-    api: APIClient
-  ) async -> String {
-    do {
-      let resp = try await api.executeAgentTool(
-        toolName: toolCall.name,
-        params: toolCall.arguments,
-        expectedOwnerId: expectedOwnerID,
-        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
-      if let error = resp.error, !error.isEmpty {
-        return "Error: \(error)"
-      }
-      return resp.result ?? ""
-    } catch {
-      log("Agent ledger tool error (\(toolCall.name)): \(error)")
-      return "Error calling backend: \(error.localizedDescription)"
     }
   }
 

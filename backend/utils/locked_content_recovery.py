@@ -7,6 +7,7 @@ Remaining is_locked rows are the durable checkpoint after any partial failure.
 import logging
 from datetime import datetime, timezone
 from uuid import uuid4
+from typing import Callable
 
 from utils.locked_content_flags import reset_recovery_enabled
 
@@ -14,6 +15,13 @@ logger = logging.getLogger(__name__)
 PAGE_SIZE = 100
 LEASE_SECONDS = 300
 RETRY_SECONDS = 60
+_cap_audio_recovery: Callable[[str], None] | None = None
+
+
+def register_cap_audio_recovery(callback: Callable[[str], None]) -> None:
+    """The API sync owner supplies STT recovery; lean auth consumers do not."""
+    global _cap_audio_recovery
+    _cap_audio_recovery = callback
 
 
 def _memory_page_drained(count: int, page_size: int) -> bool:
@@ -31,6 +39,8 @@ def _memory_page_drained(count: int, page_size: int) -> bool:
 
 
 def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
+    # Funded audio/text backlog requires explicit choice. A calendar reset or
+    # ordinary authenticated request must never mint processing intent.
     if not reset_recovery_enabled():
         return
     # Lazy imports keep the flag-off auth path free of additional dependencies.

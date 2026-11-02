@@ -35,7 +35,7 @@ def test_retrieve_rag_conversation_context_preserves_memory_order_after_parallel
     source_memory = SimpleNamespace(transcript_segments=[], get_person_ids=lambda: [])
     executor = _ReverseCompletionExecutor()
 
-    def write_context(memory, _topics, context_data, _people, _user_name):
+    def write_context(memory, _topics, context_data, _people, _user_name, _clock=None):
         context_data[memory.id] = memory.id
 
     with (

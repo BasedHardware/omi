@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from itertools import product
@@ -22,9 +23,15 @@ from utils.storefront import (
     tier_action,
 )
 from utils.storefront_copy import (
+    _count_template,
+    _deep_merge,
+    _meter_hours_line,
+    copy_for,
     cta_label,
     current_line,
+    load_copy,
     floor_to_nice,
+    format_date,
     format_money,
     hours_line,
     money,
@@ -158,6 +165,44 @@ def test_floor_to_nice_and_per_day_phrasing():
     assert months_free(4999, 49990) == 2
 
 
+def test_meter_line_includes_hours_only_from_80_until_100():
+    def usage(percent: float, plan_id: str = 'basic') -> StorefrontUsage:
+        return StorefrontUsage(
+            **present_usage(plan_id=plan_id, kind='usage_budget', percent=percent, reset_at=PERIOD_END)
+        )
+
+    def line(percent: float, plan_id: str = 'basic') -> str:
+        return usage(percent, plan_id).meter_line
+
+    assert line(40) == '40% used · resets Nov 1'
+    assert usage(40).hours_left is None
+    assert 'hours_left' not in usage(40).model_dump(mode='json')
+    assert line(79) == '79% used · resets Nov 1'
+    assert usage(79).hours_left is None
+    assert line(80) == '80% used · about 3 hours of recording left · resets Nov 1'
+    assert usage(80).hours_left == 3
+    assert line(99, 'operator') == '99% used · about 5 hours of recording left · resets Nov 1'
+    assert usage(99, 'operator').hours_left == 5
+    # A shown percent still in the hours band can round to no hours. Omit the estimate.
+    assert line(99) == '99% used · resets Nov 1'
+    assert usage(99).hours_left is None
+    assert 'about 0 hours' not in line(99)
+    assert 'hours_left' not in usage(99).model_dump(mode='json')
+    assert line(100) == '100% used · resets Nov 1'
+    assert usage(100).hours_left is None
+    assert 'hours_left' not in usage(100).model_dump(mode='json')
+    assert 'about 0 hours' not in line(100)
+    assert 'about 0 hours' not in line(140)
+    legacy = StorefrontUsage(
+        **present_usage(plan_id='unlimited', kind='transcription', percent=80, reset_at=PERIOD_END)
+    )
+    assert legacy.hours_left is None
+    assert 'hours_left' not in legacy.model_dump(mode='json')
+    for code, text in load_copy()['locales'].items():
+        assert '{hours}' in text['meter']['line'], code
+        assert '{hours}' not in text['meter']['line_short'], code
+
+
 def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
     assert months_free(1000, 11000) == 1
     assert months_free_phrase(1) == '1 month free'
@@ -169,12 +214,12 @@ def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
         currency='usd',
         monthly_minor=1000,
     )
-    assert rendered['subline'] == '$110 billed yearly · 1 month free'
+    assert rendered['subline'] == 'US$110 billed yearly · 1 month free'
     assert rendered['months_free'] == 1
     assert yearly_toggle_label(1) == 'Yearly · 1 month free'
     assert yearly_toggle_label(2) == 'Yearly · 2 months free'
     assert yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='usd') == (
-        'Switch to yearly · save $39.98'
+        'Switch to yearly · save US$39.98'
     )
     assert yearly_switch_label(monthly_minor=1999, annual_minor=1999 * 12, currency='usd') is None
     euro = yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='eur')
@@ -182,17 +227,17 @@ def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
 
 
 def test_format_money_groups_whole_dollars_and_respects_zero_decimal_currencies():
-    assert format_money(19900, 'usd') == '$199'
-    assert format_money(39800, 'usd') == '$398'
-    assert format_money(1999, 'usd') == '$19.99'
-    assert format_money(1666, 'usd') == '$16.66'
-    assert format_money(3998, 'usd') == '$39.98'
-    assert format_money(49990, 'usd') == '$499.90'
-    assert format_money(199050, 'usd') == '$1,990.50'
-    assert format_money(199000, 'usd') == '$1,990'
-    assert format_money(0, 'usd') == '$0'
-    assert money(199000) == '$1,990'
-    # JPY unit_amount is whole yen. 4800 is ¥4,800, not $48 and not 48.00 JPY.
+    assert format_money(19900, 'usd') == 'US$199'
+    assert format_money(39800, 'usd') == 'US$398'
+    assert format_money(1999, 'usd') == 'US$19.99'
+    assert format_money(1666, 'usd') == 'US$16.66'
+    assert format_money(3998, 'usd') == 'US$39.98'
+    assert format_money(49990, 'usd') == 'US$499.90'
+    assert format_money(199050, 'usd') == 'US$1,990.50'
+    assert format_money(199000, 'usd') == 'US$1,990'
+    assert format_money(0, 'usd') == 'US$0'
+    assert money(199000) == 'US$1,990'
+    # JPY unit_amount is whole yen. 4800 is ¥4,800, not US$48 and not 48.00 JPY.
     assert format_money(4800, 'jpy') == '4,800 JPY'
     assert format_money(199000, 'jpy') == '199,000 JPY'
     assert format_money(39800, 'eur') == '398 EUR'
@@ -334,7 +379,7 @@ def test_built_sheets_match_the_policy_matrix():
             free = next(tier for tier in built.tiers if tier.plan_id == 'basic')
             assert free.action == 'none' and free.cta_label is None and free.compact is True
             assert free.bullets == [] and free.blocked_line == 'Resubscribe first to change plans'
-            assert free.prices[0].headline == '$0'
+            assert free.prices[0].headline == 'US$0'
         switching = not legacy and not cancel and interval == 'month' and plan in LADDER and plan != 'basic'
         for tier in built.tiers:
             expected = expected_action(plan, tier.plan_id, legacy, cancel)
@@ -382,7 +427,7 @@ def test_built_sheets_match_the_policy_matrix():
                 yearly = current_tier.prices[0]
                 assert yearly.headline == f'{money(yearly.amount_minor // 10)}/month'
                 assert yearly.subline is not None and 'billed yearly' in yearly.subline
-                assert yearly.cta_label is not None and yearly.cta_label.startswith('Switch to yearly · save $')
+                assert yearly.cta_label is not None and yearly.cta_label.startswith('Switch to yearly · save US$')
                 assert current_tier.action == 'checkout'
                 assert current_tier.compact is False and current_tier.cta_label is None
             else:
@@ -424,7 +469,7 @@ def test_cancel_scheduled_sheet_lists_every_ladder_tier(plan, interval):
         assert tier.blocked_line == 'Resubscribe first to change plans'
         if tier.plan_id == 'basic':
             assert tier.compact is True and tier.bullets == []
-            assert tier.prices[0].headline == '$0'
+            assert tier.prices[0].headline == 'US$0'
         else:
             assert tier.compact is False and tier.bullets
 
@@ -729,6 +774,8 @@ def _scenario(name):
         return sheet_for('plus', price_id='price_plus_year', source='settings', **common)
     if name == 'pro_settings':
         return sheet_for('operator', price_id='price_operator_month', source='settings', **common)
+    if name == 'pro_budget80':
+        return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=80, **common)
     if name == 'pro_budget_cap':
         return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=100, **common)
     if name == 'architect_settings':
@@ -774,6 +821,7 @@ SCENARIOS = (
     'plus_monthly_yearly_toggle',
     'plus_annual_current',
     'pro_settings',
+    'pro_budget80',
     'pro_budget_cap',
     'architect_settings',
     'legacy_unlimited',
@@ -795,9 +843,10 @@ def test_golden_storefront_scenarios():
     assert [tier.plan_id for tier in free.tiers] == ['plus', 'basic', 'operator', 'architect']
     free_card = next(tier for tier in free.tiers if tier.is_current)
     assert free_card.compact is True and free_card.bullets == []
-    assert free_card.prices[0].headline == '$0'
+    assert free_card.prices[0].headline == 'US$0'
     assert rendered['free_budget80'].header == "You've used 80% of this month's usage"
     assert rendered['free_budget80'].usage.meter_line == ('80% used · about 3 hours of recording left · resets Nov 1')
+    assert rendered['free_budget80'].usage.more_label == 'Get more usage'
     assert rendered['free_budget80'].usage.nudge_line == ("You've used 80% of this month's usage · resets Nov 1")
     assert rendered['free_pro_gate_proactive'].header == 'Reminders and follow-ups come with Pro'
     proactive = next(tier for tier in rendered['free_pro_gate_proactive'].tiers if tier.plan_id == 'operator')
@@ -808,10 +857,10 @@ def test_golden_storefront_scenarios():
     assert rendered['free_mcp_cap'].header == "You've used today's 100 MCP requests"
     assert all('MCP requests' in tier.bullets[0] for tier in rendered['free_mcp_cap'].tiers if not tier.is_current)
     plus80 = rendered['plus_budget80']
-    assert plus80.current.line == "You're on Plus · $19.99/mo · renews Nov 1"
+    assert plus80.current.line == "You're on Plus · US$19.99/mo · renews Nov 1"
     assert plus80.usage.meter_line == '80% used · about 20 hours of recording left · resets Nov 1'
     annual = rendered['plus_annual_current']
-    assert annual.current.line == "You're on Plus · $199.90/yr · renews Nov 1"
+    assert annual.current.line == "You're on Plus · US$199.90/yr · renews Nov 1"
     plus_card = next(tier for tier in annual.tiers if tier.plan_id == 'plus')
     assert [item.interval for item in plus_card.prices] == ['year']
     assert plus_card.compact is True and plus_card.cta_label is None and plus_card.bullets == []
@@ -822,30 +871,39 @@ def test_golden_storefront_scenarios():
     assert plus_month.action == 'checkout' and plus_month.cta_label is None and plus_month.compact is False
     assert plus_month.bullets == []
     assert [item.interval for item in plus_month.prices] == ['year']
-    assert plus_month.prices[0].headline == '$19.99/month'
-    assert plus_month.prices[0].subline == '$199.90 billed yearly · 2 months free'
-    assert plus_month.prices[0].cta_label == 'Switch to yearly · save $39.98'
+    assert plus_month.prices[0].headline == 'US$19.99/month'
+    assert plus_month.prices[0].subline == 'US$199.90 billed yearly · 2 months free'
+    assert plus_month.prices[0].cta_label == 'Switch to yearly · save US$39.98'
     assert all(tier.plan_id != 'basic' for tier in switched.tiers)
     pro_settings = rendered['pro_settings']
-    assert pro_settings.current.line == "You're on Pro · $49.99/mo · renews Nov 1"
+    assert pro_settings.current.line == "You're on Pro · US$49.99/mo · renews Nov 1"
     assert [tier.plan_id for tier in pro_settings.tiers] == ['plus', 'operator']
     assert all(tier.plan_id != 'architect' for tier in pro_settings.tiers)
+    assert all(tier.plan_id != 'architect' for tier in rendered['pro_budget80'].tiers)
+    assert plus_month.prices[0].confirm_lines == [
+        'Your monthly plan continues until Nov 1',
+        'Your payment method will be charged US$199.90 when your yearly plan starts',
+        'Your yearly plan starts on Nov 1',
+    ]
     capped = rendered['pro_budget_cap']
     assert capped.header == "You've used all of this month's usage"
     assert capped.usage.percent == 100
-    assert capped.usage.meter_line == '100% used · about 0 hours of recording left · resets Nov 1'
+    assert capped.usage.meter_line == '100% used · resets Nov 1'
+    assert 'about 0 hours' not in capped.usage.meter_line
     assert [tier.plan_id for tier in capped.tiers] == ['architect', 'plus', 'operator']
     architect = next(tier for tier in capped.tiers if tier.plan_id == 'architect')
     assert architect.recommended and architect.action == 'checkout'
     assert architect.cta_label == 'Upgrade to Architect' and architect.blocked_line is None
     assert not any(tier.recommended for tier in capped.tiers if tier.plan_id != 'architect')
-    assert rendered['architect_settings'].current.line == "You're on Architect · $199/mo · renews Nov 1"
+    assert rendered['architect_settings'].current.line == "You're on Architect · US$199/mo · renews Nov 1"
     legacy = rendered['legacy_unlimited']
     assert legacy.header == 'Your plan'
     assert legacy.current.plan_id == 'unlimited_v2'
     assert legacy.current.name == 'Unlimited'
-    assert legacy.current.line == "You're on Unlimited · $29.99/mo · renews Nov 1"
+    assert legacy.current.line == "You're on Unlimited · US$29.99/mo · renews Nov 1"
     assert legacy.current.legacy_note == "We don't sell this plan anymore, but yours stays exactly as it is."
+    assert legacy.usage.more_label is None
+    assert 'more_label' not in legacy.model_dump(mode='json')['usage']
     assert not any(tier.action == 'checkout' for tier in legacy.tiers)
     assert 'basic' not in {tier.plan_id for tier in legacy.tiers}
     assert {tier.plan_id for tier in legacy.tiers if tier.action == 'none'} >= {
@@ -857,12 +915,12 @@ def test_golden_storefront_scenarios():
     assert neo.header == 'Your plan'
     assert neo.current.plan_id == 'unlimited'
     assert neo.current.name == 'Neo'
-    assert neo.current.line == "You're on Neo · $19.99/mo · renews Nov 1"
+    assert neo.current.line == "You're on Neo · US$19.99/mo · renews Nov 1"
     assert neo.current.legacy_note == legacy.current.legacy_note
     assert not any(tier.action == 'checkout' for tier in neo.tiers)
     cancelled = rendered['cancel_scheduled_plus']
     assert cancelled.header == 'Your Plus plan ends Nov 1'
-    assert cancelled.current.line == "You're on Plus · $19.99/mo"
+    assert cancelled.current.line == "You're on Plus · US$19.99/mo"
     assert [tier.plan_id for tier in cancelled.tiers] == ['plus', 'basic', 'operator', 'architect']
     assert not any(tier.recommended for tier in cancelled.tiers)
     cancelled_free = next(tier for tier in cancelled.tiers if tier.plan_id == 'basic')
@@ -896,7 +954,10 @@ def test_golden_storefront_scenarios():
         if name not in {'cancel_scheduled_plus', 'cancel_scheduled_pro'}
     )
     french = sheet_for('basic', locale='fr-FR', rows={}, bindings=[], recognized=[])
-    assert french.header == 'Choose your plan'
+    assert french.header == copy_for('fr')['headers']['default']
+    assert french.header != 'Choose your plan'
+    unknown = sheet_for('basic', locale='zz-ZZ', rows={}, bindings=[], recognized=[])
+    assert unknown.header == 'Choose your plan'
 
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     for name in SCENARIOS:
@@ -904,8 +965,268 @@ def test_golden_storefront_scenarios():
         payload = _dump(rendered[name])
         if os.environ.get('UPDATE_STOREFRONT_GOLDENS') == '1':
             path.write_text(payload, encoding='utf-8')
+            APP_FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+            (APP_FIXTURE_DIR / f'{name}.json').write_text(payload, encoding='utf-8')
         assert path.read_text(encoding='utf-8') == payload
     for name in SCENARIOS:
         path = GOLDEN_DIR / f'{name}.json'
         app_path = APP_FIXTURE_DIR / f'{name}.json'
         assert app_path.read_bytes() == path.read_bytes()
+
+
+def test_efficiency_hours_bands(monkeypatch):
+    import config.rate_card as rates
+    from copy import deepcopy
+
+    card = rates.recording_rate_card()
+    assert rates.recording_units_per_hour() == Decimal('130')
+    assert rates.recording_units_per_hour('on_device') == 0
+    for plan, hours in [('plus', 100), ('operator', 280), ('architect', 1200)]:
+        assert recording_hours(plan) == hours
+        assert '24/7' not in hours_line(plan)
+        assert 'Enough for casual daily use' not in hours_line(plan)
+    measured = deepcopy(card)
+    measured['recording']['units_per_recorded_hour']['batch'] = '30'
+    monkeypatch.setattr(rates, 'recording_rate_card', lambda: measured)
+    assert rates.recording_units_per_hour() == Decimal('32')
+    assert 'Enough for casual daily use' in hours_line('plus')
+    assert 'Enough to wear it 24/7' in hours_line('operator')
+    assert '24/7 on more than one device' in hours_line('architect')
+    assert rates.recording_units_per_hour('live') == 130
+
+
+def test_capacity_rounding_preserves_supported_band_and_meter(monkeypatch):
+    import config.rate_card as rates
+
+    card = rates.recording_rate_card()
+    card['recording']['units_per_recorded_hour']['batch'] = '50'
+    monkeypatch.setattr(rates, 'recording_rate_card', lambda: card)
+    assert recording_hours('operator') == 720
+    assert recording_hours_left('operator', 0) == 720
+    assert 'About 720 hours' in hours_line('operator')
+    assert 'Enough to wear it 24/7' in hours_line('operator')
+    card['recording']['units_per_recorded_hour']['batch'] = '110'
+    assert recording_hours('architect') == 1440
+    assert recording_hours_left('architect', 0) == 1440
+    assert '24/7 on more than one device' in hours_line('architect')
+
+
+def test_percent_rounding_never_offers_architect_before_cap():
+    rows, recognized = ladder_catalog()
+    sheet = sheet_for(
+        'operator',
+        price_id='price_operator_month',
+        trigger='usage_budget',
+        percent=99.9,
+        rows=rows,
+        recognized=recognized,
+        bindings=list(rows),
+    )
+    assert sheet.usage.percent == 99
+    assert all(tier.plan_id != 'architect' for tier in sheet.tiers)
+    assert sheet.header != "You've used all of this month's usage"
+
+
+_PLACEHOLDERS = re.compile(r'\{[a-z_]+\}')
+_PLUS_DAILY_UNIT = {
+    'ar': '3 ساعات',
+    'be': '3 гадзін',
+    'bn': '3 ঘণ্টা',
+    'bs': '3 sati',
+    'ca': '3 hores',
+    'cs': '3 hodin',
+    'da': '3 timer',
+    'lt': '3 valandų',
+    'lv': '3 stundas',
+    'mk': '3 часа',
+    'mr': '3 तास',
+    'ms': '3 jam',
+    'nl': '3 uur',
+    'no': '3 timer',
+    'pl': '3 godzin',
+    'te': '3 గంటలు',
+    'th': '3 ชั่วโมง',
+    'tl': '3 oras',
+    'tr': '3 saat',
+    'uk': '3 годин',
+    'ur': '3 گھنٹے',
+    'vi': '3 giờ',
+    'zh': '3 小时',
+}
+L10N_LOCALES = ('es', 'ja', 'ar', 'zh', 'de')
+L10N_SCENARIOS = ('free_settings', 'plus_budget80', 'pro_budget_cap', 'cancel_scheduled_plus')
+L10N_DIR = Path(__file__).resolve().parents[1] / 'fixtures' / 'storefront_v2_l10n'
+
+
+def _leaves(value, prefix=''):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from _leaves(child, f'{prefix}.{key}' if prefix else key)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _leaves(child, f'{prefix}[{index}]')
+    else:
+        yield prefix, value
+
+
+def _l10n_sheet(name, locale):
+    rows, recognized = ladder_catalog()
+    common = {
+        'rows': rows,
+        'bindings': list(rows),
+        'recognized': recognized,
+        'period_end': PERIOD_END,
+        'locale': locale,
+    }
+    if name == 'free_settings':
+        return sheet_for(
+            'basic',
+            source='settings',
+            period_end=None,
+            rows=rows,
+            bindings=list(rows),
+            recognized=recognized,
+            locale=locale,
+        )
+    if name == 'plus_budget80':
+        return sheet_for('plus', price_id='price_plus_month', trigger='usage_budget', percent=80, **common)
+    if name == 'pro_budget_cap':
+        return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=100, **common)
+    if name == 'cancel_scheduled_plus':
+        return sheet_for('plus', price_id='price_plus_month', cancel=True, source='settings', **common)
+    raise AssertionError(name)
+
+
+def test_every_locale_has_every_english_key_and_the_same_placeholders():
+    locales = load_copy()['locales']
+    english = dict(_leaves(locales['en']))
+    assert set(locales) >= set(L10N_LOCALES) | {'en'}
+    for code, text in locales.items():
+        got = dict(_leaves(text))
+        missing = set(english) - set(got)
+        assert not missing, (code, sorted(missing))
+        for key, value in english.items():
+            if isinstance(value, str):
+                assert set(_PLACEHOLDERS.findall(got[key])) == set(_PLACEHOLDERS.findall(value)), (code, key)
+        assert text['pro_gates'] == locales['en']['pro_gates']
+        focus = text['bullet_focus']
+        bullets = text['bullets']
+        for plan, items in bullets.items():
+            assert any(focus['mcp_marker'] in item for item in items), (code, plan)
+        for trigger in ('proactive_agent', 'screen_context'):
+            assert focus[trigger] in bullets['operator'], (code, trigger)
+        plus = text['hours_lines']['plus'].format(hours='100', per_day='3')
+        assert '3' in plus, code
+        if code in _PLUS_DAILY_UNIT:
+            assert _PLUS_DAILY_UNIT[code] in plus, (code, plus)
+
+
+def test_locale_matching_merges_over_english():
+    assert copy_for('pt-BR')['headers']['default'] == copy_for('pt')['headers']['default']
+    assert copy_for('zh-Hans')['headers']['default'] == copy_for('zh')['headers']['default']
+    assert copy_for('nb')['headers']['default'] == copy_for('no')['headers']['default']
+    assert copy_for('zz')['headers']['default'] == 'Choose your plan'
+    assert copy_for(None)['dates']['resets'] == 'resets {date}'
+    assert _deep_merge({'a': {'b': 1, 'c': 2}, 'd': [1]}, {'a': {'c': 9}}) == {'a': {'b': 1, 'c': 9}, 'd': [1]}
+    spanish = copy_for('es')
+    assert spanish['dates']['period_month'] == 'mes'
+    assert 'Choose your plan' not in spanish['headers']['default']
+
+
+def test_counted_lines_follow_cldr_plural_categories():
+    assert per_day_phrase(30, 'ar') == 'حوالي 1 ساعة يومياً'
+    assert per_day_phrase(60, 'ar') == 'حوالي ساعتين يومياً'
+    assert per_day_phrase(90, 'ar') == 'حوالي 3 ساعات يومياً'
+    assert per_day_phrase(150, 'ar') == 'حوالي 5 ساعات يومياً'
+    assert per_day_phrase(30, 'cs') == 'asi 1 hodinu denně'
+    assert per_day_phrase(60, 'cs') == 'asi 2 hodiny denně'
+    assert per_day_phrase(90, 'cs') == 'asi 3 hodiny denně'
+    assert per_day_phrase(150, 'cs') == 'asi 5 hodin denně'
+    assert per_day_phrase(30, 'be') == 'каля 1 гадзіна ў дзень'
+    assert per_day_phrase(60, 'bs') == 'oko 2 sata dnevno'
+    assert per_day_phrase(150, 'bs') == 'oko 5 sati dnevno'
+    assert months_free_phrase(1) == '1 month free'
+    assert months_free_phrase(2) == '2 months free'
+    assert months_free_phrase(2, 'ar') == 'شهران مجاناً'
+    assert months_free_phrase(5, 'ar') == '5 أشهر مجانية'
+    assert months_free_phrase(21, 'ar') == '21 شهراً مجاناً'
+    assert months_free_phrase(2, 'cs') == '2 měsíce zdarma'
+    assert months_free_phrase(5, 'cs') == '5 měsíců zdarma'
+    assert months_free_phrase(21, 'be') == '21 месяц бясплатна'
+    assert months_free_phrase(5, 'pl') == '5 miesięcy gratis'
+    for count, word in ((1, 'hodina'), (2, 'hodiny'), (3, 'hodiny'), (5, 'hodin'), (21, 'hodin')):
+        line = _meter_hours_line(copy_for('cs'), shown=80, left=count, reset='x', locale='cs')
+        assert f'{count} {word}' in line
+    for count, word in ((1, 'ساعة'), (2, 'ساعتين'), (3, 'ساعات'), (5, 'ساعات'), (21, 'ساعة')):
+        line = _meter_hours_line(copy_for('ar'), shown=80, left=count, reset='x', locale='ar')
+        assert word in line
+        if count != 2:
+            assert str(count) in line
+    assert (
+        _count_template(
+            copy_for('en')['per_day'], 5, 'en', plural_key='under_6_plural', one_key='under_6_one', many_key='under_6'
+        )
+        == 'about {n} hours a day'
+    )
+
+
+def test_localized_storefront_goldens():
+    L10N_DIR.mkdir(parents=True, exist_ok=True)
+    for locale in L10N_LOCALES:
+        text = copy_for(locale)
+        for name in L10N_SCENARIOS:
+            sheet = _l10n_sheet(name, locale)
+            path = L10N_DIR / f'{locale}_{name}.json'
+            payload = _dump(sheet)
+            if os.environ.get('UPDATE_STOREFRONT_GOLDENS') == '1':
+                path.write_text(payload, encoding='utf-8')
+            assert path.read_text(encoding='utf-8') == payload
+            assert sheet.header != 'Choose your plan'
+            if name == 'free_settings':
+                assert sheet.header == text['headers']['default']
+                assert sheet.current.line == text['current']['free']
+            if name == 'plus_budget80':
+                assert sheet.usage.hours_left is not None and sheet.usage.hours_left > 0
+                assert sheet.usage.meter_line
+                assert sheet.usage.reset_label == text['dates']['resets'].format(date=format_date(PERIOD_END, locale))
+                assert 'resets Nov' not in sheet.usage.meter_line
+            if name == 'pro_budget_cap':
+                assert sheet.usage.hours_left is None
+                assert sheet.header == text['headers']['budget_100']
+                assert 'about 0' not in (sheet.usage.meter_line or '')
+            if name == 'cancel_scheduled_plus':
+                assert sheet.header == text['headers']['cancel_scheduled'].format(
+                    plan='Plus', date=format_date(PERIOD_END, locale)
+                )
+    german = _l10n_sheet('plus_budget80', 'de')
+    assert german.usage.reset_label == 'setzt sich am 1. Nov. zurück'
+    japanese = _l10n_sheet('cancel_scheduled_plus', 'ja')
+    assert '11月1日' in japanese.header
+    arabic = _l10n_sheet('free_settings', 'ar')
+    assert arabic.header == copy_for('ar')['headers']['default']
+
+
+def test_current_jpy_raw_amount_and_template_support_currency_safe_clients():
+    row = price('price_jpy_current', 4800, 'month', currency='jpy')
+    sheet = sheet_for('unlimited', price_id=row['id'], rows={row['id']: row}, period_end=PERIOD_END)
+    assert sheet.current.amount_minor == 4800
+    assert sheet.current.currency == 'jpy'
+    assert '{price}' in sheet.current.line_template
+    assert '4,800 JPY' in sheet.current.line  # installed clients retain their rendered contract
+
+
+def test_annual_switch_templates_keep_prices_and_savings_in_minor_units():
+    rows, recognized = ladder_catalog()
+    sheet = sheet_for(
+        'plus',
+        price_id='price_plus_month',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        period_end=PERIOD_END,
+    )
+    tier = next(tier for tier in sheet.tiers if tier.plan_id == 'plus')
+    annual = next(price for price in tier.prices if price.interval == 'year')
+    assert annual.saving_minor == 1999 * 12 - 19990
+    assert '{saving}' in annual.cta_label_template
+    assert any('{price}' in line for line in annual.confirm_line_templates)

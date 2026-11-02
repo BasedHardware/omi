@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -60,10 +61,12 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return (Colors.grey.shade300, l.syncStatusBackingUp);
     }
-    if (hasError) return (Colors.redAccent, l.failedStatus);
+    // A stored refusal token outranks the generic failed-sync banner: the row
+    // says which refusal it was even when this WAL is the last failed sync.
+    if (hasError && state != WalSyncDisplayState.uploadRejected) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, l.syncStatusConversationCreated);
+        return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
         return (Colors.grey.shade400, l.syncStatusUploaded);
       case WalSyncDisplayState.retrying:
@@ -77,7 +80,8 @@ class WalListItem extends StatelessWidget {
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
-        return (Colors.redAccent, l.failedStatus);
+        // Which refusal it was, in On the Way's words.
+        return (Colors.redAccent, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -89,7 +93,10 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     }
-    if (hasError || state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+    // Refusals recover through the daily policy, including stale error banners.
+    // An explicit removal remains available in the full inventory.
+    final uploadRefusal = state == WalSyncDisplayState.uploadRejected;
+    if (!uploadRefusal && (hasError || walRetryCanHelp(wal) || state == WalSyncDisplayState.retrying)) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -101,7 +108,7 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
         state == WalSyncDisplayState.unsupportedAudio ||
-        state == WalSyncDisplayState.uploadRejected) {
+        uploadRefusal) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -528,6 +535,9 @@ class _SyncPageState extends State<SyncPage> {
       subtitle = job.tracked && job.totalSeconds > 0
           ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
           : l.syncProcessingBackgroundHint;
+    } else if (syncProvider.needsAttentionWalsCount > 0) {
+      title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
+      titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
       final seconds = syncProvider.missingWalsInSeconds;
       title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
@@ -641,9 +651,10 @@ class _SyncPageState extends State<SyncPage> {
   Widget _buildEmptyFilterState(BuildContext context, WalStatusFilter filter) {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
+    final needsAttention = isPending && context.read<SyncProvider>().needsAttentionWalsCount > 0;
     return OmiEmptyState(
       glyph: FaIcon(
-        isPending
+        isPending && !needsAttention
             ? FontAwesomeIcons.circleCheck
             : isCorrupted
                 ? FontAwesomeIcons.triangleExclamation
@@ -654,7 +665,7 @@ class _SyncPageState extends State<SyncPage> {
           : isCorrupted
               ? context.l10n.syncStatusFileUnavailable
               : context.l10n.noProcessedRecordings,
-      message: isPending ? context.l10n.allCaughtUp : null,
+      message: isPending && !needsAttention ? context.l10n.allCaughtUp : null,
     );
   }
 

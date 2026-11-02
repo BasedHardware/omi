@@ -48,6 +48,6 @@ class TestSearchConversationsTextMalformedPerson:
             )
 
         assert "Error" not in result
-        assert "Found 1 conversations" in result
+        assert "1 nearest conversations" in result
         people_arg = render_mod.conversations_to_string.call_args.kwargs['people']
         assert [pp.name for pp in people_arg] == ['Alice']  # malformed person skipped, good one kept

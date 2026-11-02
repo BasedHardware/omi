@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-cancel-strands-pending-wait",
+  "violated_contract": "Cancelling an operation must end its pending wait, not only the source that would have ended it. StorageSyncImpl.cancelSync cancelled the BLE storage subscription, but only that subscription's data callback checked the cancel flag and completed the file transfer's completer. A cancelled Dart subscription delivers no more data and never calls onDone, so a cancel during a multi-file transfer (firmware 3.0.17 to 3.0.19) waited out the 10-minute transfer timeout: isSyncing stayed true and the next sync was held up behind it.",
+  "canonical_prevention": "Whoever cancels the source of an in-flight wait also completes that wait. Complete it with a value rather than an error, because the cancel can land before the waiter listens and an unobserved error future is reported as uncaught. Test it hermetically with a fake that delivers events through the subscription it returns, as the real transport does, and assert that the operation returns well inside its timeout after a cancel and ends in the same state as an interrupted transfer.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/legacy_storage_limitless_seam_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**"
+  ],
+  "status": "open"
+}

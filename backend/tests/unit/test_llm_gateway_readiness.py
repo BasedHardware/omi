@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
-from llm_gateway.gateway.schemas import LaneConfig, RolloutStage
+from llm_gateway.gateway.schemas import LaneConfig, RolloutStage, Surface
 from llm_gateway.main import app
 from llm_gateway.routers import health
 from utils.llm.model_config import get_all_configured_features
@@ -101,10 +101,14 @@ def test_managed_systemone_tracks_the_active_decision_lane():
 
 def test_managed_systemone_ignores_disabled_absent_or_non_openrouter_lanes():
     config = load_gateway_config()
-    route = config.route_artifacts[config.lanes['omi:auto:jev-decisions'].active_route]
-    route.rollout.stage = RolloutStage.DISABLED
+    systemone_lanes = [lane for lane in config.lanes.values() if lane.surface == Surface.OPENROUTER_SYSTEMONE]
+    assert systemone_lanes
+    for lane in systemone_lanes:
+        config.route_artifacts[lane.active_route].rollout.stage = RolloutStage.DISABLED
+
     assert health._managed_systemone_provider_enabled(config) is False
 
+    route = config.route_artifacts[config.lanes['omi:auto:jev-decisions'].active_route]
     route.rollout.stage = RolloutStage.ACTIVE
     route.primary.provider = 'not-openrouter'
     assert health._managed_systemone_provider_enabled(config) is False
@@ -113,11 +117,13 @@ def test_managed_systemone_ignores_disabled_absent_or_non_openrouter_lanes():
     assert health._managed_systemone_provider_enabled(config) is False
 
 
-def test_ready_does_not_demand_the_systemone_key_when_its_route_is_disabled(monkeypatch):
+def test_ready_does_not_demand_the_systemone_key_when_its_routes_are_disabled(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
     config = load_gateway_config()
-    config.route_artifacts[config.lanes['omi:auto:jev-decisions'].active_route].rollout.stage = RolloutStage.DISABLED
+    for lane in config.lanes.values():
+        if lane.surface == Surface.OPENROUTER_SYSTEMONE:
+            config.route_artifacts[lane.active_route].rollout.stage = RolloutStage.DISABLED
     monkeypatch.setattr(health, 'get_gateway_config', lambda: config)
 
     response = TestClient(app).get('/ready', headers=auth_headers())

@@ -7,11 +7,15 @@ from PIL import Image
 from routers.frame_requests import _canonicalize_frame_image, _validated_image_content_type
 
 
-@pytest.mark.parametrize("image_format", ["JPEG", "PNG", "WEBP"])
-def test_supported_uploads_decode_and_canonicalize_to_bounded_metadata_free_jpeg(image_format):
+@pytest.fixture(params=["JPEG", "PNG", "WEBP"])
+def encoded_frame_image(request):
     source = BytesIO()
-    Image.new("RGB", (2400, 1600), "red").save(source, format=image_format)
-    payload = source.getvalue()
+    Image.new("RGB", (2400, 1600), "red").save(source, format=request.param)
+    return source.getvalue()
+
+
+def test_supported_uploads_decode_and_canonicalize_to_bounded_metadata_free_jpeg(encoded_frame_image):
+    payload = encoded_frame_image
     assert _validated_image_content_type(payload).startswith("image/")
     canonical = _canonicalize_frame_image(payload)
     with Image.open(BytesIO(canonical)) as image:

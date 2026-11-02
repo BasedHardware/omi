@@ -310,6 +310,30 @@ class ChangeRef(BaseModel):
     label: str
 
 
+class ReviewChangeDiff(BaseModel):
+    """Bounded before/after excerpt. Released clients ignore this object.
+
+    ``group_key`` is stable for the same term change across conversations so a
+    client can group by change, by conversation, or by term.
+    """
+
+    target_label: Optional[str] = Field(default=None, max_length=180)
+    field: Optional[str] = Field(default=None, max_length=64)
+    before: Optional[str] = Field(default=None, max_length=500)
+    after: Optional[str] = Field(default=None, max_length=500)
+    context_before: Optional[str] = Field(default=None, max_length=120)
+    context_after: Optional[str] = Field(default=None, max_length=120)
+    occurrences: Optional[int] = Field(default=None, ge=0, le=10000)
+    source_title: Optional[str] = Field(default=None, max_length=200)
+    source_started_at: Optional[datetime] = None
+    group_key: Optional[str] = Field(default=None, max_length=128)
+
+    @model_serializer(mode='wrap')
+    def omit_empty(self, handler):
+        data = handler(self)
+        return {key: value for key, value in data.items() if value is not None}
+
+
 class ReviewChange(BaseModel):
     change_id: str
     kind: Literal[
@@ -325,6 +349,20 @@ class ReviewChange(BaseModel):
     refs: list[ChangeRef] = Field(default_factory=list)
     created_at: datetime
     undone: bool = False
+    diff: Optional[ReviewChangeDiff] = Field(
+        default=None,
+        description=(
+            'Optional before/after excerpt with surrounding context. '
+            'Released clients ignore it. Never a whole transcript.'
+        ),
+    )
+
+    @model_serializer(mode='wrap')
+    def omit_empty_diff(self, handler):
+        data = handler(self)
+        if data.get('diff') is None:
+            data.pop('diff', None)
+        return data
 
 
 class ReviewChangesResponse(BaseModel):

@@ -26,7 +26,9 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
 - `adapters/telegram.py`: private-chat Bot API verification, parsing, drafts and delivery.
 - `adapters/linq.py`: replaceable `IMessageProvider` and Linq implementation.
 - `adapters/transport.py`: bounded, redacted provider IO and retry semantics.
-- `albums.py`: bounded durable album merge and debounce rules on the existing inbox/lease.
+- `albums.py`: pure album merge/debounce rules; `album_turn.py`: incremental media
+  preparation and generation sealing on the channel worker path.
+  `database/messaging_albums.py` owns transactional batch append/seal on the existing inbox/lease.
 - `adapters/modalities.py`: lightweight acknowledgements and untrusted location evidence.
 - `adapters/media.py`: Omi's existing chat file store and prerecorded STT bridge.
 - `adapters/delivery.py`: content-free provider receipts and atomic send/receive guard.
@@ -44,6 +46,9 @@ Shaped context assembly is owned by `utils/retrieval/shaped_chat.py` and
 volatile digest/scope/clock in the final user turn, eligible stable explicit boundaries.
 `database/chat_context.py` owns source paging, generation invalidation and CAS state.
 Channel events remain bounded audit/fence data; only the current runtime event supplements
-authoritative message history. Optional context reads are deadline-bounded and fail open to plain history.
+authoritative message history. Request context uses a four-worker zero-queue executor,
+bounded RPCs, and a projected fresh fence check at mount. It fails open to plain history
+without occupying setup's database workers. `database/chat_context_prefetch.py` owns
+request snapshots and at-use fences; refresh keeps the transactional store.
 Summaries refresh after turns in tracked, budgeted background jobs. See the rollout
 runbook for index readiness and fallback operations.

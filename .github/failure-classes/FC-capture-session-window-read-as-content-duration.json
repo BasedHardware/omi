@@ -5,7 +5,9 @@
   "canonical_prevention": "Derive the duration from the content \u2014 the validated transcript span, the largest segment `end` with usable text and interval \u2014 through one named authority per platform (`backend/utils/conversations/duration.py::conversation_duration_seconds`, `ServerConversation.durationInSeconds`, `ServerConversation.getDurationInSeconds`), and keep the capture-window timestamps only as the fallback for records that carry no content to measure. Because the rule ships on three platforms, pin it with shared vectors (`contracts/parity/conversation_duration.json`) that each platform runs through its own production code, so a divergence becomes a fixture edit instead of a silent per-platform drift.",
   "canonical_prevention_artifact": [
     "contracts/parity/conversation_duration.json",
-    "backend/tests/unit/test_discard_gate_duration_input.py"
+    "backend/tests/unit/test_discard_gate_duration_input.py",
+    "backend/tests/unit/test_late_audio_recorded_time.py",
+    "app/test/unit/live_start_anchor_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [

@@ -55,12 +55,18 @@ class BatchEngine:
         starvation_timeout_sec: float = 5.0,
         max_inflight: int = 2,
         on_queue_wait: Optional[Callable[[str, float], None]] = None,
+        packing: bool = False,
+        on_service_time: Optional[Callable[[str, float, float], None]] = None,
     ) -> None:
         self._gpu_worker = gpu_worker
         self._max_batch_size = max_batch_size
         self._max_wait_seconds = max_wait_seconds
         self._max_queue_depth = max_queue_depth
         self._max_inflight = max_inflight
+        if packing and max_inflight != 1:
+            raise ValueError('Packing requires PARAKEET_MAX_INFLIGHT=1')
+        self._packing = packing
+        self._on_service_time = on_service_time
         self._pending: List[PendingRequest] = []
         self._lock = asyncio.Lock()
         self._flush_task: Optional[asyncio.Task[Any]] = None
@@ -197,6 +203,8 @@ class BatchEngine:
                 if not math.isfinite(queue_deadline):
                     raise ValueError('queue_deadline must be finite')
             duration = self._get_audio_duration(audio_path)
+            if self._packing and lane == 'backfill' and (duration is None or duration > 120):
+                raise ValueError('Backfill GPU quantum must have known duration <=120s')
             async with self._lock:
                 self._prune_pending()
                 if queue_deadline is not None and time.monotonic() >= queue_deadline:
@@ -358,6 +366,10 @@ class BatchEngine:
         The existing VRAM selection still sizes every normal lane batch.
         """
         live = [r for r in self._pending if r.lane == 'live']
+        if self._packing:
+            # Never dispatch queued backfill ahead of live. A running kernel is
+            # non-preemptible; singleton <=120s quanta bound that residual delay.
+            return self._form_vram_safe_batch(live) if live else self._pending[:1]
         if not live:
             self._live_batches_since_backfill = 0
             return self._form_vram_safe_batch(self._pending)
@@ -381,6 +393,9 @@ class BatchEngine:
             'live_pending_requests': len(live),
             'live_oldest_pending_seconds': max((now - r.submitted_at for r in live), default=0.0),
             'backfill_pending_requests': len(self._pending) - len(live),
+            'backfill_oldest_pending_seconds': max(
+                (now - r.submitted_at for r in self._pending if r.lane == 'backfill'), default=0.0
+            ),
         }
 
     async def _flush_batch(self) -> None:
@@ -437,6 +452,10 @@ class BatchEngine:
                 )
                 results: Any = await gpu_future
                 inference_seconds = work_item.inference_seconds if work_item else 0.0
+                if self._on_service_time and inference_seconds > 0:
+                    # Batch wall time divided by total audio is productive RTF;
+                    # upload, admission wait and diarization are separate metrics.
+                    self._on_service_time(batch[0].lane, inference_seconds, sum(durations))
 
                 if self._on_batch_complete:
                     self._on_batch_complete(queue_durations, inference_seconds, len(batch))

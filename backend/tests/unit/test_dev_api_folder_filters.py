@@ -534,8 +534,22 @@ class TestDevApiHttpLayer:
         assert response.status_code == 200
         assert response.json()['summaries'][0]['id'] == 'recap-1'
         _mock_get_daily_summaries.assert_called_once_with(
-            'uid1', limit=10, offset=2, start_date='2026-08-01', end_date='2026-08-20'
+            'uid1',
+            limit=10,
+            offset=2,
+            start_date='2026-08-01',
+            end_date='2026-08-20',
+            record_filter=ANY,
+            read_budget=ANY,
         )
+        # The store pages readable records under the same bounded request, rather than
+        # dropping corrupt rows after a raw limit and hiding later valid recaps.
+        from utils.other.list_budget import ListReadBudget
+
+        kwargs = _mock_get_daily_summaries.call_args.kwargs
+        assert isinstance(kwargs['read_budget'], ListReadBudget)
+        assert kwargs['record_filter']({'id': 'valid', 'date': '2026-08-20'}) is True
+        assert kwargs['record_filter']({'id': 'bad', 'memories_learned': [{'content': 'missing id'}]}) is False
 
     def test_daily_summary_detail_returns_404_for_unknown_id(self):
         _, client = _build_test_app()
@@ -647,7 +661,7 @@ class TestDevApiMemoriesHttpLayer:
         assert locked_legacy['category'] == 'interesting'
         assert locked_legacy['scoring'] == '123'
         memory_service.read.assert_called_once_with(
-            'uid1', limit=4, offset=7, include_pending_processing=True, budget=ANY
+            'uid1', limit=4, offset=7, include_pending_processing=True, budget=ANY, reuse_compatibility_reads=True
         )
 
     def test_cleaner_memory_coerces_edge_values(self):

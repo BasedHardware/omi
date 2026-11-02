@@ -38,19 +38,28 @@ def store(monkeypatch):
 
     monkeypatch.setattr(google.auth, 'default', lambda **_: (AnonymousCredentials(), 'demo-omi-reprocess'))
     monkeypatch.setenv('PROVIDER_MODE', 'offline')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     client = firestore.Client(project='demo-omi-reprocess', credentials=AnonymousCredentials())
+    client.collection('sync_reprocess_scan').document('cursor').delete()
     monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
     from database import _client
 
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setenv('SYNC_REPROCESS_SETTLE_SECONDS', '600')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     tasks = []
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
     uid = 'test-' + uuid.uuid4().hex
+    client.collection('users').document(uid).set({'data_protection_level': 'enhanced'})
     yield client, uid, tasks
     for row in client.collection(reprocess.COLLECTION).where('uid', '==', uid).stream():
         row.reference.delete()
+    client.collection('sync_reprocess_scan').document('cursor').delete()
+    client.collection('users').document(uid).delete()
     client.close()
 
 
@@ -128,7 +137,7 @@ def test_loopback_worker_http_runs_current_transcript_once(store, monkeypatch):
     import httpx
     import uvicorn
     from routers import sync as sync_router
-    from utils.sync import pipeline
+    from utils.enrichment import callback
 
     client, uid, tasks = store
     processed = []
@@ -143,7 +152,7 @@ def test_loopback_worker_http_runs_current_transcript_once(store, monkeypatch):
             raise HTTPException(status_code=403)
         return 0
 
-    monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', provider_leaf)
+    monkeypatch.setattr(callback, 'enrich_conversation', provider_leaf)
     monkeypatch.setattr(sync_router.uid_sequencer, 'production_fence_mode', lambda: None)
     app = FastAPI()
     app.include_router(sync_router.router)

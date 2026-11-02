@@ -11,6 +11,8 @@ Global flags:
 * ``--api-base URL`` Override the API base URL (handy for staging/local).
 * ``-v/--verbose``   Log HTTP traffic to stderr.
 * ``--no-color``     Disable colored output (also honors ``NO_COLOR`` env var).
+* ``--timeout SECONDS`` Per-operation HTTP timeout in seconds (default: 30). Applies to
+  Developer API and local Desktop API requests; retries/backoff may exceed this limit.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
 import click
+import httpx
 import typer
 
 from omi_cli import __version__
@@ -63,6 +66,7 @@ class AppContext:
     api_base_override: Optional[str]
     renderer: Renderer
     verbose: bool
+    timeout: Optional[float] = None
     _config: Optional[cfg.Config] = field(default=None, init=False)
 
     def load_config(self) -> cfg.Config:
@@ -84,21 +88,35 @@ class AppContext:
             profile.api_base = env_base
         return profile
 
+    def httpx_timeout(self) -> Optional[httpx.Timeout]:
+        """Per-operation timeout from ``--timeout``, or None for the client default."""
+        if self.timeout is None:
+            return None
+        return httpx.Timeout(self.timeout, connect=min(self.timeout, 10.0))
+
     def make_client(self) -> OmiClient:
         profile = self.get_profile()
-        # Apply the per-command key only to cloud API requests. Local Desktop
-        # commands and saved-profile management use their own credentials.
+        # --api-base, $OMI_API_BASE and configs saved before `config set` checked URLs reach here
+        # unchecked; httpx would report a bad one as a network failure (or "outcome unknown").
+        profile.api_base = config_cmd.validated_url("api_base", profile.api_base)
+        # Apply the per-command key only to cloud API requests. Saved-profile
+        # management uses its own credentials.
         env_key = os.environ.get(cfg.ENV_API_KEY)
         if env_key:
             profile.api_key = validate_api_key_format(env_key)
             profile.auth_method = "api_key"
-        return OmiClient(profile, verbose=self.verbose)
+        return OmiClient(profile, verbose=self.verbose, timeout=self.httpx_timeout())
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
         local_api_url = os.environ.get(cfg.ENV_LOCAL_API_URL) or profile.local_api_url
         local_token = os.environ.get(cfg.ENV_LOCAL_TOKEN) or profile.local_token
-        return LocalOmiClient(api_url=local_api_url or "", token=local_token or "", verbose=self.verbose)
+        return LocalOmiClient(
+            api_url=local_api_url or "",
+            token=local_token or "",
+            timeout=self.httpx_timeout(),
+            verbose=self.verbose,
+        )
 
 
 def _version_callback(value: bool) -> None:
@@ -131,6 +149,13 @@ def _root(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Log HTTP traffic to stderr."),
     no_color: bool = typer.Option(False, "--no-color", help="Disable color output (also honors $NO_COLOR)."),
+    timeout: Optional[float] = typer.Option(
+        None,
+        "--timeout",
+        help="Per-operation HTTP timeout in seconds (default: 30). Applies to Developer API and local Desktop API requests; retries/backoff may exceed this limit.",
+        min=0.001,
+        max=600.0,
+    ),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -151,6 +176,7 @@ def _root(
         api_base_override=api_base,
         renderer=renderer,
         verbose=verbose,
+        timeout=timeout,
     )
 
 
@@ -289,6 +315,15 @@ def main() -> None:
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
+    except cfg.ConfigWriteRefused as exc:
+        # A deliberate refusal to clobber a config that would not parse. It
+        # reaches here from every write path (`config set`, `config profile
+        # use/delete`, `local configure`, and the auth store), so catching it
+        # once here beats eight call-site handlers that can drift apart.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        sys.exit(_exit_with_cli_error(CliError(message=str(exc)), renderer))
     except click.Abort:
         # Ctrl-C during an interactive prompt (Click raises click.Abort, which
         # subclasses RuntimeError — not KeyboardInterrupt — so it must be caught

@@ -406,17 +406,19 @@ def test_the_extractor_sends_whole_conversation_content(provider):
     assert "running with David" in provider.invocations[0]
 
 
-def test_extraction_seeds_the_filter_categories(provider):
-    """The extracted filters are written to the user's filter categories."""
+def test_extraction_seeds_no_filter_categories(provider):
+    """The dead filter-category seeding is removed: extraction writes nothing."""
     calls: list = []
-    original = llm_chat.add_filter_category_item
+    original = getattr(llm_chat, 'add_filter_category_item', None)
     llm_chat.add_filter_category_item = lambda uid, category, value: calls.append((category, value))
     try:
         _transcript_call()
     finally:
-        llm_chat.add_filter_category_item = original
-    assert ("people", "david") in calls
-    assert ("topics", "running") in calls
+        if original is not None:
+            llm_chat.add_filter_category_item = original
+        else:
+            del llm_chat.add_filter_category_item
+    assert calls == []
 
 
 def test_structured_source_alias_rides_the_same_lane(provider):

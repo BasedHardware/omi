@@ -12,6 +12,11 @@ import routers.pusher as pusher
 import utils.pusher_protocol as pusher_protocol
 
 
+@pytest.fixture(autouse=True)
+def emergency_legacy_contract(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+
+
 class FakeWebSocket:
     def __init__(self, frames=()):
         self.frames = deque(frames)

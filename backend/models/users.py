@@ -1,8 +1,9 @@
+from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from config.plan_catalog import PlanType
 
@@ -103,6 +104,8 @@ class ChatQuotaUnit(str, Enum):
 
 
 class ChatUsageQuota(BaseModel):
+    chat_at_cap: ChatAtCap | None = None
+    uses_shared_budget: bool = False
     plan: str  # display name: "Free", "Plus", "Architect"
     plan_type: str  # internal id: "basic" | "unlimited" | "architect"
     unit: ChatQuotaUnit
@@ -116,6 +119,15 @@ class ChatUsageQuota(BaseModel):
     # gate sends on `allowed` alone (`utils.subscription.enforce_chat_quota`
     # returns without raising for these plans).
     is_overage_plan: bool = False
+
+    @model_serializer(mode='wrap')
+    def _omit_inactive_shared_budget(self, handler):
+        data = handler(self)
+        if self.chat_at_cap is None:
+            data.pop('chat_at_cap', None)
+        if not self.uses_shared_budget:
+            data.pop('uses_shared_budget', None)
+        return data
 
 
 class Subscription(BaseModel):
@@ -193,6 +205,43 @@ class TranscriptionAllowanceSnapshot(BaseModel):
     reason: str = ''
 
 
+class HeldAudioRecording(BaseModel):
+    """One recording the server is keeping until reset or upgrade. No audio bytes."""
+
+    id: str
+    started_at: int
+    seconds: int
+
+
+class HeldAudioSummary(BaseModel):
+    """Additive held-audio totals. Absent until funded-STT dispatch enforcement is holding audio.
+
+    ``count`` is the exact number of holds, including ones past the newest page.
+    ``recordings`` is that page, newest first.
+    """
+
+    seconds: int
+    reset_at: int
+    retain_live: bool
+    state: Literal['paused', 'recovering'] = 'paused'
+    count: int = 0
+    recordings: List[HeldAudioRecording] = []
+
+
+class ProcessingBacklog(BaseModel):
+    state: Literal['capped', 'waiting_choice', 'processing', 'none']
+    budget_exhausted: bool = False
+    held_audio_count: int = 0
+    held_audio_seconds: int = 0
+    deferred_conversations: int = 0
+    deferred_seconds: int = 0
+    estimated_units: float = 0
+    estimated_hours: float = 0
+    estimated_percent: float = 0
+    remaining_units: Optional[float] = None
+    exceeds_remaining: bool = False
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -203,6 +252,10 @@ class UserSubscriptionResponse(BaseModel):
     insights_gained_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
+    # True only for a reader who can still get an introductory free trial on checkout: on the free
+    # plan with no Stripe customer yet. A former subscriber is False; clients must not promise a
+    # trial they will not get (the checkout refuses a trial request for such a reader).
+    trial_eligible: bool = False
     # Chat quota usage — derived from llm_usage collection
     chat_quota_used: float = 0.0
     chat_quota_unit: Optional[ChatQuotaUnit] = None
@@ -220,6 +273,24 @@ class UserSubscriptionResponse(BaseModel):
     # Resolved once per request by `resolve_transcription_allowance`; the same
     # answer the listen socket enforces. Null only on servers that predate it.
     transcription_allowance: Optional[TranscriptionAllowanceSnapshot] = None
+    # Present only while STT cap dispatch enforcement is on and audio is held
+    # or live capture must be retained. Omitted entirely when unset, not null.
+    # Older clients ignore the field.
+    held_audio: Optional[HeldAudioSummary] = None
+    processing_backlog: Optional[ProcessingBacklog] = None
+    # Server catalog capability, independent of BYOK and usage-budget availability.
+    cloud_screen_vectors: Optional[bool] = None
+
+    @model_serializer(mode='wrap')
+    def serialize_optional_held_audio(self, handler):
+        data = handler(self)
+        if data.get('cloud_screen_vectors') is None:
+            data.pop('cloud_screen_vectors', None)
+        if data.get('held_audio') is None:
+            data.pop('held_audio', None)
+        if data.get('processing_backlog') is None:
+            data.pop('processing_backlog', None)
+        return data
 
 
 class AvailableLanguage(BaseModel):

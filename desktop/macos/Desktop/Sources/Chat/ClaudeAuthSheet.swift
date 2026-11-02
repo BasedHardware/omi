@@ -36,7 +36,7 @@ struct ClaudeAuthSheet: View {
 
         // Description
         VStack(spacing: OmiSpacing.sm) {
-          Text("Unlock Omi Pro for $199/month")
+          Text("Unlock Omi Pro")
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(Ink.primary)
             .multilineTextAlignment(.center)

@@ -34,11 +34,13 @@ TranscriptSegment _segment(String text) {
   );
 }
 
-ServerConversation _conversation({String overview = '', List<TranscriptSegment>? segments}) {
+ServerConversation _conversation(
+    {String overview = '', List<TranscriptSegment>? segments, bool processingDeferred = false}) {
   return ServerConversation(
     id: 'conversation-1',
     createdAt: DateTime.utc(2026, 9, 21, 12),
     structured: Structured('Mm-hmm.', overview),
+    processingDeferred: processingDeferred,
     transcriptSegments: segments ?? [_segment('Mm-hmm.')],
   );
 }
@@ -85,6 +87,33 @@ void main() {
   test('keeps an in-progress capture on Summary until processing completes', () {
     final conversation = _conversation()..status = ConversationStatus.processing;
     expect(conversationDetailInitialTab(conversation), ConversationTab.summary);
+  });
+
+  test('deferred processing opens retained transcript even while status is processing', () {
+    final conversation = _conversation(processingDeferred: true)..status = ConversationStatus.processing;
+    expect(conversationDetailInitialTab(conversation), ConversationTab.transcript);
+    expect(conversationDetailInitialTab(conversation, requested: ConversationTab.summary), ConversationTab.summary);
+  });
+
+  testWidgets('deferred detail shows retained words and waiting marker', (tester) async {
+    final initial = _conversation(processingDeferred: true);
+    final details = Completer<ServerConversation?>()..complete(initial);
+    final conversations = _conversationProvider(initial, details);
+    final detail = ConversationDetailProvider();
+    final apps = AppProvider();
+    detail.setProviders(apps, conversations);
+    addTearDown(() {
+      detail.dispose();
+      conversations.dispose();
+      apps.dispose();
+    });
+    await tester.pumpWidget(_detailApp(initial, detail, conversations, apps));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('processing_deferred_marker')), findsOneWidget);
+    expect(tester.state<ConversationDetailPageState>(find.byType(ConversationDetailPage)).selectedTab,
+        ConversationTab.transcript);
+    expect(find.textContaining('Mm-hmm.', findRichText: true), findsWidgets);
   });
 
   testWidgets('tabs read Summary then Transcript, with no Tasks tab even when it has tasks', (tester) async {

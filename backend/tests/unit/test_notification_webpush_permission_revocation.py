@@ -126,6 +126,11 @@ def _loaded_notifications() -> Iterator[tuple[ModuleType, ModuleType, ModuleType
             has_silent_user_notification_been_sent=MagicMock(),
         ),
         'database.auth': _module('database.auth', get_user_from_uid=MagicMock()),
+        # Main's send paths consult the account-deletion fence first; the stub
+        # keeps that gate open (no suppression) without touching real creds.
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker', account_deletion_blocks_user_work=MagicMock(return_value=False)
+        ),
         'utils.llm.notifications': _module(
             'utils.llm.notifications',
             generate_notification_message=MagicMock(),

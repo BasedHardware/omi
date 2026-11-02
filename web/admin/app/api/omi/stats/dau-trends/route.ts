@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
 import { parsePlatformScope, scopeFilterAnd } from "@/lib/platform-scope";
 
@@ -15,7 +15,7 @@ let cache: {
 const CACHE_TTL = 30 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       cache.platform === platform &&
       Date.now() - cache.timestamp < CACHE_TTL
     ) {
-      return NextResponse.json({ data: cache.data, days });
+      return authResult.json({ data: cache.data, days });
     }
 
     // Daily unique users = distinct clients emitting ANY event (rename-proof;
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       ])) as [[string, number][], [number][]];
     } catch (err) {
       console.error("PostHog query error:", err);
-      return NextResponse.json({ error: "PostHog API error" }, { status: 502 });
+      return authResult.json({ error: "PostHog API error" }, { status: 502 });
     }
 
     // Build map from results
@@ -104,10 +104,10 @@ export async function GET(request: NextRequest) {
     }
 
     cache = { data, days, platform, timestamp: Date.now() };
-    return NextResponse.json({ data, days });
+    return authResult.json({ data, days });
   } catch (error: any) {
     console.error("DAU trends error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch DAU trends" },
       { status: 500 }
     );

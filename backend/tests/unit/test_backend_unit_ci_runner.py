@@ -233,19 +233,67 @@ def test_shards_partition_the_sorted_selection_exactly(tmp_path, mode, total):
 
         assert result.returncode == 0, result.stderr
         assert f'(shard {index}/{total}:' in result.stdout
-        assert log_path.read_text(encoding='utf-8').splitlines() == [
+        expected_log = [
             'select',
             f'preflight:{bash_path(Path(sys.executable), cwd=REPO_ROOT)}',
-            f'typecheck:{bash_path(Path(sys.executable), cwd=REPO_ROOT)}',
-            GUARD_ENV_LINE,
         ]
-        shard_selections.append(tests_out.read_text(encoding='utf-8').splitlines())
+        if index == 1:
+            # only shard 1 pays the full-tree type check for the commit; its
+            # reserved capacity also leaves it empty for this tiny uniform
+            # selection, so it stops after "No backend unit tests selected"
+            # without ever launching test.sh
+            expected_log.append(f'typecheck:{bash_path(Path(sys.executable), cwd=REPO_ROOT)}')
+            assert f'No backend unit tests selected (shard 1/{total}: 0 of 13 files)' in result.stdout
+        else:
+            assert (
+                'Skipping backend type check on shard {}/{}: shard 1 runs it for this commit.'.format(index, total)
+                in result.stdout
+            )
+            expected_log.append(GUARD_ENV_LINE)
+        assert log_path.read_text(encoding='utf-8').splitlines() == expected_log
+        shard_selections.append(tests_out.read_text(encoding='utf-8').splitlines() if tests_out.exists() else [])
 
-    for index, paths in enumerate(shard_selections, 1):
-        assert paths == SORTED_PATHS[index - 1 :: total]
+    for paths in shard_selections:
+        assert paths == sorted(paths)  # uniform fixture weights: deal order is alphabetical
+    # the deal reserves shard 1's capacity for the type check it alone runs
+    # (4 lanes x the ~90s check), so with a tiny uniform selection shard 1
+    # is dealt nothing and the other shards share the files.
+    assert shard_selections[0] == []
+    assert all(shard_selections[index] for index in range(1, total))
     flattened = [path for paths in shard_selections for path in paths]
     assert sorted(flattened) == SORTED_PATHS
     assert len(flattened) == len(set(flattened)) == len(SORTED_PATHS)
+
+
+def test_shards_deal_measured_heavy_files_first_to_the_least_loaded_shard(tmp_path):
+    # PR #23767: round-robin slices left shard walls 433-754s; dealing by
+    # measured weight keeps heavy files from stacking on one shard. The slice
+    # keeps deal order (heaviest first) so test.sh's worker slots run a
+    # longest-processing-time schedule; shard 1's reserved type-check capacity
+    # (see the partition test) keeps it out of this tiny fixture's deal.
+    backend, runner = _sharded_fixture(tmp_path)
+    heavy = {SORTED_PATHS[0]: 30.0, SORTED_PATHS[3]: 30.0, SORTED_PATHS[6]: 12.5}  # round-robin: all in shard 1 of 3
+    (backend / 'scripts/backend_unit_shard_weights.tsv').write_text(
+        '# comment\n' + ''.join(f'{path}\t{seconds}\n' for path, seconds in heavy.items()), encoding='utf-8'
+    )
+
+    shard_selections = []
+    for index in range(1, 4):
+        result, _, tests_out = _run_shard(tmp_path, backend, runner, ['--all', '--shard', f'3/{index}'], f'w-{index}')
+        assert result.returncode == 0, result.stderr
+        shard_selections.append(tests_out.read_text(encoding='utf-8').splitlines() if tests_out.exists() else [])
+
+    flattened = [path for paths in shard_selections for path in paths]
+    assert sorted(flattened) == SORTED_PATHS and len(flattened) == len(set(flattened))
+    # the two 30s files are dealt to different shards, and each shard's slice
+    # is its files in deal order: heaviest first, so the scheduler lanes fill
+    # longest-processing-time
+    thirty_second_files = {SORTED_PATHS[0], SORTED_PATHS[3]}
+    carriers = [index for index, paths in enumerate(shard_selections) if set(paths) & thirty_second_files]
+    assert len(carriers) == 2
+    for paths in shard_selections:
+        weights = [heavy.get(path, 0.0) for path in paths]
+        assert weights == sorted(weights, reverse=True)
 
 
 @pytest.mark.parametrize('spec', ['0/1', '6/0', '6/7', 'six/1', '6'])
@@ -259,14 +307,16 @@ def test_malformed_shard_specs_fail_usage_before_any_work(tmp_path, spec):
     assert not tests_out.exists()
 
 
-def test_empty_shard_selection_runs_preflight_and_typecheck_but_no_tests(tmp_path):
+def test_empty_shard_selection_runs_preflight_but_only_shard_one_typechecks(tmp_path):
     backend, runner = _sharded_fixture(tmp_path)
     changed_files = tmp_path / 'changed-files.txt'
     changed_files.write_text('backend/routers/example.py\n', encoding='utf-8', newline='\n')
 
-    for tag, arguments in (
-        ('all', ['--all', '--shard', '6/2']),
-        ('changed', ['--changed-files', str(changed_files), '--shard', '6/2']),
+    for tag, arguments, typecheck_runs in (
+        ('all-shard1', ['--all', '--shard', '6/1'], True),
+        ('all-shard2', ['--all', '--shard', '6/2'], False),
+        ('changed-shard1', ['--changed-files', str(changed_files), '--shard', '6/1'], True),
+        ('changed-shard2', ['--changed-files', str(changed_files), '--shard', '6/2'], False),
     ):
         log_path = tmp_path / f'runner-empty-{tag}.log'
         environment = os.environ | {
@@ -286,8 +336,12 @@ def test_empty_shard_selection_runs_preflight_and_typecheck_but_no_tests(tmp_pat
 
         assert result.returncode == 0, result.stderr
         assert 'No backend unit tests selected' in result.stdout
-        assert log_path.read_text(encoding='utf-8').splitlines() == [
+        expected_log = [
             'select',
             f'preflight:{bash_path(Path(sys.executable), cwd=REPO_ROOT)}',
-            f'typecheck:{bash_path(Path(sys.executable), cwd=REPO_ROOT)}',
         ]
+        if typecheck_runs:
+            expected_log.append(f'typecheck:{bash_path(Path(sys.executable), cwd=REPO_ROOT)}')
+        else:
+            assert 'Skipping backend type check on shard' in result.stdout
+        assert log_path.read_text(encoding='utf-8').splitlines() == expected_log

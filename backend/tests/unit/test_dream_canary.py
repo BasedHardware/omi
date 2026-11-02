@@ -181,10 +181,10 @@ def test_operator_env_kill_skips_without_counting_a_failure(canary, monkeypatch)
         'status': 'skipped',
         'stage': 'enqueue',
         'error_type': 'disabled',
-        'consecutive_failures': 2,
+        'consecutive_failures': 0,
     }
     assert called == [] and not lanes
-    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 2
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 0
 
 
 def test_dynamic_kill_skips_without_counting_a_failure(canary, monkeypatch):
@@ -195,8 +195,8 @@ def test_dynamic_kill_skips_without_counting_a_failure(canary, monkeypatch):
     monkeypatch.setattr(dream_canary, 'seed', lambda uid: called.append(uid))
     result = asyncio.run(dream_canary.check())
     assert result['status'] == 'skipped' and result['error_type'] == 'disabled'
-    assert result['consecutive_failures'] == 2 and called == [] and not lanes
-    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 2
+    assert result['consecutive_failures'] == 0 and called == [] and not lanes
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 0
 
 
 def test_missing_canary_uid_is_a_real_failure(canary, monkeypatch):
@@ -213,7 +213,7 @@ def test_canary_alert_counts_failures_and_ignores_skips():
         (Path(__file__).resolve().parents[2] / 'deploy/monitoring/dream-canary-failures.metric.json').read_text()
     )
     pattern = r'Dream canary status=fail .*consecutive_failures=([2-9]|[1-9][0-9]+)( |$)'
-    skipped = 'Dream canary status=skipped stage=enqueue error_type=disabled consecutive_failures=2'
+    skipped = 'Dream canary status=skipped stage=enqueue error_type=disabled consecutive_failures=0'
     failed = 'Dream canary status=fail stage=enqueue error_type=CanaryFailure consecutive_failures=2'
     assert re.search(pattern, skipped) is None
     assert re.search(pattern, failed)
@@ -229,7 +229,12 @@ def test_canary_uses_scheduler_oidc_and_long_declared_deadline():
     prod = config['environments']['prod']['jobs']
     canary = next(row for row in prod if row['name'] == 'dream-agent-canary-half-hourly')
     sweep = next(row for row in prod if row['name'] == 'dream-agent-sweep-hourly')
-    assert canary['target']['oidc'] == sweep['target']['oidc']
+    assert canary['target']['oidc']['service_account'] == sweep['target']['oidc']['service_account']
+    for job, endpoint in ((canary, 'canary'), (sweep, 'sweep')):
+        origin = job['target']['uri'].removesuffix('/v2/dream-agent/' + endpoint)
+        assert job['target']['oidc']['audience'] == origin + '/v2/sync-jobs/run'
+    assert 'backend-sync-backfill-' not in canary['target']['uri']
+    assert 'backend-sync-backfill-' in sweep['target']['uri']
     assert int(canary['attempt_deadline'][:-1]) > dream_canary.DEADLINE_SECONDS
 
 

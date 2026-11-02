@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from database import conversations as conversations_db
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -50,13 +51,26 @@ class _FakeQuery:
         return docs if self._limit is None else docs[: self._limit]
 
 
-class _FakeDocumentReference:
+class _FakeDocumentReference(StrictFirestoreDocument):
     def __init__(self, path: str, store: "_FakeFirestore"):
+        super().__init__(store, tuple(path.split('/')))
         self.path = path
         self._store = store
         self.exists = True
         self.data = {}
         self.subcollections: dict[str, _FakeCollectionReference] = {}
+
+    @property
+    def data(self):
+        return self._store.rows[self.path]
+
+    @data.setter
+    def data(self, value):
+        self._store.rows[self.path] = value
+
+    @property
+    def id(self):
+        return self.path.rsplit('/', 1)[-1]
 
     # Snapshots streamed out of a query carry `.reference`; the fake document is
     # its own snapshot so the production loop reads the same attribute it does
@@ -74,7 +88,10 @@ class _FakeDocumentReference:
         # Firestore only lists subcollections that still hold documents.
         return [sub for sub in self.subcollections.values() if any(d.exists for d in sub.documents.values())]
 
-    def get(self):
+    def get(self, transaction=None):
+        if transaction is not None:
+            transaction._assert_reference_belongs(self)
+            transaction._assert_read_allowed()
         return self
 
     def to_dict(self):
@@ -119,8 +136,11 @@ class _FakeCollectionReference:
         return _FakeQuery(self).stream()
 
 
-class _FakeFirestore:
+class _FakeFirestore(StrictFirestore):
     def __init__(self):
+        # Reuse strict transaction ordering while retaining this fixture's
+        # recursive subcollection and batch-delete surfaces.
+        super().__init__()
         self.root: dict[str, _FakeCollectionReference] = {}
         self.deleted: list[str] = []
 
@@ -217,13 +237,16 @@ def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
 
 def test_database_hard_delete_does_not_read_or_orchestrate_ancestors(store):
     conversation = _seed_conversation(store)
+    conversation.data['sync_merged_from'] = ['donor']
+    donor = store.collection('users').document('uid-1').collection('conversations').document('donor')
 
-    def unexpected_read():
-        raise AssertionError('DB hard delete must not inspect ancestor metadata')
+    def unexpected_read(*args, **kwargs):
+        raise AssertionError('DB hard delete must not read or purge ancestor documents')
 
-    conversation.get = unexpected_read
+    donor.get = unexpected_read
     conversations_db.delete_conversation('uid-1', 'conv-1')
     assert not conversation.exists
+    assert donor.exists
 
 
 def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):

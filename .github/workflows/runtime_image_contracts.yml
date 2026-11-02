@@ -1,6 +1,20 @@
 name: Runtime Image Contracts
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  # The authenticated image-smoke lane was removed 2026-11-01: its
+  # GCP_CREDENTIALS existed only in the `development` environment, which no
+  # job here ever bound, so the authenticated path could never resolve and
+  # had silently skipped since <=2026-09-23. image-smoke remains as a
+  # dispatch-only retirement notice so the nightly reusable-job contract
+  # (job set, runner) stays stable.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - 'backend/**'
@@ -14,53 +28,28 @@ on:
 permissions:
   contents: read
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   source-closure:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - name: Check final-image first-party source closures
         run: make runtime-image-source-closure
-      - id: matrix
-        name: Resolve registered PR image-smoke matrix
-        run: echo "matrix=$(python3 backend/scripts/runtime_image_contracts.py pull-request-matrix)" >> "$GITHUB_OUTPUT"
-    outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
 
   image-smoke:
-    needs: source-closure
-    # PRs run source-closure only. The old PR matrix consumed runners merely
-    # to print "Skipping" without credentials. Explicit dispatch retains the
-    # authenticated private-base smoke when that credential is configured.
-    if: github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: read
-      id-token: write
+    if: inputs.nightly_main_sha == '' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    env:
-      GCP_CREDENTIALS_AVAILABLE: ${{ secrets.GCP_CREDENTIALS != '' }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.source-closure.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Skip image smoke when GCP credentials are unavailable
-        if: env.GCP_CREDENTIALS_AVAILABLE != 'true'
+      - name: Report the retired image-smoke lane
         run: >-
-          echo "Skipping ${{ matrix.service }} image smoke because GCP_CREDENTIALS is not available to this run."
-      - name: Authenticate to GCP
-        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - uses: google-github-actions/setup-gcloud@v3
-        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
-      - name: Configure Docker for GCR
-        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
-        run: gcloud auth configure-docker --quiet
-      - name: Build and smoke the registered image
-        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
-        run: >-
-          make runtime-image-smoke
-          SERVICE=${{ matrix.service }}
-          IMAGE=omi-runtime-contract-${{ matrix.service }}:${{ github.sha }}
+          echo "The authenticated image-smoke lane was removed 2026-11-01; its
+          GCP_CREDENTIALS existed only in the development environment, which
+          this workflow never bound. source-closure remains the gate."

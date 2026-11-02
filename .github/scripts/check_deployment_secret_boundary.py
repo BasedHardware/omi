@@ -26,6 +26,7 @@ KEY_VALUE = re.compile(rf"^\s*(?:secretKey|remoteKey):\s*{UPPER_VALUE}\s*(?:#.*)
 CLOUD_RUN_SECRET = re.compile(rf"^\s*secret:\s*{UPPER_VALUE}\s*(?:#.*)?$")
 YAML_KEY = re.compile(r"^(\s*)([A-Z][A-Z0-9_]*):\s*(?:#.*)?$")
 YAML_VALUE = re.compile(r"^\s*(?:value|env_var):")
+ENV_VAR_REFERENCE = re.compile(r"^\s*env_var:\s*(?P<quote>['\"]?)(?P<name>[A-Z][A-Z0-9_]*)(?P=quote)\s*(?:#.*)?$")
 HELM_ENV_NAME = re.compile(rf"^\s*-\s*name:\s*{UPPER_VALUE}\s*(?:#.*)?$")
 HELM_SECRET_KEY = re.compile(rf"^\s*key:\s*{UPPER_VALUE}\s*(?:#.*)?$")
 CLOUD_RUN_SECRET_LINE = re.compile(rf"^\s*{UPPER_VALUE}={UPPER_VALUE}(?::[^\s#]+)?\s*(?:#.*)?$")
@@ -162,7 +163,20 @@ def _extract_bindings(relative_path: str, text: str) -> set[Binding]:
         if yaml_key:
             yaml_keys.append((len(yaml_key.group(1)), yaml_key.group(2)))
         elif yaml_keys and indent > yaml_keys[-1][0] and YAML_VALUE.match(line):
-            bindings.add(Binding(relative_path, "normal_env", yaml_keys[-1][1]))
+            reference = ENV_VAR_REFERENCE.match(line)
+            if (
+                relative_path == "backend/deploy/runtime_env.yaml"
+                and cloud_run_secrets_indent is not None
+                and yaml_keys[-1][0] > cloud_run_secrets_indent
+                and reference is not None
+            ):
+                # A secrets descriptor names the runtime credential and the
+                # operator's resource-reference variable separately. Neither
+                # descriptor placement nor its optional default changes kinds.
+                bindings.add(Binding(relative_path, "cloud_run_secret", yaml_keys[-1][1]))
+                bindings.add(Binding(relative_path, "secret_reference", reference.group("name")))
+            else:
+                bindings.add(Binding(relative_path, "normal_env", yaml_keys[-1][1]))
 
     return bindings
 
@@ -263,6 +277,8 @@ def _expected_kinds(source: str) -> set[str]:
         return {"config", "public_build"}
     if source == "normal_env":
         return {"config", "public_build"}
+    if source == "secret_reference":
+        return {"config"}
     return {"secret"}
 
 

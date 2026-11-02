@@ -95,6 +95,24 @@ def test_parse_sync_filename_timestamp_rejects_future_values():
         parse_sync_filename_timestamp(f'audio_{future}.bin')
 
 
+def test_parse_sync_filename_timestamp_accepts_future_values_within_shared_skew_tolerance(monkeypatch):
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
+    within_tolerance = int(datetime.now(timezone.utc).timestamp()) + 170
+
+    assert parse_sync_filename_timestamp(f'audio_{within_tolerance}.bin') == within_tolerance
+
+
+def test_parse_sync_filename_timestamp_tolerance_follows_the_shared_setting(monkeypatch):
+    ahead = int(datetime.now(timezone.utc).timestamp()) + 170
+
+    monkeypatch.setenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '60')
+    with pytest.raises(ValueError):
+        parse_sync_filename_timestamp(f'audio_{ahead}.bin')
+
+    monkeypatch.setenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')
+    assert parse_sync_filename_timestamp(f'audio_{ahead}.bin') == ahead
+
+
 @pytest.mark.parametrize(
     'payload',
     [

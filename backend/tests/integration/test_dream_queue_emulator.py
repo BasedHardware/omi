@@ -166,11 +166,11 @@ def test_budget_settlement_user_isolation_and_duplicate_finish(monkeypatch):
     assert sorted(results) == ['duplicate', 'finished']
     first_spend = dream_store.spend_ref(database, uids[0], first['day'])
     second_spend = dream_store.spend_ref(database, uids[1], second['day'])
-    assert first_spend.get().to_dict()['reserved_usd'] == pytest.approx(8.2)
-    assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert first_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
+    assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
     assert dream_store.own_state(uids[0], firestore_client=database)['lease'] is None
     dream_store.finish(uids[1], second, {'tokens': 10, 'usage_unknown': True}, success=False, firestore_client=database)
-    assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
 
 
 def test_fragment_spelling_round_trip_and_undo_preserve_other_segments(monkeypatch):
@@ -275,17 +275,13 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
     )
     assert dream_store.dirty_count(uid, firestore_client=database) == 468
     assert state.get().to_dict()['passes'] == 1
-    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
-        Caps().reservation_usd
-    )
+    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(0)
 
     lease = dream_store.acquire(uid, Caps(), firestore_client=database)
     dream_store.finish(uid, lease, {'tokens': 0}, success=False, release=False, refund=True, firestore_client=database)
     data = state.get().to_dict()
     assert data['passes'] == 1 and data['lease']['run_id'] == lease['run_id']
-    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
-        Caps().reservation_usd
-    )
+    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(0)
     assert dream_store.acquire(uid, Caps(), firestore_client=database) is None
     runs = dream_store.own_runs(uid, limit=20, firestore_client=database)
     assert len(runs) >= 3
@@ -335,7 +331,7 @@ def test_poison_settlement_is_atomic_and_preserves_refreshed_version(monkeypatch
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
     database.collection('users').document(uid).set({})
-    caps = Caps(passes=10, daily_usd=250, global_daily_usd=1000)
+    caps = Caps(passes=10, daily_usd=250)
     dream_store.mark_dirty(uid, [('conversations', 'poison')], firestore_client=database)
     for attempt in range(2):
         lease = dream_store.acquire(uid, caps, firestore_client=database)
@@ -425,7 +421,7 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
     old_time = datetime(2026, 10, 14, 23, 0, tzinfo=timezone.utc)
     now = old_time + timedelta(days=1)
-    caps = Caps(tokens=24000, passes=24, daily_usd=250, global_daily_usd=1000)
+    caps = Caps(tokens=24000, passes=24, daily_usd=250)
     database.collection('users').document(uid).set({})
     dream_store.mark_dirty(uid, [('conversations', 'synthetic')], firestore_client=database)
     old = dream_store.acquire(uid, caps, now=old_time, firestore_client=database)
@@ -449,7 +445,7 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
         now=old_time,
         firestore_client=database,
     )
-    assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(0.001)
+    assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
     pending = [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)]
     reclaimed = [{}, {}]
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -467,13 +463,13 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
     current = state.get().to_dict()
     assert current['lease']['run_id'] == new['run_id'] and current['abandoned_passes'] == 1
     assert current['passes'] == 1  # New UTC day, one admission despite contention.
-    assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
     new_spend = dream_store.spend_ref(database, uid, new['day'])
-    assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
     assert [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)] == pending
     report = review_store.decode_doc(uid, dream_store.own_run(uid, old['run_id'], firestore_client=database))
     assert report['source']['usage_unknown'] is True and report['source']['reason'] == 'abandoned'
-    assert report['source']['budget_charge_usd'] == pytest.approx(caps.reservation_usd)
+    assert report['source']['budget_charge_usd'] == pytest.approx(0)
     with pytest.raises(RuntimeError, match='dream_lease_lost'):
         dream_store.finish(
             uid,
@@ -485,7 +481,7 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
             firestore_client=database,
         )
     assert state.get().to_dict() == current
-    assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(0)
     assert [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)] == pending
 
 

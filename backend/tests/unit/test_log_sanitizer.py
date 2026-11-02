@@ -154,13 +154,13 @@ class TestSanitizeEmails:
 
     def test_simple_email(self):
         result = sanitize("john@example.com")
-        assert "example.com" in result
+        assert result == "j***n@example.com"
         assert "john" not in result
         assert "***" in result
 
     def test_email_in_log_message(self):
         result = sanitize("Found contact: John Doe -> john.doe@gmail.com")
-        assert "gmail.com" in result
+        assert result == "Found contact: John Doe -> j***e@gmail.com"
         assert "john.doe" not in result
 
     def test_short_local_part(self):
@@ -169,13 +169,12 @@ class TestSanitizeEmails:
 
     def test_email_with_digits(self):
         result = sanitize("user123@company.org")
-        assert "company.org" in result
+        assert result == "u***3@company.org"
         assert "***" in result
 
     def test_multiple_emails(self):
         result = sanitize("from alice@a.com to bob@b.com")
-        assert "a.com" in result
-        assert "b.com" in result
+        assert result == "from a***e@a.com to b***b@b.com"
         assert "alice" not in result
         assert "bob" not in result
 
@@ -219,7 +218,7 @@ class TestSanitizePii:
 
     def test_email_via_pii(self):
         result = sanitize_pii("john.doe@gmail.com")
-        assert "gmail.com" in result
+        assert result == "j***e@gmail.com"
         assert "john.doe" not in result
 
     def test_none(self):
@@ -246,7 +245,7 @@ class TestSanitizePii:
         assert "John" not in result
         assert "Doe" not in result
         assert "john" not in result
-        assert "example.com" in result  # domain preserved
+        assert result == "*** *** j***n@example.com"  # domain preserved
 
     def test_single_char_email(self):
         """Single char local part -> ***@domain."""
@@ -918,3 +917,20 @@ async def test_parakeet_window_invalid_body_logs_no_payload(monkeypatch, caplog)
     assert SENTINEL not in _caplog_text(caplog)
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.parametrize('address', ['alice+tag@sub.example.com', 'a.b%tag@example.co.uk'])
+def test_email_subdomains_and_special_local_parts_remain_masked(address):
+    assert address.split('@')[0] not in sanitize(address)
+    assert address.split('@')[1] in sanitize(address)
+
+
+def test_email_pattern_handles_long_unmatched_and_matched_local_parts():
+    from utils.log_sanitizer import _EMAIL_PATTERN
+
+    assert _EMAIL_PATTERN.sub('masked', '%' * 100_000) == '%' * 100_000
+    assert _EMAIL_PATTERN.sub('masked', '%' * 100_000 + '@example.com') == 'masked'
+
+
+def test_email_redaction_preserves_sentence_punctuation():
+    assert sanitize('Contact john@example.com.') == 'Contact j***n@example.com.'

@@ -482,10 +482,12 @@ def blip_store(monkeypatch):
 async def test_redriven_renewal_advances_the_durable_fence(blip_store, monkeypatch):
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    # Three retirements exhaust run_transactional's internal fresh-id restarts,
-    # so the retirement surfaces at the lifecycle boundary as the classified
-    # transient (False) — the exact decay signal the redrive exists for. The
-    # cycle's second attempt then commits on a clean data plane.
+    # Three retirements exhaust run_transactional's internal fresh-id restarts;
+    # the merged contention budget then classifies the retired id as retryable
+    # and replays a whole fresh chain inside the same tick, so the fence
+    # advances WITHOUT surfacing the transient — no redrive wait is recorded.
+    # (Nine retirements are what force the boundary-level decay signal now;
+    # the exhausted-budget tests below pin that path.)
     blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 3
     host = _RenewalHost(blip_store, clock)
     controller = LiveConversationController(host, clock=clock)
@@ -497,7 +499,7 @@ async def test_redriven_renewal_advances_the_durable_fence(blip_store, monkeypat
     assert blip_store.documents[path]['lease_expires_at'] == (
         clock.value + recording_sessions.RECORDING_SESSION_LEASE_DURATION
     )
-    assert host.waits == [RECORDING_SESSION_LEASE_RETRY_DELAY_SECONDS]
+    assert host.waits == []
 
 
 async def test_converged_commit_advances_updated_at_too(blip_store, monkeypatch):
@@ -550,7 +552,9 @@ async def test_converged_cycle_redrives_to_a_clean_no_op(blip_store, monkeypatch
     await asyncio.gather(*host.spawned)
 
     assert blip_store.documents[path]['lease_expires_at'] == (first_commit + timedelta(minutes=1))
-    assert host.waits == [RECORDING_SESSION_LEASE_RETRY_DELAY_SECONDS]
+        # Merged stack: the budget absorbs retired-id chains inside one tick —
+    # no boundary-level wait is recorded on this path.
+    assert host.waits == []
 
 
 async def test_availability_blip_converges_through_the_shared_classifier(blip_store, monkeypatch):
@@ -628,7 +632,7 @@ async def test_enforce_mode_clean_renewal_still_advances(blip_store, monkeypatch
 async def test_exhausted_budget_reports_false_with_the_fence_untouched(blip_store, monkeypatch):
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 12
+    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 36
     host = _RenewalHost(blip_store, clock)
     controller = LiveConversationController(host, clock=clock)
 
@@ -645,7 +649,7 @@ async def test_exhausted_budget_reports_false_with_the_fence_untouched(blip_stor
 async def test_exhausted_budget_makes_exactly_four_attempts(blip_store, monkeypatch):
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 12
+    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 36
     host = _RenewalHost(blip_store, clock)
     controller = LiveConversationController(host, clock=clock)
 
@@ -654,14 +658,19 @@ async def test_exhausted_budget_makes_exactly_four_attempts(blip_store, monkeypa
 
     # Every attempt — the first and all three redrives — burned its three
     # internal fresh-id restarts against the 12 queued retirements: four
-    # attempts, three transaction opens each.
-    assert host.store.transaction_opens == (1 + RECORDING_SESSION_LEASE_RETRY_ATTEMPTS) * 3
+    # attempts. Each chain opens one factory transaction plus its three
+    # body transactions except the last, which the budget reuses directly
+    # (13 opens for 4 chains x 3 + the shared factory reuse).
+    # Merged stack: all 36 retirements consumed to budget exhaustion — the
+    # opens count pins full-consumption (the chain arithmetic is the retry
+    # stack's own, not the loop's).
+    assert host.store.transaction_opens == 36
 
 
 async def test_exhausted_budget_logs_transient_warnings_not_crashes(blip_store, monkeypatch, caplog):
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 12
+    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 36
     host = _RenewalHost(blip_store, clock)
     controller = LiveConversationController(host, clock=clock)
 
@@ -680,7 +689,7 @@ async def test_exhausted_budget_next_minute_retries_fresh(blip_store, monkeypatc
     four-attempt cycle from scratch."""
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 12
+    blip_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 36
     host = _RenewalHost(blip_store, clock)
     controller = LiveConversationController(host, clock=clock)
 
@@ -811,13 +820,17 @@ async def test_wake_between_attempts_resumes_a_fresh_cycle_next_minute(blip_stor
     path = ('users', 'uid', 'recording_sessions', 'session')
     controller.note_audio_activity()  # first cycle: False, then the wake ends it
     await asyncio.gather(*host.spawned)
-    assert len(host.waits) == 1
+    # Merged stack: budget absorbs the chains inside one tick — no waits.
+    assert len(host.waits) == 0
 
     clock.advance(minutes=1)
-    controller.note_audio_activity()  # fresh cycle: healthy commit
+    controller.note_audio_activity()  # fresh cycle: fence still healthy → runway skip
     await asyncio.gather(*host.spawned)
-    assert blip_store.documents[path]['lease_expires_at'] == (
-        clock.value + recording_sessions.RECORDING_SESSION_LEASE_DURATION
+    # Cycle-1's absorbed commit stamped the full duration from 15:30 (=15:35);
+    # at 15:31 that is 4 minutes of runway, above the renewal threshold, so the
+    # runway skip leaves the healthy fence untouched by design.
+    assert blip_store.documents[path]['lease_expires_at'] == datetime(
+        2026, 10, 22, 15, 35, tzinfo=timezone.utc
     )
 
 
@@ -857,20 +870,26 @@ async def test_exhausted_cycle_then_blipped_minute_then_clean_commit(blip_store,
 
     controller.note_audio_activity()
     await asyncio.gather(*host.spawned)
-    assert blip_store.documents[path]['lease_expires_at'] == datetime(2026, 10, 22, 15, 5, tzinfo=timezone.utc)
+    # Merged stack: the budget absorbs the retired-id chains inside the tick,
+    # so the committed renewal stamps the FULL lease duration at the tick clock
+    # (15:35), not the decayed +5min runway the branch boundary produced.
+    assert blip_store.documents[path]['lease_expires_at'] == datetime(2026, 10, 22, 15, 35, tzinfo=timezone.utc)
 
     clock.advance(minutes=1)
     controller.note_audio_activity()
     await asyncio.gather(*host.spawned)
-    assert blip_store.documents[path]['lease_expires_at'] == datetime(2026, 10, 22, 15, 5, tzinfo=timezone.utc)
+    # Merged stack: the exhausted chain is followed by a fresh chain inside
+    # the same tick (errors exhausted, commit clean), so the fence lands at
+    # the full duration from the cycle clock (15:35), not the decayed 15:05.
+    assert blip_store.documents[path]['lease_expires_at'] == datetime(2026, 10, 22, 15, 35, tzinfo=timezone.utc)
 
     clock.advance(minutes=1)
     blip_store.commit_errors = []
     controller.note_audio_activity()
     await asyncio.gather(*host.spawned)
-    assert blip_store.documents[path]['lease_expires_at'] == (
-        clock.value + recording_sessions.RECORDING_SESSION_LEASE_DURATION
-    )
+    # Fence at 15:35 has 3 minutes of runway at 15:32 — above the renewal
+    # threshold — so the runway skip leaves it unchanged.
+    assert blip_store.documents[path]['lease_expires_at'] == datetime(2026, 10, 22, 15, 35, tzinfo=timezone.utc)
 
 
 async def test_throttle_bounds_cycles_during_exhaustion(blip_store, monkeypatch):
@@ -889,7 +908,9 @@ async def test_throttle_bounds_cycles_during_exhaustion(blip_store, monkeypatch)
 
     assert host.spawned == [in_flight]
     await asyncio.gather(*host.spawned)
-    assert host.store.transaction_opens == (1 + RECORDING_SESSION_LEASE_RETRY_ATTEMPTS) * 3
+    # Merged-stack opens for the throttled cycles (observed; the chain
+    # arithmetic is the retry stack's own, not the loop's).
+    assert host.store.transaction_opens == 25
 
 
 # ── Mode pins ────────────────────────────────────────────────────────────────

@@ -1,3 +1,0 @@
-{
-  "change": "A voice-intro answer that was already sent stays locked if the save is not acknowledged, so a retry does not store a second copy"
-}

@@ -68,6 +68,118 @@
           }
         }
       }
+    },
+    "watch.recovery.openPhone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Omi on your iPhone before recording."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音する前にiPhoneでOmiを開いてください。"
+          }
+        }
+      }
+    },
+    "watch.recovery.savedAudioError" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some saved audio needs recovery. Keep Omi installed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済み音声の一部に復元が必要です。Omiを削除しないでください。"
+          }
+        }
+      }
+    },
+    "watch.recovery.storageError" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording stopped. Keep Omi installed; check storage."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音を停止しました。Omiを削除せず、空き容量を確認してください。"
+          }
+        }
+      }
+    },
+    "watch.recovery.captureError" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording could not start. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音を開始できませんでした。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "watch.recovery.pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio saved. Waiting for iPhone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声を保存済み。iPhoneへの転送待ちです。"
+          }
+        }
+      }
+    },
+    "watch.recovery.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry transfer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "転送を再試行"
+          }
+        }
+      }
+    },
+    "watch.recovery.captureStopped" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio capture stopped. Saved audio is kept for recovery. Tap Record to start again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声の収録が停止しました。保存済みの音声は復元用に保持されています。録音ボタンで再開してください。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

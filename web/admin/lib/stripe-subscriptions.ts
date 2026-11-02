@@ -259,6 +259,16 @@ export function groupByProduct(
   return Array.from(groups.values()).sort((a, b) => b.mrr - a.mrr);
 }
 
+/** FinOps plan keys used by `omi_finops.plan_revenue_daily`; Neo books with Unlimited. */
+export const WALL_PLAN_KEYS: Record<string, string> = {
+  prod_SmpevIU38nIEUO: "unlimited",
+  prod_UM0IIpZ4iOgfk5: "unlimited",
+  prod_Uu6nrHIKWnnTWL: "unlimited_v2",
+  prod_Uu5HDt3sygCK8N: "plus",
+  prod_ULep5SEo0pSdaM: "operator",
+  prod_U8x5HNGnTF50X1: "architect",
+};
+
 /** Wall audit: product-scoped, including every new price. Unknown products stay visible as gaps.
  * Currency values are never added without an explicit USD exchange rate. JPY has no cents.
  */
@@ -291,6 +301,8 @@ export function wallSubscriptionBook(
     unmappedProducts = 0,
     unsupportedItems = 0;
   const monthlyByCurrency: Record<string, number> = {};
+  /** USD MRR by FinOps plan key; explicit extra products are "other". */
+  const byPlan: Record<string, number> = {};
   for (const subscription of subscriptions) {
     if (
       isAppSubscription(subscription) ||
@@ -333,9 +345,11 @@ export function wallSubscriptionBook(
         continue;
       }
       usd += amount * fx[currency];
+      const plan = WALL_PLAN_KEYS[product] || "other";
+      byPlan[plan] = (byPlan[plan] || 0) + amount * fx[currency];
     }
   }
-  return { usd, monthlyByCurrency, unmappedProducts, unsupportedItems };
+  return { usd, byPlan, monthlyByCurrency, unmappedProducts, unsupportedItems };
 }
 
 export async function fetchWallSubscriptionBook(stripe: Stripe) {

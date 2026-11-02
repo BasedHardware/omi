@@ -349,28 +349,26 @@ def test_mode_defaults_shadow_and_fails_closed(monkeypatch):
 def test_log_line_is_fixed_format_and_content_free(caplog):
     decision = cc.CaptureContainment(True, 'contained', 52, 64, 4, 52, 188.0, 0.8125)
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
-        cc.record_capture_containment(decision, mode='shadow', phase='jev', jev_p=0.75)
-        cc.record_capture_containment(
-            cc.CaptureContainment(False, 'timing'), mode='off', phase='rule', jev_p=float('nan')
-        )
+        cc.record_capture_containment(decision, mode='shadow')
+        cc.record_capture_containment(cc.CaptureContainment(False, 'timing'), mode='off')
     lines = [r.message for r in caplog.records]
     assert lines[0] == (
-        'event=capture_group_containment mode=shadow phase=jev would_join=true '
-        'reason=contained jev_p=0.750000 basis=full dropped_segments=0'
+        'event=capture_group_containment mode=shadow phase=rule would_join=true '
+        'reason=contained basis=full dropped_segments=0'
     )
     assert lines[1] == (
         'event=capture_group_containment mode=off phase=rule would_join=false '
-        'reason=timing jev_p=unavailable basis=full dropped_segments=0'
+        'reason=timing basis=full dropped_segments=0'
     )
 
 
-def test_log_labels_and_score_are_clamped(caplog):
+def test_log_labels_are_allowlisted_and_clamped(caplog):
     decision = SimpleNamespace(would_join=False, reason='not-a-reason')
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
-        cc.record_capture_containment(decision, mode='bogus', phase='bogus', jev_p=1.5)
+        cc.record_capture_containment(decision, mode='bogus')
     assert caplog.records[0].message == (
         'event=capture_group_containment mode=off phase=rule would_join=false '
-        'reason=ineligible jev_p=unavailable basis=full dropped_segments=0'
+        'reason=ineligible basis=full dropped_segments=0'
     )
 
 
@@ -392,7 +390,7 @@ def test_log_basis_is_allowlisted_and_clamped(caplog, basis):
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(decision, mode='shadow')
     expected = basis if basis in ('full', 'sampled') else 'full'
-    assert caplog.records[0].message.endswith('jev_p=unavailable basis=%s dropped_segments=0' % expected)
+    assert caplog.records[0].message.endswith('basis=%s dropped_segments=0' % expected)
     assert 'PRIVATE-SENTINEL' not in caplog.records[0].message
 
 
@@ -1245,7 +1243,7 @@ def test_every_fixed_reason_survives_the_log_allowlist(caplog, reason):
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(cc.CaptureContainment(False, reason), mode='shadow')
     assert len(caplog.records) == 1
-    assert 'reason=%s jev_p=unavailable' % reason in caplog.records[0].message
+    assert 'reason=%s basis=full' % reason in caplog.records[0].message
     assert 'reason=bounds ' not in caplog.records[0].message
 
 

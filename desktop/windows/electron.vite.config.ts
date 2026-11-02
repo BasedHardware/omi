@@ -138,7 +138,10 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
+        '@renderer': resolve('src/renderer/src'),
+        // Same note citation repair as web and macOS (contracts/note_citation_contract.json).
+        // Bundled from source: the package is plain ESM with no build step or dependencies.
+        '@omi/note-shared': resolve('../../web/packages/note-shared')
       }
     },
     plugins: [

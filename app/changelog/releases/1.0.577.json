@@ -1,0 +1,38 @@
+{
+  "version": "1.0.577",
+  "date": "2026-10-26",
+  "changes": [
+    "Integration setup keeps checking after sign-in, offers retry when a check fails, and opens external settings in your browser. Delayed replies cannot change a page or account you have left.",
+    "Opening app settings or retrying an integration setup now uses a fresh sign-in link instead of an expired or already-used link",
+    "While an episode is live, its conversation fragments — including finished ones and offline-sync captures — fold under the one live row in Today instead of showing as separate rows; they return as ordinary rows once the episode closes",
+    "Adding an MCP server that does not need sign-in now opens its page so you can enable it. Retrying a sign-in for an MCP server now starts a fresh authorization instead of reopening an expired link, and slow integration status checks no longer cut a connection short",
+    "Home no longer repeats Disconnected in a row under the title when the pendant disconnects; the pill at the top is the one place it shows",
+    "Keep live episode notes progressing when speech has no audio position, and preserve closed recaps while recordings finish processing",
+    "Live capture now explains when running notes are unavailable, keeps the previous episode accessible, and shows pending audio chunks clearly.",
+    "Conversations that never got an AI-chosen emoji now show a neutral chat bubble instead of a random or brain icon",
+    {
+      "change": "Your pendant keeps reconnecting after a lost connection or app restart, with lower scan battery use",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "change": "People, paired devices and other saved lists are kept when you reopen the app instead of being cleared",
+      "platforms": [
+        "ios"
+      ]
+    },
+    "If a pendant voice answer stops arriving, the question now gives up on time and you can ask again right away",
+    "Home no longer shows an Open Previous Episode link above your recaps",
+    "Home no longer shows an error card when Daily Recaps fail to load; they reappear on the next refresh",
+    "Change plans in Japanese yen with accurate monthly and annual prices.",
+    "Keep recording from your Omi when many recordings are waiting to sync, with smoother background saving.",
+    "Recording durations no longer count pauses between consecutive chunks",
+    "Scrolling and reopening the app stay smoother while a large recording backlog syncs in the background.",
+    "The live transcript can show an on-device preview while you record, replaced by the final transcript shortly after",
+    "Home no longer shows the For you suggestions feed",
+    "Short unidentified live turns stay unnamed across reconnects instead of creating a new numbered speaker for each socket.",
+    "Fixed the pendant tutorial getting stuck after asking Omi a question, including when another chat is open or a question fails.",
+    "Speaker labels stay consistent across transcripts and review questions, and excess unidentified voices are grouped as Others."
+  ]
+}

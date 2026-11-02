@@ -146,14 +146,19 @@ def test_expired_transaction_is_restarted_and_the_segments_land():
 
 
 def test_expired_transaction_gives_up_after_the_attempt_budget():
-    client = _FakeFirestoreClient({'has_content': False}, [InvalidArgument(EXPIRED_MESSAGE) for _ in range(3)])
+    # Merged semantics: run_transactional spends its three attempts per chain
+    # on the retired id; the outer contention budget (the shared bounded
+    # fresh-transaction budget) classifies the expiry as contention and
+    # restarts whole fresh chains, so give-up needs the expired-chain
+    # ceiling (3 chains x 3 attempts = 9 retired ids) and surfaces as the
+    # budget's FirestoreContentionExhausted.
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
 
-    with pytest.raises(InvalidArgument):
+    client = _FakeFirestoreClient({'has_content': False}, [InvalidArgument(EXPIRED_MESSAGE) for _ in range(9)])
+
+    with pytest.raises(FirestoreContentionExhausted):
         _write(client)
 
-    # run_transactional spends its three attempts on the retired id and the
-    # terminal InvalidArgument walks out of the contention budget untouched.
-    assert len(client.transactions) == 4
     assert client.commits == []
 
 

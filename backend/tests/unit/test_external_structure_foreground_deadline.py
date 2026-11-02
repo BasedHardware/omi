@@ -492,7 +492,6 @@ def test_no_other_lane_budget_was_changed_by_this_fix():
     assert with_budgets == {
         "chat_metadata_extraction",
         "external_structure",
-        "memory_conflict_flex",
         "memory_l2_flex",
         "x_memory_extraction_flex",
     }

@@ -239,28 +239,9 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+          if chatBridgeMode == "claudeCode" {
             GlassSeparator()
-
-            HStack {
-              Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Ink.listeningGreen)
-                .scaledFont(size: OmiType.caption)
-              Text("Connected to Claude")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Spacer()
-
-              Button("Disconnect") {
-                Task {
-                  await chatProvider?.disconnectClaude()
-                }
-              }
-              .buttonStyle(.plain)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-            }
+            claudeConnectionRow
           }
         }
       }
@@ -435,6 +416,69 @@ extension SettingsContentView {
           Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
+        }
+      }
+
+      settingsCard(settingId: "aichat.meetingbriefs") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.md) {
+            Image(systemName: "calendar.badge.clock")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            Text("Meeting Briefs")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Spacer()
+
+            Toggle(
+              "",
+              isOn: Binding(
+                get: { meetingMemoryBriefsEnabled },
+                set: { enabled in
+                  meetingBriefAccessRequestGeneration += 1
+                  let generation = meetingBriefAccessRequestGeneration
+                  if !enabled {
+                    meetingMemoryBriefsEnabled = false
+                    meetingBriefCalendarAccessUnavailable = false
+                    return
+                  }
+                  Task {
+                    let allowed = await SystemCalendarMeetingContextService.shared.requestBriefAccess()
+                    guard generation == meetingBriefAccessRequestGeneration else { return }
+                    if allowed {
+                      meetingMemoryBriefsEnabled = true
+                      meetingBriefCalendarAccessUnavailable = false
+                    } else {
+                      meetingBriefCalendarAccessUnavailable = true
+                      OmiToastCenter.shared.notice(
+                        "Allow Calendar access in macOS System Settings to see meeting briefs.",
+                        systemImage: "calendar.badge.exclamationmark")
+                    }
+                  }
+                }
+              )
+            )
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+            .accessibilityLabel("Meeting Briefs")
+          }
+
+          Text(
+            "Quiet, source-linked context up to two hours before a matching meeting. Uses this Mac's calendar; nothing is posted to Chat or sent automatically."
+          )
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+          if meetingBriefCalendarAccessUnavailable {
+            Text(
+              "Calendar access is off. Open System Settings → Privacy & Security → Calendars, allow this app, then turn Meeting Briefs on again."
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .accessibilityIdentifier("meeting-brief-calendar-access-help")
+          }
         }
       }
     }

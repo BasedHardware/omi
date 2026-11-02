@@ -1,3 +1,0 @@
-{
-  "change": "If checking off a task fails to save, the app now says so and keeps the task as it was instead of failing silently."
-}

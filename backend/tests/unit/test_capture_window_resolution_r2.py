@@ -64,7 +64,7 @@ def live_window():
 
 @pytest.mark.parametrize('scope', ['live', 'sync', 'v2'])
 def test_adjacent_verified_chunks_embed(env, verified_audio, monkeypatch, scope):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     conversation = live_window()
     if scope == 'sync':
         conversation.transcript_segments[0].speaker_id_scope = 'sync:offline'
@@ -88,11 +88,10 @@ def test_adjacent_verified_chunks_embed(env, verified_audio, monkeypatch, scope)
         'invalid_vector',
         'missing_vector',
         'no_clip',
-        'chunk_boundary',
     ],
 )
 def test_no_embeddings_reason_real_stage(env, verified_audio, monkeypatch, caplog, reason):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     conversation = live_window()
     verified_audio(conversation, [(0, 1.2)])
     if reason == 'all_short':
@@ -114,10 +113,6 @@ def test_no_embeddings_reason_real_stage(env, verified_audio, monkeypatch, caplo
         monkeypatch.setattr(stage, '_embed_missing', lambda *a, **kw: real(*a[:4], 0, **kw))
     elif reason == 'missing_vector':
         monkeypatch.setattr(stage, '_embed_missing', lambda *a, **kw: (1, 'complete'))
-    elif reason == 'chunk_boundary':
-        monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
-        conversation.transcript_segments[0].speaker_id_scope = 'sync:offline'
-        verified_audio(conversation, [(0, 0.6), (0.6, 1.2)])
     elif reason == 'no_clip':
         real = stage._verified_read_session
 
@@ -151,7 +146,7 @@ def test_no_embeddings_reason_real_stage(env, verified_audio, monkeypatch, caplo
 
 @pytest.mark.parametrize('gap', [0.0005, 0.01])
 def test_verified_chunks_never_bridge_missing_extent(env, verified_audio, monkeypatch, gap):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     conversation = live_window()
     verified_audio(conversation, [(0, 0.6), (0.6 + gap, 1.2)])
     stage.resolve_speakers_for_processing('offline', conversation)
@@ -160,7 +155,7 @@ def test_verified_chunks_never_bridge_missing_extent(env, verified_audio, monkey
 
 
 def test_verified_clip_bounded_and_exact_original_pcm(env, verified_audio, monkeypatch):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     conversation = live_window()
     conversation.transcript_segments[0].end = 20
     conversation.transcript_segments[0].audio_capture_end = STARTED.timestamp() + 20
@@ -185,8 +180,8 @@ def test_verified_clip_bounded_and_exact_original_pcm(env, verified_audio, monke
 
 
 @pytest.mark.parametrize('scope', ['sync', 'v2'])
-def test_span_off_legacy_clip_behavior_and_cache_keys(env, verified_audio, monkeypatch, scope):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+def test_graduated_consumer_assembles_adjacent_chunks_and_reuses_cache(env, verified_audio, monkeypatch, scope):
+
     conversation = live_window()
     conversation.transcript_segments[0].speaker_id_scope = 'sync:offline'
     if scope == 'v2':
@@ -197,7 +192,7 @@ def test_span_off_legacy_clip_behavior_and_cache_keys(env, verified_audio, monke
         )
     verified_audio(conversation, [(0, 0.6), (0.6, 1.2)])
     stage.resolve_speakers_for_processing('offline', conversation)
-    assert env[1].calls == 0 and not env[0]
+    assert env[1].calls == 1 and set(stage.decode_cache(env[0]['c1'])) == {'s0'}
     verified_audio(conversation, [(0, 1.2)])
     stage.resolve_speakers_for_processing('offline', conversation)
     assert env[1].calls == 1 and set(stage.decode_cache(env[0]['c1'])) == {'s0'}

@@ -322,8 +322,13 @@ def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(mon
                     return found
         return None
 
-    policy = find(manifest)
-    assert policy
+    assert find(manifest) is None  # Cloud Run must retain its live policy on merge.
+    policy = json.dumps(
+        {
+            'telegram': {'enabled': True, 'cohort': '*'},
+            'imessage': {'enabled': True, 'cohort': ['synthetic-rollout-member'], 'seat_cap': 'off'},
+        }
+    )
     monkeypatch.setenv('OMI_MESSAGING_CHANNEL_POLICY', policy)
     monkeypatch.delenv('OMI_MESSAGING_KILL_SWITCH_DOC', raising=False)
     monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
@@ -334,7 +339,8 @@ def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(mon
         raise AssertionError('No capacity IO allowed')
 
     monkeypatch.setattr(store, 'capacity', capacity)
-    david = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+    david = 'synthetic-rollout-member'
+    monkeypatch.setattr('config.messaging.in_rollout_cohort', lambda owner, name, **kwargs: owner == david)
     access.require_access('paid-outsider', 'telegram')
     with pytest.raises(access.AccessDenied):
         access.require_access('paid-outsider', 'imessage')
@@ -691,7 +697,7 @@ def test_ten_requested_photos_reach_file_model_in_sync_and_stream(monkeypatch):
     tool = object.__new__(chat_file.FileChatTool)
     tool.uid = 'u'
 
-    def ask(question, files):
+    def ask(question, files, video_window=None):
         assert {f.id for f in files} == set(ids)
         return 'all ten'
 
@@ -913,3 +919,187 @@ def test_pcm_retry_preserves_encoding_and_exact_wav_frames(monkeypatch):
     words = pr.parakeet_prerecorded_from_bytes(pcm, encoding='linear16', diarize=False)
     assert isinstance(words, list) and words[0]['text'] == 'Hello world'
     assert len(posted) == 2 and posted[0] == posted[1]
+
+
+@pytest.mark.asyncio
+async def test_album_late_during_media_preparation_attaches_before_generation(adapter, monkeypatch):
+    if adapter.channel != 'telegram':
+        return
+    first = replace(parsed(adapter, 'photo')[0], media_group_id='late-album')
+    second = replace(first, provider_message_id='later', text='late caption')
+    store = MemoryStore()
+    store.identities[(first.channel, first.provider, first.external_user_id)] = dict(
+        uid='u', active=True, generation='g'
+    )
+    path = store.enqueue(first)
+    store.jobs[path]['album_ready_at'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    from utils.messaging.contracts import Artifact
+
+    async def prepare(message, uid, session, guard):
+        if not message.media:
+            assert store.enqueue(second) == path
+        return replace(message, media=(*message.media, Artifact('owned', 'image/jpeg', 1, 'p.jpg')), attachments=())
+
+    monkeypatch.setattr(adapter, 'prepare', prepare)
+    gateway = Gateway(adapter, store=store, admission=lambda *a: None, rate_limit=lambda *a: None)
+    turns = []
+
+    async def turn(uid, session, message, *a, **k):
+        turns.append(message)
+        assert store.jobs[path]['generation_started_at']
+        third = replace(first, provider_message_id='last')
+        followup = store.enqueue(third)
+        assert followup != path
+        assert store.enqueue(replace(first, provider_message_id='out-of-order')) == followup
+        assert store.enqueue(third) is None
+        assert len(store.jobs[followup]['payload']['attachments']) == 2
+
+    monkeypatch.setattr(gateway, '_turn', turn)
+    assert await gateway.process(path) is True
+    assert len(turns) == 1 and len(turns[0].media) == 2 and 'late caption' in turns[0].text
+
+
+@pytest.mark.asyncio
+async def test_failed_first_batch_preserves_late_readable_photo(adapter, monkeypatch):
+    if adapter.channel != 'telegram':
+        return
+    from utils.messaging.contracts import Artifact
+
+    first = replace(parsed(adapter, 'photo')[0], media_group_id='partial-late')
+    store = MemoryStore()
+    store.identities[(first.channel, first.provider, first.external_user_id)] = dict(
+        uid='u', active=True, generation='g'
+    )
+    path = store.enqueue(first)
+    store.jobs[path]['album_ready_at'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    calls = []
+
+    async def prepare(message, uid, session, guard):
+        calls.append(message)
+        if len(calls) == 1:
+            store.enqueue(replace(first, provider_message_id='readable-late'))
+            raise MediaPreparationError('media_download', 'Synthetic download refusal')
+        return replace(message, media=(Artifact('file', 'image/jpeg', 1, 'p.jpg'),), attachments=())
+
+    monkeypatch.setattr(adapter, 'prepare', prepare)
+    gateway = Gateway(adapter, store=store, admission=lambda *a: None, rate_limit=lambda *a: None)
+    turns = []
+
+    async def turn(uid, session, message, *a, **k):
+        turns.append(message)
+
+    monkeypatch.setattr(gateway, '_turn', turn)
+    assert await gateway.process(path) is True
+    assert len(turns) == 1 and len(turns[0].media) == 1
+    assert 'Synthetic download refusal' in turns[0].text
+
+
+@pytest.mark.asyncio
+async def test_worker_failure_logs_only_bounded_reason(adapter, monkeypatch, caplog):
+    first = parsed(adapter, 'text')[0]
+    store = MemoryStore()
+    store.identities[(first.channel, first.provider, first.external_user_id)] = dict(
+        uid='u', active=True, generation='g'
+    )
+    path = store.enqueue(first)
+    gateway = Gateway(adapter, store=store, admission=lambda *a: None, rate_limit=lambda *a: None)
+
+    class PrivateFailure(Exception):
+        reason = 'private_exception_data'
+
+    async def fail(*a, **k):
+        raise PrivateFailure('private_exception_data')
+
+    monkeypatch.setattr(gateway, '_turn', fail)
+    await gateway.process(path)
+    assert 'reason=worker_error' in caplog.text
+    assert 'private_exception_data' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_album_reload_never_reintroduces_disabled_voice(adapter, monkeypatch):
+    if adapter.channel != 'telegram':
+        return
+    from utils.messaging.contracts import Artifact
+
+    photo = parsed(adapter, 'photo')[0]
+    voice = InboundAttachment('disabled-audio', 'voice.ogg', 'audio/ogg', voice=True)
+    first = replace(photo, media_group_id='voice-preference', attachments=(*photo.attachments, voice))
+    store = MemoryStore()
+    store.identities[(first.channel, first.provider, first.external_user_id)] = dict(
+        uid='u',
+        active=True,
+        generation='g',
+        voice_notes=False,
+    )
+    path = store.enqueue(first)
+    store.jobs[path]['album_ready_at'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    batches = []
+
+    async def prepare(message, uid, session, guard):
+        batches.append(message.attachments)
+        assert not any(a.voice for a in message.attachments)
+        if len(batches) == 1:
+            store.enqueue(replace(first, provider_message_id='late-audio', attachments=(voice,)))
+        return replace(message, media=message.media or (Artifact('photo', 'image/jpeg', 1, 'p.jpg'),), attachments=())
+
+    monkeypatch.setattr(adapter, 'prepare', prepare)
+    gateway = Gateway(adapter, store=store, admission=lambda *a: None, rate_limit=lambda *a: None)
+    turns = []
+
+    async def turn(uid, session, message, *a, **k):
+        turns.append(message)
+
+    monkeypatch.setattr(gateway, '_turn', turn)
+    assert await gateway.process(path) is True
+    assert len(turns) == 1 and len(turns[0].media) == 1
+    assert len(batches) == 2 and len(batches[0]) == 1 and batches[1] == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late_photo', [False, True])
+async def test_voice_disabled_album_seals_notice_or_consumes_late_photo(adapter, monkeypatch, late_photo):
+    if adapter.channel != 'telegram':
+        return
+    from utils.messaging.contracts import Artifact
+
+    photo = parsed(adapter, 'photo')[0]
+    voice = InboundAttachment('disabled-audio', 'v.ogg', 'audio/ogg', voice=True)
+    first = replace(photo, text='', media_group_id='all-voice-off', attachments=(voice,))
+    store = MemoryStore()
+    store.identities[(first.channel, first.provider, first.external_user_id)] = dict(
+        uid='u',
+        active=True,
+        generation='g',
+        voice_notes=False,
+    )
+    path = store.enqueue(first)
+    store.jobs[path]['album_ready_at'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    seal = store.seal_album
+    seals = []
+
+    def race(path, count):
+        seals.append(count)
+        if late_photo and len(seals) == 1:
+            store.enqueue(
+                replace(photo, text='', provider_message_id='late-readable', media_group_id=first.media_group_id)
+            )
+        return seal(path, count)
+
+    monkeypatch.setattr(store, 'seal_album', race)
+    batches, turns = [], []
+
+    async def prepare(message, uid, session, guard):
+        assert message.attachments and not any(a.voice for a in message.attachments)
+        batches.append(message)
+        return replace(message, media=(Artifact('photo', 'image/jpeg', 1, 'p.jpg'),), attachments=())
+
+    async def turn(uid, session, message, *a, **k):
+        turns.append(message)
+
+    monkeypatch.setattr(adapter, 'prepare', prepare)
+    gateway = Gateway(adapter, store=store, admission=lambda *a: None, rate_limit=lambda *a: None)
+    monkeypatch.setattr(gateway, '_turn', turn)
+    assert await gateway.process(path) is True
+    assert len(turns) == len(batches) == int(late_photo)
+    assert store.jobs[path]['generation_started_at'] and store.jobs[path]['status'] == 'done'

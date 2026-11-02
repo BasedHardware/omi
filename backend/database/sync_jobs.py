@@ -5,7 +5,8 @@ Jobs are ephemeral — they exist only long enough for the app to reconcile
 results. Redis is the right store: no Firestore costs, automatic TTL cleanup.
 
 Key format: sync_job:{job_id}
-TTL: 24 hours (refreshed on each update)
+TTL: 24 hours (refreshed on each update), with opt-in shorter retention for
+successful results and metric-only deduplication. See the runtime getters.
 
 The TTL governs how long a finished job's result stays queryable. The client
 uploads audio, marks the recording "uploaded", and reconciles it against this
@@ -41,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 JOB_KEY_PREFIX = 'sync_job:'
 JOB_TTL_SECONDS = 86400  # 24 hours — reconcile window (see module docstring)
+COMPLETED_TTL_ENV = 'SYNC_JOB_COMPLETED_TTL_SECONDS'
+METRIC_ONCE_TTL_ENV = 'SYNC_JOB_METRIC_ONCE_TTL_SECONDS'
 STALE_THRESHOLD_SECONDS = 600  # 10 minutes — if processing exceeds this, treat as failed
 # Cloud Tasks dispatch is near-immediate and its named task is created before
 # the 202 returns. A cloud_tasks job still 'queued' this long has lost its task
@@ -88,6 +91,28 @@ ONCE_KEY_PREFIX = 'sync_job_once:'
 def _key(key: str) -> str:
     """Keep prod's existing job and run-lease keys; isolate shared Redis in dev."""
     return sync_stage.redis_key(key)
+
+
+def _retention_seconds(env_name: str) -> int:
+    """Land dark; bad or out-of-range config preserves today's 24h retention.
+
+    Only allow reductions with a minimum one-hour recovery/observability
+    window. Read at the write boundary so tests and runtime configuration do
+    not depend on import order. Never print the environment value.
+    """
+    try:
+        seconds = int(os.getenv(env_name, str(JOB_TTL_SECONDS)))
+    except ValueError:
+        seconds = JOB_TTL_SECONDS
+    return seconds if 3600 <= seconds <= JOB_TTL_SECONDS else JOB_TTL_SECONDS
+
+
+def _job_retention_seconds(job: Dict[str, Any]) -> int:
+    # Failed/partial results still own retry/dead-letter recovery material;
+    # queued/processing jobs must survive dispatch delays and retries.
+    if job.get('status') == 'completed':
+        return _retention_seconds(COMPLETED_TTL_ENV)
+    return JOB_TTL_SECONDS
 
 
 class FencedSyncJobMutationOutcome(str, Enum):
@@ -163,10 +188,14 @@ def create_sync_job(
     content_id: Optional[str] = None,
     dispatch_mode: str = 'inline',
     ledger_fence_mode: str = SyncLedgerFenceMode.LEGACY.value,
+    policy=None,
 ) -> Dict[str, Any]:
     """Create a new sync job and store in Redis. Returns the job dict."""
     if job_id is None:
         job_id = str(uuid.uuid4())
+    from config.policy import resolve_batch_policy
+
+    policy = policy or resolve_batch_policy(uid)
     now = time.time()
     job: Dict[str, Any] = {
         'job_id': job_id,
@@ -195,6 +224,8 @@ def create_sync_job(
         # revision from fencing a job started before the hard old-revision
         # retirement, and prevents a later configuration regression from
         # silently downgrading a fenced job to legacy behavior.
+        'policy': policy.to_dict(),
+        'policy_source': 'admission',
         'ledger_fence_mode': (
             SyncLedgerFenceMode.ACTIVE.value
             if ledger_fence_mode == SyncLedgerFenceMode.ACTIVE.value
@@ -203,6 +234,15 @@ def create_sync_job(
     }
     key = _key(f'{JOB_KEY_PREFIX}{job_id}')
     r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    try:
+        r.zadd(index_key, {job_id: now})
+        r.zremrangebyrank(index_key, 0, -101)
+        r.expire(index_key, JOB_TTL_SECONDS)
+    except Exception:
+        record_fallback(
+            component='sync_dispatch', from_mode='redis', to_mode='none', reason='other', outcome='degraded'
+        )
     return job
 
 
@@ -231,6 +271,59 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
+def load_sync_job_policy(job_id: str, *, policy=None) -> Optional[Dict[str, Any]]:
+    """Admission-only policy repair; status, worker and projection reads stay pure.
+
+    An admitting caller may supply an already recorded admission part or
+    resolve once here. Non-admission roles do not call this mutating helper.
+    """
+    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
+    if not data:
+        return None
+    try:
+        raw = json.loads(_as_redis_text(data))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    if isinstance(raw.get('policy'), dict) or not isinstance(raw.get('uid'), str):
+        return raw
+    return _pin_legacy_job_policy(job_id, raw, _as_redis_text(data), policy=policy)
+
+
+def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str, *, policy=None) -> Optional[Dict[str, Any]]:
+    """CAS an old job's first policy without losing progress or resetting TTL."""
+    from config.policy import resolve_batch_policy
+    from config.policy.telemetry import record_policy_source
+
+    policy = policy or resolve_batch_policy(job['uid'], source='fallback')
+    original_uid = job['uid']
+    script = (
+        "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end "
+        "redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL') return 1"
+    )
+    key = _key(f'{JOB_KEY_PREFIX}{job_id}')
+    for _ in range(3):
+        updated = {**job, 'policy': policy.to_dict(), 'policy_source': 'fallback'}
+        if r.eval(script, 1, key, raw, json.dumps(updated, default=str)) == 1:
+            record_policy_source('fallback', policy.policy_id)
+            return updated
+        current = r.get(key)
+        if not current:
+            return None
+        try:
+            raw = _as_redis_text(current)
+            decoded = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(decoded, dict) or decoded.get('uid') != original_uid:
+            return None
+        job = decoded
+        if isinstance(job.get('policy'), dict):
+            return job  # A concurrent reader's persisted snapshot wins.
+    raise RuntimeError('sync job policy persistence contended')  # Never expose an unrecorded policy.
+
+
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:
     """Return whether a 'processing' job has gone silent past the stale bound.
 
@@ -246,15 +339,59 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     job no attempt ever started qualifies: a worker re-queuing between Cloud
     Tasks retries (mark_job_queued_for_retry) sets ``attempt``/``started_at``,
     and that pending retry must never be flipped terminal by a poll, however
-    long its backoff.
+    long its backoff — unless an overdue ``deferred_until`` marker proves the
+    budget-deferral chain already consumed the whole attempt contract, in
+    which case no queue retry is coming and the marker's horizon is the
+    recovery bound.
     """
     # The UID owner/sweeper, not a polling reader, owns liveness for accepted
     # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
     # direct Cloud Tasks dispatch-stale threshold for a heavy account.
     if job.get('dispatch_mode') == 'sequenced':
         return False
+    reference_time = time.time() if now is None else now
+    # Marker read before any status branching: a budget expiry can land during
+    # staged-file download or other post-lock work before the attempt marks the
+    # job processing, and the delayed replacement is scheduled past the
+    # preserved run lock's TTL — beyond the queued dispatch-stale threshold.
+    # Whether the deferral caught the job queued or processing, the silence
+    # until the replacement is due is planned, not a lost dispatch: a poll in
+    # the unlocked gap must not finalize it in either state.
+    raw_deferred_until = job.get('deferred_until')
+    deferred_until = (
+        float(raw_deferred_until)
+        if isinstance(raw_deferred_until, (int, float)) and not isinstance(raw_deferred_until, bool)
+        else None
+    )
+    deferred = deferred_until is not None
     status = job.get('status')
     if status == 'processing':
+        if deferred and reference_time < deferred_until:
+            return False
+        threshold = STALE_THRESHOLD_SECONDS
+    elif (
+        status == 'queued'
+        and job.get('dispatch_mode') == 'cloud_tasks'
+        and deferred
+        and reference_time < deferred_until
+    ):
+        # The replacement is deliberately scheduled ~31 minutes out (past the
+        # preserved lock's TTL); the 30-minute queued-dispatch-stale threshold
+        # would classify it dispatch-lost before it is due. Guard the window
+        # exactly as the processing branch does, then resume normal
+        # queued-dispatch staleness once the replacement is overdue.
+        return False
+    elif status == 'queued' and job.get('dispatch_mode') == 'cloud_tasks' and deferred:
+        # Overdue deferred marker: the final replacement either exhausted the
+        # attempt contract (deferrals_exhausted) or was never scheduled, and no
+        # sequencer owner or run lock remains to resume the job. A prior
+        # retryable failure (mark_job_queued_for_retry) leaves attempt/started_at
+        # populated, but that pending queue retry can never run — the queue's
+        # attempts were already spent earning those deferrals — so the
+        # never-stale pending-retry exemption must not strand the job and its
+        # content claim until the Redis TTL. The overdue marker itself is the
+        # recovery signal: make the queued state stale on the processing
+        # threshold, the same bound the marker-horizon comment above promises.
         threshold = STALE_THRESHOLD_SECONDS
     elif (
         status == 'queued'
@@ -268,7 +405,6 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     updated_at = job.get('updated_at') or job.get('created_at')
     if not isinstance(updated_at, (int, float)):
         return False
-    reference_time = time.time() if now is None else now
     return reference_time - updated_at > threshold
 
 
@@ -453,7 +589,7 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
                 key,
                 current_raw,
                 next_raw,
-                JOB_TTL_SECONDS,
+                _job_retention_seconds(next_job),
             )
         )
         if mutation.outcome is FencedSyncJobMutationOutcome.APPLIED:
@@ -609,7 +745,7 @@ def fenced_update_sync_job(
                 run_lock_token,
                 current_raw,
                 next_raw,
-                JOB_TTL_SECONDS,
+                _job_retention_seconds(next_job),
             )
         )
         if mutation.outcome is not FencedSyncJobMutationOutcome.CONFLICT:
@@ -638,6 +774,11 @@ def fenced_mark_job_processing(
         {
             'status': 'processing',
             'started_at': started_at,
+            # The budget-deferral marker guards the planned-silence window
+            # while the delayed replacement waits; the delivery that is now
+            # running IS that replacement arriving, so its transition to
+            # processing retires the marker instead of leaving it to expire.
+            'deferred_until': None,
         },
         now=started_at,
         allowed_current_statuses={'queued', 'processing'},
@@ -651,6 +792,7 @@ def mark_job_processing(job_id: str) -> Optional[Dict[str, Any]]:
         {
             'status': 'processing',
             'started_at': time.time(),
+            'deferred_until': None,
         },
     )
 
@@ -1113,6 +1255,19 @@ def release_job_run_lock(job_id: str, token: str) -> None:
         logger.warning('release_job_run_lock failed for %s: %s', job_id, e)
 
 
+def release_job_run_lock_strict(job_id: str, token: str) -> bool:
+    """Confirmed compare-and-delete for callers that must prove the release.
+
+    Unlike :func:`release_job_run_lock` the EVAL's result is returned and
+    Redis errors propagate: ``True`` only when this token's lock key was
+    actually deleted. A caller that hands a redelivery a retry-only
+    obligation must not report success while the lock silently survives to
+    its TTL — every queue retry would then deflect off a 409 the caller
+    believed impossible.
+    """
+    return bool(r.eval(_RELEASE_LOCK_SCRIPT, 1, _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token))
+
+
 def add_processed_segment(job_id: str, segment_path: str) -> None:
     """Record a segment as fully processed (conversation written) for this job.
 
@@ -1183,6 +1338,20 @@ def get_processed_segments(job_id: str) -> Set[str]:
         return set()
 
 
+def was_marked_once(job_id: str, tag: str) -> bool:
+    """Read side of try_mark_once; strict bool, fails closed on Redis error.
+
+    A read drives decisions (the sync empty-success guard), not idempotent
+    side effects, so an unreadable marker reports absent instead of assuming
+    the side effect already ran.
+    """
+    try:
+        return bool(r.get(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}')))
+    except Exception as e:
+        logger.warning('was_marked_once failed for %s:%s: %s', job_id, tag, e)
+        return False
+
+
 def try_mark_once(job_id: str, tag: str) -> bool:
     """SETNX guard so per-job side effects (fair-use metering, usage recording)
     run at most once across Cloud Tasks retries.
@@ -1191,8 +1360,45 @@ def try_mark_once(job_id: str, tag: str) -> bool:
     own fail-open posture — better to occasionally double-count than to
     silently never count.
     """
+    # Billing/fair-use and unknown future guards retain the full job window.
+    # Short metric retention may duplicate telemetry on a delayed retry but
+    # cannot repeat usage charging or customer-visible processing.
+    metric_only = tag == 'terminal_outcome_metric' or tag.startswith('segment_outcome:')
+    ttl = _retention_seconds(METRIC_ONCE_TTL_ENV) if metric_only else JOB_TTL_SECONDS
     try:
-        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=JOB_TTL_SECONDS))
+        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=ttl))
     except Exception as e:
         logger.warning('try_mark_once failed for %s:%s: %s', job_id, tag, e)
         return True
+
+
+def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
+    """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
+    from datetime import datetime, timezone
+
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    ids = r.zrevrange(index_key, 0, 99) or []
+    result = []
+    for raw_id in ids:
+        job_id = raw_id.decode() if isinstance(raw_id, bytes) else raw_id
+        job = get_sync_job(job_id)
+        if not job or job.get('uid') != uid or job.get('status') not in {'queued', 'processing'}:
+            r.zrem(index_key, job_id)
+            continue
+        start = job.get('started_at') or job['created_at']
+        job_result = job.get('result') or {}
+        conversations = sorted(
+            set(job_result.get('new_memories') or []) | set(job_result.get('updated_memories') or [])
+        )
+        result.append(
+            {
+                'id': 'sync:' + job_id,
+                'kind': 'sync_job',
+                'state': 'queued' if job['status'] == 'queued' else 'transcribing',
+                'conversation_ids': conversations,
+                'started_at': datetime.fromtimestamp(start, timezone.utc),
+                'duration_seconds': 0,
+                'updated_at': datetime.fromtimestamp(job['updated_at'], timezone.utc),
+            }
+        )
+    return result
