@@ -40,12 +40,13 @@ class DecryptError(ValueError):
 
 
 def error_result(error: Exception) -> str:
-    return {
+    results: dict[type[Exception], str] = {
         CoverageMismatch: 'coverage_mismatch',
         ChecksumMismatch: 'checksum_mismatch',
         DecodeError: 'decode_error',
         DecryptError: 'decrypt_error',
-    }.get(type(error), 'other')
+    }
+    return results.get(type(error), 'other')
 
 
 def record(result: str, codec: str | None = None) -> None:
