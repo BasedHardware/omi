@@ -122,8 +122,8 @@
       "scope": "omi_batch_timeliness_new_oldest_age_seconds from the batch worker queue sample, legs uncommitted (policy holds skipped), quarantined (held, prepared, running, failed_held), assignment_held (committed, projection receipt quarantined) and projection. quarantine_held_rows and backlog counts are visible but never alarm. Alert-only: no rollback or ramp guard reads it.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
       "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach.",
-      "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "$A > 7200 && $B < 900 for 5m",
+      "runbook": "backend/charts/monitoring/critical-failures.md",
+      "threshold": "Age >7200s with a sample newer than 900s for 5m. 2026-11-03 retained history: minimum 97211s, sample age maximum 312s. Target is contractual; normal history predates the metric and is unavailable.",
       "evaluated_bad": "Synthetic: a quarantined failed_held unit admitted after the epoch, 3h old.",
       "evaluated_good": "Synthetic: only units admitted before the epoch are late, or every new unit published within 2h."
     },
@@ -131,10 +131,10 @@
       "alert_identity": "omi-batch-unit-unpublished-2h",
       "component": "batch-pipeline",
       "impact": "product",
-      "severity": "warning",
+      "severity": "critical",
       "instatus_component": "speech-processing",
-      "tier": "agent",
-      "audience": "agent",
+      "tier": "page",
+      "audience": "human",
       "owner": "two-lane-lead"
     },
     "isPaused": false,
@@ -143,12 +143,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h",
-      "mute_time_intervals": [
-        "omi-tier-silent"
-      ]
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },

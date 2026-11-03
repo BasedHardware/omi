@@ -584,9 +584,15 @@ def log(event, **fields):
             return [safe(v) for v in value]
         return value
 
-    severity = logging.ERROR if fields.get('verdict') in {'TRIP', 'BLIND'} or event.endswith('error') else logging.INFO
+    unsafe = fields.get('verdict') in {'TRIP', 'BLIND'} or event.endswith('error')
+    # A bounded Cloud Logging counter consumes this boolean. Keep the signal on
+    # batch observer trips too: their evidence intentionally does not own the
+    # Parakeet Job's exit code. Dry-run readings must never notify humans.
+    page_signal = unsafe and not fields.get('dry_run', False) and os.environ.get('DRY_RUN', 'false').lower() != 'true'
+    severity = logging.ERROR if unsafe else logging.INFO
     logging.getLogger('incluster-guards').log(
-        severity, json.dumps(safe({'event': event, **fields}), allow_nan=False, sort_keys=True)
+        severity,
+        json.dumps(safe({'event': event, **fields, 'page_signal': page_signal}), allow_nan=False, sort_keys=True),
     )
 
 
@@ -712,7 +718,7 @@ def run(client, dry_run, now=None):
     # Batch evaluation is independent of a missing dev HPA or Parakeet data failure.
     batch_values = client.sample(batch_queries(client.namespace))
     batch = evaluate_batch(batch_values)
-    log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled')
+    log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled', dry_run=dry_run)
     hpa = None
     values = {}
     schedule = None
