@@ -310,7 +310,7 @@ def _primary_streaming_service() -> Optional[STTService]:
             return STTService.deepgram
         if provider == MODULATE_PROVIDER:
             return STTService.modulate
-        if provider == PARAKEET_PROVIDER:
+        if provider == STTService.parakeet.value:
             return STTService.parakeet
         if provider == SONIOX_PROVIDER:
             return STTService.soniox
@@ -908,7 +908,7 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
 
 
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
+    """RNNT fallback eligibility, including the operator-restored model slot."""
     return (
         STTService.parakeet.value in (model.strip() for model in service_models(stt_service_models))
         and model_is_enabled('parakeet', STTServingSurface.STREAMING)

@@ -6051,9 +6051,10 @@ connection lifetime in
 `omi_listen_deferred_stream_open_seconds{deferred_by,provider}`.
 
 Plain `parakeet` is excluded from streaming defaults and explicit model selection;
-`STT_STREAMING_PARAKEET_SLOT_ENABLED` defaults off and restores the default
-last-resort slot when true. This does not change `parakeet-window`, PTT or
-prerecorded routing, and cannot override `STT_GPU_FLEET_OFF`.
+`STT_STREAMING_PARAKEET_SLOT_ENABLED` defaults off and restores the default and
+connection-fallback slots when true, including an already-pinned two-vendor model
+list; no `STT_SERVICE_MODELS` literal change is needed. This does not change
+`parakeet-window`, PTT or prerecorded routing, and cannot override `STT_GPU_FLEET_OFF`.
 
 ### Forward canonical audio archive (default off)
 

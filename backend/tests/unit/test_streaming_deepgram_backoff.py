@@ -1072,7 +1072,7 @@ class TestGetSttServiceForLanguage:
     def test_disabled_configuration_uses_non_deepgram_defaults(self):
         with (
             patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']),
-            patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}),
+            patch.dict('os.environ', {'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'false'}),
             patch.dict(
                 'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
                 {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
@@ -1080,8 +1080,8 @@ class TestGetSttServiceForLanguage:
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
-        # An explicitly disabled deployment cannot be reactivated by its model
-        # token, even though current policy otherwise permits live Deepgram.
+        # Without operator rollback, a disabled deployment's model token cannot
+        # reactivate it or the plain Parakeet slot; keep the vendor default.
         assert (service, lang, model) == (STTService.modulate, 'en', 'velma-2')
 
     def test_unsupported_language_fails_closed(self):

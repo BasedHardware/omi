@@ -16,6 +16,7 @@ import os
 
 from config.policy.batch import cohort_bucket
 from config.policy.parts import PolicyPart, policy_environment, source_role
+from config.live_stt_gpu_fleet import gpu_fleet_off, streaming_parakeet_slot_enabled
 
 if TYPE_CHECKING:
     from config.live_stt_registry import Target
@@ -154,8 +155,6 @@ def _window_percent(env, *, strict=False):
 
 def window_pressure_allocation() -> float:
     """Process-start poller activation retains its original un-clamped input."""
-    from config.live_stt_gpu_fleet import gpu_fleet_off
-
     if gpu_fleet_off():
         return 0.0
     return float(os.environ.get('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
@@ -263,12 +262,14 @@ def account_circuit_cooldown() -> float:
 
 
 def service_models(default: list[str]) -> list[str]:
-    from config.live_stt_gpu_fleet import gpu_fleet_off
-
     if gpu_fleet_off():
         return ['soniox']  # Also build the vendor callback when an old secret/policy omitted it.
     policy = current_listen_policy.get()
-    return list(policy.service_models) if policy is not None else default
+    models = list(policy.service_models) if policy is not None else list(default)
+    # Roll back every selector and connector, including an already-pinned list.
+    if streaming_parakeet_slot_enabled() and 'parakeet' not in {model.strip() for model in models}:
+        models.append('parakeet')
+    return models
 
 
 def hintable_allocation(uid):

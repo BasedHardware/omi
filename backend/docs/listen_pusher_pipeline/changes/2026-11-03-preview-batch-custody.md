@@ -23,17 +23,24 @@ custom STT, pusher, onboarding, phone-call and channel safety checks.
 
 Plain `parakeet` is removed from streaming defaults and explicit streaming
 selection. `STT_STREAMING_PARAKEET_SLOT_ENABLED=true` restores its default
-last-resort hop before fleet-off. New two-vendor deployment literals still prefer
-Modulate and Soniox; restoring the old named preference requires the old model
-literal too. The `parakeet-window` listener lane, prerecorded order and PTT order
+last-resort hop and connection fallbacks before fleet-off, including sessions
+with a pinned two-vendor model list. No runtime model literal change is required;
+Modulate and Soniox keep their order unless the client requests Parakeet. The `parakeet-window` listener lane, prerecorded order and PTT order
 are unchanged. `STT_GPU_FLEET_OFF` wins over the rollback switch, and Windows
 PTT/transcribe continues selecting Modulate.
 
 Lead applies after PR review/CI: deploy listener, pusher and backend/backend-sync/
 backend-sync-backfill/backend-integration from the same merged revision. Defaults
 need no env override. This PR does not activate fleet-off or alter GPU replicas.
+The planscost lead first enables promotion on one listen pod or selected cohort.
 Verify running release identities and a preview-audio canary that produces an
-outbox receipt, a batch job and final words without a live provider socket.
+outbox receipt, a batch job, final words and speaker labels within 30 minutes,
+without a duplicate live provider socket. Keep the on-device preview UI. These
+sessions already own a batch obligation and use the qualified batch pipeline;
+the removed stream is duplicate work, so live p95 is not their acceptance target.
+Watch the T2 `terminal_speech` guard and promoted-session counters for one hour
+before the lead expands fleet-wide in the same apply session. Roll back promotion
+with `LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED=false` if that gate fails.
 Watch `omi_listen_preview_batch_custody_total{outcome}`, local-preview deferred
 opens, outbox failures/would-drop, batch intake/terminal speech and exhausted STT
 fallbacks. Duplicate WAL/listen delivery is a residual risk; inspect merge/dedupe
