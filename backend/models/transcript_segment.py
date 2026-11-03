@@ -135,6 +135,7 @@ class TranscriptSegment(BaseModel):
     audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
     # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
     # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    recurring_voice_id: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # Transported only in Python-mode internal dumps; the DB folds this into
     # the bounded conversation blob and removes it from stored segments.
@@ -178,7 +179,7 @@ class TranscriptSegment(BaseModel):
         if self.original_text is None:
             data.pop('original_text', None)
         data['speaker_label_source'] = project_source(data)
-        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates', 'recurring_voice_id'):
             value = getattr(self, key)
             if value is not None:
                 data[key] = value

@@ -8,7 +8,7 @@ from google.cloud import firestore
 
 from database.people_generation import bump_people_generation
 from database._client import get_firestore_client
-from database import _client, speaker_profile_authority
+from database import _client, speaker_profile_authority, recurring_voices
 from database.legal_holds import external_write_fence
 from utils.speakers import auto_enroll as policy
 from utils.stt.voiceprints import usable_person_voiceprint
@@ -182,6 +182,13 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
                 ref = user.collection('people').document(pid)
                 if ref.get(transaction=transaction).exists:
                     people.append(ref)
+        recurring = (
+            recurring_voices.prepare_retraction(transaction, user, owner, clear=True)
+            if not policy.retained(following)
+            else None
+        )
+        if recurring is not None and owner:
+            recurring_voices.write_profiles(transaction, user, owner, recurring)
         for ref in people:
             transaction.update(
                 ref, {policy.POOL_FIELD: firestore.DELETE_FIELD, 'updated_at': datetime.now(timezone.utc)}
@@ -229,6 +236,9 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
             change = policy.retract(uid, pid, person.get(policy.POOL_FIELD), source_ids)
             if change:
                 changes.append((ref, change))
+        recurring = recurring_voices.prepare_retraction(transaction, user, owner, conversations=source_ids)
+        if owner_snapshot.exists:
+            recurring_voices.write_profiles(transaction, user, owner, recurring)
         for ref, change in changes:
             transaction.update(ref, change)
             bump_people_generation(transaction, ref)
@@ -254,6 +264,9 @@ def revoke_person(uid: str, person_id: str, *, firestore_client: Any = None) -> 
         owner = owner_snapshot.to_dict() or {}
         snapshot = person.get(transaction=transaction)
         authority_update = policy.authority_after(owner, {person_id: None})
+        recurring = recurring_voices.prepare_retraction(transaction, user, owner, person_id=person_id)
+        if owner_snapshot.exists:
+            recurring_voices.write_profiles(transaction, user, owner, recurring)
         if snapshot.exists:
             transaction.update(
                 person,
