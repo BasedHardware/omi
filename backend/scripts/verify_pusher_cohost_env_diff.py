@@ -105,6 +105,7 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
         # Listen admits/suppresses managed live STT; pusher only retains audio.
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
+        'SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_SERVING_ENABLED',

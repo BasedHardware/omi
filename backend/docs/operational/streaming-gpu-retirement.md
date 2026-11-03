@@ -4,7 +4,8 @@ Production configuration declares `STT_GPU_FLEET_OFF=true`; merging the activati
 change authorizes rollout and must wait for the lead's G0-G3 cost and readiness gates.
 This source declaration is not evidence of serving state. The Parakeet guard stays
 unsuspended until the lead completes the caller rollout and drain below. The switch selects Modulate, then Soniox, for managed live sessions (Modulate is a vendor,
-not a fleet GPU, and costs about half of Soniox live), Modulate for prerecorded and PTT work, local ONNX for file VAD, and the existing vendor language probe unless `HOSTED_LID_API_URL` supplies a
+not a fleet GPU, and the cheaper live vendor: rate card v2 $0.06 vs $0.12 per audio-hour; router
+estimates $0.055 vs $0.0754), Modulate for prerecorded and PTT work, local ONNX for file VAD, and the existing vendor language probe unless `HOSTED_LID_API_URL` supplies a
 separately qualified language-ID service. An unavailable dedicated LID service
 returns to the vendor probe, never the retired shared endpoint.
 It denies Parakeet in static selection, the cost router, default fallback,

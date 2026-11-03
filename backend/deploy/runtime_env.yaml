@@ -2118,7 +2118,7 @@ environments:
         env:
           LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
           SERVER_BATCH_UNSUPPORTED_LANGUAGES:
-            value: ''
+            value: af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -2277,7 +2277,7 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
-          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
           PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
@@ -2423,6 +2423,7 @@ environments:
           STT_GPU_FLEET_OFF:
             value: 'true'
             category: ops_kill
+          SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT: {value: '100', category: rollout}
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
             category: ops_kill
