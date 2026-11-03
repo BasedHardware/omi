@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Fair-use decay switch
+
+`FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
+restrict-only decay. Enabled state reads persist throttle → warning after
+`throttle_until`, then warning → none after the written seven-day
+`warning_until` quiet period. Restrict gates remain unchanged. See the
+[decay change note](listen_pusher_pipeline/changes/2026-11-04-fair-use-throttle-decay.md)
+for legacy recovery and telemetry semantics.
+
 ## Cohort-scoped legacy sync retirement
 
 Upload admission, record-owner selection, final-pass claims, cap-hold handoff

@@ -520,6 +520,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_RECORDED_TIME_ENABLED` | Default on; resolve episode ownership by recorded timestamps for every device and late capture | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
+| `FAIR_USE_THROTTLE_DECAY_ENABLED` | Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay | backend | env | open | — | — | — | — | keep | keep | — | backend |
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1101,6 +1102,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
 - `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `EPISODE_RECORDED_TIME_ENABLED` — Default on; resolve episode ownership by recorded timestamps for every device and late capture (fail: open)
+- `FAIR_USE_THROTTLE_DECAY_ENABLED` — Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)
