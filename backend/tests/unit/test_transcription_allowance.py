@@ -151,7 +151,7 @@ MATRIX = [
     ),
     ('desktop free, no account-age block', dict(plan=PlanType.basic), 'managed', BASIC_CAP, 'plan_within_allowance'),
     (
-        'trial paywalled but Deepgram BYOK (exempt, pays Deepgram)',
+        'desktop Deepgram BYOK pays Deepgram',
         dict(plan=None, byok_enrolled=True, byok_header=True),
         'managed',
         None,
@@ -165,7 +165,7 @@ MATRIX = [
         'marketplace_reviewer',
     ),
     (
-        'marketplace reviewer, trial paywalled',
+        'desktop marketplace reviewer',
         dict(plan=PlanType.basic, reviewer=True),
         'managed',
         None,
@@ -228,12 +228,8 @@ def test_an_inactive_subscription_has_no_managed_minutes_for_either_question(mon
     assert sub.resolve_transcription_allowance('uid').reason == 'subscription_inactive'
 
 
-def test_the_release_probe_identity_is_never_admission_held_by_the_desktop_paywall(monkeypatch, sub) -> None:
-    """The fixed non-human release-probe uid exercises the full terminal desktop path
-    (utils/release_probe.py gate convention). Its Free-plan account never buys a plan
-    or BYOK keys, so once live STT cap-dispatch admission covers the whole fleet the
-    strict desktop trial paywall holds every probe packet and the pusher prod canary
-    finalization probe times out with zero transcripts (run 40190728003)."""
+def test_desktop_free_and_release_probe_remain_managed_without_trial_state(monkeypatch, sub) -> None:
+    """Both keep the production-disabled trial's managed admission answer."""
     _situate(monkeypatch, sub, plan=PlanType.basic)
     allowance = sub.resolve_transcription_allowance('omi-release-probe', source='desktop')
     assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('managed', None, 'release_probe')

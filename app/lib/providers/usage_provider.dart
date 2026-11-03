@@ -304,7 +304,11 @@ class UsageProvider with ChangeNotifier {
       Logger.debug('Failed to fetch subscription: $e');
     } finally {
       if (generation == _sessionGeneration) {
-        await _releasePaywallOnDevicePin();
+        try {
+          await _releasePaywallOnDevicePin();
+        } catch (e) {
+          Logger.debug('Failed to release paywall STT pin: $e');
+        }
         _isSubscriptionLoading = false;
         _scheduleBacklogRefresh();
         notifyListeners();
