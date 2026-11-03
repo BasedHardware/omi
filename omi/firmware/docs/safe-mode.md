@@ -88,9 +88,10 @@ cannot pass the self-test. No repeated NVS retry loop is added.
 
 `omi/bootstate` is one 24-byte settings value: LE32 state (1 SAFE, 2 GOOD,
 3 TRIAL), LE32 latch reason (0 none, 1 crash loop, 2 button, 3 simulator), and
-a NUL-terminated 16-byte firmware string. A SAFE transition writes once;
-subsequent SAFE boots compare the cached value and write nothing. Counters
-never write flash, including before settings is available. Completed DFU adds
+a NUL-terminated 16-byte firmware string. A SAFE transition attempts one write.
+Warm SAFE boots use the retained attempt bit without loading NVS; cold SAFE
+restoration compares the loaded value and writes nothing. Counters never write
+flash, including before settings is available. Completed DFU adds
 a TRIAL write to clear durable SAFE even for the same firmware version. GOOD
 is stamped after the new trial. Failed persistence retains the RAM latch and
 logs `Bootstate write failed`; failed backend initialization/writing permits
@@ -209,8 +210,8 @@ WDT enforcement, Nordic faults, Bluetooth or MCUboot.
 `--safe-mode` first checks the unchanged nine normal-boot tokens. It then
 boots `safe-mode.conf`, boots `dfu-finished.conf` without forcing the latch (so
 SAFE must reload from real simulated NVS), delivers a synthetic mcumgr callback,
-and boots normally again to check TRIAL → GOOD. All runs share the cache's
-flash backing file. It requires `Safe mode initialized: BLE DFU only`,
+and boots normally again to check TRIAL → GOOD. These four persistence runs
+share the cache's flash backing file. It requires `Safe mode initialized: BLE DFU only`,
 `Safe mode feed loop started`, and a second watchdog feed, and rejects
 codec/mic/SD startup in recovery. Normal tokens are not fabricated on safe
 boots. Only callback delivery and hardware boundaries are stubbed; NVS is real
