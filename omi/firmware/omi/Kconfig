@@ -145,4 +145,12 @@ config OMI_FAULT_INJECT_WDT_STARVE
     bool "Stop feeding WDT at uptime 30 seconds"
 endchoice
 
+config OMI_FAULT_INJECT_HARD_FAULT_DELAY_MS
+    int "Dwell before the injected fatal error"
+    depends on OMI_FAULT_INJECT_HARD_FAULT
+    default 0
+    help
+      Sleep this long before the fatal error, still before BLE. A bench
+      observer polling over SWD can then sample every failing boot.
+
 endmenu

@@ -263,6 +263,8 @@ factory hex is only for an independently authorized baseline restore; follow
    the default Kconfig value is n. Inspect the final app `.config` before use.
    The hard-fault variant executes an undefined instruction before BLE:
    `FAULT_INJECT: fatal before BLE`, followed by an immediate fatal reset.
+   On the jig, set `CONFIG_OMI_FAULT_INJECT_HARD_FAULT_DELAY_MS=5000` so each
+   failing boot dwells long enough for SWD polling to sample it.
    The driver variant is a real `DEVICE_DT_DEFINE` deferred device whose init
    spins unconditionally: `FAULT_INJECT: driver init hang`. Normal
    main calls `device_init()` and WDT resets within 30 seconds; after three

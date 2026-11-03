@@ -195,6 +195,7 @@ int main(void)
         return ret;
     }
 #ifdef CONFIG_OMI_FAULT_INJECT_HARD_FAULT
+    k_msleep(CONFIG_OMI_FAULT_INJECT_HARD_FAULT_DELAY_MS);
     printk("FAULT_INJECT: fatal before BLE\n");
     __asm__ volatile("udf #0");
     CODE_UNREACHABLE;
