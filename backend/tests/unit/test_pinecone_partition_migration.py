@@ -268,6 +268,39 @@ def test_parity_and_identity_failures_never_authorize_cutover(setup, failure):
     assert state.get_route(key, firestore_client=db).primary_namespace == key.family
 
 
+def _target_upserted_ids(provider, namespace):
+    return [
+        row['id']
+        for path, payload in provider.calls
+        if path == 'vectors/upsert' and payload['namespace'] == namespace
+        for row in payload['vectors']
+        if row['id'] != BARRIER_ID
+    ]
+
+
+def test_retry_does_not_reupload_records_already_copied_identically(setup):
+    key, db, provider, runner = setup
+    # A previous, interrupted attempt already copied a and b exactly.
+    for vector_id in ('a', 'b'):
+        provider.records[key.partition_namespace][vector_id] = deepcopy(provider.records[key.family][vector_id])
+    receipt = runner.qualify('run', dimension=2)
+    assert receipt['records'] == 3
+    assert _target_upserted_ids(provider, key.partition_namespace) == ['c']
+    assert owned(provider, key.family) == owned(provider, key.partition_namespace)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def test_target_copy_with_a_different_payload_is_rewritten(setup):
+    key, db, provider, runner = setup
+    stale = deepcopy(provider.records[key.family]['a'])
+    stale['metadata']['revision'] = 0
+    provider.records[key.partition_namespace]['a'] = stale
+    receipt = runner.qualify('run', dimension=2)
+    assert sorted(_target_upserted_ids(provider, key.partition_namespace)) == ['a', 'b', 'c']
+    assert owned(provider, key.family) == owned(provider, key.partition_namespace)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
 def test_near_tied_neighbours_swapped_by_provider_scoring_still_qualify(setup):
     key, db, provider, runner = setup
     # c and d score 0.5 and 0.5004 against probe a; the bucket scores d 6e-4 lower,

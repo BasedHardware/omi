@@ -397,6 +397,13 @@ class OwnerMigration:
         last_target_lsn = 0
         # Copy admission increments revisions itself; count those exact writes.
         owned_revision_increments = 2
+        # A resumed or retried attempt finds most records already in the target.
+        # Skip re-uploading those that match exactly; the fresh inventory and
+        # payload proofs below still verify every record in the target.
+        already_copied: dict[str, str] = {}
+        for records in self.transport.owned_pages(target, self.key.uid):
+            for record in records:
+                already_copied[record['id']] = record_digest(record)
         for records in self.transport.owned_pages(source, self.key.uid):
             if not records:
                 continue
@@ -415,7 +422,8 @@ class OwnerMigration:
                 sizes[vector_id] = len(json.dumps(record, allow_nan=False).encode()) + 64
                 if len(samples) < 3:
                     samples.append(record['values'])
-            for batch in bounded_upsert_batches(records, target):
+            to_copy = [record for record in records if already_copied.get(record['id']) != expected[record['id']]]
+            for batch in bounded_upsert_batches(to_copy, target):
                 last_target_lsn = self._write(token, 'vectors/upsert', target, [r['id'] for r in batch], vectors=batch)
                 owned_revision_increments += 2
         # Remove target-only records, including records deleted during a prior
