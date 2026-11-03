@@ -5,15 +5,16 @@ from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
 
+class RecordingVoice(BaseModel):
+    speaker_id_scope: str = Field(min_length=1, max_length=256)
+    stream_speaker: str = Field(min_length=1, max_length=100)
+
+
 class RecordingSelection(BaseModel):
     conversation_id: str = Field(min_length=1, max_length=200)
     segment_ids: list[str] = Field(min_length=1, max_length=10000)
     speaker_id: Optional[int] = None
-
-
-class RecordingVoice(BaseModel):
-    speaker_id_scope: str = Field(min_length=1, max_length=256)
-    stream_speaker: str = Field(min_length=1, max_length=100)
+    voice: Optional[RecordingVoice] = None
 
 
 class RecordingSpeakerRequest(BaseModel):

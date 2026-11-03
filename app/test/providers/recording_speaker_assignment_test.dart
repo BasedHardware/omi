@@ -139,4 +139,35 @@ void main() {
     expect(p.sourceSpeakerId('b', 99), 1);
     p.dispose();
   });
+  test('large recordings reserve Omi identity while allocating display voices', () async {
+    final p = ConversationDetailProvider(
+      assignSpeaker: (_, __, {isUser, personId, speakerId}) async => true,
+      fetchRecording: (_) async => RecordingTranscript([
+        RecordingLine('c1', line('omi')..speakerId = 99),
+        for (var i = 0; i < 101; i++)
+          RecordingLine('c$i', line(i == 1 ? 'a' : 'voice-$i'), scope: 'scope-$i', label: 'SPEAKER_1'),
+      ]),
+    );
+    select(p);
+    await p.loadRecordingTranscript();
+    expect(p.recordingDisplaySegments.first.speakerId, 99);
+    expect(p.recordingDisplaySegments.skip(1).any((line) => line.speakerId == 99), isFalse);
+    expect(p.recordingDisplaySegments.skip(1).map((line) => line.speakerId).toSet(), hasLength(101));
+    p.dispose();
+  });
+  test('recording metadata cannot hide a newer visible line', () async {
+    final p = ConversationDetailProvider(
+      assignSpeaker: (_, __, {isUser, personId, speakerId}) async => true,
+      fetchRecording: (_) async => RecordingTranscript([
+        RecordingLine('c1', line('a'), scope: 'scope', label: 'SPEAKER_1'),
+        RecordingLine('c2', line('b'), scope: 'scope', label: 'SPEAKER_1', offset: 60),
+      ]),
+    );
+    select(p);
+    p.conversation.transcriptSegments.add(line('newer')..start = 3);
+    await p.loadRecordingTranscript();
+    expect(p.recordingSegments.map((line) => line.id), contains('newer'));
+    expect(p.recordingDisplaySegments.map((line) => line.id), contains('newer'));
+    p.dispose();
+  });
 }

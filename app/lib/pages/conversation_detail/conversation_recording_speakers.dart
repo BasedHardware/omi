@@ -1,9 +1,11 @@
+import 'package:collection/collection.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/recording_speakers.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/constants.dart';
 
 /// Recording transcript loading and display identity, independent of save/summary scheduling.
 mixin ConversationRecordingSpeakers on ChangeNotifier {
@@ -88,6 +90,14 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
             label: line.label,
             offset: line.offset),
     ], episodeId: result.episodeId);
+    final receivedIds = _recording!.lines.map((line) => line.segment.id).toSet();
+    final pendingLines = current.values.where((line) => !receivedIds.contains(line.id)).toList();
+    if (pendingLines.isNotEmpty) {
+      final anchorOffset =
+          _recording!.lines.where((line) => line.conversationId == id).map((line) => line.offset).firstOrNull ?? 0.0;
+      _recording!.lines.addAll([for (final line in pendingLines) RecordingLine(id, line, offset: anchorOffset)]);
+      _recording!.lines.sort((a, b) => (a.segment.start + a.offset).compareTo(b.segment.start + b.offset));
+    }
     _recordingById.clear();
     _recordingById.addEntries(_recording!.lines.map((line) => MapEntry(line.segment.id, line)));
     _recordingSegments = _recording!.lines.map((line) => line.segment).toList();
@@ -97,8 +107,10 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
         TranscriptSegment.fromJson(line.segment.toJson())
           ..start = line.segment.start + line.offset
           ..end = line.segment.end + line.offset
-          ..speakerId = displayIds.putIfAbsent(
-              line.voice ?? (line.conversationId, line.segment.speakerId), () => displayIds.length + 1),
+          ..speakerId = line.segment.speakerId == omiSpeakerId
+              ? omiSpeakerId
+              : displayIds.putIfAbsent(line.voice ?? (line.conversationId, line.segment.speakerId),
+                  () => displayIds.length + 1 >= omiSpeakerId ? displayIds.length + 2 : displayIds.length + 1),
     ];
     _recordingOwnerId = id;
     notifyListeners();
@@ -143,7 +155,12 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
               {
                 'conversation_id': group.key,
                 'segment_ids': group.value,
-                if (speakerId != null) 'speaker_id': sourceSpeakerId(group.value.first, speakerId)
+                if (speakerId != null) 'speaker_id': sourceSpeakerId(group.value.first, speakerId),
+                if (speakerId != null && recordingLine(group.value.first)?.voice != null)
+                  'voice': {
+                    'speaker_id_scope': recordingLine(group.value.first)!.voice!.$1,
+                    'stream_speaker': recordingLine(group.value.first)!.voice!.$2,
+                  }
               },
           ],
           personId: personId,

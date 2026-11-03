@@ -184,3 +184,32 @@ def test_recording_transcript_is_ordered_at_recorded_offsets(recording):
     rows = service.transcript('u', 'c1')['conversations']
     assert [row['id'] for row in rows] == ['c0', 'c1', 'c2']
     assert [row['recording_offset_seconds'] for row in rows] == [0, 60, 120]
+
+
+def test_client_voice_proof_rejects_scope_reuse_before_any_write(recording):
+    from models.recording_speakers import RecordingVoice
+
+    before = deepcopy(recording.rows)
+    body = request(
+        selections=[
+            RecordingSelection(
+                conversation_id='c1',
+                segment_ids=['c1-s'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stale-stream', stream_speaker='SPEAKER_0'),
+            )
+        ]
+    )
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', body, None)
+    assert error.value.status_code == 409
+    assert error.value.detail['code'] == 'stale_speaker'
+    assert recording.rows == before
+
+
+def test_sync_merge_redirect_keeps_recording_rename_available(recording):
+    recording.rows[('users', 'u', 'conversations', 'donor')] = dict(
+        id='donor', deleted=True, sync_merged_into='c1', transcript_segments=[]
+    )
+    body = request(selections=[RecordingSelection(conversation_id='donor', segment_ids=['c1-s'], speaker_id=4)])
+    assert edit('u', 'donor', body, None)['applied_count'] == 3
