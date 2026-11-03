@@ -77,7 +77,7 @@ run_proof "summary task recovery, concurrency and expiry" \
 run_proof "job-store conformance (sim + emulator)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py
 
-# Daily parity PL-061/105/363. A missing old store must fail this qualification;
+# Daily parity PL-396/105/363. A missing old store must fail this qualification;
 # Postgres is additionally required by the all-backend local invocation.
 run_proof "held-custody conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \

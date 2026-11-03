@@ -1,4 +1,4 @@
-"""PL-061/105/363: retained audio never becomes a false ACK or a repeated paid attempt.
+"""PL-396/105/363: retained audio never becomes a false ACK or a repeated paid attempt.
 
 Same admission, status and recovery code on old Firestore, new Postgres and the
 simulator. Require OMI_REQUIRE_STORE_BACKENDS=all for qualification. Audio/VAD
@@ -120,7 +120,7 @@ def assert_unspent(h, before, reason):
 
 
 @pytest.mark.parametrize('state', ['held', 'prepared', 'running', 'failed_held'])
-def test_pl061_partial_results_never_acknowledge_unresolved_custody(store_backend, monkeypatch, state):
+def test_pl396_partial_results_never_acknowledge_unresolved_custody(store_backend, monkeypatch, state):
     h = store_backend
     owner, binding, _ = seed(h)
     result = {**PARTIAL['result'], 'new_memories': ['visible']}
@@ -137,7 +137,7 @@ def test_pl061_partial_results_never_acknowledge_unresolved_custody(store_backen
     assert visible.get().to_dict()['status'] == 'completed'
 
 
-def test_pl061_only_valid_completed_ledger_releases_custody(store_backend, monkeypatch):
+def test_pl396_only_valid_completed_ledger_releases_custody(store_backend, monkeypatch):
     h = store_backend
     owner, binding, _ = seed(h)
     monkeypatch.setattr(intake, 'time', SimpleNamespace(time=lambda: T0 + 20))
