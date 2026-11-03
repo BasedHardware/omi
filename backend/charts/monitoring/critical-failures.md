@@ -23,7 +23,8 @@ the executable definitions. Every rule contains the action, scope and threshold.
 | `omi-enrichment-queue-depth-page` | Native Cloud Tasks enrichment depth, 5m maximum >6000; 15m | Check dispatch, worker responses and drain rate before adding capacity. |
 | `omi-finalization-dead-letter-stock` | Global finalization dead-letter stock >45000; 15m | Split reasons and use fenced recovery; never delete jobs. |
 | `omi-stt-vendor-benched-page` | Soniox or Modulate minimum stage <=25; 15m | Inspect provider errors and GateState; get recovery approval before clearing a bench. |
-| `omi-stt-vendor-credit-page` | Any Soniox/Modulate `provider_budget_exhausted` close in 15m; 1m | Billing owner verifies and restores credits before an account-circuit reset. |
+| `omi-modulate-credit-page` | Any Modulate `provider_budget_exhausted` close in 15m; 1m | Billing owner verifies and restores credits before an account-circuit reset. |
+| `omi-soniox-budget-exhausted` (existing) | Any Soniox `provider_budget_exhausted` close in 5m; immediate | Verify Soniox balance and restore credits before resetting its circuit. |
 | `omi-incluster-guard-unsafe-page` | Any unsafe guard signal in 15m; 1m | Read verdict/reason and whether rollback completed; coordinate recovery with the lead. |
 
 Batch and finalization stocks are replicated global gauges: take `max`, never
@@ -32,6 +33,8 @@ The low-stage selector names the two serving paid targets; retired Parakeet's
 persistent low stage must not cause this page. A pristine NaN stage does not
 satisfy `<=25`. The credit alert uses the emitted closed `provider` and `reason`
 labels, rather than raw HTTP bodies or a guessed `status_code` label.
+Soniox already has a page in the live-STT gate; the new credit rule covers
+Modulate only, so the two rules cannot double-notify for one provider refusal.
 
 ## Evidence and coverage
 

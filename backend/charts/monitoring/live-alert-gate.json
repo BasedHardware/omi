@@ -52,7 +52,7 @@
     "omi-enrichment-queue-depth-page",
     "omi-finalization-dead-letter-stock",
     "omi-stt-vendor-benched-page",
-    "omi-stt-vendor-credit-page",
-    "omi-incluster-guard-unsafe-page"
+    "omi-incluster-guard-unsafe-page",
+    "omi-modulate-credit-page"
   ]
 }

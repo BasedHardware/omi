@@ -527,11 +527,11 @@
     "record": null
   },
   {
-    "uid": "omi-stt-vendor-credit-page",
+    "uid": "omi-modulate-credit-page",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Critical pipeline failures",
-    "title": "Soniox or Modulate has rejected company credit",
+    "title": "Modulate has rejected company credit",
     "condition": "C",
     "data": [
       {
@@ -547,7 +547,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=~\"soniox|modulate\",reason=\"provider_budget_exhausted\"}[15m]))",
+          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"modulate\",reason=\"provider_budget_exhausted\"}[15m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -626,18 +626,18 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "Soniox or Modulate has rejected company credit",
+      "summary": "Modulate has rejected company credit",
       "user_impact": "A serving transcription provider cannot accept paid work; fallback capacity may be exhausted next.",
       "scope": "Company-paid live STT closes classified provider_budget_exhausted (HTTP 402); grouped by closed provider label.",
       "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
       "safe_next_action": "Check the named vendor balance and billing console and ask the billing owner to top up or restore credits. Do not reset account circuits before credits are confirmed.",
-      "threshold": "Any 402-classified close in 15m, sustained 1m. Seven-day local replay catches two Soniox credit episodes on Nov2; Oct28 and Nov3 are zero. A credit refusal is actionable even at low volume.",
+      "threshold": "Any Modulate 402-classified close in 15m, sustained 1m. Seven-day local Modulate count is zero; synthetic single-close control fires. Soniox is already covered by omi-soniox-budget-exhausted, separately replayed to avoid duplicate pages.",
       "runbook": "backend/charts/monitoring/critical-failures.md"
     },
     "labels": {
       "severity": "critical",
       "instatus_component": "speech-processing",
-      "alert_identity": "omi-stt-vendor-credit-page",
+      "alert_identity": "omi-modulate-credit-page",
       "component": "live-transcription",
       "impact": "product",
       "tier": "page",

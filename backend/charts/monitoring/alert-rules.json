@@ -24806,136 +24806,6 @@
     "record": null
   },
   {
-    "uid": "omi-stt-vendor-credit-page",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Critical pipeline failures",
-    "title": "Soniox or Modulate has rejected company credit",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 600,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=~\"soniox|modulate\",reason=\"provider_budget_exhausted\"}[15m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  0
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-11-03T19:00:00Z",
-    "noDataState": "OK",
-    "execErrState": "KeepLast",
-    "for": "1m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "Soniox or Modulate has rejected company credit",
-      "user_impact": "A serving transcription provider cannot accept paid work; fallback capacity may be exhausted next.",
-      "scope": "Company-paid live STT closes classified provider_budget_exhausted (HTTP 402); grouped by closed provider label.",
-      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
-      "safe_next_action": "Check the named vendor balance and billing console and ask the billing owner to top up or restore credits. Do not reset account circuits before credits are confirmed.",
-      "threshold": "Any 402-classified close in 15m, sustained 1m. Seven-day local replay catches two Soniox credit episodes on Nov2; Oct28 and Nov3 are zero. A credit refusal is actionable even at low volume.",
-      "runbook": "backend/charts/monitoring/critical-failures.md"
-    },
-    "labels": {
-      "severity": "critical",
-      "instatus_component": "speech-processing",
-      "alert_identity": "omi-stt-vendor-credit-page",
-      "component": "live-transcription",
-      "impact": "product",
-      "tier": "page",
-      "audience": "human",
-      "owner": "two-lane-lead"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": [
-        "alertname"
-      ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h"
-    },
-    "record": null
-  },
-  {
     "uid": "omi-incluster-guard-unsafe-page",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -25055,6 +24925,136 @@
       "instatus_component": "observability",
       "alert_identity": "omi-incluster-guard-unsafe-page",
       "component": "monitoring",
+      "impact": "product",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-modulate-credit-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Critical pipeline failures",
+    "title": "Modulate has rejected company credit",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"modulate\",reason=\"provider_budget_exhausted\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T19:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "1m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Modulate has rejected company credit",
+      "user_impact": "A serving transcription provider cannot accept paid work; fallback capacity may be exhausted next.",
+      "scope": "Company-paid live STT closes classified provider_budget_exhausted (HTTP 402); grouped by closed provider label.",
+      "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
+      "safe_next_action": "Check the named vendor balance and billing console and ask the billing owner to top up or restore credits. Do not reset account circuits before credits are confirmed.",
+      "threshold": "Any Modulate 402-classified close in 15m, sustained 1m. Seven-day local Modulate count is zero; synthetic single-close control fires. Soniox is already covered by omi-soniox-budget-exhausted, separately replayed to avoid duplicate pages.",
+      "runbook": "backend/charts/monitoring/critical-failures.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-modulate-credit-page",
+      "component": "live-transcription",
       "impact": "product",
       "tier": "page",
       "audience": "human",
