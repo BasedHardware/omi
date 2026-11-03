@@ -499,37 +499,31 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
 
 @pytest.mark.asyncio
 async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch, caplog):
-    import asyncio
     from routers import batch_pipeline as routes
 
     _, store = api
     caplog.set_level(logging.INFO, logger=routes.__name__)
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
-    entered, release = asyncio.Event(), asyncio.Event()
+    events = []
 
     async def recover(segment, owner):
-        entered.set()
-        await release.wait()
+        events.append('recognition')
         return 'recovered'
+
+    async def reconcile(**kwargs):
+        events.append(('owner_reconcile', kwargs['owner_only']))
 
     service.recovery = Mock()
     from unittest.mock import AsyncMock
 
     service.recovery.recover_async = AsyncMock(side_effect=recover)
-    service.reconcile_async = AsyncMock()
-    task = asyncio.create_task(
-        routes.recover_quarantine(
-            routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
-        )
+    service.reconcile_async = AsyncMock(side_effect=reconcile)
+    result = await routes.recover_quarantine(
+        routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
     )
-    try:
-        await asyncio.wait_for(entered.wait(), 2)
-        assert not task.done()  # The request stays active during the provider call.
-        service.reconcile_async.assert_not_awaited()
-    finally:
-        release.set()
-    assert await task == {'status': 'recovered'}
+    assert result == {'status': 'recovered'}
+    assert events == ['recognition', ('owner_reconcile', True)]
     service.reconcile_async.assert_awaited_once_with(
         owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic', owner_only=True
     )
