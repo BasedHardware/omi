@@ -587,6 +587,7 @@ and an explicit empty literal renders as `''`.
 | `RECORD_SEAL_REPAIR_ENABLED` | Default on; independent bounded concurrent in-cluster repair of no-job and pending record seals using canonical privacy and tail proof | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_ENABLED` | Default on; bounded in-cluster proof and repair of dead record producers | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` | Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_SEAL_WORKER_ENABLED` | Default on; autoscaled CPU seal slots claim unsealed record_pending obligations using unchanged canonical proof and isolated row budget | backend | env | open | — | — | — | — | keep | keep | — | infracost / two-lane lead |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SERVER_BATCH_ONLY_ENABLED` | Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1197,6 +1198,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_SEAL_SWEEPER_ENABLED` — Default on; bounded in-cluster proof and repair of dead record producers (fail: open)
 - `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
 - `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` — Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing (fail: open)
+- `RECORD_SEAL_WORKER_ENABLED` — Default on; autoscaled CPU seal slots claim unsealed record_pending obligations using unchanged canonical proof and isolated row budget (fail: open)
 - `REPEAT_WORK_REVISION_ENABLED` — Reuse existing sync outbox with 60min ceiling and exact successful snapshot-based notes/L1 dedupe; content-free call/final joins (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
