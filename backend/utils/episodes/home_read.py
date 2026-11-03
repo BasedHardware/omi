@@ -274,15 +274,17 @@ def project_episode(
     hidden = 0
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
+        if row is not None and list_row and _too_short_for_a_home_row(row):
+            hidden += 1
+            continue
         if (
             row is None
-            or not conversations.is_visible_conversation(row)
+            or not conversations.is_visible_conversation(row, include_discarded=not list_row)
+            or row.get('dream_duplicate_of')
+            or conversations.bridge_pending.hidden(row)
             or is_relevance_discarded(row)
             or row.get('sync_merged_into')
         ):
-            continue
-        if list_row and _too_short_for_a_home_row(row):
-            hidden += 1
             continue
         from utils.conversations.home_titles import neutralize_minimum_title
 

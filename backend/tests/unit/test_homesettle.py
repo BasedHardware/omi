@@ -154,12 +154,7 @@ def test_membership_kill_switch_off_and_capability_fail_open(monkeypatch):
 def test_floor_member_with_long_window_is_not_a_standalone_home_row(monkeypatch):
     monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'on')
     assert home_read._too_short_for_a_home_row(
-        floor(
-            summary_blocked_reason=None,
-            structured={'title_provenance': 'server_minimum'},
-            started_at=NOW - timedelta(hours=4),
-            finished_at=NOW - timedelta(hours=3),
-        )
+        floor(started_at=NOW - timedelta(hours=4), finished_at=NOW - timedelta(hours=3))
     )
 
 

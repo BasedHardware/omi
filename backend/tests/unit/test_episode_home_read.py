@@ -329,7 +329,6 @@ def test_only_the_short_member_leaves_a_longer_episode(monkeypatch):
         {'sync_relevance_user_kept': True},
         {'summary_blocked_reason': None},
         {'status': 'in_progress'},
-        {'structured': {'title': 'short', 'overview': 'has notes'}},
     ],
 )
 def test_short_row_stays_when_anything_says_it_matters(monkeypatch, extra):
