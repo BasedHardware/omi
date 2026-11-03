@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from routers.listen import receiver as receiver_module, visible_restore as restore_module
+from routers.listen.contracts import ListenRequest
 from routers.listen.receiver import ListenReceiver
 from routers.listen.local_preview import renew_local_preview
 from config.server_batch import owned
@@ -330,7 +331,7 @@ async def test_engine_rescind_routes_only_visible_restore_with_durable_custody(h
     h = harness
     monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
     h.host.server_batch_only = server_batch_only
-    h.host.request.local_preview = True
+    h.host.request = ListenRequest(websocket=None, uid=h.host.request.uid, sample_rate=16000, local_preview=True)
     h.host.local_preview_batch = True
     h.host._local_preview_pinned = True
     h.receiver.visible_restore = None

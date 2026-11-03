@@ -20,6 +20,7 @@ from routers.listen.local_preview import (
     note_deferred_stream_closed,
     renew_local_preview,
 )
+from routers.listen.contracts import ListenRequest
 from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
 from utils.metrics import (
@@ -47,7 +48,8 @@ def counter(metric, **labels):
 
 
 def make_host(**overrides):
-    request = SimpleNamespace(
+    request = ListenRequest(
+        websocket=None,
         uid=overrides.pop('uid', 'batch-owner'),
         local_preview=overrides.pop('local_preview', True),
         onboarding_mode=overrides.pop('onboarding_mode', False),
@@ -400,12 +402,14 @@ async def test_engine_unavailable_counts_once_and_rescind_is_sticky(monkeypatch,
     monkeypatch.setattr(receiver_module, 'attach_visible_restore', attach)
     labels = dict(client_platform='ios', reason='locale_asset_missing')
     before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
+    original_request = host.request
     event = json.dumps({'type': 'local_preview_engine_unavailable', 'reason': 'locale_asset_missing'})
     await ListenReceiver._handle_text(fake, event)
     await ListenReceiver._handle_text(fake, event)
     assert counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels) == before + 1
     assert host.local_preview_batch is (not enabled)
     assert host.request.local_preview is (not enabled)
+    assert original_request.local_preview is True  # The actual request contract is frozen.
     assert attach.call_count == int(enabled)
     monkeypatch.setenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'true')
     # Neither policy admission nor repeated lease renewal can undo a rescind.

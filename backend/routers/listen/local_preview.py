@@ -14,6 +14,7 @@ Realtime apps and webhooks degrade for these sessions by ruling (David,
 import logging
 import os
 import time
+from dataclasses import replace
 
 from prometheus_client import Counter, Histogram
 
@@ -163,7 +164,7 @@ def rescind_local_preview(host, payload) -> bool:
     if os.getenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'true').strip().lower() in {'false', '0', 'off', 'no'}:
         return False
     host.local_preview_batch = False
-    host.request.local_preview = False
+    host.request = replace(host.request, local_preview=False)
     host._local_preview_engine_rescinded = True
     record_fallback(
         component='stt_live_session',
