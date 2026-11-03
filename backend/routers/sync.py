@@ -813,6 +813,9 @@ async def sync_local_files_v2(
                 content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
             )
 
+        early_capture_received_at = (
+            capture_received_at if any(is_early_capture_time(get_timestamp_from_path(path)) for path in paths) else None
+        )
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
         # temporal comparison (recording-session binding compares them against
@@ -938,7 +941,11 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
-                    'capture_received_at': capture_received_at,
+                    **(
+                        {'capture_received_at': early_capture_received_at}
+                        if early_capture_received_at is not None
+                        else {}
+                    ),
                     'recording_session_id': recording_session_id,
                     'audio_start_seconds': (
                         audio_start_seconds if isinstance(audio_start_seconds, (int, float)) else None
@@ -1229,7 +1236,7 @@ async def sync_local_files_v2(
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
                 'enqueued_at': time.time(),
-                'capture_received_at': capture_received_at,
+                **({'capture_received_at': early_capture_received_at} if early_capture_received_at is not None else {}),
                 'lane': lane_decision.lane.value,
                 'capture_time_trust': lane_decision.trust.value,
                 'recording_age_seconds': lane_decision.maximum_age_seconds,
@@ -1481,7 +1488,7 @@ async def sync_local_files_v2(
                             recording_session_id=recording_session_id,
                             audio_start_seconds=audio_start_seconds,
                             audio_end_seconds=audio_end_seconds,
-                            capture_received_at=capture_received_at,
+                            capture_received_at=early_capture_received_at,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )

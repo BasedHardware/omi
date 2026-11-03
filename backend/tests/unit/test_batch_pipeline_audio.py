@@ -152,6 +152,45 @@ def test_split_early_file_keeps_its_clock_after_a_derived_start_crosses_the_floo
     assert [u.stored_capture_at for u in units] == [receipt - 2, receipt - 1]
 
 
+@pytest.mark.parametrize('covered,kept', [((0, 2), [2, 3]), ((1, 2), [0, 2, 3])])
+def test_coverage_trimmed_early_units_keep_receipt_clock_and_pcm_order(tmp_path, monkeypatch, covered, kept):
+    from types import SimpleNamespace
+    from models.capture_coverage import FrameRange
+    from utils.capture import coverage
+
+    path = pcm(tmp_path, 1704067199)
+    Path(path).write_bytes(
+        b''.join(struct.pack('<I', 32000) + struct.pack('<h', index + 1) * 16000 for index in range(4))
+    )
+    claim = {
+        'capture_root': '123e4567-e89b-12d3-a456-426614174000',
+        'clock_epoch': 1,
+        'source_frame_start': 0,
+        'frame_count': 4,
+        'rate_hz': 16000,
+        'codec': 'pcm16',
+        'channel': 'mono',
+    }
+    monkeypatch.setenv(coverage.FLAG, 'serve')
+    monkeypatch.setattr(
+        coverage, 'admit', lambda *_a, **_k: SimpleNamespace(covered=[FrameRange(start=covered[0], end=covered[1])])
+    )
+    receipt = 1800000000.0
+    units = list(
+        capture_decode.decode_units(
+            [path],
+            received_at=receipt,
+            max_seconds=1,
+            coverage_context={'uid': 'synthetic', 'capture_evidence_claims': {Path(path).name: claim}},
+        )
+    )
+    assert [unit.capture_at for unit in units] == [1704067199 + index for index in kept]
+    assert [unit.stored_capture_at for unit in units] == [receipt - len(kept) + index for index in range(len(kept))]
+    for unit, index in zip(units, kept):
+        with wave.open(io.BytesIO(unit.wav)) as stream:
+            assert stream.readframes(16000) == struct.pack('<h', index + 1) * 16000
+
+
 def test_receipt_clock_does_not_change_normal_or_future_batch_units(tmp_path):
     receipt = 1800000000.0
     paths = [pcm(tmp_path, receipt - 100, 16000), pcm(tmp_path, receipt + 170, 16000)]

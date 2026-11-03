@@ -72,13 +72,17 @@ def decode_units(
         from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
 
         wavs, source_maps, generated = prepare((coverage_context or {}).get('uid'), wavs, frames, coverage_context)
+        early_paths = {
+            path
+            for path in wavs
+            if received_at is not None
+            and is_early_capture_time(
+                (source_maps.get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path))
+            )
+        }
         # Count canonical samples before streaming the units. Untrusted clock
         # gaps cannot place siblings years before receipt or overlap them.
-        early_frames = sum(
-            len(_canonical(path)) // 2
-            for path in wavs
-            if received_at is not None and is_early_capture_time(get_timestamp_from_path(path))
-        )
+        early_frames = sum(len(_canonical(path)) // 2 for path in wavs if path in early_paths)
         early_committed_frames = 0
 
         def packed_unit(start, pcm, runs, early):
@@ -100,7 +104,7 @@ def decode_units(
                 raise ValueError('empty decoded sync audio')
             end = start + len(pending) / (2 * RATE)
             gap = round((capture - end) * RATE)
-            early = received_at is not None and is_early_capture_time(capture)
+            early = path in early_paths
             if early and pending_early:
                 gap = 0  # Invalid wall-clock gaps are not silence or timing proof.
             if pending and (

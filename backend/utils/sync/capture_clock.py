@@ -91,14 +91,16 @@ def capture_time_rejection(
     return None
 
 
-def clamp_capture_time(capture_time: float, *, now: Optional[float] = None) -> float:
+def clamp_capture_time(capture_time: float, *, now: Optional[float] = None, allow_early_clamp: bool = True) -> float:
     """Clamp an untrustworthy early or within-tolerance future stored time.
 
     Identity callers retain raw times. Multi-file callers shift early spans
     together with ``early_capture_clock_offsets`` to preserve duration/order.
+    Callers that already applied that admission offset can future-bound only
+    with ``allow_early_clamp=False``; unadmitted legacy clock scopes stay intact.
     """
     effective_now = time.time() if now is None else now
-    if is_early_capture_time(capture_time) and early_capture_clamp_enabled():
+    if allow_early_clamp and is_early_capture_time(capture_time) and early_capture_clamp_enabled():
         return effective_now
     return min(capture_time, effective_now)
 

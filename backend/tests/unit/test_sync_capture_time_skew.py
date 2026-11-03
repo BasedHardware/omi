@@ -236,6 +236,7 @@ def test_1995_capture_is_admitted_with_closed_metric_and_content_free_log(tmp_pa
     assert Path(paths[0]).name == EARLY_NAME
     assert parse_sync_filename_timestamp(EARLY_NAME) == 788918400
     assert capture_clock.clamp_capture_time(788918400, now=1800000000) == 1800000000
+    assert capture_clock.clamp_capture_time(788918400, now=1800000000, allow_early_clamp=False) == 788918400
     assert _capture_time_counter('accepted_early_clamped') == before + 1
     lines = [r.getMessage() for r in caplog.records if 'event=sync_capture_time' in r.getMessage()]
     assert len(lines) == 1 and 'outcome=accepted_early_clamped' in lines[0]
@@ -310,6 +311,49 @@ async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor
     assert 1704067201.0 - offsets[derived] == receipt - 2
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('retrim', [False, True])
+async def test_coverage_derivatives_keep_original_early_clock_through_vad(monkeypatch, tmp_path, retrim):
+    from utils.sync.wal_audio_coverage import apply_wal_audio_coverage, build_sync_source_frame_maps
+
+    source = str(tmp_path / 'audio_omi_pcm16_16000_1704067199.wav')
+    pipeline.AudioSegment.silent(duration=4000, frame_rate=16000).export(source, format='wav')
+    claim = {
+        'capture_root': '123e4567-e89b-12d3-a456-426614174000',
+        'clock_epoch': 1,
+        'source_frame_start': 0,
+        'frame_count': 4,
+        'rate_hz': 16000,
+        'codec': 'pcm16',
+        'channel': 'mono',
+    }
+    mapping = build_sync_source_frame_maps(
+        {Path(source).name.replace('.wav', '.bin'): claim}, [source], {source: [16000] * 4}
+    )[source]
+    trimmed = apply_wal_audio_coverage(source, claim, [16000] * 4, [(2, 4)], frame_map=mapping)
+    assert trimmed is not None
+    if retrim:
+        [path] = trimmed['wav_paths']
+        mapping = trimmed['frame_maps'][path]
+        trimmed = apply_wal_audio_coverage(path, mapping['claim'], [16000] * 2, [(3, 4)], frame_map=mapping)
+        assert trimmed is not None
+
+    async def inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    duration = 1 if retrim else 2
+    monkeypatch.setattr(pipeline, 'run_blocking', inline)
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 0, 'end': duration}])
+    segments, early = set(), set()
+    errors, _ = await pipeline._run_sync_vad_phase(trimmed['wav_paths'], segments, trimmed['frame_maps'], {}, early)
+    assert not errors and segments == early and len(early) == 1
+    [path] = segments
+    stamp = pipeline.get_timestamp_from_path(path)
+    assert stamp >= capture_clock.EARLIEST_CAPTURE_TIME.timestamp()
+    offsets = capture_clock.early_capture_clock_offsets([(path, stamp, duration)], now=1800000000.0)
+    assert stamp - offsets[path] == 1800000000.0 - duration
+
+
 def test_early_clock_does_not_forward_untrusted_client_session_bounds(client, monkeypatch):
     captured = {}
 
@@ -330,6 +374,27 @@ def test_early_clock_does_not_forward_untrusted_client_session_bounds(client, mo
     assert response.status_code == 202, response.text
     assert captured['intake_context']['audio_start_seconds'] is None
     assert captured['intake_context']['audio_end_seconds'] is None
+
+
+@pytest.mark.parametrize('delta', [None, -10, 170], ids=['early', 'normal', 'future-skew'])
+def test_only_reset_clock_uploads_add_receipt_metadata_to_batch_context(client, monkeypatch, delta):
+    captured = {}
+
+    async def batch_route(**_kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def accept(**kwargs):
+        captured.update(kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'receipt', 'status': 'queued'})
+
+    monkeypatch.setattr(router, 'registered_record_response', batch_route)
+    monkeypatch.setattr(router, 'accept_batch_upload', accept)
+    response = _post_sync(client, EARLY_NAME if delta is None else _filename(delta))
+    assert response.status_code == 202, response.text
+    context = captured['intake_context']
+    assert ('capture_received_at' in context) is (delta is None)
+    if delta is None:
+        assert context['capture_received_at'] > capture_clock.EARLIEST_CAPTURE_TIME.timestamp()
 
 
 # --- one request-wide server-clock offset (fix round) ---
