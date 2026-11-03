@@ -8,11 +8,35 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from database.pinecone_mutation_lifecycle import MutationRegistry, drain_on_shutdown, install_shutdown_drain
+from database import pinecone_mutation_lifecycle as lifecycle
+
+
+def test_repeated_drain_does_not_restart_shutdown_grace(monkeypatch):
+    clock = [0.0]
+    waits = []
+    registry = MutationRegistry()
+    registry.reserve(('synthetic',))
+
+    def fail_write():
+        raise RuntimeError('synthetic Firestore unavailable')
+
+    def wait(timeout):
+        waits.append(timeout)
+        clock[0] += timeout
+
+    monkeypatch.setattr(lifecycle, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(registry._lock, 'wait', wait)
+    registry.activate(('synthetic',), fail_write)
+    assert registry.drain() == 0
+    assert registry.drain() == 0
+    assert waits == [3.0]
+    registry.discard(('synthetic',))
+    registry.start()
 
 
 async def test_shutdown_deadline_leaves_unsettled_ticket_visible_until_write_returns():
     entered, release, completed = Event(), Event(), Event()
-    registry = MutationRegistry()
+    registry = MutationRegistry(grace_seconds=0)
     identity = ('synthetic',)
     registry.reserve(identity)
 
@@ -45,7 +69,7 @@ async def test_sigterm_settles_before_lifespan_and_chains_server_handler():
     original = signal.getsignal(signal.SIGTERM)
     server_signals = []
     settled = Event()
-    registry = MutationRegistry()
+    registry = MutationRegistry(grace_seconds=0)
     identity = ('synthetic',)
     registry.reserve(identity)
 
