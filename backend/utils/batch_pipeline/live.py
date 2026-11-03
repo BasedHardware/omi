@@ -16,6 +16,8 @@ import os
 import random
 import time
 
+from utils.conversations import phase_shadow
+
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
@@ -252,7 +254,12 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         )
 
     current = await run_blocking(db_executor, read_current)
-    record_barrier = require_record_audio_barrier(current)
+    try:
+        record_barrier = require_record_audio_barrier(current)
+    except ValueError:
+        phase_shadow.observe('batch_admission', current, False, now=now)
+        raise
+    phase_shadow.observe('batch_admission', current, True, now=now)
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
