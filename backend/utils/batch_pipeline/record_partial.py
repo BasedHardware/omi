@@ -14,7 +14,7 @@ from database.record_partial import update_run, continuation_refusal
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.record_partial_audio import digest, inventory_digest, missing_units, union
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC
+from utils.batch_pipeline.source_audio import MAGIC, batch_timing_store
 from utils.batch_pipeline.record_language import prove_manifest
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import list_audio_chunks
@@ -324,7 +324,7 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
             item,
             MAGIC + json.dumps(manifest, separators=(',', ':')).encode(),
         )
-        staged.append(replace(item, audio_uri=uri))
+        staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     intake = {
         'owner_id': uid,
         'owner_key': owner_key(uid),
