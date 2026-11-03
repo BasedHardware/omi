@@ -119,6 +119,9 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
   Widget build(BuildContext context) {
     final backlog = widget.backlog;
     if (!backlog.isVisible) return const SizedBox.shrink();
+    final canUpgrade = context.select<UsageProvider?, bool>(
+      (usage) => usage?.subscription?.subscription.plan == PlanType.basic,
+    );
     final l10n = context.l10n;
     final duration = OmiDuration.compact(
       backlog.waitingSeconds,
@@ -178,13 +181,15 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
                 onPressed: _busy ? null : _postpone,
               ),
             ],
-            const SizedBox(height: OmiSpacing.xs),
-            OmiButton.secondary(
-              key: Key('processing_backlog_upgrade_${widget.surface}'),
-              label: widget.surface == 'c' ? l10n.paywallComparePlans : l10n.upgrade,
-              expand: true,
-              onPressed: widget.onUpgrade,
-            ),
+            if (canUpgrade) ...[
+              const SizedBox(height: OmiSpacing.xs),
+              OmiButton.secondary(
+                key: Key('processing_backlog_upgrade_${widget.surface}'),
+                label: widget.surface == 'c' ? l10n.paywallComparePlans : l10n.upgrade,
+                expand: true,
+                onPressed: widget.onUpgrade,
+              ),
+            ],
             if (backlog.isCapped && widget.phoneAction != null) widget.phoneAction!,
           ],
         ),
