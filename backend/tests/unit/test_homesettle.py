@@ -256,3 +256,18 @@ def test_settled_below_floor_never_expires_but_remains_search_reachable(monkeypa
     monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'off')
     assert conversations.is_visible_conversation(row)
     assert not home_read._too_short_for_a_home_row(row)
+
+
+def test_list_projection_retains_pagination_and_filtered_reachability(monkeypatch):
+    from types import SimpleNamespace
+
+    configure_membership(monkeypatch)
+    request = SimpleNamespace(headers={home_membership.HELD_EPISODES_HEADER: 'e:a'})
+    response = SimpleNamespace(headers={})
+    rows = [floor(episode_id='e'), floor(id='older', episode_id='unfetched')]
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == rows[1:]
+    assert response.headers[home_membership.PAGE_SIZE_HEADER] == '2'
+    assert response.headers[home_membership.SUPPRESSED_HEADER] == 'a'
+    response.headers.clear()
+    assert home_membership.project_list('u', rows, request, response, filtered=True) == rows
+    assert response.headers == {}

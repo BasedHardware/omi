@@ -52,3 +52,21 @@ def suppress_held_members(uid: str, rows: list[dict], held: str) -> list[dict]:
         )
         logger.warning('event=home_episode_members outcome=visible exception_type=%s', type(error).__name__)
         return rows
+
+
+def held_for(request) -> str:
+    return request.headers.get(HELD_EPISODES_HEADER, '') if request is not None else ''
+
+
+def project_list(uid: str, rows: list[dict], request, response, *, filtered: bool) -> list[dict]:
+    """Home-only suppression retains the original storage count for pagination."""
+    held = held_for(request)
+    if not held or filtered:
+        return rows
+    if response is not None:
+        response.headers[PAGE_SIZE_HEADER] = str(len(rows))
+    retained = suppress_held_members(uid, rows, held)
+    if response is not None:
+        kept = {row['id'] for row in retained}
+        response.headers[SUPPRESSED_HEADER] = ','.join(row['id'] for row in rows if row['id'] not in kept)
+    return retained
