@@ -813,3 +813,56 @@ async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, bl
 
 async def _inline_serving_call(executor, fn, *args, **kwargs):
     return fn(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first_full', [True, False])
+async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatch, first_full):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    calls, waits, yields = [], [], []
+    second = asyncio.Event()
+    original_wait_for, original_sleep = asyncio.wait_for, asyncio.sleep
+    drain_task = None
+
+    async def admission(store):
+        nonlocal drain_task
+        drain_task = asyncio.current_task()
+        calls.append(1)
+        if len(calls) == 2:
+            second.set()
+        return first_full if len(calls) == 1 else False
+
+    async def wait_for(awaitable, timeout):
+        if asyncio.current_task() is drain_task:
+            waits.append(len(calls))
+            assert timeout == 20
+            if len(calls) == 1:
+                awaitable.close()
+                raise asyncio.TimeoutError
+        return await original_wait_for(awaitable, timeout)
+
+    async def sleep(delay):
+        if asyncio.current_task() is drain_task:
+            yields.append((len(calls), delay))
+        await original_sleep(delay)
+
+    async def reconcile_async(**kwargs):
+        return None
+
+    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async)
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'drain_recordings', admission)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', wait_for)
+    monkeypatch.setattr(serving.asyncio, 'sleep', sleep)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(second.wait(), timeout=2)
+    finally:
+        await serving.stop_serving(runtime)
+    assert calls == [1, 1]
+    assert waits == ([2] if first_full else [1, 2])
+    assert yields == ([(1, 0)] if first_full else [])

@@ -44,8 +44,22 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-# Leave headroom in the shared sync (16), DB (32) and storage (128) pools.
-RECORD_DRAIN_CONCURRENCY = 4
+
+
+def _drain_setting(name: str, default: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        value = default
+    return max(1, min(value, maximum))
+
+
+def record_drain_batch() -> int:
+    return _drain_setting('RECORD_DRAIN_BATCH', 100, 500)
+
+
+def record_drain_concurrency() -> int:
+    return _drain_setting('RECORD_DRAIN_CONCURRENCY', 16, 64)
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -378,8 +392,11 @@ async def admit_recording(store, pending, *, now=None):
     )
 
 
-async def drain_recordings(store):
+async def drain_recordings(store) -> bool:
+    """Drain one bounded pass; return whether a full page warrants another."""
     started = time.monotonic()
+    batch_size = record_drain_batch()
+    concurrency = record_drain_concurrency()
     segments, partial_count = [], 0
 
     async def drain_one(segment):
@@ -390,8 +407,6 @@ async def drain_recordings(store):
         partial_count += bool(pending.get('partial_coordinator'))
         try:
             await admit_recording(store, pending)
-            if not pending.get('partial_coordinator'):
-                return
         except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
             if pending.get('partial_coordinator'):
@@ -403,6 +418,10 @@ async def drain_recordings(store):
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
 
         def defer(tx):
+            # Admission can return without moving the obligation (for example
+            # a partial capture waiting on inventory). Re-read after admission
+            # so a no-op cannot monopolize every immediately repeated pass,
+            # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
             if latest.get('state') == 'record_pending':
                 delay = INVENTORY_POLL_SECONDS if (latest.get('partial_run') or {}).get('complete') else 60
@@ -417,17 +436,18 @@ async def drain_recordings(store):
             await drain_one(segment)
 
     try:
-        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
+        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
         remaining = iter(segments)
         # Join every worker even on failure; a retry must not overlap unfinished
         # work from this pass. Across replicas the existing intake/partial CAS
         # still decides admission; selection itself never claims or expires rows.
         results = await asyncio.gather(
-            *(worker() for _ in range(min(RECORD_DRAIN_CONCURRENCY, len(segments)))), return_exceptions=True
+            *(worker() for _ in range(min(concurrency, len(segments)))), return_exceptions=True
         )
         for result in results:
             if isinstance(result, BaseException):
                 raise result
+        return len(segments) == batch_size
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
