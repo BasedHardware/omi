@@ -163,21 +163,25 @@ autoscaling:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
     spotNodePool: batch-pipeline-pool-spot
-  # Max-of-two: admissible-ready backlog holds capacity through claim wedges;
-  # worker_flight wall occupancy holds it through healthy low-backlog drains.
-  # The adapter deduplicates scrape jobs per pod and rates flights over 10m.
-  # worker_flight includes executor wait and host work inside the exclusive GPU
-  # slot, not just GPU kernels. The pump acquires that slot BEFORE timing, so
-  # pipelineDepth 2 does not double-count the second lane's slot wait. Deep-only
-  # flights use worker_flight_deep and do not contribute to this chain signal.
-  # 40 damps brief ready-count bursts; ready remains the fast path for sustained
-  # steps. 0.6 preserves the measured replay headroom below 0.85 and the measured
-  # per-worker wall ceiling (0.93). The scaled-load replay is a model, not a
-  # production throughput qualification; retain the prod floor 4 / ceiling 16.
-  # A failed/missing metric blocks scale-down; partial stale pod series can
-  # undercount the fleet, so operators must also verify sampler freshness.
-  targetQueuedUnitsPerWorker: 40
-  targetChainBusyPerWorker: "0.6"
+  # External metrics from the supplied Prometheus adapter rules must be installed
+  # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
+  # Max-of-two (batchdesign 2026-11-01 PR-2): the HPA keeps the admissible-ready
+  # backlog target AND adds GPU-chain occupancy, sizing on the higher
+  # recommendation. The ready count holds capacity through claim-chain wedges
+  # (occupancy alone sheds lanes whenever claims bind rather than flights);
+  # occupancy keeps capacity through healthy drains where backlog reads low but
+  # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
+  # replica dominance over the ready-only answer whenever backlog exceeds the
+  # per-worker target). 32, not 16: at 25% the ready count flaps 0 <-> 128
+  # minute to minute and the floor drains each burst in about two minutes, so 16
+  # bought nodes that arrived after the work was done and the 1800s window held
+  # them. Ready stays the fast path for a sustained load step, since backlog
+  # only builds when capacity is short; the chain rate is smoothed over 10m
+  # (batchretune 2026-11-02 replay: mean 4.9 vs 7.7 replicas).
+  targetQueuedUnitsPerWorker: 32
+  # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
+  # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
+  targetChainBusyPerWorker: "0.5"
   # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
   scaleDownStabilizationSeconds: 1800
 podMonitoring:

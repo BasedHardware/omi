@@ -329,7 +329,11 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await drain_recordings(service.store)
+                if await drain_recordings(service.store):
+                    # Keep draining a backlog without the idle poll delay, but
+                    # always yield so shutdown and sibling loops can progress.
+                    await asyncio.sleep(0)
+                    continue
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving action=record_drain outcome=retry exception_type=%s', type(error).__name__

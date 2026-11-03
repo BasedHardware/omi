@@ -25,6 +25,7 @@ from utils.sync.assignment_errors import SyncAssignmentConflict
 async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog):
     from utils.batch_pipeline import live
 
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '4')
     store = MemoryStore()
     for i in range(10):
         store.rows['jobs', str(i)] = {
@@ -44,7 +45,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
                 slow.set()
                 await release.wait()
             else:
-                if active == live.RECORD_DRAIN_CONCURRENCY:
+                if active == 4:
                     full.set()
                 await slow.wait()
                 await full.wait()
@@ -63,7 +64,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
                 await asyncio.sleep(0.001)
             assert len(completed) == 9
             assert not task.done()
-            assert peak == live.RECORD_DRAIN_CONCURRENCY
+            assert peak == 4
         finally:
             release.set()
             await task
@@ -121,6 +122,127 @@ async def test_drain_emits_one_identifier_free_pass_on_query_failure(monkeypatch
     assert len(caplog.records) == 1
     assert 'row_count=0 partial_count=0 seconds=' in caplog.text
     assert 'synthetic-private-message' not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'raw,batch,concurrency',
+    [(None, 100, 16), ('bad', 100, 16), ('0', 1, 1), ('-3', 1, 1), ('999', 500, 64), ('7', 7, 7)],
+)
+def test_record_drain_settings_are_bounded(monkeypatch, raw, batch, concurrency):
+    from utils.batch_pipeline import live
+
+    for name in ('RECORD_DRAIN_BATCH', 'RECORD_DRAIN_CONCURRENCY'):
+        if raw is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, raw)
+    assert live.record_drain_batch() == batch
+    assert live.record_drain_concurrency() == concurrency
+
+
+@pytest.mark.parametrize(
+    'state,limit,expected', [('record_pending', 500, 500), ('record_pending', 999, 500), ('retry', 500, 100)]
+)
+def test_due_record_page_keeps_available_at_order_and_accepts_larger_batch(state, limit, expected):
+    from unittest.mock import Mock
+    from database.batch_pipeline_store import due
+
+    query = Mock()
+    query.collection.return_value = query
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = []
+    assert due(query, 'batch_pipeline_test_live', state, 1000, limit) == []
+    query.order_by.assert_called_once_with('available_at')
+    query.limit.assert_called_once_with(expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('count,full', [(2, True), (1, False), (0, False)])
+async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, count, full):
+    from utils.batch_pipeline import live
+
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    store = MemoryStore()
+    for i in range(count):
+        store.rows['jobs', str(i)] = {'state': 'record_pending', 'available_at': 0}
+    calls = []
+    original_due = store.due
+
+    def due(state, now, limit):
+        calls.append((state, limit))
+        return original_due(state, now, limit)
+
+    async def no_admission(*args):
+        return None
+
+    monkeypatch.setattr(store, 'due', due)
+    monkeypatch.setattr(live, 'admit_recording', no_admission)
+    assert await live.drain_recordings(store) is full
+    assert calls == [('record_pending', 2)]
+    assert store.due('record_pending', live.time.time(), 100) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['value_error', 'no_admission', 'admitted', 'already_deferred'])
+@pytest.mark.parametrize('partial_complete', [False, True])
+async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome, partial_complete):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'state': 'record_pending',
+        'available_at': 0,
+        'partial_coordinator': partial_complete,
+        'partial_run': {'complete': partial_complete},
+    }
+    monkeypatch.setattr(live.time, 'time', lambda: 1000)
+
+    async def admission(store, pending):
+        if outcome == 'value_error':
+            raise ValueError('retained capture not durable yet')
+        if outcome == 'admitted':
+            store.rows['jobs', 'synthetic']['state'] = 'ready'
+        if outcome == 'already_deferred':
+            store.rows['jobs', 'synthetic']['available_at'] = 2000
+        return None
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    row = store.rows['jobs', 'synthetic']
+    assert row['state'] == ('ready' if outcome == 'admitted' else 'record_pending')
+    delay = live.INVENTORY_POLL_SECONDS if partial_complete and outcome != 'value_error' else 60
+    expected = 0 if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
+    assert row['available_at'] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked_rows', [1, 2])
+async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_rows(monkeypatch, blocked_rows):
+    from utils.batch_pipeline import live
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    store = MemoryStore()
+    for i in range(2):
+        store.rows['jobs', str(i)] = {
+            'segment_id': str(i),
+            'state': 'record_pending',
+            'available_at': 0,
+            'fenced': i < blocked_rows,
+        }
+
+    async def admission(store, pending):
+        if pending['fenced']:
+            raise BatchPrivacyBlocked('synthetic privacy fence')
+        store.rows['jobs', pending['segment_id']]['state'] = 'ready'
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    assert await live.drain_recordings(store) is False
+    for row in store.rows.values():
+        assert row['available_at'] == 0
+        assert row['state'] == ('record_pending' if row['fenced'] else 'ready')
 
 
 @pytest.fixture(autouse=True)
