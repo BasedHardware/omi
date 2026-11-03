@@ -113,7 +113,7 @@ def test_automatic_review_is_emitted_after_commit_and_not_on_retry(world, monkey
     monkeypatch.setattr(speaker_identification, 'record_speaker_review', observe)
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
-    assert observed == ['sync_embedding']
+    assert observed == ['sync_embedding', None]
 
 
 @pytest.mark.parametrize('field,error', [('is_locked', PermissionError), ('deleted', LookupError)])

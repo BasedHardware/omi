@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/recording_speakers.dart';
+import 'package:omi/backend/schema/recording_speakers.dart';
 import 'package:omi/env/env.dart';
 import '../helpers/recording_speaker_fixtures.dart';
 
@@ -13,6 +14,37 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+  test('generated recording transcript preserves scope, provider label and recording offset', () {
+    final recording = RecordingTranscript.fromResponse(jsonEncode({
+      'enabled': true,
+      'episode_id': 'episode',
+      'conversations': [
+        {
+          'id': 'c1',
+          'recording_offset_seconds': 20,
+          'transcript_segments': [
+            {
+              'id': 'a',
+              'text': 'Synthetic speech',
+              'start': 0,
+              'end': 1,
+              'is_user': false,
+              'speaker_id_scope': 'scope',
+              'stream_speaker': 'SPEAKER_0'
+            }
+          ]
+        }
+      ]
+    }));
+    expect(recording.episodeId, 'episode');
+    expect(recording.lines.single.voice, ('scope', 'SPEAKER_0'));
+    expect(recording.lines.single.offset, 20);
+  });
+  test('generated recording transcript retains the disabled switch', () {
+    final recording = RecordingTranscript.fromResponse('{"enabled":false,"conversations":[]}');
+    expect(recording.enabled, isFalse);
+    expect(recording.lines, isEmpty);
   });
   for (final status in [404, 409, 200]) {
     test('disabled or old recording server falls back to explicit per-conversation ids: $status', () async {

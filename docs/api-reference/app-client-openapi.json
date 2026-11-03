@@ -27970,6 +27970,211 @@
         "title": "RecordingSpeakerResponse",
         "type": "object"
       },
+      "RecordingTranscriptMember": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "recording_offset_seconds": {
+            "title": "Recording Offset Seconds",
+            "type": "number"
+          },
+          "transcript_segments": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingTranscriptSegment"
+            },
+            "title": "Transcript Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "recording_offset_seconds",
+          "transcript_segments"
+        ],
+        "title": "RecordingTranscriptMember",
+        "type": "object"
+      },
+      "RecordingTranscriptResponse": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingTranscriptMember"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
+          }
+        },
+        "required": [
+          "enabled",
+          "conversations"
+        ],
+        "title": "RecordingTranscriptResponse",
+        "type": "object"
+      },
+      "RecordingTranscriptSegment": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable captured text when text includes active corrections.",
+            "title": "Original Text"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "SPEAKER_00",
+            "title": "Speaker"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "speaker_id_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id Scope"
+          },
+          "speaker_label_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "auto",
+                  "carried"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label Source"
+          },
+          "speech_profile_processed": {
+            "default": true,
+            "title": "Speech Profile Processed",
+            "type": "boolean"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          },
+          "stream_speaker": {
+            "title": "Stream Speaker",
+            "type": "string"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "translations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Translation"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translations"
+          }
+        },
+        "required": [
+          "text",
+          "is_user",
+          "start",
+          "end",
+          "stream_speaker"
+        ],
+        "title": "RecordingTranscriptSegment",
+        "type": "object"
+      },
       "RecordingVoice": {
         "properties": {
           "speaker_id_scope": {
@@ -52327,7 +52532,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingTranscriptResponse"
+                }
               }
             },
             "description": "Successful Response"
