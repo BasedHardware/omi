@@ -1192,22 +1192,26 @@ class PipelineWorker:
                             )
                         stage = 'assemble_words'
                     silence = state['silence_payload']
-                    if (
-                        not state['silence']
-                        and not words
-                        and not shapes[item.segment_id]['asr_words']
-                        and worker_silence_disposition_enabled()
-                    ):
-                        try:
-                            silence = inspect_silence(item, state['samples'])
-                        except Exception:
-                            # Unavailable/invalid strict VAD is never silence. Keep
-                            # the original empty-ASR quarantine and recovery route.
-                            silence = None
-                        if silence is not None:
-                            state['silence'] = True
-                            state['speech_spans'], state['speech_seconds'] = [], 0.0
-                            self.counts['silence'] += 1
+                    if not state['silence'] and not words and not shapes[item.segment_id]['asr_words']:
+                        if worker_silence_disposition_enabled():
+                            try:
+                                silence = inspect_silence(item, state['samples'])
+                            except Exception:
+                                # Unavailable/invalid strict VAD is never silence. Keep
+                                # the original empty-ASR quarantine and recovery route.
+                                silence = None
+                            if silence is not None:
+                                state['silence'] = True
+                                state['speech_spans'], state['speech_seconds'] = [], 0.0
+                                self.counts['silence'] += 1
+                        elif not item.shadow and strict_vad_shadow_sampled(item.segment_id):
+                            try:
+                                # Rollback qualification only: do not alter state or
+                                # suppress EMPTY_ASR when disposition is disabled.
+                                observed = inspect_silence(item, state['samples'])
+                                worker_metrics.strict_vad(observed is not None, True, asr_empty=True)
+                            except Exception:
+                                pass
                     if not state['silence'] and not words:
                         raise BatchValidationError(
                             ValidationReason.NO_OWNED_WORDS

@@ -64,6 +64,7 @@ SCOPE = (
     'utils/batch_pipeline/**/*.py',
     'diarizer/batch_pipeline*.py',
     'config/batch_pipeline*.py',
+    'config/batch_language_recovery.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
     'config/policy/**/*.py',

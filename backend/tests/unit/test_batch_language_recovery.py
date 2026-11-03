@@ -1134,3 +1134,110 @@ def test_words_repair_bounds_decoded_audio_and_fails_closed_on_malformed_jobs(
     assert outcome == 'repair_budget_held'
     assert not row(client).get('speech_redrive')
     assert modulate.call_count == 1
+
+
+@pytest.mark.parametrize(
+    'cap,seconds,master,expected',
+    [
+        (None, 61, True, False),
+        ('', 61, True, False),
+        ('bad', 61, True, False),
+        ('nan', 61, True, False),
+        ('inf', 61, True, False),
+        ('-1', 61, True, False),
+        ('0', 61, True, False),
+        ('600', 60, True, False),
+        ('600', 60.001, True, True),
+        ('600', 600, True, True),
+        ('600', 600.001, True, False),
+        ('9000', 7200, True, True),
+        ('9000', 7200.001, True, False),
+        ('600', float('nan'), True, False),
+        ('600', float('inf'), True, False),
+        ('600', None, True, False),
+        ('600', 61, False, False),
+    ],
+)
+def test_long_modulate_gate_is_bounded_and_fail_closed(monkeypatch, cap, seconds, master, expected):
+    from config.batch_language_recovery import long_recovery_allowed
+
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', str(master).lower())
+    if cap is None:
+        monkeypatch.delenv('BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS', cap)
+    assert long_recovery_allowed(seconds) is expected
+    if isinstance(seconds, (int, float)) and seconds > 60:
+        assert not allowed(seconds)  # Never widen Soniox's independent bound.
+
+
+@pytest.mark.parametrize('answer', ['empty', 'words_without_vad', 'error', 'worker_words'])
+def test_long_guarded_call_is_single_metered_attempt_and_never_false_silence(
+    setup, monkeypatch, legacy_dependencies, answer
+):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS', '600')
+    job = row(client)
+    job['duration_seconds'] = 61
+    if answer == 'worker_words':
+        worker_receipt(client, 2)
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as handle:
+        handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        handle.writeframes(b'\0' * (61 * 16000 * 2))
+    artifacts.fetch_audio.return_value = audio.getvalue()
+    if answer in {'words_without_vad', 'worker_words'}:
+        modulate.return_value = (WORDS, 'vi')
+    elif answer == 'error':
+        modulate.side_effect = TimeoutError('synthetic')
+    from utils.batch_pipeline import quarantine_recovery
+
+    accepted = Mock()
+    monkeypatch.setattr(quarantine_recovery, 'record_accepted', accepted)
+    expected = 'recovered' if answer == 'worker_words' else 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == expected
+    final = row(client)
+    receipts = final['recovery']['recognizers']
+    assert receipts['modulate']['outcome'] == (
+        'empty' if answer == 'empty' else 'error' if answer == 'error' else 'words'
+    )
+    if answer != 'worker_words':
+        assert receipts['soniox']['outcome'] == 'refused'
+        assert final['recovery_state'] == 'failed_held' and not final.get('result')
+        artifacts.persist_recovery_result.assert_not_called()
+    else:
+        assert artifacts.persist_recovery_result.call_args.args[1]['words']
+    assert accepted.call_count == (0 if answer == 'error' else 1)
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    modulate.assert_called_once()
+    soniox.assert_not_called()
+
+
+@pytest.mark.parametrize('gate', ['0', '600'])
+def test_long_guarded_units_recheck_funding_before_spend(setup, monkeypatch, legacy_dependencies, gate):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS', gate)
+    row(client)['duration_seconds'] = 61
+    from utils.batch_pipeline import quarantine_recovery
+
+    # Disposition inspects first; its after-download funding check refuses spend.
+    funding = Mock(return_value=False)
+    monkeypatch.setattr(quarantine_recovery, 'sync_allowed', funding)
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as handle:
+        handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        handle.writeframes(b'\0' * (61 * 16000 * 2))
+    artifacts.fetch_audio.return_value = audio.getvalue()
+    assert recovery.recover('bad', binding.owner_id) == ('held' if gate == '600' else 'failed_held')
+    artifacts.fetch_audio.assert_called_once()
+    assert funding.call_count == int(gate == '600')
+    if gate == '0':
+        from config.batch_language_recovery import duration_limited
+
+        assert duration_limited(row(client))
+    modulate.assert_not_called()
+    soniox.assert_not_called()
