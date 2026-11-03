@@ -19,6 +19,7 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -340,7 +341,7 @@ environment_shared:
           value: '30'
           category: rollout
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,parakeet
+          value: modulate-velma-2,soniox
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -358,6 +359,7 @@ environment_shared:
         WAKE_WORD_ADJUDICATION_ENABLED:
           value: 'true'
           category: rollout
+        HOSTED_LID_API_URL: {value: '', category: service_discovery}
         HOSTED_PARAKEET_API_URL:
           category: service_discovery
         HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -517,6 +519,7 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1167,6 +1170,7 @@ environment_shared:
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1514,6 +1518,7 @@ environment_shared:
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1872,6 +1877,7 @@ environment_shared:
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -2203,6 +2209,7 @@ environment_shared:
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:

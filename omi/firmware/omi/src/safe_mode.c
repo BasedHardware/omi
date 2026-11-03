@@ -44,6 +44,18 @@ LOG_MODULE_REGISTER(safe_mode, CONFIG_LOG_DEFAULT_LEVEL);
 #define STATE_GOOD 2
 #define STATE_TRIAL 3
 
+/* Keep the original pending value (1). Every failed/hung resolve attempt is
+ * followed by a boot without a read. Three reads max; values are retained ABI.
+ */
+enum dfu_resolve_state {
+    DFU_IDLE = 0,
+    DFU_PENDING = 1,
+    DFU_WAIT_TWO = 2,
+    DFU_RETRY_TWO = 3,
+    DFU_WAIT_ONE = 4,
+    DFU_RETRY_ONE = 5,
+};
+
 /* NOLOAD at a fixed DTS address: no driver or C startup may clear this. */
 struct retained_boot {
     uint32_t magic;
@@ -62,6 +74,9 @@ static volatile struct retained_boot retained __attribute__((section(".omi_retai
 static volatile struct retained_boot retained;
 #endif
 _Static_assert(sizeof(retained) <= 64, "retained boot record exceeds reservation");
+_Static_assert(sizeof(retained) == 48 && offsetof(struct retained_boot, dfu_pending) == 36 &&
+                   offsetof(struct retained_boot, crc) == 44,
+               "retained boot layout changed");
 _Static_assert(sizeof(FW) <= sizeof(retained.fw), "firmware version too long");
 
 struct bootstate {
@@ -107,7 +122,7 @@ static void retained_seal(void)
 static bool retained_valid(void)
 {
     return retained.magic == BOOT_MAGIC && retained.count <= BOOT_COUNT_MAX && retained.latch_reason <= 3 &&
-           retained.fatal <= 1 && retained.dfu_pending <= 1 && retained.persist_attempted <= 1 &&
+           retained.fatal <= 1 && retained.dfu_pending <= DFU_RETRY_ONE && retained.persist_attempted <= 1 &&
            memcmp((const void *) retained.fw, FW, sizeof(FW)) == 0 && retained.crc == retained_crc();
 }
 
@@ -149,7 +164,16 @@ void safe_mode_early_boot(void)
 #endif
     bool valid = retained_valid();
     restore_latch = !valid;
-    resolve_dfu = valid && retained.dfu_pending;
+    resolve_dfu = valid && (retained.dfu_pending == DFU_PENDING || retained.dfu_pending == DFU_RETRY_TWO ||
+                            retained.dfu_pending == DFU_RETRY_ONE);
+    /* A waiting state guarantees this entire boot bypasses the backend read.
+     * Arm the next attempt only for a later boot; resolve_dfu stays false.
+     */
+    if (valid && retained.dfu_pending == DFU_WAIT_TWO) {
+        retained.dfu_pending = DFU_RETRY_TWO;
+    } else if (valid && retained.dfu_pending == DFU_WAIT_ONE) {
+        retained.dfu_pending = DFU_RETRY_ONE;
+    }
     crash = crash || (valid && retained.fatal != 0);
     /* RESETREAS=0 is POR; RAM contents on cold boot are not a contract. */
     if (!valid || (!crash && !retained.latch_reason)) {
@@ -223,7 +247,9 @@ void safe_mode_settings_ready(int status)
     }
     restore_latch = false;
     resolve_dfu = false;
-    retained.dfu_pending = 0;
+    if (settings_ready) {
+        retained.dfu_pending = DFU_IDLE;
+    }
     retained_seal();
 }
 
@@ -242,10 +268,16 @@ void safe_mode_restore(void)
     if (!restore_latch && !resolve_dfu) {
         return;
     }
-    /* If even this narrow backend read hangs, the next WDT boot must bypass it
-     * and advertise using the still-latched record, rather than hang forever.
+    /* Spend an attempt BEFORE any backend access. A failed/hung read keeps
+     * the remaining budget; the next WDT boot bypasses it and advertises SAFE.
      */
-    retained.dfu_pending = 0;
+    if (resolve_dfu && retained.dfu_pending == DFU_PENDING) {
+        retained.dfu_pending = DFU_WAIT_TWO;
+    } else if (resolve_dfu && retained.dfu_pending == DFU_RETRY_TWO) {
+        retained.dfu_pending = DFU_WAIT_ONE;
+    } else {
+        retained.dfu_pending = DFU_IDLE;
+    }
     retained_seal();
     int err = settings_subsys_init();
     if (!err) {
@@ -256,12 +288,13 @@ void safe_mode_restore(void)
 
 /* Called after recovery advertising is up, never loads app or BT settings.
  * One attempt per latch prevents an NVS init/write hang from blocking every
- * recovery boot. A failed write leaves the RAM latch intact.
+ * recovery boot. A failed write leaves the RAM latch intact. Outstanding DFU
+ * resolution must preserve any committed TRIAL until retries finish.
  */
 void safe_mode_persist(void)
 {
     k_mutex_lock(&bootstate_lock, K_FOREVER);
-    if (!active || !retained.latch_reason || retained.persist_attempted) {
+    if (!active || !retained.latch_reason || retained.persist_attempted || retained.dfu_pending != DFU_IDLE) {
         k_mutex_unlock(&bootstate_lock);
         return;
     }
@@ -313,7 +346,7 @@ static enum mgmt_cb_return dfu_event(uint32_t event,
             /* Publish intent BEFORE NVS; a reset after its commit but before
              * new_trial must resolve persisted TRIAL, even for this version.
              */
-            retained.dfu_pending = 1;
+            retained.dfu_pending = DFU_PENDING;
             retained_seal();
             if (!save_state(STATE_TRIAL, 0)) {
                 new_trial();

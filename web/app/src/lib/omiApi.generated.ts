@@ -1378,6 +1378,7 @@ export interface CleanerMemory {
   category: MemoryCategory;
   category_source?: string | null;
   content: string;
+  extracted_at?: string | null;
   id: string;
   manually_added?: boolean | null;
   manually_added_source?: string | null;
@@ -1385,6 +1386,7 @@ export interface CleanerMemory {
   policy?: Record<string, unknown> | null;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+  source_at?: string | null;
 }
 
 export interface ClickUpListsResponse {
@@ -4741,6 +4743,7 @@ export interface ScreenActivityAppSummary {
 
 export interface ScreenActivityCoverage {
   capture_completeness?: "unknown";
+  devices?: Array<ScreenDeviceCoverage>;
   first_observed_at?: string | null;
   last_observed_at?: string | null;
   row_limit: number;
@@ -4782,6 +4785,13 @@ export interface ScreenActivitySyncResponse {
   frame_requests?: Array<FrameRequestDelivery> | null;
   last_id: number;
   synced: number;
+}
+
+export interface ScreenDeviceCoverage {
+  device_id: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  synced_through?: string | null;
 }
 
 export interface ScreenFrameAdjudicationRequest {
@@ -4887,6 +4897,7 @@ export interface SearchedMemory {
   category: MemoryCategory;
   category_source?: string | null;
   content: string;
+  extracted_at?: string | null;
   id: string;
   manually_added?: boolean | null;
   manually_added_source?: string | null;
@@ -4895,6 +4906,7 @@ export interface SearchedMemory {
   relevance_score: number;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+  source_at?: string | null;
 }
 
 export interface Section {
@@ -7071,6 +7083,7 @@ export interface OmiApiSchemas {
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
   "ScreenActivitySyncResponse": ScreenActivitySyncResponse;
+  "ScreenDeviceCoverage": ScreenDeviceCoverage;
   "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
   "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
   "ScreenFrameCandidateIn": ScreenFrameCandidateIn;

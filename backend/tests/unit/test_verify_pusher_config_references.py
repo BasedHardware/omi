@@ -244,6 +244,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
         "CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS": "30",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+        "HOSTED_LID_API_URL": "",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://172.16.48.49/diarizer",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
@@ -266,7 +267,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "PROACTIVITY_V2_POSTHOG_TOKEN": public_token,
         "PROACTIVITY_V2_POSTHOG_HOST": "https://us.posthog.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
-        "STT_SERVICE_MODELS": "modulate-velma-2,soniox,parakeet",
+        "STT_SERVICE_MODELS": "modulate-velma-2,soniox",
         "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
         "TRANSCRIPTION_SHADOW_ENABLED": "true",
         "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
@@ -337,7 +338,7 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
         "DEEPGRAM_SELF_HOSTED_URL",
     ):
         assert retired not in literals
-    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,parakeet"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox"
 
 
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
@@ -348,7 +349,7 @@ def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: Simpl
 
     assert preflight.validate_dev_pusher_binding_contract(deployment) == [
         "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
-        "expected 'modulate-velma-2,soniox,parakeet', got 'modulate-velma-2'"
+        "expected 'modulate-velma-2,soniox', got 'modulate-velma-2'"
     ]
 
 

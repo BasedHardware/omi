@@ -522,6 +522,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         entries = ',\n'.join(
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
+                'HOSTED_LID_API_URL',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -1576,9 +1577,8 @@ def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(t
                     entry['value'] = (
                         'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
                     )
-                    # The live listener owns its configured streaming order.
-                    if key == 'STT_SERVICE_MODELS' and platform == 'gke' and service_name == 'backend-listen':
-                        continue
+                    # Plain Parakeet is no longer admissible even on the listener;
+                    # reviewed window aliases still have their separate policy.
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -3037,7 +3037,7 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
 def test_non_listener_stt_models_accept_a_policy_ordered_subset():
     from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
 
-    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox,parakeet'}}
+    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox'}}
     config = {'gke': {'pusher': {'env': env_map}}}
     assert _validate_stt_serving_model_policy('prod', config) == []
 

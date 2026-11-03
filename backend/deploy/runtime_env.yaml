@@ -18,6 +18,7 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
           SERVER_BATCH_UNSUPPORTED_LANGUAGES:
             value: ''
             category: ops_kill
@@ -209,6 +210,9 @@ environments:
           LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED: {value: 'true', category: rollout}
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
+          HOSTED_LID_API_URL:
+            value: ''
+            category: service_discovery
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
@@ -350,6 +354,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          HOSTED_LID_API_URL:
+            value: ''
+            category: service_discovery
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
             category: ops_kill
@@ -504,7 +511,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,parakeet
+            value: modulate-velma-2,soniox
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -601,7 +608,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,parakeet
+            value: modulate-velma-2,soniox
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -919,6 +926,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            HOSTED_LID_API_URL:
+              value: ''
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -1181,6 +1191,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            HOSTED_LID_API_URL:
+              value: ''
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -1471,6 +1484,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            HOSTED_LID_API_URL:
+              value: ''
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -1730,6 +1746,9 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            HOSTED_LID_API_URL:
+              value: ''
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -2115,8 +2134,9 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
           SERVER_BATCH_UNSUPPORTED_LANGUAGES:
-            value: ''
+            value: af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -2275,7 +2295,7 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
-          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
           PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
@@ -2306,6 +2326,9 @@ environments:
           LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED: {value: 'true', category: rollout}
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
+          HOSTED_LID_API_URL:
+            value: http://172.16.160.20/lid
+            category: service_discovery
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
@@ -2419,7 +2442,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           STT_GPU_FLEET_OFF:
-            value: 'false'
+            value: 'true'
             category: ops_kill
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
@@ -2550,6 +2573,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          HOSTED_LID_API_URL:
+            value: http://172.16.160.20/lid
+            category: service_discovery
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2633,7 +2659,7 @@ environments:
             category: ops_kill
             value: '100'
           STT_GPU_FLEET_OFF:
-            value: 'false'
+            value: 'true'
             category: ops_kill
           OMI_FLAGS_FIRESTORE_PROJECT:
             value: based-hardware
@@ -2691,6 +2717,18 @@ environments:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+      parakeet-lid:
+        env:
+          PARAKEET_DEVICE:
+            value: cpu
+            category: runtime
+          PARAKEET_LID_ONLY:
+            value: 'true'
+            category: runtime
+          PARAKEET_LID_MODEL:
+            value: whisper-base
+            category: runtime
+        values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -3118,6 +3156,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            HOSTED_LID_API_URL:
+              value: http://172.16.160.20/lid
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -3181,7 +3222,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -3500,6 +3541,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            HOSTED_LID_API_URL:
+              value: http://172.16.160.20/lid
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -3589,7 +3633,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -3909,6 +3953,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            HOSTED_LID_API_URL:
+              value: http://172.16.160.20/lid
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -3991,7 +4038,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -4267,6 +4314,9 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
+            HOSTED_LID_API_URL:
+              value: http://172.16.160.20/lid
+              category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -4324,7 +4374,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:

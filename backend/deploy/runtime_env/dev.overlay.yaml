@@ -219,7 +219,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,parakeet
+          value: modulate-velma-2,soniox
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -270,7 +270,7 @@ overlay:
     config_map:
       entries:
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,parakeet
+          value: modulate-velma-2,soniox
           source: literal
         CONVERSATION_SUMMARIZED_APP_IDS:
           source: environment
