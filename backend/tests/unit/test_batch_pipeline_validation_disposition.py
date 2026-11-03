@@ -10,7 +10,7 @@ import pytest
 
 from config.batch_pipeline import worker_validation_disposition_enabled
 from diarizer import batch_pipeline, batch_pipeline_models
-from diarizer.batch_pipeline import BatchValidationError, ValidationReason
+from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
 from diarizer.batch_pipeline_models import PyannoteVAD
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_batch_pipeline_worker import item, setup_worker

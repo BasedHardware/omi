@@ -18,7 +18,8 @@ import pytest
 import numpy as np
 
 from config.batch_pipeline_providers import ProviderConfig
-from diarizer.batch_pipeline import BatchValidationError, PipelineWorker, bounded_window_words, validate_words
+from diarizer.batch_pipeline import PipelineWorker, bounded_window_words
+from utils.batch_pipeline.word_validation import BatchValidationError, validate_words
 
 # build_incoming's function-level imports (pre_recorded pulls the deepgram SDK,
 # deterministic_minimum, models.conversation, sync.capture) land in whichever
