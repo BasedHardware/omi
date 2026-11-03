@@ -14982,4 +14982,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'بولنے والا بدل گیا ہے۔ سطریں دوبارہ منتخب کریں۔';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ریکارڈنگ بہت بڑی ہے۔ ایک گفتگو میں کم سطریں منتخب کریں۔',
+        'partial': 'کچھ سطریں محفوظ ہوگئیں۔ باقی سطریں منتخب کرکے دوبارہ کوشش کریں۔',
+        'other': 'کچھ سطریں محفوظ ہوگئیں۔ باقی سطریں منتخب کرکے دوبارہ کوشش کریں۔',
+      },
+    );
+    return '$_temp0';
+  }
 }

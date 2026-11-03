@@ -42,10 +42,15 @@ class MockCaptureExternalActions extends NoopCaptureExternalActions {
   Completer<bool>? assignmentCompleter;
   int assignmentCalls = 0;
   int? assignedSpeaker;
+  (String, String)? assignedVoice;
+  List<String>? assignedIds;
   @override
-  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId, {int? speakerId}) async {
+  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId,
+      {int? speakerId, (String, String)? voice}) async {
     assignmentCalls++;
     assignedSpeaker = speakerId;
+    assignedVoice = voice;
+    assignedIds = ids;
     return assignmentCompleter == null ? assignmentResult : await assignmentCompleter!.future;
   }
 
@@ -441,6 +446,39 @@ void main() {
     provider.dispose();
   });
 
+  test('live whole-recording rename fences reused ids across reconnect scopes', () async {
+    final actions = MockCaptureExternalActions()..assignmentResult = true;
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'scoped',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [],
+    }));
+    final a = _segment('a', 'first')..speakerIdScope = 'stream:1';
+    final b = _segment('b', 'reconnect')..speakerIdScope = 'stream:2';
+    provider.onSegmentReceived([a, b]);
+    await Future<void>.delayed(Duration.zero);
+    expect(await provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a', 'b'], applyToSpeaker: true), isTrue);
+    expect(a.personId, 'maya');
+    expect(b.personId, isNull);
+    expect(actions.assignedIds, ['a']);
+    expect(actions.assignedVoice, ('stream:1', 'SPEAKER_0'));
+    final later = _segment('later', 'same scope')..speakerIdScope = 'stream:1';
+    final other = _segment('other', 'another reconnect')..speakerIdScope = 'stream:2';
+    provider.onSegmentReceived([later, other]);
+    await Future<void>.delayed(Duration.zero);
+    expect(later.personId, 'maya');
+    expect(other.personId, isNull);
+    provider.dispose();
+  });
+
   test('live renames queue while the first is in flight and both persist', () async {
     final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
     final provider = CaptureProvider(
@@ -459,6 +497,7 @@ void main() {
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
     final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    expect(await provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['missing']), isFalse);
     final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['b']);
     expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
     await Future<void>.delayed(Duration.zero);
@@ -525,7 +564,7 @@ void main() {
       }));
       provider.onSegmentReceived([_segment('a', 'one')]);
       await Future<void>.delayed(Duration.zero);
-      final outcomes = <({bool saved, int lines, bool stale})>[];
+      final outcomes = <({bool saved, int lines, bool stale, bool limited, bool partial})>[];
       final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a'], onSettled: outcomes.add);
       await Future<void>.delayed(Duration.zero);
       final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a'], onSettled: outcomes.add);

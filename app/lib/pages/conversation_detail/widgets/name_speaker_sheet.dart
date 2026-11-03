@@ -213,6 +213,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   List<TranscriptSegment>? _recordingLines;
   List<TranscriptSegment> get _segments => _recordingLines ?? widget.segments;
 
+  Iterable<TranscriptSegment> get _sameSpeakerLines {
+    // The detail loader supplies a proven voice across member conversations.
+    if (_recordingLines != null) return _recordingLines!;
+    final anchor = _segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+    return _segments.where((s) => anchor?.sameRecordingVoice(s) ?? s.speakerId == widget.speakerId);
+  }
+
   Future<void> _loadRecordingLines() async {
     final load = widget.loadRecordingLines;
     if (load == null) return;
@@ -339,7 +346,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       if (mounted) _loadRecordingLines();
     });
     _applyToSpeaker = widget.defaultApplyToSpeaker;
-    final sameSpeaker = _segments.where((s) => widget.wholeRecording || s.speakerId == widget.speakerId);
+    final sameSpeaker = _sameSpeakerLines;
     _selectedSegmentIds = _applyToSpeaker ? sameSpeaker.map((s) => s.id).toList() : [widget.segmentId];
     if (!_selectedSegmentIds.contains(widget.segmentId)) {
       _selectedSegmentIds.add(widget.segmentId);
@@ -720,9 +727,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments = widget.segments
-        .where((s) => (widget.wholeRecording || s.speakerId == widget.speakerId) && s.id != widget.segmentId)
-        .toList();
+    final untaggedSegments = _sameSpeakerLines.where((s) => s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(

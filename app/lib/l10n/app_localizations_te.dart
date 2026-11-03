@@ -15033,4 +15033,17 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'వక్త మారారు. పంక్తులను మళ్లీ ఎంచుకోండి.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'రికార్డింగ్ చాలా పెద్దది. ఒక సంభాషణలో తక్కువ పంక్తులను ఎంచుకోండి.',
+        'partial': 'కొన్ని పంక్తులు సేవ్ అయ్యాయి. మిగిలిన వాటిని ఎంచుకుని మళ్లీ ప్రయత్నించండి.',
+        'other': 'కొన్ని పంక్తులు సేవ్ అయ్యాయి. మిగిలిన వాటిని ఎంచుకుని మళ్లీ ప్రయత్నించండి.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -4559,5 +4559,6 @@
     "liveAudioSaved": "{duration} tersimpan",
     "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah.",
     "speakerWholeRecording": "Terapkan ke seluruh rekaman",
-    "speakerSelectionChanged": "Pembicara berubah. Pilih baris lagi."
+    "speakerSelectionChanged": "Pembicara berubah. Pilih baris lagi.",
+    "speakerRenameIssue": "{reason, select, limit{Rekaman terlalu besar. Pilih lebih sedikit baris dalam satu percakapan.} partial{Beberapa baris tersimpan. Pilih baris yang tersisa dan coba lagi.} other{Beberapa baris tersimpan. Pilih baris yang tersisa dan coba lagi.}}"
 }

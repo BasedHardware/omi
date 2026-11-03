@@ -14983,4 +14983,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Konuşmacı değişti. Satırları yeniden seçin.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Kayıt çok büyük. Bir konuşmada daha az satır seçin.',
+        'partial': 'Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.',
+        'other': 'Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -14897,4 +14897,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'ผู้พูดเปลี่ยนไปแล้ว โปรดเลือกบรรทัดอีกครั้ง';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'การบันทึกใหญ่เกินไป เลือกบรรทัดให้น้อยลงในหนึ่งบทสนทนา',
+        'partial': 'บันทึกบางบรรทัดแล้ว เลือกบรรทัดที่เหลือแล้วลองอีกครั้ง',
+        'other': 'บันทึกบางบรรทัดแล้ว เลือกบรรทัดที่เหลือแล้วลองอีกครั้ง',
+      },
+    );
+    return '$_temp0';
+  }
 }

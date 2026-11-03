@@ -59,7 +59,7 @@ def commit_manual_assignment(
         time_range=time_range,
         **recording_options,
     )
-    if background_tasks is not None:
+    if background_tasks is not None and resolved:
         schedule_assignment_teaching(
             background_tasks,
             uid,

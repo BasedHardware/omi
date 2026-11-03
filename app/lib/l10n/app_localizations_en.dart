@@ -14955,4 +14955,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'The speaker changed. Select the lines again.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Recording too large. Select fewer lines in one conversation.',
+        'partial': 'Some lines were saved. Select the remaining lines and try again.',
+        'other': 'Some lines were saved. Select the remaining lines and try again.',
+      },
+    );
+    return '$_temp0';
+  }
 }

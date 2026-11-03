@@ -14953,4 +14953,17 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'वक्ता बदल गया है। पंक्तियाँ फिर से चुनें।';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'रिकॉर्डिंग बहुत बड़ी है। एक बातचीत में कम पंक्तियाँ चुनें।',
+        'partial': 'कुछ पंक्तियाँ सहेजी गईं। बाकी पंक्तियाँ चुनकर फिर कोशिश करें।',
+        'other': 'कुछ पंक्तियाँ सहेजी गईं। बाकी पंक्तियाँ चुनकर फिर कोशिश करें।',
+      },
+    );
+    return '$_temp0';
+  }
 }

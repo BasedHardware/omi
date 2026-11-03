@@ -15073,4 +15073,17 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'பேச்சாளர் மாறிவிட்டார். வரிகளை மீண்டும் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'பதிவு மிகப் பெரியது. ஒரு உரையாடலில் குறைவான வரிகளைத் தேர்ந்தெடுக்கவும்.',
+        'partial': 'சில வரிகள் சேமிக்கப்பட்டன. மீதமுள்ள வரிகளைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.',
+        'other': 'சில வரிகள் சேமிக்கப்பட்டன. மீதமுள்ள வரிகளைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.',
+      },
+    );
+    return '$_temp0';
+  }
 }

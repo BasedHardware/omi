@@ -14998,4 +14998,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'O falante mudou. Selecione as linhas novamente.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'A gravação é muito grande. Selecione menos linhas em uma conversa.',
+        'partial': 'Algumas linhas foram salvas. Selecione as restantes e tente novamente.',
+        'other': 'Algumas linhas foram salvas. Selecione as restantes e tente novamente.',
+      },
+    );
+    return '$_temp0';
+  }
 }

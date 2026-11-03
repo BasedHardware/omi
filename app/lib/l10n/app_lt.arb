@@ -4524,5 +4524,6 @@
     "liveAudioSaved": "Išsaugota {duration}",
     "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.",
     "speakerWholeRecording": "Taikyti visam įrašui",
-    "speakerSelectionChanged": "Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą."
+    "speakerSelectionChanged": "Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą.",
+    "speakerRenameIssue": "{reason, select, limit{Įrašas per didelis. Pasirinkite mažiau eilučių viename pokalbyje.} partial{Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.} other{Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.}}"
 }

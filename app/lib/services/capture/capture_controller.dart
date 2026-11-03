@@ -1029,7 +1029,7 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
-  final Map<int, String> _manualSpeakerDefaults = {};
+  final Map<Object, String> _manualSpeakerDefaults = {};
 
   bool hasTranscripts = false;
 
@@ -4334,10 +4334,12 @@ class CaptureController extends ChangeNotifier
   @override
   void publishSpeakerAssignment(int speakerId, String finalPersonId, String personName, List<String> targets,
       bool applyToSpeaker, int generation) {
+    final anchor = segments.where((line) => targets.contains(line.id)).firstOrNull;
+    final voiceKey = anchor?.recordingVoice ?? speakerId;
     if (applyToSpeaker) {
-      _manualSpeakerDefaults[speakerId] = finalPersonId;
+      _manualSpeakerDefaults[voiceKey] = finalPersonId;
     } else {
-      _manualSpeakerDefaults.remove(speakerId);
+      _manualSpeakerDefaults.remove(voiceKey);
     }
     if (_socket?.state == SocketServiceState.connected &&
         !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {

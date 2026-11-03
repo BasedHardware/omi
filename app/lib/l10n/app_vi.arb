@@ -4524,5 +4524,6 @@
     "liveAudioSaved": "Đã lưu {duration}",
     "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.",
     "speakerWholeRecording": "Áp dụng cho toàn bộ bản ghi",
-    "speakerSelectionChanged": "Người nói đã thay đổi. Hãy chọn lại các dòng."
+    "speakerSelectionChanged": "Người nói đã thay đổi. Hãy chọn lại các dòng.",
+    "speakerRenameIssue": "{reason, select, limit{Bản ghi quá lớn. Hãy chọn ít dòng hơn trong một cuộc trò chuyện.} partial{Một số dòng đã được lưu. Hãy chọn các dòng còn lại và thử lại.} other{Một số dòng đã được lưu. Hãy chọn các dòng còn lại và thử lại.}}"
 }

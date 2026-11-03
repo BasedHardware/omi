@@ -27822,6 +27822,17 @@
           "conversation_id": {
             "title": "Conversation Id",
             "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
           }
         },
         "required": [
@@ -36500,6 +36511,17 @@
               }
             ],
             "title": "Speaker Id"
+          },
+          "speaker_id_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id Scope"
           },
           "speaker_label_source": {
             "anyOf": [

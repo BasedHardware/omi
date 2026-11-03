@@ -15029,4 +15029,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'A beszélő megváltozott. Válaszd ki újra a sorokat.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'A felvétel túl nagy. Válasszon kevesebb sort egy beszélgetésből.',
+        'partial': 'Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.',
+        'other': 'Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.',
+      },
+    );
+    return '$_temp0';
+  }
 }

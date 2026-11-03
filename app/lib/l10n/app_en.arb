@@ -18298,5 +18298,14 @@
         "description": "Under the saved-audio card's heading."
     },
     "speakerWholeRecording": "Apply to the whole recording",
-    "speakerSelectionChanged": "The speaker changed. Select the lines again."
+    "speakerSelectionChanged": "The speaker changed. Select the lines again.",
+    "speakerRenameIssue": "{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}",
+    "@speakerRenameIssue": {
+        "description": "Speaker rename budget refusal or partial member save; successful labels remain applied.",
+        "placeholders": {
+            "reason": {
+                "type": "String"
+            }
+        }
+    }
 }

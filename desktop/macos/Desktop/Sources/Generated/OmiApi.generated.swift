@@ -6242,6 +6242,7 @@ public enum OmiAPI {
     public let personId: String?
     public let speaker: String?
     public let speakerId: Int?
+    public let speakerIdScope: String?
     public let speakerLabelSource: String?
     public let speechProfileProcessed: Bool?
     public let start: Double
@@ -6257,6 +6258,7 @@ public enum OmiAPI {
       case personId = "person_id"
       case speaker
       case speakerId = "speaker_id"
+      case speakerIdScope = "speaker_id_scope"
       case speakerLabelSource = "speaker_label_source"
       case speechProfileProcessed = "speech_profile_processed"
       case start
@@ -6274,6 +6276,7 @@ public enum OmiAPI {
       personId = try c.decodeIfPresent(String.self, forKey: .personId)
       speaker = try c.decodeIfPresent(String.self, forKey: .speaker)
       speakerId = try c.decodeIfPresent(Int.self, forKey: .speakerId)
+      speakerIdScope = try c.decodeIfPresent(String.self, forKey: .speakerIdScope)
       speakerLabelSource = try c.decodeIfPresent(String.self, forKey: .speakerLabelSource)
       speechProfileProcessed = try c.decodeIfPresent(Bool.self, forKey: .speechProfileProcessed)
       start = try c.decode(Double.self, forKey: .start)
@@ -6282,7 +6285,7 @@ public enum OmiAPI {
       translations = try c.decodeIfPresent([Translation].self, forKey: .translations)
     }
 
-    public init(end: Double, id: String? = nil, isUser: Bool, originalText: String? = nil, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
+    public init(end: Double, id: String? = nil, isUser: Bool, originalText: String? = nil, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerIdScope: String? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
       self.end = end
       self.id = id
       self.isUser = isUser
@@ -6290,6 +6293,7 @@ public enum OmiAPI {
       self.personId = personId
       self.speaker = speaker
       self.speakerId = speakerId
+      self.speakerIdScope = speakerIdScope
       self.speakerLabelSource = speakerLabelSource
       self.speechProfileProcessed = speechProfileProcessed
       self.start = start

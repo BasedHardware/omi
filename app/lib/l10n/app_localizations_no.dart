@@ -14974,4 +14974,17 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Taleren er endret. Velg linjene på nytt.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Opptaket er for stort. Velg færre linjer i én samtale.',
+        'partial': 'Noen linjer ble lagret. Velg de resterende og prøv igjen.',
+        'other': 'Noen linjer ble lagret. Velg de resterende og prøv igjen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

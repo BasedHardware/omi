@@ -1,11 +1,13 @@
 """Explicit naming across a recording; never joins embeddings or different scopes.
 
 Episode membership is authoritative when present. The non-episode compatibility
-path scans this user's stored rows because historical transcripts have no
-queryable scope index. No timestamps or conversation-local speaker ids join rows.
+path uses a bounded indexed scope lookup. Historical rows without that index
+remain local until their next transcript write. No timestamps or conversation-local speaker ids join rows.
 """
 
 from datetime import datetime, timezone
+
+from config.recording_speakers import MAX_SCOPES, MAX_MEMBERS, check_budget, enabled
 
 from database import conversations as conversations_db, episodes as episodes_db
 from database.recording_speakers import scope_conversation_ids
@@ -16,6 +18,7 @@ from utils.live_speaker_carry import carried_receipt, voice_segments
 from utils.manual_speaker_assignments import assignment_segments, manual_assignment
 from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.observability.fallback import record_fallback
+from utils.conversations.fragment_visibility import is_relevance_discarded
 
 
 def _current_conversation(uid, conversation_id):
@@ -26,6 +29,8 @@ def _current_conversation(uid, conversation_id):
         if not row:
             break
         if not row.get('deleted'):
+            if is_relevance_discarded(row):
+                raise LookupError('Conversation not found')
             return dict(row, id=conversation_id)
         conversation_id = row.get('sync_merged_into')
         if not conversation_id:
@@ -36,6 +41,8 @@ def _current_conversation(uid, conversation_id):
 def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
     anchor = _current_conversation(uid, conversation_id)
     conversation_id = anchor['id']
+    if not enabled():
+        return None, [dict(anchor, transcript_segments=assignment_segments(anchor))]
     episode = (
         episodes_db.get_episode(uid, episode_id)
         if episode_id
@@ -50,7 +57,8 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         '',
     }
     if episode:
-        ids = episode.get('conversation_ids') or []
+        ids = list(dict.fromkeys(episode.get('conversation_ids') or []))
+        check_budget(len(ids))
         if conversation_id not in ids:
             raise ValueError('Conversation is no longer in this recording')
         rows = [
@@ -61,14 +69,14 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
     elif scopes:
         rows = [
             dict(row, id=cid)
-            for cid in scope_conversation_ids(uid, scopes)
+            for cid in dict.fromkeys([conversation_id, *scope_conversation_ids(uid, scopes)])
             if (row := conversations_db.get_conversation(uid, cid))
         ]
     else:
         rows = [anchor]
-    return episode, [
-        dict(row, transcript_segments=assignment_segments(row)) for row in rows if row and not row.get('deleted')
-    ]
+    rows = [row for row in rows if row and not row.get('deleted') and not is_relevance_discarded(row)]
+    check_budget(len(rows), sum(len(row.get('transcript_segments') or []) for row in rows))
+    return episode, [dict(row, transcript_segments=assignment_segments(row)) for row in rows]
 
 
 def _recorded_start(row):
@@ -87,6 +95,7 @@ def transcript(uid, conversation_id):
     origin = min(starts) if starts else 0
     # Only fields needed by the picker. Avoid exposing server receipt/evidence internals.
     return {
+        'enabled': enabled(),
         'episode_id': episode['id'] if episode else None,
         'conversations': [
             {
@@ -106,6 +115,7 @@ def transcript(uid, conversation_id):
 
 
 def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks, *, episode_id=None):
+    check_budget(len({s.conversation_id for s in body.selections}), sum(len(s.segment_ids) for s in body.selections))
     episode, rows = members(uid, conversation_id, episode_id=episode_id)
     by_id = {row['id']: row for row in rows}
     selections = [
@@ -118,20 +128,24 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
         )
         for selection in body.selections
     ]
+    selected_ids_by_conversation = {}
+    for selection in selections:
+        selected_ids_by_conversation.setdefault(selection.conversation_id, set()).update(selection.segment_ids)
+    selected_scopes = (
+        {body.voice.speaker_id_scope}
+        if body.voice
+        else {
+            s.get('speaker_id_scope')
+            for cid, selected_ids in selected_ids_by_conversation.items()
+            for s in (by_id.get(cid) or {}).get('transcript_segments') or []
+            if s.get('id') in selected_ids and s.get('speaker_id_scope')
+        }
+    )
+    if len(selected_scopes) > MAX_SCOPES:
+        check_budget(MAX_MEMBERS + 1)
     if episode is None:
-        # A selected sibling can contain a later provider scope absent in the
-        # open row. Join using the selected voice's scope, never the open row's
-        # speaker number (and never bridge the names of different scopes).
-        selected_scopes = (
-            {body.voice.speaker_id_scope}
-            if body.voice
-            else {
-                s.get('speaker_id_scope')
-                for selection in selections
-                for s in (by_id.get(selection.conversation_id) or {}).get('transcript_segments') or []
-                if s.get('id') in selection.segment_ids and s.get('speaker_id_scope')
-            }
-        )
+        # A selected sibling may contain a later scope absent in the open row.
+        # Only that selected scope may expand discovery, never a speaker number.
         anchor_scopes = {
             s.get('speaker_id_scope')
             for s in (by_id.get(conversation_id) or _current_conversation(uid, conversation_id)).get(
@@ -175,6 +189,13 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
         )
         selected_ids = set(selection.segment_ids)
         selected = [s for s in row.get('transcript_segments') or [] if s.get('id') in selected_ids]
+        if (
+            selection.speaker_id is not None
+            and body.whole_recording
+            and not selection.voice
+            and any(s.get('speaker_id_scope') for s in selected)
+        ):
+            raise ValueError('Scoped speaker rename requires the selected voice identity')
         for segment in selected:
             if selection.voice and (
                 segment.get('speaker_id_scope') != selection.voice.speaker_id_scope
@@ -203,7 +224,9 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
                         targets.setdefault(row['id'], {})[line['id']] = (None, line.get('speaker_id'))
             else:
                 targets.setdefault(row['id'], {})[segment['id']] = (
-                    (scope, voice) if voice else (None, segment.get('speaker_id'))
+                    (scope, voice or canonical_speaker_label(str(segment.get('speaker') or '')))
+                    if scope
+                    else (None, segment.get('speaker_id'))
                 )
     if any(by_id[cid].get('is_locked') for cid in targets):
         raise PermissionError('Conversation is locked')
@@ -211,20 +234,31 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
         record_fallback(component='other', from_mode='other', to_mode='incumbent', reason='other', outcome='degraded')
     applied = []
     decided_at = datetime.now(timezone.utc).isoformat()
+    check_budget(len(targets), sum(len(ids) for ids in targets.values()))
+    if len({voice[0] for ids in targets.values() for voice in ids.values() if voice[0]}) > MAX_SCOPES:
+        check_budget(MAX_MEMBERS + 1)
     for cid, ids in targets.items():
-        raw, resolved, _, _ = commit_manual_assignment(
-            uid,
-            cid,
-            person_id=body.person_id,
-            is_user=body.is_user,
-            segment_ids=list(ids),
-            use_for_speech_training=body.use_for_speech_training,
-            background_tasks=background_tasks,
-            expected_voices=ids,
-            decided_at=decided_at,
-            recording_voice_defaults=body.whole_recording or body.voice is not None,
-        )
-        applied.append({'conversation_id': raw['id'], 'applied_count': len(resolved)})
+        try:
+            raw, resolved, _, _ = commit_manual_assignment(
+                uid,
+                cid,
+                person_id=body.person_id,
+                is_user=body.is_user,
+                segment_ids=list(ids),
+                use_for_speech_training=body.use_for_speech_training,
+                background_tasks=background_tasks,
+                expected_voices=ids,
+                decided_at=decided_at,
+                recording_voice_defaults=body.whole_recording or body.voice is not None,
+            )
+            applied.append({'conversation_id': raw['id'], 'applied_count': len(resolved)})
+        except (ValueError, LookupError, PermissionError):
+            applied.append({'conversation_id': cid, 'applied_count': 0, 'error': 'stale_speaker'})
+        except Exception:
+            # Earlier members may already be committed. Report every outcome so
+            # clients never roll those labels back after a later member fails.
+            record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
+            applied.append({'conversation_id': cid, 'applied_count': 0, 'error': 'save_failed'})
     return {
         'episode_id': episode['id'] if episode else None,
         'conversations': applied,
@@ -236,6 +270,8 @@ def recording_carry(uid, previous, active_scope):
     """Use the latest scoped decisions even when the last member has no such voice."""
     from database import recording_speakers as decisions_db
 
+    if not enabled():
+        return carried_receipt(previous, active_scope)
     if not active_scope:
         return {}
     try:

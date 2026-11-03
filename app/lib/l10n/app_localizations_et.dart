@@ -14963,4 +14963,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Kõneleja muutus. Vali read uuesti.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Salvestis on liiga suur. Vali ühes vestluses vähem ridu.',
+        'partial': 'Mõned read salvestati. Vali ülejäänud ja proovi uuesti.',
+        'other': 'Mõned read salvestati. Vali ülejäänud ja proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
 }

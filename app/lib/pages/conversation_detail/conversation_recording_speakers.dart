@@ -40,13 +40,17 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
 
   bool loadingRecordingTranscript = false;
   bool recordingLoadFailed = false;
+  bool recordingLoadLimited = false;
+  bool get wholeRecordingEnabled => _recording?.enabled ?? true;
+  bool speakerAssignmentLimited = false;
+  bool speakerAssignmentPartial = false;
   Future<void>? _recordingLoad;
 
   Future<void> loadRecordingTranscript() {
     if (_recordingOwnerId == conversation.id) return Future.value();
     if (_recordingLoad case final pending?) return pending;
     loadingRecordingTranscript = true;
-    recordingLoadFailed = false;
+    recordingLoadFailed = recordingLoadLimited = false;
     notifyListeners();
     final pending = _loadRecordingTranscript().whenComplete(() {
       _recordingLoad = null;
@@ -63,7 +67,8 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
     RecordingTranscript? result;
     try {
       result = await fetchRecordingTranscript(id);
-    } catch (_) {
+    } catch (error) {
+      recordingLoadLimited = error is RecordingSpeakerLimitException;
       recordingLoadFailed = recordingAssignmentEnabled;
       return;
     }
@@ -89,7 +94,7 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
             scope: line.scope,
             label: line.label,
             offset: line.offset),
-    ], episodeId: result.episodeId);
+    ], episodeId: result.episodeId, enabled: result.enabled);
     final receivedIds = _recording!.lines.map((line) => line.segment.id).toSet();
     final pendingLines = current.values.where((line) => !receivedIds.contains(line.id)).toList();
     if (pendingLines.isNotEmpty) {
@@ -118,7 +123,10 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
 
   List<TranscriptSegment> voiceSegmentsFor(String segmentId, int speakerId) {
     final row = _recordingById[segmentId];
-    if (row == null) return conversation.transcriptSegments.where((line) => line.speakerId == speakerId).toList();
+    if (row == null) {
+      final anchor = conversation.transcriptSegments.firstWhereOrNull((line) => line.id == segmentId);
+      return conversation.transcriptSegments.where((line) => anchor?.sameRecordingVoice(line) ?? false).toList();
+    }
     return _recording!.lines
         .where((line) => row.voice == null
             ? line.conversationId == row.conversationId && line.segment.speakerId == speakerId
@@ -135,6 +143,11 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
     }
     return groups;
   }
+
+  String recordingOwner(TranscriptSegment line) => _recordingById[line.id]?.conversationId ?? conversation.id;
+
+  (String, String)? recordingVoiceFor(String? id) =>
+      _recordingById[id]?.voice ?? recordingSegments.firstWhereOrNull((line) => line.id == id)?.recordingVoice;
 
   String? get recordingEpisodeId => _recording?.episodeId;
   RecordingLine? recordingLine(String? id) => _recordingById[id];
@@ -156,10 +169,10 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
                 'conversation_id': group.key,
                 'segment_ids': group.value,
                 if (speakerId != null) 'speaker_id': sourceSpeakerId(group.value.first, speakerId),
-                if (speakerId != null && recordingLine(group.value.first)?.voice != null)
+                if (speakerId != null && recordingVoiceFor(group.value.first) != null)
                   'voice': {
-                    'speaker_id_scope': recordingLine(group.value.first)!.voice!.$1,
-                    'stream_speaker': recordingLine(group.value.first)!.voice!.$2,
+                    'speaker_id_scope': recordingVoiceFor(group.value.first)!.$1,
+                    'stream_speaker': recordingVoiceFor(group.value.first)!.$2,
                   }
               },
           ],

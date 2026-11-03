@@ -38,11 +38,15 @@ def prepare(transaction, client, uid, conversation, expected_voices, decided_at)
 
 def validate_selection(current, expected_voices):
     """Fence stale ids and scope joins once per voice, before any transaction writes."""
-    if expected_voices is None:
-        return
     from utils.live_speaker_carry import voice_segments
     from utils.manual_speaker_assignments import assignment_segments
 
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    if is_relevance_discarded(current) or current.get('deleted'):
+        raise ValueError('Selected conversation is no longer visible')
+    if expected_voices is None:
+        return
     normalized = dict(current, transcript_segments=assignment_segments(current))
     by_id = {s.get('id'): s for s in normalized['transcript_segments']}
     scoped = {
@@ -107,20 +111,60 @@ def prepare_assignment(
 
 
 def scope_conversation_ids(uid, scopes, *, firestore_client=None):
-    """Historical scopes live in compressed transcripts; discover only within this UID."""
-    from database.conversations import decode_transcript_segments_verified
+    """Indexed UID-local lookup, bounded before hydration (including hidden rows)."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    from config.recording_speakers import MAX_MEMBERS, MAX_SCOPES, SCOPE_INDEX_FIELD, check_budget
 
+    if len(scopes) > MAX_SCOPES:
+        check_budget(MAX_MEMBERS + 1)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection('conversations')
-    query = collection.select(['transcript_segments', 'transcript_segments_compressed', 'deleted'])
-    result = []
-    for snapshot in query.stream():
-        raw = snapshot.to_dict() or {}
-        if raw.get('deleted') or not raw.get('transcript_segments'):
-            continue
-        segments = decode_transcript_segments_verified(
-            uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
+    query = collection.where(filter=FieldFilter(SCOPE_INDEX_FIELD, 'array_contains_any', sorted(scopes)))
+    snapshots = list(query.select(['deleted', 'discarded']).limit(MAX_MEMBERS + 1).stream())
+    check_budget(len(snapshots))
+    return [s.id for s in snapshots if not any((s.to_dict() or {}).get(k) for k in ('deleted', 'discarded'))]
+
+
+def same_assignment(transaction, client, uid, current, expected_voices, intent):
+    """A retry of an already committed decision earns no new receipt or learning job."""
+    if not expected_voices:
+        return False
+    from utils.manual_speaker_assignments import recording_voice_key
+
+    person_id, is_user, training, defaults = intent
+    receipt = current.get('manual_speaker_assignments') or {}
+    by_id = {s.get('id'): s for s in current.get('transcript_segments') or []}
+
+    def same(entry):
+        return bool(entry) and (
+            entry.get('person_id') == person_id
+            and bool(entry.get('is_user')) == is_user
+            and entry.get('use_for_speech_training', True) == training
+            and not entry.get('rejection')
         )
-        if any(s.get('speaker_id_scope') in scopes for s in segments):
-            result.append(snapshot.id)
-    return result
+
+    scopes = {}
+    for sid, (scope, label) in expected_voices.items():
+        entry = (receipt.get('segments') or {}).get(sid)
+        line = by_id.get(sid) or {}
+        if not same(entry) or line.get('person_id') != person_id or bool(line.get('is_user')) != is_user:
+            return False
+        if not defaults:
+            if scope and entry.get('source') != 'recording_segment':
+                return False
+            continue
+        default = (
+            (receipt.get('voices') or {}).get(recording_voice_key(scope, label))
+            if scope
+            else (receipt.get('speakers') or {}).get(str(label))
+        )
+        if not same(default):
+            return False
+        if scope:
+            scopes.setdefault(scope, set()).add(label)
+    for scope, labels in scopes.items():
+        row = _ref(client, uid, scope).get(transaction=transaction).to_dict() or {}
+        decisions = json.loads(decrypt(row['content'], uid)) if row.get('content') else {}
+        if any(not same(decisions.get(label)) for label in labels):
+            return False
+    return True

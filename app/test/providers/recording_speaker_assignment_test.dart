@@ -68,6 +68,64 @@ void main() {
     expect(regenerations, 2);
     p.dispose();
   });
+  test('conversation cache and raw segment transports retain scoped voice identity', () {
+    final c = conversation();
+    c.transcriptSegments.single
+      ..speakerIdScope = 'stream:1'
+      ..speaker = 'SPEAKER_01';
+    final restored = ServerConversation.fromJson(c.toJson());
+    expect(restored.transcriptSegments.single.recordingVoice, ('stream:1', 'SPEAKER_1'));
+    expect(TranscriptSegment.fromJson(c.transcriptSegments.single.toJson()).recordingVoice, ('stream:1', 'SPEAKER_1'));
+  });
+  test('rename before recording metadata arrives still proves and updates only one scoped voice', () async {
+    final calls = <List<Map<String, dynamic>>>[];
+    final p = ConversationDetailProvider(
+        assignRecording: (_, selections, {required personId, required wholeRecording, episodeId}) async {
+      calls.add(selections);
+      return const ApiSuccess(1);
+    });
+    final c = conversation();
+    c.transcriptSegments.single.speakerIdScope = 'first';
+    c.transcriptSegments.add(line('b')..speakerIdScope = 'reconnect');
+    p.selectedDate = c.createdAt;
+    p.setCachedConversation(c);
+    p.beginSpeakerLabelingSession();
+    final saved = p.startSpeakerAssignment(['a'], 'maya', speakerId: 1)!;
+    expect(c.transcriptSegments.map((s) => s.personId), ['maya', null]);
+    expect(await saved, isTrue);
+    expect(calls.single.single['voice'], {'speaker_id_scope': 'first', 'stream_speaker': 'SPEAKER_1'});
+    p.dispose();
+  });
+  test('partial member failure rolls back only failed members', () async {
+    final p = ConversationDetailProvider(
+      fetchRecording: (_) async => RecordingTranscript([
+        RecordingLine('c1', line('a'), scope: 's', label: 'SPEAKER_1'),
+        RecordingLine('c2', line('b'), scope: 's', label: 'SPEAKER_1'),
+      ]),
+      assignRecording: (_, __, {required personId, required wholeRecording, episodeId}) async =>
+          throw const PartialSpeakerAssignmentException({'c1'}, {'c2'}, 1, stale: true),
+    );
+    select(p);
+    await p.loadRecordingTranscript();
+    p.beginSpeakerLabelingSession();
+    expect(await p.startSpeakerAssignment(['a', 'b'], 'maya')!, isFalse);
+    expect(p.recordingSegments.map((s) => s.personId), ['maya', null]);
+    expect(p.speakerAssignmentPartial, isTrue);
+    expect(p.lastSpeakerAppliedCount, 1);
+    p.dispose();
+  });
+  test('over-cap failure rolls back optimistic labels and exposes specific reason', () async {
+    final p = ConversationDetailProvider(
+      assignRecording: (_, __, {required personId, required wholeRecording, episodeId}) async =>
+          const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 413)),
+    );
+    select(p);
+    p.beginSpeakerLabelingSession();
+    expect(await p.startSpeakerAssignment(['a'], 'maya')!, isFalse);
+    expect(p.conversation.transcriptSegments.single.personId, isNull);
+    expect(p.speakerAssignmentLimited, isTrue);
+    p.dispose();
+  });
   test('one recording request spans two members with optimistic rollback on stale 409', () async {
     final response = Completer<ApiResult<int>>();
     final calls = <List<Map<String, dynamic>>>[];

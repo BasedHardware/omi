@@ -14968,4 +14968,17 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Mluvčí se změnil. Vyberte řádky znovu.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Nahrávka je příliš velká. Vyberte méně řádků v jedné konverzaci.',
+        'partial': 'Některé řádky byly uloženy. Vyberte zbývající a zkuste to znovu.',
+        'other': 'Některé řádky byly uloženy. Vyberte zbývající a zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
 }

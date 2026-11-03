@@ -15019,4 +15019,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'ಮಾತನಾಡುವವರು ಬದಲಾಗಿದ್ದಾರೆ. ಸಾಲುಗಳನ್ನು ಮತ್ತೆ ಆಯ್ಕೆಮಾಡಿ.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ರೆಕಾರ್ಡಿಂಗ್ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ. ಒಂದು ಸಂಭಾಷಣೆಯಲ್ಲಿ ಕಡಿಮೆ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.',
+        'partial': 'ಕೆಲವು ಸಾಲುಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ಉಳಿದ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'other': 'ಕೆಲವು ಸಾಲುಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ಉಳಿದ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+      },
+    );
+    return '$_temp0';
+  }
 }

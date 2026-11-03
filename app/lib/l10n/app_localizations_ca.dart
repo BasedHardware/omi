@@ -15045,4 +15045,17 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'El parlant ha canviat. Torna a seleccionar les línies.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'La gravació és massa gran. Selecciona menys línies en una conversa.',
+        'partial': 'S’han desat algunes línies. Selecciona les restants i torna-ho a provar.',
+        'other': 'S’han desat algunes línies. Selecciona les restants i torna-ho a provar.',
+      },
+    );
+    return '$_temp0';
+  }
 }

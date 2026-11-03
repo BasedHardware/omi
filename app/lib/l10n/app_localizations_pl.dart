@@ -15013,4 +15013,17 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Mówca się zmienił. Wybierz wiersze ponownie.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Nagranie jest za duże. Wybierz mniej wierszy w jednej rozmowie.',
+        'partial': 'Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.',
+        'other': 'Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
 }

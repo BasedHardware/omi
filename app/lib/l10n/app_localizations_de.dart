@@ -15083,4 +15083,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Die Sprecherzuordnung hat sich geändert. Wähle die Zeilen erneut aus.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Die Aufnahme ist zu groß. Wähle weniger Zeilen in einem Gespräch.',
+        'partial': 'Einige Zeilen wurden gespeichert. Wähle die übrigen und versuche es erneut.',
+        'other': 'Einige Zeilen wurden gespeichert. Wähle die übrigen und versuche es erneut.',
+      },
+    );
+    return '$_temp0';
+  }
 }

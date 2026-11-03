@@ -14974,4 +14974,17 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Puhuja muuttui. Valitse rivit uudelleen.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Tallenne on liian suuri. Valitse vähemmän rivejä yhdestä keskustelusta.',
+        'partial': 'Osa riveistä tallennettiin. Valitse loput ja yritä uudelleen.',
+        'other': 'Osa riveistä tallennettiin. Valitse loput ja yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

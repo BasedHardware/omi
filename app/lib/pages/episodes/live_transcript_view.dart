@@ -458,15 +458,13 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
-    final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-      (s) => s.speakerId == speakerId,
-      orElse: () => SpeakerLabelSuggestionEvent.empty(),
-    );
+    final anchor = provider.segments.firstWhere((line) => line.id == segmentId);
+    final suggestion = provider.suggestionsBySegmentId[segmentId] ?? SpeakerLabelSuggestionEvent.empty();
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
       segmentId: segmentId,
-      segments: provider.segments,
+      segments: provider.segments.where((line) => anchor.sameRecordingVoice(line)).toList(),
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
       wholeRecording: true,
@@ -479,10 +477,13 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
           personName,
           segmentIds,
           applyToSpeaker: applyToSpeaker,
+          voice: anchor.recordingVoice,
           onSettled: (result) {
             if (!mounted || provider.speakerAssignmentIdentity != identity) return;
             reported = true;
-            if (result.saved) {
+            if (result.limited || result.partial) {
+              OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
+            } else if (result.saved) {
               OmiFeedback.confirm(context, context.l10n.speakerLabelLinesLabeled(result.lines));
             } else {
               OmiFeedback.error(context,
@@ -547,7 +548,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   Future<void> _acceptSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
     final ids = [
       for (final s in provider.segments)
-        if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
+        if (segment.sameRecordingVoice(s) && !s.isUser && s.personId == null) s.id,
     ];
     OmiHaptics.light();
     final identity = provider.speakerAssignmentIdentity;
@@ -558,10 +559,13 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       person.name,
       ids,
       applyToSpeaker: true,
+      voice: segment.recordingVoice,
       onSettled: (result) {
         if (!mounted || provider.speakerAssignmentIdentity != identity) return;
         reported = true;
-        if (result.saved) {
+        if (result.limited || result.partial) {
+          OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
+        } else if (result.saved) {
           OmiHaptics.success();
         } else {
           OmiFeedback.error(

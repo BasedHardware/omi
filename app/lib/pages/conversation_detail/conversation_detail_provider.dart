@@ -31,6 +31,8 @@ export 'package:omi/pages/conversation_detail/conversation_summary_generation.da
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+part 'conversation_speaker_restore.dart';
+
 typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
     {bool? isUser, String? personId, int? speakerId});
 typedef ConversationReprocessCall = Future<ReprocessResult> Function(String,
@@ -61,6 +63,12 @@ class ConversationDetailProvider extends ChangeNotifier
             (assignSpeaker == null
                 ? (id) async {
                     final result = await getRecordingTranscript(id);
+                    if (result is ApiFailure<RecordingTranscript> && result.problem.statusCode == 413) {
+                      throw const RecordingSpeakerLimitException();
+                    }
+                    if (result is ApiFailure<RecordingTranscript> && result.problem.statusCode == 404) {
+                      return RecordingTranscript([], enabled: false);
+                    }
                     return switch (result) { ApiSuccess(:final data) => data, ApiFailure() => null };
                   }
                 : (_) async => null),
@@ -223,68 +231,7 @@ class ConversationDetailProvider extends ChangeNotifier
     return pending;
   }
 
-  Future<bool> _persistSpeakerRestore(
-    ServerConversation target,
-    Map<TranscriptSegment, (bool, String?, String?)> restore,
-    Map<TranscriptSegment, (bool, String?, String?)> current,
-    int generation,
-    Future<void> previousSave,
-  ) async {
-    final landed = <TranscriptSegment>{};
-    try {
-      await previousSave;
-      // One request per restored label: the lines an action covered may have carried different ones.
-      final groups = <(bool, String?), List<TranscriptSegment>>{};
-      for (final MapEntry(key: segment, value: original) in restore.entries) {
-        groups.putIfAbsent((original.$1, original.$1 ? null : original.$2), () => []).add(segment);
-      }
-      for (final MapEntry(key: (isUser, personId), value: segments) in groups.entries) {
-        final ids = [for (final segment in segments) segment.id];
-        final saved = _assignRecording == null
-            ? await _assignSpeaker(target.id, ids, isUser: isUser, personId: personId)
-            : await persistRecordingLabel(_assignRecording!, target.id, ids, isUser ? 'user' : (personId ?? ''), null)
-                is ApiSuccess<int>;
-        if (!saved) {
-          _rollForwardUnsavedRestore(target, restore, current, landed, generation);
-          return false;
-        }
-        landed.addAll(segments);
-      }
-      if (_speakerConversationDeleted(target.id) || target.deleted) {
-        _dropSpeakerRefreshState(target.id);
-      } else if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
-        _automaticSpeakerSummaryRefreshIds.add(target.id);
-        if (!_isDisposed && identical(conversationOrNull, target)) _speakerSummaryConversationId = target.id;
-      }
-      if (!_isDisposed && identical(conversationOrNull, target)) notifyListeners();
-      return true;
-    } catch (_) {
-      _rollForwardUnsavedRestore(target, restore, current, landed, generation);
-      return false;
-    } finally {
-      await _finishSpeakerSave(target);
-    }
-  }
-
-  /// A restore that failed part-way: the groups that already saved stay undone, the rest roll
-  /// forward to the labels the server still has, so the transcript matches the server line by line.
-  void _rollForwardUnsavedRestore(
-    ServerConversation target,
-    Map<TranscriptSegment, (bool, String?, String?)> restore,
-    Map<TranscriptSegment, (bool, String?, String?)> current,
-    Set<TranscriptSegment> landed,
-    int generation,
-  ) {
-    final unsaved = [
-      for (final segment in restore.keys)
-        if (!landed.contains(segment)) segment,
-    ];
-    _rollbackSpeakerAssignment(target, unsaved, current, generation, null);
-  }
-
-  bool _speakerConversationDeleted(String conversationId) =>
-      conversationProvider?.memoriesToDelete.containsKey(conversationId) == true ||
-      (_cachedConversation?.id == conversationId && _cachedConversation?.deleted == true);
+  void _notifySpeakerRestore() => notifyListeners();
 
   void _dropSpeakerRefreshState(String conversationId) {
     _automaticSpeakerSummaryRefreshIds.remove(conversationId);
@@ -333,16 +280,16 @@ class ConversationDetailProvider extends ChangeNotifier
         (expectedConversationId != null && target.id != expectedConversationId)) {
       return null;
     }
-    speakerAssignmentStale = false;
+    speakerAssignmentStale = speakerAssignmentLimited = speakerAssignmentPartial = false;
     final selectedIds = segmentIds.toSet();
     final anchor = recordingSegments.where((line) => selectedIds.contains(line.id)).firstOrNull;
-    final voice = recordingLine(anchor?.id)?.voice;
+    final voice = recordingVoiceFor(anchor?.id);
     final anchorOwner = recordingLine(anchor?.id)?.conversationId ?? target.id;
     final selected = recordingSegments
         .where((line) => speakerId == null
             ? selectedIds.contains(line.id)
             : voice != null
-                ? recordingLine(line.id)?.voice == voice
+                ? (recordingLine(line.id)?.voice ?? line.recordingVoice) == voice
                 : line.speakerId == speakerId && (recordingLine(line.id)?.conversationId ?? target.id) == anchorOwner)
         .toList();
     if (selected.isEmpty) return null;
@@ -442,10 +389,15 @@ class ConversationDetailProvider extends ChangeNotifier
         }
       }
       final self = resolvedId == 'user';
+      var committed = selected;
+      var partial = false;
       try {
         final bool saved;
         if (_assignRecording != null) {
           final result = await persistRecordingLabel(_assignRecording!, target.id, segmentIds, resolvedId, speakerId);
+          if (result is ApiFailure<int> && result.problem.statusCode == 413) {
+            throw const RecordingSpeakerLimitException();
+          }
           if (result is ApiFailure<int> && result.problem.statusCode == 409) throw const StaleSpeakerException();
           lastSpeakerAppliedCount = result is ApiSuccess<int> ? result.data : 0;
           saved = result is ApiSuccess<int>;
@@ -458,12 +410,20 @@ class ConversationDetailProvider extends ChangeNotifier
           _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
           return false;
         }
+      } on PartialSpeakerAssignmentException catch (error) {
+        speakerAssignmentPartial = partial = true;
+        speakerAssignmentStale = error.stale;
+        lastSpeakerAppliedCount = error.appliedCount;
+        committed = selected.where((line) => error.succeeded.contains(recordingOwner(line))).toList();
+        _rollbackSpeakerAssignment(
+            target, selected.where((line) => !committed.contains(line)).toList(), before, generation, onFailed);
       } catch (error) {
+        speakerAssignmentLimited = error is RecordingSpeakerLimitException;
         speakerAssignmentStale = error is StaleSpeakerException;
         _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
         return false;
       }
-      for (final segment in selected) {
+      for (final segment in committed) {
         _confirmedSpeakerLabels[segment] = (self, self ? null : resolvedId, 'manual');
       }
       // A sync bridge may have retired the ID while this detail page stayed
@@ -472,7 +432,8 @@ class ConversationDetailProvider extends ChangeNotifier
       if (_syncConversationId.hasMatch(target.id)) _speakerRefreshId = target.id;
       if (_speakerConversationDeleted(target.id) || target.deleted) {
         _dropSpeakerRefreshState(target.id);
-      } else if (changed &&
+      } else if (committed.isNotEmpty &&
+          changed &&
           target.status == ConversationStatus.completed &&
           target.structured.overview.trim().isNotEmpty) {
         _automaticSpeakerSummaryRefreshIds.add(target.id);
@@ -481,7 +442,7 @@ class ConversationDetailProvider extends ChangeNotifier
       if (!_isDisposed && identical(conversationOrNull, target)) {
         notifyListeners();
       }
-      return true;
+      return !partial;
     } finally {
       for (final segment in selected) {
         _segmentPendingSaves[segment] = (_segmentPendingSaves[segment] ?? 1) - 1;
@@ -692,7 +653,12 @@ class ConversationDetailProvider extends ChangeNotifier
     VoidCallback? onFailed,
   ) {
     // An action that never saved has nothing to undo.
-    _labelingUndo.removeWhere((undo) => undo.generation == generation);
+    final failedIds = selected.map((line) => line.id).toSet();
+    for (final undo in _labelingUndo.where((undo) => undo.generation == generation)) {
+      undo.before.removeWhere((id, _) => failedIds.contains(id));
+      undo.changedIds.removeAll(failedIds);
+    }
+    _labelingUndo.removeWhere((undo) => undo.generation == generation && undo.changedIds.isEmpty);
     if (_isDisposed || !identical(conversationOrNull, target)) return;
     for (final segment in selected) {
       if (_segmentLabelGeneration[segment] != null && _segmentLabelGeneration[segment] != generation) continue;

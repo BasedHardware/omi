@@ -37,6 +37,7 @@ class RecordingSpeakerRequest(BaseModel):
 class RecordingMemberCount(BaseModel):
     conversation_id: str
     applied_count: int
+    error: Optional[str] = None
 
 
 class RecordingSpeakerResponse(BaseModel):

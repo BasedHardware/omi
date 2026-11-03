@@ -4559,5 +4559,6 @@
     "liveAudioSaved": "{duration} kaydedildi",
     "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür.",
     "speakerWholeRecording": "Kaydın tamamına uygula",
-    "speakerSelectionChanged": "Konuşmacı değişti. Satırları yeniden seçin."
+    "speakerSelectionChanged": "Konuşmacı değişti. Satırları yeniden seçin.",
+    "speakerRenameIssue": "{reason, select, limit{Kayıt çok büyük. Bir konuşmada daha az satır seçin.} partial{Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.} other{Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.}}"
 }

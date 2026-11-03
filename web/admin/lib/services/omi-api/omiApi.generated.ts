@@ -4496,6 +4496,7 @@ export type RecordedClock = "device" | "estimated_device" | "frame" | "live_capt
 export interface RecordingMemberCount {
   applied_count: number;
   conversation_id: string;
+  error?: string | null;
 }
 
 export interface RecordingSelection {
@@ -5929,6 +5930,7 @@ export interface TranscriptSegment {
   person_id?: string | null;
   speaker?: string | null;
   speaker_id?: number | null;
+  speaker_id_scope?: string | null;
   speaker_label_source?: "manual" | "auto" | "carried" | null;
   speech_profile_processed?: boolean;
   start: number;

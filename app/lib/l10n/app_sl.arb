@@ -11950,5 +11950,6 @@
     "liveAudioSaved": "Shranjeno {duration}",
     "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.",
     "speakerWholeRecording": "Uporabi za celoten posnetek",
-    "speakerSelectionChanged": "Govorec se je spremenil. Znova izberite vrstice."
+    "speakerSelectionChanged": "Govorec se je spremenil. Znova izberite vrstice.",
+    "speakerRenameIssue": "{reason, select, limit{Posnetek je prevelik. Izberite manj vrstic v enem pogovoru.} partial{Nekatere vrstice so shranjene. Izberite preostale in poskusite znova.} other{Nekatere vrstice so shranjene. Izberite preostale in poskusite znova.}}"
 }

@@ -4524,5 +4524,6 @@
     "liveAudioSaved": "{duration} salvate",
     "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.",
     "speakerWholeRecording": "Aplică întregii înregistrări",
-    "speakerSelectionChanged": "Vorbitorul s-a schimbat. Selectează din nou rândurile."
+    "speakerSelectionChanged": "Vorbitorul s-a schimbat. Selectează din nou rândurile.",
+    "speakerRenameIssue": "{reason, select, limit{Înregistrarea este prea mare. Selectează mai puține rânduri dintr-o conversație.} partial{Unele rânduri au fost salvate. Selectează-le pe cele rămase și încearcă din nou.} other{Unele rânduri au fost salvate. Selectează-le pe cele rămase și încearcă din nou.}}"
 }

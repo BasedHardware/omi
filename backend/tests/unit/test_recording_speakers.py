@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from database import conversations as db, recording_speakers as decisions_db
-from models.recording_speakers import RecordingSelection, RecordingSpeakerRequest
+from models.recording_speakers import RecordingSelection, RecordingSpeakerRequest, RecordingVoice
 from routers.recording_speakers import edit
 from tests.unit.test_manual_speaker_assignments import world
 from utils import recording_speakers as service
@@ -45,12 +45,20 @@ def recording(world, monkeypatch):
     return store
 
 
-def request(*, whole=True, selections=None):
+def request(*, whole=True, selections=None, proof=True):
     return RecordingSpeakerRequest(
         person_id='new',
         whole_recording=whole,
         use_for_speech_training=False,
-        selections=selections or [RecordingSelection(conversation_id='c1', segment_ids=['c1-s'], speaker_id=4)],
+        selections=selections
+        or [
+            RecordingSelection(
+                conversation_id='c1',
+                segment_ids=['c1-s'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stream:1', stream_speaker='SPEAKER_0') if proof else None,
+            )
+        ],
     )
 
 
@@ -103,7 +111,7 @@ def test_stale_speaker_is_typed_409_without_partial_writes(recording):
 def test_unscoped_rows_only_change_the_source_member(recording):
     for cid in ['c0', 'c1', 'c2']:
         recording.rows[('users', 'u', 'conversations', cid)]['transcript_segments'][0].pop('speaker_id_scope')
-    assert edit('u', 'c1', request(), None)['applied_count'] == 1
+    assert edit('u', 'c1', request(proof=False), None)['applied_count'] == 1
 
 
 @pytest.mark.parametrize('whole', [True, False])
@@ -138,9 +146,11 @@ def test_non_episode_scope_fallback_includes_same_scope_only(recording, monkeypa
         SimpleNamespace(id=cid, to_dict=lambda cid=cid: recording.rows[('users', 'u', 'conversations', cid)])
         for cid in ['c0', 'c1', 'c2']
     ]
-    snapshots.append(SimpleNamespace(id='empty', to_dict=lambda: {'transcript_segments': None}))
+    # An indexed array query cannot return rows without the scope field.
     collection = SimpleNamespace(stream=lambda: iter(snapshots))
     collection.select = lambda fields: collection
+    collection.where = lambda **kwargs: collection
+    collection.limit = lambda count: collection
     client = SimpleNamespace(
         collection=lambda _: SimpleNamespace(document=lambda _: SimpleNamespace(collection=lambda _: collection))
     )
@@ -236,9 +246,18 @@ def test_client_voice_proof_rejects_scope_reuse_before_any_write(recording):
 
 def test_sync_merge_redirect_keeps_recording_rename_available(recording):
     recording.rows[('users', 'u', 'conversations', 'donor')] = dict(
-        id='donor', deleted=True, sync_merged_into='c1', transcript_segments=[]
+        id='donor', deleted=True, discarded=True, sync_merged_into='c1', transcript_segments=[]
     )
-    body = request(selections=[RecordingSelection(conversation_id='donor', segment_ids=['c1-s'], speaker_id=4)])
+    body = request(
+        selections=[
+            RecordingSelection(
+                conversation_id='donor',
+                segment_ids=['c1-s'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stream:1', stream_speaker='SPEAKER_0'),
+            )
+        ]
+    )
     assert edit('u', 'donor', body, None)['applied_count'] == 3
 
 
@@ -268,3 +287,186 @@ def test_episode_http_route_uses_episode_admission_and_fans_out(recording, monke
         denied = client.patch('/v1/episodes/e/assign-speaker', json=request().model_dump())
         assert denied.status_code == 404
         assert recording.rows == before
+
+
+def test_live_identity_proof_rejects_reconnected_same_number(recording):
+    from models.recording_speakers import RecordingVoice
+
+    line = recording.rows[('users', 'u', 'conversations', 'c1')]['transcript_segments'][1]
+    line['speaker_id'] = 4
+    before = deepcopy(recording.rows)
+    body = request(
+        selections=[
+            RecordingSelection(
+                conversation_id='c1',
+                segment_ids=['c1-s', 'c1-other'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stream:1', stream_speaker='SPEAKER_0'),
+            )
+        ]
+    )
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', body, None)
+    assert error.value.status_code == 409
+    assert recording.rows == before
+
+
+@pytest.mark.parametrize('budget', ['members', 'segments'])
+def test_over_cap_refuses_before_any_write(recording, monkeypatch, budget):
+    from config import recording_speakers as limits
+
+    monkeypatch.setattr(limits, 'MAX_MEMBERS' if budget == 'members' else 'MAX_SEGMENTS', 2)
+    before = deepcopy(recording.rows)
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', request(), None)
+    assert error.value.status_code == 413
+    assert error.value.detail == 'recording_speaker_limit_exceeded'
+    assert recording.rows == before
+
+
+def test_scope_discovery_is_indexed_and_bounded():
+    calls = []
+
+    class Query:
+        def where(self, *, filter):
+            calls.append(('where', filter.field_path, filter.op_string, filter.value))
+            return self
+
+        def select(self, fields):
+            calls.append(('select', fields))
+            return self
+
+        def limit(self, count):
+            calls.append(('limit', count))
+            return self
+
+        def stream(self):
+            assert calls[-1] == ('limit', 65)
+            return iter([])
+
+    client = SimpleNamespace(
+        collection=lambda _: SimpleNamespace(document=lambda _: SimpleNamespace(collection=lambda _: Query()))
+    )
+    assert decisions_db.scope_conversation_ids('u', {'stream:1'}, firestore_client=client) == []
+    assert calls[0] == ('where', 'recording_speaker_scopes', 'array_contains_any', ['stream:1'])
+
+
+def test_scope_index_is_stamped_before_transcript_encryption(world):
+    _, _, segments = world
+    payload = db._prepare_conversation_for_write(
+        {'transcript_segments': [dict(segments[0], speaker_id_scope='stream:1')]}, 'u', 'standard'
+    )
+    assert payload['recording_speaker_scopes'] == ['stream:1']
+    assert isinstance(payload['transcript_segments'], bytes)
+    assert (
+        db.decode_transcript_segments_verified('u', payload['transcript_segments'], True)[0]['speaker_id_scope']
+        == 'stream:1'
+    )
+
+
+def test_discarded_members_are_hidden_and_never_assigned(recording):
+    recording.rows[('users', 'u', 'conversations', 'c0')]['discarded'] = True
+    assert {row['id'] for row in service.transcript('u', 'c1')['conversations']} == {'c1', 'c2'}
+    assert edit('u', 'c1', request(), None)['applied_count'] == 2
+    assert decode(recording, 'c0')['transcript_segments'][0]['person_id'] == 'old'
+
+
+def test_discard_race_is_rechecked_in_assignment_transaction(recording, monkeypatch):
+    original = service.commit_manual_assignment
+
+    def raced(uid, cid, **kwargs):
+        recording.rows[('users', uid, 'conversations', cid)]['discarded'] = True
+        return original(uid, cid, **kwargs)
+
+    monkeypatch.setattr(service, 'commit_manual_assignment', raced)
+    result = edit('u', 'c1', request(), None)
+    assert result['applied_count'] == 0
+    assert all(row['error'] == 'stale_speaker' for row in result['conversations'])
+    assert all(decode(recording, cid)['transcript_segments'][0]['person_id'] == 'old' for cid in ['c0', 'c1', 'c2'])
+
+
+def test_later_stale_member_returns_outcomes_for_already_committed_members(recording, monkeypatch):
+    original = service.commit_manual_assignment
+
+    def raced(uid, cid, **kwargs):
+        if cid == 'c1':
+            recording.rows[('users', uid, 'conversations', cid)]['transcript_segments'][0][
+                'speaker_id_scope'
+            ] = 'reconnect'
+        return original(uid, cid, **kwargs)
+
+    monkeypatch.setattr(service, 'commit_manual_assignment', raced)
+    result = edit('u', 'c1', request(), None)
+    assert result['applied_count'] == 2
+    outcomes = {r['conversation_id']: r for r in result['conversations']}
+    assert outcomes['c1']['error'] == 'stale_speaker'
+    for cid in ['c0', 'c2']:
+        assert 'error' not in outcomes[cid]
+        assert decode(recording, cid)['transcript_segments'][0]['person_id'] == 'new'
+    assert decode(recording, 'c1')['transcript_segments'][0]['person_id'] == 'old'
+
+
+def test_retry_is_noop_for_receipt_generation_and_learning_jobs(recording):
+    body = request().model_copy(update={'use_for_speech_training': True})
+    first = edit('u', 'c1', body, None)
+    assert first['applied_count'] == 3
+    before = deepcopy(recording.rows)
+    second = edit('u', 'c1', body, None)
+    assert second['applied_count'] == 0
+    assert recording.rows == before
+
+
+def test_kill_switch_defaults_on_and_off_disables_fanout_and_carry(recording, monkeypatch):
+    from config.recording_speakers import enabled
+
+    monkeypatch.delenv('RECORDING_SPEAKER_RENAME_ENABLED', raising=False)
+    assert enabled()
+    edit('u', 'c1', request(), None)
+    monkeypatch.setenv('RECORDING_SPEAKER_RENAME_ENABLED', 'off')
+    assert not enabled()
+    result = service.transcript('u', 'c1')
+    assert result['enabled'] is False
+    assert [row['id'] for row in result['conversations']] == ['c1']
+    before = deepcopy(recording.rows)
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', request(), None)
+    assert error.value.detail == 'recording_speaker_rename_disabled'
+    assert recording.rows == before
+    assert service.recording_carry('u', {'transcript_segments': []}, 'stream:1') == {}
+
+
+@pytest.mark.parametrize('whole', [True, False])
+def test_unscoped_recording_retry_is_also_noop(recording, whole):
+    recording.rows[('users', 'u', 'conversations', 'c1')]['transcript_segments'][0].pop('speaker_id_scope')
+    body = request(whole=whole, proof=False)
+    assert edit('u', 'c1', body, None)['applied_count'] == 1
+    before = deepcopy(recording.rows)
+    assert edit('u', 'c1', body, None)['applied_count'] == 0
+    assert recording.rows == before
+
+
+def test_legacy_fallback_cannot_assign_a_discarded_conversation(recording):
+    recording.rows[('users', 'u', 'conversations', 'c1')]['discarded'] = True
+    before = deepcopy(recording.rows)
+    with pytest.raises(ValueError):
+        db.assign_conversation_speaker('u', 'c1', person_id='new', segment_ids=['c1-s'])
+    assert recording.rows == before
+
+
+def test_scoped_speaker_wide_request_requires_client_voice_proof(recording):
+    before = deepcopy(recording.rows)
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', request(proof=False), None)
+    assert error.value.status_code == 409
+    assert recording.rows == before
+
+
+def test_scope_budget_is_checked_before_voice_expansion(recording, monkeypatch):
+    monkeypatch.setattr(service, 'MAX_SCOPES', 1)
+    monkeypatch.setattr(service, 'voice_segments', lambda *a: pytest.fail('Voice expansion ran before the budget'))
+    before = deepcopy(recording.rows)
+    body = request(whole=False, selections=[RecordingSelection(conversation_id='c1', segment_ids=['c1-s', 'c1-other'])])
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', body, None)
+    assert error.value.status_code == 413
+    assert recording.rows == before

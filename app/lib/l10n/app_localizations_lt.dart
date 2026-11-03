@@ -14992,4 +14992,17 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Įrašas per didelis. Pasirinkite mažiau eilučių viename pokalbyje.',
+        'partial': 'Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.',
+        'other': 'Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
 }

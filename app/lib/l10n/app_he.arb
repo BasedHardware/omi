@@ -11950,5 +11950,6 @@
     "liveAudioSaved": "{duration} נשמרו",
     "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
     "speakerWholeRecording": "החל על כל ההקלטה",
-    "speakerSelectionChanged": "הדובר השתנה. יש לבחור שוב את השורות."
+    "speakerSelectionChanged": "הדובר השתנה. יש לבחור שוב את השורות.",
+    "speakerRenameIssue": "{reason, select, limit{ההקלטה גדולה מדי. בחרו פחות שורות בשיחה אחת.} partial{חלק מהשורות נשמרו. בחרו את הנותרות ונסו שוב.} other{חלק מהשורות נשמרו. בחרו את הנותרות ונסו שוב.}}"
 }

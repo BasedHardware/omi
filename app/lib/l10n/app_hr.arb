@@ -11950,5 +11950,6 @@
     "liveAudioSaved": "Spremljeno {duration}",
     "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.",
     "speakerWholeRecording": "Primijeni na cijelu snimku",
-    "speakerSelectionChanged": "Govornik se promijenio. Ponovno odaberite retke."
+    "speakerSelectionChanged": "Govornik se promijenio. Ponovno odaberite retke.",
+    "speakerRenameIssue": "{reason, select, limit{Snimka je prevelika. Odaberite manje redaka u jednom razgovoru.} partial{Neki su retci spremljeni. Odaberite preostale i pokušajte ponovno.} other{Neki su retci spremljeni. Odaberite preostale i pokušajte ponovno.}}"
 }

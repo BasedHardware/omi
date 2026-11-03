@@ -14738,4 +14738,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => '说话人已更改。请重新选择这些行。';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '录音太大。请在一个对话中选择更少的行。',
+        'partial': '部分行已保存。请选择其余行并重试。',
+        'other': '部分行已保存。请选择其余行并重试。',
+      },
+    );
+    return '$_temp0';
+  }
 }

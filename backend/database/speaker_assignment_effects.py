@@ -210,3 +210,21 @@ def record_shadow_correction(current, resolved, logger):
             logger.warning(
                 'event=speaker_grouping_correction outcome=unavailable exception_type=%s', type(error).__name__
             )
+
+
+def record_assignment_commit(uid, result, logger):
+    """Best-effort observation must never turn a committed label into a failed outcome."""
+    from database.people_stats_cache import invalidate_people_stats_cache
+    from utils.observability.speaker_identification import record_speaker_review
+    from utils.observability.speaker_learning_jobs import record_speaker_learning_job_events
+
+    current, resolved, _, before = result
+    if not resolved:
+        return
+    try:
+        invalidate_people_stats_cache(uid)
+        record_shadow_correction(current, resolved, logger)
+        record_speaker_review(uid, current['id'], before, current['transcript_segments'])
+        record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
+    except Exception:
+        record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')

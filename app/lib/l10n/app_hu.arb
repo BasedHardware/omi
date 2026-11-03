@@ -4620,5 +4620,6 @@
     "liveAudioSaved": "{duration} mentve",
     "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg.",
     "speakerWholeRecording": "Alkalmazás a teljes felvételre",
-    "speakerSelectionChanged": "A beszélő megváltozott. Válaszd ki újra a sorokat."
+    "speakerSelectionChanged": "A beszélő megváltozott. Válaszd ki újra a sorokat.",
+    "speakerRenameIssue": "{reason, select, limit{A felvétel túl nagy. Válasszon kevesebb sort egy beszélgetésből.} partial{Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.} other{Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.}}"
 }

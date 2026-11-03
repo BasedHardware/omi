@@ -26336,6 +26336,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The speaker changed. Select the lines again.'**
   String get speakerSelectionChanged;
+
+  /// Speaker rename budget refusal or partial member save; successful labels remain applied.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}'**
+  String speakerRenameIssue(String reason);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

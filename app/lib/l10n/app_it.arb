@@ -4524,5 +4524,6 @@
     "liveAudioSaved": "{duration} salvati",
     "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.",
     "speakerWholeRecording": "Applica a tutta la registrazione",
-    "speakerSelectionChanged": "Il parlante è cambiato. Seleziona di nuovo le righe."
+    "speakerSelectionChanged": "Il parlante è cambiato. Seleziona di nuovo le righe.",
+    "speakerRenameIssue": "{reason, select, limit{La registrazione è troppo grande. Seleziona meno righe in una conversazione.} partial{Alcune righe sono state salvate. Seleziona le altre e riprova.} other{Alcune righe sono state salvate. Seleziona le altre e riprova.}}"
 }

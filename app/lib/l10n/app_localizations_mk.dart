@@ -15034,4 +15034,17 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Говорникот се промени. Изберете ги редовите повторно.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Снимката е преголема. Изберете помалку редови во еден разговор.',
+        'partial': 'Некои редови се зачувани. Изберете ги преостанатите и обидете се повторно.',
+        'other': 'Некои редови се зачувани. Изберете ги преостанатите и обидете се повторно.',
+      },
+    );
+    return '$_temp0';
+  }
 }

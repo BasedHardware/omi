@@ -4524,5 +4524,6 @@
     "liveAudioSaved": "{duration} desats",
     "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.",
     "speakerWholeRecording": "Aplica a tota la gravació",
-    "speakerSelectionChanged": "El parlant ha canviat. Torna a seleccionar les línies."
+    "speakerSelectionChanged": "El parlant ha canviat. Torna a seleccionar les línies.",
+    "speakerRenameIssue": "{reason, select, limit{La gravació és massa gran. Selecciona menys línies en una conversa.} partial{S’han desat algunes línies. Selecciona les restants i torna-ho a provar.} other{S’han desat algunes línies. Selecciona les restants i torna-ho a provar.}}"
 }

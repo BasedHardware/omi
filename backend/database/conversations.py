@@ -32,6 +32,7 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
+from config.recording_speakers import stamp_scope_index
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
@@ -317,6 +318,7 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
     summary_delivery.prepare(data, uid)
     if owner_diagnostics.FIELD in data:
@@ -3361,9 +3363,9 @@ def assign_conversation_speaker(
         persist_assignment_effects,
         run_assignment_transaction,
         owner_confirmation_updates,
-        record_shadow_correction,
+        record_assignment_commit,
     )
-    from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
+    from database.speaker_learning_jobs import extract_learning_receipt_markers
 
     validate_assignment_range(time_range)
     rejection = normalize_rejection(rejection)
@@ -3425,6 +3427,15 @@ def assign_conversation_speaker(
             is_user,
         )
         recording_decisions.validate_selection(current, expected_voices)
+        if recording_decisions.same_assignment(
+            transaction,
+            client,
+            uid,
+            current,
+            expected_voices,
+            (person_id, is_user, use_for_speech_training, recording_voice_defaults),
+        ):
+            return current, [], [], []
         before = copy.deepcopy(current['transcript_segments'])
         if source_segments is not None:
             before_ids = {s.get('id') for s in before}
@@ -3494,11 +3505,8 @@ def assign_conversation_speaker(
         return current, resolved, removed, relabeled
 
     result = run_assignment_transaction(client, assign)
-    invalidate_people_stats_cache(uid)
-    current, resolved, _, before = result
-    record_shadow_correction(current, resolved, logger)
-    record_speaker_review(uid, current['id'], before, current['transcript_segments'])
-    record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
+    record_assignment_commit(uid, result, logger)
+    current = result[0]
     try:
         _reveal_match_scores_for_read(current, uid)
     except Exception:

@@ -15004,4 +15004,17 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Runātājs ir mainījies. Atlasiet rindas vēlreiz.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Ieraksts ir pārāk liels. Atlasiet mazāk rindu vienā sarunā.',
+        'partial': 'Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.',
+        'other': 'Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
 }

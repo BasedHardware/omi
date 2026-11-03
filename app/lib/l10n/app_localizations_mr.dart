@@ -14978,4 +14978,17 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'वक्ता बदलला आहे. ओळी पुन्हा निवडा.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'रेकॉर्डिंग खूप मोठे आहे. एका संभाषणात कमी ओळी निवडा.',
+        'partial': 'काही ओळी जतन झाल्या. उरलेल्या ओळी निवडून पुन्हा प्रयत्न करा.',
+        'other': 'काही ओळी जतन झाल्या. उरलेल्या ओळी निवडून पुन्हा प्रयत्न करा.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -4566,5 +4566,6 @@
     "liveAudioSaved": "{duration} gemt",
     "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload.",
     "speakerWholeRecording": "Anvend på hele optagelsen",
-    "speakerSelectionChanged": "Taleren er ændret. Vælg linjerne igen."
+    "speakerSelectionChanged": "Taleren er ændret. Vælg linjerne igen.",
+    "speakerRenameIssue": "{reason, select, limit{Optagelsen er for stor. Vælg færre linjer i én samtale.} partial{Nogle linjer blev gemt. Vælg de resterende og prøv igen.} other{Nogle linjer blev gemt. Vælg de resterende og prøv igen.}}"
 }

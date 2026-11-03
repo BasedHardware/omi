@@ -116,13 +116,14 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    # Opaque voice scope travels to clients for exact recording rename proofs.
+    speaker_id_scope: Optional[str] = None
     # Persisted for backend identity consumers. SkipJsonSchema keeps these out of
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
     # Cleared atomically on the first manual review; never authorizes teaching.
     speaker_match_source: SkipJsonSchema[Optional[str]] = None
-    speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # Only present for v2 text whose provider position could not be proven.
     # Absence keeps every v1 serialized segment byte-identical.

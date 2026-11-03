@@ -14882,4 +14882,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'تغيّر المتحدث. حدد الأسطر مرة أخرى.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'التسجيل كبير جدًا. حدد أسطرًا أقل في محادثة واحدة.',
+        'partial': 'تم حفظ بعض الأسطر. حدد الأسطر المتبقية وحاول مجددًا.',
+        'other': 'تم حفظ بعض الأسطر. حدد الأسطر المتبقية وحاول مجددًا.',
+      },
+    );
+    return '$_temp0';
+  }
 }

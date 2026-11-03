@@ -1128,10 +1128,7 @@ _add(
 _add(
     DriverEntry(
         'database.recording_speakers.scope_conversation_ids',
-        base={'uid': UID},
-        neutrals={
-            'scopes': (frozenset({'stream:1'}), 'post-decode membership only; the UID-scoped projection is unchanged')
-        },
+        base={'uid': UID, 'scopes': frozenset({'stream:1'})},
     )
 )
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))

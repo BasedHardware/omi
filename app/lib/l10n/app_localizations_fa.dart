@@ -14965,4 +14965,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ضبط خیلی بزرگ است. خط‌های کمتری از یک گفتگو انتخاب کنید.',
+        'partial': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+        'other': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+      },
+    );
+    return '$_temp0';
+  }
 }

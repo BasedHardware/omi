@@ -14985,4 +14985,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Pembicara berubah. Pilih baris lagi.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Rekaman terlalu besar. Pilih lebih sedikit baris dalam satu percakapan.',
+        'partial': 'Beberapa baris tersimpan. Pilih baris yang tersisa dan coba lagi.',
+        'other': 'Beberapa baris tersimpan. Pilih baris yang tersisa dan coba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
 }

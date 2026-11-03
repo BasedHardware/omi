@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
+from config.recording_speakers import enabled, RecordingLimitExceeded
 from config.episodes import APP_CHANNEL_HEADER, client_channel_admitted, episodes_enabled_for
 from models.recording_speakers import RecordingSpeakerRequest, RecordingSpeakerResponse
 from utils import recording_speakers
@@ -11,8 +12,12 @@ router = APIRouter(tags=['conversations'])
 
 
 def edit(uid, conversation_id, body, background_tasks, *, episode_id=None):
+    if not enabled():
+        raise HTTPException(409, detail='recording_speaker_rename_disabled')
     try:
         return recording_speakers.assign(uid, conversation_id, body, background_tasks, episode_id=episode_id)
+    except RecordingLimitExceeded as error:
+        raise HTTPException(413, detail='recording_speaker_limit_exceeded') from error
     except LookupError as error:
         raise HTTPException(404, detail=str(error)) from error
     except PermissionError as error:
@@ -34,6 +39,8 @@ def get_recording_speakers(
         if not (episodes_enabled_for(uid) and client_channel_admitted(channel)):
             result['episode_id'] = None
         return result
+    except RecordingLimitExceeded as error:
+        raise HTTPException(413, detail='recording_speaker_limit_exceeded') from error
     except LookupError as error:
         raise HTTPException(404, detail='Conversation not found') from error
     except PermissionError as error:

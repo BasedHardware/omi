@@ -15004,4 +15004,17 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'Дакладчык змяніўся. Выберыце радкі зноў.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Запіс занадта вялікі. Выберыце менш радкоў у адной размове.',
+        'partial': 'Некаторыя радкі захаваны. Выберыце астатнія і паспрабуйце зноў.',
+        'other': 'Некаторыя радкі захаваны. Выберыце астатнія і паспрабуйце зноў.',
+      },
+    );
+    return '$_temp0';
+  }
 }

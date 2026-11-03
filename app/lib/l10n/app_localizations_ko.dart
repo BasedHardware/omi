@@ -14763,4 +14763,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => '화자가 변경되었습니다. 줄을 다시 선택해 주세요.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '녹음이 너무 큽니다. 한 대화에서 더 적은 줄을 선택하세요.',
+        'partial': '일부 줄이 저장되었습니다. 나머지 줄을 선택하고 다시 시도하세요.',
+        'other': '일부 줄이 저장되었습니다. 나머지 줄을 선택하고 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
 }

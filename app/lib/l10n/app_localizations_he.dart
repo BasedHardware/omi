@@ -14860,4 +14860,17 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get speakerSelectionChanged => 'הדובר השתנה. יש לבחור שוב את השורות.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ההקלטה גדולה מדי. בחרו פחות שורות בשיחה אחת.',
+        'partial': 'חלק מהשורות נשמרו. בחרו את הנותרות ונסו שוב.',
+        'other': 'חלק מהשורות נשמרו. בחרו את הנותרות ונסו שוב.',
+      },
+    );
+    return '$_temp0';
+  }
 }

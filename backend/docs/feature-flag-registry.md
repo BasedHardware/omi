@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-02 -->
+<!-- feature-flag-registry as-of: 2026-11-03 -->
 
 # Feature-flag authority registry
 
@@ -119,6 +119,7 @@ during the seven-day grace, then fails unless a dated `review_overdue`
 exception is recorded for David.
 
 - `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` — review_by 2026-11-01 (dazheng)
+- `BATCH_JOBSTORE_MODE` — review_by 2026-11-02 (dazheng)
 
 ## Flags
 
@@ -581,6 +582,7 @@ and an explicit empty literal renders as `''`.
 | `PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED` | Default on; refresh the live pusher audio_files projection from exact uploaded-object metadata between full prefix rebuilds; 0 restores per-flush listing | backend | env | open | — | — | — | — | keep | keep | — | planscost |
 | `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED` | Default on; bound only committed pusher projection queue capacity waits to the existing 300-second receive-liveness budget | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
+| `RECORDING_SPEAKER_RENAME_ENABLED` | Default on; bounded scoped recording speaker naming. Off reports disabled and clients use explicit single-conversation assignments. | backend, mobile | env | open | — | — | — | — | keep | keep | — | speakerrename |
 | `RECORD_AUDIO_PARTIAL_ENABLED` | Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_BARRIER_INLINE_FINISH` | Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_OVERLAP_TRIM_ENABLED` | Default on; earlier retained objects own divergent overlap frames in seal proof and admission manifests | backend | env | open | {value: 'true', category: ops_kill} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | keep | — | two-lane lead |
@@ -1190,6 +1192,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED` — Default on; bound only committed pusher projection queue capacity waits to the existing 300-second receive-liveness budget (fail: open)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
+- `RECORDING_SPEAKER_RENAME_ENABLED` — Default on; bounded scoped recording speaker naming. Off reports disabled and clients use explicit single-conversation assignments. (fail: open)
 - `RECORD_AUDIO_PARTIAL_ENABLED` — Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills (fail: open)
 - `RECORD_BARRIER_INLINE_FINISH` — Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds (fail: open)
 - `RECORD_SEAL_REPAIR_ENABLED` — Default on; independent bounded concurrent in-cluster repair of no-job and pending record seals using canonical privacy and tail proof (fail: open)

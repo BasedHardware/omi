@@ -5,7 +5,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 
-typedef CaptureSpeakerSaveOutcome = ({bool saved, int lines, bool stale});
+typedef CaptureSpeakerSaveOutcome = ({bool saved, int lines, bool stale, bool limited, bool partial});
 
 /// Serial persistence with immediate labels; capture owns the stream publication.
 mixin CaptureSpeakerAssignment on ChangeNotifier {
@@ -32,6 +32,7 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
     String personName,
     List<String> segmentIds, {
     bool applyToSpeaker = false,
+    (String, String)? voice,
     ValueChanged<CaptureSpeakerSaveOutcome>? onSettled,
   }) async {
     final conversationId = speakerAssignmentConversation?.id;
@@ -39,13 +40,19 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
     if (segmentIds.isEmpty || conversationId == null || speakerAssignmentClosed) return false;
     final actions = externalActions;
     final identity = speakerAssignmentIdentity;
+    final anchor = segments.where((line) => line.id == segmentIds.first).firstOrNull;
+    if (anchor == null) return false;
+    final selected = segments
+        .where((line) => applyToSpeaker
+            ? (voice == null ? anchor.sameRecordingVoice(line) : line.recordingVoice == voice)
+            : segmentIds.contains(line.id))
+        .toList();
+    if (selected.isEmpty) return false;
+    final targets = selected.map((line) => line.id).toList();
     final previous = _speakerAssignmentTail;
     final finished = Completer<void>();
     _speakerAssignmentTail = finished.future;
     final generation = ++_liveLabelSequence;
-    final targets = List<String>.of(segmentIds);
-    final selected =
-        segments.where((line) => applyToSpeaker ? line.speakerId == speakerId : targets.contains(line.id)).toList();
     final before = {for (final line in selected) line: (line.isUser, line.personId, line.speakerLabelSource)};
     for (final line in selected) {
       if ((_pendingLiveLabels[line] ?? 0) == 0) _confirmedLiveLabels[line] = before[line];
@@ -61,6 +68,8 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
     var committed = false;
     var staleFailure = false;
     var appliedCount = 0;
+    var limitedFailure = false;
+    var partialFailure = false;
     try {
       await previous;
       if (speakerAssignmentClosed || identity != speakerAssignmentIdentity) return false;
@@ -71,19 +80,28 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
           identity != speakerAssignmentIdentity) {
         return false;
       }
-      final saved = await actions.assignSpeaker(
-        conversationId,
-        targets,
-        finalPersonId,
-        speakerId: applyToSpeaker ? speakerId : null,
-      );
+      bool saved;
+      try {
+        saved = await actions.assignSpeaker(
+          conversationId,
+          targets,
+          finalPersonId,
+          speakerId: applyToSpeaker ? speakerId : null,
+          voice: applyToSpeaker ? (voice ?? anchor.recordingVoice) : null,
+        );
+      } on PartialSpeakerAssignmentException catch (error) {
+        partialFailure = true;
+        appliedCount = error.appliedCount;
+        staleFailure = error.stale;
+        saved = error.succeeded.contains(conversationId);
+      }
       if (!saved) return false;
       committed = true;
       for (final line in selected) {
         _confirmedLiveLabels[line] =
             (finalPersonId == 'user', finalPersonId == 'user' ? null : finalPersonId, 'manual');
       }
-      appliedCount = actions.lastSpeakerAppliedCount;
+      if (!partialFailure) appliedCount = actions.lastSpeakerAppliedCount;
       if (speakerAssignmentClosed ||
           speakerAssignmentIdentity != identity ||
           speakerAssignmentConversation?.id != conversationId ||
@@ -101,6 +119,7 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
       return true;
     } catch (error) {
       staleFailure = error is StaleSpeakerException;
+      limitedFailure = error is RecordingSpeakerLimitException;
       return false;
     } finally {
       if (!committed) {
@@ -124,7 +143,13 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
       finished.complete();
       if (!speakerAssignmentClosed) notifyListeners();
       if (!speakerAssignmentClosed && identity == speakerAssignmentIdentity) {
-        onSettled?.call((saved: committed, lines: appliedCount, stale: staleFailure));
+        onSettled?.call((
+          saved: committed,
+          lines: appliedCount,
+          stale: staleFailure,
+          limited: limitedFailure,
+          partial: partialFailure
+        ));
       }
     }
   }

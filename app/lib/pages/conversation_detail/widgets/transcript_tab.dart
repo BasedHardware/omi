@@ -85,7 +85,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     await provider.loadRecordingTranscript();
     if (!mounted || provider.conversationOrNull?.id != id) return;
     if (provider.recordingLoadFailed) {
-      OmiFeedback.error(context, context.l10n.transcriptLoadFailed);
+      OmiFeedback.error(context,
+          provider.recordingLoadLimited ? context.l10n.speakerRenameIssue('limit') : context.l10n.transcriptLoadFailed);
       return;
     }
     if (!_readyForTranscriptEdit(provider)) return;
@@ -240,7 +241,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       speakerId: speakerId,
       segmentId: segmentId,
       segments: provider.voiceSegmentsFor(segmentId, speakerId),
-      wholeRecording: true,
+      wholeRecording: provider.wholeRecordingEnabled,
       loadRecordingLines: () async {
         await provider.loadRecordingTranscript();
         return provider.voiceSegmentsFor(segmentId, speakerId);
@@ -346,6 +347,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       onFailed: () {
         if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
         if (!mounted) return;
+        if (provider.speakerAssignmentLimited || provider.speakerAssignmentPartial) {
+          OmiFeedback.error(
+              context, context.l10n.speakerRenameIssue(provider.speakerAssignmentLimited ? 'limit' : 'partial'));
+          return;
+        }
         if (provider.speakerAssignmentStale) {
           OmiFeedback.error(context, context.l10n.speakerSelectionChanged);
           unawaited(provider.refreshConversation());
