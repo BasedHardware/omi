@@ -20,11 +20,12 @@ from prometheus_client import REGISTRY
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from fastapi.responses import JSONResponse
 
 from routers import sync as router
 from utils.observability.reasons import SyncCaptureTimeReason
 from utils.request_validation import parse_sync_filename_timestamp
-from utils.sync import capture_clock, lanes
+from utils.sync import capture_clock, lanes, pipeline
 from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeRejected, capture_time_rejection
 from utils.sync.clock_run import clock_run_from_path
 from utils.sync.empty_upload import nonempty_manifest_claims
@@ -282,10 +283,55 @@ def test_early_retry_keeps_raw_name_content_identity_and_reuses_receipt(client, 
 
 def test_early_request_offset_preserves_capture_order_and_duration():
     receipt = 1800000000.0
-    offset = capture_clock.early_capture_clock_offset([788918410.0, 788918470.0], now=receipt)
-    assert 788918470.0 - offset == receipt
-    assert 788918400.0 - offset < 788918460.0 - offset
-    assert (788918470.0 - offset) - (788918460.0 - offset) == 10
+    # Distinct reset dates cannot preserve bogus decades of wall-clock gap.
+    spans = [('later', 1685577600.0, 10.0), ('first', 788918400.0, 10.0)]
+    offsets = capture_clock.early_capture_clock_offsets(spans, now=receipt)
+    assert 788918400.0 - offsets['first'] == receipt - 20
+    assert 1685577600.0 - offsets['later'] == receipt - 10
+    assert (1685577610.0 - offsets['later']) == receipt
+
+
+@pytest.mark.asyncio
+async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor(monkeypatch):
+    source = 'audio_omi_opus_16000_1_fs160_1704067199.wav'
+    derived = '1704067201.wav'
+
+    async def inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    def vad(_path, segments, _errors):
+        segments.add(derived)
+
+    monkeypatch.setattr(pipeline, 'run_blocking', inline)
+    monkeypatch.setattr(pipeline, 'retrieve_vad_segments', vad)
+    segments, early = set(), set()
+    errors, _elapsed = await pipeline._run_sync_vad_phase([source], segments, early_segment_paths=early)
+    assert not errors and segments == early == {derived}
+    receipt = 1800000000.0
+    offsets = capture_clock.early_capture_clock_offsets([(derived, 1704067201.0, 2.0)], now=receipt)
+    assert 1704067201.0 - offsets[derived] == receipt - 2
+
+
+def test_early_clock_does_not_forward_untrusted_client_session_bounds(client, monkeypatch):
+    captured = {}
+
+    async def batch_route(**_kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def accept(**kwargs):
+        captured.update(kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'early', 'status': 'queued'})
+
+    monkeypatch.setattr(router, 'registered_record_response', batch_route)
+    monkeypatch.setattr(router, 'accept_batch_upload', accept)
+    response = client.post(
+        '/v2/sync-local-files',
+        params={'recording_session_id': 'reset', 'audio_start_seconds': 788918400, 'audio_end_seconds': 1685577601},
+        files=[('files', (EARLY_NAME, b'\x00' * 32, 'application/octet-stream'))],
+    )
+    assert response.status_code == 202, response.text
+    assert captured['intake_context']['audio_start_seconds'] is None
+    assert captured['intake_context']['audio_end_seconds'] is None
 
 
 # --- one request-wide server-clock offset (fix round) ---
@@ -505,7 +551,7 @@ def test_1995_segment_stores_receipt_clock_pair_without_losing_duration():
 
     receipt = datetime.now(timezone.utc).timestamp()
     raw = 788918400.0
-    offset = capture_clock.early_capture_clock_offset([raw + 10], now=receipt)
+    offset = capture_clock.early_capture_clock_offsets([('seg', raw, 10.0)], now=receipt)['seg']
     store, _response, closest_seen, _now_test = _run_skewed_segment(raw, offset, False)
     (stored,) = conversations(store)
     assert stored['started_at'].timestamp() == pytest.approx(receipt - 10, abs=0.01)

@@ -200,7 +200,7 @@ from utils.sync.capture_clock import (
     capture_clock_offset,
     capture_time_rejection,
     clamp_capture_time,
-    early_capture_clock_offset,
+    early_capture_clock_offsets,
     is_early_capture_time,
 )
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
@@ -1785,7 +1785,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
 
         timestamp = get_timestamp_from_path(path)
         clock_run = clock_run_from_path(path)
-        if is_early_capture_time(timestamp) and early_capture_offset:
+        if early_capture_offset:
             capture_time_offset = early_capture_offset
         # Legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
@@ -2517,6 +2517,7 @@ async def _run_sync_vad_phase(
     segmented_paths: set,
     source_frame_maps: dict | None = None,
     segment_source_maps: dict | None = None,
+    early_segment_paths: set[str] | None = None,
 ) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
@@ -2526,21 +2527,31 @@ async def _run_sync_vad_phase(
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
+            source_early = early_segment_paths is not None and is_early_capture_time(get_timestamp_from_path(path))
+        except ValueError:
+            source_early = False  # Internal invalid names retain their existing later validation.
+        local_segments: set[str] = set() if source_early else segmented_paths
+        try:
             if segment_source_maps is not None:
                 retrieve_vad_segments(
                     path,
-                    segmented_paths,
+                    local_segments,
                     local_errors,
                     source_frame_map=(source_frame_maps or {}).get(path),
                     segment_source_maps=segment_source_maps,
                     segment_source_lock=segment_source_lock,
                 )
             else:
-                retrieve_vad_segments(path, segmented_paths, local_errors)
+                retrieve_vad_segments(path, local_segments, local_errors)
         except Exception as error:
             if not local_errors:
                 local_errors.append(_bounded_exception_type(error))
         finally:
+            if source_early:
+                with segment_source_lock:
+                    segmented_paths.update(local_segments)
+                    if early_segment_paths is not None:
+                        early_segment_paths.update(local_segments)
             vad_errors.extend(local_errors)
 
     # Executor futures cannot stop their underlying threads when cancelled.
@@ -2986,12 +2997,15 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     ),
                 },
             )
+            early_segment_paths: set[str] = set()
             if source_frame_maps:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, early_segment_paths
                 )
             else:
-                vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
+                vad_errors, vad_ms = await _run_sync_vad_phase(
+                    wav_paths, segmented_paths, early_segment_paths=early_segment_paths
+                )
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
 
@@ -3295,13 +3309,13 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     max(get_timestamp_from_path(path) + get_wav_duration(path) for path in segmented_paths)
                 ),
             )
-            request_early_offset = await run_blocking(
+            request_early_offsets = await run_blocking(
                 sync_executor,
-                lambda: early_capture_clock_offset(
+                lambda: early_capture_clock_offsets(
                     [
-                        get_timestamp_from_path(path) + get_wav_duration(path)
+                        (path, get_timestamp_from_path(path), get_wav_duration(path))
                         for path in segmented_paths
-                        if is_early_capture_time(get_timestamp_from_path(path))
+                        if path in early_segment_paths
                     ],
                     now=capture_received_at if capture_received_at is not None else time.time(),
                 ),
@@ -3322,9 +3336,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                         segment_list,
                         lambda path: get_timestamp_from_path(path)
                         + (
-                            request_capture_offset - request_early_offset
-                            if request_early_offset and is_early_capture_time(get_timestamp_from_path(path))
-                            else 0
+                            request_capture_offset - request_early_offsets[path] if path in request_early_offsets else 0
                         ),
                         get_wav_duration,
                         uid,
@@ -3387,7 +3399,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                     capture_time_offset=request_capture_offset,
-                    early_capture_offset=request_early_offset,
+                    early_capture_offset=request_early_offsets.get(path, 0.0),
                 )
                 if deferred_outcome.get('provider'):
                     with segment_lock:

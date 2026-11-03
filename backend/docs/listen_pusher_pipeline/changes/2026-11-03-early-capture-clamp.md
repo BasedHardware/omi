@@ -6,8 +6,12 @@ stamps keep their existing rejection policy. No client change is required to
 admit a retry; clients with the old nonworking Retry button still need an update.
 
 The raw filename remains the content/dedupe identity and ordering source.
-Stored early-clock spans move together to server receipt time, preserving
-duration and order. Their age remains untrusted and their work uses backfill
+Stored early-clock spans pack in raw order, ending at server receipt time,
+preserving audio duration while discarding untrustworthy wall-clock gaps (even
+between different reset years). Early/normal clocks stay in separate units;
+client time bounds from reset clocks do not drive temporal session lookup.
+Derived VAD or split-unit starts inherit their original file's clock policy.
+Their age remains untrusted and their work uses backfill
 pacing. Both the batch and legacy sync paths consume the normalized clock.
 
 Deploy through the backend and backend-sync Cloud Run train (including the

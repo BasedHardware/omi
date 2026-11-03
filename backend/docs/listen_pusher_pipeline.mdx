@@ -6253,7 +6253,10 @@ V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
 is unset or not `false` (default on). Such uploads retain untrusted backfill
 pacing, without treating the invalid year as a lookback age. Valid historical
 siblings still obey lookback. The server records upload receipt time and
-shifts the early-clock spans together so the newest audio ends at receipt;
+packs early-clock audio in original timestamp/name order so the newest audio
+ends at receipt. Bogus wall-clock gaps are discarded; canonical audio duration
+is preserved and early/normal clocks never share a packed unit. Early-clock
+client session-time bounds are omitted from temporal lookup;
 raw filename timestamps, source order, content IDs and chunk identity stay
 unchanged. Batch jobs freeze that stored clock with their audio; legacy queued
 jobs carry receipt time in their durable payload. Setting the switch to `false`

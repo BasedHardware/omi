@@ -207,7 +207,6 @@ from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
-    early_capture_clock_offset,
     is_early_capture_time,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
@@ -833,20 +832,19 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
-                audio_start_seconds = float(audio_start_seconds)
-                audio_end_seconds = min(float(audio_end_seconds), admitted_end)
-                early_starts = [value for value in admitted_file_starts if is_early_capture_time(value)]
-                session_clock_offset = (
-                    early_capture_clock_offset(early_starts, now=capture_received_at)
-                    if len(early_starts) == len(admitted_file_starts)
-                    else 0.0
-                )
-                if not session_clock_offset:
+                if any(is_early_capture_time(value) for value in admitted_file_starts):
+                    # Reset clocks prove no server-clock interval. Do not use
+                    # a possibly years-wide client claim for session lookup;
+                    # explicit targets and source-frame evidence stay intact.
+                    audio_start_seconds = audio_end_seconds = None
+                else:
+                    admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
+                    audio_start_seconds = float(audio_start_seconds)
+                    audio_end_seconds = min(float(audio_end_seconds), admitted_end)
                     session_clock_offset = capture_clock_offset(max(admitted_file_starts))
-                if session_clock_offset:
-                    audio_start_seconds -= session_clock_offset
-                    audio_end_seconds -= session_clock_offset
+                    if session_clock_offset > 0:
+                        audio_start_seconds -= session_clock_offset
+                        audio_end_seconds -= session_clock_offset
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths

@@ -10,9 +10,9 @@ import pytest
 from utils.batch_pipeline import audio, capture_decode
 
 
-def pcm(tmp_path, capture, samples=160, rate=16000):
+def pcm(tmp_path, capture, samples=160, rate=16000, sample=1):
     path = tmp_path / f'audio_omi_pcm16_{rate}_{capture}.bin'
-    body = b'\x01\x00' * samples
+    body = struct.pack('<h', sample) * samples
     path.write_bytes(struct.pack('<I', len(body)) + body)
     return str(path)
 
@@ -110,11 +110,46 @@ def test_early_capture_batch_keeps_raw_identity_and_order_with_receipt_clock(tmp
     receipt = 1800000000.0
     # Reverse input order, separated enough to produce two units.
     paths = [pcm(tmp_path, 788918500, 16000), pcm(tmp_path, 788918400, 16000)]
-    units = list(capture_decode.decode_units(paths, received_at=receipt))
+    units = list(capture_decode.decode_units(paths, received_at=receipt, max_seconds=1))
     assert [u.capture_at for u in units] == [788918400, 788918500]
-    assert [u.stored_capture_at for u in units] == [receipt - 101, receipt - 1]
+    assert [u.stored_capture_at for u in units] == [receipt - 2, receipt - 1]
     assert [u.duration_seconds for u in units] == [1, 1]
     assert units[-1].stored_capture_at + units[-1].duration_seconds == receipt
+
+
+def test_distinct_reset_years_pack_in_order_without_keeping_bogus_gaps(tmp_path):
+    receipt = 1800000000.0
+    paths = [pcm(tmp_path, 1685577600, 16000), pcm(tmp_path, 788918400, 16000)]
+    units = list(capture_decode.decode_units(paths, received_at=receipt, max_seconds=1))
+    assert [u.capture_at for u in units] == [788918400, 1685577600]
+    assert [u.stored_capture_at for u in units] == [receipt - 2, receipt - 1]
+    assert sum(u.duration_seconds for u in units) == 2
+
+
+def test_early_packing_keeps_pcm_order_without_inventing_wall_clock_silence(tmp_path):
+    paths = [pcm(tmp_path, 1685577600, 16000, sample=2), pcm(tmp_path, 788918400, 16000, sample=1)]
+    [unit] = list(capture_decode.decode_units(paths, received_at=1800000000.0))
+    assert unit.capture_at == 788918400 and unit.stored_capture_at == 1799999998.0
+    with wave.open(io.BytesIO(unit.wav)) as stream:
+        assert stream.getnframes() == 32000
+        assert stream.readframes(32000) == b'\x01\x00' * 16000 + b'\x02\x00' * 16000
+
+
+def test_early_and_normal_clocks_do_not_share_one_packed_unit(tmp_path):
+    # Adjacent raw stamps straddle the policy floor but use different clocks.
+    receipt = 1800000000.0
+    paths = [pcm(tmp_path, 1704067199, 16000), pcm(tmp_path, 1704067200, 16000)]
+    units = list(capture_decode.decode_units(paths, received_at=receipt))
+    assert len(units) == 2
+    assert units[0].stored_capture_at == receipt - 1
+    assert units[1].capture_at == 1704067200 and units[1].stored_capture_at is None
+
+
+def test_split_early_file_keeps_its_clock_after_a_derived_start_crosses_the_floor(tmp_path):
+    receipt = 1800000000.0
+    units = list(capture_decode.decode_units([pcm(tmp_path, 1704067199, 32000)], received_at=receipt, max_seconds=1))
+    assert [u.capture_at for u in units] == [1704067199, 1704067200]
+    assert [u.stored_capture_at for u in units] == [receipt - 2, receipt - 1]
 
 
 def test_receipt_clock_does_not_change_normal_or_future_batch_units(tmp_path):

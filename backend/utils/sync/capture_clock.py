@@ -47,16 +47,22 @@ def is_early_capture_time(capture_time: float) -> bool:
     return capture_time < EARLIEST_CAPTURE_TIME.timestamp()
 
 
-def early_capture_clock_offset(capture_ends: list[float], *, now: float) -> float:
-    """Place the newest early-clock audio at receipt time, preserving raw order.
+def early_capture_clock_offsets(spans: list[tuple[str, float, float]], *, now: float) -> dict[str, float]:
+    """Place admitted reset-clock audio in raw order, ending at receipt time.
 
-    Callers supply ends of spans whose START was early, including a span
-    crossing the 2024 boundary. Subtract only from early spans. Normal clocks in
-    a mixed request retain their existing policy; raw identity never moves.
+    Invalid clocks prove order, not wall-clock gaps (two resets can be years
+    apart). Pack their durations together; keep raw keys and normal clocks.
+    Already accepted work keeps this policy after admission is switched off.
     """
-    # This is after admission. Already accepted work keeps its receipt clock
-    # even when the operator subsequently disables new early-clock uploads.
-    return max(capture_ends) - now if capture_ends else 0.0
+    # The caller marks source files: a derived segment can cross the 2024
+    # boundary and must still inherit its original file's reset clock.
+    early = sorted(spans, key=lambda span: (span[1], span[0]))
+    cursor = now - sum(duration for _, _, duration in early)
+    offsets = {}
+    for key, capture, duration in early:
+        offsets[key] = capture - cursor
+        cursor += duration
+    return offsets
 
 
 def capture_time_rejection(
@@ -89,7 +95,7 @@ def clamp_capture_time(capture_time: float, *, now: Optional[float] = None) -> f
     """Clamp an untrustworthy early or within-tolerance future stored time.
 
     Identity callers retain raw times. Multi-file callers shift early spans
-    together with ``early_capture_clock_offset`` to preserve duration/order.
+    together with ``early_capture_clock_offsets`` to preserve duration/order.
     """
     effective_now = time.time() if now is None else now
     if is_early_capture_time(capture_time) and early_capture_clamp_enabled():
