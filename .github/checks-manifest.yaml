@@ -290,6 +290,7 @@ checks:
     command: ["make", "-C", "omi/firmware/tests", "test"]
     triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**"]
     lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
     reason: "CV1 safe-mode recovery must count failed boots without NVS wear, survive same-version DFU, and preserve the fielded OTA slot geometry"
   - id: pre-push-firmware-formatter-prerequisite
     command: ["bash", "scripts/test-pre-push-firmware-format-prerequisite.sh"]
