@@ -292,6 +292,16 @@ def test_early_request_offset_preserves_capture_order_and_duration():
     assert (1685577610.0 - offsets['later']) == receipt
 
 
+def test_early_offsets_follow_original_files_when_trimming_reverses_derived_starts():
+    receipt = 1800000000.0
+    spans = [('older-tail', 1704067209.0, 1.0), ('newer', 1704067195.0, 1.0)]
+    offsets = capture_clock.early_capture_clock_offsets(
+        spans, now=receipt, source_starts={'older-tail': 1704067190.0, 'newer': 1704067195.0}
+    )
+    assert 1704067209.0 - offsets['older-tail'] == receipt - 2
+    assert 1704067195.0 - offsets['newer'] == receipt - 1
+
+
 @pytest.mark.asyncio
 async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor(monkeypatch, tmp_path):
     source = str(tmp_path / 'audio_omi_opus_16000_1_fs160_1704067199.wav')
@@ -303,11 +313,14 @@ async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor
 
     monkeypatch.setattr(pipeline, 'run_blocking', inline)
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 2.0, 'end': 4.0}])
-    segments, early = set(), set()
-    errors, _elapsed = await pipeline._run_sync_vad_phase([source], segments, early_segment_paths=early)
-    assert not errors and segments == early == {derived}
+    segments, early = set(), {}
+    errors, _elapsed = await pipeline._run_sync_vad_phase([source], segments, early_segment_times=early)
+    assert not errors and segments == set(early) == {derived}
+    assert early[derived] == 1704067199
     receipt = 1800000000.0
-    offsets = capture_clock.early_capture_clock_offsets([(derived, 1704067201.0, 2.0)], now=receipt)
+    offsets = capture_clock.early_capture_clock_offsets(
+        [(derived, 1704067201.0, 2.0)], now=receipt, source_starts=early
+    )
     assert 1704067201.0 - offsets[derived] == receipt - 2
 
 
@@ -344,13 +357,15 @@ async def test_coverage_derivatives_keep_original_early_clock_through_vad(monkey
     duration = 1 if retrim else 2
     monkeypatch.setattr(pipeline, 'run_blocking', inline)
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 0, 'end': duration}])
-    segments, early = set(), set()
+    segments, early = set(), {}
     errors, _ = await pipeline._run_sync_vad_phase(trimmed['wav_paths'], segments, trimmed['frame_maps'], {}, early)
-    assert not errors and segments == early and len(early) == 1
+    assert not errors and segments == set(early) and len(early) == 1
     [path] = segments
     stamp = pipeline.get_timestamp_from_path(path)
     assert stamp >= capture_clock.EARLIEST_CAPTURE_TIME.timestamp()
-    offsets = capture_clock.early_capture_clock_offsets([(path, stamp, duration)], now=1800000000.0)
+    offsets = capture_clock.early_capture_clock_offsets(
+        [(path, stamp, duration)], now=1800000000.0, source_starts=early
+    )
     assert stamp - offsets[path] == 1800000000.0 - duration
 
 

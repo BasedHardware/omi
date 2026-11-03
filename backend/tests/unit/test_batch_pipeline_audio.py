@@ -197,3 +197,44 @@ def test_receipt_clock_does_not_change_normal_or_future_batch_units(tmp_path):
     units = list(capture_decode.decode_units(paths, received_at=receipt))
     assert [u.capture_at for u in units] == [receipt - 100, receipt + 170]
     assert all(u.stored_capture_at is None for u in units)
+
+
+def test_trimmed_tail_cannot_move_an_older_file_behind_its_newer_sibling(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from models.capture_coverage import FrameRange
+    from utils.capture import coverage
+
+    older, newer = pcm(tmp_path, 1704067190), pcm(tmp_path, 1704067195, 16000, sample=2)
+    Path(older).write_bytes((struct.pack('<I', 32000) + b'\x01\x00' * 16000) * 20)
+    base = {
+        'capture_root': '123e4567-e89b-12d3-a456-426614174000',
+        'clock_epoch': 1,
+        'rate_hz': 16000,
+        'codec': 'pcm16',
+        'channel': 'mono',
+    }
+    claims = {
+        Path(older).name: {**base, 'source_frame_start': 0, 'frame_count': 20},
+        Path(newer).name: {**base, 'source_frame_start': 20, 'frame_count': 1},
+    }
+    monkeypatch.setenv(coverage.FLAG, 'serve')
+    monkeypatch.setattr(
+        coverage,
+        'admit',
+        lambda _uid, _key, ranges, **_k: SimpleNamespace(
+            covered=[FrameRange(start=0, end=19)] if ranges[0].start == 0 else []
+        ),
+    )
+    units = list(
+        capture_decode.decode_units(
+            [newer, older],
+            received_at=1800000000.0,
+            max_seconds=1,
+            coverage_context={'uid': 'synthetic', 'capture_evidence_claims': claims},
+        )
+    )
+    assert [unit.capture_at for unit in units] == [1704067209, 1704067195]
+    assert [unit.stored_capture_at for unit in units] == [1799999998, 1799999999]
+    for unit, sample in zip(units, (1, 2)):
+        with wave.open(io.BytesIO(unit.wav)) as stream:
+            assert stream.readframes(16000) == struct.pack('<h', sample) * 16000

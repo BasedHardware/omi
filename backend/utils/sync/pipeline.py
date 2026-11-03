@@ -978,7 +978,7 @@ def retrieve_vad_segments(
     segment_source_maps: dict | None = None,
     segment_source_lock: threading.Lock | None = None,
     keep_short: bool = False,
-    early_segment_paths: set[str] | None = None,
+    early_segment_times: dict[str, float] | None = None,
 ):
     try:
         start_timestamp = get_timestamp_from_path(path)
@@ -1020,8 +1020,10 @@ def retrieve_vad_segments(
                     dup += 1
                     segment_path = f'{path_dir}/dup{dup}_{clock_prefix}{segment_timestamp}.wav'
                 segmented_paths.add(segment_path)
-                if early_segment_paths is not None:
-                    early_segment_paths.add(segment_path)
+                if early_segment_times is not None:
+                    early_segment_times[segment_path] = (source_frame_map or {}).get(
+                        'capture_clock_at', start_timestamp
+                    )
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             try:
                 segment_aseg.export(segment_path, format='wav')
@@ -2527,7 +2529,7 @@ async def _run_sync_vad_phase(
     segmented_paths: set,
     source_frame_maps: dict | None = None,
     segment_source_maps: dict | None = None,
-    early_segment_paths: set[str] | None = None,
+    early_segment_times: dict[str, float] | None = None,
 ) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
@@ -2537,13 +2539,13 @@ async def _run_sync_vad_phase(
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
-            source_early = early_segment_paths is not None and is_early_capture_time(
+            source_early = early_segment_times is not None and is_early_capture_time(
                 ((source_frame_maps or {}).get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path))
             )
         except (IndexError, ValueError):
             source_early = False  # Internal invalid names retain their existing later validation.
         retrieve = (
-            partial(retrieve_vad_segments, early_segment_paths=early_segment_paths)
+            partial(retrieve_vad_segments, early_segment_times=early_segment_times)
             if source_early
             else retrieve_vad_segments
         )
@@ -2962,6 +2964,11 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                             )
                         ],
                         now=capture_received_at if capture_received_at is not None else time.time(),
+                        source_starts={
+                            path: mapping['capture_clock_at']
+                            for path, mapping in source_frame_maps.items()
+                            if mapping and 'capture_clock_at' in mapping
+                        },
                     ),
                 )
                 cap_held = await hold_capture_if_exhausted(
@@ -3032,15 +3039,15 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     ),
                 },
             )
-            early_segment_paths: set[str] = set()
-            admitted_early_paths = early_segment_paths if capture_received_at is not None else None
+            early_segment_times: dict[str, float] = {}
+            admitted_early_times = early_segment_times if capture_received_at is not None else None
             if source_frame_maps:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, admitted_early_paths
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, admitted_early_times
                 )
             else:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, early_segment_paths=admitted_early_paths
+                    wav_paths, segmented_paths, early_segment_times=admitted_early_times
                 )
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
@@ -3351,16 +3358,24 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     [
                         (path, get_timestamp_from_path(path), get_wav_duration(path))
                         for path in segmented_paths
-                        if path in early_segment_paths
+                        if path in early_segment_times
                     ],
                     now=capture_received_at if capture_received_at is not None else time.time(),
+                    source_starts=early_segment_times,
                 ),
             )
 
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
-            segment_list = sorted(segmented_paths, key=lambda path: (get_timestamp_from_path(path), path))
+            segment_list = sorted(
+                segmented_paths,
+                key=lambda path: (
+                    early_segment_times.get(path, get_timestamp_from_path(path)),
+                    get_timestamp_from_path(path),
+                    path,
+                ),
+            )
             assignment_turnstile = _OrderedTurnstile(segment_list)
             segment_targets: dict = {}
             segment_binding_reasons: dict = {}

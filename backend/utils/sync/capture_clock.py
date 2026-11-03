@@ -47,16 +47,19 @@ def is_early_capture_time(capture_time: float) -> bool:
     return capture_time < EARLIEST_CAPTURE_TIME.timestamp()
 
 
-def early_capture_clock_offsets(spans: list[tuple[str, float, float]], *, now: float) -> dict[str, float]:
+def early_capture_clock_offsets(
+    spans: list[tuple[str, float, float]], *, now: float, source_starts: dict[str, float] | None = None
+) -> dict[str, float]:
     """Place admitted reset-clock audio in raw order, ending at receipt time.
 
     Invalid clocks prove order, not wall-clock gaps (two resets can be years
     apart). Pack their durations together; keep raw keys and normal clocks.
     Already accepted work keeps this policy after admission is switched off.
+    Source stamps order files; derivative stamps order pieces within a file.
     """
     # The caller marks source files: a derived segment can cross the 2024
     # boundary and must still inherit its original file's reset clock.
-    early = sorted(spans, key=lambda span: (span[1], span[0]))
+    early = sorted(spans, key=lambda span: ((source_starts or {}).get(span[0], span[1]), span[1], span[0]))
     cursor = now - sum(duration for _, _, duration in early)
     offsets = {}
     for key, capture, duration in early:

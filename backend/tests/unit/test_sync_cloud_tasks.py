@@ -1383,6 +1383,7 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
     sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
+    sys.modules['utils.sync.files'].get_timestamp_from_path = MagicMock(return_value=time.time())
     saved_modules['utils.sync'] = prior_utils_sync
     sync_pkg = types.ModuleType('utils.sync')
     sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]

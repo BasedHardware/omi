@@ -97,7 +97,14 @@ def decode_units(
         pending_runs = []
         start = 0.0
         pending_early = False
-        for path in sorted(wavs, key=lambda value: (get_timestamp_from_path(value), value)):
+        for path in sorted(
+            wavs,
+            key=lambda value: (
+                (source_maps.get(value) or {}).get('capture_clock_at', get_timestamp_from_path(value)),
+                get_timestamp_from_path(value),
+                value,
+            ),
+        ):
             capture = float(get_timestamp_from_path(path))
             pcm = _canonical(path)
             if not pcm:
