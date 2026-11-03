@@ -32,6 +32,8 @@ WRITE_PATHS = frozenset({'vectors/upsert', 'vectors/update', 'vectors/delete'})
 # Connect-phase failures happen before the request is written to the wire. Any
 # later failure (write/read timeout, a server disconnect) stays an unknown outcome.
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+# Settling a copy admission retries transient Firestore/auth failures this many times.
+SETTLE_ATTEMPTS = 5
 
 
 def bounded_upsert_batches(records: list[dict], namespace: str) -> Iterator[list[dict]]:
@@ -164,6 +166,8 @@ class PartitionTransport:
             response = client.post(f'https://{self.host}/{path}', json=payload, headers=headers)
         except NOT_SENT_ERRORS as error:
             if path in WRITE_PATHS:
+                # Nothing reached Pinecone, so there is no request to reconcile against.
+                self.last_write_request_id = None
                 raise WriteNotSent(f'Connection failed before the {path} request was sent') from error
             raise
         response.raise_for_status()
@@ -376,6 +380,31 @@ class OwnerMigration:
     def _route(self) -> state.Route:
         return state.get_route(self.key, firestore_client=self.firestore_client)
 
+    def _settle(self, settle: Any, ticket: state.MutationTicket) -> None:
+        """Finish or mark a copy admission, retrying transient Firestore/auth failures.
+
+        Both settlements are idempotent: a retry after a commit that did land finds the
+        ticket gone and returns without counting it twice. Giving up on a transient
+        error would strand a pending marker that blocks the owner's migration.
+        """
+        from google.api_core import exceptions as google_exceptions
+
+        transient = (
+            google_exceptions.Unauthenticated,
+            google_exceptions.ServiceUnavailable,
+            google_exceptions.DeadlineExceeded,
+            google_exceptions.Aborted,
+            google_exceptions.InternalServerError,
+        )
+        for attempt in range(SETTLE_ATTEMPTS):
+            try:
+                settle(self.key, ticket, firestore_client=self.firestore_client)
+                return
+            except transient:
+                if attempt + 1 == SETTLE_ATTEMPTS:
+                    raise
+                time.sleep(min(30, 2**attempt))
+
     @contextmanager
     def _copy_admission(self, token: str, ids: list[str], namespace: str, operation_kind: str) -> Iterator[None]:
         ticket = state.begin_mutation(
@@ -386,7 +415,7 @@ class OwnerMigration:
             firestore_client=self.firestore_client,
         )
         if ticket.migration_token != token:
-            state.finish_mutation(self.key, ticket, firestore_client=self.firestore_client)
+            self._settle(state.finish_mutation, ticket)
             raise MigrationNotReady('Migration token is no longer active')
         # The durable pending ticket stops cutover/cancellation while a copy
         # request is in flight; the existing gate prevents post-delete writes.
@@ -397,11 +426,11 @@ class OwnerMigration:
                 yield
         except BaseException as error:
             if attempted and ids != [BARRIER_ID] and not isinstance(error, WriteNotSent):
-                state.mark_mutation_uncertain(self.key, ticket, firestore_client=self.firestore_client)
+                self._settle(state.mark_mutation_uncertain, ticket)
             else:
-                state.finish_mutation(self.key, ticket, firestore_client=self.firestore_client)
+                self._settle(state.finish_mutation, ticket)
             raise
-        state.finish_mutation(self.key, ticket, firestore_client=self.firestore_client)
+        self._settle(state.finish_mutation, ticket)
 
     def _write(self, token: str, path: str, namespace: str, scoped_ids: list[str], **payload: Any) -> int:
         with self._copy_admission(

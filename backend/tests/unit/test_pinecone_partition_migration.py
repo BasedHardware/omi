@@ -941,6 +941,45 @@ def test_copy_timeout_keeps_unknown_outcome_blocking_cutover(setup):
     assert route.pending_count + route.uncertain_count > 0
 
 
+def test_transient_auth_failure_while_settling_a_copy_write_is_retried(setup, monkeypatch):
+    from google.api_core import exceptions as google_exceptions
+
+    key, db, provider, runner = setup
+    real_finish = state.finish_mutation
+    failures = {'left': 2}
+
+    def flaky_finish(*args, **kwargs):
+        if failures['left']:
+            failures['left'] -= 1
+            raise google_exceptions.Unauthenticated('token refresh failed')
+        return real_finish(*args, **kwargs)
+
+    monkeypatch.setattr(state, 'finish_mutation', flaky_finish)
+    monkeypatch.setattr(migration.time, 'sleep', lambda seconds: None)
+    receipt = runner.qualify('run', dimension=2)
+    assert failures['left'] == 0
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == 0 and route.uncertain_count == 0
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def test_persistent_settlement_failure_gives_up_after_bounded_attempts(setup, monkeypatch):
+    from google.api_core import exceptions as google_exceptions
+
+    key, db, provider, runner = setup
+    calls = []
+
+    def always_failing(*args, **kwargs):
+        calls.append(1)
+        raise google_exceptions.ServiceUnavailable('firestore down')
+
+    monkeypatch.setattr(state, 'finish_mutation', always_failing)
+    monkeypatch.setattr(migration.time, 'sleep', lambda seconds: None)
+    with pytest.raises(google_exceptions.ServiceUnavailable):
+        runner.qualify('run', dimension=2)
+    assert len(calls) == migration.SETTLE_ATTEMPTS
+
+
 def test_write_that_never_left_is_a_known_noop_not_an_unknown_outcome(setup):
     key, db, provider, runner = setup
     provider.unsent_namespace = key.partition_namespace
@@ -1007,6 +1046,8 @@ def test_only_connect_phase_failures_count_as_not_sent(monkeypatch, error, unsen
         monkeypatch.setattr(transport.client, 'post', _Post(error))
         with pytest.raises(migration.WriteNotSent if unsent else type(error)):
             transport.write('vectors/upsert', 'ns1', vectors=[])
+        # Only a request that may have reached Pinecone keeps an id for reconciliation.
+        assert (transport.last_write_request_id is None) is unsent
         with pytest.raises(type(error)):
             transport.call('query', {'namespace': 'ns1'})
     finally:
