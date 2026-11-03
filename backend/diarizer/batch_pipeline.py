@@ -803,13 +803,15 @@ class PipelineWorker:
         handed_off = False
 
         def settle_persist(entry):
-            slot, item, future, silent, has_silence = entry
+            slot, item, future, silent, has_silence, language_receipt = entry
             try:
                 uri = future.result()
             except Exception as exc:
                 fail(item, exc, 'persist')
                 return
-            results[slot] = WorkResult(item.segment_id, uri, 'silence' if silent else 'success')
+            results[slot] = WorkResult(
+                item.segment_id, uri, 'silence' if silent else 'success', language_receipt=language_receipt
+            )
             if has_silence:
                 silence_records.append(item.segment_id)
 
@@ -1278,6 +1280,15 @@ class PipelineWorker:
                             'admission': 'authorized_compute',
                         }
                     stage = 'persist'
+                    from utils.batch_pipeline.language_receipt import observation
+
+                    language_receipt = None
+                    if item.language_receipt_enabled:
+                        language_receipt = observation(
+                            state.get('stt_language'),
+                            'none' if state['silence'] else 'live_record' if state['reused'] else self.config.words,
+                            words,
+                        )
                     if self._io is not None:
                         # Encrypt/upload while the GPU diarizes the next item. The
                         # result keeps its admitted position; failures settle below.
@@ -1289,11 +1300,19 @@ class PipelineWorker:
                                 self._io.submit(self.timings.call, 'persist', self.persist, item, payload),
                                 state['silence'],
                                 silence is not None,
+                                language_receipt,
                             )
                         )
                         continue
                     uri = self.timings.call('persist', self.persist, item, payload)
-                    results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
+                    results.append(
+                        WorkResult(
+                            item.segment_id,
+                            uri,
+                            'silence' if state['silence'] else 'success',
+                            language_receipt=language_receipt,
+                        )
+                    )
                     if silence is not None:
                         silence_records.append(item.segment_id)
                 except Exception as exc:

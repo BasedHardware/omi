@@ -259,6 +259,15 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
     if refusal:
         event(refusal, late=run['generation'] > 1)
         return
+    row = pending['record_snapshot']
+    from utils.batch_pipeline.language_receipt import auto_language_cohort
+
+    receipt_enabled = auto_language_cohort(
+        server_batch_only=row.get('server_batch_only') is True,
+        client_platform=row.get('client_platform'),
+        native_record=True,
+        language=row.get('language'),
+    )
     items = [
         WorkItem(
             digest([content, i]),
@@ -270,10 +279,10 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
             conversation_id=cid,
             privacy_generation=pending['privacy_generation'],
             requires_compute_admission=True,
+            language_receipt_enabled=True if receipt_enabled else None,
         )
         for i, (start, duration, _) in enumerate(units)
     ]
-    row = pending['record_snapshot']
     protection = await run_blocking(db_executor, artifacts.authorize, seed_for(pending))
     binding = ProjectionBinding(
         uid,
@@ -292,7 +301,9 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         native_record=True,
         partial_record=True,
     )
-    staged = []
+    from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
+
+    staged, language_receipts = [], {}
     for item, (_, _, refs) in zip(items, units):
         context = {
             'owner_id': uid,
@@ -318,6 +329,8 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         }
         if row.get('server_batch_only') is True:
             manifest = await prove_manifest(store, artifacts, item, manifest)
+        if item.language_receipt_enabled:
+            language_receipts[item.segment_id] = language_admission_receipt(manifest['context'])
         uri = await run_blocking(
             storage_executor,
             artifacts.stage_audio,
@@ -339,6 +352,7 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         'record_partial_generation': run['generation'],
         'record_partial_page': run['page'],
         'record_partial_content': content,
+        **({'language_receipts': language_receipts} if language_receipts else {}),
         **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
     }
     await run_blocking(

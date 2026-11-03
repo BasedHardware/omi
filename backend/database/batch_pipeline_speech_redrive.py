@@ -1,7 +1,6 @@
 """Explicit operator intents; a new recognizer preserves every spent paid token."""
 
 from copy import deepcopy
-from dataclasses import asdict
 from uuid import uuid4
 
 from config.policy import RecoveryPolicy
@@ -331,8 +330,8 @@ class SpeechRedriveStore:
             ):
                 return False
             if marker.get('state') == 'completed':
-                return isinstance(result_uri, str) and job.get('result') == asdict(
-                    WorkResult(segment_id, result_uri, outcome)
+                return isinstance(result_uri, str) and WorkResult(segment_id, result_uri, outcome).matches_persisted(
+                    job.get('result')
                 )
             if marker.get('state') != 'running' or not self.terminal(job, existing, now):
                 return False
@@ -356,7 +355,7 @@ class SpeechRedriveStore:
                     ready_at=now,
                     merge_pending=True,
                     recovery_state='recovered',
-                    result=asdict(WorkResult(segment_id, result_uri, outcome)),
+                    result=WorkResult(segment_id, result_uri, outcome).to_dict(),
                 )
                 tx.put('owners', owner_key(job['owner_id']), owner)
             else:

@@ -99,11 +99,20 @@ def setup_worker(**kwargs):
 
 def test_cross_user_chain_decode_once_sort_restore_and_persist():
     worker, words, saved, decoded, diarized, failures = setup_worker()
-    results = worker.process_batch([item('long', 4), item('short', 2)])
+    results = worker.process_batch(
+        [
+            replace(item('long', 4), language_receipt_enabled=True),
+            replace(item('short', 2), language_receipt_enabled=True),
+        ]
+    )
     assert words.calls == [[2, 4]]
     assert decoded == ['long', 'short']
     assert len(diarized) == 2
     assert {r.segment_id for r in results} == {'long', 'short'}
+    assert all(r.language_receipt['language'] == 'en' for r in results)
+    assert all(r.language_receipt['route'] == 'parakeet' for r in results)
+    assert all(r.language_receipt['word_count'] == 1 for r in results)
+    assert all(r.language_receipt['letters'] == 5 and r.language_receipt['incompatible_letters'] == 0 for r in results)
     assert saved['short']['words'][0]['word'] == 'hello'
     assert not failures
 

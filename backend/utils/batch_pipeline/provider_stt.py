@@ -166,7 +166,7 @@ def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute, p
     if item.requires_compute_admission:
         raise ValueError('provider units are funded by the provider stage, not GPU compute admission')
     previous = tx.get('jobs', item.segment_id)
-    immutable = {**asdict(item), 'priority': int(item.priority)}
+    immutable = {**item.to_dict(), 'priority': int(item.priority)}
     if previous:
         if previous.get('state') == 'record_pending':
             raise ValueError('a pending recording cannot take the provider route')
@@ -474,7 +474,7 @@ class ProviderSttStore:
                 )
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
-                job.update(state='result_ready', result=asdict(WorkResult(segment_id, result_uri or '', outcome)))
+                job.update(state='result_ready', result=WorkResult(segment_id, result_uri or '', outcome).to_dict())
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', owner_key(job['owner_id']), owner)
             tx.put('jobs', segment_id, job)

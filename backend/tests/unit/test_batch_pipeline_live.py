@@ -417,6 +417,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
 
     monkeypatch.setattr(live, 'prove_manifest', prove)
     if server_only:
+        current['client_platform'] = 'ios'
         current['external_data'] = {**(current.get('external_data') or {}), 'server_batch_only': True}
         current.update(
             has_content=True, server_batch_audio_start=100, server_batch_audio_end=101, transcript_segments=[]
@@ -507,7 +508,17 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     assert bool(proofs) is server_only
     assert manifests[0]['context']['stt_language'] == ('en' if server_only else language)
     assert store.rows['jobs', segment]['projection_binding']['native_record']
-    assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
+    intake = store.rows['intakes', 'bp_' + content]
+    assert (intake.get('server_batch_only') is True) is server_only
+    receipt_enabled = server_only and language == 'multi'
+    assert ('language_receipts' in intake) is receipt_enabled
+    assert (store.rows['jobs', intake['segment_ids'][0]].get('language_receipt_enabled') is True) is receipt_enabled
+    if receipt_enabled:
+        assert intake['language_receipts'][intake['segment_ids'][0]] == {
+            'version': 1,
+            'language': 'en',
+            'evidence': 'audio_lid',
+        }
     # A slow raw-archive listing must raise and retry, never admit a short capture.
     assert listings == [{'max_count': 4096, 'require_archive': True}]
 
