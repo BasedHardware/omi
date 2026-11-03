@@ -18,7 +18,7 @@ from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
-from database._client import is_transient_availability_error
+from utils.firestore_transient_types import is_transient_availability_error
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
     cutover_enforcement_enabled,

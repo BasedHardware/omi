@@ -25,7 +25,8 @@ from google.api_core.exceptions import InvalidArgument
 
 from database.privacy_check_metrics import with_session_census
 from database import users as users_db
-from database._client import get_firestore_client, is_transient_availability_error
+from database._client import get_firestore_client
+from utils.firestore_transient_types import is_transient_availability_error
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
