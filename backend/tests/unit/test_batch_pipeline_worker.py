@@ -17,8 +17,8 @@ from config import stt_cap_dispatch as cap_policy
 from config.batch_pipeline import worker_silence_disposition_enabled
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer import batch_pipeline, batch_pipeline_models
+from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
 from diarizer.batch_pipeline import (
-    BatchValidationError,
     PipelineWorker,
     LiveWords,
     Window,
@@ -127,7 +127,7 @@ def test_route_precedes_vad_failure_without_claiming_asr(monkeypatch, caplog, la
         routes = [r.message for r in caplog.records if 'event=batch_language_route' in r.message]
         assert len(routes) == 1 and f'route={route}' in routes[0]
         if failure == 'vad_call':
-            raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+            raise BatchValidationError(ValidationReason.VAD_BOUNDS)
         return [(3, 4)]  # speech_windows rejects bounds on a two-second buffer.
 
     worker, words, saved, *_ = setup_worker(language_of=lambda _: language, vad=vad)
@@ -155,7 +155,7 @@ def test_route_precedes_packed_segmentation_and_vad_failure(caplog):
         return ['features']
 
     def vad(samples, features):
-        raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+        raise BatchValidationError(ValidationReason.VAD_BOUNDS)
 
     flight = SimpleNamespace(segment=segment, vad_spans=vad)
     worker, words, saved, *_ = setup_worker(flight_models=flight)

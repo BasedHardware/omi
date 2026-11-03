@@ -4,7 +4,7 @@ Enrichment calls the existing stored-audio speaker resolver before summarization
 For transcripts with `final:batch:` provenance (including retained
 `provider_speaker` scopes after resolution), `BATCH_CONVERSATION_SPEAKERS_ENABLED`
 defaults on. The existing batch admission cohort determines which new records
-reach this path. No additional account cohort or ASR call is introduced.
+reach this path. The optional whole pass adds a nested GPU cohort, described below; it makes no ASR call.
 Retained-audio conversations use the existing audio/cache path. For sync-off
 records, [ADR-0004](../adr/0004-sync-off-speaker-centroids.md) approves temporary
 encrypted centroids under the additional default-on
@@ -65,3 +65,53 @@ That stops automatic batch linking/naming, including when speaker-evidence mode
 serves. It preserves existing transcript and manual labels; it does not rewrite
 historical conversations or undo already published names. No historical repair
 or production flag mutation is part of this code change.
+
+
+## Whole-conversation final pass (sync-on slice)
+
+After the current resolver and speaker-evidence projection, before summary generation,
+`BATCH_FINAL_PASS_ENABLED` defaults on beneath `BATCH_CONVERSATION_SPEAKERS_ENABLED`.
+`BATCH_FINAL_PASS_PERCENT` defaults to 100 and uses the existing transcription-final-pass
+UID hash bucket. This knob is independent of the retiring shadow/legacy-sync flags.
+Only persisted `final:batch:` authority with private cloud sync reaches it during
+normal enrichment; bounded identity-only retries do not run it. Sync-off
+continues using ADR-0004's temporary centroid resolver. No enrollment is published.
+
+The adapter assembles `audio_files` through `iter_audio_chunk_pcm`, separately for
+live PCM, sync Opus and raw stores. Like the shadow worker it trims duplicate leading
+samples and preserves gaps. It replays each encrypted, generation-pinned unit result's
+words and stable projection IDs, and requires exact decoded unit PCM equality on a
+fully covered store interval. Stored transcript offsets and lexical alignment never
+place a unit. Only one proven store is diarized per conversation; units from other
+stores, missing/expired artifacts, mixed-speaker segments and words in gaps retain
+the current resolver labels. Optional provider metadata loss also abstains. The
+artifact adapter's live privacy generation and deletion fences apply before/after
+reads and references are rechecked after inference. This writes no artifacts and
+never extends an existing cleanup deadline. Sync-on still needs its staged result
+and audio/manifest; enrichment after their cleanup abstains.
+
+`run_final_pass` uses community-1 through `/v2/diarization`, unchanged centroid naming,
+five-second evidence floor, thresholds, margin and joint owner arbitration. A manual
+owner or an owner in an unplaced unit reserves the identity. Manual receipts and
+stable segment IDs survive application under `final:batch:conversation:<id>`.
+Every failure, including incompatible embedding output, emits `record_fallback`
+and retains current resolver labels. There is
+one nonwaiting process slot, a 600-second deadline, a 7200-second PCM ceiling
+(`failed:too_long`), 128-unit/read limits, and the existing bounded audio reader.
+Budget reservations are Redis-atomic and charge attempts (including retries) before
+GPU work: `BATCH_FINAL_PASS_DAILY_AUDIO_HOURS=1200`,
+`BATCH_FINAL_PASS_HOURLY_AUDIO_HOURS=50`, `BATCH_FINAL_PASS_HOURLY_REQUESTS=1000`.
+Invalid budgets or Redis failure refuse the pass. These are capacity limits, not
+new admission. Per-unit diarization remains in place, so inference cost is additive.
+
+Use `omi_transcription_final_pass_total{lane="batch"}` outcomes, final-pass agreement
+and latency with the same lane label, owner-parity delta, processing p95 enrichment
+latency, and `omi_diarization_v2_queue_depth` for ramp decisions. The lead sets
+10%, then 50%, then 100%, expanding only after each cohort has a full observation
+window with clean fallback rate, owner-parity delta, p95 enrichment latency and
+diarizer-batch queue depth. GPU planning: admitted audio-hours/day × 0.03–0.042 =
+GPU-hours/day; at the default 1200-hour daily ceiling this adds about 36–50.4
+GPU-hours/day. This is compute time, excluding any pool floor/idle allocation.
+Rollback with `BATCH_FINAL_PASS_ENABLED=false` (or percent zero); already-published
+labels persist. The lead owns deployment and expansion; this PR changes no runtime
+configuration or capacity.

@@ -676,7 +676,7 @@ def vendor_turns(words: list[dict], duration: float, *, fallback: bool = False) 
 async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
-    from diarizer.batch_pipeline import validate_words
+    from utils.batch_pipeline.word_validation import validate_words
 
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
