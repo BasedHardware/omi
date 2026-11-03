@@ -106,10 +106,13 @@ class GeneratedActionItem {
   final String? conversationId;
   final DateTime? createdAt;
   final String description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final String? dueCertainty;
   final String? ownerName;
   final double? ownershipConfidence;
+  final GeneratedReminderIntent? reminderIntent;
+  final GeneratedReminderOrigin? reminderOrigin;
   final List<String>? sourceSegmentIds;
   final String? targetTaskId;
   final DateTime? updatedAt;
@@ -126,10 +129,13 @@ class GeneratedActionItem {
     this.conversationId,
     this.createdAt,
     required this.description,
+    this.due,
     this.dueAt,
     this.dueCertainty,
     this.ownerName,
     this.ownershipConfidence,
+    this.reminderIntent,
+    this.reminderOrigin,
     this.sourceSegmentIds,
     this.targetTaskId,
     this.updatedAt,
@@ -148,10 +154,13 @@ class GeneratedActionItem {
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueCertainty: _readFieldValue<String>(_readField(json, const ["due_certainty"]), "due_certainty", _readString, requiredField: false, nullable: true),
       ownerName: _readFieldValue<String>(_readField(json, const ["owner_name"]), "owner_name", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: false, nullable: true),
+      reminderIntent: _readFieldValue<GeneratedReminderIntent>(_readField(json, const ["reminder_intent"]), "reminder_intent", (value) => _readObject(value, GeneratedReminderIntent.fromJson), requiredField: false, nullable: true),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["source_segment_ids"]), "source_segment_ids", _readStringList, requiredField: false, nullable: true),
       targetTaskId: _readFieldValue<String>(_readField(json, const ["target_task_id"]), "target_task_id", _readString, requiredField: false, nullable: true),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
@@ -171,13 +180,124 @@ class GeneratedActionItem {
       'conversation_id': conversationId,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_certainty': dueCertainty,
       'owner_name': ownerName,
       'ownership_confidence': ownershipConfidence,
+      'reminder_intent': reminderIntent?.toJson(),
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_segment_ids': sourceSegmentIds,
       'target_task_id': targetTaskId,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedTaskDue {
+  final String? date;
+  final String? expression;
+  final DateTime? instant;
+  final String kind;
+  final String? reason;
+  final String? timezone;
+  final String? yearBasis;
+
+  const GeneratedTaskDue({
+    this.date,
+    this.expression,
+    this.instant,
+    required this.kind,
+    this.reason,
+    this.timezone,
+    this.yearBasis,
+  });
+
+  factory GeneratedTaskDue.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskDue(
+      date: _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: false, nullable: true),
+      expression: _readFieldValue<String>(_readField(json, const ["expression"]), "expression", _readString, requiredField: false, nullable: true),
+      instant: _readFieldValue<DateTime>(_readField(json, const ["instant"]), "instant", _readDateTime, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
+      timezone: _readFieldValue<String>(_readField(json, const ["timezone"]), "timezone", _readString, requiredField: false, nullable: true),
+      yearBasis: _readFieldValue<String>(_readField(json, const ["year_basis"]), "year_basis", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'expression': expression,
+      'instant': instant?.toUtc().toIso8601String(),
+      'kind': kind,
+      'reason': reason,
+      'timezone': timezone,
+      'year_basis': yearBasis,
+    };
+  }
+}
+
+class GeneratedReminderIntent {
+  final String? dueExpression;
+  final String kind;
+
+  const GeneratedReminderIntent({
+    this.dueExpression,
+    required this.kind,
+  });
+
+  factory GeneratedReminderIntent.fromJson(Map<String, dynamic> json) {
+    return GeneratedReminderIntent(
+      dueExpression: _readFieldValue<String>(_readField(json, const ["due_expression"]), "due_expression", _readString, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'due_expression': dueExpression,
+      'kind': kind,
+    };
+  }
+}
+
+class GeneratedReminderOrigin {
+  final DateTime extractedAt;
+  final String inputRevision;
+  final String policyRevision;
+  final String? reviewReason;
+  final DateTime? sourceAt;
+  final String speakerEvidenceRevision;
+
+  const GeneratedReminderOrigin({
+    required this.extractedAt,
+    required this.inputRevision,
+    this.policyRevision = "explicit-reminders-v1",
+    this.reviewReason,
+    this.sourceAt,
+    required this.speakerEvidenceRevision,
+  });
+
+  factory GeneratedReminderOrigin.fromJson(Map<String, dynamic> json) {
+    return GeneratedReminderOrigin(
+      extractedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["extracted_at"]), "extracted_at", _readDateTime, requiredField: true, nullable: false), "extracted_at"),
+      inputRevision: _required(_readFieldValue<String>(_readField(json, const ["input_revision"]), "input_revision", _readString, requiredField: true, nullable: false), "input_revision"),
+      policyRevision: _required(_readFieldValue<String>(_readField(json, const ["policy_revision"]), "policy_revision", _readString, requiredField: false, nullable: false, defaultValue: "explicit-reminders-v1"), "policy_revision"),
+      reviewReason: _readFieldValue<String>(_readField(json, const ["review_reason"]), "review_reason", _readString, requiredField: false, nullable: true),
+      sourceAt: _readFieldValue<DateTime>(_readField(json, const ["source_at"]), "source_at", _readDateTime, requiredField: false, nullable: true),
+      speakerEvidenceRevision: _required(_readFieldValue<String>(_readField(json, const ["speaker_evidence_revision"]), "speaker_evidence_revision", _readString, requiredField: true, nullable: false), "speaker_evidence_revision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'extracted_at': extractedAt.toUtc().toIso8601String(),
+      'input_revision': inputRevision,
+      'policy_revision': policyRevision,
+      'review_reason': reviewReason,
+      'source_at': sourceAt?.toUtc().toIso8601String(),
+      'speaker_evidence_revision': speakerEvidenceRevision,
     };
   }
 }
@@ -970,6 +1090,7 @@ class GeneratedConversation {
   final String? callPlatform;
   final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
+  final String? captureTimezone;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -1037,6 +1158,7 @@ class GeneratedConversation {
     this.callPlatform,
     this.captureCoverage,
     this.captureGroup,
+    this.captureTimezone,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -1106,6 +1228,7 @@ class GeneratedConversation {
       callPlatform: _readFieldValue<String>(_readField(json, const ["call_platform"]), "call_platform", _readString, requiredField: false, nullable: true),
       captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
+      captureTimezone: _readFieldValue<String>(_readField(json, const ["capture_timezone"]), "capture_timezone", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -1176,6 +1299,7 @@ class GeneratedConversation {
       'call_platform': callPlatform,
       'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
+      'capture_timezone': captureTimezone,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
@@ -1466,6 +1590,7 @@ class GeneratedConversationSearchItem {
   final String? callPlatform;
   final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
+  final String? captureTimezone;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -1534,6 +1659,7 @@ class GeneratedConversationSearchItem {
     this.callPlatform,
     this.captureCoverage,
     this.captureGroup,
+    this.captureTimezone,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -1604,6 +1730,7 @@ class GeneratedConversationSearchItem {
       callPlatform: _readFieldValue<String>(_readField(json, const ["call_platform"]), "call_platform", _readString, requiredField: false, nullable: true),
       captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
+      captureTimezone: _readFieldValue<String>(_readField(json, const ["capture_timezone"]), "capture_timezone", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -1675,6 +1802,7 @@ class GeneratedConversationSearchItem {
       'call_platform': callPlatform,
       'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
+      'capture_timezone': captureTimezone,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),

@@ -1,6 +1,6 @@
 """Task due precision shared by extraction, Candidates and task readers."""
 
-from datetime import date as Date, datetime
+from datetime import date as Date
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 

@@ -1066,7 +1066,7 @@ def resolve_task_candidate(
                 'history_coverage': 'reminder_creation_only',
             }
             write_transaction.update(task_ref, {'creation_receipt': creation_receipt})
-        candidate_patch = {
+        candidate_patch: dict[str, Any] = {
             'status': CandidateStatus.accepted.value,
             'resolution_reason': 'accepted',
             'result_task_id': task_id,

@@ -243,7 +243,7 @@ def prepare_reminder(
         or getattr(item, 'candidate_action', None) in {'update', 'complete'}
     ):
         return None
-    ids = set(getattr(item, 'source_segment_ids', ()) or ())
+    ids: set[str] = set(getattr(item, 'source_segment_ids', ()) or ())
     all_segments = getattr(conversation, 'transcript_segments', ()) or ()
     cited = [row for row in all_segments if getattr(row, 'id', None) in ids]
     if not ids or ids != {row.id for row in cited}:
@@ -277,8 +277,8 @@ def prepare_reminder(
         extracted_at=extracted_at,
         review_reason='owner_unresolved' if speaker.owner == 'unknown' else None,
     )
-    context = getattr(item, 'context', None) or ''
-    if due.kind == 'date' and due.date not in context:
+    context: str = getattr(item, 'context', None) or ''
+    if due.kind == 'date' and due.date and due.date not in context:
         context = f'{context} Due {due.date} (all day, {due.timezone}).'.strip()
     if due.kind == 'unresolved' and due.expression and due.expression not in context:
         context = f'{context} Date needs review: {due.expression}.'.strip()

@@ -16,6 +16,7 @@ from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCre
 from models.candidate import CandidateCreate, SummaryTaskReference
 from models.structured import ActionItem
 from models.task_intelligence import StableId
+from models.task_due import TaskDue
 
 
 class SummaryTaskNotFoundError(Exception):
@@ -55,7 +56,7 @@ class SummaryTaskRow:
                     description=self.item.description,
                     owner=TaskOwner(self.item.capture_owner or 'unknown'),
                     due_at=self.item.due_at,
-                    due=self.item.due.model_dump(mode='python') if self.item.due else None,
+                    due=TaskDue.model_validate(self.item.due.model_dump(mode='python')) if self.item.due else None,
                     due_confidence=1.0 if self.item.due_at else None,
                 ),
                 'capture_confidence': self.item.capture_confidence if self.item.capture_confidence is not None else 0.5,
