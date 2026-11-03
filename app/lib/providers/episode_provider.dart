@@ -43,6 +43,8 @@ class EpisodeProvider extends ChangeNotifier {
   DateTime? _homeTo;
   Timer? _homeHold;
   int _homeGeneration = 0;
+  Future<void>? _homeRead;
+  String? _homeReadingKey;
 
   ConversationProvider? _homeConversations;
   Set<String> _hiddenHomeMembers = {};
@@ -101,6 +103,7 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   void invalidateHome() {
+    _homeReadingKey = null;
     _homeReadAt = null;
     _homeFrom = null;
     _homeTo = null;
@@ -114,8 +117,22 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// Load all pages atomically so partially loaded membership never splits an episode on Home.
-  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false, bool bootstrap = false}) async {
+  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false, bool bootstrap = false}) {
     _ensureOwner();
+    final key = '$_ownerUid|$from|$to|$bootstrap';
+    if (!force && key == _homeReadingKey && _homeRead != null) return _homeRead!;
+    final read = _readHome(from, to, force: force, bootstrap: bootstrap);
+    _homeReadingKey = key;
+    _homeRead = read;
+    return read.whenComplete(() {
+      if (identical(_homeRead, read)) {
+        _homeRead = null;
+        _homeReadingKey = null;
+      }
+    });
+  }
+
+  Future<void> _readHome(DateTime from, DateTime to, {required bool force, required bool bootstrap}) async {
     if (!_enabled && !bootstrap) return;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
     if (!force &&
@@ -128,9 +145,6 @@ class EpisodeProvider extends ChangeNotifier {
       return;
     }
     _homeKey = key;
-    _homeFrom = from;
-    _homeTo = to;
-    _homeReadAt = _clock();
     final generation = ++_homeGeneration;
     final uid = _ownerUid;
     final collected = <String, Episode>{};
@@ -164,6 +178,9 @@ class EpisodeProvider extends ChangeNotifier {
       }
     } while (cursor != null);
     _homeEpisodes = collected.values.toList();
+    _homeFrom = from;
+    _homeTo = to;
+    _homeReadAt = _clock();
     notifyListeners();
     _holdHome(from, to, key);
   }

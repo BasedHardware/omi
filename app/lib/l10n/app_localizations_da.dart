@@ -14958,5 +14958,5 @@ class AppLocalizationsDa extends AppLocalizations {
   String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
 
   @override
-  String get episodeFinishingUp => 'Gør færdig…';
+  String get episodeFinishingUp => 'Afslutter…';
 }

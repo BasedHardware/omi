@@ -58,6 +58,24 @@ void main() {
     expect(cursorCalls.length, 2, reason: 'rebuilds coalesce within the poll interval');
   });
 
+  test('unfinished Home requests coalesce without treating the window as cached', () async {
+    var calls = 0;
+    final page = Completer<ApiResult<EpisodePageRead>>();
+    final provider = EpisodeProvider(fetchPage: (_, __, {cursor}) {
+      calls++;
+      return page.future;
+    })
+      ..debugSetLive(null);
+    addTearDown(provider.dispose);
+    final first = provider.refreshHome(_t0, _t0);
+    final second = provider.refreshHome(_t0, _t0);
+    expect(calls, 1);
+    page.complete(const ApiFailure(ApiProblem(ApiProblemKind.transport)));
+    await Future.wait([first, second]);
+    await provider.refreshHome(_t0, _t0);
+    expect(calls, 2, reason: 'failed coalesced reads must remain retryable');
+  });
+
   test('Home re-reads on its own while an episode waits for its summary, and stops once settled', () {
     fakeAsync((async) {
       var reads = 0;
@@ -260,6 +278,33 @@ void main() {
     await provider.refreshHome(_t0, _t0);
     expect(provider.homeEpisodes.single.id, 'complete');
   });
+
+  for (final failure in ['failed page', 'repeated cursor']) {
+    test('Home does not cache a wider incomplete window: $failure', () async {
+      var calls = 0;
+      var incomplete = false;
+      final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            calls++;
+            if (incomplete) {
+              if (failure == 'failed page') return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+              return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'repeat'));
+            }
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)]));
+          })
+        ..debugSetLive(null);
+      addTearDown(provider.dispose);
+      await provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
+      incomplete = true;
+      final wide = _t0.subtract(const Duration(days: 10));
+      await provider.refreshHome(wide, _t0.add(const Duration(days: 1)));
+      final afterFailure = calls;
+      incomplete = false;
+      await provider.refreshHome(wide.add(const Duration(days: 1)), _t0);
+      expect(calls, afterFailure + 1, reason: 'failed coverage cannot suppress the narrower read');
+    });
+  }
 
   test('local member deletion stays hidden after DELETE settles, while Undo restores it', () async {
     final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));

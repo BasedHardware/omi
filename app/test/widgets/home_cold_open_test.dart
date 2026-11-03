@@ -14,6 +14,12 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import '../support/typed_conversation_screen.dart';
 
+class _ThrowingInitialConversations extends ConversationProvider {
+  _ThrowingInitialConversations() : super(isSignedIn: () => true);
+  @override
+  Future<void> getInitialConversations({bool checkDailySummaries = true}) async => throw StateError('fixture failure');
+}
+
 void main() {
   final previousVisibilityInterval = VisibilityDetectorController.instance.updateInterval;
   setUpAll(() {
@@ -108,59 +114,64 @@ void main() {
     conversations.dispose();
     episodes.dispose();
   });
-  testWidgets('Short clips keeps a matched floor member outside the episode overlay', (tester) async {
-    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
-    await SharedPreferencesUtil.init();
-    final now = DateTime.now();
-    final short = ServerConversation(
-      id: 'floor',
-      createdAt: now,
-      startedAt: now,
-      structured: Structured('Short clip match', ''),
-      discarded: true,
-    );
-    final retained = ServerConversation(id: 'retained', createdAt: now, structured: Structured('Retained member', ''));
-    final conversations = ConversationProvider(
-      isSignedIn: () => true,
-      conversationListFetcher: () async => (items: [short], ok: true),
-    );
-    conversations.showShortConversations = true;
-    conversations.conversations = [short];
-    conversations.groupedConversations = {
-      DateTime(now.year, now.month, now.day): [short],
-    };
-    final episodes = EpisodeProvider(
-      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
-      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
-      fetchPage: (_, __, {cursor}) async => ApiSuccess(
-        EpisodePageRead(
-          enabled: true,
-          episodes: [
-            Episode(
-              id: 'e',
-              live: false,
-              startedAt: now,
-              lastActivityAt: now,
-              conversationIds: ['floor', 'retained'],
-              members: [retained],
-            ),
-          ],
+  for (final speakerSearch in [false, true]) {
+    testWidgets('Filtered Home keeps exact source match, speaker search=$speakerSearch', (tester) async {
+      SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+      await SharedPreferencesUtil.init();
+      final now = DateTime.now();
+      final short = ServerConversation(
+        id: 'floor',
+        createdAt: now,
+        startedAt: now,
+        structured: Structured('Short clip match', ''),
+        discarded: true,
+      );
+      final retained =
+          ServerConversation(id: 'retained', createdAt: now, structured: Structured('Retained member', ''));
+      final conversations = ConversationProvider(
+        isSignedIn: () => true,
+        conversationListFetcher: () async => (items: [short], ok: true),
+      );
+      conversations.showShortConversations = !speakerSearch;
+      conversations.selectedSpeakerId = speakerSearch ? 'fixture-speaker' : null;
+      conversations.searchedConversations = speakerSearch ? [short] : [];
+      conversations.conversations = [short];
+      conversations.groupedConversations = {
+        DateTime(now.year, now.month, now.day): [short],
+      };
+      final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (_, __, {cursor}) async => ApiSuccess(
+          EpisodePageRead(
+            enabled: true,
+            episodes: [
+              Episode(
+                id: 'e',
+                live: false,
+                startedAt: now,
+                lastActivityAt: now,
+                conversationIds: ['floor', 'retained'],
+                members: [retained],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-    await episodes.refreshLive();
-    await episodes.refreshHome(now.subtract(const Duration(days: 1)), now.add(const Duration(days: 1)));
-    await tester.pumpWidget(
-      await buildTypedConversationScreen(conversations, episodes: episodes, initializePreferences: false),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byKey(ValueKey(short.id)), findsOneWidget, reason: 'the exact source row remains reachable');
-    expect(find.text('Retained member'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-    conversations.dispose();
-    episodes.dispose();
-  });
+      );
+      await episodes.refreshLive();
+      await episodes.refreshHome(now.subtract(const Duration(days: 1)), now.add(const Duration(days: 1)));
+      await tester.pumpWidget(
+        await buildTypedConversationScreen(conversations, episodes: episodes, initializePreferences: false),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(ValueKey(short.id)), findsOneWidget, reason: 'the exact source row remains reachable');
+      expect(find.text('Retained member'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      conversations.dispose();
+      episodes.dispose();
+    });
+  }
   for (final delay in [const Duration(milliseconds: 200), const Duration(milliseconds: 800)]) {
     testWidgets('cold Home joins staggered providers, overlay delay $delay', (tester) async {
       SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
@@ -206,6 +217,11 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
         expect(find.text(a.structured.title), findsNothing);
         expect(find.text(b.structured.title), findsNothing);
+        if (elapsed + const Duration(milliseconds: 50) >= const Duration(milliseconds: 500)) {
+          expect(find.text('Finishing up…'), findsOneWidget, reason: 'the 500 ms cap paints a neutral hold');
+        } else {
+          expect(find.text('Finishing up…'), findsNothing, reason: 'nothing paints before the join deadline');
+        }
       }
       overlay.complete(
         ApiSuccess(
@@ -241,4 +257,37 @@ void main() {
       episodes.dispose();
     });
   }
+  testWidgets('a thrown conversation fetch releases the initial overlay hold', (tester) async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final row = ServerConversation(
+        id: 'cached',
+        createdAt: now,
+        startedAt: now,
+        structured: Structured('Cached reachable conversation', 'Fixture overview'));
+    final conversations = _ThrowingInitialConversations()
+      ..conversations = [row]
+      ..groupedConversations = {
+        DateUtils.dateOnly(now): [row]
+      };
+    final overlay = Completer<ApiResult<EpisodePageRead>>();
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+      fetchPage: (_, __, {cursor}) => overlay.future,
+    );
+    await tester.pumpWidget(await buildTypedConversationScreen(conversations,
+        episodes: episodes, initializePreferences: false, requestInitialLoad: true));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Finishing up…'), findsNothing);
+    expect(find.text(row.structured.title), findsOneWidget);
+    overlay.complete(const ApiSuccess(EpisodePageRead(enabled: true)));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    conversations.dispose();
+    episodes.dispose();
+  });
 }

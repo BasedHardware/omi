@@ -393,6 +393,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           );
           await overlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         }
+      } catch (error, stack) {
+        Logger.error('Initial Home conversations failed: $error\n$stack');
+        _initialOverlayPending = false;
       } finally {
         if (mounted) setState(() => _isBootstrapping = false);
       }
@@ -584,7 +587,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final defaultHome = convoProvider.previousQuery.isEmpty &&
+        final defaultHome = !convoProvider.hasActiveSearch &&
             !_hasActiveFilter(convoProvider) &&
             !convoProvider.showShortConversations &&
             !convoProvider.showDiscardedConversations &&
@@ -594,9 +597,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
-            convoProvider.selectedFolderId == null &&
-            !convoProvider.showStarredOnly;
+        final bool showRecordings =
+            !convoProvider.hasActiveSearch && convoProvider.selectedFolderId == null && !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem

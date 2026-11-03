@@ -25,6 +25,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
 part 'sync_job_fetch.dart';
+part 'conversation_home_list.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -508,11 +509,10 @@ class ConversationApi {
     DateTime? endDate,
     String? folderId,
     bool? starred,
-  }) async {
-    final sent = await executeApi<String>(
-      request: ApiRequest(
-        url: conversationCollectionUrl(
-          _baseUrl,
+    Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+    void Function(int)? onStorageCount,
+  }) =>
+      _listHomeConversations(this,
           limit: limit,
           offset: offset,
           statuses: statuses,
@@ -521,20 +521,8 @@ class ConversationApi {
           endDate: endDate,
           folderId: folderId,
           starred: starred,
-        ),
-        method: 'GET',
-      ),
-      send: _send,
-      decode: (body) => body,
-    );
-    return switch (sent) {
-      ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (await _decodeOffUi(data, conversationRowsDecoder)) {
-          ApiSuccess(:final data, :final rejectedRows) => _rows(data, rejectedRows, truncated),
-          ApiFailure(:final problem) => ApiFailure(problem),
-        },
-    };
-  }
+          heldHomeEpisodes: heldHomeEpisodes,
+          onStorageCount: onStorageCount);
 
   static ApiResult<List<ServerConversation>> _rows(List<ServerConversation> rows, int rejectedRows, bool truncated) {
     // decodeApiRows' partial-decode report, raised here because the decode may run on another isolate.

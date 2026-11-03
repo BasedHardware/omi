@@ -1363,17 +1363,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         typed: null
       );
     } else if (typedApi != null) {
-      pageResult = _packTypedConversationList(
-        await typedApi.list(
-          limit: _conversationPageSize,
-          offset: pageOffset,
-          includeDiscarded: showDiscardedConversations,
-          startDate: startDate,
-          endDate: endDate,
-          folderId: selectedFolderId,
-          starred: showStarredOnly ? true : null,
-        ),
-      );
+      pageResult = await _getTypedHomePage(typedApi, pageOffset, startDate, endDate);
     } else {
       var storageCount = 0;
       final fetched = await getConversationsResult(
