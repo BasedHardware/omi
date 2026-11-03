@@ -241,9 +241,12 @@ def production_caller_env(source):
     config = runtime_manifest()['environments']['prod']
     if source in ('backend-listen', 'pusher'):
         caller = config['gke'][source]
+        # GKE's manifest is an overlay on its chart, where vendor secrets live.
+        env = dict(production_caller_env('chart:' + source))
     else:
         caller = config['cloud_run']['services'][source]
-    env = {name: entry.get('value', 'configured-binding') for name, entry in caller['env'].items()}
+        env = {}
+    env.update({name: entry.get('value', 'configured-binding') for name, entry in caller['env'].items()})
     env.update({name: 'configured-binding' for name in caller.get('secrets', {})})
     return env
 
