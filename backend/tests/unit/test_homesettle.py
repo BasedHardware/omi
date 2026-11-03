@@ -124,9 +124,7 @@ def configure_membership(monkeypatch):
     monkeypatch.setattr(home_membership.client_gate, 'client_seen', lambda uid: True)
     monkeypatch.setattr(home_membership, 'episodes_enabled_for', lambda uid: True)
     monkeypatch.setattr(home_membership.episodes, 'get_episode', lambda uid, eid: episode() if eid == 'e' else None)
-    monkeypatch.setattr(
-        home_membership.home_read, 'project_episode', lambda uid, e, **kw: {'members': [{'id': 'a'}, {'id': 'b'}]}
-    )
+    monkeypatch.setattr(home_read, 'project_episode', lambda uid, e, **kw: {'members': [{'id': 'a'}, {'id': 'b'}]})
 
 
 def test_membership_hides_only_exact_members_with_held_extant_replacement(monkeypatch):
@@ -190,9 +188,17 @@ def test_membership_outages_and_merged_donors_keep_members_reachable(monkeypatch
     assert home_membership.suppress_held_members('u', [row], 'e:a') == [row]
 
 
-def test_conversation_route_preserves_page_cursor_and_unfetched_members(monkeypatch):
-    from fastapi import Request, Response
+@pytest.fixture
+def conversation_routes():
     from routers import conversations as routes
+
+    return routes
+
+
+def test_conversation_route_preserves_page_cursor_and_unfetched_members(monkeypatch, conversation_routes):
+    from fastapi import Request, Response
+
+    routes = conversation_routes
 
     configure_membership(monkeypatch)
     rows = [floor(episode_id='e'), floor(id='old', episode_id='unfetched')]

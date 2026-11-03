@@ -10,7 +10,7 @@ import re
 
 from config.episodes import home_hide_episode_members_enabled, episodes_enabled_for
 from database import episodes
-from utils.episodes import client_gate, home_read
+from utils.episodes import client_gate
 
 logger = logging.getLogger(__name__)
 HELD_EPISODES_HEADER = 'X-Omi-Home-Episode-Ids'
@@ -28,6 +28,8 @@ def suppress_held_members(uid: str, rows: list[dict], held: str) -> list[dict]:
     try:
         if not client_gate.client_seen(uid):
             return rows
+        from utils.episodes import home_read
+
         represented = set()
         for eid in {pair[0] for pair in acknowledged}:
             episode = episodes.get_episode(uid, eid)
