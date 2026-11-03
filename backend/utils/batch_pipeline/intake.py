@@ -684,6 +684,9 @@ async def accept_upload(
                 conversation_id=conversation_id
                 or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
                 privacy_generation=context.generation,
+                # The built-in decoder times WAL PCM from sync filenames.
+                # Alternate adapters (for example held WAV) have no such proof.
+                timing_store='sync' if decode is None else None,
             )
 
         from utils.stt.batch_language import resolve_language, self_language_class

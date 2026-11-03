@@ -1,20 +1,28 @@
-# Prove batch speaker windows on the live store
+# Batch speaker windows require admitted timing provenance
 
-Persisted `final:batch:{unit}` speaker scopes originate in desktop record units timed on the live store.
-When overlapping live and sync spans cause `untrusted_clock`, the per-window resolver now proves these
-windows against `is_batch` / `.batch.enc` / `.batch.bin` chunks alone. Both decoded-window verification and
-embedding clip assembly select that store. A missing, malformed, overlapping or uncovered live span still
-refuses proof; sync audio never fills a live-store hole. Resolved conversation scopes require the retained
-unit scope in `provider_speaker` to recover the timing store.
+A `final:batch:{unit}` scope can come from live pusher custody or a `batch_sync_v1` WAL upload;
+record-origin does not prove the live clock. This corrects the original scope-only selection in #24465.
+CPU admission records optional `WorkItem.timing_store` from the actual source: built-in WAL decoding uses
+`sync`; retained live manifests use `batch` only when every reference is `.batch.enc` / `.batch.bin`.
+Unknown/mixed references and alternate decoders remain unstamped. Projection copies the stamp into the
+storage-only `provider_speaker` dict with the original scope/id/provider; all survive conversation
+re-scoping. Public JSON still omits that dict.
 
-`SPEAKER_BATCH_STORE_ENABLED` defaults on, independently of `SPEAKER_SYNC_STORE_ENABLED`; false/0/off/no
-restores the previous batch refusal. It follows the existing per-window cohort, with no additional admission
-or deployment in this change. The existing `conversation_speaker_sync_store` log reports total candidates,
-total proofs and `batch_proven`. Manual receipts retain precedence.
+Only stamped `final:batch:` windows refused for overlapping stores can be proven on the named store.
+Sync stamps select `.opus` / `.opus.enc`; batch stamps select `is_batch` / `.batch.enc` / `.batch.bin`.
+Proof, decoded coverage and clip assembly use the same store without fallback. Unstamped history stays
+refused: job `audio_uri` points to a generic staged artifact and cannot prove its source cheaply. No
+historical lookup/backfill or privacy contract changes are added.
+
+`SPEAKER_BATCH_STORE_ENABLED` defaults on inside the per-window cohort and controls stamped batch-scoped
+windows on either store. False/0/off/no restores their refusal independently of `SPEAKER_SYNC_STORE_ENABLED`,
+which controls native `sync:` scopes. Manual receipts and naming/budget policy are unchanged.
+The log is now `conversation_speaker_store` with candidates, total proven, `batch_proven` and `sync_proven`;
+repository charts, monitoring and scripts had no references to its previous name.
 
 Contract: [trusted placement](../../listen_pusher_pipeline.mdx#trusted-capture-span-placement-and-live-speaker-resolution).
 Operations: [batch speaker runbook](../../runbooks/batch-conversation-speakers.md).
-Regression evidence: `backend/tests/unit/test_speaker_sync_store.py` covers two-store live-only reads,
-rollback, local holes, retained provider scopes and manual overrides. The producer, GPU worker, streaming
-path and voice-vector privacy contract are unchanged. Local synthetic tests establish store isolation and
-identity policy; real-audio attribution accuracy remains a separate measurement.
+Regression evidence: store and producer suites cover WAL/live selection, unstamped refusal, admission
+provenance, re-scoping, holes, kill switches and manual precedence. No GPU worker, streaming or deployment
+change is included. Local synthetic tests establish store isolation and identity policy; real-audio
+attribution accuracy remains a separate measurement.

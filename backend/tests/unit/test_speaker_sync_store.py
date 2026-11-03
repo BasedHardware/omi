@@ -116,14 +116,12 @@ def test_outside_the_cohort_the_recording_still_refuses(env, two_stores, monkeyp
     assert conversation.speaker_resolution.status == 'unavailable'
 
 
-def test_final_batch_segments_are_never_proven_on_the_sync_store(env, two_stores):  # noqa: F811
+def test_unstamped_final_batch_segments_keep_the_refusal(env, two_stores):  # noqa: F811
     _, diarizer = env
     files, reads = two_stores
     conversation = _resolve(files, scopes=['final:batch:unit'] * len(PLAN))
-    # Only the first window has a live-store coverage hole; later windows use
-    # the live voice even though the sync store carries the two desired voices.
-    assert diarizer.calls == len(PLAN) - 1
-    assert reads == ['0.batch.enc']
+    assert diarizer.calls == 0
+    assert reads == []
     assert conversation.speaker_resolution.status == 'unavailable'
 
 
@@ -286,19 +284,20 @@ def batch_stores(monkeypatch):
     return files, reads, chunks
 
 
-def _batch_conversation(files, *, resolved_scopes=False):
+def _batch_conversation(files, *, resolved_scopes=False, timing_store='batch'):
     conversation = _conversation(PLAN, scopes=[f'final:batch:unit{i // 2}' for i in range(len(PLAN))])
     conversation.audio_files = files
     for segment in conversation.transcript_segments:
         segment.speaker_match_source = 'batch_pyannote'
         segment.speaker_identity_status = 'no_match'
+        segment.provider_speaker = {
+            'id': segment.speaker_id,
+            'scope': segment.speaker_id_scope,
+            'provider': 'parakeet',
+            'timing_store': timing_store,
+        }
         if resolved_scopes:
-            segment.provider_speaker = {
-                'id': segment.speaker_id,
-                'scope': segment.speaker_id_scope,
-                'provider': 'parakeet',
-            }
-            segment.speaker_id_scope = 'final:batch:conversation:c1'
+            segment.assign_resolved_speaker(segment.speaker_id, 'final:batch:conversation:c1')
     return conversation
 
 
@@ -319,7 +318,44 @@ def test_final_batch_windows_resolve_on_live_store_alone(env, batch_stores, capl
         stage.resolve_speakers_for_processing('u1', conversation)
     assert env[1].calls == len(PLAN)
     _assert_batch_voices(conversation, reads)
-    assert 'event=conversation_speaker_sync_store candidates=8 proven=8 batch_proven=8' in caplog.text
+    assert 'event=conversation_speaker_store candidates=8 proven=8 batch_proven=8 sync_proven=0' in caplog.text
+
+
+@pytest.mark.parametrize('resolved_scopes', [False, True])
+def test_batch_sync_v1_wal_windows_use_only_the_stamped_sync_store(
+    env, two_stores, resolved_scopes, monkeypatch
+):  # noqa: F811
+    monkeypatch.setattr(
+        stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0], 'person': VOICES[1]}
+    )
+    files, reads = two_stores
+    conversation = _batch_conversation(files, timing_store='sync', resolved_scopes=resolved_scopes)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == len(PLAN)
+    assert reads and all(path.endswith('.opus.enc') for path in reads)
+    assert conversation.speaker_resolution.status == 'resolved'
+    for segment, voice in zip(conversation.transcript_segments, PLAN):
+        assert segment.is_user == (voice == 0)
+        assert segment.person_id == ('person' if voice == 1 else None)
+        assert segment.provider_speaker['timing_store'] == 'sync'
+        assert segment.speaker_id_scope.startswith('final:batch:conversation:')
+
+
+@pytest.mark.parametrize('stamp', [None, '', 'unknown', ['batch']])
+def test_missing_or_unknown_batch_timing_store_cannot_choose_live_pcm(env, batch_stores, stamp):  # noqa: F811
+    files, reads, _ = batch_stores
+    conversation = _batch_conversation(files, timing_store=stamp)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == 0 and reads == []
+    assert conversation.speaker_resolution.status == 'unavailable'
+
+
+def test_stamped_sync_batch_windows_obey_the_batch_switch(env, two_stores, monkeypatch):  # noqa: F811
+    monkeypatch.setenv('SPEAKER_BATCH_STORE_ENABLED', 'false')
+    files, reads = two_stores
+    conversation = _batch_conversation(files, timing_store='sync')
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == 0 and reads == []
 
 
 def test_batch_kill_switch_restores_untrusted_clock(env, batch_stores, monkeypatch):  # noqa: F811

@@ -3,8 +3,9 @@
 Most pendant recordings hold two stored copies on independent clocks: ``.batch.enc``
 from the live pusher and ``.opus.enc`` from sync upload. ``locate`` refuses a window
 where any two spans overlap, yet a ``sync:`` segment was timed on the uploaded file,
-so its own store can still prove it. Persisted ``final:batch:`` unit scopes come
-from desktop record-origin units timed on the live ``.batch.enc`` store.
+so its own store can still prove it. A ``final:batch:`` unit can come from either
+producer; only its admission-stamped ``provider_speaker.timing_store`` selects
+the clock. Historical units without that stamp keep their refusal.
 
 Only the per-window cohort reaches this. Everything else keeps today's refusal.
 """
@@ -87,18 +88,22 @@ def single_store_placements(
             scope = (getattr(segment, 'provider_speaker', None) or {}).get('scope') or ''
         if scope.startswith('sync:') and scope != 'sync:':
             store = SYNC_STORE
+            store_enabled = enabled[SYNC_STORE]
         elif (
             scope.startswith('final:batch:')
             and scope != 'final:batch:'
             and not scope.startswith(BATCH_CONVERSATION_SCOPE)
         ):
-            store = BATCH_STORE
+            store = (getattr(segment, 'provider_speaker', None) or {}).get('timing_store')
+            if store not in (SYNC_STORE, BATCH_STORE):
+                continue
+            store_enabled = enabled[BATCH_STORE]
         else:
             continue
         if (
             placement is None
             or placement.reason != 'untrusted_clock'
-            or not enabled[store]
+            or not store_enabled
             or segment.end <= segment.start
         ):
             continue
@@ -121,9 +126,10 @@ def single_store_placements(
         if coverage[store].validated and not coverage[store].ambiguous(*window) and coverage[store].covers(*window)
     }
     logger.info(
-        'event=conversation_speaker_sync_store candidates=%d proven=%d batch_proven=%d',
+        'event=conversation_speaker_store candidates=%d proven=%d batch_proven=%d sync_proven=%d',
         len(candidates),
         len(proven),
         sum(p.store == BATCH_STORE for p in proven.values()),
+        sum(p.store == SYNC_STORE for p in proven.values()),
     )
     return proven

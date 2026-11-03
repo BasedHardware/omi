@@ -30,7 +30,7 @@ from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
+from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
@@ -351,7 +351,7 @@ async def admit_recording(store, pending, *, now=None):
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
-        staged.append(replace(item, audio_uri=uri))
+        staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     return await run_blocking(
         db_executor,
         admit,

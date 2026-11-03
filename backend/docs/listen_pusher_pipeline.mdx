@@ -4320,10 +4320,17 @@ exists, so span-bearing mixed live+sync conversations resolve.
 
 Within the per-window speaker cohort, `SPEAKER_SYNC_STORE_ENABLED` and
 `SPEAKER_BATCH_STORE_ENABLED` default on. For overlapping-store `untrusted_clock`
-refusals, `sync:` unit windows use only sync objects; persisted `final:batch:`
-unit windows use only live `is_batch` / `.batch.enc` / `.batch.bin` objects.
-Resolved batch conversation scopes require the retained provider unit scope.
-Each switch accepts false/0/off/no to restore its store's refusal independently.
+refusals, `sync:` unit windows use only sync objects. A `final:batch:` unit scope
+alone cannot identify a clock: record-origin WAL uploads also use that prefix.
+CPU admission records optional `WorkItem.timing_store` (`sync` for built-in WAL
+decoding, `batch` for homogeneous `.batch.enc` / `.batch.bin` custody references).
+Projection copies it into storage-only `provider_speaker.timing_store`, alongside
+the original unit scope/id/provider. Both survive conversation re-scoping.
+Stamped batch windows use only the named store; unknown sources and unstamped
+history stay refused. Generic staged `audio_uri` values do not prove a store,
+so no historical reads or backfill are added. Public JSON excludes the marker.
+Each switch accepts false/0/off/no: the sync switch controls native `sync:`
+windows, and the batch switch controls `final:batch:` windows on either store.
 Proof, decoded coverage and embedding clip assembly all use the selected store;
 an uncovered window never borrows the other store's audio.
 
