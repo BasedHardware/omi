@@ -36,7 +36,7 @@ from typing import FrozenSet, List, Literal, Optional, Sequence, Tuple
 Verdict = Literal['keep', 'discard']
 
 # Bumped whenever a rule changes, so stored decisions stay attributable.
-RULES_VERSION = 1
+RULES_VERSION = 2
 
 # ---------------------------------------------------------------------------
 # Lexicons. All entries are casefolded; apostrophes are normalised to "'".
@@ -116,7 +116,7 @@ EXPLICIT_REMINDER_RE = re.compile(
 # Code points of CJK acknowledgement particles. A CJK transcript whose Han/kana
 # characters are all in this set is a backchannel ("嗯嗯", "好的", "对对对").
 CJK_FILLER_CHARS: FrozenSet[str] = frozenset(
-    '嗯啊哦噢喔呃额恩唉哎诶欸嘿喂哈呵呀吧嘛呢啦了的对好是行' 'はいええうんあそうね'
+    '嗯啊哦噢喔呃额恩唉哎诶欸嘿喂哈呵呀吧嘛呢啦了的对好是行' 'はいええうんあそうね' 'ハイ'
 )
 
 # Capitalised forms that are names or months but collide with FUNCTION_WORDS.

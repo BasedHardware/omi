@@ -8,6 +8,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -21,6 +22,7 @@ from utils.batch_pipeline.contracts import (
     RecoveryWork,
     ValidationFailureWork,
 )
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
@@ -313,6 +315,7 @@ class Pump:
             type(error).__name__,
         )
 
+    @with_batch_privacy_attempt
     async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
         snapshot = (
@@ -423,7 +426,7 @@ class Pump:
             if prepared is not None:
 
                 async def discard_invalid_preparation(handle):
-                    while handle.item.segment_id not in lost and not (stop_event is not None and stop_event.is_set()):
+                    while lost.isdisjoint(handle.segment_ids) and not (stop_event is not None and stop_event.is_set()):
                         await asyncio.sleep(0.1)
                     # Cancellation is immediate for queued work. Running SDK
                     # calls retain their reservation until the lane's final
@@ -474,8 +477,8 @@ class Pump:
                     if prepared is not None:
                         # A queued decode may have been cancelled on stop/lease
                         # loss. Never let it become this or a replacement attempt.
-                        if prepared.cancelled or prepared.item.segment_id in skipped:
-                            skipped.add(prepared.item.segment_id)
+                        if prepared.cancelled or not skipped.isdisjoint(prepared.segment_ids):
+                            skipped.update(prepared.segment_ids)
                             # The fetch may already be running and cannot be
                             # cancelled. Final cleanup drains it after GPU unlock,
                             # with its reservation and lease renewal still held.
@@ -485,7 +488,12 @@ class Pump:
                     process = getattr(self.worker, 'process_batch_deferred', self.worker.process_batch)
                     compute = asyncio.create_task(
                         self._run_blocking(
-                            'worker_flight',
+                            # The HPA sizes on worker_flight: idle-only release must not buy a GPU.
+                            (
+                                'worker_flight_deep'
+                                if all(v.item.priority == Priority.DEEP for v in leases)
+                                else 'worker_flight'
+                            ),
                             sync_executor,
                             process,
                             [v.item for v in leases if v.item.segment_id not in skipped],

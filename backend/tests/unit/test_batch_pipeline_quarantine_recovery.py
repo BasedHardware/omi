@@ -682,7 +682,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
     assert stt.call_count == 1
-    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad')
+    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad', owner_only=True)
 
 
 @pytest.mark.parametrize('delivery_wins', [False, True])

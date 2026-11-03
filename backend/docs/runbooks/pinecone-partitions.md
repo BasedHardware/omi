@@ -28,6 +28,27 @@ GO. Do not manufacture receipts to bypass an unfinished check.
 4. Have a reviewer check the complete writer inventory and evidence within 24
    hours of each production apply. Changing the fleet invalidates the review.
 
+What the 2026-11-02 rollout learned about building that inventory:
+
+- A writer is any runtime that holds a Pinecone key **and** sets `PINECONE_INDEX_NAME`;
+  `database/vector_db.py` builds no client without both. Cloud Run jobs count. Take a
+  job's digest from its latest execution, because job specs often name a mutable tag.
+  The rollout found `notifications-job` (scheduled every 15 minutes) and two dormant
+  jobs still on pre-partition images, holding the key and the production index.
+- For services, list every revision with traffic above 0% or a tag. For GKE, use the
+  running pods' image IDs (scaled-to-zero deployments still count), plus pods that no
+  Deployment, StatefulSet, DaemonSet or Job owns.
+- Map each digest to a source commit through the registry tag of that exact digest.
+  Promoted images (pusher) carry only `promotion-<digest>` in production; trace them
+  through the development registry's SHA tag. Some development images are OCI indexes;
+  the serving digest is the `linux/amd64` manifest inside the tagged index.
+- Read the cluster with a private `KUBECONFIG` per identity. The shared `~/.kube` GKE
+  token cache can serve another agent's identity.
+- Any production train changes the fleet. Rescan, get a delta review, and run a
+  drift check before every batch.
+- Pass the real path of `fleet.json` to `--fleet-receipt`. Artifact paths resolve
+  relative to its directory, so a symlink fails the gate.
+
 Use the deployed backend environment and Google ADC. `PINECONE_INDEX_NAME` selects
 its index and `PINECONE_API_KEY` comes from the existing secret environment; never
 put credentials in receipts or command arguments. Only the exact dev index
@@ -160,6 +181,32 @@ alerts on nonzero exit/blocked routes, and an owner for recovery. Monitor error
 rates, search parity, provider units and bill changes; a migration count alone
 does not prove savings.
 
+### Cost and throughput (measured 2026-11-02)
+
+- Query read units follow the scanned namespace's size, not the number of matches:
+  a filtered top-1 query cost 69 RU on legacy `ns1`, 76 on `ns2` and 38 on `ns4`,
+  but 1 RU on an owner's bucket. That drop is the saving. Measure it per family with
+  one synthetic query after the first batch.
+- Copy cost is mostly the source payload proof, one legacy-namespace query per proof
+  group. The operator packs groups by response size, up to 100 records.
+- The provider reports 0 write units for upserts. Estimate about 1 WU per KB of
+  record (about 13 WU per 3072-d vector) and count it against the budget.
+- One process moves about 4-10 records/s, plus about 13 s per family even when it
+  is empty. A 19k-record family took about 55 minutes. Run several processes on
+  disjoint owners, keeping the same output directory, rather than larger batches.
+- Owners with unsettled serving operations report `blocked_unsettled_operations`.
+  Skip them and leave the operations untouched until they are reconciled.
+
+### Out-of-band legacy writers
+
+Current code writes an owner's vectors only to the authoritative route, and its
+deletes remove both copies. So after cutover, an owner's ID count in the legacy
+namespace can stay flat or fall, never rise. Record that count right after each
+batch (ID listing by the owner's ID prefix, 1 RU per 100 IDs) and re-count before
+the next. Any increase means a pre-partition process, such as an old checkout's
+script, wrote the legacy copy. Stop and resync that owner from its bucket. The
+count cannot see an old-code update to an existing ID, so it detects inserts only.
+
 ## Receipts, interruption and recovery
 
 Each run atomically writes `run-<UTC>-<id>.json`; per-family owner journals live
@@ -178,6 +225,20 @@ reset a revision, clear pending operations, or assume an old request has settled
 For uncertain operations, obtain evidence of the original provider request's
 settled outcome and scope before using the state reconciliation protocol. Keep
 serving from the authoritative route while investigating.
+
+**Never kill an operator process.** A kill that lands between a copy write's
+admission and its settlement leaves a pending marker that blocks that owner until
+it is reconciled. To stop a run, create the `--stop-file` path. The operator then
+stops at its next provider read or before its next write admission, never inside
+a write, exactly like a budget stop: the route stays `copying` under the owned
+token with nothing pending, and the same output directory resumes with `--resume`.
+A driver bounded by a session or job time limit should create the stop file
+before that limit.
+
+To show that another operator has stopped, use the newest `copy_*` operation's
+creation time under the copying routes' `operations` subcollection. Route
+`update_time` keeps moving, because serving writes to a copying owner also update
+the route.
 
 Rollback uses the same explicit owner selection plus `--apply --rollback` and
 current production evidence. It copies the **current** authoritative bucket back

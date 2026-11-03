@@ -14,6 +14,7 @@ from utils.enrichment.admission import run_created_webhook as _run_conversation_
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
@@ -157,6 +158,7 @@ from utils.other.storage import (
     upload_syncing_temporal_file,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.delivery import observe_sync_failures, sync_result, sync_refreshed, sync_defer, sync_done
 from utils.observability.transcription import record_sync_transcription_outcome
 from config.transcription_final_pass import sync_enabled_for
 from utils.speaker_assignment import process_speaker_assigned_segments
@@ -1043,6 +1045,7 @@ def retrieve_vad_segments(
         del aseg
 
 
+@observe_sync_failures
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """Reassess relevance and regenerate notes after sync appends."""
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
@@ -1052,7 +1055,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
-            return
+            return sync_result('deferred')
         conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         if conversation_data:
             conversation_id = conversation_data['id']
@@ -1063,12 +1066,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             else:
                 context['defer_reason'] = 'conversation_missing'
         logger.info('event=sync_reprocess_callback outcome=unavailable')
-        return
+        return sync_result('no_op' if conversation_data and conversation_data.get('deleted') else 'deferred')
 
     if conversation_data.get(bridge_pending.FIELD):
         conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
         if conversation_data is None:
-            return
+            return sync_result('deferred')
 
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(
@@ -1083,9 +1086,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
         # finalizer skips processing that later content.
-        if context is not None:
-            context['defer_reason'] = 'open_live_target'
-        return
+        return sync_defer(context, 'open_live_target')
 
     if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
         context['sync_hold'] = True
@@ -1100,7 +1101,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         context['hold_outcome'] = outcome
         if due is not None:
             context.update(defer_reason=outcome, defer_until=due)
-            return
+            return sync_result('deferred')
         if outcome in {'unchanged', 'late_cap', 'immaterial'}:
             if (conversation_data.get('smart_merge') or {}).get('role') == 'survivor' and refresh_owed(
                 conversation_data
@@ -1111,7 +1112,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             ):
                 raise SyncConversationPersistenceFenced('hold completion snapshot changed')
             context['hold_skipped'] = True
-            return
+            return sync_result('no_op')
         context['hold_snapshot'] = processing_hold.content_snapshot(conversation_data)
 
     # Intake already discarded a rule-settled fragment; skip the processing
@@ -1141,7 +1142,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
                 context = PROCESS_CONTEXT.get()
                 if context is not None:
                     context['discarded'] = True
-            return
+            return sync_result('no_op' if outcome in ('discarded', 'already_discarded') else 'deferred')
 
     if PROCESS_CONTEXT.get() is not None and not claim_from_snapshot(
         get_firestore_client(), uid, conversation_id, conversation_data
@@ -1162,7 +1163,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             ):
                 raise SyncConversationPersistenceFenced('hold completion snapshot changed')
             context['hold_skipped'] = True
-            return
+            return sync_result('no_op')
         refreshed = conversations_db.get_conversation(uid, conversation_id)
         if (
             refreshed
@@ -1176,7 +1177,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             )
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
-        return deserialize_conversation(refreshed) if refreshed else None
+        return sync_refreshed(refreshed, deserialize_conversation, summary_output_present)
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
@@ -1212,9 +1213,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     except ConversationAbsorbed as absorbed:
         if context is not None:
             context['redirect_to'] = absorbed.canonical_id
-            return
+            return sync_result('deferred')
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
-        return deserialize_conversation(canonical) if canonical else None
+        return sync_result('deferred', deserialize_conversation(canonical) if canonical else None)
 
     if context is not None and context.get('hold_budget_denied_at_max'):
         if not conversations_db.complete_sync_processing_hold(
@@ -1222,7 +1223,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
         context['hold_skipped'] = True
-        return None
+        return sync_result('no_op')
 
     if (
         context is not None
@@ -1267,7 +1268,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
-    return processed_conversation
+    return sync_done(processed_conversation)
 
 
 def _speaker_identity_dependencies() -> SpeakerIdentityDependencies:
@@ -2321,6 +2322,12 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
 
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
+    names = [file.filename for file in files if file.filename]
+    if len(set(names)) != len(names):
+        # Each body is written to its own name, so a repeat would overwrite an
+        # earlier body before anything can keep it. Refuse before writing: a
+        # request-level 400 makes the app retry each retained file on its own.
+        raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Repeated sync filename'})
     directory = f'syncing/{uid}/{job_id}/'
     os.makedirs(directory, exist_ok=True)
     paths = []
@@ -2567,7 +2574,8 @@ async def _resolve_safety_wal_target(
 
 @sync_attempt
 @sync_snapshot_resolve_job
-async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
+@with_batch_privacy_attempt
+async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
     raw_paths: list,
@@ -3725,7 +3733,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_subtype=failure_subtype,
             )
             if content_id and failed_segments == 0 and custody:
-                await _delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
+                await delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
             if content_id and failed_segments > 0:
                 failure_kwargs = (
                     {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
@@ -3920,11 +3928,11 @@ def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
         return 0
 
 
-async def _delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
+async def delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
     return await run_blocking(storage_executor, _delete_staged_blobs, blob_paths, **custody)
 
 
-def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
+def download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
     """Bound backfill downloads and expansion before any decode allocation."""
     if bounded_backfill and len(blob_paths) > MAX_BACKFILL_FILES:
         raise BackfillInputLimitExceeded('backfill staged file count exceeded')

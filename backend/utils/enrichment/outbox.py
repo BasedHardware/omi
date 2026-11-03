@@ -6,6 +6,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 """
 
 from __future__ import annotations
+from utils.observability.delivery import record_delivery
 
 import hashlib
 import math
@@ -666,6 +667,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 get_firestore_client(), COLLECTION, document_id, owner, task_token
             ):
                 raise
+            record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(admitted_token)
