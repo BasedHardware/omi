@@ -215,6 +215,7 @@ def test_get_executor_metrics_returns_all_pools():
         'llm',
         'stripe',
         'sync',
+        'record_language',
         'postprocess',
         'cleanup',
         'storage',

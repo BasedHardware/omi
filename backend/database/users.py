@@ -1,5 +1,6 @@
 from database.people_generation import bump_people_generation, write_person
 from database.person_speech_samples import add_sample_transaction
+from database.people_projection import project_people
 from config.refactor_modes import serving_for
 from utils.speakers.person_pool import (
     pool_profile,
@@ -991,12 +992,8 @@ def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
     return project_person_learning(uid, person_data, firestore_client=db)
 
 
-def get_people(uid: str, *, include_dismissed: bool = False):
-    cache = {}
-    return [
-        project_person_learning(uid, person, firestore_client=db, projection_cache=cache)
-        for person in list_people(db, uid, include_dismissed=include_dismissed)
-    ]
+def get_people(uid: str, *, include_dismissed: bool = False, memoize: bool = False):
+    return project_people(db, uid, include_dismissed, memoize, list_people, project_person_learning)
 
 
 def count_people(uid: str, *, firestore_client: Any = None) -> int:

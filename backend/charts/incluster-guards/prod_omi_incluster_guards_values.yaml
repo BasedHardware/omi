@@ -1,3 +1,6 @@
+# Retire the streaming GPU writer before applying the off overlays.
+# Wait for any existing guard Job to finish before setting deployment replicas to zero.
+parakeetSuspended: false
 namespace: prod-omi-backend
 hpaName: prod-omi-parakeet
 prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
