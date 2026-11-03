@@ -415,6 +415,7 @@ class Scheduler:
                         and busy
                         and not refreshed
                         and candidate_fanout < SCHEDULER_SHARDS
+                        and candidates is not None
                         and len(candidates) >= candidate_fanout
                     ):
                         # A full busy prefix proves nothing about the remaining
