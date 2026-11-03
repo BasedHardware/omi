@@ -33,7 +33,7 @@ def main():
     with os.fdopen(os.dup(1), 'w') as output:
         configure_logging('record-seal-worker', default_format='json', stdout=output, stderr=output)
         with silent_dependencies():
-            run(emit=emit)
+            run(os.environ['BATCH_PIPELINE_WORKER_RELEASE'], os.environ['POD_NAMESPACE'], emit=emit)
 
 
 if __name__ == '__main__':

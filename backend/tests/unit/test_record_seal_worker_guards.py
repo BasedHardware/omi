@@ -41,8 +41,6 @@ def test_malformed_job_cannot_pin_discovery_or_claim(source, monkeypatch, identi
 
 
 def test_startup_refusal_emits_only_aggregate_and_closes_server(monkeypatch):
-    monkeypatch.setenv('BATCH_PIPELINE_WORKER_RELEASE', 'r')
-    monkeypatch.setenv('POD_NAMESPACE', 'n')
     monkeypatch.setenv('RECORD_SEAL_REPAIR_ENABLED', 'true')
     server, thread = Mock(), Mock()
     monkeypatch.setattr(prometheus_client, 'start_http_server', Mock(return_value=(server, thread)))
@@ -54,7 +52,7 @@ def test_startup_refusal_emits_only_aggregate_and_closes_server(monkeypatch):
         raise SystemExit(0)
 
     with pytest.raises(SystemExit):
-        worker.run(pause=stop, emit=messages.append)
+        worker.run('r', 'n', pause=stop, emit=messages.append)
     assert messages == [{'event': 'record_seal_worker', 'outcome': 'error', 'stage': 'startup'}]
     server.shutdown.assert_called_once()
     server.server_close.assert_called_once()

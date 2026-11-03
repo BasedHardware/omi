@@ -3,7 +3,6 @@
 from collections import deque
 from datetime import datetime, timezone
 import json
-import os
 import time
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
@@ -193,10 +192,10 @@ class Worker:
                 break
 
 
-def run(*, pause=time.sleep, emit=lambda _: None):
+def run(release, namespace, *, pause=time.sleep, emit=lambda _: None):
     from prometheus_client import start_http_server
 
-    metrics = Metrics(os.environ['BATCH_PIPELINE_WORKER_RELEASE'], os.environ['POD_NAMESPACE'])
+    metrics = Metrics(release, namespace)
     server, thread = start_http_server(8080, registry=metrics.registry)
     worker = None
     try:
