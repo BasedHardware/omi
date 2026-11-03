@@ -116,7 +116,7 @@ runtimeConfigMapName: prod-omi-backend-config
 env:
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
-    value: "false"
+    value: "true"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
@@ -527,7 +527,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,parakeet"
+    value: "modulate-velma-2,soniox"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:

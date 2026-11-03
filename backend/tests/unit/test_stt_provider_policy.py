@@ -73,7 +73,7 @@ def test_soniox_async_is_limited_to_held_recovery_and_batch_failover():
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,parakeet',
+        STTServingSurface.STREAMING: 'modulate-velma-2,soniox',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
         STTServingSurface.PTT: 'modulate-velma-2,parakeet',
     }
@@ -149,3 +149,16 @@ def test_live_policy_admits_languages_beyond_the_retired_deepgram_list(language)
 @pytest.mark.parametrize('language', ['my', 'am', 'lo'])
 def test_live_policy_rejects_languages_outside_modulate_auto_detection(language):
     assert supports_live_multilingual_mode(language) is False
+
+
+def test_plain_streaming_slot_is_removed_but_window_and_ptt_remain(monkeypatch):
+    monkeypatch.delenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', raising=False)
+    assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert model_is_enabled('parakeet-window', STTServingSurface.STREAMING)
+    assert model_is_enabled('parakeet', STTServingSurface.PTT)
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+    assert model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox,parakeet'
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'soniox'

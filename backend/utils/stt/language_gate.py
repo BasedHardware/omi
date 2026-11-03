@@ -18,6 +18,7 @@ import os
 import httpx
 from prometheus_client import Counter
 
+from config.live_stt_gpu_fleet import gpu_fleet_off
 from config.prerecorded_language import language_class, language_gate_percent, self_lid_confidence_floor
 
 logger = logging.getLogger(__name__)
@@ -86,14 +87,14 @@ def _probability(value) -> float | None:
 
 def self_detect(probe: bytes, *, surface: str) -> SelfVerdict | None:
     """One bounded call; no retries. `probe` is a WAV of at most 30 s."""
-    from config.live_stt_gpu_fleet import gpu_fleet_off
+    base = os.getenv('HOSTED_LID_API_URL', '').strip().rstrip('/')
+    if not base:
+        if gpu_fleet_off():
+            return None  # Keep vendor LID without dialing the retired shared pool.
+        base = os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')
 
-    dedicated = os.getenv('HOSTED_LID_API_URL', '').strip().rstrip('/')
-    if not dedicated and gpu_fleet_off():
-        return None  # Preserve the caller's vendor LID path without a dead-pool timeout.
     outcome = 'error'
     try:
-        base = dedicated or os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')
         if not base:
             outcome = 'no_url'
             return None
