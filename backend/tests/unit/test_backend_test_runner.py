@@ -308,11 +308,17 @@ def test_file_isolation_reaps_worker_that_dies_before_status(tmp_path):
         "esac\n",
     )
 
+    # Remove the timeout intermediary only for this worker-death probe so
+    # $PPID remains the scheduler's worker subshell on every host. Timeout
+    # enforcement itself is exercised by the file-budget probes below.
+    _write_executable(tmp_path / "timeout", '#!/usr/bin/env bash\nshift 3\nexec "$@"\n')
+
     result = subprocess.run(
         bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=os.environ
         | {
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
             "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
             "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
             "BACKEND_PYTEST_WORKERS": "1",
