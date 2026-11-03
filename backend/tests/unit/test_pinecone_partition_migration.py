@@ -345,6 +345,17 @@ def test_search_parity_accepts_only_tie_level_differences():
             migration.search_parity(old, new)
 
 
+def test_search_parity_reports_measured_score_drift_without_ids():
+    old = _matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('d', 0.7))
+    new = _matches(('a', 0.9), ('b', 0.8025), ('c', 0.70005), ('d', 0.7))
+    with pytest.raises(migration.MigrationNotReady) as error:
+        migration.search_parity(old, new)
+    message = str(error.value)
+    assert 'max |diff| 2.50e-03 > tolerance 1e-03 for 1 of 4 shared ids' in message
+    assert message.endswith('preserve source route')
+    assert not any(f"'{i}'" in message for i in 'abcd')
+
+
 def _proof_queries(provider, namespace):
     return [
         p for path, p in provider.calls if path == 'query' and p.get('includeValues') and p['namespace'] == namespace
