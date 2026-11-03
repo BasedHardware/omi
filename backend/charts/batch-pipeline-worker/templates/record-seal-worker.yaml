@@ -48,13 +48,12 @@ spec:
           readinessProbe:
             httpGet: {path: /metrics, port: metrics}
           env:
-            - {name: RECORD_SEAL_WORKER_ENABLED, value: {{ .Values.recordSealWorker.runtimeEnabled | quote }}}
-            - {name: RECORD_SEAL_REPAIR_ENABLED, value: "true"}
+            - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealWorker.runtimeEnabled | quote }}}
             - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
             - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
             - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
             - {name: RECORD_SEAL_REPAIR_SERVER_FLAGS, value: {{ .Values.recordSealWorker.serverFlags | toJson | quote }}}
-            - {name: WORKER_RELEASE, value: {{ .Release.Name | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
             - {name: OMI_ENV_STAGE, value: prod}

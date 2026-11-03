@@ -1,6 +1,7 @@
 """Seal discovery hints and expiring metadata claims; no seal authority here."""
 
 from datetime import datetime
+import math
 import time
 import uuid
 
@@ -36,8 +37,8 @@ def pending_page(client, namespace, *, horizon, after=None, limit=PAGE_SIZE):
 
 
 def conversation_ref(client, job):
-    uid, cid = job['owner_id'], job['conversation_id']
-    if not uid or not cid or '/' in uid or '/' in cid:
+    uid, cid = job.get('owner_id'), job.get('conversation_id')
+    if not all(isinstance(part, str) and part and '/' not in part for part in (uid, cid)):
         raise ValueError('invalid seal identity')
     return client.collection('users').document(uid).collection('conversations').document(cid)
 
@@ -54,6 +55,11 @@ def is_debt(row):
 
 
 def ready(claim, now):
+    if not isinstance(claim, dict) or not all(
+        type(claim.get(field, 0)) in (int, float) and math.isfinite(claim.get(field, 0))
+        for field in ('expires_at', 'retry_after')
+    ):
+        return False  # Malformed metadata remains for the sweeper; never pins a page.
     return claim.get('expires_at', 0) <= now and claim.get('retry_after', 0) <= now
 
 
@@ -68,7 +74,10 @@ def acquire(client, namespace, job_id, *, clock=time.time):
         job = ref.get(transaction=tx).to_dict() or {}
         if job.get('state') != 'record_pending' or not ready(job.get('seal_claim') or {}, now):
             return None
-        row_ref = conversation_ref(client, job)
+        try:
+            row_ref = conversation_ref(client, job)
+        except ValueError:
+            return None
         row = row_ref.get(transaction=tx).to_dict() or {}
         if not is_debt(row):
             return None
@@ -87,7 +96,7 @@ def release(client, namespace, claim, *, clock=time.time):
     def commit(tx):
         job = ref.get(transaction=tx).to_dict() or {}
         current = job.get('seal_claim') or {}
-        if current.get('token') != claim['token']:
+        if not isinstance(current, dict) or current.get('token') != claim['token']:
             return False
         tx.update(ref, {'seal_claim': {**current, 'expires_at': 0, 'retry_after': clock() + BACKOFF_SECONDS}})
         return True

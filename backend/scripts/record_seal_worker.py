@@ -2,6 +2,9 @@
 """Private dependency output stays suppressed for the CPU seal worker lifetime."""
 
 from pathlib import Path
+import json
+import logging
+import os
 import signal
 import sys
 
@@ -15,13 +18,22 @@ from utils.batch_pipeline.record_seal_cluster_repair import silent_dependencies
 from utils.batch_pipeline.record_seal_worker import run
 
 
+def emit(payload):
+    logger = logging.getLogger('record-seal-worker')
+    record = logger.makeRecord(logger.name, logging.ERROR, '', 0, json.dumps(payload), (), None)
+    logger.handle(record)
+
+
 def main():
     def terminate(*_):
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, terminate)
-    with silent_dependencies():
-        run()
+    # Keep one explicit aggregate output fd while silencing private SDK output.
+    with os.fdopen(os.dup(1), 'w') as output:
+        configure_logging('record-seal-worker', default_format='json', stdout=output, stderr=output)
+        with silent_dependencies():
+            run(emit=emit)
 
 
 if __name__ == '__main__':

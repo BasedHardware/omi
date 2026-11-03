@@ -34,7 +34,7 @@ def test_cpu_placement_ceiling_and_identity():
     assert metric['metric']['name'] == 'omi_record_seal_backlog'
     assert metric['target'] == {'type': 'AverageValue', 'averageValue': '4'}
     env = {e['name']: e.get('value') for e in container['env']}
-    assert env['RECORD_SEAL_WORKER_ENABLED'] == 'true'
+    assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == env['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'true'
 
 
@@ -81,5 +81,11 @@ def test_adapter_freshness_dedup_and_prometheus_scrape_path():
 
 def test_other_stages_never_create_workers():
     for stage in ('dev', 'staging'):
-        docs = documents('--set', f'stage={stage}')
+        result = render(
+            '-f',
+            str(CHART / f'{stage}_omi_batch-pipeline-worker_values.yaml'),
+            namespace='staging' if stage == 'staging' else 'dev-omi-backend',
+        )
+        assert result.returncode == 0, result.stderr
+        docs = {(doc['kind'], doc['metadata']['name']): doc for doc in yaml.safe_load_all(result.stdout) if doc}
         assert ('Deployment', 'record-seal-worker') not in docs

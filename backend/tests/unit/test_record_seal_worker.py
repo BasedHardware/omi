@@ -107,7 +107,6 @@ class Process:
 
 
 def slot(source, monkeypatch, process):
-    monkeypatch.setenv('RECORD_SEAL_WORKER_ENABLED', 'true')
     monkeypatch.setenv('RECORD_SEAL_REPAIR_ENABLED', 'true')
     metrics = worker.Metrics('synthetic-release', 'synthetic-namespace')
     launch = Mock(return_value=process)
@@ -137,13 +136,16 @@ def test_termination_reaps_before_release_and_preserves_audio(source, monkeypatc
 def test_budget_exhaustion_advances_to_other_rows_and_backs_off(source, monkeypatch):
     process = Process()
     instance, metrics = slot(source, monkeypatch, process)
-    source[1].rows[(*JOB_PATH[:-1], 'next')] = {**source[1].rows[JOB_PATH], 'seal_claim': {}}
+    next_path = (*PATH[:-1], 'next')
+    source[1].rows[next_path] = dict(source[1].rows[PATH])
+    source[1].rows[(*JOB_PATH[:-1], 'next')] = {**source[1].rows[JOB_PATH], 'conversation_id': 'next', 'seal_claim': {}}
     instance.pending.extend(['pending', 'next'])
     instance.clock = lambda: 281
     instance.tick()
     assert process.killed
     assert instance.active[2]['job_id'] == 'next'
     assert instance.launch.call_count == 2
+    assert instance.launch.call_args.args == (next_path, 270, 'apply')
     assert b'disposition="budget_exhausted"' in generate_latest(metrics.registry)
     instance.close()
 
@@ -160,7 +162,7 @@ def test_refusals_leave_audio_for_sweeper_with_backoff(source, monkeypatch, disp
 
 
 def test_kill_switch_idles_without_discovery_or_claims(source, monkeypatch):
-    monkeypatch.setenv('RECORD_SEAL_WORKER_ENABLED', 'false')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_ENABLED', 'false')
     instance = worker.Worker(source[1], 'batch_pipeline_dev', worker.Metrics('r', 'n'))
     instance.scanner = Mock()
     monkeypatch.setattr(claims, 'acquire', Mock(side_effect=AssertionError('must idle')))
@@ -171,7 +173,7 @@ def test_kill_switch_idles_without_discovery_or_claims(source, monkeypatch):
 def test_switch_off_during_walk_reaps_and_stops_further_claims(source, monkeypatch):
     process = Process()
     instance, _ = slot(source, monkeypatch, process)
-    monkeypatch.setenv('RECORD_SEAL_WORKER_ENABLED', 'false')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_ENABLED', 'false')
     instance.tick()
     assert process.killed and instance.active is None
 

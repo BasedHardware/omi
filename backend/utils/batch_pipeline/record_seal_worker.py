@@ -15,7 +15,8 @@ from utils.batch_pipeline.record_seal_budget import SweepBudget, BudgetExhausted
 
 
 def enabled():
-    return os.getenv('RECORD_SEAL_WORKER_ENABLED', 'true').strip().lower() == 'true' and config.enabled()
+    # Reuse repair's existing control per Deployment, including in the child.
+    return config.enabled()
 
 
 class Metrics:
@@ -44,6 +45,9 @@ class Metrics:
             'omi_record_seal_attempts', 'Closed-set row dispositions', (*labels, 'disposition'), registry=self.registry
         )
         self.labels = values
+        self.invalid = Counter(
+            'omi_record_seal_invalid_jobs', 'Malformed pending identities skipped', labels, registry=self.registry
+        ).labels(*values)
         # An uninitialized gauge is not a successful empty sample.
         self.backlog.set(float('nan'))
         self.oldest.set(float('nan'))
@@ -80,7 +84,13 @@ class Scanner:
 
     def page(self, *, candidates=True):
         jobs, after = claims.pending_page(self.client, self.namespace, horizon=self.horizon, after=self.after)
-        refs = [claims.conversation_ref(self.client, job) for _, job in jobs]
+        valid = []
+        for job_id, job in jobs:
+            try:
+                valid.append((job_id, job, claims.conversation_ref(self.client, job)))
+            except ValueError:
+                self.metrics.invalid.inc()
+        refs = [ref for _, _, ref in valid]
         rows = (
             {
                 doc.reference.path: doc.to_dict() or {}
@@ -93,8 +103,8 @@ class Scanner:
         selected = []
         # Do not mutate partial-pass counters/frontier until every read succeeds.
         count, oldest = 0, 0
-        for job_id, job in jobs:
-            row = rows.get(claims.conversation_ref(self.client, job).path, {})
+        for job_id, job, ref in valid:
+            row = rows.get(ref.path, {})
             if claims.is_debt(row):
                 count += 1
                 oldest = max(oldest, max(0, now - row['finished_at'].timestamp()))
@@ -180,10 +190,10 @@ class Worker:
                 break
 
 
-def run(*, pause=time.sleep):
+def run(*, pause=time.sleep, emit=lambda _: None):
     from prometheus_client import start_http_server
 
-    metrics = Metrics(os.environ['WORKER_RELEASE'], os.environ['POD_NAMESPACE'])
+    metrics = Metrics(os.environ['BATCH_PIPELINE_WORKER_RELEASE'], os.environ['POD_NAMESPACE'])
     server, thread = start_http_server(8080, registry=metrics.registry)
     worker = None
     try:
@@ -202,6 +212,7 @@ def run(*, pause=time.sleep):
                 # samples retain their old timestamp; the adapter fails closed.
                 if worker:
                     worker.pending.clear()
+                emit({'event': 'record_seal_worker', 'outcome': 'error', 'stage': 'tick' if worker else 'startup'})
                 pause(5)
             pause(0.1)
     finally:

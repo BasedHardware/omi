@@ -77,6 +77,7 @@ def test_chart_kill_switch_removes_job_and_rbac_and_plan_mode_is_explicit():
     assert not any(
         doc and doc['kind'] in {'CronJob', 'Role', 'RoleBinding'} for doc in yaml.safe_load_all(result.stdout)
     )
+    assert not any(doc and doc['metadata']['name'] == 'record-seal-worker' for doc in yaml.safe_load_all(result.stdout))
     result = render('--set', 'recordSealSweeper.mode=plan,recordSealSweeper.runtimeEnabled=false')
     assert result.returncode == 0
     cron = next(
@@ -153,6 +154,13 @@ def test_alert_filters_parse_inner_message_and_never_extract_identifiers():
     assert conditions[1]['conditionThreshold']['thresholdValue'] == 0
     assert conditions[2]['conditionAbsent']['duration'] == '7200s'
     assert all(entry['alignmentPeriod'] == '3600s' for entry in backlog['aggregations'])
+    assert all(
+        entry['alignmentPeriod'] == '3600s'
+        for condition in conditions
+        for config in (condition.get('conditionThreshold') or condition.get('conditionAbsent'),)
+        for entry in config['aggregations']
+    )
+    assert int(policies[0]['alertStrategy']['autoClose'][:-1]) > int(conditions[2]['conditionAbsent']['duration'][:-1])
     bare = policies[1]['conditions'][0]['conditionMatchedLog']['filter']
     for count in (1, 10, 128):
         assert _matches(bare, json.dumps({'event': 'record_seal_sweep', 'bare_token_skips': count}))

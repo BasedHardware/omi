@@ -79,3 +79,10 @@ Rollback in one Helm values change: `recordSealWorker.runtimeEnabled=false` and
 `recordSealRepair.suspend=false`. The new Deployment idles and its old pods reap
 children during replacement; repair resumes at its existing cadence. Never delete
 the cron or its RBAC in the first rollout. The hourly sweeper remains the net.
+The worker reuses `RECORD_SEAL_REPAIR_ENABLED` in its own pod and row child;
+`recordSealWorker.runtimeEnabled` controls that pod independently of the cron's
+`recordSealRepair.runtimeEnabled`. No additional runtime flag or budget exception.
+Malformed job identities advance the discovery cursor and increment
+`omi_record_seal_invalid_jobs_total`; investigate that count through a scoped
+operator query. Startup/tick failures emit only aggregate status, never exceptions
+or provider bodies, while private dependency diagnostics stay suppressed.

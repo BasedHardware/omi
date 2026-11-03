@@ -70,7 +70,7 @@
       }
     ],
     "alertStrategy": {
-      "autoClose": "3600s"
+      "autoClose": "86400s"
     },
     "documentation": {
       "mimeType": "text/markdown",
