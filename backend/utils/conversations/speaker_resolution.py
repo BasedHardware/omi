@@ -13,7 +13,7 @@ from config.batch_conversation_speakers import (
     sync_off_enabled,
 )
 from utils.conversations.speaker_clips import MAX_CLIP_SECONDS, SAMPLE_RATE, verified_clip as _verified_clip
-from utils.conversations.speaker_sync_store import in_sync_store, sync_store_placements
+from utils.conversations.speaker_sync_store import in_store, single_store_placements
 from utils.conversations.speaker_window_cohort import per_window_evidence
 from utils.speakers import processing as speaker_evidence
 
@@ -311,9 +311,9 @@ def _embed_missing(
     embedded = 0
     failures = 0
 
-    def store_only(segment: TranscriptSegment) -> bool:
+    def store_of(segment: TranscriptSegment) -> Optional[str]:
         placement = placements.get(segment.id) if placements and segment.id is not None else None
-        return placement is not None and placement.store is not None
+        return placement.store if placement else None
 
     def wanted(start: float, next_start: Optional[float]) -> bool:
         index = bisect.bisect_left(midpoints, start)
@@ -348,7 +348,7 @@ def _embed_missing(
             last = bisect.bisect_left(midpoints, chunk_end)
             for segment in pending[first:last]:
                 # Chunks here mix stores; these assemble from their own store below.
-                if store_only(segment):
+                if store_of(segment):
                     continue
                 abs_start, abs_end = window_of(segment)
                 begin, end = max(abs_start, chunk_start), min(abs_end, chunk_end)
@@ -378,9 +378,7 @@ def _embed_missing(
                 if time.monotonic() > deadline:
                     return
                 windows: List[Tuple[float, float]] = []
-                clip, reason = _verified_clip(
-                    session, *window_of(segment), windows=windows, sync_store_only=store_only(segment)
-                )
+                clip, reason = _verified_clip(session, *window_of(segment), windows=windows, store=store_of(segment))
                 if clip is None:
                     diagnostics.clip_skips += 1
                     if reason == 'clip_too_short':
@@ -547,7 +545,7 @@ def _verified_read_session(
         extents = []
         refusal = None
         for chunk in chunks:
-            if placement and placement.store and not in_sync_store(chunk):
+            if placement and placement.store and not in_store(chunk, placement.store):
                 continue
             start, upper_end = bounds_by_path[chunk['path']]
             # Unknown Opus durations are deliberately unbounded: never assume
@@ -1232,7 +1230,7 @@ def _resolve(
             placements[segment.id] = place_segment(segment, mapping, index)
         if mapping.get('started_at') is not None:
             placements.update(
-                sync_store_placements(
+                single_store_placements(
                     uid,
                     conversation.id,
                     segments,
