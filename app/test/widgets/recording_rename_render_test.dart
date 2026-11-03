@@ -1,3 +1,5 @@
+import 'package:omi/env/env.dart';
+import '../helpers/recording_speaker_fixtures.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -48,6 +50,7 @@ Future<void> loadFonts() async {
 }
 
 void main() {
+  setUpAll(() => Env.init(RecordingSpeakerFixtureEnv()));
   testWidgets('recording rename renders fixture lines and default scope', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();

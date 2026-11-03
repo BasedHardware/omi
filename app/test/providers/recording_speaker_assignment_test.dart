@@ -102,10 +102,12 @@ void main() {
   test('independent queued edits both persist', () async {
     final first = Completer<bool>();
     final calls = <List<String>>[];
-    final p = ConversationDetailProvider(assignSpeaker: (_, ids, {isUser, personId, speakerId}) {
-      calls.add(ids);
-      return calls.length == 1 ? first.future : Future.value(true);
-    });
+    final p = ConversationDetailProvider(
+        fetchConversation: (_) async => null,
+        assignSpeaker: (_, ids, {isUser, personId, speakerId}) {
+          calls.add(ids);
+          return calls.length == 1 ? first.future : Future.value(true);
+        });
     select(p);
     p.conversation.transcriptSegments.add(line('b'));
     p.beginSpeakerLabelingSession();

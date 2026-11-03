@@ -1,3 +1,5 @@
+import 'package:omi/env/env.dart';
+import '../helpers/recording_speaker_fixtures.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -33,6 +35,7 @@ TranscriptSegment line(String id) => TranscriptSegment(
     end: 2,
     translations: []);
 void main() {
+  setUpAll(() => Env.init(RecordingSpeakerFixtureEnv()));
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
