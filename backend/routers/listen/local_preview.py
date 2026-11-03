@@ -12,13 +12,18 @@ Realtime apps and webhooks degrade for these sessions by ruling (David,
 """
 
 import logging
+import os
 import time
 
 from prometheus_client import Histogram
 
 from config.batch_live_preview import local_preview_batch_owned
 from config.cloud_live_stt import local_preview_batch_enabled
-from utils.metrics import OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL
+from utils.metrics import (
+    OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL,
+    OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
+)
+from utils.observability.fallback import record_fallback
 from utils.observability.reasons import LocalPreviewOutcome, ReasonFamily, reason_label
 from utils.observability.transcription import bounded_client_platform
 from utils.stt.outcomes import bounded_provider
@@ -112,3 +117,53 @@ def note_deferred_stream_closed(receiver) -> None:
         ).observe(max(0.0, time.monotonic() - opened_at))
     except Exception:
         pass  # Telemetry never blocks teardown.
+
+
+# Mirrors LivePreviewReason's failure wire values; arbitrary client input is
+# never a metric label. Unknown/malformed reasons collapse to engine_error.
+ENGINE_UNAVAILABLE_REASONS = frozenset(
+    {
+        'os_too_old',
+        'os_engine_unavailable',
+        'locale_unsupported',
+        'locale_asset_missing',
+        'speech_permission_denied',
+        'bundled_not_installed',
+        'bundled_not_built',
+        'engine_error',
+    }
+)
+
+
+def rescind_local_preview(host, payload) -> bool:
+    """Count once per granted socket and revoke one-way, including lease renewal."""
+    if (
+        not getattr(host.request, 'local_preview', False)
+        or not getattr(host, 'local_preview_batch', False)
+        or getattr(host, '_local_preview_engine_reported', False)
+    ):
+        return False
+    host._local_preview_engine_reported = True
+    raw = payload.get('reason')
+    reason = raw if isinstance(raw, str) and raw in ENGINE_UNAVAILABLE_REASONS else 'engine_error'
+    try:
+        platform = getattr(getattr(host, 'client_device_context', None), 'platform', None)
+        OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL.labels(
+            client_platform=bounded_client_platform(platform),
+            reason=reason,
+        ).inc()
+    except Exception:
+        pass  # Telemetry never interrupts capture.
+    if os.getenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'true').strip().lower() in {'false', '0', 'off', 'no'}:
+        return False
+    host.local_preview_batch = False
+    host.request.local_preview = False
+    host._local_preview_engine_rescinded = True
+    record_fallback(
+        component='stt_live_session',
+        from_mode='local_preview',
+        to_mode='visible_restore',
+        reason='engine_error',
+        outcome='degraded',
+    )
+    return True

@@ -187,6 +187,21 @@ class LocalPreviewAdmission {
   LivePreviewController? preview;
   bool admitted = false;
 
+  /// One-way for this capture. Reconnects must not ask for another engine.
+  bool _engineUnavailableForCapture = false;
+  bool get engineUnavailableForCapture => _engineUnavailableForCapture;
+
+  void refuseEngineForCapture({
+    required void Function() sendControl,
+    required void Function(HeldPendantFrame frame) send,
+  }) {
+    if (engineUnavailableForCapture) return;
+    _engineUnavailableForCapture = true;
+    // Same socket: control must precede every flushed binary frame.
+    sendControl();
+    refuseForSocket(send: send);
+  }
+
   /// This socket is settled as refused (hold timed out or overflowed and its
   /// frames already streamed, or a client gate flipped mid-session): a later
   /// grant on the same socket never admits it.
@@ -284,7 +299,8 @@ class LocalPreviewAdmission {
     // A verdict that arrives after the deadline is the timeout's refusal.
     if (_deadlinePassed()) _latchTimeout(null);
     _cancelDeadline();
-    final effective = granted && socketDeclared && preview != null && !_refusedForSocket;
+    final effective =
+        granted && socketDeclared && preview != null && !_refusedForSocket && !engineUnavailableForCapture;
     _report(effective ? LocalPreviewVerdictOutcome.granted : LocalPreviewVerdictOutcome.refused);
     _verdictPendingSince = null;
     if (effective) {
@@ -354,6 +370,7 @@ class LocalPreviewAdmission {
       }
     }
     admitted = false;
+    _engineUnavailableForCapture = false;
     _verdictPendingSince = null;
     _held.clear();
     preview?.endCapture();

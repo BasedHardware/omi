@@ -1,5 +1,6 @@
 """Mobile local-preview lane: admission, deferred cloud stream, client events."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -23,6 +24,7 @@ from routers.listen.runtime import ListenSessionRuntime
 from utils.metrics import (
     OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
     OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
+    OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL,
 )
 
 KILL = 'LOCAL_PREVIEW_BATCH_ENABLED'
@@ -382,3 +384,58 @@ def test_ready_event_for_deferred_session_names_no_provider():
 def test_local_preview_field_is_absent_for_older_clients():
     payload = MessageServiceStatusEvent(status='mobile_batch_admission', mobile_standard_batch=False).to_json()
     assert 'local_preview' not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('switch', [None, 'true', 'false', ' OFF ', '0', 'no'])
+async def test_engine_unavailable_counts_once_and_rescind_is_sticky(monkeypatch, switch):
+    monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
+    if switch is not None:
+        monkeypatch.setenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', switch)
+    enabled = switch in {None, 'true'}
+    host = make_host()
+    assert admit_local_preview(host)
+    fake = make_receiver(host)
+    attach = Mock()
+    monkeypatch.setattr(receiver_module, 'attach_visible_restore', attach)
+    labels = dict(client_platform='ios', reason='locale_asset_missing')
+    before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
+    event = json.dumps({'type': 'local_preview_engine_unavailable', 'reason': 'locale_asset_missing'})
+    await ListenReceiver._handle_text(fake, event)
+    await ListenReceiver._handle_text(fake, event)
+    assert counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels) == before + 1
+    assert host.local_preview_batch is (not enabled)
+    assert host.request.local_preview is (not enabled)
+    assert attach.call_count == int(enabled)
+    monkeypatch.setenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'true')
+    # Neither policy admission nor repeated lease renewal can undo a rescind.
+    for _ in range(2):
+        assert renew_local_preview(host) is (not enabled)
+        assert admit_local_preview(host) is (not enabled)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('raw', ['unbounded-client-input', None, [], {}])
+async def test_engine_unavailable_reason_and_platform_are_bounded(monkeypatch, raw):
+    monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
+    host = make_host(client_device_context=SimpleNamespace(platform='unbounded-platform'))
+    assert admit_local_preview(host)
+    fake = make_receiver(host)
+    monkeypatch.setattr(receiver_module, 'attach_visible_restore', Mock())
+    labels = dict(client_platform='unknown', reason='engine_error')
+    before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
+    await ListenReceiver._handle_text(fake, json.dumps({'type': 'local_preview_engine_unavailable', 'reason': raw}))
+    assert counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels) == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['a_future_control_kind', 'local_preview_engine_unavailable'])
+async def test_unknown_control_and_ungranted_engine_event_are_noops(monkeypatch, kind):
+    fake = make_receiver(make_host(local_preview=False, local_preview_batch=False))
+    attach = Mock(side_effect=AssertionError('restore attached'))
+    monkeypatch.setattr(receiver_module, 'attach_visible_restore', attach)
+    await ListenReceiver._handle_text(fake, json.dumps({'type': kind, 'reason': 'engine_error'}))
+    assert fake.host.local_preview_batch is False
+    assert fake.host.request.local_preview is False
+    assert not getattr(fake.host, '_local_preview_engine_reported', False)
+    attach.assert_not_called()

@@ -1,6 +1,7 @@
 """Visible-only paid preview never borrows the managed provider fallback chain."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -8,6 +9,8 @@ import pytest
 
 from routers.listen import receiver as receiver_module, visible_restore as restore_module
 from routers.listen.receiver import ListenReceiver
+from routers.listen.local_preview import renew_local_preview
+from config.server_batch import owned
 from utils.observability import demand_cohort
 from utils.stt.streaming import STTService
 
@@ -319,3 +322,84 @@ async def test_without_capture_clock_hidden_audio_still_offsets_new_provider_wor
     h.dial.call_args.args[0]([{'text': 'Synthetic visible words.', 'start': 0.0, 'end': 0.01}])
     words = h.callback.call_args.args[0]
     assert [(word['start'], word['end']) for word in words] == [(1.0, 1.01)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('server_batch_only', [True, False])
+async def test_engine_rescind_routes_only_visible_restore_with_durable_custody(harness, monkeypatch, server_batch_only):
+    h = harness
+    monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
+    h.host.server_batch_only = server_batch_only
+    h.host.request.local_preview = True
+    h.host.local_preview_batch = True
+    h.host._local_preview_pinned = True
+    h.receiver.visible_restore = None
+    h.receiver.cloud_live_suppressed = True
+    h.host.task_supervisor = SimpleNamespace(create_lifetime_task=lambda coro, **kw: coro.close())
+    h.receiver.ensure_live_demand_routing = Mock()
+    legacy = AsyncMock(side_effect=AssertionError('full cloud stream'))
+    monkeypatch.setattr(receiver_module.legacy_recovery, 'flush_stt_buffer', legacy)
+    h.receiver.initialize_stt = AsyncMock(side_effect=AssertionError('full cloud initialization'))
+    await ListenReceiver._handle_text(
+        h.receiver,
+        json.dumps(
+            {
+                'type': 'local_preview_engine_unavailable',
+                'reason': 'os_engine_unavailable',
+            }
+        ),
+    )
+    assert not h.host.request.local_preview
+    assert not renew_local_preview(h.host)
+    assert owned(h.host.batch_record_capture)
+    h.restore = h.receiver.visible_restore
+    assert h.restore is not None
+    h.restore.presence.policy.clock = lambda: h.now[0]
+    h.restore.presence.policy.changed_at = h.now[0]
+    monkeypatch.setattr(h.restore.presence, 'observe', h.restore.presence.policy.observe)
+    try:
+        await flush(h, settle=False)
+        h.dial.assert_not_awaited()
+        observe(h, True)
+        h.now[0] += 14.99
+        await flush(h, settle=False)
+        h.dial.assert_not_awaited()
+        h.now[0] += 0.01
+        await flush(h, settle=False)
+        await h.restore.opening
+        await flush(h, settle=False)
+        h.dial.assert_awaited_once()
+        h.raw.send.assert_called_once()
+        h.dial.call_args.args[0]([{'text': 'Synthetic restored preview'}])
+        h.callback.assert_called_once()
+        # Duplicate control and renewal cannot attach a second transcript source.
+        await ListenReceiver._handle_text(h.receiver, json.dumps({'type': 'local_preview_engine_unavailable'}))
+        assert h.receiver.visible_restore is h.restore
+        assert not renew_local_preview(h.host)
+        legacy.assert_not_awaited()
+        h.receiver.initialize_stt.assert_not_awaited()
+        observe(h, False)
+        h.dial.call_args.args[0]([{'text': 'late text'}])
+        h.callback.assert_called_once()
+    finally:
+        await h.restore.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_rescind_without_durable_owner_never_opens_full_cloud(harness, monkeypatch):
+    h = harness
+    h.host.server_batch_only = False
+    h.host.batch_record_capture = {}  # A declaration/grant is not durable server custody.
+    h.host._local_preview_engine_rescinded = True
+    h.receiver.visible_restore = None
+    h.receiver.cloud_live_suppressed = True
+    h.receiver.initialize_stt = AsyncMock(side_effect=AssertionError('full stream'))
+    assert not owned(h.host.batch_record_capture)
+    restore_module.attach_visible_restore(h.receiver)
+    assert h.receiver.visible_restore is None
+    assert await h.receiver._open_deferred_stream()
+    buffer = bytearray(b'\x00\x01')
+    await ListenReceiver._flush_stt_buffer(h.receiver, buffer)
+    assert not buffer
+    h.receiver.initialize_stt.assert_not_awaited()
+    h.dial.assert_not_awaited()

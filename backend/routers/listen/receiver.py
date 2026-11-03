@@ -25,7 +25,7 @@ from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, supp
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
-from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed
+from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed, rescind_local_preview
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.visible_restore import attach_visible_restore
 from routers.listen.demand_switch import switch_live_demand
@@ -1008,7 +1008,9 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
-        if getattr(self.host, 'server_batch_only', False) is True:
+        if getattr(self.host, 'server_batch_only', False) is True or getattr(
+            self.host, '_local_preview_engine_rescinded', False
+        ):
             return None  # Includes failover, reconnect and idle-reopen callers.
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
@@ -1316,6 +1318,10 @@ class ListenReceiver(ReplayFilterMixin):
             return await ListenReceiver._initialize_stt(self)
 
     async def _initialize_stt(self) -> bool:
+        if getattr(self.host, '_local_preview_engine_rescinded', False):
+            self.cloud_live_suppressed = True
+            attach_visible_restore(self)
+            return True
         self.host.server_batch_only = server_batch_suppresses_live(self.host)
         self.host.server_batch_initialized = True
         if self.host.server_batch_only:
@@ -1504,7 +1510,9 @@ class ListenReceiver(ReplayFilterMixin):
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
 
-        if getattr(self.host, 'server_batch_only', False) is True:
+        if getattr(self.host, 'server_batch_only', False) is True or getattr(
+            self.host, '_local_preview_engine_rescinded', False
+        ):
             restore = getattr(self, 'visible_restore', None)
             if restore is not None:
                 return await restore.open()
@@ -2070,7 +2078,9 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
-        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
+        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True or getattr(
+            getattr(self, 'host', None), '_local_preview_engine_rescinded', False
+        ):
             restore = getattr(self, 'visible_restore', None)
             if restore is not None:
                 await restore.flush(buffer)
@@ -2447,6 +2457,9 @@ class ListenReceiver(ReplayFilterMixin):
                 # Custom STT may run without forwarding raw audio: set the clock origin, not the first-audio funnel.
                 state.first_audio_byte_timestamp = custom_stt_clock_origin(segments, time.time())
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
+        elif kind == 'local_preview_engine_unavailable':
+            if rescind_local_preview(self.host, payload):
+                attach_visible_restore(self)
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':

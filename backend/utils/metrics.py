@@ -1207,6 +1207,12 @@ OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
     ['outcome', 'client_platform'],
 )
 
+OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL = Counter(
+    'omi_listen_local_preview_engine_unavailable_total',
+    'Granted local-preview sockets reporting no usable phone speech engine, by bounded platform and reason',
+    ['client_platform', 'reason'],
+)
+
 OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
     'omi_listen_deferred_stream_opened_total',
     'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',

@@ -211,6 +211,7 @@ class CaptureController extends ChangeNotifier
   void installLivePreview(LivePreviewController preview) {
     if (_captureControllerDisposed) return preview.dispose();
     lifetime.own(_localPreview.install(preview, _deviceAudioListeners, _phoneMicAudioListeners));
+    lifetime.listenTo(preview, _checkLocalPreviewEngine);
   }
 
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
@@ -1823,7 +1824,7 @@ class CaptureController extends ChangeNotifier
     final refusal = allowed
         ? _localPreviewRefusal(codec, customStt: effectiveConfig != null)
         : LocalPreviewClientRefusal.killSwitch;
-    final localPreview = _localPreview.preview != null && refusal == null;
+    final localPreview = _localPreview.preview != null && refusal == null && !_localPreview.engineUnavailableForCapture;
     if (refusal != null) _localPreview.preview?.clientRefused(refusal.wireName, midSession: false);
     _localPreview.language = language;
 
@@ -2348,6 +2349,20 @@ class CaptureController extends ChangeNotifier
     if (refusal == null) return;
     _localPreview.preview?.clientRefused(refusal.wireName, midSession: true);
     _localPreview.refuseForSocket(send: _sendPendantToSocket);
+    _mobileStandardBatch?.dropLocalPreview();
+  }
+
+  void _checkLocalPreviewEngine() {
+    final preview = _localPreview.preview;
+    if (!_localPreview.admitted || preview?.phase != LivePreviewPhase.unavailable) return;
+    final reason = preview!.selected!.reason;
+    _localPreview.refuseEngineForCapture(
+      sendControl: () => _socket?.sendText(jsonEncode({
+        'type': 'local_preview_engine_unavailable',
+        'reason': reason.wireName,
+      })),
+      send: _sendPendantToSocket,
+    );
     _mobileStandardBatch?.dropLocalPreview();
   }
 
