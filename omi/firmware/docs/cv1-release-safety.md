@@ -1,0 +1,133 @@
+# CV1 tested-byte release runbook
+
+CV1's installed MCUboot is overwrite-only and OTA cannot replace it. A signed
+image that boots badly has no automatic runtime rollback. Signing uses randomized
+RSA signatures: rebuilding tested source does not reproduce the tested bytes.
+
+## Build, test, promote
+
+1. Merge the intended source and firmware revision into main. Normally bump
+   `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf`. A `version` override
+   is also supported. The workflow sets both BLE DIS and the app's signed
+   MCUboot header version to that value; packaging verifies the signed header.
+2. Dispatch `firmware_release.yml` **without** `publish` to build QA artifacts.
+   The default OTA zip contains only app image 0. Set `include_network_core=true`
+   only when intentionally testing a paired app/radio update. This changes zip
+   packaging only: MCUboot, partitions, sysbuild layout, `merged.hex` and
+   `merged_CPUNET.hex` are untouched.
+3. Download `cv1-qa-release` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
+   through the stock app. Record the run ID, attempt, asset SHA-256 from
+   `qa-provenance.json`, phone/app version, device identity and health results.
+   Use the separate `cv1-bench-symbols-v<version>` app ELF for debugger symbols
+   (including `curr_tick` when present in that build). Symbols are never released.
+   This workflow verifies provenance, not that someone performed physical QA.
+4. After approval to publish, dispatch from main with `publish=publish` and
+   `qa_run_id=<tested run ID>`. Use the same `version` and network-core opt-in
+   as QA. Example (operator procedure, not an instruction to run now):
+
+   ```bash
+   gh workflow run firmware_release.yml --ref main \
+     -f publish=publish -f qa_run_id=123456789 \
+     -f version=3.0.22 -f changelog='Release notes'
+   ```
+
+   The run must belong to this repository and workflow, have completed
+   successfully as a manual build-only run, and have the exact SHA of the main
+   ref being published. Artifacts bind the run attempt, version, network opt-in
+   and asset checksums. Missing/expired/old-format artifacts fail closed. A
+   rerun invalidates an earlier attempt's receipt: download and test again.
+   Advancing main requires a new QA build at that SHA. No rebuild, signing,
+   repackaging or renaming occurs on publish. Only the tested zip and two factory
+   hex files are attached. Existing tags are refused.
+
+## Rollout plan: new releases start at 1%, and David expands
+
+The workflow writes `rollout_percent:1` and `blocked:false` in the existing
+`KEY_VALUE` release-body block. Inputs can explicitly override either. David
+expands the cohort by editing **that block** (for example 1 → 10 → 50 → 100)
+only after the current cohort's install success, reconnect, firmware identity,
+audio capture and battery checks remain clean. David owns each expansion and
+reviews the first cohort before the next expansion; no automatic expansion is
+scheduled. Keep the prior eligible release published while observing the ramp.
+
+`/v2/firmware/latest` hashes the supplied `device_id` with SHA-256, takes the
+first eight digest bytes as a big-endian integer modulo 100, and admits buckets
+below `rollout_percent`. The hash excludes the release version, so cohorts are
+stable and nested. Selection retains publication order, firmware minimums and
+newer-version checks; an excluded device receives its newest eligible release,
+or the existing 404/no-update response. Missing `rollout_percent` means 100%,
+preserving existing releases. Invalid explicit policies exclude the release.
+
+**Current client limitation:** `app/lib/backend/http/api/device.dart` sends only
+`device_model`, `firmware_revision`, `hardware_revision` and `manufacturer_name`.
+None is a device identifier. This PR does not synthesize one from those fields,
+an account or a random value. The optional backend `device_id` admits identified
+clients; existing unidentified clients are excluded from percentages below 100
+and retain an earlier eligible release. Consequently the default 1% release is
+held from those clients. Device cohort rollout requires a client that sends its
+existing device identifier and qualification of that identifier's stability.
+
+Set `blocked:true` in the same block to stop all new offers, even at 100%.
+The stable and exact-version endpoints also honor the block and exclude partial
+rollouts when no identifier is supplied, preventing alternate discovery paths
+from bypassing the hold. This cannot cancel an in-progress download/install or
+recall a cached/direct asset URL. Release metadata is normally cached for five
+minutes; during GitHub failures the shared helper may serve last-known-good
+metadata for up to a day. Verify fresh responses after any body edit; this is
+an offer kill switch, not immediate device revocation. Restoring `blocked:false`
+resumes only the configured cohort.
+
+## Reserved emergency revert versions
+
+**3.0.90 through 3.0.99 (3.0.9x) are reserved for emergency reverts.** The workflow
+rejects this range unless `emergency_revert=true`, on both QA and publish runs.
+Normal versions must leave that space available; do not consume it for features.
+
+Installed MCUboot refuses downgrades based on the signed image header, not the
+BLE string. Revert by rebuilding and **re-signing the last good source with a
+version higher than the bad installed image**, then testing those new bytes and
+promoting that QA run. Do not re-serve a lower-version zip. In particular older
+retained artifacts used a `0.0.0+0` signed header; their BLE version alone is not
+a sufficient rollback receipt. A revert candidate needs a reviewed source
+commit carrying the last good changes and the higher version; QA and publish
+must still share the exact main SHA. Set `emergency_revert=true` explicitly in
+both dispatches and retain the 1%/David expansion plan or explicitly record the
+reason for overriding it. After a 3.0.9x revert, future releases also need a
+higher signed version (for example 3.1.0). These ten numbers are finite; never
+claim they provide automatic recovery or recover a device that cannot do OTA.
+
+## Packaging evidence and local verification
+
+NCS 2.9.0 [`cmake/sysbuild/zip.cmake`](https://github.com/nrfconnect/sdk-nrf/blob/v2.9.0/cmake/sysbuild/zip.cmake)
+selects `omi.signed.bin` as image 0 and the signed network output as
+`ipc_radio.bin`, image 1. It calls `generate_dfu_zip` in
+[`cmake/fw_zip.cmake`](https://github.com/nrfconnect/sdk-nrf/blob/v2.9.0/cmake/fw_zip.cmake),
+which invokes [`scripts/bootloader/generate_zip.py`](https://github.com/nrfconnect/sdk-nrf/blob/v2.9.0/scripts/bootloader/generate_zip.py)
+to create a format-1 zip and per-file `manifest.json`. `build-cv1.sh` obtains it
+from the unchanged sysbuild. `cv1_release.py` filters the manifest and copies
+image 0 verbatim when staging the QA artifact. It preserves the app entry's
+size, slot, load address and version and all top-level metadata.
+
+The app's `FirmwareMixin.processZipFile` loops over `manifest.files`, creates
+one `mcumgr.Image` per entry and passes the list to `updateManager.update`.
+`Manifest.fromJson` requires explicit image indexes only for multi-image input;
+`ManifestFile.image` accepts `"0"` and defaults a missing index to 0. No second
+image is required by this source path. The locked `mcumgr_flutter` package was
+also inspected with its archive SHA-256 checked against `app/pubspec.lock`: its
+Dart update method serializes the supplied list, and the Android/iOS bridges
+map that list directly into their native manager's list-based start method.
+The retained app image has no image-dependency TLV requiring a paired network
+update. This is source/artifact verification; a real
+single-image BLE install and postboot radio/health checks remain bench gates.
+
+Run offline policy/packaging tests with:
+
+```bash
+python3 -m unittest discover -s omi/firmware/scripts/ci -p 'test_cv1_release.py'
+```
+
+Backend policy tests live in `backend/tests/unit/test_firmware_rollout.py`;
+use the selected-file `BACKEND_UNIT_TEST_FILE_LIST` convention in
+`backend/test.sh`. Route tests and preflight through `omi-heavy run --` on shared
+hosts. No secrets, workflow dispatch, release mutation or device flashing is
+needed for these tests.

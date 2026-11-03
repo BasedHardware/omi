@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cv1-tested-release-contract-tests
+    command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
+    triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-03 CV1 bench finding: rebuilds change randomized signed bytes and the installed overwrite-only loader cannot undo a bad boot; reject untested promotion and unintended radio packaging"
   - id: pcloud-backup-contract-tests
     command: ["bash", "scripts/run-plugin-pcloud-tests.sh"]
     triggers: ["plugins/omi-pcloud-app/**", "plugins/omi-plugin-sdk/**", "backend/utils/plugin_transport.py", "backend/utils/plugin_backup_audio.py", "scripts/run-plugin-pcloud-tests.sh", ".github/checks-manifest.yaml"]

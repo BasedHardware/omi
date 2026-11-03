@@ -1,4 +1,5 @@
 import re
+import hashlib
 from typing import Optional, Tuple, List, Dict
 
 from fastapi import APIRouter, HTTPException
@@ -112,8 +113,36 @@ def _get_release_prefix(device: DeviceModel) -> str:
     return "Friend"
 
 
+def _release_is_eligible(kv: Dict, device_id: Optional[str]) -> bool:
+    """Stable nested cohorts. Missing policy preserves published-release behavior.
+
+    Unidentified clients can receive legacy or 100% releases, never partial cohorts.
+    Invalid explicit policies fail closed so a typo cannot expand a rollout.
+    """
+    blocked = str(kv.get('blocked', 'false')).strip().lower()
+    if blocked != 'false':
+        return False
+    raw_percent = str(kv.get('rollout_percent', '100')).strip()
+    if not re.fullmatch(r'[0-9]+', raw_percent):
+        return False
+    percent = int(raw_percent)
+    if not 0 <= percent <= 100:
+        return False
+    if percent == 100:
+        return True
+    if percent == 0 or not device_id or not device_id.strip():
+        return False
+    # Hash only the identifier, not the release, so expanding the percentage
+    # retains existing members and successive releases share the same cohort.
+    bucket = int.from_bytes(hashlib.sha256(device_id.encode('utf-8')).digest()[:8], 'big') % 100
+    return bucket < percent
+
+
 def _find_candidate_releases(
-    releases: List[Dict], release_prefix: str, current_firmware_tuple: Optional[Tuple[int, ...]] = None
+    releases: List[Dict],
+    release_prefix: str,
+    current_firmware_tuple: Optional[Tuple[int, ...]] = None,
+    device_id: Optional[str] = None,
 ) -> List[Dict]:
     """Filter releases matching the device prefix.
 
@@ -138,6 +167,8 @@ def _find_candidate_releases(
             continue
 
         kv = extract_key_value_pairs(release.get("body"))
+        if not _release_is_eligible(kv, device_id):
+            continue
 
         release_firmware_version_str = kv.get("release_firmware_version")
         if not release_firmware_version_str:
@@ -229,7 +260,13 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
 
 
 @router.get("/v2/firmware/latest", response_model=FirmwareVersionResponse)
-async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
+async def get_latest_version(
+    device_model: str,
+    firmware_revision: str,
+    hardware_revision: str,
+    manufacturer_name: str,
+    device_id: Optional[str] = None,
+):
     device = _get_device_by_model_number(device_model)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -250,7 +287,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
     release_prefix = _get_release_prefix(device)
-    candidates = _find_candidate_releases(releases, release_prefix, current_firmware_tuple)
+    candidates = _find_candidate_releases(releases, release_prefix, current_firmware_tuple, device_id)
 
     if not candidates:
         raise HTTPException(status_code=404, detail="No suitable firmware update found for your device version.")

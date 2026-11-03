@@ -969,7 +969,7 @@
       "runs_on": "ubuntu-latest"
     },
     "firmware_release.yml/build-cv1": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 30,
       "display_name": "Omi CV1 (nRF5340)",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -978,7 +978,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Manual-only frequency forecast remains zero; no added jobs or automatic runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4189,15 +4189,30 @@
     "firmware_release.yml": {
       "name": "Firmware Build & Release (Omi CV1)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual-only CV1 QA and tested-artifact promotion inputs; no automatic trigger, runner or job expansion.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
+            "blocked": {
+              "default": "false",
+              "description": "Kill switch: do not offer this release",
+              "type": "boolean"
+            },
             "changelog": {
               "default": "Bug fixes and improvements",
               "description": "Pipe-separated changelog e.g. \"Fixed audio|Battery improvements\"",
               "required": "false",
               "type": "string"
+            },
+            "emergency_revert": {
+              "default": "false",
+              "description": "Explicitly authorize a reserved 3.0.90-3.0.99 emergency revert version",
+              "type": "boolean"
+            },
+            "include_network_core": {
+              "default": "false",
+              "description": "Explicitly include image 1 in OTA (must match the tested QA run)",
+              "type": "boolean"
             },
             "minimum_app_version": {
               "default": "",
@@ -4228,6 +4243,16 @@
               "description": "Type \"publish\" to create the GitHub Release. Anything else = build-only (artifacts uploaded to the run, no release).",
               "required": "false",
               "type": "string"
+            },
+            "qa_run_id": {
+              "default": "",
+              "description": "Required for publish: successful build-only run of this workflow at the same SHA",
+              "type": "string"
+            },
+            "rollout_percent": {
+              "default": "1",
+              "description": "Initial device cohort percentage; David expands by editing the release body",
+              "type": "number"
             },
             "version": {
               "default": "",

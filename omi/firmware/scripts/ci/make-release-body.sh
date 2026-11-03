@@ -12,6 +12,8 @@
 #   MIN_APP_CODE          minimum_app_version_code (optional)
 #   OTA_STEPS             ota_update_steps, comma-separated (optional)
 #   IS_LEGACY_SECURE_DFU  "True"/"False" to emit the line; blank to omit it
+#   ROLLOUT_PERCENT       optional 0-100 cohort (CV1 workflow supplies 1)
+#   BLOCKED               optional true/false kill switch
 #   HOW_TO_FLASH          optional multiline "How to Flash" section
 #   OUT                   output file path (required)
 #
@@ -58,6 +60,8 @@ set -euo pipefail
   if [ -n "${MIN_APP_CODE:-}" ]; then echo "minimum_app_version_code:$MIN_APP_CODE"; fi
   if [ -n "${OTA_STEPS:-}" ];    then echo "ota_update_steps:$OTA_STEPS"; fi
   if [ -n "${IS_LEGACY_SECURE_DFU:-}" ]; then echo "is_legacy_secure_dfu:$IS_LEGACY_SECURE_DFU"; fi
+  if [ -n "${ROLLOUT_PERCENT:-}" ]; then echo "rollout_percent:$ROLLOUT_PERCENT"; fi
+  if [ -n "${BLOCKED:-}" ]; then echo "blocked:$BLOCKED"; fi
   echo "changelog:${CHANGELOG:-Bug fixes and improvements}"
   echo "KEY_VALUE_END -->"
 } > "$OUT"

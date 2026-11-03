@@ -6,9 +6,10 @@ Component guide for `omi/firmware/`. General engineering rules: root `AGENTS.md`
 
 Firmware releases are manual via `.github/workflows/firmware_release.yml`:
 
-1. Bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf` first.
-2. `gh workflow run firmware_release.yml -f publish=publish -f changelog="..." -f minimum_app_version_code=...` (omit `publish` for a build-only QA run).
-3. The workflow builds via Docker (NCS 2.9.0 sysbuild + MCUboot), names the OTA asset `Omi_CV1_OTA_v<ver>.zip` (the "ota" substring is required), and publishes a `Omi_CV1_v<ver>` GitHub Release with the `KEY_VALUE` body that `backend/routers/firmware.py` serves.
+Follow [the CV1 release runbook](docs/cv1-release-safety.md): build-only QA first,
+then promote that run's exact artifacts with `qa_run_id` from the same main SHA.
+New releases start at 1%; David expands by editing the release body. Versions
+3.0.90–3.0.99 require the explicit emergency-revert input.
 
 Build logic lives in `omi/firmware/scripts/ci/`.
 
