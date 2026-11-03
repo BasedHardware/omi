@@ -37,9 +37,16 @@ from database.batch_pipeline_privacy import (
 )
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold, is_queue_dispositioned
+from database.batch_pipeline_store import (
+    ADMISSIBLE_READY_SCAN_LIMIT,
+    OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    is_admissible_ready,
+    is_policy_hold,
+    is_queue_dispositioned,
+)
 
-# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: keep the model import-light).
+# Mirrors the recovery protocol's state names without binding to its enum.
+# The shared queue predicate import creates no Firestore client.
 PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
@@ -242,8 +249,6 @@ class SimStore:
 
     def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
         """Mirrors database.batch_pipeline_store.oldest_admissible_ready."""
-        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
-
         rows = sorted(
             (row['enqueued_at'], segment_id, row)
             for segment_id in self._by_state.get('ready', ())

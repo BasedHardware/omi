@@ -242,9 +242,15 @@ FIFO prefix. Dispositioned queue states (`dead`, `quarantined`, `committed`,
 `privacy_blocked`) are excluded; completed terminal markers on `result_ready`
 still owe a commit. A full exempt prefix with a sentinel reports NaN and
 **BLIND**, rather than inventing a late commitment from a policy hold. A
-separate NaN count prevents another finite priority from masking blindness.
+separate NaN count for both oldest and retry clocks prevents another finite
+priority from masking blindness. A fresh, finite over-30-minute age in another
+priority remains TRIP with `metrics_blind=true`; only stale evidence suppresses
+that known breach.
 The page-tier Grafana rules in `../monitoring/alerts/batch-queue-safety.json`
-cover a fresh commitment older than two hours and sustained queue blindness;
+cover a fresh commitment older than two hours and sustained queue blindness
+(120s stale plus 5m pending, matching the observer's freshness bound).
+The single delivery-lateness rule combines both sources with independent
+freshness gates, avoiding a duplicate queue lateness page;
 the lead must import them. See the [runbook](../../docs/runbooks/batch-queue-safety.md).
 It still includes legitimate deep
 queues; it cannot identify new

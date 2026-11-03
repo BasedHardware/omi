@@ -28,7 +28,6 @@ def test_batch_delivery_and_queue_safety_rules_use_the_existing_import_and_live_
         'omi-batch-unit-unpublished-2h',
         'omi-batch-timeliness-sample-stale',
         'omi-batch-timeliness-scan-blind',
-        'omi-batch-queue-uncommitted-2h',
         'omi-batch-queue-safety-blind',
     }
     imported = verifier.load_live_stt_import_rules(production=True)

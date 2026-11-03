@@ -352,7 +352,7 @@ def test_rules_page_on_new_delivery_breach_and_keep_diagnostics_agent_tier():
     exprs = [q['model'].get('expr') or q['model'].get('expression') for q in alarm['data']]
     assert 'leg=~"uncommitted|quarantined|assignment_held|projection"' in exprs[0]
     assert 'quarantine_held_rows' not in exprs[0] and 'backlog' not in ' '.join(exprs)
-    assert '$A > 7200 && $B < 900' in exprs
+    assert '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)' in exprs
     assert rules['omi-batch-timeliness-sample-stale']['noDataState'] == 'Alerting'
     blind = rules['omi-batch-timeliness-scan-blind']
     assert 'omi_batch_timeliness_scan_truncated' in blind['data'][0]['model']['expr']

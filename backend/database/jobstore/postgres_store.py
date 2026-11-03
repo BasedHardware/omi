@@ -37,13 +37,20 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
-from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold, is_queue_dispositioned
+from database.batch_pipeline_store import (
+    ADMISSIBLE_READY_SCAN_LIMIT,
+    OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    is_admissible_ready,
+    is_policy_hold,
+    is_queue_dispositioned,
+)
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 
 import database.jobstore.codec as codec
 from database.jobstore.connection import Pool
 
-# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: that module pulls in Firestore).
+# Mirrors the recovery protocol's state names without binding to its enum.
+# Shared queue predicates above already load Firestore types, but create no client.
 PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
@@ -290,8 +297,6 @@ class PostgresStore:
 
     def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
         """A bounded ready prefix walked past holds and deferred rows, as on Firestore."""
-        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
-
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND state = 'ready' "

@@ -31,7 +31,22 @@ rollback target or evidence that six workers have the same cost or capacity.
 Recheck Ready on-demand capacity before any later roll; do not scale down to
 the earlier baseline as part of an observability rollback.
 
+Current operator checklist:
+
+1. Before a worker roll, confirm HPA min 6 / max 12 and at least 6 Ready on-demand
+   L4 nodes. A later change needs a new lead decision and a fresh capacity read.
+2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 6 together, with
+   `maxReplicas` 12. Let Helm preserve the live replica count; never force it to
+   the baseline during an outage.
+3. Use the current chart's scale-in policy. The older sizing, prices,
+   recommendations and scale-in procedures below are dated evidence only.
+
 ### Earlier four-worker sizing (2026-11-01)
+
+**Historical evidence only: every value and procedural recommendation in this
+subsection is superseded by the current checklist above. Do not execute these
+older rollout, floor-change or scale-in instructions. This historical subsection
+ends at `provider-stt queue`.**
 
 David's requirement (11-01): keep GPUs even when a vendor is cheaper, because
 Modulate has outages. Modulate had six hard or degraded events in six weeks;
@@ -176,7 +191,7 @@ paid-intent violations and no `failed_held` with a vendor cause:
 | All vendors down | only `vendor_held` and the GPU ring; nothing terminal |
 | Recovery | half-open probe, close, auto-redrive drains holds at the queue rate |
 | Late result after failover | merges once; the late token settles as superseded |
-| L4 stockout (no scale-up) | floor of 4 keeps serving; HPA does not hammer scale-up |
+| L4 stockout (no scale-up) | configured standing floor keeps serving; HPA does not hammer scale-up |
 
 **Prod drill (step 2, 1% cohort, lead-run, low peak).** Force the Modulate
 breaker open for the cohort through slice C's thresholds config, hold for 30
@@ -226,8 +241,8 @@ through the HPA. `vendor_held` units that reroute to the ring do.
 Follows vendorscope-ops section 5. Each step is one write to roll back.
 
 0. Preconditions: #24222 queues live; slices A–D merged dormant; F1, F2 and
-   F3 adopted (above); staging drill table green; staging ladder receipt; floor 4
-   live with at least 4 Ready OD nodes.
+   F3 adopted (above); staging drill table green; staging ladder receipt; current
+   floor 6 live with at least 6 Ready OD nodes, HPA max 12.
 1. Shadow at the current batch percent: decisions counted, routing unchanged.
 2. 1% vendor routing with floor share on, plus the prod drill.
 3. 5% → 25% in lockstep with the batch and draining-cohort steps (vendor

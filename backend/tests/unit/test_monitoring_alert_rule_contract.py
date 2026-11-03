@@ -96,13 +96,28 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
 
 def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_page():
     for export_name, rules in _all_rule_exports().items():
-        late = rules['omi-batch-queue-uncommitted-2h']
-        assert late['data'][2]['model']['expression'] == '$A > 7200 && $B < 120', export_name
-        assert 'namespace="prod-omi-backend"' in late['data'][0]['model']['expr']
+        assert 'omi-batch-queue-uncommitted-2h' not in rules
+        late = rules['omi-batch-unit-unpublished-2h']
+        nodes = {node['refId']: node for node in late['data']}
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        selector = '{namespace="prod-omi-backend"}'
+        assert nodes['A']['model']['expr'] == (
+            'max(omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+        )
+        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
+        assert (
+            nodes['F']['model']['expr']
+            == f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) or vector(1e9)'
+        )
         blind = rules['omi-batch-queue-safety-blind']
         expr = blind['data'][0]['model']['expr']
-        assert ' != ' in expr and 'count(' in expr
-        assert '>= bool 900' in expr and 'or vector(1)' in expr
+        assert expr == (
+            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
+            f' + (count(omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector}) or vector(0))'
+            f' + (count(omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector}) or vector(0))'
+        )
         for rule in (late, blind):
             assert rule['for'] == '5m'
             assert rule['labels']['tier'] == 'page'

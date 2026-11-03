@@ -519,27 +519,69 @@ def test_ready_and_scheduling():
 @pytest.mark.parametrize('age', [1799, 1800, 1801])
 def test_batch_stuck_proxy_and_missing_projection_is_explicit(age):
     reading = guard.evaluate_batch(
-        {'age_incomplete': 0, 'oldest_age': age, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0}
+        {'age_incomplete': 0, 'retry_incomplete': 0, 'oldest_age': age, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0}
     )
     assert reading['verdict'] == ('TRIP' if age > 1800 else 'PARTIAL')
     assert 'new_projection_obligations_unavailable' in reading['unknown']
     assert guard.evaluate_batch({})['verdict'] == 'BLIND'
     assert (
         guard.evaluate_batch(
-            {'age_incomplete': 0, 'oldest_age': 9999, 'retry_age': 0, 'freshness': 121, 'scrape_age': 0}
+            {
+                'age_incomplete': 0,
+                'retry_incomplete': 0,
+                'oldest_age': 9999,
+                'retry_age': 0,
+                'freshness': 121,
+                'scrape_age': 0,
+            }
         )['verdict']
         == 'BLIND'
     )
 
 
-def test_saturated_priority_is_blind_even_when_another_priority_has_finite_age():
-    reading = guard.evaluate_batch(
-        {'oldest_age': 0, 'age_incomplete': 1, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0}
-    )
+@pytest.mark.parametrize(
+    'signal,metric',
+    [
+        ('age_incomplete', 'omi_batch_pipeline_oldest_age_seconds'),
+        ('retry_incomplete', 'omi_batch_pipeline_retry_age_seconds'),
+    ],
+)
+def test_saturated_priority_is_blind_even_when_another_priority_has_finite_age(signal, metric):
+    values = {
+        'oldest_age': 0,
+        'age_incomplete': 0,
+        'retry_incomplete': 0,
+        'retry_age': 0,
+        'freshness': 0,
+        'scrape_age': 0,
+    }
+    values[signal] = 1
+    reading = guard.evaluate_batch(values)
     assert reading['verdict'] == 'BLIND'
     assert reading['metrics_blind']
     assert not reading['trips']
-    assert 'count(' in guard.batch_queries('synthetic')['age_incomplete']
+    selector = '{namespace="synthetic"}'
+    assert guard.batch_queries('synthetic')[signal] == (
+        f'(count({metric}{selector} != {metric}{selector}) or vector(0))'
+    )
+
+
+@pytest.mark.parametrize('signal', ['age_incomplete', 'retry_incomplete'])
+@pytest.mark.parametrize('freshness,verdict', [(0, 'TRIP'), (121, 'BLIND')])
+def test_incomplete_priority_preserves_a_known_fresh_breach(signal, freshness, verdict):
+    values = {
+        'oldest_age': 1801,
+        'age_incomplete': 0,
+        'retry_incomplete': 0,
+        'retry_age': 0,
+        'freshness': freshness,
+        'scrape_age': 0,
+    }
+    values[signal] = 1
+    reading = guard.evaluate_batch(values)
+    assert reading['verdict'] == verdict
+    assert reading['metrics_blind']
+    assert reading['trips'] == (['uncommitted_job_age_over_30m'] if verdict == 'TRIP' else [])
 
 
 class FakeClient:
@@ -558,7 +600,14 @@ class FakeClient:
         return (
             self.signals
             if 'first_p95' in expr
-            else {'age_incomplete': 0, 'oldest_age': 0, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0}
+            else {
+                'age_incomplete': 0,
+                'retry_incomplete': 0,
+                'oldest_age': 0,
+                'retry_age': 0,
+                'freshness': 0,
+                'scrape_age': 0,
+            }
         )
 
     def kube(self, path, patch=None):
@@ -760,7 +809,14 @@ def test_batch_safety_trips_are_isolated_evidence_not_job_failures(caplog):
     def sample(expr):
         if 'first_p95' in expr:
             return client.signals
-        return {'age_incomplete': 0, 'oldest_age': 94643.0, 'retry_age': 0.0, 'freshness': 0.0, 'scrape_age': 0.0}
+        return {
+            'age_incomplete': 0,
+            'retry_incomplete': 0,
+            'oldest_age': 94643.0,
+            'retry_age': 0.0,
+            'freshness': 0.0,
+            'scrape_age': 0.0,
+        }
 
     client.sample = sample
     assert guard.run(client, False, 0) == 0  # parakeet WARMUP/clean; batch TRIP isolated

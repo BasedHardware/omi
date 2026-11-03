@@ -48,7 +48,6 @@
     "omi-batch-unit-unpublished-2h",
     "omi-batch-timeliness-sample-stale",
     "omi-batch-timeliness-scan-blind",
-    "omi-batch-queue-uncommitted-2h",
     "omi-batch-queue-safety-blind"
   ]
 }

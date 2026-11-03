@@ -63,17 +63,20 @@ live in `../alerts/batch-timeliness.json`, in the combined export and the existi
 set. Gate changes trigger the existing metrics-egress workflow; no workflow change is needed. A committed
 definition is not evidence that production Grafana has imported it.
 
-1. Deploy a batch worker image that contains this change.
+1. Deploy the batch worker image and queue-age guard chart containing this fix **before** importing any
+   queue-safety pages. Keep the audited worker min 6 / max 12 bounds.
 2. Confirm in Prometheus that `max(omi_batch_timeliness_observed_at_seconds) > 0` and that
    `omi_batch_timeliness_samples_total{outcome="ok"}` increases.
 3. Run the monitoring contracts. Dispatch the existing metrics-egress workflow for production at the reviewed
    main SHA, or use the documented Grafana provisioning path (`--apply --backup-file <new-file>`).
 4. Read back every gated UID, its definition, unpaused state and receiver; distinguish import proof from actual
-   notification-delivery proof. Deploy the queue-age worker/guard fix before importing its queue-specific pages.
+   notification-delivery proof.
 
 `omi-batch-unit-unpublished-2h` is page tier with human audience and no agent mute interval: it uses the existing
 Telegram receiver. The stale and truncated-scan diagnostics remain agent tier. The independent queue-safety blind
-rule is page tier. No contact point, secret or notification-policy tree is changed.
+rule is page tier. The single lateness rule combines the new-cohort delivery legs with all-epoch active
+compute commitments. Each source has its own freshness gate; no separate queue lateness UID duplicates it.
+No contact point, secret or notification-policy tree is changed.
 
 Rollback: set `BATCH_TIMELINESS_ALARM_ENABLED=false` on the worker (gauges freeze and the stale rule fires), or pause
 the three Grafana rules. The index step: merge triggers the Firestore index reconcile; approve its prod job and wait

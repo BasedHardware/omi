@@ -1,9 +1,13 @@
 # Batch queue safety: late work and incomplete scans
 
 The queue guard targets 30-minute commitment age. Grafana's
-`omi-batch-queue-uncommitted-2h` rule sends a human Telegram alert when a fresh
-queue sample contains a compute commitment older than two hours for five
-minutes. It covers all admission epochs. Import the committed Grafana rules
+`omi-batch-unit-unpublished-2h` rule is the single human lateness page. It fires
+when either a fresh queue sample contains an all-epoch compute commitment older
+than two hours or a fresh timeliness sample measures a new-cohort delivery breach,
+for five minutes. Each source has its own freshness gate, so a stale source cannot
+silence positively measured late work from the other. There is no second queue
+lateness UID to duplicate the same incident.
+Import the committed Grafana rules
 through the monitoring runbook; a merged JSON file is not a live alert.
 
 `oldest()` and `oldest_retry()` skip deliberate policy holds and rows in
@@ -13,23 +17,30 @@ exempt `result_ready`: its ordered commit is still owed. Unknown states remain
 measured. The broader timeliness alarm separately covers quarantine, assignment
 holds and projection; this queue proxy does not prove delivery to the user.
 That delivery rule is promoted into the existing Grafana import gate with a human
-page tier; its diagnostic companions remain agent tier. The lead must dispatch
+page tier; its diagnostic companions remain agent tier. Historical `dead` rows
+are outside those timeliness legs: exclusion from the compute proxy is not a
+claim that their retained recovery debt has an age alarm. The rollout lead must
+census and track any such debt separately through the legacy recovery path.
+The lead must dispatch
 the production import and verify live definitions after deploying this fix.
 
 A bounded scan reads at most 501 documents. If the first 500 are all exempt and
 a sentinel remains, it exports NaN, meaning unknown age. It must neither invent
 late work from a hold's enqueue time nor publish a healthy zero. Prometheus
 `max` can ignore NaNs beside finite priorities, so the guard separately counts
-`age != age` and reports BLIND. The page-tier
+`age != age` for both oldest and retry clocks and reports BLIND. A fresh finite
+over-30-minute observation in another priority still reports TRIP, with
+`metrics_blind=true`; incomplete coverage never erases positively measured late work.
+The page-tier
 `omi-batch-queue-safety-blind` rule alerts after five minutes of scan blindness
-or absent observations, or after queue freshness is stale for fifteen minutes
+or absent observations, or after queue freshness is stale for two minutes
 plus five minutes pending. Capacity and timeliness sampling continue independently.
 
 ## Triage without weakening custody
 
 Use `ro-prod` and metadata aggregates. Count states and bounded reason codes;
 never read user content, print owners, or delete source audio. Read the guard's
-`batch_safety` log and compare age, `age_incomplete`, and freshness. An allowance
+`batch_safety` log and compare age, `age_incomplete`, `retry_incomplete`, and freshness. An allowance
 hold is an admission decision, not poisoned audio. Let its normal authorized
 re-evaluation proceed; never waive allowance or redrive it to silence a metric.
 

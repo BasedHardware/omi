@@ -466,10 +466,10 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
     return [doc.id for doc in docs]
 
 
-# Bounded FIFO prefix the uncommitted-age proxy walks past policy holds. A
-# hold population that fills the entire prefix fails the proxy toward tripping
-# on the oldest hold's age (an unmeasured commitment may sit beyond the bound);
-# retiring the holds themselves stays with the custody track.
+# Bounded FIFO prefix walked past policy holds and dispositioned rows. An
+# exempt prefix with a sentinel exports NaN: an unmeasured commitment may sit
+# beyond the bound. The observer and pager report that incomplete scan as
+# blindness; retiring holds themselves stays with the custody track.
 OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
 
 
