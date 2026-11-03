@@ -6,11 +6,16 @@
 #define ATOMIC_INIT(v) (v)
 typedef int atomic_t;
 #define ARG_UNUSED(x) (void) (x)
-#define K_FOREVER 0
+typedef struct {
+    int ticks;
+} k_timeout_t;
+#define K_FOREVER ((k_timeout_t){-1})
+#define SYS_FOREVER_MS (-1)
 #define LOG_INF(...)
 #define K_SEM_DEFINE(name, initial, limit) static int name = initial
 #define K_THREAD_DEFINE(name, stack, fn, p1, p2, p3, priority, options, delay)                                         \
-    static void (*name)(void *, void *, void *) = fn
+    static void (*name)(void *, void *, void *) = fn;                                                                  \
+    static const bool name##_starts_suspended = (delay == SYS_FOREVER_MS)
 static jmp_buf finished;
 static unsigned gives, delays, shutdowns;
 static int atomic_get(int *v)
@@ -29,9 +34,9 @@ static void k_sem_give(int *s)
     *s = 1;
     gives++;
 }
-static void k_sem_take(int *s, int t)
+static void k_sem_take(int *s, k_timeout_t t)
 {
-    (void) t;
+    assert(t.ticks == -1);
     if (!*s)
         longjmp(finished, 1);
     *s = 0;
@@ -48,6 +53,7 @@ static void turnoff_all(void)
 #include "power_off.inc"
 int main(void)
 {
+    assert(power_off_thread_starts_suspended);
     assert(!power_control_off_pending());
     assert(power_control_schedule_off() == 0);
     assert(power_control_schedule_off() == 0 && gives == 1 && shutdowns == 0);

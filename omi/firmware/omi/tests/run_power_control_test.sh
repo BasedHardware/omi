@@ -16,6 +16,10 @@ assert source.count(start) == source.count(end) == 1
 Path(sys.argv[2]).write_text(source[source.index(start):source.index(end)])
 # Protect the allocated UUID, charging attribute order, and privacy on disconnect.
 assert 'BT_UUID_128_ENCODE(0x19B10016,' in source
+normal = source[source.index('int transport_start()'):]
+assert normal.index('k_thread_start(power_off_thread);') < normal.index('bt_enable(NULL)')
+safe = source[source.index('int transport_start_safe(void)'):source.index('// periodic advertising')]
+assert 'k_thread_start(' not in safe
 attrs = source[source.index('static struct bt_gatt_attr settings_service_attr[]'):]
 attrs = attrs[:attrs.index('\n};')]
 assert attrs.index('&settings_mute_characteristic_uuid.uuid') < attrs.index('&settings_power_control_characteristic_uuid.uuid')

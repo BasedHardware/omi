@@ -195,7 +195,8 @@ static void power_off_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
-K_THREAD_DEFINE(power_off_thread, 2048, power_off_thread_fn, NULL, NULL, NULL, 5, 0, 0);
+/* Recovery must not start a backlog application worker before mode selection. */
+K_THREAD_DEFINE(power_off_thread, 2048, power_off_thread_fn, NULL, NULL, NULL, 5, 0, SYS_FOREVER_MS);
 /* End BLE power-off worker. */
 
 //
@@ -1897,6 +1898,8 @@ int transport_start_safe(void)
 int transport_start()
 {
     int err = 0;
+
+    k_thread_start(power_off_thread);
 
     // Pull the nfsw control high
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
