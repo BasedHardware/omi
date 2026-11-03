@@ -610,9 +610,9 @@ def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():
     commitment = {'merge_pending': True, 'enqueued_at': 2.0}
     assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0}), Doc(commitment)]), 'omi', 1) == 2.0
     assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0})]), 'omi', 1) is None
-    # The #23638 truncation sentinel still fails toward tripping on the oldest
-    # hold when marker-only holds fill the scan bound.
+    # Marker-only holds have the same incomplete-scan contract as current
+    # allowance decisions: never fabricate late work or report a fresh zero.
     truncated = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)]
-    assert oldest(Client(truncated), 'omi', 1) == 0.0
+    assert math.isnan(oldest(Client(truncated), 'omi', 1))
     exact = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
     assert oldest(Client(exact), 'omi', 1) is None
