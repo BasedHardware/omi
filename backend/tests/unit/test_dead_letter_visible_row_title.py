@@ -132,7 +132,9 @@ def _conversation(extra: dict | None = None, *, child_photos: list[dict] | None 
     )
 
 
-def _dead_letter(conversation: _Ref, failure_code: str = 'final_attempt_failed', *, time_zone=None) -> dict:
+def _dead_letter(
+    conversation: _Ref, failure_code: str = 'final_attempt_failed', *, time_zone=None, outcome_box=None
+) -> dict:
     transaction = _Transaction()
     zone_calls: list[str] = []
 
@@ -151,6 +153,7 @@ def _dead_letter(conversation: _Ref, failure_code: str = 'final_attempt_failed',
         None,
         failure_code,
         zone_for,
+        outcome_box,
     )
     conversation_writes = [patch for ref, patch in transaction.updates if ref is conversation]
     assert len(conversation_writes) == 1
@@ -178,8 +181,9 @@ def test_transient_failure_with_transcript_is_titled_and_retryable(failure_code)
     conversation = _conversation(
         {'transcript_segments': _segments('', 'We picked the venue for Friday. Then lunch.', 'More talk.')}
     )
+    outcome_box: dict[str, bool] = {}
 
-    patch = _dead_letter(conversation, failure_code)
+    patch = _dead_letter(conversation, failure_code, outcome_box=outcome_box)
 
     assert patch['status'] == 'completed'
     assert patch['discarded'] is False
@@ -187,16 +191,19 @@ def test_transient_failure_with_transcript_is_titled_and_retryable(failure_code)
     # Only the title changes; the rest of the stored structured map survives.
     assert patch['structured'] == {'title': 'We picked the venue for Friday.', 'overview': '', 'category': 'other'}
     assert patch['summary_retryable'] is True
+    assert outcome_box['visible_without_summary'] is True
     assert patch['_zone_calls'] == []  # a transcript title needs no zone lookup
 
 
 def test_model_found_nothing_to_summarize_gets_a_title_but_no_retry_state():
     conversation = _conversation({'transcript_segments': _segments('Okay so the plan is fine.')})
+    outcome_box: dict[str, bool] = {}
 
-    patch = _dead_letter(conversation, 'recovery_structure_unavailable')
+    patch = _dead_letter(conversation, 'recovery_structure_unavailable', outcome_box=outcome_box)
 
     assert patch['structured']['title'] == 'Okay so the plan is fine.'
     assert 'summary_retryable' not in patch
+    assert outcome_box['visible_without_summary'] is False
 
 
 def test_missing_structured_is_created_with_the_deterministic_title():
