@@ -135,10 +135,10 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'worker_release': 'synthetic-worker',
         'namespace': 'synthetic',
     }
-    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '40'}
+    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
     assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
     assert chain['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'}
-    assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.6'}
+    assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
 
 
 def test_enabled_chart_refuses_unpinned_image_and_unsampled_scale_to_zero():
@@ -331,13 +331,12 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         # by namespace alone; requiring worker_release would match zero series.
         assert chain_labels == {'namespace': 'synthetic'}
         assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
-        # Superseded balanced shape, exercised only as non-prod machinery.
         # Both pool deployments export the same worker_release and one
         # namespace's chain metric covers the whole fleet, so both targets
         # double: each pool HPA buys half of either demand instead of buying
         # it twice.
-        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '80'}
-        assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1.2'}
+        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '64'}
+        assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
         == 'synthetic-worker-spot'
