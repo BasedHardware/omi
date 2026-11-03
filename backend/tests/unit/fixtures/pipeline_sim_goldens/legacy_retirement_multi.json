@@ -286,7 +286,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -389,7 +389,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -492,7 +492,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -595,7 +595,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",
@@ -698,7 +698,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m quarantined recovery:running",

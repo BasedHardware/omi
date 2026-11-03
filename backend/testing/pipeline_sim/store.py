@@ -272,25 +272,32 @@ class SimStore:
         return True
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        from config.batch_pipeline import control_candidate_fanout
+
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         prefix = f'p{priority}_'
-        best = None
-        for key in self._controls:
-            if key in exclude:
-                continue
-            row = self.rows[('control', key)]
-            if not row.get(prefix + 'active'):
-                continue
-            service = row.get(prefix + 'service')
-            available = row.get(prefix + pool + '_available_at')
-            if service is None or available is None or service < 0 or available > now:
-                continue
-            rank = hashlib.sha256(f'{worker_id}:{key}'.encode()).digest() if worker_id else available
-            candidate = (service, rank, key)
-            if best is None or candidate < best:
-                best = candidate
-        return best[2] if best else None
+        rows = [(self.rows['control', key], key) for key in self._controls]
+        rows = [
+            (row, key)
+            for row, key in rows
+            if row.get(prefix + 'active')
+            and row.get(prefix + 'service', -1) >= 0
+            and row.get(prefix + pool + '_available_at', float('inf')) <= now
+        ]
+        rows.sort(key=lambda v: (v[0][prefix + 'service'], v[0][prefix + pool + '_available_at'], v[1]))
+        rows = rows[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            rows.sort(key=lambda v: (v[0][prefix + 'service'], hashlib.sha256(f'{worker_id}:{v[1]}'.encode()).digest()))
+        return [key for _, key in rows]
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
@@ -460,7 +467,10 @@ class SimStore:
         key = hash_owner(owner_id)
         removed = 0
         touched: list[tuple[str, str]] = []  # production purge re-copies these to the A2 shadow after commit
-        for (table, segment_id), job in sorted(self.rows.items()):
+        for table, segment_id in sorted(self.rows):
+            # Earlier deletions may repair this row's next pointer. Production
+            # _delete_job re-reads its snapshot inside each transaction too.
+            job = self.rows.get((table, segment_id), {})
             if table != 'jobs' or job.get('owner_key') != key:
                 continue
             binding = job.get('projection_binding') or {}

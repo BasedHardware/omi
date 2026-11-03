@@ -33,6 +33,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
     store = MemoryStore()
     for i in range(10):
         store.rows['jobs', str(i)] = {
+            'owner_id': f'synthetic-{i}',
             'state': 'record_pending',
             'available_at': 0,
             'partial_coordinator': i == 0,
@@ -90,6 +91,7 @@ async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
     store = MemoryStore()
     for segment in ('first', 'second', 'third'):
         store.rows['jobs', segment] = {
+            'owner_id': f'synthetic-{segment}',
             'segment_id': segment,
             'state': 'record_pending',
             'available_at': 0,
@@ -112,8 +114,8 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '2')
     monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse() if reverse else None)
     store = MemoryStore()
-    store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
-    store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'bad'] = {'owner_id': 'synthetic-bad', 'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'slow'] = {'owner_id': 'synthetic-slow', 'state': 'record_pending', 'available_at': 0}
     original_run = store.run
     slow, release = asyncio.Event(), asyncio.Event()
 
@@ -199,7 +201,7 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
     store = MemoryStore()
     for i in range(count):
-        store.rows['jobs', str(i)] = {'state': 'record_pending', 'available_at': 0}
+        store.rows['jobs', str(i)] = {'owner_id': f'synthetic-{i}', 'state': 'record_pending', 'available_at': 0}
     calls = []
     original_due = store.due
 
@@ -225,6 +227,7 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
 
     store = MemoryStore()
     store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
         'state': 'record_pending',
         'available_at': 0,
         'partial_coordinator': partial_complete,
@@ -260,6 +263,7 @@ async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_r
     store = MemoryStore()
     for i in range(2):
         store.rows['jobs', str(i)] = {
+            'owner_id': f'synthetic-{i}',
             'segment_id': str(i),
             'state': 'record_pending',
             'available_at': 0,
