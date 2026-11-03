@@ -242,7 +242,7 @@ def test_1995_capture_is_admitted_with_closed_metric_and_content_free_log(tmp_pa
 
 
 def test_early_clock_uses_paced_recovery_without_expiring_bogus_age():
-    now = 1800000000
+    now = int(datetime.now(timezone.utc).timestamp())
     decision = lanes.classify_sync_lane([EARLY_NAME], client_device_id='pendant', now=now)
     assert decision.lane is lanes.SyncLane.BACKFILL
     assert decision.trust is lanes.CaptureTimeTrust.UNTRUSTED
