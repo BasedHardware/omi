@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 
 /// Reports the visible Home row count. The server keeps the daily peak.
 /// Identical counts inside a minute are dropped so a rebuild storm does not post.
+/// A failed report is dropped. It never invents a row count.
 class HomeRowsHealth {
   static void Function(int rowCount) report = _post;
   static int? _lastCount;
@@ -35,13 +36,22 @@ class HomeRowsHealth {
     final base = Env.apiBaseUrl;
     if (base == null || base.isEmpty) return;
     final root = base.endsWith('/') ? base : '$base/';
-    makeApiCall(
-      url: '${root}v1/telemetry/home-rows',
-      headers: const {},
-      body: jsonEncode({'row_count': rowCount}),
-      method: 'POST',
-      retries: 0,
-      signOutOn401: false,
+    _send(root, rowCount);
+  }
+
+  static Future<void> _send(String root, int rowCount) async {
+    final result = await executeApi<void>(
+      request: ApiRequest(
+        url: '${root}v1/telemetry/home-rows',
+        method: 'POST',
+        body: jsonEncode({'row_count': rowCount}),
+      ),
+      decode: (_) {},
     );
+    switch (result) {
+      case ApiSuccess():
+      case ApiFailure():
+        return;
+    }
   }
 }
