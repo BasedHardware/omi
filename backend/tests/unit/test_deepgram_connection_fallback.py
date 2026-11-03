@@ -388,14 +388,26 @@ async def test_a_language_parakeet_cannot_serve_is_not_offered_to_it():
 def test_parakeet_is_a_configured_fallback_only_when_the_deployment_can_serve_it():
     with (
         patch.object(streaming, 'stt_service_models', ['dg-nova-3', ' modulate-velma-2', 'parakeet']),
-        patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream'}),
+        patch.dict(
+            'os.environ',
+            {
+                'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream',
+                'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'true',
+            },
+        ),
     ):
         assert streaming.parakeet_is_configured_fallback('en') is True
         # Parakeet has no multilingual live mode, so a `multi` session must not move to it.
         assert streaming.parakeet_is_configured_fallback('multi') is False
     with (
         patch.object(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2']),
-        patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream'}),
+        patch.dict(
+            'os.environ',
+            {
+                'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream',
+                'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'true',
+            },
+        ),
     ):
         assert streaming.parakeet_is_configured_fallback('en') is False
 

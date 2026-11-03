@@ -21,8 +21,10 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 227,
+  "count": 229,
   "names": {
+    "LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
+    "STT_STREAMING_PARAKEET_SLOT_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
     "PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
     "SYNC_BACKFILL_WORKER_API_URL": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},

@@ -17,6 +17,13 @@ from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_
 from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
 
 
+@pytest.fixture(autouse=True)
+def restored_plain_parakeet_slot(monkeypatch):
+    # These legacy capability/preference cases exercise the pre-retirement
+    # chain. Default-off behavior is covered by test_streaming_parakeet_slot.
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+
+
 @pytest.mark.asyncio
 async def test_returns_connection_on_first_success():
     """First successful connect_to_deepgram call returns immediately, no sleep."""

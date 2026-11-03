@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Final, Mapping
 
-from config.live_stt_gpu_fleet import gpu_fleet_off
+from config.live_stt_gpu_fleet import gpu_fleet_off, streaming_parakeet_slot_enabled
 
 
 class STTServingSurface(str, Enum):
@@ -141,18 +141,14 @@ HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = SONIOX_PROVIDER
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.
 #
-# Parakeet is the bounded-capacity last resort: the Parakeet service owns the
-# hard stream gate (see parakeet/admission.py), so every listener converges on
-# one cap per serving pod instead of listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
     # Velma-2 leads on cost, and its failures are recoverable: a mid-session
     # error frame hands the stream to Soniox rather than ending it (#12459), which
     # is what the second slot is for. Soniox only ever serves as that failover
     # hop, so judge it by the failover metrics, not by session-start acceptance
-    # (#13662). Parakeet stays last rather than being dropped: a client can ask
-    # for it by name (`?stt_service=parakeet`), and that preference is only
-    # honorable while the model is listed here.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'parakeet'),
+    # (#13662). The plain Parakeet last-resort slot is retired independently of
+    # the reviewed parakeet-window lane and can be restored by its kill switch.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.
@@ -352,6 +348,12 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
     A Deepgram token is admissible when either deployment is allowed. Selection
     re-checks the runtime's own provider, so this cannot reach a withheld one.
     """
+    if (
+        model.strip().lower() == 'parakeet'
+        and surface == STTServingSurface.STREAMING
+        and not streaming_parakeet_slot_enabled()
+    ):
+        return False
     if model.strip().lower() == 'parakeet-window' and surface != STTServingSurface.STREAMING:
         return False
     provider = provider_for_model_token(model)
@@ -364,7 +366,10 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
 
 def default_models_for_surface(surface: STTServingSurface) -> tuple[str, ...]:
     """Return the canonical model ordering for one serving surface."""
-    return tuple(model for model in DEFAULT_MODELS_BY_SURFACE[surface] if model_is_enabled(model, surface))
+    models = DEFAULT_MODELS_BY_SURFACE[surface]
+    if surface == STTServingSurface.STREAMING and streaming_parakeet_slot_enabled():
+        models += ('parakeet',)
+    return tuple(model for model in models if model_is_enabled(model, surface))
 
 
 def canonical_model_config(surface: STTServingSurface) -> str:

@@ -20,7 +20,6 @@ from deepgram.clients.live.v1 import LiveOptions
 from config.stt_provider_policy import (
     DEEPGRAM_PROVIDERS,
     MODULATE_PROVIDER,
-    PARAKEET_PROVIDER,
     SONIOX_PROVIDER,
     STTServingSurface,
     deepgram_provider_for_runtime,
@@ -30,6 +29,7 @@ from config.stt_provider_policy import (
     parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
+    model_is_enabled,
     supports_live_multilingual_mode,
 )
 from config.policy.listen import service_models, account_circuit_cooldown
@@ -911,7 +911,7 @@ def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
     """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
     return (
         STTService.parakeet.value in (model.strip() for model in service_models(stt_service_models))
-        and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
+        and model_is_enabled('parakeet', STTServingSurface.STREAMING)
         and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
     )
@@ -1003,7 +1003,7 @@ def get_stt_service_for_language(
             if (
                 model == 'parakeet-window'
                 and surface == STTServingSurface.STREAMING
-                and provider_is_enabled(PARAKEET_PROVIDER, surface)
+                and model_is_enabled(model, surface)
             ):
                 if not window_allocation(window_uid):
                     parakeet_fallback_reason = 'allocation_rejected'
@@ -1014,7 +1014,7 @@ def get_stt_service_for_language(
                 else:
                     parakeet_fallback_reason = 'config_incomplete'
             if model == 'parakeet':
-                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
+                if model_is_enabled(model, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
                     if parakeet_supports_language(surface, requested_language):
                         return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
                     else:
