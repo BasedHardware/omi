@@ -124,6 +124,8 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: ""
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST

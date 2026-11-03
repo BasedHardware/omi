@@ -24,7 +24,7 @@ from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
-from database.batch_pipeline_intake import admit
+from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
@@ -230,7 +230,7 @@ def retained_record_units(
         yield start, end - start, references
 
 
-async def admit_recording(store, pending, *, now=None):
+async def admit_recording(store, pending, *, now=None, provider_outbox_factory=None):
     from config.batch_pipeline import require_record_protocol_ready
 
     require_record_protocol_ready()
@@ -256,7 +256,16 @@ async def admit_recording(store, pending, *, now=None):
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
     if current.get('record_audio_partial'):
-        return await drain_partial(store, pending, current, client, artifacts, retained_record_units, now=now)
+        return await drain_partial(
+            store,
+            pending,
+            current,
+            client,
+            artifacts,
+            retained_record_units,
+            now=now,
+            provider_outbox_factory=provider_outbox_factory,
+        )
     # A failed raw-archive listing raises (drain retries in 60 s) rather than
     # admitting a recording whose later packs are silently missing.
     chunks = await run_blocking(
@@ -353,13 +362,14 @@ async def admit_recording(store, pending, *, now=None):
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     return await run_blocking(
         db_executor,
-        admit,
+        admit_record_units,
         store,
         staged,
         binding,
         now,
         namespace=store.namespace,
         policy=policy,
+        provider_outbox_factory=provider_outbox_factory,
         require_artifacts=True,
         record_barrier=record_barrier,
         intake={
@@ -377,7 +387,7 @@ async def admit_recording(store, pending, *, now=None):
     )
 
 
-async def drain_recordings(store) -> bool:
+async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     """Drain one bounded pass; return whether a full page warrants another."""
     started = time.monotonic()
     batch_size = record_drain_batch()
@@ -393,7 +403,10 @@ async def drain_recordings(store) -> bool:
         partial_count += bool(pending.get('partial_coordinator'))
         failed = False
         try:
-            await admit_recording(store, pending)
+            if provider_outbox_factory is None:
+                await admit_recording(store, pending)
+            else:
+                await admit_recording(store, pending, provider_outbox_factory=provider_outbox_factory)
         except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
             # These rows remain due, so a full page must keep the idle wait.
