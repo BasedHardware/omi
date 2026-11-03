@@ -125,7 +125,7 @@ def visible_restore_selected(host) -> bool:
         getattr(host, 'server_batch_only', False) is True
         and owned(getattr(host, 'batch_record_capture', None) or {})
         and getattr(getattr(host, 'client_device_context', None), 'platform', None) in {'ios', 'android'}
-        and not getattr(host.request, 'local_preview', False)
+        and not getattr(host, 'local_preview_batch', False)
         and not getattr(host, 'use_custom_stt', False)
         and not getattr(host, 'is_multi_channel', False)
         and host.request.uid
