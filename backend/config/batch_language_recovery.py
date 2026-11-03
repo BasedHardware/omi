@@ -1,4 +1,4 @@
-"""Controlled independent recognition; hard one-minute per-intent spend bound."""
+"""Controlled independent recognition with separate Soniox and guarded Modulate bounds."""
 
 import math
 import os
@@ -42,6 +42,15 @@ def allowed(seconds):
     try:
         cap = float(os.getenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', str(MAX_AUDIO_SECONDS)))
         return enabled() and math.isfinite(cap) and 0 < seconds <= min(cap, MAX_AUDIO_SECONDS)
+    except (TypeError, ValueError):
+        return False
+
+
+def long_recovery_allowed(seconds):
+    """Permit one guarded Modulate attempt; never widen the Soniox ceiling."""
+    try:
+        cap = float(os.getenv('BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS', '0') or '0')
+        return enabled() and math.isfinite(cap) and MAX_AUDIO_SECONDS < seconds <= min(cap, 7200.0)
     except (TypeError, ValueError):
         return False
 
