@@ -468,3 +468,18 @@ def test_loaded_eight_word_lazy_placeholder_is_neutral_without_floor_metadata():
         structured={'title': 'Please call the landlord about the leaking pipe'},
     )
     assert conversations.prepare_conversation_for_read(raw, 'u')['structured']['title'].startswith('Recording · ')
+
+
+@pytest.mark.parametrize('bound', ['start_date', 'end_date'])
+def test_date_filtered_members_stay_reachable_even_with_a_held_header(monkeypatch, bound):
+    from types import SimpleNamespace
+
+    configure_membership(monkeypatch)
+    request = SimpleNamespace(
+        headers={home_membership.HELD_EPISODES_HEADER: 'e:a'}, query_params={bound: NOW.isoformat()}
+    )
+    response = SimpleNamespace(headers={})
+    rows = [floor(episode_id='e')]
+    assert home_membership.held_for(request) == ''  # Also restores ordinary cache/version decisions.
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == rows
+    assert response.headers == {}

@@ -57,11 +57,14 @@ def suppress_held_members(uid: str, rows: list[dict], held: str) -> list[dict]:
 
 
 def held_for(request) -> str:
-    return (
-        request.headers.get(HELD_EPISODES_HEADER, '')
-        if request is not None and home_hide_episode_members_enabled()
-        else ''
-    )
+    if request is None or not home_hide_episode_members_enabled():
+        return ''
+    # A date-filtered view shows its exact matches, including old pages whose
+    # episode overlay may fall outside that view's selected window.
+    query = getattr(request, 'query_params', {})
+    if query.get('start_date') or query.get('end_date'):
+        return ''
+    return request.headers.get(HELD_EPISODES_HEADER, '')
 
 
 def project_list(uid: str, rows: list[dict], request, response, *, filtered: bool) -> list[dict]:
