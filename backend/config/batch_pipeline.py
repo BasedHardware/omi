@@ -453,6 +453,13 @@ def recovered_merge_release_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
 
 
+def recovery_owner_only_enabled() -> bool:
+    """Kill switch: post-recovery requests drain their owner without global maintenance."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED')
+
+
 def sweep_owner_chain_enabled() -> bool:
     """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
     from config.policy import kill_switch

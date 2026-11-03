@@ -42,6 +42,10 @@ class ProjectionFollowups:
         self.tasks: dict[str, asyncio.Task] = {}
         self.after: str | None = None
         self.pending: deque[str] = deque()
+        # Recovery requests may wake one owner's persisted receipts while a
+        # periodic discovery page is already queued. Keep those wakeups apart
+        # so a request cannot spend a slot on another owner's pending work.
+        self.targeted_pending: deque[str] = deque()
         self.prioritized: set[str] = set()
         self.owed: dict[str, None] = {}
         self.closed = False
@@ -82,7 +86,7 @@ class ProjectionFollowups:
                 candidates.append(sid)
         return candidates
 
-    async def schedule(self, priority=(), *, tail=()):
+    async def schedule(self, priority=(), *, tail=(), discover=True):
         # Rows a sweep's chain walk persisted, possibly behind the discovery
         # cursor. They wait for the next discovery pass and join behind its page,
         # so they never jump discovered work and never keep discovery from running.
@@ -96,6 +100,17 @@ class ProjectionFollowups:
                 # Over the bound: restart discovery at the head once so the next
                 # page rediscovers the durable rows we could not hold.
                 self.discovery.after = None
+        if not discover:
+            first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
+            if first:
+                for segment in first:
+                    self.forget_page(segment)  # Targeted recovery wakes always probe completion.
+                selected = set(first)
+                self.pending = deque(segment for segment in self.pending if segment not in selected)
+                queued = set(self.targeted_pending)
+                self.targeted_pending.extend(segment for segment in first if segment not in queued)
+            self.launch_targeted()
+            return
         if priority:
             # A targeted owner-chain wake goes ahead of discovered rows. Slots,
             # segment claims and receipt fences are unchanged; discovery resumes
@@ -106,7 +121,7 @@ class ProjectionFollowups:
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
-            if self.pending or not self.owed:
+            if not discover or self.pending or not self.owed:
                 return
         # Finish launching this bounded page before advancing discovery. Slow
         # tasks must not cause the next serving pass to discard queued rows.
@@ -115,6 +130,8 @@ class ProjectionFollowups:
             self.launch()
             if self.pending or not self.owed:
                 return
+        if not discover:
+            return
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:
@@ -142,6 +159,7 @@ class ProjectionFollowups:
         self.launch()
 
     def launch(self):
+        self.launch_targeted()
         while self.pending and len(self.tasks) < MAX_FOLLOWUPS and not self.closed:
             segment = self.pending.popleft()
             task = start_background_task(self.run(segment), name='batch_projection_followup')
@@ -151,14 +169,23 @@ class ProjectionFollowups:
                 self.prioritized.discard(segment)
             else:
                 self.after = segment
-            task.add_done_callback(lambda done, sid=segment: self.finished(sid, done))
+            task.add_done_callback(lambda done, sid=segment: self.finished(sid, done, targeted=False))
+
+    def launch_targeted(self):
+        while self.targeted_pending and len(self.tasks) < MAX_FOLLOWUPS and not self.closed:
+            segment = self.targeted_pending.popleft()
+            if segment in self.tasks:
+                continue
+            task = start_background_task(self.run(segment), name='batch_projection_followup')
+            self.tasks[segment] = task
+            task.add_done_callback(lambda done, sid=segment: self.finished(sid, done, targeted=True))
 
     def forget_page(self, segment):
         page = self.pages.pop(segment, None)
         if page is not None and page not in self.pages.values():
             self.completion_attempts = {key for key in self.completion_attempts if key[0] != page}
 
-    def finished(self, segment, task):
+    def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
         self.forget_page(segment)
         if task.cancelled():
@@ -166,10 +193,14 @@ class ProjectionFollowups:
             # worker with another task after the shutdown snapshot was taken.
             self.closed = True
             self.pending.clear()
+            self.targeted_pending.clear()
             self.owed.clear()
             self.pages.clear()
             self.completion_attempts.clear()
-        self.launch()  # Refill immediately, without another 20s serving sleep.
+        if targeted:
+            self.launch_targeted()
+        else:
+            self.launch()  # Refill immediately, without another 20s serving sleep.
 
     def read_persisted(self, segment):
         store = self.projector.store
