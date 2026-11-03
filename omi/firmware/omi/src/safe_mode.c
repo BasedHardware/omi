@@ -1,16 +1,21 @@
 #include "safe_mode.h"
 
 #include <errno.h>
-#include <limits.h>
+#include <stddef.h>
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #if defined(CONFIG_MCUMGR)
+#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
+#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt_callbacks.h>
 #include <zephyr/mgmt/mcumgr/mgmt/callbacks.h>
 #else
 #include "safe_mode_sim_mgmt.h"
 #endif
 #include <zephyr/settings/settings.h>
+#if defined(CONFIG_MCUMGR)
+#include <zephyr/storage/flash_map.h>
+#endif
 
 #if !defined(CONFIG_OMI_NATIVE_SIM) || defined(OMI_SAFE_MODE_HOST)
 #include <hal/nrf_reset.h>
@@ -32,7 +37,8 @@ LOG_MODULE_REGISTER(safe_mode, CONFIG_LOG_DEFAULT_LEVEL);
 #error "Fault injection is forbidden in release builds"
 #endif
 
-#define BOOT_MAGIC 0x53414631u
+#define BOOT_MAGIC 0x53414632u
+#define BOOT_COUNT_MAX 255u
 #define FW CONFIG_BT_DIS_FW_REV_STR
 #define STATE_SAFE 1
 #define STATE_GOOD 2
@@ -46,6 +52,9 @@ struct retained_boot {
     uint32_t latch_reason;
     uint32_t fatal;
     char fw[16];
+    uint32_t dfu_pending;
+    uint32_t persist_attempted;
+    uint32_t crc;
 };
 #ifndef CONFIG_OMI_NATIVE_SIM
 static volatile struct retained_boot retained __attribute__((section(".omi_retained"), used));
@@ -66,13 +75,61 @@ static bool settings_ready;
 static bool self_test_done;
 static int64_t ready_at;
 static bool trial_ready;
+static bool restore_latch;
+static bool resolve_dfu;
+static bool image0_upload;
+/* Main's SAFE/GOOD writes and the SMP worker's TRIAL write share authority.
+ * Fatal/early hooks never acquire this lock or call settings.
+ */
+K_MUTEX_DEFINE(bootstate_lock);
+
+/* CRC-32/ISO-HDLC, no driver, tables, locks or allocation (also used by fatal).
+ * Volatile byte reads cover every field preceding crc, including the full FW.
+ */
+static uint32_t retained_crc(void)
+{
+    const volatile uint8_t *bytes = (const volatile uint8_t *) &retained;
+    uint32_t crc = 0xffffffffu;
+    for (size_t i = 0; i < offsetof(struct retained_boot, crc); ++i) {
+        crc ^= bytes[i];
+        for (unsigned int bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+        }
+    }
+    return ~crc;
+}
+
+static void retained_seal(void)
+{
+    retained.crc = retained_crc();
+}
+
+static bool retained_valid(void)
+{
+    return retained.magic == BOOT_MAGIC && retained.count <= BOOT_COUNT_MAX && retained.latch_reason <= 3 &&
+           retained.fatal <= 1 && retained.dfu_pending <= 1 && retained.persist_attempted <= 1 &&
+           memcmp((const void *) retained.fw, FW, sizeof(FW)) == 0 && retained.crc == retained_crc();
+}
 
 static void new_trial(void)
 {
     memset((void *) &retained, 0, sizeof(retained));
     memcpy((void *) retained.fw, FW, sizeof(FW));
     retained.magic = BOOT_MAGIC;
+    retained_seal();
 }
+
+#if !defined(CONFIG_OMI_NATIVE_SIM) || defined(OMI_SAFE_MODE_HOST)
+static void record_fatal(void)
+{
+    /* Do not bless preexisting corruption by computing a new CRC over it. */
+    if (!retained_valid()) {
+        new_trial();
+    }
+    retained.fatal = 1;
+    retained_seal();
+}
+#endif
 
 void safe_mode_early_boot(void)
 {
@@ -90,7 +147,9 @@ void safe_mode_early_boot(void)
 #endif
     nrf_reset_resetreas_clear(NRF_RESET, reason);
 #endif
-    bool valid = retained.magic == BOOT_MAGIC && memcmp((const void *) retained.fw, FW, sizeof(FW)) == 0;
+    bool valid = retained_valid();
+    restore_latch = !valid;
+    resolve_dfu = valid && retained.dfu_pending;
     crash = crash || (valid && retained.fatal != 0);
     /* RESETREAS=0 is POR; RAM contents on cold boot are not a contract. */
     if (!valid || (!crash && !retained.latch_reason)) {
@@ -98,12 +157,13 @@ void safe_mode_early_boot(void)
     }
     retained.fatal = 0;
     retained.reset_reason = reason;
-    if (retained.count < UINT32_MAX) {
+    if (retained.count < BOOT_COUNT_MAX) {
         retained.count++;
     }
     if (retained.count > CONFIG_OMI_SAFE_MODE_BOOT_LIMIT && !retained.latch_reason) {
         retained.latch_reason = 1;
     }
+    retained_seal();
 }
 
 int safe_mode_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *arg)
@@ -119,7 +179,8 @@ int safe_mode_settings_set(const char *name, size_t len, settings_read_cb read_c
     if (rc != sizeof(value)) {
         return rc < 0 ? rc : -EINVAL;
     }
-    if (value.state < STATE_SAFE || value.state > STATE_TRIAL || !memchr(value.fw, 0, sizeof(value.fw))) {
+    if (value.state < STATE_SAFE || value.state > STATE_TRIAL || value.reason > 3 ||
+        !memchr(value.fw, 0, sizeof(value.fw))) {
         return -EINVAL;
     }
     saved = value;
@@ -133,6 +194,7 @@ static int save_state(uint32_t state, uint32_t reason)
         return 0;
     }
     if (!settings_ready) {
+        printk("Bootstate write failed (%d); RAM latch retained\n", -EIO);
         return -EIO;
     }
     int err = settings_save_one("omi/bootstate", &value, sizeof(value));
@@ -145,43 +207,134 @@ static int save_state(uint32_t state, uint32_t reason)
     return err;
 }
 
-static enum mgmt_cb_return dfu_finished(uint32_t event,
-                                        enum mgmt_cb_return prev_status,
-                                        int32_t *rc,
-                                        uint16_t *group,
-                                        bool *abort_more,
-                                        void *data,
-                                        size_t data_size)
+/* Only invalid RAM restores SAFE. A pending DFU transaction is the sole warm
+ * boot exception: NVS decides whether TRIAL committed before reset.
+ */
+void safe_mode_settings_ready(int status)
 {
-    ARG_UNUSED(rc);
-    ARG_UNUSED(group);
-    ARG_UNUSED(abort_more);
-    ARG_UNUSED(data);
-    ARG_UNUSED(data_size);
-    if (event == MGMT_EVT_OP_IMG_MGMT_DFU_PENDING && prev_status == MGMT_CB_OK) {
-        /* Persist TRIAL even for same-version DFU; a cold reset must not reload SAFE. */
-        if (!save_state(STATE_TRIAL, 0)) {
+    settings_ready = status == 0;
+    if (settings_ready && !strcmp(saved.fw, FW)) {
+        if (resolve_dfu && saved.state == STATE_TRIAL) {
             new_trial();
-            trial_ready = false; /* Only the next boot may certify this upload. */
-            printk("Safe mode DFU finished: fresh trial on next boot\n");
+            retained.count = 1;
+        } else if (restore_latch && saved.state == STATE_SAFE) {
+            retained.latch_reason = saved.reason ? saved.reason : 1;
+        }
+    }
+    restore_latch = false;
+    resolve_dfu = false;
+    retained.dfu_pending = 0;
+    retained_seal();
+}
+
+static int read_bootstate(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg, void *param)
+{
+    ARG_UNUSED(param);
+    if (*name) {
+        return 0;
+    }
+    return safe_mode_settings_set("bootstate", len, read_cb, cb_arg);
+}
+
+void safe_mode_restore(void)
+{
+    if (!restore_latch && !resolve_dfu) {
+        return;
+    }
+    /* If even this narrow backend read hangs, the next WDT boot must bypass it
+     * and advertise using the still-latched record, rather than hang forever.
+     */
+    retained.dfu_pending = 0;
+    retained_seal();
+    int err = settings_subsys_init();
+    if (!err) {
+        err = settings_load_subtree_direct("omi/bootstate", read_bootstate, NULL);
+    }
+    safe_mode_settings_ready(err);
+}
+
+/* Called after recovery advertising is up, never loads app or BT settings.
+ * One attempt per latch prevents an NVS init/write hang from blocking every
+ * recovery boot. A failed write leaves the RAM latch intact.
+ */
+void safe_mode_persist(void)
+{
+    k_mutex_lock(&bootstate_lock, K_FOREVER);
+    if (!active || !retained.latch_reason || retained.persist_attempted) {
+        k_mutex_unlock(&bootstate_lock);
+        return;
+    }
+    retained.persist_attempted = 1;
+    retained_seal();
+    if (!settings_ready) {
+        settings_ready = settings_subsys_init() == 0;
+    }
+    (void) save_state(STATE_SAFE, retained.latch_reason);
+    k_mutex_unlock(&bootstate_lock);
+}
+
+static enum mgmt_cb_return dfu_event(uint32_t event,
+                                     enum mgmt_cb_return prev_status,
+                                     int32_t *rc,
+                                     uint16_t *group,
+                                     bool *abort_more,
+                                     void *data,
+                                     size_t data_size)
+{
+    ARG_UNUSED(group);
+    if (event == MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK) {
+        const struct img_mgmt_upload_check *check = data;
+        /* PENDING has no payload in NCS 2.9.0. Remember the inspected target
+         * on EVERY chunk (also handles resumption with an omitted image key).
+         */
+        image0_upload = false;
+        if (prev_status != MGMT_CB_OK) {
+            return MGMT_CB_OK;
+        }
+        bool valid = check && data_size == sizeof(*check) && check->req && check->action;
+        bool app = valid && check->action->area_id == FIXED_PARTITION_ID(slot1_partition);
+        if (active && (!app || check->req->image != 0)) {
+            *rc = MGMT_ERR_EINVAL;
+            *abort_more = true;
+            return MGMT_CB_ERROR_RC;
+        }
+        image0_upload = app && check->req->image == 0;
+    } else if (event == MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED) {
+        image0_upload = false;
+    } else if (event == MGMT_EVT_OP_IMG_MGMT_DFU_PENDING) {
+        bool completed_app = image0_upload && prev_status == MGMT_CB_OK;
+        image0_upload = false;
+        if (completed_app) {
+            k_mutex_lock(&bootstate_lock, K_FOREVER);
+            if (!settings_ready) {
+                settings_ready = settings_subsys_init() == 0;
+            }
+            /* Publish intent BEFORE NVS; a reset after its commit but before
+             * new_trial must resolve persisted TRIAL, even for this version.
+             */
+            retained.dfu_pending = 1;
+            retained_seal();
+            if (!save_state(STATE_TRIAL, 0)) {
+                new_trial();
+                trial_ready = false;
+                self_test_done = true; /* main-loop readiness may arrive after this callback. */
+                printk("Safe mode DFU finished: fresh trial on next boot\n");
+            } else {
+                retained.dfu_pending = 0;
+                retained_seal();
+            }
+            k_mutex_unlock(&bootstate_lock);
         }
     }
     return MGMT_CB_OK;
 }
 static struct mgmt_callback dfu_callback;
 
-void safe_mode_settings_ready(int status)
-{
-    settings_ready = status == 0;
-    if (settings_ready && saved.state == STATE_SAFE && !strcmp(saved.fw, FW)) {
-        retained.latch_reason = saved.reason ? saved.reason : 1;
-    }
-}
-
 bool safe_mode_boot(void)
 {
-    dfu_callback.callback = dfu_finished;
-    dfu_callback.event_id = MGMT_EVT_OP_IMG_MGMT_DFU_PENDING;
+    dfu_callback.callback = dfu_event;
+    dfu_callback.event_id =
+        MGMT_EVT_OP_IMG_MGMT_DFU_PENDING | MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK | MGMT_EVT_OP_IMG_MGMT_DFU_STOPPED;
     mgmt_callback_register(&dfu_callback);
 #ifndef CONFIG_OMI_NATIVE_SIM
     const struct gpio_dt_spec button = GPIO_DT_SPEC_GET(DT_NODELABEL(usr_btn), gpios);
@@ -199,10 +352,8 @@ bool safe_mode_boot(void)
 #ifdef CONFIG_OMI_SIM_FORCE_SAFE_MODE
     retained.latch_reason = 3;
 #endif
+    retained_seal();
     active = retained.latch_reason != 0;
-    if (active) {
-        (void) save_state(STATE_SAFE, retained.latch_reason);
-    }
     printk("BOOTSTATE: active=%u count=%u reason=%u reset=0x%08x state=%u\n",
            active,
            retained.count,
@@ -219,32 +370,37 @@ bool safe_mode_active(void)
 
 void safe_mode_main_loop_ready(bool advertising)
 {
+    k_mutex_lock(&bootstate_lock, K_FOREVER);
     if (!active && advertising) {
         ready_at = k_uptime_get();
         trial_ready = true;
     }
+    k_mutex_unlock(&bootstate_lock);
 }
 
 void safe_mode_poll(void)
 {
+    k_mutex_lock(&bootstate_lock, K_FOREVER);
     if (!active && !self_test_done && trial_ready &&
         k_uptime_get() - ready_at >= (int64_t) CONFIG_OMI_SAFE_MODE_GOOD_UPTIME_S * 1000) {
         retained.count = 0;
+        retained_seal();
         /* One attempt per boot; never turn a failing NVS into a 1 Hz write loop. */
         self_test_done = true;
         (void) save_state(STATE_GOOD, 0);
         printk("Safe mode self-test passed\n");
     }
+    k_mutex_unlock(&bootstate_lock);
 }
 
 void safe_mode_snapshot_get(struct safe_mode_snapshot *out)
 {
-    *out = (struct safe_mode_snapshot){.boot_count = retained.count,
-                                       .reset_reason = retained.reset_reason,
-                                       .latch_reason = retained.latch_reason,
-                                       .active = active,
-                                       .latched = retained.latch_reason != 0,
-                                       .bootstate = saved.state};
+    *out = (struct safe_mode_snapshot) {.boot_count = retained.count,
+                                        .reset_reason = retained.reset_reason,
+                                        .latch_reason = retained.latch_reason,
+                                        .active = active,
+                                        .latched = retained.latch_reason != 0,
+                                        .bootstate = saved.state};
 }
 
 #ifndef CONFIG_OMI_NATIVE_SIM
@@ -253,7 +409,7 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
     ARG_UNUSED(reason);
     ARG_UNUSED(esf);
-    retained.fatal = 1;
+    record_fatal();
     __DSB();
     NVIC_SystemReset();
     CODE_UNREACHABLE;
@@ -277,6 +433,7 @@ void safe_mode_run(void)
         }
     }
     printk("Safe mode feed loop started\n");
+    safe_mode_persist();
     unsigned int held = 0;
     bool released = false;
     for (;;) {
@@ -304,15 +461,4 @@ void safe_mode_run(void)
     }
 }
 
-#ifdef CONFIG_OMI_FAULT_INJECT_DRIVER_HANG
-static int inject_driver_hang(void)
-{
-    if (!retained.latch_reason) {
-        printk("FAULT_INJECT: driver init hang\n");
-        for (;;) {}
-    }
-    return 0;
-}
-SYS_INIT(inject_driver_hang, POST_KERNEL, 0);
-#endif
 #endif

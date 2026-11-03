@@ -199,6 +199,10 @@ SETTINGS_STATIC_HANDLER_DEFINE(app_settings, "omi", NULL, settings_set, NULL, NU
 
 int app_settings_init(void)
 {
+#ifdef CONFIG_OMI_FAULT_INJECT_SETTINGS_HANG
+    printk("FAULT_INJECT: app settings init hang\n");
+    for (;;) {}
+#endif
     int err = settings_subsys_init();
     if (err) {
         LOG_ERR("Failed to initialize settings subsystem (err %d)", err);

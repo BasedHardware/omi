@@ -9,6 +9,6 @@ if(CONFIG_OMI_FAULT_INJECT)
   endif()
 endif()
 
-if(CONFIG_MCUMGR AND (NOT CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS OR NOT CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS))
-  message(FATAL_ERROR "Safe-mode recovery requires MCUmgr notification and image status hooks")
+if(CONFIG_MCUMGR AND (NOT CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS OR NOT CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS OR NOT CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK))
+  message(FATAL_ERROR "Safe-mode recovery requires MCUmgr notification, upload-check and image status hooks")
 endif()

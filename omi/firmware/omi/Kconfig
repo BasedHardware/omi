@@ -138,7 +138,9 @@ choice OMI_FAULT_INJECT_KIND
 config OMI_FAULT_INJECT_HARD_FAULT
     bool "Fatal error before BLE"
 config OMI_FAULT_INJECT_DRIVER_HANG
-    bool "POST_KERNEL driver-init hang"
+    bool "Deferred driver-init hang"
+config OMI_FAULT_INJECT_SETTINGS_HANG
+    bool "Hang in app_settings_init"
 config OMI_FAULT_INJECT_WDT_STARVE
     bool "Stop feeding WDT at uptime 30 seconds"
 endchoice

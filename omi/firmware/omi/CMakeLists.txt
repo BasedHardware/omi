@@ -9,6 +9,7 @@ zephyr_linker_sources(SECTIONS src/safe_mode.ld)
 file(GLOB app_sources
     src/main.c
     src/safe_mode.c
+    src/safe_mode_devices.c
     src/mic.c
     src/battery.c
     src/led.c

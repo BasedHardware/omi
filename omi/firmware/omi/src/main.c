@@ -179,12 +179,20 @@ int main(void)
         LOG_WRN("Watchdog init failed (err %d), continuing without watchdog", ret);
     }
 
-    /* Load the sticky latch before any application device/capture startup. */
-    int setting_ret = app_settings_init();
-    safe_mode_settings_ready(setting_ret);
+    /* Decide from validated RAM first. Only cold/invalid RAM (or an interrupted
+     * DFU commit) needs the isolated bootstate read. Never load app settings in SAFE.
+     */
+    safe_mode_restore();
     if (safe_mode_boot()) {
         safe_mode_run();
         return 0;
+    }
+    int setting_ret = app_settings_init();
+    safe_mode_settings_ready(setting_ret);
+    ret = safe_mode_devices_init();
+    if (ret) {
+        LOG_ERR("Deferred device initialization failed (%d)", ret);
+        return ret;
     }
 #ifdef CONFIG_OMI_FAULT_INJECT_HARD_FAULT
     printk("FAULT_INJECT: fatal before BLE\n");

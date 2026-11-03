@@ -972,13 +972,13 @@ static void log_local_ble_addresses(void)
 static int ensure_local_ble_identity(void)
 {
 #if defined(CONFIG_BT_SETTINGS)
-    int err = settings_load();
-    if (err && err != -ENOENT) {
-        if (!safe_mode_active()) {
+    /* Recovery uses unencrypted SMP; do not enter a broken settings/bond path. */
+    if (!safe_mode_active()) {
+        int err = settings_load();
+        if (err && err != -ENOENT) {
             LOG_ERR("Failed to load BT settings (err %d)", err);
             return err;
         }
-        LOG_WRN("Safe mode: BT settings unavailable (%d); allow re-pairing", err);
     }
 #endif
 

@@ -152,12 +152,20 @@ void safe_mode_run(void)
 {
     printk("Safe mode initialized: BLE DFU only\n");
     printk("Safe mode feed loop started\n");
+    safe_mode_persist();
     for (;;) {
         watchdog_feed();
         k_msleep(1000);
 #ifdef CONFIG_OMI_SIM_FINISH_DFU
         if (sim_dfu_callback) {
-            sim_dfu_callback->callback(sim_dfu_callback->event_id, MGMT_CB_OK, NULL, NULL, NULL, NULL, 0);
+            struct img_mgmt_upload_req req = {.image = 0};
+            struct img_mgmt_upload_action action = {.area_id = FIXED_PARTITION_ID(slot1_partition)};
+            struct img_mgmt_upload_check check = {.req = &req, .action = &action};
+            int32_t rc = 0;
+            bool abort_more = false;
+            sim_dfu_callback->callback(
+                MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK, MGMT_CB_OK, &rc, NULL, &abort_more, &check, sizeof(check));
+            sim_dfu_callback->callback(MGMT_EVT_OP_IMG_MGMT_DFU_PENDING, MGMT_CB_OK, NULL, NULL, NULL, NULL, 0);
             sim_dfu_callback = NULL;
         }
 #endif

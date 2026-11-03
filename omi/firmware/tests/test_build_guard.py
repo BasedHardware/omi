@@ -22,3 +22,16 @@ for fault, debug, development, kind, expected in (
     ], capture_output=True, text=True)
     assert (proc.returncode != 0) == bool(expected), proc.stdout + proc.stderr
 print("Release fault-injection guard: all 8 build configurations passed")
+
+# Recovery must never compile with the image-target rejection hook missing.
+for notification, status, upload in ((True, True, True), (False, True, True),
+                                      (True, False, True), (True, True, False)):
+    proc = subprocess.run([
+        "cmake", "-DCONFIG_MCUMGR=ON",
+        f"-DCONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS={'ON' if notification else 'OFF'}",
+        f"-DCONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS={'ON' if status else 'OFF'}",
+        f"-DCONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK={'ON' if upload else 'OFF'}",
+        "-P", str(GUARD)
+    ], capture_output=True, text=True)
+    assert (proc.returncode == 0) == (notification and status and upload), proc.stdout + proc.stderr
+print("Recovery callback guard: all 4 hook configurations passed")

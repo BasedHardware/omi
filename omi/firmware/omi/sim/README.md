@@ -131,3 +131,11 @@ Safe boots instead require `Safe mode initialized: BLE DFU only` and
 delivery is a stub with the pinned Zephyr signature; no radio/DFU protocol is
 simulated. GPIO, retained hardware RAM, fatal reset and early WDT remain host
 unit/jig checks. See [the bench plan](../../docs/safe-mode.md).
+
+The review regression also builds the production deferred fault device. Normal
+startup must hang inside its `device_init()` until the runner kills that process
+group; SAFE with the same device must feed twice and never invoke its init.
+A separate SAFE build enables an unconditional `app_settings_init()` hang and
+must bypass it. These are selection/control-flow checks. The forced RAM latch
+stands in for prior watchdog resets; Nordic WDT counting and retention remain
+host/jig checks. The final normal trial leaves simulated NVS GOOD for repeat runs.

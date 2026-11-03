@@ -1,6 +1,6 @@
 CC ?= cc
 BUILD_DIR ?= $(if $(wildcard /Volumes/Ephemeral/scratch),/Volumes/Ephemeral/scratch,/tmp)/omi-safe-mode-host
-CFLAGS = -std=c11 -O2 -Wall -Wextra -Werror
+CFLAGS = -pthread -std=c11 -O2 -Wall -Wextra -Werror
 CPPFLAGS = -Istubs -I../omi/sim -DCONFIG_OMI_NATIVE_SIM=1 -DOMI_SAFE_MODE_HOST=1 \
  -DCONFIG_OMI_SAFE_MODE_BOOT_LIMIT=3 -DCONFIG_OMI_SAFE_MODE_GOOD_UPTIME_S=60 \
  -DCONFIG_OMI_WATCHDOG_TIMEOUT_MS=30000 -DCONFIG_BT_DIS_FW_REV_STR='"3.0.22"'

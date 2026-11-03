@@ -5,9 +5,12 @@
 #include <stdint.h>
 #include <zephyr/settings/settings.h>
 
-/* Called before POST_KERNEL device init, then from main after settings load. */
+/* PRE_KERNEL_2 records the attempt; main selects SAFE before app settings/devices. */
 void safe_mode_early_boot(void);
 bool safe_mode_boot(void);
+void safe_mode_restore(void);
+void safe_mode_persist(void);
+int safe_mode_devices_init(void);
 int safe_mode_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *arg);
 void safe_mode_settings_ready(int status);
 bool safe_mode_active(void);
