@@ -1217,6 +1217,12 @@ OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
     ['mode'],
 )
 
+OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL = Counter(
+    'omi_listen_server_batch_suppression_total',
+    'Server batch suppression decisions at STT initialization (including reinitialization), closed reason set',
+    ['decision', 'reason', 'client_platform'],
+)
+
 OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
     'omi_listen_local_preview_sessions_total',
     'Listen sessions by mobile local-preview lane admission outcome (closed reason set)',
@@ -1227,6 +1233,16 @@ OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
     'omi_listen_deferred_stream_opened_total',
     'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
     ['deferred_by'],
+)
+
+OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL = Counter(
+    'omi_listen_visible_restore_streams_total',
+    'Batch-only visible Modulate preview stream attempts by bounded outcome',
+    ['outcome'],
+)
+OMI_LISTEN_VISIBLE_RESTORE_SECONDS_TOTAL = Counter(
+    'omi_listen_visible_restore_seconds_total',
+    'Visible wall seconds served by batch-only Modulate preview streams',
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(

@@ -128,13 +128,6 @@
     },
     {
       "path": "utils/batch_pipeline/live.py",
-      "function": "retained_record_units",
-      "name": "BUCKET_AUDIO_DERIVED",
-      "count": 1,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/batch_pipeline/live.py",
       "function": "admit_recording",
       "name": "BUCKET_BATCH_PIPELINE",
       "count": 1,

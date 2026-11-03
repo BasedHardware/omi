@@ -406,6 +406,34 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+SERVING_METRICS_MIN_REFRESH_DEFAULT = 30.0
+SERVING_METRICS_MIN_REFRESH_MAX = 60.0
+
+
+def serving_metrics_min_refresh_seconds() -> float:
+    """Ship-on: one queue-gauge refresh per serving instance per interval.
+
+    Every serving instance refreshed the same global gauges on each 20 s
+    supervisor tick and each scrape; the policy-hold walk in ``oldest`` made
+    that about 1.6M Firestore reads/h at 28 instances. The guard calls the
+    sample blind after 120 s, so the cap stays at 60 s. ``off`` or a value
+    <= 0 is the kill switch: refresh on every call. Malformed or out-of-range
+    values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', '').strip().lower()
+    if not raw:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= SERVING_METRICS_MIN_REFRESH_MAX else SERVING_METRICS_MIN_REFRESH_DEFAULT
+
+
 ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
 ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
 
@@ -451,6 +479,13 @@ def recovered_merge_release_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def recovery_owner_only_enabled() -> bool:
+    """Kill switch: post-recovery requests drain their owner without global maintenance."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED')
 
 
 def sweep_owner_chain_enabled() -> bool:
@@ -549,6 +584,25 @@ def worker_pipeline_depth() -> int:
     except ValueError:
         return WORKER_PIPELINE_DEPTH_DEFAULT
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
+
+
+WORKER_PROCESSES_DEFAULT = 1
+WORKER_PROCESSES_MAX = 3
+
+
+def worker_processes() -> int:
+    """Independent pump processes sharing the pod's one GPU; ``1`` (default) runs no supervisor.
+
+    Each process loads its own model chain and keeps its own pump depth and
+    decoded-audio bound, so host and device memory scale with the count; the
+    chart sizes pod resources per count. Malformed or out-of-range values run
+    one process: a typo must never multiply the pod's memory.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PROCESSES', str(WORKER_PROCESSES_DEFAULT)))
+    except ValueError:
+        return 1
+    return value if 1 <= value <= WORKER_PROCESSES_MAX else 1
 
 
 WORKER_IO_CONCURRENCY_DEFAULT = 5

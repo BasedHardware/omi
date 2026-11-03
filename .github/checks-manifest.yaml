@@ -754,6 +754,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT launch collision requires the Meta and mcumgr SwiftProtobuf copies to remain in mutually exclusive iOS pod graphs"
+  - id: ios-rayban-audio-capture
+    command: ["ruby", "app/ios/test/rayban_audio_capture_test.rb"]
+    triggers: ["app/ios/Runner/RayBanMeta/RayBanMetaAudioCapture.swift", "app/ios/test/rayban_audio_capture_test.rb", "app/ios/test/rayban_audio_capture_test.swift", "app/ios/test/fixtures/rayban_audio_avfoundation.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "FC-stopped-capture-retains-audio-session: failed Ray-Ban setup must release a partially acquired tap/engine/session before retry; execute the actual capture class with injected framework effects and type-check against the real iOS SDK"
   - id: rayban-dat-xcode-graph
     command: ["ruby", "app/ios/test/rayban_dat_xcode_graph_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Flutter/raybanDat*.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/Runner.xcodeproj/xcshareddata/xcschemes/raybanDat.xcscheme", "app/ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved", "app/ios/test/rayban_dat_xcode_graph_test.rb", ".github/checks-manifest.yaml"]

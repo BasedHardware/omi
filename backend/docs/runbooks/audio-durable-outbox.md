@@ -10,6 +10,15 @@ controls legacy raw admission only after the outbox switch is set to `false`;
 it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`
 continues to control raw playback reads independently.
 
+`AUDIO_CUSTODY_FRAMED_PERCENT` defaults to 0 independently of
+`AUDIO_ARCHIVE_PERCENT`. Its framed windows rejoin send pauses up to 60 seconds
+of captured audio / 16 MiB, retaining each original frame position and sample
+count. A frame table is not one continuous wall span. Both generations and
+both plaintext hashes still gate each part's receipt; no ACK waits for an
+entire conversation. Raw and projection discovery read the committed frame
+table, never treating a media-only orphan as custody. Percent 0 restores the
+per-pause writer while readers retain support for existing framed objects.
+
 For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
 before removing its active pack. LISTEN commits at the pack's own 60-second,

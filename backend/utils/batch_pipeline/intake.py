@@ -4,6 +4,9 @@ from dataclasses import replace
 import hashlib
 import io
 import logging
+import os
+import shutil
+import tempfile
 import time
 import wave
 
@@ -110,6 +113,33 @@ def _sampled_refusal(target: dict, user: dict, evidence) -> None:
 def _next_unit(iterator):
     # StopIteration cannot cross asyncio Future boundaries.
     return next(iterator, None)
+
+
+def _private_sample_paths(paths: list[str]) -> tuple[str, list[str]]:
+    """Link the caller's uploads under their own names for a decode that may refuse.
+
+    WAL decode deletes its inputs; a sampled refusal hands the upload back to legacy,
+    which must still stage these exact files (else FileNotFoundError -> 503 loop).
+    """
+    if len(set(paths)) != len(paths):
+        # The router wrote every body under one repeated name to one file, so
+        # an earlier body is already gone. Never acknowledge it; the phone keeps
+        # its audio (the same fail-closed answer as an unsampled batch decode).
+        raise ValueError('sampled upload repeats a filename')
+    directory = tempfile.mkdtemp(prefix='omi-batch-sample-')
+    try:
+        linked = []
+        for path in paths:
+            target = os.path.join(directory, os.path.basename(path))
+            try:
+                os.link(path, target)
+            except OSError:
+                shutil.copy2(path, target)
+            linked.append(target)
+        return directory, linked
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
 
 
 def _open_operator_intent(job: dict) -> bool:
@@ -340,6 +370,8 @@ async def accept_upload(
     policy: BatchUnitPolicy | None = None,
     usage_period: str | None = None,
     evidence: IntakeRouteEvidence | None = None,
+    vendor_table: bool = True,
+    release: str | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -351,6 +383,7 @@ async def accept_upload(
     policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
+    sample_directory = None
     try:
         # A2 seam: the sync upload admission (intakes, jobs, owners, queues, control) is mirrored in shadow mode.
         store = await run_blocking(
@@ -579,7 +612,7 @@ async def accept_upload(
             byok=byok_enabled,
             uid=uid,
             batch_percent=policy.batch_percent,
-            vendor_eligible=mode is not LegacySyncMode.ON,
+            vendor_eligible=vendor_table and mode is not LegacySyncMode.ON,
             gpu_saturated=(lambda: overflow_enabled() and gpu_overflow.saturated(store)) if fresh else None,
         ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
@@ -625,11 +658,14 @@ async def accept_upload(
             raise ValueError('serving intake requires a dedicated batch GPU pool')
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
         max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
+        decode_paths = paths
+        if sampled and decode is None:
+            sample_directory, decode_paths = await run_blocking(sync_executor, _private_sample_paths, paths)
         iterator = (
             decode(max_unit_seconds)
             if decode is not None
             else decode_for_intake(
-                paths,
+                decode_paths,
                 max_unit_seconds,
                 uid,
                 {**(intake_context or {}), 'client_device_id': client_device_id},
@@ -807,6 +843,9 @@ async def accept_upload(
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),
+                # An automatic release (trial or conversion) is backfill the owner did not tap for;
+                # its rows carry the source so hard-3 and the 2h alarm can count it apart.
+                **({'release': release} if release else {}),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
@@ -847,6 +886,8 @@ async def accept_upload(
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
+        if sample_directory is not None:
+            await run_blocking(sync_executor, shutil.rmtree, sample_directory, True)
 
 
 def stranded_adopter(observed: dict, *, owner_job_present: bool | None = None):

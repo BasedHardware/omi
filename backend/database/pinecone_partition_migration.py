@@ -24,6 +24,16 @@ class MigrationNotReady(RuntimeError):
     """A failed qualification leaves the old route active."""
 
 
+class WriteNotSent(MigrationNotReady):
+    """The connection failed before any request bytes left: a known no-op, not an unknown outcome."""
+
+
+WRITE_PATHS = frozenset({'vectors/upsert', 'vectors/update', 'vectors/delete'})
+# Connect-phase failures happen before the request is written to the wire. Any
+# later failure (write/read timeout, a server disconnect) stays an unknown outcome.
+NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
 def bounded_upsert_batches(records: list[dict], namespace: str) -> Iterator[list[dict]]:
     """Keep wide vectors and metadata below Pinecone's 2 MB request limit."""
     overhead = len(json.dumps({'namespace': namespace, 'vectors': []}).encode())
@@ -58,6 +68,51 @@ def record_digest(record: dict) -> str:
     return sha256(json.dumps(payload, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
+# The provider scores one record slightly differently in different namespaces
+# (measured 2-4e-4 on memories-backend-dev, 2026-11-02), so near-tied neighbours
+# can swap. Payloads are proven exactly elsewhere; this only bounds ranking drift.
+SEARCH_SCORE_TOLERANCE = 1e-3
+
+
+def search_parity(old: list[dict], new: list[dict], tolerance: float = SEARCH_SCORE_TOLERANCE) -> bool:
+    """Raise unless two top-k lists agree up to reordering among near-equal scores.
+
+    Every shared ID scores within ``tolerance``; an ID may appear in only one
+    list solely at the cutoff, tied to the other list's lowest score; and any
+    pair ranked in opposite order is tied within ``tolerance``. Returns whether
+    the order was exactly identical.
+    """
+    try:
+        old_scores = {match['id']: float(match['score']) for match in old}
+        new_scores = {match['id']: float(match['score']) for match in new}
+    except (KeyError, TypeError, ValueError) as error:
+        raise MigrationNotReady('Search results lack comparable scores') from error
+    if len(old_scores) != len(old) or len(new_scores) != len(new) or len(old) != len(new):
+        raise MigrationNotReady('Search result membership differs; preserve source route')
+    shared = old_scores.keys() & new_scores.keys()
+    if any(abs(old_scores[i] - new_scores[i]) > tolerance for i in shared):
+        raise MigrationNotReady('Search scores differ; preserve source route')
+    old_floor = min(old_scores.values(), default=0.0)
+    new_floor = min(new_scores.values(), default=0.0)
+    if any(old_scores[i] - new_floor > tolerance for i in old_scores.keys() - shared) or any(
+        new_scores[i] - old_floor > tolerance for i in new_scores.keys() - shared
+    ):
+        raise MigrationNotReady('Search result membership differs; preserve source route')
+    position = {match['id']: rank for rank, match in enumerate(new)}
+    ranked = [match['id'] for match in old if match['id'] in position]
+    for i, first in enumerate(ranked):
+        for second in ranked[i + 1 :]:
+            if position[first] > position[second] and abs(old_scores[first] - old_scores[second]) > tolerance:
+                raise MigrationNotReady('Search result order differs; preserve source route')
+    return [match['id'] for match in old] == [match['id'] for match in new]
+
+
+# Payload-proof query packing. A 3072-d record with modest metadata serializes to about 45 KB in a query
+# response (30 records measured at 1.37 MB on the dev index, 100 at 4.5 MB, 2026-11-02).
+PAYLOAD_PROOF_MAX_RECORDS = 100
+PAYLOAD_PROOF_MAX_BYTES = 3_500_000
+
+
 IDENTITY_FIELDS = {
     'ns1': ('memory_id',),
     'ns2': ('memory_id',),
@@ -72,17 +127,45 @@ IDENTITY_FIELDS = {
 class PartitionTransport:
     """REST transport retains LSN headers that the normal SDK hides."""
 
-    def __init__(self, host: str, api_key: str, *, client: httpx.Client | None = None):
+    def __init__(
+        self,
+        host: str,
+        api_key: str,
+        *,
+        client: httpx.Client | None = None,
+        write_client: httpx.Client | None = None,
+    ):
         if not host.endswith('.pinecone.io') or '/' in host:
             raise ValueError('Expected an index host from the Pinecone control plane')
         self.host = host
         self.client = client or httpx.Client(timeout=60)
+        # Mutations never reuse a pooled connection: a server that closed an idle
+        # keep-alive connection turns the next request on it into a disconnect
+        # without a response, an unknown outcome that blocks the owner.
+        # Never alias an injected read client: its pool would bring keep-alive back.
+        self.write_client = write_client or httpx.Client(timeout=60, limits=httpx.Limits(max_keepalive_connections=0))
         self.headers = {'Api-Key': api_key, 'X-Pinecone-Api-Version': '2025-10'}
         self.read_units = 0.0
         self.write_units = 0.0
+        # Client request id of the most recent mutation, kept for reconciliation evidence.
+        self.last_write_request_id: str | None = None
+
+    def close(self) -> None:
+        self.client.close()
+        if self.write_client is not self.client:
+            self.write_client.close()
 
     def call(self, path: str, payload: dict) -> tuple[dict, dict]:
-        response = self.client.post(f'https://{self.host}/{path}', json=payload, headers=self.headers)
+        headers, client = self.headers, self.client
+        if path in WRITE_PATHS:
+            self.last_write_request_id = uuid4().hex
+            headers, client = {**self.headers, 'X-Request-Id': self.last_write_request_id}, self.write_client
+        try:
+            response = client.post(f'https://{self.host}/{path}', json=payload, headers=headers)
+        except NOT_SENT_ERRORS as error:
+            if path in WRITE_PATHS:
+                raise WriteNotSent(f'Connection failed before the {path} request was sent') from error
+            raise
         response.raise_for_status()
         body = response.json()
         usage = body.get('usage') or {}
@@ -229,8 +312,19 @@ class PartitionTransport:
 
         visit(selectors, 0, [])
 
-    def verify_payloads(self, namespace: str, uid: str, probe: list[float], lsn: int, groups: dict) -> None:
+    def verify_payloads(
+        self, namespace: str, uid: str, probe: list[float], lsn: int, groups: dict, sizes: dict | None = None
+    ) -> None:
+        """Prove every record's fresh payload, packing identity groups into as few queries as fit.
+
+        A query's read cost is set by the namespace it scans, not by how many matches it returns, so
+        fewer, fuller queries prove the same records for less. Each query stays within a response-byte
+        budget estimated from the copied records' serialized sizes. Without sizes, the old 30-record
+        groups apply.
+        """
         selectors, expected = [], {}
+        batch_bytes = 0
+        unknown_size = PAYLOAD_PROOF_MAX_BYTES // 30
 
         def check() -> None:
             if not selectors:
@@ -255,11 +349,21 @@ class PartitionTransport:
         for selector_json, records in groups.items():
             if len(records) > 30:
                 raise MigrationNotReady('Too many provider identities share a source key for bounded payload proof')
-            if len(expected) + len(records) > 30:
+            group_bytes = sum((sizes or {}).get(vector_id, unknown_size) for vector_id in records)
+            if expected and (
+                len(expected) + len(records) > PAYLOAD_PROOF_MAX_RECORDS
+                or batch_bytes + group_bytes > PAYLOAD_PROOF_MAX_BYTES
+            ):
                 check()
-                selectors, expected = [], {}
+                selectors, expected, batch_bytes = [], {}, 0
             selectors.append(json.loads(selector_json))
             expected.update(records)
+            batch_bytes += group_bytes
+            if group_bytes > PAYLOAD_PROOF_MAX_BYTES:
+                # An identity group is the smallest filterable unit and cannot be split. An over-budget
+                # group is proven alone, never packed with others: at most 30 records, as before packing.
+                check()
+                selectors, expected, batch_bytes = [], {}, 0
         check()
 
 
@@ -291,8 +395,8 @@ class OwnerMigration:
             with external_write_fence(self.key.uid, firestore_client=self.firestore_client):
                 attempted = True
                 yield
-        except Exception:
-            if attempted and ids != [BARRIER_ID]:
+        except BaseException as error:
+            if attempted and ids != [BARRIER_ID] and not isinstance(error, WriteNotSent):
                 state.mark_mutation_uncertain(self.key, ticket, firestore_client=self.firestore_client)
             else:
                 state.finish_mutation(self.key, ticket, firestore_client=self.firestore_client)
@@ -320,6 +424,7 @@ class OwnerMigration:
         samples: list[list[float]] = []
         expected: dict[str, str] = {}
         groups: dict[str, dict[str, str]] = {}
+        sizes: dict[str, int] = {}
         before = self._route()
         if before.pending_count or before.uncertain_count:
             raise MigrationNotReady('Source has unfinished mutations')
@@ -330,6 +435,13 @@ class OwnerMigration:
         last_target_lsn = 0
         # Copy admission increments revisions itself; count those exact writes.
         owned_revision_increments = 2
+        # A resumed or retried attempt finds most records already in the target.
+        # Skip re-uploading those that match exactly; the fresh inventory and
+        # payload proofs below still verify every record in the target.
+        already_copied: dict[str, str] = {}
+        for records in self.transport.owned_pages(target, self.key.uid):
+            for record in records:
+                already_copied[record['id']] = record_digest(record)
         for records in self.transport.owned_pages(source, self.key.uid):
             if not records:
                 continue
@@ -344,9 +456,12 @@ class OwnerMigration:
                     raise MigrationNotReady('Record lacks an authoritative identity filter for payload proof')
                 selector = json.dumps({field: {'$eq': metadata[field]} for field in fields}, sort_keys=True)
                 groups.setdefault(selector, {})[vector_id] = expected[vector_id]
+                # Response bytes for this match: the record plus score, used to pack proof queries.
+                sizes[vector_id] = len(json.dumps(record, allow_nan=False).encode()) + 64
                 if len(samples) < 3:
                     samples.append(record['values'])
-            for batch in bounded_upsert_batches(records, target):
+            to_copy = [record for record in records if already_copied.get(record['id']) != expected[record['id']]]
+            for batch in bounded_upsert_batches(to_copy, target):
                 last_target_lsn = self._write(token, 'vectors/upsert', target, [r['id'] for r in batch], vectors=batch)
                 owned_revision_increments += 2
         # Remove target-only records, including records deleted during a prior
@@ -373,8 +488,8 @@ class OwnerMigration:
         target_ids = self.transport.fresh_inventory(target, self.key.uid, probe, last_target_lsn, groups)
         if source_ids != set(expected) or target_ids != set(expected):
             raise MigrationNotReady('Fresh complete inventory differs from the copied snapshot')
-        self.transport.verify_payloads(source, self.key.uid, probe, source_barrier, groups)
-        self.transport.verify_payloads(target, self.key.uid, probe, last_target_lsn, groups)
+        self.transport.verify_payloads(source, self.key.uid, probe, source_barrier, groups, sizes)
+        self.transport.verify_payloads(target, self.key.uid, probe, last_target_lsn, groups, sizes)
         query_checks = []
         source_indexed = 0
         for vector in samples or [probe]:
@@ -382,11 +497,8 @@ class OwnerMigration:
             new, target_indexed = self.transport.query(target, self.key.uid, vector)
             if source_indexed < source_barrier or target_indexed < last_target_lsn:
                 raise MigrationNotReady('Query replica has not reached the verified write barrier')
-            old_ids = [match['id'] for match in old['matches']]
-            new_ids = [match['id'] for match in new['matches']]
-            if old_ids != new_ids:
-                raise MigrationNotReady('Search result order differs; preserve source route')
-            query_checks.append({'matched': len(old_ids), 'passed': True})
+            exact = search_parity(old['matches'], new['matches'])
+            query_checks.append({'matched': len(old['matches']), 'passed': True, 'exact_order': exact})
         after = self._route()
         if (
             after.pending_count

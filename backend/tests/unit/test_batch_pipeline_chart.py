@@ -271,9 +271,15 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     batch_size = environment_values.get('worker', {}).get('batchSize', defaults['worker']['batchSize'])
     assert batch_size == 8
     assert project_env['BATCH_PIPELINE_MODEL_BATCH_SIZE']['value'] == str(batch_size)
-    assert container['resources']['requests']['memory'] == '12Gi'
-    assert container['resources']['limits']['memory'] == '14Gi'
-    assert container['resources']['requests']['cpu'] == '4'
+    processes = environment_values.get('worker', {}).get('processes', defaults['worker']['processes'])
+    assert project_env['BATCH_PIPELINE_WORKER_PROCESSES']['value'] == str(processes)
+    # Two processes double the one-process host sizing, inside g2-standard-8.
+    sized = ('12Gi', '14Gi', '4') if processes == 1 else ('24Gi', '26Gi', '6')
+    assert (
+        container['resources']['requests']['memory'],
+        container['resources']['limits']['memory'],
+        container['resources']['requests']['cpu'],
+    ) == sized
     assert container['resources']['limits']['cpu'] == '8'
     assert container['resources']['requests']['nvidia.com/gpu'] == '1'
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
@@ -626,6 +632,35 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
 
 
+@pytest.mark.parametrize(
+    'arguments,expected', [((), 'true'), (('--set', 'worker.sharedEmbeddingTrunkEnabled=false'), 'false')]
+)
+def test_shared_embedding_trunk_ships_on_with_helm_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED'] == expected
+
+
+@pytest.mark.parametrize(
+    'value,env_name',
+    [
+        ('vadSegmentationReuseEnabled', 'BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED'),
+        ('prepareFlightEnabled', 'BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED'),
+        ('asrCudaGraphsEnabled', 'BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED'),
+    ],
+)
+@pytest.mark.parametrize('kill', [False, True])
+def test_gpu_efficiency_levers_ship_on_with_helm_kill_switches(value, env_name, kill):
+    arguments = ('--set', f'worker.{value}=false') if kill else ()
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env[env_name] == ('false' if kill else 'true')
+
+
 @pytest.mark.parametrize('arguments,expected', [((), 'true'), (('--set', 'worker.shardSpreadEnabled=false'), 'false')])
 def test_shard_spread_ships_on_with_helm_kill_switch(arguments, expected):
     result = render(*enabled_arguments(), *arguments)
@@ -653,6 +688,28 @@ def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expec
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == expected
+
+
+@pytest.mark.parametrize(
+    'arguments,expected,memory',
+    [((), '1', ('12Gi', '14Gi')), (('--set', 'worker.processes=2'), '2', ('24Gi', '26Gi'))],
+)
+def test_worker_processes_default_one_and_two_size_the_pod(arguments, expected, memory):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    container = deployment['spec']['template']['spec']['containers'][0]
+    env = {v['name']: v.get('value') for v in container['env']}
+    assert env['BATCH_PIPELINE_WORKER_PROCESSES'] == expected
+    assert (container['resources']['requests']['memory'], container['resources']['limits']['memory']) == memory
+    assert container['resources']['limits']['nvidia.com/gpu'] == '1'  # Processes share one GPU.
+    assert container['ports'] == [{'name': 'http', 'containerPort': 8080}]  # Children stay on loopback.
+
+
+@pytest.mark.parametrize('count,message', [(0, 'must be in'), (4, 'must be in'), (3, 'processResources.3')])
+def test_worker_processes_refuse_unsized_counts(count, message):
+    result = render(*enabled_arguments(), '--set', f'worker.processes={count}')
+    assert result.returncode != 0 and message in result.stderr
 
 
 def test_gpu_skip_switches_render_overrides():
