@@ -126,6 +126,12 @@ def test_prod_bucket_by_hash_is_refused():
     assert ('prod_hash', 'BUCKET_BATCH_PIPELINE') in staging_violations(env)
 
 
+def test_prod_derived_audio_bucket_is_refused():
+    env = _clean_env()
+    env['BUCKET_AUDIO_DERIVED'] = 'omi-audio-derived-uc1'
+    assert ('prod_hash', 'BUCKET_AUDIO_DERIVED') in staging_violations(env)
+
+
 def test_hashes_are_hex_digests_not_values():
     assert all(len(h) == 64 and int(h, 16) >= 0 for h in PROD_DATA_PLANE_HASHES)
 

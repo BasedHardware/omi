@@ -21,9 +21,10 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 226,
+  "count": 227,
   "names": {
     "PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
+    "BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
     "SYNC_BACKFILL_WORKER_API_URL": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},
     "SYNC_BACKFILL_WORKER_AUDIENCE": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},
     "BATCH_VENDOR_ROUTING_ENABLED": {"owner": "vroute-b / two-lane lead", "review_by": "2026-11-29"},
