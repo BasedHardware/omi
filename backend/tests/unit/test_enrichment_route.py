@@ -223,6 +223,93 @@ def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(row
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+def _gateway_status(status):
+    import httpx
+
+    request = httpx.Request('POST', 'http://gateway.invalid/v1/embeddings')
+    response = httpx.Response(status, request=request)
+    return httpx.HTTPStatusError('synthetic', request=request, response=response)
+
+
+def _remapped_aborted():
+    """Firestore's commit path: api_core remaps the grpc error, raised from it."""
+    from google.api_core import exceptions as google_errors
+
+    try:
+        raise RuntimeError('synthetic grpc _InactiveRpcError')
+    except RuntimeError as source:
+        try:
+            raise google_errors.Aborted('synthetic contention') from source
+        except google_errors.Aborted as error:
+            return error
+
+
+def _wrapped_read_timeout():
+    """A caller's wrapper around the gateway's embedding read timeout."""
+    import httpx
+
+    error = RuntimeError('synthetic wrapper')
+    error.__cause__ = httpx.ReadTimeout('synthetic')
+    return error
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        pytest.param(_remapped_aborted(), id='firestore-aborted'),
+        pytest.param(_gateway_status(503), id='gateway-503'),
+        pytest.param(_wrapped_read_timeout(), id='wrapped-read-timeout'),
+    ],
+)
+def test_transient_dependency_faults_release_the_lease_as_409(rows, client, monkeypatch, error):
+    """Prod 11-03: these answered 500 and kept the lease, so the queue retry was consumed as BUSY."""
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=error))
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, monkeypatch):
+    """Luna r1: a store fault inside ``record_empty_failure`` is outside the callback's except clauses."""
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', Mock(side_effect=_remapped_aborted()))
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, lambda *_: SimpleNamespace(structured={'title': 'Synthetic'}))
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):
+    """Luna r1: the effects-only branch runs before the callback block."""
+    from utils.conversations import lazy_enrichment
+
+    rows[0][KEY]['effects_only'] = True
+    monkeypatch.setattr(lazy_enrichment, 'enrich_settled', Mock(side_effect=_gateway_status(503)))
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, Mock())
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client, monkeypatch):
+    import httpx
+
+    monkeypatch.setattr(
+        consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=_gateway_status(400))
+    )
+    token = rows[0][KEY]['task_token']
+    with pytest.raises(httpx.HTTPStatusError):
+        client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert rows[0][KEY]['lease_until'] > 0
+
+
 def _provider_sweep(monkeypatch, sweep):
     """Stub the C8 provider-STT outbox that maintain() also sweeps (M3 review); never touches Firestore."""
     import database.outbox as outbox_module
