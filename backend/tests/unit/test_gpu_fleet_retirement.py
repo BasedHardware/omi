@@ -1,6 +1,8 @@
 """No serving escape may dial the retired shared Parakeet/VAD services."""
 
+from functools import lru_cache
 from pathlib import Path
+from unittest.mock import Mock
 import subprocess
 
 import pytest
@@ -120,6 +122,7 @@ def test_hosted_vad_is_bypassed_without_waiting_for_failure(retired, monkeypatch
     assert vad.vad_is_empty('unused.wav', return_segments=True) == [{'start': 0, 'end': 1}]
 
 
+@lru_cache(maxsize=None)
 def resources(chart, *extra):
     path = ROOT / 'backend/charts' / chart
     image_args = [] if chart == 'incluster-guards' else ['--set-string', 'image.tag=retirement-contract-test']
@@ -138,7 +141,7 @@ def resources(chart, *extra):
         ],
         text=True,
     )
-    return [item for item in yaml.safe_load_all(result) if item]
+    return [item for item in yaml.load_all(result, Loader=yaml.CSafeLoader) if item]
 
 
 @pytest.mark.parametrize('chart', ['parakeet', 'vad', 'diarizer'])
@@ -179,13 +182,13 @@ def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replica
         ],
         text=True,
     )
-    batch = [o for o in yaml.safe_load_all(result) if o]
+    batch = [o for o in yaml.load_all(result, Loader=yaml.CSafeLoader) if o]
     assert 'replicas' not in next(o for o in batch if o['kind'] == 'Deployment')['spec']
     assert next(o for o in batch if o['kind'] == 'HorizontalPodAutoscaler')['spec']['minReplicas'] == 1
 
 
 def test_retirement_is_declared_on_every_prod_routing_runtime_only():
-    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    manifest = runtime_manifest()
     # The composed document owns runtime identity, independent from chart defaults.
     for environment, config in manifest['environments'].items():
         envs = [config['gke'][name]['env'] for name in ('backend-listen', 'pusher')]
@@ -195,14 +198,14 @@ def test_retirement_is_declared_on_every_prod_routing_runtime_only():
         )
         for env in envs:
             if environment == 'prod':
-                assert env['STT_GPU_FLEET_OFF']['value'] == 'false'
+                assert env['STT_GPU_FLEET_OFF']['value'] == 'true'
             else:
                 assert 'STT_GPU_FLEET_OFF' not in env
 
 
 @pytest.mark.parametrize('service', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
 def test_cloud_run_retirement_configuration_can_pass_real_startup(service, streaming_module):
-    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    manifest = runtime_manifest()
     config = manifest['environments']['prod']['cloud_run']['services'][service]
     # All four roles already use this runtime identity; reuse the existing secret,
     # with no new key or IAM change, rather than weakening the startup key guard.
@@ -210,7 +213,7 @@ def test_cloud_run_retirement_configuration_can_pass_real_startup(service, strea
     assert config['secrets']['SONIOX_API_KEY'] == {'secret': 'SONIOX_API_KEY', 'version': 'latest'}
     environment = {name: binding['value'] for name, binding in config['env'].items() if 'value' in binding}
     environment.update({name: 'configured-binding' for name in config['secrets']})
-    environment['STT_GPU_FLEET_OFF'] = 'true'
+    assert environment['STT_GPU_FLEET_OFF'] == 'true'
     streaming_module.validate_streaming_stt_env(environment)
 
 
@@ -219,3 +222,121 @@ def test_windows_ptt_still_selects_modulate_after_fleet_off(retired, streaming_m
         streaming_module.get_stt_service_for_language('en', surface=STTServingSurface.PTT)[0]
         == streaming_module.STTService.modulate
     )
+
+
+@lru_cache(maxsize=1)
+def runtime_manifest():
+    return yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+
+
+@lru_cache(maxsize=None)
+def production_caller_env(source):
+    """Load real declarations; secret values are synthetic and never fetched."""
+    if source.startswith('chart:'):
+        chart = source.split(':', 1)[1]
+        objects = resources(chart)
+        deployment = next(o for o in objects if o['kind'] == 'Deployment')
+        entries = deployment['spec']['template']['spec']['containers'][0]['env']
+        return {entry['name']: entry.get('value', 'configured-binding') for entry in entries}
+    config = runtime_manifest()['environments']['prod']
+    if source in ('backend-listen', 'pusher'):
+        caller = config['gke'][source]
+        # GKE's manifest is an overlay on its chart, where vendor secrets live.
+        env = dict(production_caller_env('chart:' + source))
+    else:
+        caller = config['cloud_run']['services'][source]
+        env = {}
+    env.update({name: entry.get('value', 'configured-binding') for name, entry in caller['env'].items()})
+    env.update({name: 'configured-binding' for name in caller.get('secrets', {})})
+    return env
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend-listen',
+        'pusher',
+        'backend',
+        'backend-sync',
+        'backend-sync-backfill',
+        'backend-integration',
+        'chart:backend-listen',
+        'chart:pusher',
+    ],
+)
+def test_production_callers_cannot_resolve_retired_endpoints(source, monkeypatch, streaming_module):
+    from config.parakeet_ja import window_endpoint
+    from config.prerecorded_stt import providers_for_model_config
+    from utils.stt import language_gate, pre_recorded, vad
+
+    env = production_caller_env(source)
+    assert env['STT_GPU_FLEET_OFF'] == 'true'
+    assert env['SONIOX_API_KEY']
+    assert env['MODULATE_API_KEY']
+    # The checks must work from checked-in config, independently of the test runner's env.
+    for name in ('STT_GPU_FLEET_OFF', 'HOSTED_LID_API_URL', 'STT_SERVICE_MODELS', 'STT_PRERECORDED_MODEL'):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, str(value))
+    # Some endpoints are retained for warm rollback or bound only in live config.
+    # Poison both paths to prove the switch wins over those bindings too.
+    monkeypatch.setenv('HOSTED_VAD_API_URL', 'http://retired.invalid/v1/vad')
+    monkeypatch.setenv('HOSTED_PARAKEET_JA_API_URL', 'http://retired.invalid')
+    monkeypatch.setattr(language_gate.httpx, 'Client', lambda **kw: pytest.fail('retired LID dialed'))
+    monkeypatch.setattr(vad.requests, 'post', lambda *a, **kw: pytest.fail('retired VAD dialed'))
+    monkeypatch.setattr(vad, '_run_file_vad', lambda path: [{'start': 0, 'end': 1}])
+    monkeypatch.setattr(pre_recorded, 'modulate_prerecorded_from_bytes', lambda *a, **kw: ['vendor words'])
+    streaming_module.validate_streaming_stt_env(env)
+    for language in ('en', 'ja', 'multi'):
+        selected = streaming_module.get_stt_service_for_language(
+            language, preferred_service='parakeet', window_uid='synthetic-owner', prefer_window=True
+        )
+        assert selected[0] == streaming_module.STTService.soniox
+        assert pre_recorded.get_prerecorded_service(language)[0] == 'modulate'
+        assert (
+            streaming_module.get_stt_service_for_language(language, surface=STTServingSurface.PTT)[0]
+            == streaming_module.STTService.modulate
+        )
+        assert window_endpoint(language) == ''
+    assert providers_for_model_config(env.get('STT_PRERECORDED_MODEL', '')) == ('modulate',)
+    assert pre_recorded.parakeet_prerecorded_from_bytes(b'wav') == ['vendor words']
+    assert language_gate.self_detect(b'wav', surface='batch') is None
+    assert vad.vad_is_empty('unused.wav', return_segments=True) == [{'start': 0, 'end': 1}]
+
+
+@pytest.mark.parametrize('fleet_off', ['true', 'false'])
+@pytest.mark.parametrize('fails', [False, True])
+def test_dedicated_lid_precedes_shared_endpoint_and_failure_keeps_vendor(monkeypatch, fleet_off, fails):
+    from utils.stt import language_gate
+
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', fleet_off)
+    monkeypatch.setenv('HOSTED_LID_API_URL', ' http://cpu-lid.invalid/lid/ ')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://retired.invalid')
+    client = Mock()
+    response = Mock(status_code=200)
+    response.json.return_value = {
+        'language': 'de',
+        'language_probability': 0.99,
+        'p_supported': 0.99,
+        'audio_seconds': 6,
+    }
+    client.__enter__ = Mock(return_value=client)
+    client.__exit__ = Mock(return_value=False)
+    client.post.return_value = response
+    if fails:
+        client.post.side_effect = language_gate.httpx.TimeoutException('unavailable')
+    monkeypatch.setattr(language_gate.httpx, 'Client', lambda **kw: client)
+    verdict = language_gate.self_detect(b'wav', surface='batch')
+    if fails:
+        assert verdict is None
+    else:
+        assert verdict.language == 'de'
+    assert client.post.call_count == 1
+    assert client.post.call_args.args == ('http://cpu-lid.invalid/lid/v2/language',)
+
+
+def test_notifications_job_has_no_shared_gpu_bindings():
+    config = runtime_manifest()['environments']['prod']['cloud_run']['jobs']['notifications-job']
+    for key in ('HOSTED_VAD_API_URL', 'HOSTED_PARAKEET_API_URL'):
+        assert key not in config['env']
+        assert key not in config.get('secrets', {})
