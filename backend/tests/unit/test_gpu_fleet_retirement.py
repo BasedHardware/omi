@@ -212,3 +212,10 @@ def test_cloud_run_retirement_configuration_can_pass_real_startup(service, strea
     environment.update({name: 'configured-binding' for name in config['secrets']})
     environment['STT_GPU_FLEET_OFF'] = 'true'
     streaming_module.validate_streaming_stt_env(environment)
+
+
+def test_windows_ptt_still_selects_modulate_after_fleet_off(retired, streaming_module):
+    assert (
+        streaming_module.get_stt_service_for_language('en', surface=STTServingSurface.PTT)[0]
+        == streaming_module.STTService.modulate
+    )
