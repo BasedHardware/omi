@@ -735,6 +735,10 @@ def _desktop_projection() -> ClientProcessing:
 
 
 def _stub_desktop_terminal(monkeypatch):
+    from utils.conversations import relevance_io
+
+    # Owner-recognition witnesses use synthetic captures, without episode I/O.
+    monkeypatch.setattr(relevance_io, 'occasion_retention', lambda *args, **kwargs: None)
     module = process_conversation_mod
     monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(module, 'link_duplicate_captures', lambda *args, **kwargs: None)
