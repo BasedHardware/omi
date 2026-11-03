@@ -27,6 +27,9 @@ def explicit_stage(monkeypatch):
         ('prior_content', 'content_receipt_conflict'),
         ('uncovered', 'audio_coverage_unproven'),
         ('failed_check', 'coverage_check_failed'),
+        ('artifact_failed', 'artifact_lookup_failed'),
+        ('alias_failed', 'alias_write_failed'),
+        ('status_failed', 'receipt_status_read_failed'),
     ],
 )
 async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, caplog, case, expected):
@@ -36,6 +39,11 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     row = {'record_lane_owner': live_upload.OWNER, 'source': 'omi', 'client_device_id': 'synthetic-device'}
     store.rows['intakes', 'bp_' + content] = {'segment_ids': ['synthetic-segment']}
     store.rows['jobs', 'synthetic-segment'] = {'segment_id': 'synthetic-segment'}
+    store.rows['content', f'{uid}/{content}'] = {
+        'status': 'processing',
+        'dispatch_protocol': 'batch_v1',
+        'job_id': 'bp_' + content,
+    }
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
     monkeypatch.setattr(live_upload, 'artifacts_for', lambda *_: object())
     monkeypatch.setattr(live_upload, '_covered', lambda *_: False)
@@ -49,12 +57,31 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
         store.rows['intakes', 'bp_' + content]['segment_ids'] = []
     elif case == 'prior_content':
         store.rows['content', f'{uid}/synthetic-content'] = {'status': 'processing'}
-    elif case == 'failed_check':
+    elif case in {'failed_check', 'artifact_failed', 'alias_failed', 'status_failed'}:
 
         def fail(*_):
             raise RuntimeError('sensitive@example.test users/0123456789012345678901234567/jobs/private-job')
 
-        monkeypatch.setattr(live_upload, '_covered', fail)
+        if case == 'failed_check':
+            monkeypatch.setattr(live_upload, '_covered', fail)
+        elif case == 'artifact_failed':
+            monkeypatch.setattr(live_upload, 'artifacts_for', fail)
+        else:
+            monkeypatch.setattr(live_upload, '_covered', lambda *_: True)
+            if case == 'status_failed':
+                monkeypatch.setattr(live_upload, 'durable_status', fail)
+            else:
+                original_run = store.run
+                calls = 0
+
+                def fail_alias(body):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 2:
+                        return fail()
+                    return original_run(body)
+
+                monkeypatch.setattr(store, 'run', fail_alias)
     before = deepcopy(store.rows)
     with caplog.at_level(logging.INFO, logger=live_upload.__name__):
         response = await live_upload.registered_record_response(
@@ -73,7 +100,16 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
         'code': 'record_capture_pending',
         'detail': 'Retain local audio until the registered record is complete',
     }
-    assert store.rows == before
+    if case == 'status_failed':
+        # The alias committed before the read failed; the client still keeps
+        # its audio, and the next retry can reuse that durable receipt.
+        after = deepcopy(store.rows)
+        alias = after.pop(('content', f'{uid}/synthetic-content'))
+        assert alias['record_content_id'] == content
+        assert alias['job_id'] == 'bp_' + content
+        assert after == before
+    else:
+        assert store.rows == before
     messages = [record.getMessage() for record in caplog.records]
     assert messages == [f'event=sync_record_upload outcome=pending reason={expected}']
 

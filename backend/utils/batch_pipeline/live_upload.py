@@ -55,7 +55,10 @@ class RecordUploadWait(Enum):
     RECORD_JOBS_MISSING = 'record_jobs_missing'
     AUDIO_COVERAGE_UNPROVEN = 'audio_coverage_unproven'
     ALIAS_CONFLICT = 'alias_conflict'
+    ARTIFACT_LOOKUP_FAILED = 'artifact_lookup_failed'
     COVERAGE_CHECK_FAILED = 'coverage_check_failed'
+    ALIAS_WRITE_FAILED = 'alias_write_failed'
+    RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
 def _pending(reason: RecordUploadWait):
@@ -307,8 +310,10 @@ async def registered_record_response(
         return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT)
     if not jobs:
         return _pending(RecordUploadWait.RECORD_JOBS_MISSING)
+    failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        failure_reason = RecordUploadWait.COVERAGE_CHECK_FAILED
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
             return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN)
 
@@ -329,11 +334,13 @@ async def registered_record_response(
             )
             return True
 
+        failure_reason = RecordUploadWait.ALIAS_WRITE_FAILED
         if not await run_blocking(db_executor, store.run, alias):
             return _pending(RecordUploadWait.ALIAS_CONFLICT)
+        failure_reason = RecordUploadWait.RECEIPT_STATUS_READ_FAILED
         status = await run_blocking(db_executor, durable_status, store, uid, 'bp_' + content)
         return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
     except Exception:
         # An erased/missing manifest cannot prove WAL coverage. Retain it;
         # never translate a storage/privacy failure into legacy compute.
-        return _pending(RecordUploadWait.COVERAGE_CHECK_FAILED)
+        return _pending(failure_reason)
