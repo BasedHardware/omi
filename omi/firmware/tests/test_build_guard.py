@@ -23,6 +23,17 @@ for fault, debug, development, kind, expected in (
     assert (proc.returncode != 0) == bool(expected), proc.stdout + proc.stderr
 print("Release fault-injection guard: all 8 build configurations passed")
 
+# Sysbuild jig builds opt in through the environment; any other value fails closed.
+import os
+for value, expected in (("1", 0), ("", 1), ("ON", 1), ("0", 1)):
+    env = dict(os.environ, OMI_DEVELOPMENT_BUILD=value)
+    proc = subprocess.run([
+        "cmake", "-DCONFIG_OMI_FAULT_INJECT=ON", "-DCONFIG_DEBUG=ON", "-DCMAKE_BUILD_TYPE=Debug",
+        "-P", str(GUARD)
+    ], capture_output=True, text=True, env=env)
+    assert (proc.returncode != 0) == bool(expected), proc.stdout + proc.stderr
+print("Development opt-in through the environment: all 4 values passed")
+
 # Recovery must never compile with the image-target rejection hook missing.
 for notification, status, upload in ((True, True, True), (False, True, True),
                                       (True, False, True), (True, True, False)):
