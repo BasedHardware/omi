@@ -396,12 +396,12 @@ void safe_mode_poll(void)
 
 void safe_mode_snapshot_get(struct safe_mode_snapshot *out)
 {
-    *out = (struct safe_mode_snapshot) {.boot_count = retained.count,
-                                        .reset_reason = retained.reset_reason,
-                                        .latch_reason = retained.latch_reason,
-                                        .active = active,
-                                        .latched = retained.latch_reason != 0,
-                                        .bootstate = saved.state};
+    *out = (struct safe_mode_snapshot){.boot_count = retained.count,
+                                       .reset_reason = retained.reset_reason,
+                                       .latch_reason = retained.latch_reason,
+                                       .active = active,
+                                       .latched = retained.latch_reason != 0,
+                                       .bootstate = saved.state};
 }
 
 #ifndef CONFIG_OMI_NATIVE_SIM
