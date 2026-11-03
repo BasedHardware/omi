@@ -2299,10 +2299,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get firmwareUsbWarning => 'Η σύνδεση USB κατά τη διάρκεια ενημερώσεων μπορεί να βλάψει τη συσκευή σας.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Μπαταρία πάνω από 15%';
+  String get firmwareBatteryRequirement => 'Μπαταρία πάνω από 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Βεβαιωθείτε ότι η συσκευή σας έχει 15% μπαταρία.';
+  String get firmwareEnsureBattery => 'Βεβαιωθείτε ότι η συσκευή σας έχει 30% μπαταρία.';
 
   @override
   String get firmwareStableConnection => 'Σταθερή σύνδεση';
@@ -10661,7 +10661,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Η μπαταρία είναι στο $level%. Φορτίστε τη συσκευή τουλάχιστον στο 15% πριν από την ενημέρωση.';
+    return 'Η μπαταρία είναι στο $level%. Φορτίστε τη συσκευή τουλάχιστον στο 30% πριν από την ενημέρωση.';
   }
 
   @override

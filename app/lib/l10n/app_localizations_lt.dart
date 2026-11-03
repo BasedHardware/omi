@@ -2278,10 +2278,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get firmwareUsbWarning => 'USB ryšys atnaujinimo metu gali sugadinti jūsų įrenginį.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterija virš 15%';
+  String get firmwareBatteryRequirement => 'Baterija virš 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Įsitikinkite, kad jūsų įrenginyje yra 15% baterijos.';
+  String get firmwareEnsureBattery => 'Įsitikinkite, kad jūsų įrenginyje yra 30% baterijos.';
 
   @override
   String get firmwareStableConnection => 'Stabilus ryšys';
@@ -10606,7 +10606,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Akumuliatorius $level %. Prieš atnaujindami įkraukite įrenginį bent iki 15 %.';
+    return 'Akumuliatorius $level %. Prieš atnaujindami įkraukite įrenginį bent iki 30 %.';
   }
 
   @override

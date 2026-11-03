@@ -2240,10 +2240,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareUsbWarning => '更新期间的USB连接可能会损坏您的设备。';
 
   @override
-  String get firmwareBatteryAbove15 => '电量高于15%';
+  String get firmwareBatteryRequirement => '电量高于30%';
 
   @override
-  String get firmwareEnsureBattery => '确保您的设备有15%的电量。';
+  String get firmwareEnsureBattery => '确保您的设备有30%的电量。';
 
   @override
   String get firmwareStableConnection => '稳定连接';
@@ -10410,7 +10410,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return '电量为 $level%。更新前请将设备充电至至少 15%。';
+    return '电量为 $level%。更新前请将设备充电至至少 30%。';
   }
 
   @override

@@ -2286,10 +2286,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get firmwareUsbWarning => 'Povezava USB med posodobitvami lahko poškoduje vašo napravo.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterija nad 15%';
+  String get firmwareBatteryRequirement => 'Baterija nad 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Zagotovite, da ima vaša naprava 15% baterije.';
+  String get firmwareEnsureBattery => 'Zagotovite, da ima vaša naprava 30% baterije.';
 
   @override
   String get firmwareStableConnection => 'Stabilna povezava';
@@ -10620,7 +10620,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Baterija je na $level %. Pred posodobitvijo napolnite napravo na vsaj 15 %.';
+    return 'Baterija je na $level %. Pred posodobitvijo napolnite napravo na vsaj 30 %.';
   }
 
   @override

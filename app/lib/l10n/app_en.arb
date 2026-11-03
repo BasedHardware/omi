@@ -2419,11 +2419,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Battery Above 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Ensure your device has 15% battery.",
+    "firmwareBatteryRequirement": "Battery Above 30%",
+    "firmwareEnsureBattery": "Ensure your device has 30% battery.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -12491,7 +12488,7 @@
     "@firmwareBatteryUnavailable": {
         "description": "Shown when a pendant firmware update is blocked because its battery level is unknown and it is not charging."
     },
-    "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 15% before updating.",
+    "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 30% before updating.",
     "@firmwareBatteryTooLow": {
         "description": "Firmware update blocked by low battery",
         "placeholders": {
@@ -18300,5 +18297,8 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
+    },
+    "@firmwareBatteryRequirement": {
+        "description": "Firmware update step title about battery level"
     }
 }

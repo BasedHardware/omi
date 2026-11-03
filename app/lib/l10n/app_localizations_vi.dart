@@ -2288,10 +2288,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get firmwareUsbWarning => 'Kết nối USB trong khi cập nhật có thể làm hỏng thiết bị của bạn.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Pin trên 15%';
+  String get firmwareBatteryRequirement => 'Pin trên 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Đảm bảo thiết bị của bạn có 15% pin.';
+  String get firmwareEnsureBattery => 'Đảm bảo thiết bị của bạn có 30% pin.';
 
   @override
   String get firmwareStableConnection => 'Kết nối ổn định';
@@ -10589,7 +10589,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 15% trước khi cập nhật.';
+    return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 30% trước khi cập nhật.';
   }
 
   @override

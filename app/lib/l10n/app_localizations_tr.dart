@@ -2285,10 +2285,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get firmwareUsbWarning => 'Güncellemeler sırasında USB bağlantısı cihazınıza zarar verebilir.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Pil %15\'in üzerinde';
+  String get firmwareBatteryRequirement => 'Pil %30\'in üzerinde';
 
   @override
-  String get firmwareEnsureBattery => 'Cihazınızın %15 pili olduğundan emin olun.';
+  String get firmwareEnsureBattery => 'Cihazınızın %30 pili olduğundan emin olun.';
 
   @override
   String get firmwareStableConnection => 'Kararlı bağlantı';
@@ -10600,7 +10600,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Pil %$level seviyesinde. Güncellemeden önce cihazınızı en az %15\'e kadar şarj edin.';
+    return 'Pil %$level seviyesinde. Güncellemeden önce cihazınızı en az %30\'e kadar şarj edin.';
   }
 
   @override

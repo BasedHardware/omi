@@ -744,7 +744,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final currentTime = now ?? DateTime.now();
 
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
-    // Always publish unknown readings and firmware/low-battery threshold crossings.
+    // Always publish unknown readings and crossings of the shared firmware or low-battery thresholds.
     final delta = (_lastNotifiedBatteryLevel - value).abs();
     final elapsed =
         _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);

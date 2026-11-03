@@ -2291,10 +2291,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get firmwareUsbWarning => 'Падлучэнне USB во час абнаўленняў можа пашкодзіць ваш прыбор.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Батарэя вышэй за 15%';
+  String get firmwareBatteryRequirement => 'Батарэя вышэй за 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Пераканайцеся, што ў вашага прыбору 15% батарэі.';
+  String get firmwareEnsureBattery => 'Пераканайцеся, што ў вашага прыбору 30% батарэі.';
 
   @override
   String get firmwareStableConnection => 'Стабільнае злучэнне';
@@ -10618,7 +10618,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Зарад батарэі $level%. Зарадзіце прыладу хаця б да 15% перад абнаўленнем.';
+    return 'Зарад батарэі $level%. Зарадзіце прыладу хаця б да 30% перад абнаўленнем.';
   }
 
   @override

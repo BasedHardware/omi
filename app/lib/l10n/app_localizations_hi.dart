@@ -2257,10 +2257,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get firmwareUsbWarning => 'अपडेट के दौरान USB कनेक्शन आपके डिवाइस को नुकसान पहुंचा सकता है।';
 
   @override
-  String get firmwareBatteryAbove15 => 'बैटरी 15% से अधिक';
+  String get firmwareBatteryRequirement => 'बैटरी 30% से अधिक';
 
   @override
-  String get firmwareEnsureBattery => 'सुनिश्चित करें कि आपके डिवाइस में 15% बैटरी है।';
+  String get firmwareEnsureBattery => 'सुनिश्चित करें कि आपके डिवाइस में 30% बैटरी है।';
 
   @override
   String get firmwareStableConnection => 'स्थिर कनेक्शन';
@@ -10570,7 +10570,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'बैटरी $level% है। अपडेट से पहले डिवाइस को कम से कम 15% तक चार्ज करें।';
+    return 'बैटरी $level% है। अपडेट से पहले डिवाइस को कम से कम 30% तक चार्ज करें।';
   }
 
   @override

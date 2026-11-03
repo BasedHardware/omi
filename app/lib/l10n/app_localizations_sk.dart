@@ -2286,10 +2286,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get firmwareUsbWarning => 'Pripojenie USB počas aktualizácií môže poškodiť vaše zariadenie.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Batéria nad 15%';
+  String get firmwareBatteryRequirement => 'Batéria nad 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Uistite sa, že vaše zariadenie má 15% batérie.';
+  String get firmwareEnsureBattery => 'Uistite sa, že vaše zariadenie má 30% batérie.';
 
   @override
   String get firmwareStableConnection => 'Stabilné pripojenie';
@@ -10581,7 +10581,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Batéria je na $level %. Pred aktualizáciou nabite zariadenie aspoň na 15 %.';
+    return 'Batéria je na $level %. Pred aktualizáciou nabite zariadenie aspoň na 30 %.';
   }
 
   @override

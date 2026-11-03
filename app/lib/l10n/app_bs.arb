@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Baterija iznad 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Provjeri da tvoj uređaj ima 15% baterije.",
+    "firmwareBatteryRequirement": "Baterija iznad 30%",
+    "firmwareEnsureBattery": "Provjeri da tvoj uređaj ima 30% baterije.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10772,7 +10769,7 @@
     "firmwareUpdateFailedMessage": "Ažuriranje nije završeno. Uređaj je i dalje na trenutnom firmveru i siguran je za upotrebu. Držite ga napunjenim i blizu telefona, pa pokušajte ponovo.",
     "firmwareDownloadFailedMessage": "Ažuriranje nije moguće preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu, pa pokušajte ponovo.",
     "firmwareBatteryUnavailable": "Nivo baterije još nije dostupan. Sačekajte trenutak i ponovo se povežite ako se to ne promijeni.",
-    "firmwareBatteryTooLow": "Baterija je na {level}%. Napunite uređaj na najmanje 15% prije ažuriranja.",
+    "firmwareBatteryTooLow": "Baterija je na {level}%. Napunite uređaj na najmanje 30% prije ažuriranja.",
     "startUpdate": "Pokreni ažuriranje",
     "otaNotSupported": "Ovaj firmver se ne može ažurirati preko Wi-Fi mreže.",
     "otaConnectFailed": "Povezivanje s uređajem {deviceName} nije uspjelo. Držite ga uključenim i blizu, pa pokušajte ponovo.",

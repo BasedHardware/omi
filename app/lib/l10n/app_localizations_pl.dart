@@ -2282,10 +2282,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get firmwareUsbWarning => 'Połączenie USB podczas aktualizacji może uszkodzić urządzenie.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Bateria powyżej 15%';
+  String get firmwareBatteryRequirement => 'Bateria powyżej 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Upewnij się, że urządzenie ma 15% baterii.';
+  String get firmwareEnsureBattery => 'Upewnij się, że urządzenie ma 30% baterii.';
 
   @override
   String get firmwareStableConnection => 'Stabilne połączenie';
@@ -10624,7 +10624,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Bateria ma $level%. Przed aktualizacją naładuj urządzenie do co najmniej 15%.';
+    return 'Bateria ma $level%. Przed aktualizacją naładuj urządzenie do co najmniej 30%.';
   }
 
   @override

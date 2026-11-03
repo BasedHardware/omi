@@ -274,7 +274,7 @@ void main() {
       expect(provider.batteryLevel, 80);
     });
 
-    for (final (from, to) in [(14, 15), (15, 14)]) {
+    for (final (from, to) in [(29, 30), (30, 29)]) {
       test('notifies on a one-point firmware threshold crossing $from to $to', () {
         final now = DateTime(2026, 11, 3);
         provider.updateBatteryLevelForTesting(from, now: now);

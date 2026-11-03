@@ -242,6 +242,8 @@ void main() {
     provider.sample(kFirmwareUpdateMinBattery - 1);
     await tester.pumpAndSettle();
     expect(startButton(tester).onPressed, isNull);
+    expect(find.text(en.firmwareBatteryTooLow(29)), findsOneWidget);
+    expect(en.firmwareBatteryTooLow(29), contains('at least 30%'));
     provider.sample(kFirmwareUpdateMinBattery);
     await tester.pumpAndSettle();
     expect(startButton(tester).onPressed, isNotNull);
@@ -275,7 +277,7 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  for (final battery in [-1, 0, kFirmwareUpdateMinBattery - 1]) {
+  for (final battery in [-1, 0, 15, kFirmwareUpdateMinBattery - 1]) {
     testWidgets('sheet confirmation rechecks battery $battery before starting', (tester) async {
       final provider = _DeviceProvider(batteryLevel: kFirmwareUpdateMinBattery);
       await pumpPage(tester, provider);

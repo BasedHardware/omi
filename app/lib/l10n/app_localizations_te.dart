@@ -2296,10 +2296,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get firmwareUsbWarning => 'అపడేట్‌ల సమయంలో USB కనెక్션్ మీ డివైస్‌ను నష్టపరచవచ్చు.';
 
   @override
-  String get firmwareBatteryAbove15 => '15% కంటే ఎక్కువ బ్యాటరీ';
+  String get firmwareBatteryRequirement => '30% కంటే ఎక్కువ బ్యాటరీ';
 
   @override
-  String get firmwareEnsureBattery => 'మీ డివైస్‌కు 15% బ్యాటరీ ఉందని నిర్ధారించుకోండి.';
+  String get firmwareEnsureBattery => 'మీ డివైస్‌కు 30% బ్యాటరీ ఉందని నిర్ధారించుకోండి.';
 
   @override
   String get firmwareStableConnection => 'స్థిర కనెక్షన్';
@@ -10639,7 +10639,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'బ్యాటరీ $level% ఉంది. అప్‌డేట్ చేసే ముందు పరికరాన్ని కనీసం 15% ఛార్జ్ చేయండి.';
+    return 'బ్యాటరీ $level% ఉంది. అప్‌డేట్ చేసే ముందు పరికరాన్ని కనీసం 30% ఛార్జ్ చేయండి.';
   }
 
   @override

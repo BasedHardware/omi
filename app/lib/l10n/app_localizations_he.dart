@@ -2267,10 +2267,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get firmwareUsbWarning => 'חיבור USB בזמן עדכונים עשוי להזיק למכשירך.';
 
   @override
-  String get firmwareBatteryAbove15 => 'סוללה מעל 15%';
+  String get firmwareBatteryRequirement => 'סוללה מעל 30%';
 
   @override
-  String get firmwareEnsureBattery => 'וודא שהמכשיר שלך בעל 15% סוללה.';
+  String get firmwareEnsureBattery => 'וודא שהמכשיר שלך בעל 30% סוללה.';
 
   @override
   String get firmwareStableConnection => 'חיבור יציב';
@@ -10504,7 +10504,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'הסוללה על $level%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.';
+    return 'הסוללה על $level%. יש לטעון את המכשיר ל-30% לפחות לפני העדכון.';
   }
 
   @override

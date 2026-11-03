@@ -2285,10 +2285,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get firmwareUsbWarning => 'Sambungan USB semasa kemas kini boleh merosakkan peranti anda.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Bateri melebihi 15%';
+  String get firmwareBatteryRequirement => 'Bateri melebihi 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Pastikan peranti anda mempunyai 15% bateri.';
+  String get firmwareEnsureBattery => 'Pastikan peranti anda mempunyai 30% bateri.';
 
   @override
   String get firmwareStableConnection => 'Sambungan stabil';
@@ -10610,7 +10610,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'Bateri pada $level%. Cas peranti sekurang-kurangnya 15% sebelum mengemas kini.';
+    return 'Bateri pada $level%. Cas peranti sekurang-kurangnya 30% sebelum mengemas kini.';
   }
 
   @override

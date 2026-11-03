@@ -2293,10 +2293,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get firmwareUsbWarning => 'ನವೀಕರಣದ ಸಮಯದಲ್ಲಿ USB ಸಂಪರ್ಕವು ನಿಮ್ಮ ಯಂತ್ರವನ್ನು ಹಾನಿ ಮಾಡಬಹುದು.';
 
   @override
-  String get firmwareBatteryAbove15 => 'ಬ್ಯಾಟರಿ 15% ಮೇಲಿದೆ';
+  String get firmwareBatteryRequirement => 'ಬ್ಯಾಟರಿ 30% ಮೇಲಿದೆ';
 
   @override
-  String get firmwareEnsureBattery => 'ನಿಮ್ಮ ಯಂತ್ರದಲ್ಲಿ 15% ಬ್ಯಾಟರಿ ಇದೆ ಎಂದು ಖಚಿತ ಮಾಡಿ.';
+  String get firmwareEnsureBattery => 'ನಿಮ್ಮ ಯಂತ್ರದಲ್ಲಿ 30% ಬ್ಯಾಟರಿ ಇದೆ ಎಂದು ಖಚಿತ ಮಾಡಿ.';
 
   @override
   String get firmwareStableConnection => 'ಸ್ಥಿರ ಸಂಪರ್ಕ';
@@ -10623,7 +10623,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String firmwareBatteryTooLow(int level) {
-    return 'ಬ್ಯಾಟರಿ $level% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 15% ಚಾರ್ಜ್ ಮಾಡಿ.';
+    return 'ಬ್ಯಾಟರಿ $level% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 30% ಚಾರ್ಜ್ ಮಾಡಿ.';
   }
 
   @override
