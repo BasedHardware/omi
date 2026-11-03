@@ -11,8 +11,11 @@ from hashlib import sha256
 from functools import wraps
 import json
 import logging
+from time import sleep
 from typing import Any, Mapping, Sequence, cast
 from uuid import uuid4
+
+from google.api_core.exceptions import Aborted, DeadlineExceeded, Unauthenticated, ServiceUnavailable
 
 from database import _client as firestore_clients
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -27,7 +30,7 @@ def start_mutations() -> None:
 
 
 def drain_mutations() -> int:
-    """Shutdown-only: stop admission and preserve live mutations as uncertain."""
+    """Shutdown-only: close admission, wait briefly, preserve stragglers as uncertain."""
     return _mutations.drain()
 
 
@@ -356,10 +359,20 @@ def finish_mutation(
         raise ValueError('write_lsn must be a nonnegative integer')
     client = _client(firestore_client)
     try:
-        route = _finish_mutation(client.transaction(), _document(client, key), key, ticket, write_lsn)
+        for attempt in range(3):
+            try:
+                route = _finish_mutation(client.transaction(), _document(client, key), key, ticket, write_lsn)
+                break
+            except (Unauthenticated, ServiceUnavailable, DeadlineExceeded, Aborted):
+                if attempt == 2:
+                    raise
+                # The transaction is idempotent, including a committed write
+                # whose response was lost. Never repeat the provider operation.
+                sleep(0.05 * (attempt + 1))
     except BaseException:
         # Preserve the original failure, including process interruption. A retry
         # must not silently orphan the old admission under a fresh token.
+        logger.warning('event=pinecone_mutation_finish outcome=settlement_failed')
         try:
             mark_mutation_uncertain(key, ticket, firestore_client=client)
         except BaseException:
