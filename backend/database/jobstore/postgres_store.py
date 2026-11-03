@@ -26,6 +26,8 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 
 from __future__ import annotations
 
+from config.batch_pipeline import control_candidate_fanout
+
 import re
 import hashlib
 import random
@@ -372,6 +374,14 @@ class PostgresStore:
         return self.run(acquire)
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
@@ -379,12 +389,11 @@ class PostgresStore:
             rows = conn.execute(
                 f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
                 f'AND {at} <= %s ORDER BY {p}_service, {at}, key COLLATE "C" LIMIT %s',
-                (self.namespace, now, 64 if worker_id else 1),
+                (self.namespace, now, control_candidate_fanout(fanout) if worker_id else 1),
             ).fetchall()
         if worker_id:
-            rows = [row for row in rows if row[0] not in exclude]
             rows.sort(key=lambda row: (row[1], hashlib.sha256(f'{worker_id}:{row[0]}'.encode()).digest()))
-        return rows[0][0] if rows else None
+        return [row[0] for row in rows]
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Revoke a fenced detached lease/retry; same fence recheck and revoke-only write as Firestore."""

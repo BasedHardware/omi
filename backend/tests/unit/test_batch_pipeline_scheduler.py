@@ -106,17 +106,28 @@ class MemoryStore:
             return True
 
     def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
+        import hashlib
+        from config.batch_pipeline import control_candidate_fanout
         from utils.batch_pipeline.control import field
 
         candidates = [
             (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
             for (table, key), v in self.rows.items()
             if table == 'control'
-            and key not in exclude
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
-        return min(candidates)[2] if candidates else None
+        candidates.sort()
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
+        return [row[2] for row in candidates]
 
     def oldest_retry(self, priority):
         values = [
