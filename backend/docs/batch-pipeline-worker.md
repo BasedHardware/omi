@@ -313,44 +313,42 @@ maximum (3 -> 16) in the same reviewed
 qualification window, using a real scale-up during the 25% soak as the
 scheduling proof.
 
-The scaler sizes on the **higher of two signals** (max-of-two, batchdesign
-2026-11-01 PR-2): the incumbent admissible-ready backlog
-(`targetQueuedUnitsPerWorker=32`) and GPU-chain occupancy — the external metric
-`omi_batch_pipeline_gpu_chain_busy_seconds` exposes fleet `worker_flight` busy
-seconds per second (10m rate, one series per pod) at `targetChainBusyPerWorker=0.5` (~89% of the measured
-healthy per-worker chain ceiling 0.56; hpafit 2026-11-01). Occupancy alone sheds
-lanes whenever claims bind rather than flights: through a claim-chain wedge the
-ready backlog is real work that converts the moment the wedge clears, so the
-ready count holds capacity exactly when occupancy under-reads. Occupancy pays
-the reverse dividend — through a healthy drain the backlog reads low while
-flights are real, and the 24h replay shows the chain signal covering hours the
-ready-only answer starves (37 minutes), with the combined replay at 0 starved
-minutes and replica counts at or above the ready-only answer whenever backlog
-exceeds the per-worker target. Both signals are minute-scale sawtooths at 25%
-(ready flaps 0 <-> 128 units; 2m chain demand spikes to 5.8 s/s while the 10m
-rate stays under 3), and the 1800s window holds the highest recommendation it
-saw, so the ready target is 32 rather than 16 and the chain rule rates over 10m.
-The smoothed chain rate answers a sustained load step late; the ready backlog,
-which only builds when capacity is short, stays the fast path (step model 1.1 ->
-5.8 chain s/s: worst backlog wait 3.4 min vs 2.8 min before). Two scrape jobs
-read every worker pod, so the rule takes one series per pod before summing;
-without that, demand reads double. The batchretune replay over
-2026-11-01T23:41Z..02:41Z holds a mean of 4.9 replicas with no minute above 0.85
-chain s/s per worker, sheds from 12 to 5 within an hour, and compares with 12 for
-the 16-unit, 2m, undeduplicated shape
-(`test_batch_pipeline_hpa_retune_replay.py`). Scale-down sheds one pod per 600s after a 1800s
-window so a stockout never costs a warm on-demand node it cannot re-obtain; the
-admissible-count adapter rule stays installed so rollback is a values revert
-without an adapter redeploy. The targets remain provisional pending throughput
-qualification before any apply.
+The scaler sizes on the **higher of two signals**: admissible-ready backlog
+(`targetQueuedUnitsPerWorker=41`) and fleet `worker_flight` wall seconds per
+second (`targetChainBusyPerWorker=0.56`). The adapter deduplicates the two scrape
+jobs per pod and sums their 10m rates. Ready backlog protects claim-bound work;
+chain occupancy protects healthy drains with little ready backlog. The timer
+includes executor wait and host-side serial work, rather than CUDA/ASR seconds.
+The pump takes its GPU slot before starting the timer, so `pipelineDepth=2` does
+not double-count slot wait. Production must keep stage profiling enabled.
 
-For cutover/rollback, op1 captures the current release values/manifest privately,
-keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
-drain, and verifies the single OD deployment/image, the HPA budget when enabled,
-and all count classes. Production has no Spot companion. If qualification
-fails, restore the prior release with autoscaling off and three Ready OD
-workers. CPU is not the scale signal; queue latency,
-useful throughput, GPU duty and the cost ledger still gate cohort expansion.
+The reverted 40/0.6 retune (#24481, reverted by #24493 before cluster apply)
+starved 35 minutes in the existing 24h replay. The replacement preserves every
+existing replay assertion: current 3h fixture mean/max 4.34/5 with zero hot
+minutes, older measured 24h mean/max 6.37/15 with zero starvation and backlog
+dominance. The current-volume step model has worst wait 3.35 minutes and catches
+up in 10 minutes. These are fixture/model results, not production throughput or
+p95 qualification. The [search frontier](batch-pipeline-hpa-frontier.md) records
+the grid, rejected candidates, model limitations, and reproducible command.
+
+The synthetic 3.7x full-volume sensitivity model has mean/max 11.46/16 and six
+hot minutes; peak 5m demand needs 18 workers at the 0.85 hot threshold. Full
+volume is unqualified under the unchanged 16-pod ceiling. Apply only at current
+volume, watch one shed cycle plus 24h, and decide capacity before streaming
+retirement raises batch volume. Keep the 1800s stabilization and one pod per
+600s stockout policy; the older replay does not faithfully enforce that period.
+The chain metric and adapter stay unchanged. Kill switch: restore targets
+32/0.5 with the same min 4/max 16 and downscale policy, or roll back the Helm
+release after checking its saved values/image. No new environment setting.
+
+For this HPA retune's regression, the lead restores targets 32/0.5 with the HPA
+on, min 4/max 16 and the existing downscale policy. For a separate whole-worker
+qualification failure, the lead restores the privately captured known-good
+image/runtime bindings while preserving the ruling floor of four Ready
+on-demand workers. Capture release values/manifest before either operation;
+keep the image pinned and the 1500s SIGTERM drain intact. Verify the single OD
+deployment/image, HPA budget and count classes. Production has no Spot companion.
+Queue latency, useful throughput, GPU duty and the cost ledger gate expansion.
 
 ## Stage profiling (metrics-only)
 
