@@ -3,7 +3,9 @@
 This is the small recovery release ahead of the firmware backlog release, per
 David's 2026-11-03 decision. It does not provide MCUboot rollback or repair a
 bootloader/network image. Ship only the application image after build-only QA
-and jig qualification. No hardware was flashed while implementing this change.
+and jig qualification. The pre-review branch was built, flashed, booted, advertised and accepted a BLE
+connection on the jig. The adversarial-review fixes below have not been built
+or flashed on CV1 on this host; they need fresh bench qualification.
 
 ## Behavior
 
@@ -12,22 +14,64 @@ The default limit is three failed boots: the fourth attempt enters recovery.
 Watchdog/lockup resets and software resets marked by the fatal handler count;
 pin reset, ordinary software reboot, OFF wake and POR start a fresh trial.
 The fatal handler uses only retained RAM, a barrier and `NVIC_SystemReset()`.
-Pre-hook `PRE_KERNEL_1` hangs remain outside coverage. The latch cannot bypass
-an actual kernel/device init that hangs on every boot before main; the driver
-fault-injection hook deliberately skips its hang when latched. Recovery depends
-on vendor kernel/device initialization and the network core remaining functional.
+Pre-hook `PRE_KERNEL_1` hangs remain outside coverage. Application-only DTS
+`zephyr,deferred-init` removes non-recovery devices from automatic boot
+initialization. Normal mode calls `device_init()`
+before any application use; SAFE never calls it. A repeatable deferred-driver
+hang therefore counts until the fourth boot selects SAFE and bypasses that
+init. Recovery still depends on the eager kernel/devices and network core.
 
-Main loads app settings before other app startup, then samples P0.26 for a
-continuous three-second hold. A held button latches recovery. The recovery
-branch powers SD and PDM enable low, initializes the LED, enables Bluetooth,
-loads identity/bonds, registers diagnostics and starts connectable advertising
-at 1–2 seconds. SMP, DIS and the configured static BAS service are registered
-by Zephyr; application audio/settings/features/time/storage/button/haptic
-services and connection callbacks are skipped. No SD initialization, mic,
-codec, capture, ring writer, pusher thread or battery work runs. NOR/SPI3 stays
-awake for the secondary slot. The existing advertising payload/name stays
-unchanged, including its audio service UUID; do not treat that advertisement
-alone as proof of capture availability. Read diagnostics.
+Main decides from CRC-validated retained RAM **before** `app_settings_init()`.
+A valid latch enters SAFE without loading application settings, identities or
+bonds. Unencrypted SMP is intentional (David's decision); recovery can create
+an ephemeral BLE identity and accept a fresh unbonded central. Only invalid
+retained RAM restores a durable SAFE latch, via
+`settings_load_subtree_direct("omi/bootstate", ...)`, without application/BT
+settings handlers. An interrupted DFU transaction has the narrow TRIAL check
+described below. A three-second P0.26 hold also latches recovery.
+
+The recovery branch powers SD and PDM enable low, initializes the LED, enables
+Bluetooth, registers diagnostics and starts connectable advertising at 1–2
+seconds. SMP, DIS and the configured static BAS service are registered by
+Zephyr; application audio/settings/features/time/storage/button/haptic services
+and connection callbacks are skipped. No SD initialization, mic, codec,
+capture, ring writer, pusher thread or battery work runs. NOR/SPI3 stays awake
+for the secondary slot. The existing advertising payload/name stays unchanged,
+including its audio service UUID; do not treat that advertisement alone as
+proof of capture availability. Read diagnostics.
+
+NCS 2.9.0's pinned Zephyr `1f8f3dc291420c70cd39e77a5cdc954561d4a08f`
+(`v3.7.99-ncs2`, Zephyr 3.7 lineage) supplies `device_init()` and deferred
+`DEVICE_DT_DEFINE`/`DEVICE_DT_INST_DEFINE` initialization unconditionally.
+There is **no `CONFIG_DEVICE_DEFERRED_INIT` symbol** in that pinned release;
+adding it causes a fatal Kconfig warning. Use the DTS property alone with this
+SDK. `include/zephyr/device.h` places marked entries in `.z_deferred_init`, and
+`kernel/init.c::z_impl_device_init()` invokes them manually. The app overlay defers:
+
+| Node | Driver / normal order |
+| --- | --- |
+| `i2c2` | nrfx I2C, before its sensor children (when enabled) |
+| `pdm0`, `i2s0` | nrfx DMIC and I2S (enabled instances only) |
+| `adc` | nrfx SAADC, before battery application startup |
+| `lsm6ds3tr_c` | LSM6DSL IMU/sensor (when enabled) |
+| `sdhc0`, `sdhc0/mmc` | SPI SD host, then SDMMC disk registration |
+
+The software Opus codec has no Zephyr device init; it already starts only in
+normal application code. T5838, haptic and battery application initialization
+also remain normal-only. There is no separate eager codec device in this DTS.
+The optional Wi-Fi driver is not enabled in `omi.conf`.
+
+Residual risks: clock, interrupt/GPIO, UART console, PWM for the safe LED,
+SPI3/external NOR, internal flash, IPC/Bluetooth and other kernel/system init
+required by recovery remain eager. A repeatable hang there cannot be bypassed.
+PWM is kept for the recovery LED, and SPI3/NOR must remain ready for DFU; no
+required driver was deferred. NVS/backend access can also hang: cold/invalid
+RAM needs one restore attempt; a warm valid latch skips it. After advertising,
+SAFE attempts backend initialization and a SAFE write once per retained latch,
+without loading settings. A CRC-covered attempt bit prevents a backend hang
+from blocking every following recovery boot. If this attempt fails/hangs,
+cold-power persistence is not guaranteed; warm SAFE and unencrypted DFU remain
+available. Completion may retry backend initialization once for its TRIAL write.
 
 The red LED pulses for 50 ms each second. Release the entry gesture, then hold
 for three seconds and release to enter System OFF. This path samples the GPIO
@@ -49,23 +93,49 @@ subsequent SAFE boots compare the cached value and write nothing. Counters
 never write flash, including before settings is available. Completed DFU adds
 a TRIAL write to clear durable SAFE even for the same firmware version. GOOD
 is stamped after the new trial. Failed persistence retains the RAM latch and
-logs `Bootstate write failed`; failed settings loading permits recovery with
-re-pairing but cannot promise cold-power latch persistence. Only settings/NVS
+logs `Bootstate write failed`; failed backend initialization/writing permits
+recovery with an ephemeral identity but cannot promise cold-power persistence. Only settings/NVS
 is used; littlefs, SD metadata and the MCUboot trailer are untouched.
 
-The callback is the pinned Zephyr `MGMT_EVT_OP_IMG_MGMT_DFU_PENDING` event:
+The upload-check hook `MGMT_EVT_OP_IMG_MGMT_DFU_CHUNK` rejects image 1 (and
+all non-application targets) in SAFE before erase/write. It checks both the
+request image number and the inspected `action.area_id` against the application
+secondary slot: continuation chunks can omit `image` and default to 0 even
+while continuing a network-core upload. Normal-mode upload policy is preserved.
+
+The completion callback is the pinned Zephyr `MGMT_EVT_OP_IMG_MGMT_DFU_PENDING` event:
 it means upload finished writing, not successful cryptographic validation,
 activation or a healthy image. It clears latch/count for the *next* boot; the
-current recovery session keeps running. An interrupted/failed upload doesn't
+current recovery session keeps running. PENDING has no payload in NCS 2.9.0,
+so only an image-0/application-slot check immediately preceding completion may
+clear the latch; STOPPED, rejected/failed chunks, unknown completions and
+image-1 completions cannot clear it. An interrupted/failed upload doesn't
 clear it. A new firmware string also starts a fresh version trial. The next
-bad image can latch again. Never update image 1 (network) during recovery
-unless deliberately qualifying that separate operation.
+bad image can latch again. Network-core uploads are forbidden in SAFE.
+
+Before writing TRIAL, completion seals a retained `dfu_pending` intent. If reset
+lands after the NVS commit but before clearing the RAM latch, the next boot
+reads only bootstate: TRIAL for this firmware overrides the stale latch and
+starts a fresh count-1 trial; SAFE or a failed read retains the latch. The intent
+is consumed before that read so an NVS hang cannot permanently prevent SAFE.
+Ordinary warm latches do not reread settings: an old TRIAL must not erase a
+later crash loop. This is the sole warm-latch settings exception, needed to
+resolve the interrupted transaction; no `app_settings_init()` or bond loading
+is involved. Main's SAFE/GOOD writes and the SMP worker's TRIAL write are
+serialized; SAFE persistence rechecks the latch under that lock, so a late
+persistence attempt cannot overwrite a completed DFU's TRIAL.
 
 ## Retained RAM placement and evidence
 
-The record is 36 bytes inside a 64-byte DTS `zephyr,retained-ram` reservation
+The record is 48 bytes inside a 64-byte DTS `zephyr,retained-ram` reservation
 at `0x2006FF00–0x2006FF40`. The application linker owns it as `.omi_retained`
-NOLOAD. Link assertions reject overlap with data/BSS/noinit (including static
+NOLOAD. CRC-32/ISO-HDLC covers every preceding byte (including magic, reset
+cause, full firmware field and transaction/persistence bits). Count saturates
+at 255, latch reason must be 0–3, fatal and the two bits must be 0–1. Magic,
+version, CRC or range mismatch invalidates the whole record; no field from it
+can supply a latch. A cold/invalid record can still restore a separately valid
+NVS SAFE. All mutations, including fatal, reseal the CRC. The format magic is
+changed so the prior 36-byte record is invalidated safely. Link assertions reject overlap with data/BSS/noinit (including static
 stacks/heaps) and excess size. The node lives in `omi/app.overlay`, selected
 only by the application; shared board DTS and bootloader configuration are
 unchanged. Kconfig conditionals in shared DTS are not a valid isolation guard
@@ -128,6 +198,10 @@ pre-settings crashes; SAFE writes once across 100 subsequent recovery boots;
 cold reload; failed and completed DFU callbacks; same-version recovery;
 version change; uptime/advertising gates; saturation; normal reset classes;
 and no false latch over 100 sporadic watchdog resets separated by good trials.
+They also corrupt each retained byte with magic intact, check ranges independently
+of CRC, reject image-1 and resumed network-slot chunks, ignore unknown/stopped
+completions, and reproduce reset after committing same-version TRIAL while RAM
+still says latched. A later crash loop with that old TRIAL must still latch.
 The suite also runs the existing audio-packet and nine-milestone parser tests,
 slot geometry and the release build guard. It does not emulate torn NVS writes,
 WDT enforcement, Nordic faults, Bluetooth or MCUboot.
@@ -140,7 +214,14 @@ flash backing file. It requires `Safe mode initialized: BLE DFU only`,
 `Safe mode feed loop started`, and a second watchdog feed, and rejects
 codec/mic/SD startup in recovery. Normal tokens are not fabricated on safe
 boots. Only callback delivery and hardware boundaries are stubbed; NVS is real
-Zephyr. Simulator RAM does not survive process exit. Use a dedicated cache;
+Zephyr. It also compiles a real deferred Zephyr fault device: the normal path
+must print its init-hang witness and time out, while forced SAFE with the same
+fault device must advertise its stub recovery milestones and feed twice without
+entering init. A forced-SAFE settings-hang build likewise must skip
+`app_settings_init()`. The runner terminates the hung process group. This proves
+selection/deferred-init control flow, not Nordic watchdog/reset enforcement.
+Fault boots use separate `runtime-*-hang/flash.bin` files so they cannot poison
+the four-process persistence scenario. Simulator RAM does not survive process exit. Use a dedicated cache;
 delete its flash backing file to clear durable state. See `omi/sim/README.md`
 for the Linux/amd64 Docker requirement and disposable engine setup.
 
@@ -164,6 +245,7 @@ factory hex is only for an independently authorized baseline restore; follow
    overlay with `CONFIG_DEBUG=y`, `CONFIG_OMI_FAULT_INJECT=y`, and exactly one
    of `CONFIG_OMI_FAULT_INJECT_HARD_FAULT=y`,
    `CONFIG_OMI_FAULT_INJECT_DRIVER_HANG=y`,
+   `CONFIG_OMI_FAULT_INJECT_SETTINGS_HANG=y`, or
    `CONFIG_OMI_FAULT_INJECT_WDT_STARVE=y`. Pass
    `-DEXTRA_CONF_FILE=/absolute/fault.conf -DOMI_DEVELOPMENT_BUILD=ON
    -DCMAKE_BUILD_TYPE=Debug` to the
@@ -175,18 +257,35 @@ factory hex is only for an independently authorized baseline restore; follow
    the default Kconfig value is n. Inspect the final app `.config` before use.
    The hard-fault variant executes an undefined instruction before BLE:
    `FAULT_INJECT: fatal before BLE`, followed by an immediate fatal reset.
-   The driver variant spins at POST_KERNEL priority 0 after the early WDT:
-   `FAULT_INJECT: driver init hang`, reset within 30 seconds. The starvation
+   The driver variant is a real `DEVICE_DT_DEFINE` deferred device whose init
+   spins unconditionally: `FAULT_INJECT: driver init hang`. Normal
+   main calls `device_init()` and WDT resets within 30 seconds; after three
+   failures SAFE must reach BLE and feed without invoking that device. There
+   is no latch test in its init. Also qualify a hang in a real PDM/SD init
+   using a temporary local breakpoint/spin in that driver, keeping it deferred.
+   The settings variant spins unconditionally inside `app_settings_init()`:
+   `FAULT_INJECT: app settings init hang`. The fourth boot must select SAFE
+   without that line, application settings loading or bond loading. Test a
+   fresh unbonded central for both variants. The starvation
    variant prints `FAULT_INJECT: watchdog starvation` at uptime 30 seconds,
    then resets by the watchdog about 30 seconds later. After three failed
    boots, require the recovery banner/feed-loop line and `omi/bootstate=SAFE`.
-   Injection skips latched recovery. Read retained words with J-Link across
+   The normal application path is skipped in latched recovery. Read retained words with J-Link across
    resets; count must rise, never be clobbered by the loader. Diagnostics
    must report `active=1`, `latched=1`, reason 1, count >= 4 and reset cause.
    Verify 1–2 second advertising, DIS and SMP availability under the existing
    permission policy; record all `CONFIG_MCUMGR_TRANSPORT_BT_PERM_*` values.
    Exercise disconnect/reconnect and a fresh unbonded central as well.
-3. **Manual and false-latch checks.** Hold P0.26 throughout the first three
+3. **Retained corruption, manual and false-latch checks.** Before testing
+   corruption, recover/clear durable SAFE so it cannot mask the result. Halt
+   after the early hook has sealed the record, flip one bit in count, reset
+   cause, latch reason, fatal, firmware, pending or persistence field with
+   J-Link while preserving magic, then warm-reset. Each must invalidate RAM,
+   start count 1 and never supply a latch. Test the CRC word too. The host
+   tests additionally reseal out-of-range count/reason/fatal to prove validation
+   is independent of CRC. Restore normal firmware after fault qualification.
+
+   **Manual checks.** Hold P0.26 throughout the first three
    seconds of main startup; require latch reason 2. Power cycle: SAFE must
    reload. Recover; then repeat watchdog resets more than 60 healthy seconds
    apart and require count cleared each time, no false SAFE. Pin resets and
@@ -196,6 +295,16 @@ factory hex is only for an independently authorized baseline restore; follow
    Require `omi/bootstate=TRIAL` and
    `Safe mode DFU finished: fresh trial on next boot`, then reboot, normal
    milestones and after 60 seconds GOOD. Repeat with a same-version image.
+   For the commit/reset window, use a debug breakpoint on the DFU callback's
+   `new_trial()` after `save_state(TRIAL)` returns success; verify NVS says
+   TRIAL and RAM is CRC-valid, latched, with `dfu_pending=1`. Issue a warm system
+   reset without resuming the RAM clear: require normal startup/count 1 and GOOD
+   after 60 seconds. Reset before the NVS write as the companion case: SAFE must
+   remain. Repeat crashes in the recovered trial and confirm the previous TRIAL
+   does not prevent relatching. Attempt image 1 and a continuation with image
+   omitted: require an SMP error, no network-slot erase/write, unchanged SAFE
+   and no DFU-finished witness. Then prove image 0 still completes. Do not install
+   a network image.
    Interrupt an upload before completion: SAFE must stay set. A failed
    bootstate write must log a warning and must not claim latch clearance.
 5. **Power.** Measure average current and compare recovery against a crash
@@ -234,13 +343,14 @@ This snapshot's settings code has no muted fail-closed branch.
 
 Counting only in main, as scoped, would miss every pre-main driver hang.
 The count/reset capture therefore moved into the PRE_KERNEL_2 watchdog hook;
-main handles settings/manual selection. Settings now load early for the durable
-latch. The production transport previously swallowed advertising failures;
+main selects from RAM before settings and defers non-recovery devices. Only
+invalid RAM restores the durable latch; pending DFU intent resolves a committed
+TRIAL using an isolated bootstate read. The production transport previously swallowed advertising failures;
 its behavior is preserved, with a separate successful-advertising witness for
 GOOD. The approved text's DFU-finished event is named DFU_PENDING in NCS 2.9.0.
 Recovery needs an explicit TRIAL NVS write (in addition to SAFE/GOOD) for
-same-version cold-reset escape. Latch persistence is unavailable if settings
-fails; recovery still advertises for re-pairing. No firmware or map claim in
+same-version cold-reset escape. Latch persistence is unavailable if backend initialization/writing fails;
+recovery advertises without loading bonds. No firmware or map claim in
 this document substitutes for the remaining real-board qualification.
 
 The RTT claim also differs from code: `startup_replay.decode_snapshot()` checks
