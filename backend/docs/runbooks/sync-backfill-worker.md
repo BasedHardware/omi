@@ -156,3 +156,6 @@ database in `based-hardware-dev`, private Redis and staging buckets. Both
 supervisor and child check `utils.staging_fence` before network/data access.
 Do not use shared-data dev as a substitute. Runtime image build/import, live
 identity and staging speech/custody outcomes are separate qualification gates.
+
+Run the [staging proof kit](syncsplit-staging.md) in infracost's authorized
+window before proposing activation or S6 audio work.
