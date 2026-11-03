@@ -7333,8 +7333,13 @@ cannot bypass independent recovery through the legacy no-provider tools.
 The 32 ms boundary is a conservative Silero frame-resolution
 proposal supported by synthetic tests, not labeled evidence about held audio.
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults off in code;
-`false` stops new Soniox calls without substituting another Modulate attempt.
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults on in code;
+explicit deployment overrides still apply. Unsupported-language provider attempts
+that exhaust candidates with `empty_validated` enter quarantine `held` for bounded
+recovery. Either `worker_failure.reason` or `stt_route.provider_reason` equal to
+`unsupported_language` identifies a guarded job. `false` restores immediate
+worker `failed_held` and stops new Soniox calls without substituting another
+Modulate attempt.
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to 60 and can only
 lower that hard per-unit cap. Company-funded allowance, privacy, original
 ledger and single paid-intent fences apply. No paid POST is retried. The result
