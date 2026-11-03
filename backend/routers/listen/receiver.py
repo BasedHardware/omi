@@ -21,11 +21,16 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
 from config.server_batch import suppress_live as server_batch_suppresses_live
-from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, suppresses_provider_stream
+from config.cloud_live_stt import resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
-from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed, rescind_local_preview
+from routers.listen.local_preview import (
+    admit_local_preview,
+    note_deferred_stream_closed,
+    record_cloud_live_saved_seconds,
+    rescind_local_preview,
+)
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.visible_restore import attach_visible_restore
 from routers.listen.demand_switch import switch_live_demand
@@ -179,7 +184,6 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL,
-    OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
     OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
     OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
@@ -853,26 +857,7 @@ class ListenReceiver(ReplayFilterMixin):
         pending.note_failure(typed if isinstance(typed, str) else None, continuing=continuing or departing)
 
     def _record_cloud_live_saved_seconds(self, request: Any, decoded_audio_bytes: int) -> None:
-        """Provider stream seconds this session's policy mode would not have spent. Telemetry only."""
-
-        try:
-            mode = getattr(self, '_cloud_live_mode', None) or STREAM
-            if mode == STREAM:
-                return
-            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
-            if mode == OFF:
-                if not getattr(self, 'cloud_live_suppressed', False):
-                    return  # The deferred stream opened; this audio went to a provider.
-                OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(decoded_audio_bytes / (sample_rate * 2))
-                return
-            # when_watched: hidden seconds (background + foreground-not-visible)
-            # would leave the paid vendor lane for the Parakeet window leg.
-            totals = self.host.state.realtime_demand.totals()
-            OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(
-                totals.get('background', 0.0) + totals.get('foreground', 0.0)
-            )
-        except Exception as error:
-            logger.warning('Cloud live mode telemetry failed type=%s', type(error).__name__)
+        record_cloud_live_saved_seconds(self, request, decoded_audio_bytes)
 
     def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
         """Report who could have watched this session live. Telemetry only; never raises."""

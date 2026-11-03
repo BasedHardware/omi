@@ -194,17 +194,10 @@ class CaptureController extends ChangeNotifier
     return !phone.isFrameDurable(positioned);
   }
 
-  /// Account change with no open socket: the WAL cleanup that follows drops
-  /// its in-memory tail, so frames this router kept off the socket are
-  /// written to the batch journal for the OLD owner (recovered and uploaded
-  /// through the ordinary sync path when that owner is back).
+  /// Account cleanup discards the WAL tail. Preserve suppressed, not-yet-durable
+  /// frames in the old owner's batch journal for later sync.
   bool _preserveSuppressedForAccountChange(List<HeldPendantFrame> frames) =>
-      _mobileStandardBatch?.preserveForOwner(
-        [for (final frame in frames) (frame.payload, frame.capturedAt ?? _now())],
-        codec: _localPreview.pendantCodec,
-        recordingSessionId: activeRecordingId,
-      ) ??
-      false;
+      _localPreview.preserveForAccountChange(frames, _mobileStandardBatch, activeRecordingId);
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
 
@@ -2352,19 +2345,11 @@ class CaptureController extends ChangeNotifier
     _mobileStandardBatch?.dropLocalPreview();
   }
 
-  void _checkLocalPreviewEngine() {
-    final preview = _localPreview.preview;
-    if (!_localPreview.admitted || preview?.phase != LivePreviewPhase.unavailable) return;
-    final reason = preview!.selected!.reason;
-    _localPreview.refuseEngineForCapture(
-      sendControl: () => _socket?.sendText(jsonEncode({
-        'type': 'local_preview_engine_unavailable',
-        'reason': reason.wireName,
-      })),
+  void _checkLocalPreviewEngine() => _localPreview.refuseUnavailableEngine(
+      sendControl: (reason) =>
+          _socket?.sendText(jsonEncode({'type': 'local_preview_engine_unavailable', 'reason': reason.wireName})),
       send: _sendPendantToSocket,
-    );
-    _mobileStandardBatch?.dropLocalPreview();
-  }
+      dropLocalPreview: () => _mobileStandardBatch?.dropLocalPreview());
 
   /// The pendant sender while a transcription socket is still connected.
   void Function(HeldPendantFrame frame)? get _openSocketSender =>

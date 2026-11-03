@@ -15,12 +15,12 @@ import logging
 import os
 import time
 
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 
 from config.batch_live_preview import local_preview_batch_owned
-from config.cloud_live_stt import local_preview_batch_enabled
+from config.cloud_live_stt import OFF, STREAM, local_preview_batch_enabled
 from utils.metrics import (
-    OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL,
+    OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
     OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
@@ -37,6 +37,12 @@ OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS = Histogram(
     'Seconds from a deferred cloud live STT stream opening to session teardown, by why it was deferred and provider',
     ['deferred_by', 'provider'],
     buckets=(2, 5, 15, 30, 60, 120, 300, 900, 1800, 3600, 7200),
+)
+
+OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL = Counter(
+    'omi_listen_local_preview_engine_unavailable_total',
+    'Granted local-preview sockets reporting no usable phone speech engine, by bounded platform and reason',
+    ['client_platform', 'reason'],
 )
 
 ADMITTED = LocalPreviewOutcome.ADMITTED.value
@@ -167,3 +173,26 @@ def rescind_local_preview(host, payload) -> bool:
         outcome='degraded',
     )
     return True
+
+
+def record_cloud_live_saved_seconds(receiver, request, decoded_audio_bytes: int) -> None:
+    """Provider stream seconds this session's policy mode would not have spent. Telemetry only."""
+
+    try:
+        mode = getattr(receiver, '_cloud_live_mode', None) or STREAM
+        if mode == STREAM:
+            return
+        sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+        if mode == OFF:
+            if not getattr(receiver, 'cloud_live_suppressed', False):
+                return  # The deferred stream opened; this audio went to a provider.
+            OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(decoded_audio_bytes / (sample_rate * 2))
+            return
+        # when_watched: hidden seconds (background + foreground-not-visible)
+        # would leave the paid vendor lane for the Parakeet window leg.
+        totals = receiver.host.state.realtime_demand.totals()
+        OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(
+            totals.get('background', 0.0) + totals.get('foreground', 0.0)
+        )
+    except Exception as error:
+        logger.warning('Cloud live mode telemetry failed type=%s', type(error).__name__)

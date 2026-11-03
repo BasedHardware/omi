@@ -13,6 +13,7 @@ from routers.listen import receiver as receiver_module
 from routers.listen import runtime as runtime_module
 from routers.listen.local_preview import (
     OMI_LISTEN_DEFERRED_STREAM_OPEN_SECONDS,
+    OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL,
     REASONS,
     admit_local_preview,
     local_preview_reason,
@@ -24,7 +25,6 @@ from routers.listen.runtime import ListenSessionRuntime
 from utils.metrics import (
     OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
     OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
-    OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL,
 )
 
 KILL = 'LOCAL_PREVIEW_BATCH_ENABLED'
