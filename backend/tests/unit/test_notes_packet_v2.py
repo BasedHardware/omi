@@ -82,7 +82,9 @@ def test_language_preference_precedes_noisy_conversation_language(monkeypatch, p
     assert output_language.resolve_output_language('synthetic-account', conversation) == expected
 
 
-def test_notes_packet_requires_transcript_agreement_for_capture_fallback(monkeypatch):
+@pytest.mark.parametrize('mode,expected', [('off', 'vi'), ('shadow', 'vi'), ('serve', 'en')])
+def test_notes_packet_requires_transcript_agreement_for_capture_fallback(monkeypatch, mode, expected):
+    monkeypatch.setenv(packet.FLAG, mode)
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: '')
     packet_data = packet.build_notes_packet(
         prefix=prefix(),
@@ -91,8 +93,8 @@ def test_notes_packet_requires_transcript_agreement_for_capture_fallback(monkeyp
         words=30,
         inputs=inputs(output_language_code='multi', language_code='vi'),
     )
-    assert packet_data['output_language'] == 'en'
-    assert packet_data['response_language'] == 'en'
+    assert packet_data['output_language'] == expected
+    assert packet_data['response_language'] == expected
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'typo'])
@@ -331,7 +333,10 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
 def test_short_clip_shadow_does_not_serve_minimum(monkeypatch):
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv(packet.FLAG, 'shadow')
-    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='A brief synthetic remark')], photos=[])
+    conversation = SimpleNamespace(
+        transcript_segments=[TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0)],
+        photos=[],
+    )
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation) is None
 
 
@@ -407,6 +412,7 @@ def processing():
 )
 def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, trigger_name):
     from utils.conversations.processing_trigger import ProcessingTrigger
+    from models.transcript_segment import TranscriptSegment
 
     monkeypatch.setenv(packet.FLAG, 'serve')
     monkeypatch.setattr(processing.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
@@ -415,7 +421,7 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         processing, 'should_discard_conversation', lambda *_args, **_kwargs: pytest.fail('paid discard')
     )
     conversation = SimpleNamespace(
-        transcript_segments=[SimpleNamespace(text='A brief synthetic remark')],
+        transcript_segments=[TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0)],
         language='en',
         started_at=START,
         photos=[],
@@ -607,7 +613,7 @@ def test_app_result_receives_the_resolved_output_language_only_in_cohort(monkeyp
     monkeypatch.setenv(packet.FLAG, mode)
     app = SimpleNamespace(id='synthetic-app', name='Synthetic summary', enabled=True, works_with_memories=lambda: True)
     conversation = SimpleNamespace(
-        id='synthetic-conversation', language='zh', started_at=None, photos=[], apps_results=[]
+        id='synthetic-conversation', language='zh', started_at=None, photos=[], apps_results=[], transcript_segments=[]
     )
     seen = []
     monkeypatch.setattr(processing, 'get_available_apps', lambda *_args: [app])
