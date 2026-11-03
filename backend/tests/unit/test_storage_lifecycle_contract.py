@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
     NONCURRENT_DELETE_RULE,
@@ -68,32 +70,16 @@ def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
     )
 
 
-def test_prod_archive_rule_is_pinned_to_the_coldline_batch_stock():
-    archive = [
-        r
-        for r in _rules(_load("prod.json"))
-        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "ARCHIVE"
-    ]
-    assert len(archive) == 1, "prod declares exactly one ARCHIVE transition (David 11-01)"
-    rule = archive[0]
-    assert rule["condition"]["matchesStorageClass"] == ["COLDLINE"], "only already-Coldline objects may move to Archive"
-    assert rule["condition"]["matchesPrefix"] == ["chunks/"]
-    assert rule["condition"]["matchesSuffix"] == [
-        ".batch.enc",
-        ".batch.bin",
-    ], "same batch-artifact scope as the Coldline rule; .opus.enc chunks stay out"
-    assert rule["condition"]["age"] == 90, (
-        "lifecycle age is creation-based and transitions are asynchronous, so no age can "
-        "*guarantee* a Coldline interval; 90 (3x the Coldline transition age) keeps a real "
-        "Coldline residency even for lagged transitions, and the pre-existing stock "
-        "(created >= 90d ago) still moves on first evaluation"
+def test_prod_has_no_archive_rule():
+    assert all(rule["action"].get("storageClass") != "ARCHIVE" for rule in _rules(_load("prod.json"))), (
+        "David dropped the existing-stock Archive transition on 2026-11-02; " "prod apply must never reinstall it"
     )
 
 
-def test_archive_rule_is_rejected_outside_prod():
-    dev = _load("development.json")
-    dev_with_archive = json.loads(json.dumps(dev))
-    dev_with_archive["lifecycle"]["rule"].append(
+@pytest.mark.parametrize("name", APPLY_FILES + ROLLBACK_FILES)
+def test_archive_rule_is_rejected_in_every_private_cloud_variant(name):
+    document = _load(name)
+    document["lifecycle"]["rule"].append(
         {
             "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
             "condition": {
@@ -104,8 +90,8 @@ def test_archive_rule_is_rejected_outside_prod():
             },
         }
     )
-    errors = validate_desired_document(dev_with_archive)
-    assert any("ARCHIVE" in e and "omi-private-cloud-sync" in e for e in errors), errors
+    errors = validate_desired_document(document)
+    assert any("must set storageClass COLDLINE" in e and "ARCHIVE" in e for e in errors), errors
 
 
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
@@ -138,9 +124,7 @@ def test_rollback_files_only_drop_rules_the_apply_variant_added():
         assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        expected = (
-            ["Delete", "SetStorageClass", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
-        )
+        expected = ["Delete", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
         assert (
             sorted(rule["action"]["type"] for rule in dropped) == expected
         ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"

@@ -118,7 +118,7 @@ async def test_real_pump_and_worker_export_one_cycle_with_nested_leaf_stages():
     for stage in [
         'pump_cycle',
         'pull',
-        'worker_flight',
+        'worker_flight_deep',  # The fixture's job is DEEP: idle-only work the HPA must not size on.
         'fetch_decode',
         'vad',
         'windows',
@@ -130,7 +130,7 @@ async def test_real_pump_and_worker_export_one_cycle_with_nested_leaf_stages():
         assert registry.get_sample_value('omi_batch_pipeline_stage_seconds_count', {'stage': stage}) == 1
     for stage in ['ordered_merge', 'maintenance']:
         assert registry.get_sample_value('omi_batch_pipeline_stage_seconds_count', {'stage': stage}) >= 1
-    for absent in ['asr_recovery', 'cuda_sync', 'flight_segment', 'flight_diarize']:
+    for absent in ['worker_flight', 'asr_recovery', 'cuda_sync', 'flight_segment', 'flight_diarize']:
         assert not registry.get_sample_value('omi_batch_pipeline_stage_seconds_count', {'stage': absent})
     assert not [t for t in asyncio.all_tasks() if t is not asyncio.current_task() and not t.done()]
 

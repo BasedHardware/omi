@@ -531,12 +531,12 @@ class Projector:
             requests, self.drain_requests = self.drain_requests, {}
         self.drains.request(requests)
 
-    def schedule_index_flush(self) -> None:
-        """Converge owed search/people-stats work off the chain. Event-loop thread only."""
+    def schedule_index_flush(self, owner_id: str | None = None) -> None:
+        """Converge owed search work off-chain, optionally for one owner."""
         from utils.executors import db_executor, run_blocking, start_background_task
 
-        if self.index.owed:
-            start_background_task(run_blocking(db_executor, self.index.flush), name='batch_projection_index')
+        if self.index.owed if owner_id is None else self.index.has_owed(owner_id):
+            start_background_task(run_blocking(db_executor, self.index.flush, owner_id), name='batch_projection_index')
 
     def persist(self, segment_id: str) -> None:
         """Only ordered assignment holds the owner claim; receipts are the outbox."""
@@ -556,15 +556,15 @@ class Projector:
                 raise ProjectionBlocked('projection assignment claim busy')
             return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
 
-    async def start_followups(self, priority=()):
+    async def start_followups(self, priority=(), *, discover=True):
         # Imported lazily: the synchronous worker seam remains lightweight.
         from utils.batch_pipeline.projection_followup import ProjectionFollowups
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
         with self.handoff:
-            tail, self.chain_followups = self.chain_followups, []
-        await self.followups.schedule(priority, tail=tail)
+            tail, self.chain_followups = (self.chain_followups, []) if discover else ((), self.chain_followups)
+        await self.followups.schedule(priority, tail=tail, discover=discover)
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
@@ -836,11 +836,11 @@ class Projector:
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
         """One bounded page of held units whose record target may be restored."""
-        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_page
+        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_scan_pass
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
-        counts, self.release_after = release_page(
+        counts, self.release_after = release_scan_pass(
             self.store,
             limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
             after_id=self.release_after,

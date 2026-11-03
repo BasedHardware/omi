@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
@@ -112,6 +113,81 @@ def test_queue_age_and_stale_refresh_retains_previous_sample(monkeypatch):
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'completed'}) == 1
     with pytest.raises(ValueError):
         metrics.record('user-id')
+
+
+def test_min_refresh_interval_skips_reads_and_a_failure_retries_next_call(monkeypatch):
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry, min_refresh_seconds=30)
+    store = MemoryStore()
+    Scheduler(store).enqueue(item('a'), 0)
+    calls = []
+    oldest = store.oldest
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', counted)
+    freshness = {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    metrics.refresh(store, 100)
+    reads = len(calls)
+    assert reads > 0
+    metrics.refresh(store, 129)
+    assert len(calls) == reads
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 100
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(store, 'oldest', unavailable)
+    with pytest.raises(RuntimeError):
+        metrics.refresh(store, 130)
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 100
+    # A failed sample does not start a new interval: the next call reads again.
+    monkeypatch.setattr(store, 'oldest', counted)
+    metrics.refresh(store, 131)
+    assert len(calls) > reads
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 131
+
+
+def test_a_refresh_started_during_another_skips_its_reads(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+
+    def overlapping(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            metrics.refresh(store, 100)  # a second caller arriving mid-read
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', overlapping)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * len(list(Priority))
+
+
+def test_zero_min_refresh_interval_reads_on_every_call(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry())
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+    monkeypatch.setattr(store, 'oldest', lambda *a, **k: calls.append(a) or oldest(*a, **k))
+    metrics.refresh(store, 100)
+    reads = len(calls)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * reads
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [('', 30.0), ('off', 0.0), ('0', 0.0), ('-5', 0.0), ('45', 45.0), ('61', 30.0), ('0.5', 30.0), ('bad', 30.0)],
+)
+def test_serving_metrics_min_refresh_seconds_is_bounded_below_the_guard_blind_window(monkeypatch, raw, expected):
+    from config.batch_pipeline import serving_metrics_min_refresh_seconds
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', raw)
+    assert serving_metrics_min_refresh_seconds() == expected
 
 
 def test_admission_hold_reason_counter_counts_policy_defers_and_folds_unknown():
