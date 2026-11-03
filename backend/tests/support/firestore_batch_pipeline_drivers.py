@@ -329,8 +329,12 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',
-            domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready', 'record_pending']},
-            neutrals={'now': (1.0, 'timestamp operand only'), 'limit': (100, 'bounded page size')},
+            domains={
+                'namespace': namespaces,
+                'state': ['leased', 'retry', 'result_ready', 'record_pending'],
+                'limit': [1, 100, 500, 999],
+            },
+            neutrals={'now': (1.0, 'timestamp operand only')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.oldest',

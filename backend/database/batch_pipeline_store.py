@@ -452,7 +452,7 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
         .where('state', '==', state)
         .where(field, '<=', now)
         .order_by(field)
-        .limit(max(1, min(limit, 100)))
+        .limit(max(1, min(limit, 500 if state == 'record_pending' else 100)))
         .stream()
     )
     return [doc.id for doc in docs]
