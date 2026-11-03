@@ -25,3 +25,8 @@ pause/unpause and reads it on reconnect.
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).
+
+## Application recovery
+
+CV1 safe-mode behavior, host/simulator commands, retained-RAM qualification and
+jig fault-injection options live in [docs/safe-mode.md](docs/safe-mode.md).

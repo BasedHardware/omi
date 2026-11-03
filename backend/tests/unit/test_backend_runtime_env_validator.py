@@ -543,6 +543,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend-integration":\s*\{.*?"env":\s*\[)',
         r'\1{"name": "BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED", "value": "false"},'
+        r'{"name": "BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS", "value": "0"},'
         r'{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
         r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
         payload,
@@ -552,7 +553,10 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
-        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},'
+        r'\n        {"name": "BATCH_CONTROL_CANDIDATE_FANOUT", "value": "16"},'
+        r'\n        {"name": "BATCH_ADMISSION_PARALLEL_CALLS", "value": "true"},'
+        r'\n        {"name": "BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS", "value": "10"},',
         payload,
         flags=re.DOTALL,
     )
@@ -1439,12 +1443,16 @@ def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
         ]
 
 
-def test_approved_soniox_binding_is_only_prod_recovery_and_gate_is_on_only_there():
+def test_soniox_live_retirement_bindings_keep_recovery_gate_integration_only():
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     for stage in ('dev', 'prod'):
         services = manifest['environments'][stage]['cloud_run']['services']
         holders = {name for name, service in services.items() if 'SONIOX_API_KEY' in service.get('secrets', {})}
-        assert holders == ({'backend-integration'} if stage == 'prod' else set())
+        # Lead 2026-11-02 17:42Z: reuse the existing key and runtime identity for
+        # live GPU retirement; the independent recovery gate remains integration-only.
+        assert holders == (
+            {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} if stage == 'prod' else set()
+        )
         assert services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'][
             'value'
         ] == ('true' if stage == 'prod' else 'false')
@@ -3410,3 +3418,19 @@ def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
     gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
     errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
     assert [error.scope for error in errors] == ['prod/llm_gateway']
+
+
+def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage in ('dev', 'prod'):
+        services = manifest['environments'][stage]['cloud_run']['services']
+        cap = 'BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS'
+        assert {name for name, service in services.items() if cap in service.get('env', {})} == {'backend-integration'}
+        assert services['backend-integration']['env'][cap] == {
+            'value': '0',
+            'category': 'ops_kill',
+        }
+        for name in ('backend-sync', 'backend-sync-backfill'):
+            env = services[name]['env']
+            assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
+            assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'

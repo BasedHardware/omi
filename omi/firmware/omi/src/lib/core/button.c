@@ -411,8 +411,7 @@ void turnoff_all()
     }
     rc = watchdog_deinit();
     if (rc < 0) {
-        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
-        return;
+        LOG_WRN("Watchdog cannot stop (%d); proceeding to System OFF", rc);
     }
 
     /* Persist an IMU timestamp base so we can estimate time across system_off. */

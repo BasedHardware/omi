@@ -1,0 +1,5 @@
+apiVersion: v2
+name: sync-backfill-worker
+description: Dedicated on-demand CPU pull workers for sequenced backfill
+type: application
+version: 0.1.0

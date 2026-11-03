@@ -855,9 +855,11 @@ def validate_streaming_stt_env(env: Any = None) -> None:
     a next hop in the documented chain. Do not print secret values.
     """
     source = os.environ if env is None else env
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
     models = source.get('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS))
     listed = [model.strip() for model in models.split(',') if model.strip()]
-    if 'soniox' in listed and not (source.get('SONIOX_API_KEY') or '').strip():
+    if ('soniox' in listed or gpu_fleet_off(source)) and not (source.get('SONIOX_API_KEY') or '').strip():
         raise RuntimeError(
             'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
             'remove soniox from the serving chain or set the key'
@@ -998,7 +1000,11 @@ def get_stt_service_for_language(
                 if language in deepgram_nova3_languages:
                     return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
-            if model == 'parakeet-window' and surface == STTServingSurface.STREAMING:
+            if (
+                model == 'parakeet-window'
+                and surface == STTServingSurface.STREAMING
+                and provider_is_enabled(PARAKEET_PROVIDER, surface)
+            ):
                 if not window_allocation(window_uid):
                     parakeet_fallback_reason = 'allocation_rejected'
                 elif not window_language_supported(language, requested_language, window_uid):

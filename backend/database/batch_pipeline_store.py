@@ -15,7 +15,7 @@ from typing import Any, Callable, Protocol, TypeVar
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
-from config.batch_pipeline import contention_retry_enabled, SCHEDULER_SHARDS
+from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
@@ -58,6 +58,9 @@ class Store(Protocol):
     def control_candidate(
         self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
     ) -> str | None: ...
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -238,6 +241,11 @@ class FirestoreStore:
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        return control_candidates(self.client, self.namespace, priority, pool, now, worker_id=worker_id, fanout=fanout)
 
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         # One conditional write, no transaction or retrying read set. A stale
@@ -452,7 +460,7 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
         .where('state', '==', state)
         .where(field, '<=', now)
         .order_by(field)
-        .limit(max(1, min(limit, 100)))
+        .limit(max(1, min(limit, 500 if state == 'record_pending' else 100)))
         .stream()
     )
     return [doc.id for doc in docs]
@@ -611,6 +619,13 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
 def control_candidate(
     client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
 ) -> str | None:
+    candidates = control_candidates(client, namespace, priority, pool, now, worker_id=worker_id)
+    return next((key for key in candidates if key not in exclude), None)
+
+
+def control_candidates(
+    client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+) -> list[str]:
     if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
         raise ValueError('bounded priority and pool required')
     prefix = f'p{priority}_'
@@ -622,15 +637,14 @@ def control_candidate(
         .where(available, '<=', now)
         .order_by(service)
         .order_by(available)
-        .limit(SCHEDULER_SHARDS if worker_id else 1)
+        .limit(control_candidate_fanout(fanout) if worker_id else 1)
         .stream()
     )
     if worker_id:
         # Service remains the primary fairness key. Only equal-service shards
         # use worker affinity, and a busy shard can be skipped without writes.
-        docs = [doc for doc in docs if doc.id not in exclude]
         docs.sort(key=lambda doc: (doc.to_dict()[service], hashlib.sha256(f'{worker_id}:{doc.id}'.encode()).digest()))
-    return docs[0].id if docs else None
+    return [doc.id for doc in docs]
 
 
 def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:

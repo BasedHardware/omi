@@ -16,8 +16,9 @@ class DiarizerBackend(Protocol):
 
 
 class HttpDiarizer:
-    def __init__(self, backend: str):
+    def __init__(self, backend: str, *, reserve_attempt=None):
         self.backend = backend
+        self.reserve_attempt = reserve_attempt
 
     def diarize(self, pcm, *, deadline, segments=None, vectors=None, resolution=None):
         variable = 'HOSTED_DIARIZATION_API_URL' if self.backend == 'pyannote' else 'HOSTED_NEMOTRON_DIARIZATION_API_URL'
@@ -29,6 +30,8 @@ class HttpDiarizer:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError
+            if self.reserve_attempt is not None and not self.reserve_attempt(len(pcm) / 32000):
+                raise RuntimeError('diarizer_attempt_budget')
             try:
                 response = httpx.post(
                     url + '/v2/diarization',

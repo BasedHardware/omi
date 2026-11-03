@@ -177,9 +177,11 @@ BATCH_STAGE_ENV_RATCHET_PREFIXES = (
 # prefixes cover its SCOPE.
 FLAG_BUDGET_TESTS = ('tests/unit/test_flag_budget.py',)
 FLAG_BUDGET_PREFIXES = (
+    'backend/utils/pusher_audio_projection.py',
     'backend/utils/batch_pipeline/',
     'backend/diarizer/batch_pipeline',
     'backend/config/batch_pipeline',
+    'backend/config/batch_language_recovery.py',
     'backend/utils/sync/',
     'backend/utils/stt/',
     'backend/config/policy/',

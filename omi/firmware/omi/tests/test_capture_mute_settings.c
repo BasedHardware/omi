@@ -6,6 +6,16 @@
 #include "../src/lib/core/capture_mute_gatt.h"
 #include "../src/settings.c"
 
+/* The recovery state machine has its own production host harness. */
+int safe_mode_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *arg)
+{
+    (void) name;
+    (void) len;
+    (void) read_cb;
+    (void) arg;
+    return -ENOENT;
+}
+
 static uint8_t persisted;
 static int save_error;
 static unsigned writes;

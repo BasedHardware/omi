@@ -27,6 +27,23 @@ from prometheus_client import Counter
 REASON_VALUE_MAX_LENGTH = 40
 
 
+class ServerBatchSuppressionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    SUPPRESSED = 'suppressed'
+    LANGUAGE_AUTO = 'language_auto'
+    LANGUAGE_UNSUPPORTED = 'language_unsupported'
+    PROFILE_MISMATCH = 'profile_mismatch'
+    PRIVATE_SYNC_OFF = 'private_sync_off'
+    CUSTOM_STT = 'custom_stt'
+    MULTI_CHANNEL = 'multi_channel'
+    PHONE_CALL = 'phone_call'
+    ONBOARDING = 'onboarding'
+    PUSHER_UNAVAILABLE = 'pusher_unavailable'
+    CAPTURE_NOT_OWNED = 'capture_not_owned'
+    PLATFORM_UNSELECTED = 'platform_unselected'
+    NOT_ENABLED = 'not_enabled'
+
+
 class ReasonFamily(StrEnum):
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
@@ -53,6 +70,8 @@ class ReasonFamily(StrEnum):
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
     VENDOR_ROUTE = 'vendor_route'
+    DELIVERY = 'delivery'
+    BATCH_FINAL_PASS = 'batch_final_pass'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -70,6 +89,14 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class DeliveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DELIVERED = 'delivered'
+    NO_OP = 'no_op'
+    DEFERRED = 'deferred'
+    FAILED = 'failed'
 
 
 class SyncProcessingHoldOutcome(StrEnum):
@@ -260,6 +287,20 @@ class WorkOutcome(StrEnum):
     SUCCESS = 'success'
     SILENCE = 'silence'
     NO_RECOVERABLE_SPEECH = 'no_recoverable_speech'
+
+
+class BatchFinalPassOutcome(StrEnum):
+    """Fallback outcomes of the batch whole-conversation pass (`utils/conversations/final_pass_batch.py`)."""
+
+    UNKNOWN = 'unknown'
+    SKIPPED_BUDGET = 'skipped_budget'
+    TOO_LONG = 'failed_too_long'
+    READ_BUDGET = 'failed_read_budget'
+    INCOMPLETE_COVERAGE = 'failed_incomplete_coverage'
+    BATCH_AUDIO = 'failed_batch_audio'
+    INCOMPATIBLE_SPACE = 'failed_incompatible_space'
+    REVOKED = 'failed_revoked'
+    UNASSIGNED_WORDS = 'failed_unassigned_words'
 
 
 class QuarantineReason(StrEnum):
@@ -485,6 +526,7 @@ class WorkerValidationStage(StrEnum):
     """Worker validation stage tokens."""
 
     UNKNOWN = 'unknown'
+    FETCH_DECODE = 'fetch_decode'
     VAD_WINDOWS = 'vad_windows'
     WORD_CLOCKS = 'word_clocks'
     ASSEMBLE_WORDS = 'assemble_words'
@@ -495,6 +537,7 @@ class WorkerValidationReason(StrEnum):
     """Worker validation failure reasons."""
 
     UNKNOWN = 'unknown'
+    STAGED_AUDIO_INVALID = 'staged_audio_invalid'
     WORD_SHAPE = 'word_shape'
     WORD_CLOCK = 'word_clock'
     WORD_SEQUENCE = 'word_sequence'

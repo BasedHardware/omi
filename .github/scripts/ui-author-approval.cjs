@@ -62,8 +62,25 @@ async function evidence(github, repo, pr) {
       if (!/^desktop\/macos\/.*\.swift$/.test(path)) continue;
       for (const ref of [pr.base.sha,pr.head.sha]) {
         try {
-          const {data} = await github.rest.repos.getContent({...repo,path,ref});
-          if (data.encoding !== 'base64' || !data.content || data.size > 1000000) {
+          let {data} = await github.rest.repos.getContent({...repo,path,ref});
+          // Contents omits the body above 1 MB (including generated API clients).
+          // Read that exact immutable blob instead; generated files still undergo
+          // the same UI scan as every other Swift file, on both sides of the diff.
+          if (data.encoding === 'none' && data.size > 1000000 && data.size <= 10000000
+            && /^[a-f0-9]{40}$/.test(data.sha)) {
+            const metadata = data;
+            try {
+              ({data} = await github.rest.git.getBlob({...repo,file_sha:metadata.sha}));
+            } catch (error) {
+              // Only a missing path at getContent may be treated as a deletion.
+              throw new Error('Incomplete Swift source evidence: blob fetch failed',{cause:error});
+            }
+            if (data.sha !== metadata.sha || data.size !== metadata.size) {
+              throw new Error('Incomplete Swift source evidence');
+            }
+          }
+          if (data.encoding !== 'base64' || !data.content || data.size > 10000000
+            || Buffer.from(data.content,'base64').length !== data.size) {
             throw new Error('Incomplete Swift source evidence');
           }
           const source = Buffer.from(data.content,'base64').toString('utf8');

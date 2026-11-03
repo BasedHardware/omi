@@ -189,6 +189,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
+from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
@@ -825,7 +826,9 @@ def trigger_conversation_apps(
     else:
         # Summarization apps are opt-in: only a usable preferred app runs automatically.
         preferred_app_id = redis_db.get_user_preferred_app(uid)
-        if preferred_app_id and preferred_app_id in all_apps_dict:
+        if preferred_app_id == DEFAULT_SUMMARY_APP_ID:
+            app_to_run = default_summary_app()
+        elif preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
             logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
         elif preferred_app_id:
@@ -926,7 +929,7 @@ def trigger_conversation_apps(
             )
             if not persisted:
                 raise RuntimeError('conversation disappeared while persisting app result')
-        if usage_attribution in {
+        if app.id != 'omi-default-summary' and usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
         }:

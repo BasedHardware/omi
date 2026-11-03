@@ -33,6 +33,7 @@ from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     allowed as independent_allowed,
+    long_recovery_allowed,
     enabled as independent_enabled,
     language_guarded,
     below_silence_threshold,
@@ -344,6 +345,7 @@ class QuarantineRecovery:
                 language_guarded(job)
                 and inspected_spans == []
                 and not independent_allowed(duration)
+                and not long_recovery_allowed(duration)
                 and not (independent_enabled() and worker is not None)
             ):
                 if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(
@@ -369,13 +371,13 @@ class QuarantineRecovery:
             # new-admission guard is rolled back.
             # The worker's bound VAD receipt is the only evidence that may
             # locate recognized words when strict CPU VAD finds no speech.
-            multilingual = (
-                safety_net_enabled()
-                or policy.speech_empty_multilingual
-                or ((job.get('worker_failure') or {}).get('reason') == 'unsupported_language')
-            )
+            multilingual = safety_net_enabled() or policy.speech_empty_multilingual or language_guarded(job)
             if not self.protocol.start(
-                segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
+                segment_id,
+                token,
+                self.clock(),
+                provider='modulate' if multilingual else 'legacy_sync',
+                local_silence=local_payload is not None,
             ):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
@@ -502,7 +504,7 @@ class QuarantineRecovery:
                         audio,
                         empty,
                         policy,
-                        guarded=(job.get('worker_failure') or {}).get('reason') == 'unsupported_language',
+                        guarded=language_guarded(job),
                         token=token,
                         first_empty=first_empty,
                         job=job,

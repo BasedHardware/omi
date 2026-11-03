@@ -5,6 +5,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
 
+#include "safe_mode.h"
+
 LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 
 // Default values if not found in flash
@@ -173,7 +175,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         return 0;
     }
 
-    return -ENOENT;
+    return safe_mode_settings_set(name, len, read_cb, cb_arg);
 }
 
 int app_settings_save_rtc_timestamp(struct rtc_time ts)
@@ -239,6 +241,10 @@ SETTINGS_STATIC_HANDLER_DEFINE(app_settings, "omi", NULL, settings_set, NULL, NU
 
 int app_settings_init(void)
 {
+#ifdef CONFIG_OMI_FAULT_INJECT_SETTINGS_HANG
+    printk("FAULT_INJECT: app settings init hang\n");
+    for (;;) {}
+#endif
     int err = settings_subsys_init();
     if (err) {
         LOG_ERR("Failed to initialize settings subsystem (err %d)", err);

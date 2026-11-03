@@ -75,6 +75,7 @@ class RecordingIndex:
 
 @pytest.fixture
 def harness(monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
     monkeypatch.setenv('PINECONE_PARTITIONS_ENABLED', 'true')
     db = StrictFirestore()
 
@@ -225,6 +226,69 @@ def test_unknown_provider_outcome_permanently_blocks_migration(harness):
     raw.failure = None
     scoped.upsert(namespace=key.family, vectors=[record()])
     assert state.get_route(key, firestore_client=db).uncertain_count == 1
+
+
+@pytest.mark.parametrize('interruption', [KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize('operation', ['upsert', 'delete', 'purge'])
+def test_process_interruption_preserves_unknown_provider_outcome(harness, interruption, operation):
+    scoped, raw, key, db = harness
+    raw.failure = interruption()
+    with pytest.raises(interruption):
+        if operation == 'upsert':
+            scoped.upsert(namespace=key.family, vectors=[record()])
+        elif operation == 'delete':
+            scoped.delete(namespace=key.family, ids=['owner-a-record'])
+        else:
+            scoped.delete_all_copies(namespace=key.family, filter={'uid': key.uid})
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == 0
+    assert route.uncertain_count == 1
+    with pytest.raises(state.PartitionBusy):
+        state.begin_migration(key, uuid4().hex, firestore_client=db)
+
+
+def test_shutdown_settles_running_ticket_without_claiming_provider_ack(harness):
+    scoped, raw, key, db = harness
+    entered, release = Event(), Event()
+
+    def wait_for_shutdown():
+        entered.set()
+        assert release.wait(5)
+
+    raw.before_write = wait_for_shutdown
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(scoped.upsert, namespace=key.family, vectors=[record()])
+        try:
+            assert entered.wait(5)
+            assert state.drain_mutations() == 1
+            assert state.drain_mutations() == 0
+            route = state.get_route(key, firestore_client=db)
+            assert route.pending_count == 0
+            assert route.uncertain_count == 1
+            assert route.latest_write_lsn == 0
+            with pytest.raises(state.PartitionBusy):
+                state.begin_migration(key, uuid4().hex, firestore_client=db)
+        finally:
+            release.set()
+        result.result(timeout=5)
+    # A late provider ack must not erase the uncertainty recorded at shutdown.
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
+
+
+def test_provider_ack_followed_by_failed_finish_does_not_orphan_ticket(harness, monkeypatch):
+    scoped, raw, key, db = harness
+
+    def fail_finish(*args):
+        raise RuntimeError('Firestore finish unavailable')
+
+    monkeypatch.setattr(state, '_finish_mutation', fail_finish)
+    with pytest.raises(RuntimeError, match='finish unavailable'):
+        scoped.upsert(namespace=key.family, vectors=[record()])
+    assert len([call for call in raw.calls if call[0] == 'upsert']) == 1
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == 0
+    assert route.uncertain_count == 1
+    assert state.drain_mutations() == 0
 
 
 def test_upsert_cannot_route_record_for_other_owner(harness):

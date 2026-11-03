@@ -19,6 +19,7 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -27,7 +28,7 @@ environment_shared:
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
-          value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+          value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER:
           value: '1'
@@ -62,6 +63,9 @@ environment_shared:
         CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS:
           value: '30'
           category: rollout
+        BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+        BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+        BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
@@ -528,7 +532,7 @@ environment_shared:
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
-          value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+          value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER:
           value: '0'
@@ -789,7 +793,7 @@ environment_shared:
       FIRESTORE_READ_LEDGER:
         value: '1'
       FIRESTORE_READ_LEVERS:
-        value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+        value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
         category: rollout
       FSR_QUEUE_AGE_PUBLISHER:
         value: '0'
@@ -915,6 +919,9 @@ environment_shared:
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -986,7 +993,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1289,6 +1296,9 @@ environment_shared:
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1365,7 +1375,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1554,9 +1564,10 @@ environment_shared:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
             value: '25'
             category: rollout
+          # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
-            value: '555'
+            value: '1665'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -1647,6 +1658,9 @@ environment_shared:
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1719,7 +1733,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1905,9 +1919,10 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'on'
+          # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
-            value: '555'
+            value: '1665'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -1996,6 +2011,9 @@ environment_shared:
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2067,7 +2085,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2290,7 +2308,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2371,7 +2389,7 @@ environment_shared:
             version: latest
         env:
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2436,7 +2454,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2510,7 +2528,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'

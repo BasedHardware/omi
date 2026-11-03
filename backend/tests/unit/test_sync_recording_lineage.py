@@ -1222,7 +1222,7 @@ async def test_coordinator_forwards_each_segment_its_generation(coordinator, mon
 
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
     )
     expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if flag == '' else [None] * 4
@@ -1244,7 +1244,7 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
     lineage_module = sys.modules[stubs['pipeline'].fallback_segment_targets.__module__]
     monkeypatch.setattr(lineage_module, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
     caplog.set_level(logging.INFO, logger=lineage_module.__name__)
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
     )
     assert captured == {chunk['id']: 'STAMP' for chunk in chunks}
@@ -1278,7 +1278,7 @@ async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(c
         enriched.append(dict(response.pop('_merged', {})))
 
     pipeline._reprocess_merged_conversations = reprocess
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
     )
     assert captured == {}  # landed audio never returns to STT or assignment
