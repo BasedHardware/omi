@@ -119,7 +119,6 @@ from utils.subscription import (
     plan_uses_overage,
     get_plan_features,
     get_monthly_usage_for_subscription,
-    is_trial_paywalled,
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
@@ -127,7 +126,6 @@ from utils.subscription import (
     adapt_plans_for_legacy_client,
     wire_plan_for_client,
     legacy_plan_features,
-    clear_trial_paywall_cache,
     get_trial_metadata,
 )
 from database import user_usage as user_usage_db
@@ -1198,7 +1196,6 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             )
     users_db.set_byok_active(uid, {p: peppered_fingerprint(fp) for p, fp in data.fingerprints.items()})
     invalidate_byok_state_cache(uid)
-    clear_trial_paywall_cache(uid)
     return {"active": True}
 
 
@@ -1207,7 +1204,6 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
     invalidate_byok_state_cache(uid)
-    clear_trial_paywall_cache(uid)
     return {"active": False}
 
 
@@ -1678,19 +1674,8 @@ def get_user_paywall_status(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     platform: Optional[str] = Query(None),
 ):
-    """Trial-paywall status for the calling user on the given platform.
-
-    Used by the Rust desktop-backend middleware to decide whether to proxy
-    paid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of
-    `is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth
-    account >3d old + platform in {macos, desktop}. Mobile platforms always
-    return `paywalled=false`.
-
-    Platform comes from `X-App-Platform` header (preferred) or `platform`
-    query param (fallback). Unknown / missing platforms are never paywalled.
-    """
-    resolved_platform = x_app_platform or platform
-    return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
+    """Released desktop middleware still reads this permanently disabled gate."""
+    return PaywallStatusResponse(paywalled=False)
 
 
 @router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
@@ -2686,8 +2671,6 @@ async def synthesize_ai_profile(
 
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'memories')
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     synthesis = await run_blocking(
         llm_executor,
         lambda: ai_user_profile_llm.synthesize_ai_user_profile(

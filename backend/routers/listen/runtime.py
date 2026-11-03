@@ -104,7 +104,7 @@ from config.policy.listen import current_listen_policy, routing_mode_raw, listen
 from routers.listen.policy import initialize_session_policy
 from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
-from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
+from utils.subscription import get_remaining_transcription_seconds
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
     normalize_codec_frame,
@@ -539,13 +539,6 @@ class ListenSessionRuntime:
             # Check before bootstrap/registration so rejection has no session to tear down.
             # A create already past this point can still race a deletion commit.
             await self.request.websocket.close(code=1008, reason='Conversation was deleted')
-            return False
-        if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
-            await self.request.websocket.send_json(
-                FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
-            )
-            await self.wait(0.5)
-            await self.request.websocket.close(code=1008, reason='trial_expired')
             return False
         error = validate_audio_format(self.request.codec, self.request.sample_rate)
         if error:

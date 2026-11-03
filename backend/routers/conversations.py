@@ -2120,10 +2120,7 @@ async def generate_conversation_topic_endpoint(
     # build a minimal dependency graph, and utils.subscription pulls database.user_usage
     # in at import time.
     from utils.llm import conversation_topic as conversation_topic_llm
-    from utils.subscription import is_trial_paywalled
 
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     topic = await run_blocking(
         llm_executor,
         lambda: conversation_topic_llm.generate_conversation_topic(

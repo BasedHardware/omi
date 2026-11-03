@@ -379,31 +379,6 @@ async def test_audio_app_lookup_uses_db_executor_without_blocking_loop(integrati
 
 
 @pytest.mark.asyncio
-async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integration_harness):
-    app = integration_harness.app
-    calls = []
-
-    def failing_paywall(uid, source):
-        assert (uid, source) == ('user-paywall', 'desktop')
-        raise RuntimeError('paywall store unavailable')
-
-    async def tracking_run_blocking(executor, func, *args, **kwargs):
-        calls.append((executor, func, args, kwargs))
-        return func(*args, **kwargs)
-
-    with patch.object(app, 'run_blocking', tracking_run_blocking), patch.object(
-        app, 'is_trial_paywalled', failing_paywall
-    ):
-        with pytest.raises(RuntimeError, match='paywall store unavailable'):
-            await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
-
-    assert calls == [
-        (app.db_executor, app.account_deletion_blocks_user_work, ('user-paywall',), {}),
-        (app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {}),
-    ]
-
-
-@pytest.mark.asyncio
 async def test_realtime_message_uses_async_notification_boundary(integration_harness):
     app = integration_harness.app
     external_app = _realtime_app()
