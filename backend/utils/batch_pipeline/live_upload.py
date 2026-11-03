@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 import io
+import logging
 import wave
 
 from fastapi.responses import JSONResponse
@@ -41,7 +42,29 @@ class RecordUploadRoute(Enum):
     BATCH = 'batch_owned'
 
 
-def _pending():
+logger = logging.getLogger(__name__)
+
+
+class RecordUploadWait(Enum):
+    TARGET_UNRESOLVED = 'target_unresolved'
+    RESERVATION_PENDING = 'reservation_pending'
+    OWNER_CLAIM_RACED = 'owner_claim_raced'
+    OWNER_CONTEXT_MISMATCH = 'owner_context_mismatch'
+    RECEIPT_STATUS_MISSING = 'receipt_status_missing'
+    CONTENT_RECEIPT_CONFLICT = 'content_receipt_conflict'
+    RECORD_JOBS_MISSING = 'record_jobs_missing'
+    AUDIO_COVERAGE_UNPROVEN = 'audio_coverage_unproven'
+    ALIAS_CONFLICT = 'alias_conflict'
+    ARTIFACT_LOOKUP_FAILED = 'artifact_lookup_failed'
+    COVERAGE_CHECK_FAILED = 'coverage_check_failed'
+    ALIAS_WRITE_FAILED = 'alias_write_failed'
+    RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
+
+
+def _pending(reason: RecordUploadWait):
+    # These are custody waits, not evidence of Cloud Run refusing a request.
+    # Keep the branch vocabulary static and omit identities/audio/error text.
+    logger.info('event=sync_record_upload outcome=pending reason=%s', reason.value)
     return JSONResponse(
         status_code=503,
         headers={'Retry-After': '30'},
@@ -187,7 +210,7 @@ async def registered_record_response(
     else:
         conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
         if snapshot is None or conversation_id is None:
-            return _pending() if policy.live_record_enabled else None
+            return _pending(RecordUploadWait.TARGET_UNRESOLVED) if policy.live_record_enabled else None
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
@@ -208,7 +231,7 @@ async def registered_record_response(
             and record_capture_eligible(uid, row, policy=policy)
         )
         if awaiting_reservation or (snapshot is not None and not snapshot.exists and policy.live_record_enabled):
-            return _pending()
+            return _pending(RecordUploadWait.RESERVATION_PENDING)
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
@@ -234,7 +257,7 @@ async def registered_record_response(
                 firestore_client=store.client,
             )
             if revision is None:
-                return _pending()
+                return _pending(RecordUploadWait.OWNER_CLAIM_RACED)
             if reason:
                 record_admission_exclusion(language, reason, legacy_available=True)
             # A fresh legacy claim caused by this conversation's language is a
@@ -258,7 +281,7 @@ async def registered_record_response(
             },
         )
     if row.get('deleted') or row.get('source') != source or row.get('client_device_id') != client_device_id:
-        return _pending()
+        return _pending(RecordUploadWait.OWNER_CONTEXT_MISMATCH)
     content, _ = record_identity(uid, conversation_id)
 
     def read(tx):
@@ -282,15 +305,17 @@ async def registered_record_response(
         )
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
-        return start_response(status) if status else _pending()
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
     if prior:
-        return _pending()
+        return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT)
     if not jobs:
-        return _pending()
+        return _pending(RecordUploadWait.RECORD_JOBS_MISSING)
+    failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        failure_reason = RecordUploadWait.COVERAGE_CHECK_FAILED
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
-            return _pending()
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN)
 
         def alias(tx):
             current = tx.get('content', f'{uid}/{content_id}')
@@ -309,11 +334,13 @@ async def registered_record_response(
             )
             return True
 
+        failure_reason = RecordUploadWait.ALIAS_WRITE_FAILED
         if not await run_blocking(db_executor, store.run, alias):
-            return _pending()
+            return _pending(RecordUploadWait.ALIAS_CONFLICT)
+        failure_reason = RecordUploadWait.RECEIPT_STATUS_READ_FAILED
         status = await run_blocking(db_executor, durable_status, store, uid, 'bp_' + content)
-        return start_response(status) if status else _pending()
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
     except Exception:
         # An erased/missing manifest cannot prove WAL coverage. Retain it;
         # never translate a storage/privacy failure into legacy compute.
-        return _pending()
+        return _pending(failure_reason)

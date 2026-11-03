@@ -1559,7 +1559,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 63,
-        "title": "Pendant sockets with audio"
+        "title": "Pendant sockets that sent audio"
       },
       "pointer": "/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -1584,42 +1584,6 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "100 * (sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__range]))) / sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__range]))",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 3,
-        "title": "Live session"
-      },
-      "pointer": "/panels/3/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "(100 * (sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 81,
-        "title": ""
-      },
-      "pointer": "/panels/4/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
       "expression": "100 * (sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -1632,7 +1596,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 2,
-        "title": "Voice capture"
+        "title": "Finalization job succeeded"
       },
       "pointer": "/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -1668,7 +1632,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 4,
-        "title": "Chat"
+        "title": "Chat answer"
       },
       "pointer": "/panels/9/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -1704,7 +1668,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 36,
-        "title": "Push-to-talk"
+        "title": "Cloud PTT transport"
       },
       "pointer": "/panels/13/targets/0/expr",
       "scope": "explicit-bridge"
@@ -1740,7 +1704,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 70,
-        "title": "Search index"
+        "title": "Index write succeeded"
       },
       "pointer": "/panels/15/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3351,7 +3315,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 219
+    "query_consumers": 217
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
