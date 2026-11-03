@@ -323,22 +323,16 @@ def _close(
     carried_items: Optional[list[dict[str, Any]]] = None,
     preserve_for_reconciliation: bool = False,
     extra_fields: Optional[Mapping[str, Any]] = None,
-) -> bool:
-    """Close once; resolve any provisional item still open as dropped (never a task).
+) -> Optional[dict[str, Any]]:
+    """Close once, returning committed state; None when the compare-and-swap loses.
 
-    ``detach`` removes a conversation that joined provisionally and turned out to
-    start the next occasion; its link is rewritten by the episode it opens.
-    ``closing`` is the conversation whose end closes the episode: its items stay
-    provisional until its processing reconciles them, and it never reopens this
-    episode or opens another (``_closed_owner``).
-    ``preserve_for_reconciliation`` leaves other members' items provisional on
-    this closed episode so their own finalizers can still reconcile them.
+    ``detach`` rewrites a provisional member's link into its successor.
+    ``closing`` keeps that member's items for finalization without reopening.
+    ``preserve_for_reconciliation`` keeps other members' provisional items.
     """
     expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
-    # A WAL member may have gained speech since its last incremental update (or
-    # the provider was down at attach). Merge only unapplied member snapshots
-    # into these notes before closing. Explicit targeting avoids idle-close
-    # recursion and prevents a late member from opening/joining another episode.
+    # Fold unapplied WAL speech into these notes before close, explicitly
+    # targeting this episode to avoid recursion or reassignment.
     for cid in episode.get('recovered_conversation_ids') or []:
         if cid == detach:
             continue
@@ -400,7 +394,7 @@ def _close(
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
         composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
-    return closed is not None
+    return closed
 
 
 def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -420,11 +414,17 @@ def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
 
 
 def settle_episode_for_read(uid: str, episode: dict[str, Any], c: Collaborators) -> dict[str, Any]:
-    """Idle-close and read back the winner, including a concurrent close/activity update."""
+    """Reuse a successful close; one exact read only when another writer won."""
     now = _now(c)
     if policy.idle_close_due(episode, now):
-        _close(uid, episode, 'idle', c, now=now)
-        return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
+        closed = _close(uid, episode, 'idle', c, now=now)
+        return (
+            closed
+            or episodes_db.get_home_episode_snapshots(
+                uid, [str(episode['id'])], firestore_client=c.firestore_client
+            ).get(str(episode['id']))
+            or episode
+        )
     return episode
 
 

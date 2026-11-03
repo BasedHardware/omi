@@ -15,11 +15,16 @@ resolved language as part of the next update, and the episode only stamps
 from __future__ import annotations
 
 import logging
-from collections import Counter
 from typing import Any, Mapping, Optional
 
 from config.refactor_modes import serving_for
-from utils.llm.output_language import language_preference as read_language_preference, normalize_language
+from utils.llm.output_language import (
+    language_preference as read_language_preference,
+    normalize_language,
+    capture_output_language,
+    dominant_segment_language,
+    languages_match,
+)
 from utils.translation_language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -44,7 +49,6 @@ def conversation_language(uid: str, conversation_id: str, firestore_client: Any)
 # langdetect is unreliable on short text (backend AGENTS.md); a shorter state carries no
 # language worth repairing anyway.
 _MIN_STATE_DETECT_CHARS = 20
-_SEGMENT_LANGUAGE_FIELDS = ('language', 'language_code', 'language_tag', 'detected_language', '_provider_language')
 
 
 def resolved_invoke(uid, conversation_language, invoke, *, output_language=None):
@@ -91,40 +95,6 @@ def state_language(episode: Optional[Mapping[str, Any]], *, hint_language: Optio
     return detected_state_language(episode, hint_language=hint_language) or stored_language(episode)
 
 
-def languages_match(left: Optional[str], right: Optional[str]) -> bool:
-    """Compare safe language tags at the base-language precision of local detection."""
-    a, b = normalize_language(left), normalize_language(right)
-    return bool(a and b and (a == b or a.split('-', 1)[0] == b.split('-', 1)[0]))
-
-
-def dominant_segment_language(segments: Any) -> str:
-    """Choose the character-weighted dominant language from an in-memory segment batch.
-
-    Prefer an existing per-segment language tag. When the stream did not retain one,
-    detect only sufficiently long segments locally; no provider call or database read
-    is made. Short/noisy text is deliberately left unknown.
-    """
-    weights: Counter[str] = Counter()
-    first_seen: dict[str, int] = {}
-    for segment in segments or ():
-        field = segment.get if isinstance(segment, Mapping) else lambda key: getattr(segment, key, None)
-        text = str(field('text') or '')
-        letters = sum(char.isalpha() for char in text)
-        language = ''
-        for key in _SEGMENT_LANGUAGE_FIELDS:
-            language = normalize_language(field(key))
-            if language:
-                break
-        if not language and letters >= _MIN_STATE_DETECT_CHARS:
-            language = normalize_language(detect_language(text, hint_language='en'))
-        if language:
-            first_seen.setdefault(language, len(first_seen))
-            weights[language] += max(letters, 1)
-    if not weights:
-        return ''
-    return max(weights, key=lambda language: (weights[language], -first_seen[language]))
-
-
 def resolve_episode_language(
     uid: str,
     conversation_language: Optional[str],
@@ -142,8 +112,6 @@ def resolve_episode_language(
     preferred = normalize_language(preference)
     if preferred:
         return preferred
-    from utils.llm.output_language import capture_output_language
-
     return capture_output_language(conversation_language, segments, preference=preferred)
 
 

@@ -519,6 +519,7 @@ and an explicit empty literal renders as `''`.
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `HOME_HIDE_BELOW_FLOOR_ROWS` | Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `HOME_HIDE_EPISODE_MEMBERS` | Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `HOME_NEUTRAL_MINIMUM_TITLES` | Default on; neutral Home titles for below-floor or short server minimums and loaded eight-word lazy placeholders | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LATE_AUDIO_SYNC_INTAKE_ENABLED` | Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
@@ -1096,6 +1097,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
 - `HOME_HIDE_BELOW_FLOOR_ROWS` — Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours (fail: open)
 - `HOME_HIDE_EPISODE_MEMBERS` — Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement (fail: open)
+- `HOME_NEUTRAL_MINIMUM_TITLES` — Default on; neutral Home titles for below-floor or short server minimums and loaded eight-word lazy placeholders (fail: open)
 - `HOSTED_PARAKEET_JA_API_URL` — Base URL of the Japanese Parakeet window deployment (parakeet chart ja block); empty keeps Japanese on its vendors regardless of PARAKEET_JA_WINDOW_PERCENT (fail: closed)
 - `JOBSTORE_SHADOW_WRITES` — Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow (fail: open)
 - `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` — Default-off shared monthly budget admission for Free and ladder prices; hold on device at cap; legacy bypass (fail: closed)

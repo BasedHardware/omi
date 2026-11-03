@@ -28,7 +28,7 @@ def floor(**updates):
             'summary_blocked_reason': 'content_below_floor',
             'structured': {'title': 'Thank you.', 'overview': ''},
         },
-        **updates
+        **updates,
     )
 
 
@@ -65,7 +65,8 @@ def test_hold_expires_and_respects_user_curation_and_switch(monkeypatch):
 def test_minimum_titles_are_neutral_on_conversation_and_episode_reads(provenance, title):
     raw = floor(
         summary_blocked_reason=None,
-        finished_at=NOW - timedelta(hours=3),
+        started_at=NOW - timedelta(hours=4),
+        finished_at=NOW - timedelta(hours=4) + timedelta(seconds=30),
         transcript_segments=[{'text': 'Thank you for the visit and the breakfast today. More words.'}],
     )
     if title == 'Thank you.':
@@ -116,14 +117,16 @@ def episode(**updates):
             'last_activity_at': NOW - timedelta(hours=2),
             'conversation_ids': ['a', 'b'],
         },
-        **updates
+        **updates,
     )
 
 
 def configure_membership(monkeypatch):
     monkeypatch.setattr(home_membership.client_gate, 'client_seen', lambda uid: True)
     monkeypatch.setattr(home_membership, 'episodes_enabled_for', lambda uid: True)
-    monkeypatch.setattr(home_membership.episodes, 'get_episode', lambda uid, eid: episode() if eid == 'e' else None)
+    monkeypatch.setattr(
+        home_membership.episodes, 'get_home_episode_snapshots', lambda uid, ids: {'e': episode()} if 'e' in ids else {}
+    )
     monkeypatch.setattr(home_read, 'project_episode', lambda uid, e, **kw: {'members': [{'id': 'a'}, {'id': 'b'}]})
 
 
@@ -161,30 +164,39 @@ def test_floor_member_with_long_window_is_not_a_standalone_home_row(monkeypatch)
     )
 
 
-def test_list_projection_detects_legacy_echo_without_returning_transcripts(monkeypatch):
-    from fake_firestore import FakeFirestoreClient
+def test_list_titles_use_only_loaded_fields_and_never_refetch_transcripts(monkeypatch):
+    from tests.unit.test_indexed_list_read_path import Db
 
-    store = FakeFirestoreClient()
-    root = store.collection('users').document('u').collection('conversations')
-    root.document('a').set({'transcript_segments': [{'text': 'Thank you.'}]})
+    raw = floor(
+        created_at=NOW,
+        updated_at=NOW,
+        memory_id='a',
+        discarded=False,
+        summary_blocked_reason=None,
+        started_at=NOW - timedelta(hours=4),
+        finished_at=NOW - timedelta(hours=4) + timedelta(seconds=30),
+    )
+    store = Db([raw])
     monkeypatch.setattr(conversations, 'db', store)
-    raw = floor()
-    before = deepcopy(raw)
-    from database.conversation_home_titles import neutralize_legacy_list_titles
-
-    neutralize_legacy_list_titles('u', [raw])
-    assert raw['structured']['title'].startswith('Recording · ')
-    assert 'transcript_segments' not in raw
-    assert root.document('a').get().to_dict() == {'transcript_segments': [{'text': 'Thank you.'}]}
-    assert before['structured']['title'] == 'Thank you.'
+    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: True)
+    rows = conversations.get_conversations_without_photos('u', list_fields_only=True)
+    assert rows[0]['structured']['title'] == 'Thank you.'  # Unknown provenance needs absent speech: leave it alone.
+    assert 'transcript_segments' not in rows[0]
+    assert raw['structured']['title'] == 'Thank you.'
 
 
 def test_membership_outages_and_merged_donors_keep_members_reachable(monkeypatch):
     configure_membership(monkeypatch)
     row = floor(episode_id='e')
-    monkeypatch.setattr(home_membership.episodes, 'get_episode', lambda *_: episode(recorded_merged_into='successor'))
+    monkeypatch.setattr(
+        home_membership.episodes,
+        'get_home_episode_snapshots',
+        lambda *_: {'e': episode(recorded_merged_into='successor')},
+    )
     assert home_membership.suppress_held_members('u', [row], 'e:a') == [row]
-    monkeypatch.setattr(home_membership.episodes, 'get_episode', Mock(side_effect=RuntimeError('offline')))
+    monkeypatch.setattr(
+        home_membership.episodes, 'get_home_episode_snapshots', Mock(side_effect=RuntimeError('offline'))
+    )
     assert home_membership.suppress_held_members('u', [row], 'e:a') == [row]
 
 
@@ -290,7 +302,7 @@ def test_idle_list_read_uses_the_winner_of_a_concurrent_close_or_activity_update
     latest = dict(stale, status=latest_status, last_activity_at=NOW)
     close = Mock(return_value=False)
     monkeypatch.setattr(service, '_close', close)
-    monkeypatch.setattr(home_read.episodes, 'get_episode', lambda *a, **kw: latest)
+    monkeypatch.setattr(home_read.episodes, 'get_home_episode_snapshots', lambda *a, **kw: {'e': latest})
     monkeypatch.setattr(
         home_read,
         '_read_members',
@@ -304,3 +316,152 @@ def test_idle_list_read_uses_the_winner_of_a_concurrent_close_or_activity_update
     close.assert_called_once()
     # A parallel closer already scheduled compose; the list must not schedule it again.
     assert checked == ([] if latest_status == 'closed' else [latest])
+
+
+@pytest.mark.parametrize('not_modified', [False, True])
+def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, conversation_routes, not_modified):
+    from fastapi import Request, Response
+    from types import SimpleNamespace
+
+    routes = conversation_routes
+    monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
+    request = Request({'type': 'http', 'headers': [(b'x-omi-home-episode-ids', b'e:a')]})
+    cached = Response(status_code=304) if not_modified else None
+    finish = Mock()
+    start = Mock(return_value=SimpleNamespace(not_modified=cached, finish=finish))
+    monkeypatch.setattr(routes.ListVersionCheck, 'start', start)
+    fetch = Mock(return_value=[floor(summary_blocked_reason=None)])
+    monkeypatch.setattr(routes.conversations_db, 'get_conversations_without_photos', fetch)
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    monkeypatch.setattr(routes, 'redact_conversations_for_list', lambda *a: None)
+    response = Response()
+    result = routes.get_conversations(
+        request=request,
+        response=response,
+        uid='u',
+        sources=None,
+        start_date=None,
+        end_date=None,
+        folder_id=None,
+        starred=None,
+    )
+    start.assert_called_once_with(request, 'u', 'conversations')
+    if not_modified:
+        assert result is cached
+        fetch.assert_not_called()
+    else:
+        assert finish.call_args.kwargs['cacheable'] is True
+        assert home_membership.PAGE_SIZE_HEADER not in response.headers
+
+
+@pytest.mark.parametrize('value', ['off', '0', 'false', 'no'])
+def test_neutral_title_kill_switch_covers_all_home_projections(monkeypatch, value):
+    monkeypatch.setenv('HOME_NEUTRAL_MINIMUM_TITLES', value)
+    for provenance in [None, 'server_minimum']:
+        raw = floor(
+            summary_blocked_reason=None,
+            finished_at=NOW - timedelta(hours=3),
+            transcript_segments=[{'text': 'Thank you.'}],
+            structured={'title': 'Thank you.', 'title_provenance': provenance},
+        )
+        assert conversations.prepare_conversation_for_read(raw, 'u')['structured']['title'] == 'Thank you.'
+        wire = home_read.project_episode('u', episode(), members={'a': raw})
+        assert wire['members'][0]['title'] == 'Thank you.'
+
+
+@pytest.mark.parametrize('pin', ['on', 'off'])
+def test_capture_language_without_segments_retains_valid_capture(monkeypatch, pin):
+    from database import users
+    from utils.episodes.output_language import resolve_episode_language
+
+    monkeypatch.setenv('EPISODE_OUTPUT_LANGUAGE_PIN', pin)
+    monkeypatch.setattr(users, 'get_user_language_preference', lambda uid: '')
+    assert resolve_output_language('u', 'ja') == 'ja'
+    assert resolve_episode_language('u', 'ja', preference='') == 'ja'
+    segments = [{'text': 'The whole transcript is a discussion about the project budget.', 'language': 'en'}]
+    assert resolve_output_language('u', 'ja', segments) == ('ja' if pin == 'off' else 'en')
+    assert resolve_episode_language('u', 'ja', preference='', segments=segments) == ('ja' if pin == 'off' else 'en')
+
+
+def test_member_validation_has_fixed_read_budget_and_excess_members_stay_visible(monkeypatch):
+    from fake_firestore import FakeFirestoreClient
+
+    monkeypatch.setattr(home_membership.client_gate, 'client_seen', lambda uid: True)
+    monkeypatch.setattr(home_membership, 'episodes_enabled_for', lambda uid: True)
+    store = FakeFirestoreClient()
+    rows = [floor(id=f'c{i}', episode_id=f'e{i}') for i in range(50)]
+    for row in rows:
+        store.collection('users').document('u').collection('episodes').document(row['episode_id']).set(
+            episode(id=row['episode_id'], conversation_ids=[row['id']])
+        )
+    monkeypatch.setattr(home_membership.episodes, '_client', lambda _: store)
+    old_read = Mock(side_effect=lambda uid, eid: episode(id=eid, conversation_ids=[f'c{eid[1:]}']))
+    monkeypatch.setattr(home_membership.episodes, 'get_episode', old_read)
+    monkeypatch.setattr(
+        home_read, 'project_episode', lambda uid, e, **kw: {'members': [{'id': cid} for cid in e['conversation_ids']]}
+    )
+    batch = Mock(wraps=store.get_all)
+    monkeypatch.setattr(store, 'get_all', batch)
+    result = home_membership.suppress_held_members(
+        'u', rows, ','.join(f"{row['episode_id']}:{row['id']}" for row in rows)
+    )
+    old_read.assert_not_called()
+    assert batch.call_count == 1
+    assert len(batch.call_args.args[0]) == 5
+    hidden = {r['id'] for r in rows} - {r['id'] for r in result}
+    assert len(hidden) == 5
+    assert len(result) == 45
+
+
+def test_idle_close_winner_reuses_returned_doc_without_reread(monkeypatch):
+    stale = episode(status='live')
+    closed = dict(stale, status='closed')
+    monkeypatch.setattr(service, '_close', Mock(return_value=closed))
+    reread = Mock(side_effect=AssertionError('winner must reuse the close result'))
+    monkeypatch.setattr(service.episodes_db, 'get_episode', reread)
+    assert service.settle_episode_for_read('u', stale, service.Collaborators()) is closed
+    reread.assert_not_called()
+
+
+def test_episode_page_limits_idle_close_work_without_hiding_unsettled_members(monkeypatch):
+    rows = [episode(id=f'e{i}', status='live', conversation_ids=[f'c{i}']) for i in range(50)]
+    settle = Mock(side_effect=lambda uid, row, c: dict(row, status='closed'))
+    monkeypatch.setattr(service, 'settle_episode_for_read', settle)
+    monkeypatch.setattr(home_read, '_read_members', lambda *a, **kw: {})
+    monkeypatch.setattr(
+        home_read,
+        'project_episode',
+        lambda uid, row, **kw: {
+            'id': row['id'],
+            'status': row['status'],
+            'members': [{'id': row['conversation_ids'][0]}],
+        },
+    )
+    monkeypatch.setattr(home_read, 'schedule_missed_composes', lambda *a: 0)
+    wires = home_read.project_episodes('u', rows)
+    assert settle.call_count == 2
+    assert len(wires) == 50
+    assert sum(w['status'] == 'live' for w in wires) == 48
+
+
+@pytest.mark.parametrize('provenance', [None, 'server_minimum'])
+def test_dead_letter_and_non_floor_normal_titles_remain_authoritative(provenance):
+    raw = floor(
+        summary_blocked_reason=None,
+        finalization_status='dead_letter',
+        transcript_segments=[{'text': 'Call the landlord.'}],
+        structured={'title': 'Call the landlord.', 'title_provenance': provenance},
+    )
+    assert conversations.prepare_conversation_for_read(raw, 'u')['structured']['title'] == 'Call the landlord.'
+    assert home_read.project_episode('u', episode(), members={'a': raw})['members'][0]['title'] == 'Call the landlord.'
+    raw.pop('finalization_status')
+    assert conversations.prepare_conversation_for_read(raw, 'u')['structured']['title'] == 'Call the landlord.'
+
+
+def test_loaded_eight_word_lazy_placeholder_is_neutral_without_floor_metadata():
+    raw = floor(
+        summary_blocked_reason=None,
+        transcript_segments=[{'text': 'Please call the landlord about the leaking pipe this afternoon.'}],
+        structured={'title': 'Please call the landlord about the leaking pipe'},
+    )
+    assert conversations.prepare_conversation_for_read(raw, 'u')['structured']['title'].startswith('Recording · ')

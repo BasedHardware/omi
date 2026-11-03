@@ -77,14 +77,14 @@ def test_local_capture_time_is_converted_in_code(tz, expected):
     assert packet._local_started_at_iso(START.replace(tzinfo=None), tz) == expected
 
 
-@pytest.mark.parametrize('preference,conversation,expected', [('en', 'zh', 'en'), ('', 'fr', 'en'), (None, None, 'en')])
+@pytest.mark.parametrize('preference,conversation,expected', [('en', 'zh', 'en'), ('', 'fr', 'fr'), (None, None, 'en')])
 def test_language_preference_precedes_noisy_conversation_language(monkeypatch, preference, conversation, expected):
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: preference)
     assert output_language.resolve_output_language('synthetic-account', conversation) == expected
 
 
-@pytest.mark.parametrize('mode,expected', [('off', 'vi'), ('shadow', 'vi'), ('serve', 'en')])
-def test_notes_packet_requires_transcript_agreement_for_capture_fallback(monkeypatch, mode, expected):
+@pytest.mark.parametrize('mode,expected', [('off', 'vi'), ('shadow', 'vi'), ('serve', 'vi')])
+def test_notes_packet_without_segments_keeps_valid_capture_fallback(monkeypatch, mode, expected):
     monkeypatch.setenv(packet.FLAG, mode)
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: '')
     packet_data = packet.build_notes_packet(

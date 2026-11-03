@@ -54,6 +54,7 @@ EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
+HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
@@ -116,6 +117,11 @@ def episode_hard_cap_across_conversations_enabled() -> bool:
 def home_hide_episode_members_enabled() -> bool:
     """Hide only members covered by a client-held, extant episode projection."""
     return modes_default_on(HOME_HIDE_EPISODE_MEMBERS_ENV)
+
+
+def home_neutral_minimum_titles_enabled() -> bool:
+    """Replace provisional transcript-echo Home titles without changing storage."""
+    return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
 
 
 def home_hide_below_floor_rows_enabled() -> bool:
@@ -269,3 +275,7 @@ COMPOSER_MAX_PARAGRAPH_CHARS = 1200
 COMPOSER_MAX_POINTS = 6
 COMPOSER_MAX_DETAILS = 4
 COMPOSER_MAX_POINT_CHARS = 400
+
+# Extra reads caused by Home projection, independent of page/member counts.
+HOME_MEMBERSHIP_EPISODE_READ_LIMIT = 5
+HOME_IDLE_CLOSES_PER_READ = 2

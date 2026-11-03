@@ -31,8 +31,8 @@ def suppress_held_members(uid: str, rows: list[dict], held: str) -> list[dict]:
         from utils.episodes import home_read
 
         represented = set()
-        for eid in {pair[0] for pair in acknowledged}:
-            episode = episodes.get_episode(uid, eid)
+        ids = sorted({row['episode_id'] for row in rows if (row.get('episode_id'), row.get('id')) in acknowledged})
+        for eid, episode in episodes.get_home_episode_snapshots(uid, ids).items():
             if not episode or episode.get('recorded_merged_into') or episode.get('status') == 'live':
                 continue
             projected = home_read.project_episode(
@@ -57,7 +57,11 @@ def suppress_held_members(uid: str, rows: list[dict], held: str) -> list[dict]:
 
 
 def held_for(request) -> str:
-    return request.headers.get(HELD_EPISODES_HEADER, '') if request is not None else ''
+    return (
+        request.headers.get(HELD_EPISODES_HEADER, '')
+        if request is not None and home_hide_episode_members_enabled()
+        else ''
+    )
 
 
 def project_list(uid: str, rows: list[dict], request, response, *, filtered: bool) -> list[dict]:

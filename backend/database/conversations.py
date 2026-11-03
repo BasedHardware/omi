@@ -52,7 +52,6 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
-from database.conversation_home_titles import neutralize_legacy_list_titles
 from utils.conversations.home_titles import apply_user_title, project_home
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
@@ -1949,6 +1948,7 @@ def get_conversations_without_photos(
                 'has_photos',
                 'folder_user_set',
                 'episode_id',
+                'finalization_status',
                 *SETTLING_FIELDS,
             }
         )
@@ -2006,8 +2006,6 @@ def get_conversations_without_photos(
         ),
     )
 
-    if list_fields_only:
-        neutralize_legacy_list_titles(uid, rows, budget=budget)
     return rows
 
 

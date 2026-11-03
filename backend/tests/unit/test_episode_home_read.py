@@ -160,16 +160,13 @@ def test_each_page_has_bounded_episode_reads_and_chunked_member_reads(store, mon
 
     def counted_batch(refs, **kwargs):
         batches.append(len(refs))
-        assert kwargs['field_paths'] in (
-            home_read.MEMBER_FIELDS,
-            ['transcript_segments', 'transcript_segments_compressed'],
-        )
+        assert kwargs['field_paths'] == home_read.MEMBER_FIELDS
         return get_all(refs, **kwargs)
 
     monkeypatch.setattr(store, 'get_all', counted_batch)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     projected = home_read.project_episodes('u', rows, firestore_client=store)
-    assert batches == [50, 50, 21, 50, 50, 21]
+    assert batches == [50, 50, 21]
     assert [len(row['members']) for row in projected] == [120, 10]
 
 

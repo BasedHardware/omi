@@ -11,6 +11,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
+    HOME_IDLE_CLOSES_PER_READ,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
     COMPOSER_MAX_SCHEDULED_PER_READ,
     COMPOSER_READ_THROTTLE_SECONDS,
@@ -19,7 +20,7 @@ from config.episodes import (
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
-from utils.episodes.policy import utc
+from utils.episodes.policy import utc, idle_close_due
 from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
@@ -100,6 +101,7 @@ MEMBER_FIELDS = [
     'finished_at',
     'created_at',
     'status',
+    'finalization_status',
     'sync_relevance_user_kept',
     'has_photos',
     'photos',
@@ -123,9 +125,6 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
         for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
             if snapshot.exists:
                 members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
-    from database.conversation_home_titles import neutralize_legacy_list_titles
-
-    neutralize_legacy_list_titles(uid, list(members.values()), firestore_client=client)
     return {
         cid: row
         for cid, raw in members.items()
@@ -134,8 +133,11 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
 
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
-    c = service.Collaborators(firestore_client=firestore_client)
-    settled = [service.settle_episode_for_read(uid, row, c) for row in rows]
+    client = firestore_client if firestore_client is not None else conversations.db
+    c = service.Collaborators(firestore_client=client)
+    # Close only a fixed number; remaining live rows retain their members.
+    due = [row['id'] for row in rows if idle_close_due(row, datetime.now(timezone.utc))][:HOME_IDLE_CLOSES_PER_READ]
+    settled = [service.settle_episode_for_read(uid, row, c) if row['id'] in due else row for row in rows]
     just_closed = {
         new['id'] for old, new in zip(rows, settled) if old.get('status') == 'live' and new.get('status') == 'closed'
     }
