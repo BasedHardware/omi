@@ -15,7 +15,7 @@ spec:
           sourceLabels:
             - __name__
           # Pin the suppression readout explicitly as well as the broad application keep.
-          regex: omi_.*|omi_listen_server_batch_suppression_total|omi_listen_preview_batch_custody_total|conversation_llm_input_dedupe_.*
+          regex: omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*
   targetLabels:
     metadata:
       - service

@@ -42,7 +42,7 @@ class ListenSessionPolicy(PolicyPart):
     window_allocated: bool = False
     # Mirrors stt_provider_policy DEFAULT_MODELS_BY_SURFACE[STREAMING]; Deepgram
     # retired 2026-08-27.
-    service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'parakeet')
+    service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox')
     failover_recovery_enabled: bool = False
     fallback_liveness_grace_seconds: float = 0.3
     paid_spillover_budget_enabled: bool = False
