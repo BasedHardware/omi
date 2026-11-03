@@ -145,7 +145,7 @@ def same_assignment(transaction, client, uid, current, expected_voices, intent):
 
     scopes = {}
     for sid, (scope, label) in expected_voices.items():
-        entry = (receipt.get('segments') or {}).get(sid)
+        entry = (receipt.get('segments') or {}).get(sid) or {}
         line = by_id.get(sid) or {}
         if not same(entry) or line.get('person_id') != person_id or bool(line.get('is_user')) != is_user:
             return False
