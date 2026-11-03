@@ -45,7 +45,6 @@ prod:
     GOOGLE_TASKS_CLIENT_ID: [backend, backend-integration]
     GOOGLE_TASKS_CLIENT_SECRET: [backend, backend-integration]
     HOSTED_PUSHER_API_URL: [backend]
-    HOSTED_VAD_API_URL: [backend, backend-integration, backend-sync, backend-sync-backfill]
     HUGGINGFACE_TOKEN: [backend, backend-integration, backend-sync, backend-sync-backfill]
     LADDER_V1_ARCHITECT_MONTH_PRICE_ID: [backend-listen]
     LADDER_V1_ARCHITECT_YEAR_PRICE_ID: [backend-listen]

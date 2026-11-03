@@ -14,7 +14,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 IN_CLUSTER_EMBEDDING = 'http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080'
-IN_CLUSTER_VAD = 'http://prod-omi-vad.prod-omi-backend.svc.cluster.local:8080/v1/vad'
 IN_CLUSTER_PUSHER = 'http://prod-omi-pusher.prod-omi-backend.svc.cluster.local:8080'
 
 
@@ -35,7 +34,6 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
     gke_embedding = IN_CLUSTER_EMBEDDING if in_cluster else f'http://{ip}/diarizer'
     # Prod NLLB is retired (translation runs on Luna), so prod binds no translation URL.
     gke_translation = None if in_cluster else f'http://{ip}/nllb'
-    gke_vad = IN_CLUSTER_VAD if in_cluster else f'http://{ip}/vad/v1/vad'
     for source in (manifest, overlay):
         for host in ('backend-listen', 'pusher'):
             assert source['gke'][host]['env']['HOSTED_SPEAKER_EMBEDDING_API_URL']['value'] == gke_embedding
@@ -54,7 +52,8 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env, ip, domain):
     assert _chart('parakeet', env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == f'http://{ip}/diarizer'
     listen_chart = _chart('backend-listen', env)
     assert listen_chart.get('HOSTED_TRANSLATION_API_URL') == gke_translation
-    assert listen_chart['HOSTED_VAD_API_URL'] == gke_vad
+    # Hosted VAD is retired; listen and sync fall back to local Silero ONNX.
+    assert 'HOSTED_VAD_API_URL' not in listen_chart
     assert listen_chart['HOSTED_PARAKEET_API_URL'] == f'http://parakeet.{domain}'
     assert _chart('pusher', env)['HOSTED_PARAKEET_API_URL'] == f'http://parakeet.{domain}'
     if in_cluster:
@@ -70,7 +69,7 @@ def test_prod_in_cluster_callers_stay_off_internal_alb_routes():
     """
     listen_chart = _chart('backend-listen', 'prod')
     assert listen_chart['HOSTED_PUSHER_API_URL'] == IN_CLUSTER_PUSHER
-    assert listen_chart['HOSTED_VAD_API_URL'] == IN_CLUSTER_VAD
+    assert 'HOSTED_VAD_API_URL' not in listen_chart
     assert listen_chart['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
     assert 'HOSTED_TRANSLATION_API_URL' not in listen_chart
     assert _chart('pusher', 'prod')['HOSTED_SPEAKER_EMBEDDING_API_URL'] == IN_CLUSTER_EMBEDDING
