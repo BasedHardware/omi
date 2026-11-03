@@ -39,7 +39,7 @@ from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
@@ -295,7 +295,9 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
     units = []
     try:
-        while unit := await run_blocking(sync_executor, next, iterator, None):
+        # Advancing the generator downloads retained objects. Keep that leaf
+        # I/O off the smaller sync pool used by serving and sync coordinators.
+        while unit := await run_blocking(storage_executor, next, iterator, None):
             units.append(unit)
             if len(units) > 128:
                 raise ValueError('retained capture unit budget exceeded')

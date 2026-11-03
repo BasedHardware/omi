@@ -14,6 +14,8 @@ extern uint8_t battery_percentage;
  * @return 0 if successful, negative errno code if error
  */
 int transport_start();
+int transport_start_safe(void);
+bool transport_advertising_started(void);
 
 /**
  * @brief Turn off the BLE transport

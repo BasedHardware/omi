@@ -140,6 +140,7 @@ def test_periodic_retry_after_failure_between_owner_merge_commits(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['before_assignment', 'after_assignment'])
 async def test_periodic_restart_finishes_durable_publication_after_request_failure(monkeypatch, failure):
+    monkeypatch.setattr(projection_followup, 'projection_followup_page_enabled', lambda: True)
     log = ResultLog()
     ids = chain(log, BURST, 'recovered-content', 3)
     # Extend the assignment-only ResultLog model with the follow-up snapshot
@@ -178,13 +179,21 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         # its walk-owed follow-ups launch on the next independent tick.
         if restarted.drains and restarted.drains.tasks:
             await asyncio.gather(*list(restarted.drains.tasks.values()))
+        # Settle this discovery page before the next tick. Otherwise a ready
+        # receipt's rediscovery depends on the executor's scheduling speed.
+        while restarted.followups and restarted.followups.tasks:
+            await asyncio.gather(*list(restarted.followups.tasks.values()))
+        initial_probes = restarted.complete_content.call_count
+        assert initial_probes == (1 if failure == 'before_assignment' else len(ids))
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
         assert log.persist_order == ids
-        # Ready siblings may share one completion probe for the discovery page.
-        assert 1 <= restarted.complete_content.call_count <= len(ids)
+        # Mocked completion leaves ready receipts discoverable. The first
+        # probe for each unit plus one ready-content probe on the next page
+        # are required; page coalescing is not a process-wide suppression.
+        assert restarted.complete_content.call_count == len(ids) + 1
     finally:
         tasks = [
             task for runner in (restarted.drains, restarted.followups) if runner for task in list(runner.tasks.values())
