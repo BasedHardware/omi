@@ -41,6 +41,7 @@ overlay:
       env:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
+        STT_GPU_FLEET_OFF: {value: 'false', category: ops_kill}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
@@ -258,6 +259,7 @@ overlay:
       env:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
+        STT_GPU_FLEET_OFF: {value: 'false', category: ops_kill}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
@@ -480,6 +482,9 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
           TELEGRAM_BOT_TOKEN:
             secret: TELEGRAM_BOT_TOKEN
             version: latest
@@ -514,6 +519,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'false', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -531,7 +537,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -860,6 +866,9 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
           DREAM_AGENT_FEEDBACK_SALT:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
@@ -867,6 +876,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'false', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -887,7 +897,7 @@ overlay:
           # Restore monthly usage reads only for compute admission on backend-sync (admitscope 2026-11-01).
           # Writers maintain totals and cache invalidation while reader levers are off.
           # Preserve the existing epoch and every other service/lever (#24194 guard).
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1240,6 +1250,10 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync-backfill:
+        secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
@@ -1255,6 +1269,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'false', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -1269,7 +1284,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1608,6 +1623,7 @@ overlay:
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
+          STT_GPU_FLEET_OFF: {value: 'false', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
@@ -1627,7 +1643,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);

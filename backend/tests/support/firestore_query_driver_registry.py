@@ -2516,6 +2516,7 @@ _add(
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.worker_candidates',
+        domains={'after_uid': [None, UID]},
         neutrals={'limit': _LIMIT},
         patchers=_SYNC_PROD,
     )

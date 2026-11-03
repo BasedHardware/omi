@@ -838,6 +838,15 @@ class PipelineWorker:
                     frozen_languages[item.segment_id] = frozen_language
                     frozen_streams[item.segment_id] = frozen_stream
                     strict_shadow[item.segment_id] = shadow_silent
+                    if self.config.words == 'parakeet' and not item.shadow:
+                        # Record the frozen route decision before either packed
+                        # or serial VAD can fail. This is not an ASR-call receipt.
+                        record_route(
+                            'worker',
+                            frozen_language,
+                            'blocked' if language_class(frozen_language) != 'supported' else 'parakeet',
+                            segment_id=item.segment_id,
+                        )
                     yield item, samples
 
             flight_excluded = set()
@@ -886,15 +895,6 @@ class PipelineWorker:
                             silence = None
                             strict_failed = True
                         if not strict_failed and silence is None:
-                            # The early raise skips the barrier below, so the
-                            # route signal must be recorded here.
-                            if not item.shadow:
-                                record_route(
-                                    'worker',
-                                    frozen_languages.get(item.segment_id),
-                                    'blocked',
-                                    segment_id=item.segment_id,
-                                )
                             raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
                         if not strict_failed:
                             spans = []
@@ -956,13 +956,6 @@ class PipelineWorker:
                         # A new-admission rollback cannot revoke the quality
                         # boundary for audio already in this worker's custody.
                         blocked = language_class(state['stt_language']) != 'supported'
-                        if not item.shadow:
-                            record_route(
-                                'worker',
-                                state['stt_language'],
-                                'blocked' if blocked else 'parakeet',
-                                segment_id=item.segment_id,
-                            )
                         if blocked and clips:
                             # Never ask a fixed-language recognizer to guess an
                             # unknown language, even if it would return words.

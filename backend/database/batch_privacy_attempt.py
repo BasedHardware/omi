@@ -6,16 +6,36 @@ from contextvars import ContextVar
 from functools import wraps
 import inspect
 from threading import RLock
+from datetime import datetime
+import re
 
 TOKEN_FIELD = 'memo_token'
 SCHEMA_FIELD = 'memo_schema'
 TOKEN_SCHEMA = 1
-# Conversation fields the batch privacy decision reads. A commit that writes any
-# of them rotates the owner's token (database.batch_privacy_write_fence), so
-# writers should omit a field whose stored value they are not changing.
+# Shared with the sync writer: unchanged authority fields must not become writes.
 CONVERSATION_AUTHORITY_FIELDS = frozenset(
     {'deleted', 'sync_merged_into', 'record_lane_owner', 'uses_custom_stt', 'private_cloud_sync_enabled'}
 )
+
+
+def token_version(snapshot):
+    """Missing schema, malformed tokens or unknown server revisions never certify reuse."""
+    privacy = snapshot.to_dict() or {}
+    token = privacy.get(TOKEN_FIELD)
+    revision = getattr(snapshot, 'update_time', None)
+    if not (
+        snapshot.exists
+        and isinstance(revision, datetime)
+        and revision.tzinfo is not None
+        and revision.utcoffset() is not None
+        and type(privacy.get(SCHEMA_FIELD)) is int
+        and privacy[SCHEMA_FIELD] == TOKEN_SCHEMA
+        and isinstance(token, str)
+        and re.fullmatch('[0-9a-f]{32}', token) is not None
+        and not any(privacy.get(field) for field in ('blocked', 'purging', 'memo_blocked'))
+    ):
+        return None
+    return (token, revision.isoformat(), getattr(revision, 'nanosecond', 0))
 
 
 class PrivacyAttempt:

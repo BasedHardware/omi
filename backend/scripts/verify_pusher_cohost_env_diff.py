@@ -235,6 +235,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
             "SERVER_BATCH_ONLY_MOBILE_PERCENT",
+            # Only listen opens visibility-gated Modulate previews; pusher
+            # retains raw custody/finalization and never evaluates this cohort.
+            "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",

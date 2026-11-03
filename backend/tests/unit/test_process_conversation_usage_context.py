@@ -2122,3 +2122,26 @@ def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, 
 def _isolated_relevance_policy(monkeypatch):
     # This legacy model/input fixture has no episode or neighbor database.
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+
+
+def test_builtin_preference_runs_on_new_conversation_without_install_then_clear_stops_it():
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    _setup_trigger_apps_mocks(preferred_app_id=DEFAULT_SUMMARY_APP_ID)
+    first = _make_trigger_conversation()
+    result, available, llm, usage, catalog = _trigger_apps_context()
+    with available, llm, usage as record_usage, catalog as lookup:
+        process_conversation.trigger_conversation_apps('user-builtin', first)
+        assert [(item.app_id, item.content) for item in first.apps_results] == [
+            (DEFAULT_SUMMARY_APP_ID, 'App result content')
+        ]
+        assert result.call_args.args[2].id == DEFAULT_SUMMARY_APP_ID
+        lookup.assert_not_called()
+        record_usage.assert_not_called()
+
+        # A later conversation sees the cleared preference and must not run the default again.
+        process_conversation.redis_db.get_user_preferred_app.return_value = None
+        second = _make_trigger_conversation()
+        process_conversation.trigger_conversation_apps('user-builtin', second)
+        assert second.apps_results == []
+        result.assert_called_once()

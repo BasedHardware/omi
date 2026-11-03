@@ -3,6 +3,7 @@
 import asyncio
 import os
 from urllib.parse import urlsplit
+from typing import Protocol
 
 import httpx
 
@@ -39,6 +40,10 @@ def identity_token(audience: str) -> str:
     if not isinstance(token, str) or not token:
         raise RuntimeError('Workload Identity did not return an ID token')
     return token
+
+
+class ControlClient(Protocol):
+    async def call(self, operation: str, body: dict | None = None) -> dict: ...
 
 
 class WorkerClient:

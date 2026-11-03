@@ -210,7 +210,9 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def start(self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False):
+    def start(
+        self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False, local_silence=False
+    ):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             result = tx.get('results', segment_id)
@@ -227,6 +229,17 @@ class RecoveryStore:
             job['recovery_state'] = 'running'
             if provider not in {'legacy_sync', 'modulate'}:
                 raise ValueError('closed recovery provider required')
+            if local_silence:
+                if language_guarded(job) or job['recovery'].get('recognizers') or operator_paid_attempt:
+                    raise ValueError('unattempted local silence required')
+                # provider names the selected route, not an observed call. This
+                # token-bound decision skips STT entirely, even if storage or
+                # settle must later reconcile the deterministic result object.
+                job['recovery']['no_vendor_call'] = {
+                    'version': 1,
+                    'reason': 'strict_vad_silence',
+                    'vad_speech_seconds': 0,
+                }
             job['recovery']['provider'] = provider
             job['recovery']['started_at'] = now
             if operator_paid_attempt:

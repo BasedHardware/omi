@@ -18,6 +18,7 @@ from starlette.websockets import WebSocketState
 from config.ladder_v1 import enabled as ladder_enabled
 from config import ladder_v1 as ladder_policy
 from database import conversation_tombstones
+from database.privacy_check_metrics import with_session_census, flush_session_census, reset_session_census
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from config.rollout_cohorts import warm_rollout_cohorts
@@ -799,9 +800,11 @@ class ListenSessionRuntime:
                 break
 
     async def _record_usage_periodically(self) -> None:
+        await self.persistence.call(reset_session_census)
         while self.state.active:
             if await self.wait(60):
                 break
+            await self.persistence.call(flush_session_census)
             transcription_seconds = await self._flush_usage(final=False)
             if self.use_custom_stt:
                 continue
@@ -1149,6 +1152,7 @@ class ListenSessionRuntime:
             reason=f'fallback_from_{selected}' if fell_back else None,
         )
 
+    @with_session_census('listen')
     async def run(self) -> None:
         if not isinstance(getattr(self, 'recovery_enabled', None), bool):
             self.recovery_enabled = session_recovery_enabled(self)

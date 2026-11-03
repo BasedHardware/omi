@@ -947,6 +947,28 @@ def parakeet_prerecorded_from_bytes(
     language: Optional[str] = None,
     return_language: bool = False,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off():
+        # Explicit proxy/shadow/recovery callers bypass general provider selection.
+        # Keep their audio and language return contract while retiring the endpoint.
+        if encoding:
+            audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
+        record_fallback(
+            component='stt_selection',
+            from_mode='parakeet',
+            to_mode='modulate',
+            reason='config_incomplete',
+            outcome='recovered',
+        )
+        return modulate_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+            language=language,
+        )
     logger.info(
         f'parakeet_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding}'
     )

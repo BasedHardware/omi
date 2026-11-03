@@ -28,6 +28,10 @@ class Target:
     replay: ReplayLimits | None = None
 
     def capable(self, language: str | None, features: frozenset[str] = frozenset({'streaming'})) -> bool:
+        from config.stt_provider_policy import provider_is_enabled
+
+        if not provider_is_enabled(self.family, STTServingSurface.STREAMING):
+            return False
         lang = (language or 'multi').lower().split('-', 1)[0]
         if not features.issubset(self.features) or (self.languages and lang not in self.languages):
             return False

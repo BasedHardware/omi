@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -53,7 +54,7 @@ async def test_idle_tick_authenticates_and_does_no_pipeline_work(monkeypatch):
     assert 'utils.sync.pipeline' not in sys.modules
 
 
-async def test_idle_image_hands_back_an_unexpected_lease():
+async def test_runtime_passes_claim_to_supervisor():
     class Client:
         def __init__(self):
             self.operations = []
@@ -63,8 +64,11 @@ async def test_idle_image_hands_back_an_unexpected_lease():
             return {'lease': {'payload': {'uid': 'synthetic', 'job_id': 'job', 'sequencer_epoch': 1}, 'token': 't'}}
 
     client = Client()
-    await worker_runtime.Runtime(client).tick()
-    assert client.operations == ['claim', 'fail']
+    runtime = worker_runtime.Runtime(client)
+    runtime.execute = AsyncMock()
+    await runtime.tick()
+    assert client.operations == ['claim']
+    runtime.execute.assert_awaited_once()
 
 
 async def test_stop_interrupts_idle_wait():
@@ -76,6 +80,19 @@ async def test_stop_interrupts_idle_wait():
     runtime = worker_runtime.Runtime(Client())
     await runtime.run()
     assert runtime.stop.is_set()
+
+
+async def test_empty_claims_back_off_and_work_resets_poll_interval():
+    client = AsyncMock()
+    client.call.return_value = {'lease': None}
+    runtime = worker_runtime.Runtime(client)
+    runtime.execute = AsyncMock()
+    for _ in range(8):
+        await runtime.tick()
+    assert runtime.poll_seconds == 60
+    client.call.return_value = {'lease': {'payload': {}}}
+    await runtime.tick()
+    assert runtime.poll_seconds == worker_runtime.POLL_SECONDS
 
 
 def render(*extra):
@@ -120,7 +137,10 @@ def test_chart_pins_identity_resources_and_dedicated_entrypoint():
     assert container['command'] == ['python', '-m', 'utils.sync.worker_runtime']
     assert container['image'].endswith('@sha256:' + 'a' * 64)
     assert container['envFrom'] == [{'secretRef': {'name': 'synthetic-runtime'}}]
-    assert set(docs) == {'ServiceAccount', 'Deployment'}
+    assert set(docs) == {'ServiceAccount', 'Deployment', 'PodMonitoring'}
+    monitoring = docs['PodMonitoring']['spec']
+    assert monitoring['selector']['matchLabels'] == deployment['template']['metadata']['labels']
+    assert monitoring['endpoints'] == [{'port': 'http', 'path': '/metrics', 'interval': '15s'}]
     desired = yaml.safe_load((ROOT / 'backend/deploy/sync-backfill-worker.yaml').read_text())
     assert desired['admissionPercent'] == 0
     assert desired['nodePool']['config']['spot'] is False
