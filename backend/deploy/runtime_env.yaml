@@ -4313,7 +4313,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS:
-              value: '600'
+              value: '0'
               category: ops_kill
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app

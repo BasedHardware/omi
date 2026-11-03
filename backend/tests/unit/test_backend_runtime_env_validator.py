@@ -3417,14 +3417,14 @@ def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
     assert [error.scope for error in errors] == ['prod/llm_gateway']
 
 
-def test_guarded_long_recovery_is_scoped_to_integration_and_hours_are_inert():
+def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     for stage in ('dev', 'prod'):
         services = manifest['environments'][stage]['cloud_run']['services']
         cap = 'BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS'
         assert {name for name, service in services.items() if cap in service.get('env', {})} == {'backend-integration'}
         assert services['backend-integration']['env'][cap] == {
-            'value': '600' if stage == 'prod' else '0',
+            'value': '0',
             'category': 'ops_kill',
         }
         for name in ('backend-sync', 'backend-sync-backfill'):

@@ -87,24 +87,34 @@ recovery. Company-funded Soniox rechecks the batch allowance even for units
 originally admitted with customer-funded credentials. Guarded Modulate dispatch
 also rechecks company funding. With the feature enabled, a positive input-bound
 worker VAD receipt permits that existing Modulate attempt when CPU VAD has no
-spans, including captures above 60 seconds. For new guarded units with absent, zero or unbound worker evidence,
-`BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS` separately permits one
-Modulate attempt above 60 seconds through the configured cap (prod: **600 s**;
-dev and code default: **0**, disabled). Invalid/nonfinite values refuse this
-extension; the absolute ceiling is 7200 s. The master recovery flag and the
-existing company-funding recheck must both permit the call. Set the cap to `0`
-and redeploy backend-integration to restore the duration hold for new units.
-The existing worker-proof path is unchanged.
+spans, including captures above 60 seconds. That existing worker-proof path
+is unchanged.
 
-This extension does not widen Soniox's 60-second ceiling or relax acoustic
-validation: Modulate empty settles `failed_held` with Modulate `empty` and
-Soniox `refused` receipts. Words without strict or valid bound worker VAD also
-stay `failed_held`, with a positive word-count receipt. Words with valid acoustic
-evidence use ordinary recovery settlement. Neither case fabricates silence or
-reopens an already `failed_held` intent; existing holds remain operator-owned.
-At the previously documented $0.03/audio-hour estimate, a 600-second attempt is
-$0.005; this is not a measured bill or an aggregate spend cap. Accepted empty
-and word responses retain existing metering; fleet volume must be sized by the lead.
+`BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS` remains **0** in prod, dev
+and code defaults: the long-recovery extension is in its kill state. The code
+path is retained, but newly admitted units have neither strict CPU VAD spans
+nor a valid input-bound worker speech receipt. Their Modulate words therefore
+raise `WordsWithoutVad` and remain `failed_held`; enabling this extension now
+would add paid calls without a recoverable new population. The planscost lead
+keeps it off following Luna's P1 review.
+
+Before this cap is ever raised, recovery must be able to **accept words with
+independent acoustic evidence for that newly admitted population**: obtain and
+validate input-bound speech evidence independent of transcript word clocks,
+then use it in ordinary accepted settlement with measured speech accounting.
+Regression tests must prove the new success path, privacy/funding/one-attempt
+fences and unchanged false-silence protections, followed by lead review of the
+activation and spend plan. Existing worker-receipt successes are not evidence
+that this new population can recover; they already pass the existing gate.
+
+The dormant extension still refuses invalid/nonfinite caps, clamps any future
+cap at 7200 s, requires the master recovery flag and rechecks company funding.
+It never widens Soniox's 60-second ceiling or relaxes acoustic validation:
+Modulate empty retains Modulate `empty` and Soniox `refused` receipts above
+60 seconds; words without VAD retain their positive word-count receipt and
+stay held. Neither case fabricates silence or reopens an already `failed_held`
+intent. Keeping the cap at `0` and redeploying backend-integration preserves
+this kill state; existing held backlog remains operator-owned.
 
 The global backfill daily-hours deployment setting is **1665** (3x the prior
 555), but binds only if `SYNC_BACKFILL_ADMISSION_LIMITS=true`; that separate
