@@ -126,6 +126,12 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: BATCH_CONTROL_CANDIDATE_FANOUT
+    value: "16"
+  - name: BATCH_ADMISSION_PARALLEL_CALLS
+    value: "true"
+  - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
+    value: "10"
   - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
     value: ""
   - name: BATCH_PIPELINE_ENABLED
