@@ -83690,6 +83690,7 @@
     },
     "/v2/firmware/latest": {
       "get": {
+        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered.",
         "operationId": "get_latest_version_v2_firmware_latest_get",
         "parameters": [
           {
@@ -83726,6 +83727,22 @@
             "schema": {
               "title": "Manufacturer Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
             }
           }
         ],
@@ -83812,7 +83829,7 @@
     },
     "/v2/firmware/version": {
       "get": {
-        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.",
+        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.\nExplicit requests ignore rollout_percent for support/reverts, but blocked releases return 404.",
         "operationId": "get_firmware_version_v2_firmware_version_get",
         "parameters": [
           {
