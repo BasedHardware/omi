@@ -52,6 +52,10 @@ if not hasattr(_exc, "ResourceExhausted"):
     _exc.ResourceExhausted = type("ResourceExhausted", (Exception,), {})
 if not hasattr(_exc, "ServiceUnavailable"):
     _exc.ServiceUnavailable = type("ServiceUnavailable", (Exception,), {})
+if not hasattr(_exc, "InternalServerError"):
+    _exc.InternalServerError = type("InternalServerError", (Exception,), {})
+if not hasattr(_exc, "RetryError"):
+    _exc.RetryError = type("RetryError", (Exception,), {})
 
 _fs = _mod("google.cloud.firestore")
 if not hasattr(_fs, "Query"):
