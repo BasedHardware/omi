@@ -2011,7 +2011,7 @@ def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
             '15m',
         ),
         'omi-finalization-byok-abandoned': (
-            'sum(increase(listen_finalization_byok_session_abandoned_total[1d]))',
+            'max(listen_finalization_byok_session_abandoned_last_24h)',
             0,
             'agent',
             '0s',

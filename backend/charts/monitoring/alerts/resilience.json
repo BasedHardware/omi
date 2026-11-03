@@ -3335,7 +3335,7 @@
       "summary": "Oldest blocked_byok job is more than 3 days old",
       "threshold": "max(listen_finalization_oldest_blocked_byok_age_seconds) > 259200",
       "user_impact": "BYOK conversations are waiting for valid request-scoped keys and have no summary.",
-      "scope": "Authoritative finalization projection stock and indexed oldest-job ages, plus committed BYOK abandonment conversions.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
       "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
       "safe_next_action": "Triage blocked jobs and arrange a user reconnect with valid BYOK keys before the 14-day bound; never substitute Omi credentials.",
       "runbook": "backend/docs/listen_finalization_jobs.mdx"
@@ -3490,9 +3490,9 @@
       "summary": "Oldest blocked_byok job is more than 7 days old",
       "threshold": "max(listen_finalization_oldest_blocked_byok_age_seconds) > 604800",
       "user_impact": "BYOK conversations are approaching automatic abandonment without a summary.",
-      "scope": "Authoritative finalization projection stock and indexed oldest-job ages, plus committed BYOK abandonment conversions.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
       "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
-      "safe_next_action": "Page the rollout lead; prioritize reconnect outreach with valid BYOK keys before day 14 and track disposition; never extend retention or substitute Omi credentials.",
+      "safe_next_action": "The first deploy will page on the existing 13-day backlog. On-call should do nothing beyond confirming automatic conversion at 14 days; do not manually replay jobs or change the bound.",
       "runbook": "backend/docs/listen_finalization_jobs.mdx"
     },
     "labels": {
@@ -3642,7 +3642,7 @@
       "summary": "Dead-letter finalization stock exceeds 1000 jobs",
       "threshold": "max(listen_finalization_jobs{status=\"dead_letter\"}) > 1000",
       "user_impact": "Terminal conversations retain recordings but may lack summaries or finalization effects.",
-      "scope": "Authoritative finalization projection stock and indexed oldest-job ages, plus committed BYOK abandonment conversions.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
       "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
       "safe_next_action": "Assign two-lane-lead triage; classify failure codes and record a disposition for affected jobs; arrange approved explicit reprocess or fenced replay only after fixing the cause.",
       "runbook": "backend/docs/listen_finalization_jobs.mdx"
@@ -3794,10 +3794,10 @@
     "annotations": {
       "__dashboardUid__": "omi-core-features",
       "__panelId__": "31",
-      "summary": "Oldest dead-letter finalization job was created more than 7 days ago",
-      "threshold": "max(listen_finalization_oldest_dead_letter_age_seconds) > 604800",
+      "summary": "Oldest dead-letter finalization job has spent more than 7 days in dead_letter",
+      "threshold": "max(listen_finalization_oldest_dead_letter_age_seconds) > 604800 (since terminal_at)",
       "user_impact": "Terminal captures can remain without structured results indefinitely.",
-      "scope": "Authoritative finalization projection stock and indexed oldest-job ages, plus committed BYOK abandonment conversions.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
       "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
       "safe_next_action": "Assign two-lane-lead triage to the oldest jobs; record disposition and follow the terminal recovery procedure for approved reprocess or fenced replay.",
       "runbook": "backend/docs/listen_finalization_jobs.mdx"
@@ -3839,7 +3839,7 @@
         "refId": "A",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 86400,
+          "from": 600,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -3848,7 +3848,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(listen_finalization_byok_session_abandoned_total[1d]))",
+          "expr": "max(listen_finalization_byok_session_abandoned_last_24h)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -3950,10 +3950,10 @@
       "__dashboardUid__": "omi-core-features",
       "__panelId__": "31",
       "summary": "At least one BYOK finalization job was abandoned in the last day",
-      "threshold": "sum(increase(listen_finalization_byok_session_abandoned_total[1d])) > 0",
+      "threshold": "document-derived last-24h count > 0",
       "user_impact": "The 14-day abandonment bound closed a job without producing its summary.",
-      "scope": "Authoritative finalization projection stock and indexed oldest-job ages, plus committed BYOK abandonment conversions.",
-      "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
+      "verification": "Confirm summary freshness and the count of committed dead_letter jobs with last_failure_code=byok_session_abandoned and terminal_at in the last 24 hours.",
       "safe_next_action": "Review byok_session_abandoned jobs and count affected conversations; arrange explicit reprocessing with valid user keys and record disposition under two-lane-lead.",
       "runbook": "backend/docs/listen_finalization_jobs.mdx"
     },

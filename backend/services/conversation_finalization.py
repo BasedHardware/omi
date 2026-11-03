@@ -38,6 +38,7 @@ from utils.metrics import (
     CONVERSATION_ORPHANED_UNFINALIZED,
     LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
     LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL,
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
@@ -697,6 +698,7 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS.set(float(summary['oldest_blocked_byok_age_seconds']))
     LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS.set(float(summary['oldest_dead_letter_age_seconds']))
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H.set(float(summary['byok_abandoned_last_24h']))
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):
