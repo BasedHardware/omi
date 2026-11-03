@@ -27,6 +27,7 @@ from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
 from routers.listen.local_preview import (
     admit_local_preview,
+    close_rescinded_stream,
     note_deferred_stream_closed,
     record_cloud_live_saved_seconds,
     rescind_local_preview,
@@ -2444,6 +2445,7 @@ class ListenReceiver(ReplayFilterMixin):
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'local_preview_engine_unavailable':
             if rescind_local_preview(self.host, payload):
+                close_rescinded_stream(self)
                 attach_visible_restore(self)
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)

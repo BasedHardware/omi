@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from routers.listen import receiver as receiver_module, visible_restore as restore_module
+from routers.listen import (
+    local_preview as local_preview_module,
+    receiver as receiver_module,
+    visible_restore as restore_module,
+)
 from routers.listen.contracts import ListenRequest
 from routers.listen.receiver import ListenReceiver
 from routers.listen.local_preview import renew_local_preview
@@ -404,3 +408,38 @@ async def test_rescind_without_durable_owner_never_opens_full_cloud(harness, mon
     assert not buffer
     h.receiver.initialize_stt.assert_not_awaited()
     h.dial.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rescind_retires_an_already_open_journal_carveout_before_restore(harness, monkeypatch):
+    h = harness
+    monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
+    h.host.request = ListenRequest(websocket=None, uid='owner', local_preview=True, sample_rate=16000)
+    h.host.local_preview_batch = True
+    h.receiver.visible_restore = None
+    previous = SimpleNamespace(finish=Mock())
+    h.receiver.stt_socket = previous
+    h.host.task_supervisor = SimpleNamespace(create_lifetime_task=lambda coro, **kw: coro.close())
+    h.receiver.ensure_live_demand_routing = Mock()
+    closing = []
+
+    def spawn(coro, **kwargs):
+        task = asyncio.create_task(coro)
+        closing.append(task)
+        return task
+
+    h.host.spawn = spawn
+    begin = Mock()
+    abort = AsyncMock()
+    monkeypatch.setattr(local_preview_module, 'begin_stream_close', begin)
+    monkeypatch.setattr(local_preview_module, 'abort_replay_socket', abort)
+    await ListenReceiver._handle_text(h.receiver, json.dumps({'type': 'local_preview_engine_unavailable'}))
+    begin.assert_called_once_with(previous)
+    previous.finish.assert_called_once()
+    assert h.receiver.cloud_live_suppressed
+    assert h.receiver.stt_socket is None
+    assert h.receiver.visible_restore is not None
+    await asyncio.gather(*closing)
+    abort.assert_awaited_once_with(previous, timeout=2)
+    h.dial.assert_not_awaited()
+    await h.receiver.visible_restore.shutdown()

@@ -28,6 +28,9 @@ from utils.observability.fallback import record_fallback
 from utils.observability.reasons import LocalPreviewOutcome, ReasonFamily, reason_label
 from utils.observability.transcription import bounded_client_platform
 from utils.stt.outcomes import bounded_provider
+from utils.stt.provider_stream_end import begin_stream_close
+from utils.stt.replay_delivery import abort_replay_socket
+from utils.stt.socket import release_live_stt_socket
 
 logger = logging.getLogger(__name__)
 
@@ -197,3 +200,20 @@ def record_cloud_live_saved_seconds(receiver, request, decoded_audio_bytes: int)
         )
     except Exception as error:
         logger.warning('Cloud live mode telemetry failed type=%s', type(error).__name__)
+
+
+def close_rescinded_stream(receiver) -> None:
+    """Retire any journal-refusal carve-out before a visible-only stream can open."""
+    receiver.cloud_live_suppressed = True
+    socket = getattr(receiver, 'stt_socket', None)
+    receiver.stt_socket = None
+    if socket is None:
+        return
+    try:
+        begin_stream_close(socket)
+        socket.finish()
+    except Exception as error:
+        logger.warning('Rescinded preview stream close failed type=%s', type(error).__name__)
+    finally:
+        release_live_stt_socket(socket)
+        receiver.host.spawn(abort_replay_socket(socket, timeout=2), name='local_preview_rescind_close')
