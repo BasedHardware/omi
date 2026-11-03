@@ -58,7 +58,9 @@ class Store(Protocol):
     def control_candidate(
         self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
     ) -> str | None: ...
-    def control_candidates(self, priority: int, pool: str, now: float, *, worker_id: str = '') -> list[str]: ...
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -240,8 +242,10 @@ class FirestoreStore:
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
 
-    def control_candidates(self, priority: int, pool: str, now: float, *, worker_id: str = '') -> list[str]:
-        return control_candidates(self.client, self.namespace, priority, pool, now, worker_id=worker_id)
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        return control_candidates(self.client, self.namespace, priority, pool, now, worker_id=worker_id, fanout=fanout)
 
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         # One conditional write, no transaction or retrying read set. A stale
@@ -620,7 +624,7 @@ def control_candidate(
 
 
 def control_candidates(
-    client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = ''
+    client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
 ) -> list[str]:
     if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
         raise ValueError('bounded priority and pool required')
@@ -633,7 +637,7 @@ def control_candidates(
         .where(available, '<=', now)
         .order_by(service)
         .order_by(available)
-        .limit(control_candidate_fanout() if worker_id else 1)
+        .limit(control_candidate_fanout(fanout) if worker_id else 1)
         .stream()
     )
     if worker_id:

@@ -379,7 +379,9 @@ class PostgresStore:
             None,
         )
 
-    def control_candidates(self, priority: int, pool: str, now: float, *, worker_id: str = '') -> list[str]:
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
@@ -387,7 +389,7 @@ class PostgresStore:
             rows = conn.execute(
                 f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
                 f'AND {at} <= %s ORDER BY {p}_service, {at}, key COLLATE "C" LIMIT %s',
-                (self.namespace, now, control_candidate_fanout() if worker_id else 1),
+                (self.namespace, now, control_candidate_fanout(fanout) if worker_id else 1),
             ).fetchall()
         if worker_id:
             rows.sort(key=lambda row: (row[1], hashlib.sha256(f'{worker_id}:{row[0]}'.encode()).digest()))

@@ -448,7 +448,10 @@ closed diagnostics, historical held-unit disposition and rollback semantics.
 Worker defaults ship on. `worker.controlCandidateFanout` maps to
 `BATCH_CONTROL_CANDIDATE_FANOUT` (16; integer clamp 1–64, malformed → 16).
 Each spread-mode priority pass queries one sorted candidate list, excludes busy
-claims locally, and refreshes at most once after a committed control change.
+claims locally, and uses at most one extra query at the previous 64-shard width
+when the full candidate window is busy or a committed control change needs a
+refresh. These paths share one refresh budget: at most two queries per priority
+pass, and the ordinary productive pull still reads only its initial window.
 Eligible deficit rounds keep retrying the head, so fresh work cannot be bypassed.
 Service remains the primary rank and worker affinity breaks ties within the
 bounded query prefix. Set 64 to restore the previous query width; list reuse

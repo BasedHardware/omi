@@ -103,6 +103,10 @@ def test_worker_affinity_spreads_ties_but_never_overrides_service(monkeypatch):
     all_ids = store_module.control_candidates(client, 'batch_pipeline_dev', 0, 'batch', 1, worker_id='worker-0')
     assert len(all_ids) == 8 and all_ids[0] == choices[0]
     assert query.limit.call_args.args == (64,)
+    monkeypatch.setenv('BATCH_CONTROL_CANDIDATE_FANOUT', '1')
+    store_module.control_candidates(client, 'batch_pipeline_dev', 0, 'batch', 1, worker_id='worker-0', fanout=64)
+    assert query.limit.call_args.args == (64,)
+
     excluded = store_module.control_candidate(
         client, 'batch_pipeline_dev', 0, 'batch', 1, worker_id='worker-0', exclude={choices[0]}
     )
@@ -209,7 +213,7 @@ class SpreadMemoryStore(MemoryStore):
             None,
         )
 
-    def control_candidates(self, priority, pool, now, *, worker_id=''):
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
         from config.batch_pipeline import control_candidate_fanout
 
         if self._round_view is not None:
@@ -223,7 +227,7 @@ class SpreadMemoryStore(MemoryStore):
             if value.get(field(priority, 'active')) and value[field(priority, pool + '_available_at')] <= now
         ]
         candidates.sort()
-        candidates = candidates[: control_candidate_fanout() if worker_id else 1]
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
         if worker_id:
             candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
         self._selection.source = source

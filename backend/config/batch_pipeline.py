@@ -174,10 +174,10 @@ def shared_live_enabled() -> bool:
     return resolve_stage_policy('', 'scheduler').shared_live
 
 
-def control_candidate_fanout() -> int:
+def control_candidate_fanout(fanout: int | None = None) -> int:
     """Bound hint reads; 64 restores the previous candidate query width."""
     try:
-        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16'))
+        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16') if fanout is None else fanout)
     except ValueError:
         return 16
     return min(64, max(1, value))

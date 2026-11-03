@@ -110,7 +110,7 @@ class MemoryStore:
             None,
         )
 
-    def control_candidates(self, priority, pool, now, *, worker_id=''):
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
         import hashlib
         from config.batch_pipeline import control_candidate_fanout
         from utils.batch_pipeline.control import field
@@ -123,7 +123,7 @@ class MemoryStore:
             and v[field(priority, pool + '_available_at')] <= now
         ]
         candidates.sort()
-        candidates = candidates[: control_candidate_fanout() if worker_id else 1]
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
         if worker_id:
             candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
         return [row[2] for row in candidates]

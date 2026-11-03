@@ -14,6 +14,8 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
+    SCHEDULER_SHARDS,
+    control_candidate_fanout,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
@@ -397,16 +399,31 @@ class Scheduler:
             busy = False
             candidates = None
             refreshed = False
+            candidate_fanout = control_candidate_fanout()
             for _ in range(128):
                 if spread:
                     if candidates is None:
                         candidates = self.store.control_candidates(
-                            int(priority), self.pool, now, worker_id=self.worker_id
+                            int(priority), self.pool, now, worker_id=self.worker_id, fanout=candidate_fanout
                         )
                     shard = next((key for key in candidates if key not in excluded), None)
                 else:
                     shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
+                    if (
+                        spread
+                        and busy
+                        and not refreshed
+                        and candidate_fanout < SCHEDULER_SHARDS
+                        and len(candidates) >= candidate_fanout
+                    ):
+                        # A full busy prefix proves nothing about the remaining
+                        # shards. Spend the sole refresh on the legacy width,
+                        # skipping every already-tried claim locally.
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
+                        continue
                     break
                 receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
                 if receipts:
@@ -426,11 +443,11 @@ class Scheduler:
                 if spread:
                     if not eligible:
                         excluded.add(shard)
-                    # Refresh at most once after a committed control change,
-                    # never after a busy claim. Deficit rounds can keep retrying
-                    # the eligible head without another hint query.
+                    # Share one wide refresh budget with busy-window refill.
+                    # Later deficit rounds retry the eligible head locally.
                     if not refreshed:
                         candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
                         refreshed = True
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.

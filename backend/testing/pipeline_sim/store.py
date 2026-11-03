@@ -277,7 +277,9 @@ class SimStore:
             None,
         )
 
-    def control_candidates(self, priority: int, pool: str, now: float, *, worker_id: str = '') -> list[str]:
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
         from config.batch_pipeline import control_candidate_fanout
 
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
@@ -292,7 +294,7 @@ class SimStore:
             and row.get(prefix + pool + '_available_at', float('inf')) <= now
         ]
         rows.sort(key=lambda v: (v[0][prefix + 'service'], v[0][prefix + pool + '_available_at'], v[1]))
-        rows = rows[: control_candidate_fanout() if worker_id else 1]
+        rows = rows[: control_candidate_fanout(fanout) if worker_id else 1]
         if worker_id:
             rows.sort(key=lambda v: (v[0][prefix + 'service'], hashlib.sha256(f'{worker_id}:{v[1]}'.encode()).digest()))
         return [key for _, key in rows]
