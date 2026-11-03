@@ -41,6 +41,23 @@ class QueueTimeoutError(Exception):
     pass
 
 
+# NeMo's per-feature normalization rejects the WHOLE batch when its shortest
+# member is shorter than a single spectrogram frame (raw prod line, parakeet
+# container: "normalize_batch with `per_feature` normalize_type received a
+# tensor of length 1. This will result in torch.std() returning nan. Make sure
+# your audio length has enough samples for a single feature (ex. at least
+# `hop_length` for Mel Spectrograms)."). The message names its site, so the
+# flush path can tell this input-shaped fault apart from a GPU fault without
+# reaching into NeMo internals. Batched with 43-99 siblings a day in prod,
+# that one file used to fail every future in its batch.
+_NORMALIZE_BATCH_ERROR = 'normalize_batch with `per_feature` normalize_type received a tensor of length'
+
+
+def _is_degenerate_batch_normalization(exc: BaseException) -> bool:
+    """True for the NeMo head-of-line poison ValueError (message-identified)."""
+    return _NORMALIZE_BATCH_ERROR in str(exc)
+
+
 class BatchEngine:
     def __init__(
         self,
@@ -93,6 +110,7 @@ class BatchEngine:
             "total_files": 0,
             "rejected_requests": 0,
             "vram_limited_batches": 0,
+            "degenerate_batch_split_retries": 0,
         }
 
     def _try_init_vram(self) -> None:
@@ -485,12 +503,35 @@ class BatchEngine:
                     if not req.future.done():
                         req.future.set_exception(err)
             except Exception as exc:
-                if "CUDA out of memory" in str(exc) or "OutOfMemoryError" in type(exc).__name__:
-                    is_oom = True
-                logger.error(f"Batch transcription failed: {exc}")
-                for req in batch:
-                    if not req.future.done():
-                        req.future.set_exception(exc)
+                if (
+                    _is_degenerate_batch_normalization(exc)
+                    and len(batch) > 1
+                    and not any(req.future.done() for req in batch)
+                ):
+                    # Head-of-line poison: NeMo's per-feature normalization
+                    # rejects the entire grouped GPU call because ONE member
+                    # is shorter than a spectrogram frame. The fault is
+                    # input-shaped, not a GPU fault, so the batch's other
+                    # members are healthy: re-run every file as its own call
+                    # (the solo call IS the isolated unit) so N-1 healthy
+                    # transcriptions survive one user's degenerate upload.
+                    # A single-file batch is never retried — the grouped call
+                    # was already that file's solo call. The no-done guard
+                    # keeps the path one-shot: a batch whose futures were
+                    # resolved elsewhere (shutdown prune, deadline expiry)
+                    # must not be re-submitted behind their backs.
+                    self._metrics["degenerate_batch_split_retries"] += 1
+                    logger.warning(
+                        "Batch rejected by per-feature normalization; retrying %d files individually", len(batch)
+                    )
+                    await self._retry_batch_one_by_one(batch)
+                else:
+                    if "CUDA out of memory" in str(exc) or "OutOfMemoryError" in type(exc).__name__:
+                        is_oom = True
+                    logger.error(f"Batch transcription failed: {exc}")
+                    for req in batch:
+                        if not req.future.done():
+                            req.future.set_exception(exc)
             finally:
                 if is_oom and self._on_gpu_oom:
                     self._on_gpu_oom()
@@ -500,6 +541,50 @@ class BatchEngine:
         finally:
             self._batches_inflight -= 1
             sem.release()
+
+    async def _retry_batch_one_by_one(self, batch: List[PendingRequest]) -> None:
+        """Re-run each file of a normalization-rejected batch as its own GPU call.
+
+        The grouped call died on ONE member's degenerate audio; the solo
+        calls let the healthy members finish while the genuinely degenerate
+        file fails alone with its own error. A solo GPU call resolves its
+        future with the per-file result list (one entry for the one file),
+        so each request gets ``results[0]`` — the same shape the grouped
+        path delivers, never the raw list. File cleanup still belongs to
+        the flush's ``finally`` (``owns_file``), so this retry never
+        unlinks anything itself. Cancellation during the retry resolves
+        every outstanding future with the shutdown error before
+        propagating, exactly like the grouped-call cancel path.
+        """
+        for req in batch:
+            if req.future.done():
+                continue
+            try:
+                gpu_future, _work_item = self._gpu_worker.submit(
+                    {
+                        "audio_paths": [req.audio_path],
+                        "timestamps": req.timestamps,
+                        "batch_size": 1,
+                        "durations": [self._effective_duration(req)],
+                    },
+                    cast(asyncio.AbstractEventLoop, self._loop),
+                )
+                results: Any = await gpu_future
+                if isinstance(results, list) and len(results) == 1:
+                    per_file: Any = results[0]
+                else:
+                    per_file = results
+                if not req.future.done():
+                    req.future.set_result(per_file)
+            except asyncio.CancelledError:
+                err = RuntimeError("Batch cancelled during shutdown")
+                for other in batch:
+                    if not other.future.done():
+                        other.future.set_exception(err)
+                raise
+            except Exception as exc:
+                if not req.future.done():
+                    req.future.set_exception(exc)
 
     @property
     def metrics(self) -> Dict[str, Any]:

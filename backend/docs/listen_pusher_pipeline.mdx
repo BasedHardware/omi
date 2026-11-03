@@ -779,7 +779,7 @@ accounted media duration admitted per request. The finite allowance check bounds
 normally narrows it further. The semaphore is not shared across replicas, and an
 accounting-write outage does not have this finite cumulative bound.
 
-> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by the private Firestore sync-lineage-resolve cohort, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-11-02 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry; pusher session-admission transient shed with clean 1013 refusal and a refused close class)
 
 Conversation finalization notes and opted-in mobile/app chat use shaped invocation
 when `OMI_SHAPED_AGENT_MODE=on` on prod backend, backend-sync,
@@ -1561,6 +1561,20 @@ under the prefix. One residual observation therefore proves nothing, so the
 verifier re-attacks the residue once before its fail-closed verdict
 (`owner storage purge left N objects`) — an account-wipe caller still gets a
 torn-purge refusal, but a converged race no longer produces one. That verdict
+is identity-based, not presence-based: the delete loop records the
+`(name, generation)` pair of every delete it applies and the final re-list
+ignores *versioned* entries at those identities — the read side's echo of
+this very call's deletes (the just-deleted version answers one more read, or
+stays listed as noncurrent under a soft-delete policy). A generation-less
+entry is never masked by the echo rule, and a never-deleted name, a name at
+a newer generation (the late writer's upload) or a delete that never applied
+still fails closed: an echo must not hide the residue it raced. The same
+verifier is the only purge implementation the family keeps — the dedicated
+recordings bucket sweep and both frame-request tiers run through it (the
+shared `owner storage purge left` message replaces the arm-private
+`frame-request purge left` spelling), and the account wipe's diagnostics
+ticket lookups absorb the same concurrent-wipe 404 their owner bundles
+already do. The verdict
 arrives at `_discard_unreferenced_audio` after the conversation row is already
 gone, so it cannot retroactively fail the delete: a residual signal keeps the
 retained-audio classification (`Retained unreferenced audio behind a late
@@ -5240,6 +5254,8 @@ committed speech into a fresh conversation.
 ## 8. WebSocket Task Supervision
 
 `routers/listen/runtime.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supervisor loop instead of `asyncio.gather()` to manage background tasks. This prevents ghost connections where a hung background task blocks cleanup forever.
+
+**Session-admission transient shed (pusher).** The four admission profile reads in `_websocket_util_trigger` (webhook delay, audio-apps count, private-cloud flag, protection level) are a session's first data-plane round trips; each rides `_admission_read_with_transient_shed` (`PUSHER_ADMISSION_TRANSIENT_ATTEMPTS`, doubling from `PUSHER_ADMISSION_TRANSIENT_BACKOFF_SECONDS`). A cold pod-start channel's momentary availability blip (the shared 503/504/500 trio plus the drained-retry envelope carrying one — `database._client.is_transient_availability_error`) is retried in place; a drained budget ends the never-started session with journey `cancelled` and close **1013 Try Again Later** (`pusher_admission_shed_retries_total` / `pusher_admission_shed_exhausted_total` count attempts and refusals by read name). Permanent refusals, quota pressure and unknown failures keep the loud first-attempt arm (journey `failure`, close 1011, uvicorn traceback), and cancels are never absorbed — the pod-teardown boundary owns them. The listen side files the 1013 refusal as its own `refused` close class at INFO severity (`utils/listen_pusher_session.py`, alongside `restart` at {1012}), so a shed refusal is expected churn, not a fault.
 
 **Supervisor exits on:**
 - Client disconnect (receive task completes)

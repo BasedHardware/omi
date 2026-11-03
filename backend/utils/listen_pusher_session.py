@@ -79,6 +79,14 @@ PUSHER_CLOSE_CLASS_RESTART = 'restart'
 PUSHER_CLOSE_CLASS_NO_FRAME = 'no_frame'
 PUSHER_CLOSE_CLASS_ABNORMAL = 'abnormal'
 PUSHER_CLOSE_CLASS_CLEAN = 'clean'
+# A session refused before it started (pusher session admission): the pod
+# answered the WebSocket handshake, its admission profile reads then saw a
+# drained transient-availability budget, and the server ended the never-used
+# session with close 1013 Try Again Later. Not a fault and not a restart: the
+# session carried no audio, nothing was committed, and the peer's own
+# reconnect cadence is the recovery — the pusher side files the 1013 as
+# expected churn, the way the listen side already files service restarts.
+PUSHER_CLOSE_CLASS_REFUSED = 'refused'
 
 # The websockets keepalive's own death statement. When one side's ping goes
 # unanswered past ``ping_timeout`` it fails the connection with
@@ -134,6 +142,8 @@ def classify_pusher_close(e: ConnectionClosed) -> str:
         return PUSHER_CLOSE_CLASS_RESTART
     if code == 1000:
         return PUSHER_CLOSE_CLASS_CLEAN
+    if code == 1013:
+        return PUSHER_CLOSE_CLASS_REFUSED
     return PUSHER_CLOSE_CLASS_ABNORMAL
 
 
@@ -154,6 +164,12 @@ def log_pusher_connection_closed(
     it fired once per live session per restart wave (~x342/30m for the
     audio-bytes line alone during the 2026-10-09 wave) and buried the genuine
     abnormal closes that share the message shape.
+
+    A refused session (close 1013 Try Again Later, pushed by the pusher's own
+    admission shed before any audio flowed) logs at INFO for the same reason:
+    the session carried nothing, the server deliberately told the peer to
+    retry, and the peer's reconnect cadence is the recovery — there is no
+    fault for an operator to act on.
 
     The keepalive's own death ("received 1011 ... keepalive ping timeout",
     ``PUSHER_CLOSE_CLASS_KEEPALIVE``) logs at WARNING on a session's first
@@ -186,7 +202,7 @@ def log_pusher_connection_closed(
         # in-flight observation while the session's reconnect is already
         # armed, same one-death-one-line rule as the no-frame class below.
         level = logging.WARNING if not dedupe else logging.INFO
-    elif close_class == PUSHER_CLOSE_CLASS_RESTART or dedupe:
+    elif close_class in (PUSHER_CLOSE_CLASS_RESTART, PUSHER_CLOSE_CLASS_REFUSED) or dedupe:
         level = logging.INFO
     else:
         level = logging.ERROR

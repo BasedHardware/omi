@@ -109,6 +109,18 @@ PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS = Counter(
     'Private cloud audio batches dropped after exhausting upload attempts',
 )
 
+PUSHER_ADMISSION_SHED_RETRIES_TOTAL = Counter(
+    'pusher_admission_shed_retries_total',
+    'Pusher session-admission profile-read attempts retried after a transient availability blip, by read name',
+    ['read'],
+)
+
+PUSHER_ADMISSION_SHED_EXHAUSTED_TOTAL = Counter(
+    'pusher_admission_shed_exhausted_total',
+    'Pusher sessions refused at admission (close 1013) after the transient shed drained, by read name',
+    ['read'],
+)
+
 PUSHER_CIRCUIT_BREAKER_STATE = Gauge(
     'pusher_circuit_breaker_state',
     'Pusher circuit breaker state (0=closed, 1=open, 2=half_open)',
@@ -127,7 +139,7 @@ PUSHER_SESSION_DEGRADED = Gauge(
 PUSHER_CLOSE_EVENTS_TOTAL = Counter(
     'pusher_close_events_total',
     'Pusher socket close observations by class (restart, no_frame, keepalive_timeout, '
-    'abnormal, clean) and whether a reconnect was already armed (deduped=true means a '
+    'abnormal, clean, refused) and whether a reconnect was already armed (deduped=true means a '
     'sibling task logged this close). Counted per observation, not per close — the '
     'burst shape is the signal that a single socket death is re-observed by multiple '
     'tasks.',

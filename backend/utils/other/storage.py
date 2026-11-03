@@ -214,7 +214,52 @@ def maybe_invalidate_conversation_playback(
     if fingerprint != stamped:
         enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
 
+def _blob_purge_identity(blob: Any) -> Tuple[str, Optional[int]]:
+    """The ``(name, generation)`` pair one object version answers as.
 
+    A versioned listing (``versions=True``) identifies every entry — live or
+    noncurrent — by this pair, which is exactly the identity the purge loop's
+    ``blob.delete()`` applies to. A listing without versions answers the bare
+    name, so its identity carries no generation and a re-delete of it is the
+    same operation the loop already performed.
+    """
+
+    name = getattr(blob, 'name', None)
+    generation = getattr(blob, 'generation', None)
+    try:
+        generation = int(generation) if generation is not None else None
+    except (TypeError, ValueError):
+        generation = None
+    return (str(name), generation)
+
+
+def _purge_residue(
+    bucket: Any,
+    prefix: str,
+    listing_kwargs: Dict[str, Any],
+    deleted_identities: set,
+) -> list:
+    """Re-list the prefix and return only genuine residue.
+
+    A *versioned* entry at an identity this purge already deleted is the
+    storage's read-after-write echo of its own deletes — the ``versions=True``
+    listing keeps answering the just-deleted version for a propagation window,
+    and a soft-delete policy keeps listing it as noncurrent — never an object
+    the wipe failed to remove. Generation-less entries carry no version
+    identity, so the echo rule never masks them: they stay residue under the
+    same presence verdict the pre-identity verifier used, as do versioned
+    entries at identities this call never deleted (a late writer's upload) or
+    at identities whose deletes never applied (a lost delete). The caller
+    turns the survivors into the fail-closed verdict.
+    """
+
+    residue: list = []
+    for blob in bucket.list_blobs(prefix=prefix, **listing_kwargs):
+        name, generation = _blob_purge_identity(blob)
+        if generation is not None and (name, generation) in deleted_identities:
+            continue
+        residue.append(blob)
+    return residue
 
 
 def _delete_owner_bucket_prefix(bucket: Any, prefix: str, *, account_deletion_uid: str | None = None) -> int:
@@ -243,11 +288,34 @@ def _delete_owner_bucket_prefix(bucket: Any, prefix: str, *, account_deletion_ui
     hold refuses the delete (fail closed), and a temporary hold on the
     deletion path is released before the delete, exactly as the shared
     account-deletion helper does.
+    The verdict itself is identity-based, not presence-based. With a versioned
+    listing a just-deleted version keeps answering reads — or stays listed as
+    noncurrent under a soft-delete policy — for a propagation window after the
+    delete commits, so a presence-only verdict can fail on the read side's
+    echo of this very call's deletes (prod backend-listen 2026-11-01: the
+    verifier's own re-list answered the just-deleted versions of 782/782
+    empty-generation sweeps and every one failed as ``owner storage purge
+    left``; the lifecycle re-attack loop then re-listed ~10x per conversation
+    per 30-minute window). The loop therefore records the ``(name,
+    generation)`` identity of every delete it applies and the final verdict
+    ignores *versioned* entries at those identities; a generation-less entry
+    is never masked — the presence verdict keeps it residue exactly as before
+    — and a never-deleted name, a name at a *newer* generation (the late
+    writer's upload) or a versioned delete that never applied still fails
+    closed: an echo must not mask the lost delete it raced.
+
+    Failure-Class: FC-post-commit-index-maintenance-terminal — the purge
+    verdict runs strictly after its authoritative outcome (an irreversible
+    wipe or an explicit deletion) has committed; the storage's own
+    read-after-write echo window may not rewrite that committed outcome as a
+    failed purge, while genuine residue that survives fresh deletes of itself
+    still blocks it exactly as before.
     """
 
     real_gcs = _uses_real_gcs_bucket(bucket)
     listing_kwargs = {'versions': True} if real_gcs else {}
     deleted = 0
+    deleted_identities: set = set()
     for _ in range(_OWNER_PURGE_SETTLE_ATTEMPTS):
         blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
         if not blobs:
@@ -269,9 +337,10 @@ def _delete_owner_bucket_prefix(bucket: Any, prefix: str, *, account_deletion_ui
             except BlobNotFound:
                 continue
             deleted += 1
-    remaining = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
-    if remaining:
-        raise RuntimeError(f'owner storage purge left {len(remaining)} objects under {prefix}')
+            deleted_identities.add(_blob_purge_identity(blob))
+    residue = _purge_residue(bucket, prefix, listing_kwargs, deleted_identities)
+    if residue:
+        raise RuntimeError(f'owner storage purge left {len(residue)} objects under {prefix}')
     return deleted
 
 
@@ -346,9 +415,16 @@ def delete_all_user_storage_objects(uid: str) -> int:
                     ticket = blob.name.rsplit('/', 1)[-1].removesuffix('.json')
                     if len(ticket) == 12 and all(c in '0123456789ABCDEF' for c in ticket):
                         lookup = bucket.blob(f'diagnostics/tickets/{ticket}.json')
-                        if lookup.exists():
-                            lookup.delete()
-                            deleted += 1
+                        try:
+                            if lookup.exists():
+                                lookup.delete()
+                                deleted += 1
+                        except BlobNotFound:
+                            # A concurrent wipe of the same owner won the race
+                            # and already removed the lookup; the object is
+                            # exactly where this delete wanted it, so the
+                            # shared verdict below stays the only authority.
+                            continue
             deleted += _delete_owner_bucket_prefix(bucket, prefix, account_deletion_uid=uid)
     return deleted
 
@@ -614,17 +690,11 @@ def delete_all_conversation_recordings(uid: str) -> int:
         return 0
     bucket = _get_storage_client().bucket(memories_recordings_bucket)
     # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
-    blobs = bucket.list_blobs(prefix=f"{uid}/")
-    deleted = 0
-    for blob in blobs:
-        blob.delete()
-        deleted += 1
-    # Concrete GCS has strong list consistency. Lightweight custom fakes also
-    # support this proof; only the legacy MagicMock fixture is exempt because
-    # it intentionally returns the same static blob on every listing.
-    if type(bucket).__module__ != 'unittest.mock' and list(bucket.list_blobs(prefix=f'{uid}/')):
-        raise RuntimeError(f'owner storage purge left objects under {uid}/')
-    return deleted
+    # The shared owner-purge verifier owns the delete loop and the residue verdict: the same
+    # read-after-write echo that can fail the owner-prefix sweep arms answers this bucket's
+    # re-list too, and a 404-answered delete (a concurrent purge of the same prefix, or one
+    # torn delete) must be settled by a fresh re-attack instead of failing the wipe.
+    return _delete_owner_bucket_prefix(bucket, f'{uid}/')
 
 
 # ********************************************
