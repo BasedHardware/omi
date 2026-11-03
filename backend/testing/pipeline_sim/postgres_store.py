@@ -132,6 +132,11 @@ class PgSimStore(SimStore):
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return self.pg.control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)
 
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        return self.pg.control_candidates(priority, pool, now, worker_id=worker_id, fanout=fanout)
+
     def first_pending(self, owner_key: str) -> dict | None:
         return self.pg.run(lambda tx: tx.first_pending(owner_key))
 
