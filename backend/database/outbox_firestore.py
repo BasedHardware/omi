@@ -425,14 +425,14 @@ class FirestoreEnrichmentOutbox:
         return released
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
-        # Invariant 8: no shared scan cursor; every pass starts at the oldest due row.
+        # Share legacy's bounded inspection progress; per-row CAS still owns custody.
         counts = _outbox().sweep(
             now=now,
             limit=limit,
             discard=self._blocked,
             client=self._bound_client,
             wake=None if self._create_wake is None else self._wake,
-            cursor=False,
+            cursor=True,
         )
         return SweepCounts(
             rewoken=counts['repaired'],

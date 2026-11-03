@@ -282,7 +282,25 @@ def test_production_callers_cannot_resolve_retired_endpoints(source, monkeypatch
     # Poison both paths to prove the switch wins over those bindings too.
     monkeypatch.setenv('HOSTED_VAD_API_URL', 'http://retired.invalid/v1/vad')
     monkeypatch.setenv('HOSTED_PARAKEET_JA_API_URL', 'http://retired.invalid')
-    monkeypatch.setattr(language_gate.httpx, 'Client', lambda **kw: pytest.fail('retired LID dialed'))
+    dedicated_lid = str(env.get('HOSTED_LID_API_URL') or '').strip().rstrip('/')
+
+    class DedicatedLidOnly:
+        # Only the separately qualified CPU LID service may be dialed; never the shared pool.
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def post(self, url, **kw):
+            if not dedicated_lid or not url.startswith(dedicated_lid + '/'):
+                pytest.fail('retired LID dialed')
+            return language_gate.httpx.Response(503)
+
+    monkeypatch.setattr(language_gate.httpx, 'Client', DedicatedLidOnly)
     monkeypatch.setattr(vad.requests, 'post', lambda *a, **kw: pytest.fail('retired VAD dialed'))
     monkeypatch.setattr(vad, '_run_file_vad', lambda path: [{'start': 0, 'end': 1}])
     monkeypatch.setattr(pre_recorded, 'modulate_prerecorded_from_bytes', lambda *a, **kw: ['vendor words'])

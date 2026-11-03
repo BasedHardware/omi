@@ -573,6 +573,8 @@ env:
         key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
+  - name: HOSTED_LID_API_URL
+    value: "http://172.16.160.20/lid"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED

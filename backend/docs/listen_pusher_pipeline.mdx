@@ -8956,3 +8956,10 @@ the request. Global maintenance and discovery retain the independent serving
 supervisor (20-second wait after each pass, 60-second maintenance lease TTL).
 Pending jobs and result receipts remain the durable retry owner across process
 loss. [Details and verification](listen_pusher_pipeline/changes/2026-11-03-recovery-owner-only.md).
+
+### Lifecycle phase shadow
+
+`PHASE_SHADOW_ENABLED` defaults to `true`; `false`, `0`, `off` or `no` disables
+all read-side phase derivation and observation. This telemetry switch never selects
+reader behavior or performs storage IO. Existing verdicts remain authoritative,
+including when shadow computation fails. [Projection rules and measurement limits](listen_pusher_pipeline/changes/2026-11-03-phase-shadow.md).
