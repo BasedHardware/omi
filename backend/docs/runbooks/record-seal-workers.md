@@ -61,7 +61,8 @@ sampler latency and pending volume before retiring the cron.
 
 Lead/infracost owns deployment and staging; this change performs neither.
 Populate `recordSealWorker.serverFlags` with the current serving policy, as for
-`recordSealRepair.serverFlags`; an absent/invalid map refuses cloud access.
+`recordSealRepair.serverFlags`; with the switch on, an absent/invalid map exits
+the pod before `/metrics` serves, so it crash-loops and never reports Ready.
 Refresh both maps together while the cron overlaps. Runtime worker switch is ON
 by default, but no live flag change is implied by this chart.
 

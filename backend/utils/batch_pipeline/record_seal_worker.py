@@ -195,6 +195,15 @@ class Worker:
 def run(release, namespace, *, pause=time.sleep, emit=lambda _: None):
     from prometheus_client import start_http_server
 
+    if enabled():
+        # Readiness is /metrics, so refuse policy before serving it: a pod with
+        # an absent or invalid map crash-loops instead of reporting Ready idle.
+        try:
+            config.require_runtime()
+            config.server_flags()
+        except Exception:
+            emit({'event': 'record_seal_worker', 'outcome': 'error', 'stage': 'policy'})
+            raise SystemExit(1) from None
     metrics = Metrics(release, namespace)
     server, thread = start_http_server(8080, registry=metrics.registry)
     worker = None
@@ -202,8 +211,6 @@ def run(release, namespace, *, pause=time.sleep, emit=lambda _: None):
         while True:
             try:
                 if enabled() and worker is None:
-                    config.require_runtime()
-                    config.server_flags()  # Fail before any cloud access on invalid policy.
                     from database._client import get_data_plane_firestore_client
 
                     worker = Worker(get_data_plane_firestore_client(), 'batch_pipeline_prod', metrics)
