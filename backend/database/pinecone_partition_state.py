@@ -359,16 +359,18 @@ def finish_mutation(
         raise ValueError('write_lsn must be a nonnegative integer')
     client = _client(firestore_client)
     try:
-        for attempt in range(3):
+        attempt = 0
+        while True:
             try:
                 route = _finish_mutation(client.transaction(), _document(client, key), key, ticket, write_lsn)
                 break
             except (Unauthenticated, ServiceUnavailable, DeadlineExceeded, Aborted):
-                if attempt == 2:
+                attempt += 1
+                if attempt == 3:
                     raise
                 # The transaction is idempotent, including a committed write
                 # whose response was lost. Never repeat the provider operation.
-                sleep(0.05 * (attempt + 1))
+                sleep(0.05 * attempt)
     except BaseException:
         # Preserve the original failure, including process interruption. A retry
         # must not silently orphan the old admission under a fresh token.
