@@ -9,6 +9,7 @@ import pytest
 from config.audio_custody import framed_pack
 from utils.other import audio_outbox, audio_outbox_metrics, raw_audio_read, storage
 from utils.other.audio_chunks import iter_audio_chunk_pcm
+from utils.other import audio_frame_table
 from utils.pusher_protocol import ByteBudget
 from utils.pusher_record_finish import RecordProjectionQueue
 from tests.unit.test_audio_durable_outbox import (
@@ -198,3 +199,53 @@ async def test_mid_window_death_leaves_tail_held_and_prior_part_released(remote,
     assert len(receipts) == 1 and audio_outbox.read_pcm('owner', receipts[0]) == captured[0]
     assert receipts[0].samples == 160 and sock.close_code == 1011
     assert len(remote.list_blobs('raw-live/')) == len(remote.list_blobs('audio-outbox/')) == 1
+
+
+def test_oversized_frame_manifest_never_issues_an_unreadable_receipt(remote, monkeypatch):
+    # The writer must honor the reader bound before issuing a custody receipt.
+    monkeypatch.setattr(audio_outbox, 'MAX_MANIFEST_BYTES', 1, raising=False)
+    pcm = b'\x01\x02' * 160
+    before = audio_outbox_metrics.CUSTODY_COMMITS._value.get()
+    with pytest.raises(ValueError, match='frame manifest exceeds reader bound'):
+        audio_outbox.commit_pcm_window(
+            'owner', pcm, 'conversation', 1000, 16000, 'root', 0, [frame(pcm, 1000)], framed=True
+        )
+    assert len(remote.list_blobs('raw-live/')) == 1
+    assert not remote.list_blobs('audio-outbox/')
+    assert audio_outbox_metrics.CUSTODY_COMMITS._value.get() == before
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+@pytest.mark.parametrize('headroom', [0, 31, 32])
+def test_manifest_receipt_bound_includes_actual_encryption_envelope(remote, monkeypatch, protection, headroom):
+    pcm = b'\x01\x02' * 160
+
+    def commit():
+        return audio_outbox.commit_pcm_window(
+            'owner',
+            pcm,
+            'conversation',
+            1000,
+            16000,
+            'root',
+            0,
+            [frame(pcm, 1000)],
+            framed=True,
+            data_protection_level=protection,
+        )
+
+    original = commit()
+    stored = remote.blob(original.manifest_path).data
+    plaintext = storage.encryption.decrypt_audio_file(stored, 'owner') if protection == 'enhanced' else stored
+    bound = len(plaintext) + headroom
+    monkeypatch.setattr(audio_outbox, 'MAX_MANIFEST_BYTES', bound)
+    monkeypatch.setattr(audio_frame_table, 'MAX_MANIFEST_BYTES', bound)
+    before = audio_outbox_metrics.CUSTODY_COMMITS._value.get()
+    if len(stored) > bound:
+        with pytest.raises(ValueError, match='frame manifest exceeds reader bound'):
+            commit()
+        assert audio_outbox_metrics.CUSTODY_COMMITS._value.get() == before
+    else:
+        receipt = commit()
+        assert audio_frame_table.receipt_frames(remote, 'owner', receipt.to_dict()) == ([frame(pcm, 1000)], 16000)
+    assert audio_outbox.read_pcm('owner', original) == pcm
