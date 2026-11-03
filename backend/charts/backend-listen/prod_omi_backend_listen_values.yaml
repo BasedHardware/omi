@@ -104,7 +104,7 @@ env:
     value: "true"
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
-    value: "false"
+    value: "true"
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
