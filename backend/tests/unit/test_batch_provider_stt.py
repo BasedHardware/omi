@@ -421,7 +421,8 @@ def test_failover_intent_keeps_prior_vad_if_next_inspection_is_missing_or_lower(
         (RuntimeError('synthetic'), {'stage': 'provider', 'reason': 'operation_failed'}),
     ],
 )
-def test_vendor_failure_is_terminal_failed_held_and_never_re_enters_recovery(world, monkeypatch, error, expected):
+def test_kill_switch_off_keeps_vendor_failure_terminal(world, monkeypatch, error, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
     artifacts, vendor = Artifacts(), Vendor(error)

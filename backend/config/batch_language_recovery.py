@@ -35,7 +35,7 @@ def inherited_language(conversation_language, user_language):
 
 
 def enabled():
-    return os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false').strip().lower() == 'true'
+    return os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true').strip().lower() == 'true'
 
 
 def allowed(seconds):
@@ -48,7 +48,9 @@ def allowed(seconds):
 
 def language_guarded(job):
     # Both unsupported/blocked and unknown/blocked worker routes use this reason.
-    return (job.get('worker_failure') or {}).get('reason') == 'unsupported_language'
+    return (job.get('worker_failure') or {}).get('reason') == 'unsupported_language' or (
+        job.get('stt_route') or {}
+    ).get('provider_reason') == 'unsupported_language'
 
 
 def below_silence_threshold(seconds):

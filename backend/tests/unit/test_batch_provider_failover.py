@@ -253,6 +253,49 @@ def test_validated_empty_fails_over_like_the_held_recovery_second_chance(store):
     assert attempts(store) == [('modulate', 'empty_validated', 5.0), ('soniox', 'ok', 5.0)]
 
 
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_guarded_validated_empty_exhaustion_and_kill_switch(store, monkeypatch, terminal, enabled):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', str(enabled).lower())
+    artifacts, vendors = Artifacts(), Vendors(modulate=[RecoveryFailure('response_validation', 'empty_asr')])
+    if terminal:
+        # A previously open candidate disappears before the failover delivery.
+        stage(store, artifacts, vendors).run('p1')
+        assert job(store)['state'] == PENDING
+        stage(store, artifacts, vendors, routes=lambda _: ('modulate',), now=201).run('p1')
+    else:
+        stage(store, artifacts, vendors, routes=lambda _: ('modulate',)).run('p1')
+    assert job(store)['state'] == 'quarantined'
+    assert job(store)['recovery_state'] == ('held' if enabled else 'failed_held')
+    assert job(store)['measured_held_vad_speech_seconds'] == 0.5
+    assert job(store)['attempt'] == 0
+    assert vendors.calls == ['modulate']
+
+
+def test_non_guarded_empty_exhaustion_stays_failed_held(store):
+    # GPU-route metadata must never acquire the language-only recovery handoff.
+    store.rows[('jobs', 'p1')]['stt_route'] = {
+        'stt_route': 'parakeet',
+        'provider_reason': 'none',
+        'provider_service': 'none',
+        'language': 'en',
+    }
+    protocol = provider_stt.ProviderSttStore(store)
+    assert protocol.start('p1', 'synthetic-token', 200, 'modulate')
+    assert (
+        protocol.settle(
+            'p1',
+            'synthetic-token',
+            201,
+            failure={'stage': 'response_validation', 'reason': 'empty_asr'},
+            attempt_outcome=VendorAttemptOutcome.EMPTY_VALIDATED,
+            audio_seconds=5,
+        )
+        == 'settled'
+    )
+    assert job(store)['recovery_state'] == 'failed_held'
+
+
 def test_unhealthy_admitted_vendor_is_skipped_before_any_spend(store):
     artifacts, vendors = Artifacts(), Vendors()
     health = Health(modulate=VendorHealthReason.BREAKER_OPEN)

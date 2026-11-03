@@ -74,10 +74,14 @@ batch re-ramp will clear.
 
 ## Spend and rollback
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **off** in code per lead
-ruling 404ca5. Prod declares it `true` on backend-integration only (activated
-2026-10-27 02:07Z per lead 5da7dc/ebc45a); dev and the GPU worker stay off.
-Explicit `true` enables the capped path; `false` stops new Soniox attempts. It never falls back to another Modulate call. Rollback:
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **on** in code.
+Explicit deployment overrides still apply; dev and the GPU worker stay pinned off.
+Unsupported-language provider jobs whose final attempt is validated empty enter
+`held` for the existing Modulate-then-one-Soniox recovery. The route's
+`provider_reason=unsupported_language` and the worker failure reason both identify
+guarded jobs. Other worker failures remain terminal `failed_held`.
+Explicit `false` restores immediate worker `failed_held` and stops new Soniox
+attempts. It never falls back to another Modulate call. Rollback:
 set it false on the recovery role/operator, retaining all held obligations.
 
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to **60** and can only
