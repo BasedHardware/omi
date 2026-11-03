@@ -18,6 +18,7 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
           SERVER_BATCH_UNSUPPORTED_LANGUAGES:
             value: ''
             category: ops_kill
@@ -504,7 +505,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,parakeet
+            value: modulate-velma-2,soniox
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -601,7 +602,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,parakeet
+            value: modulate-velma-2,soniox
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -2115,6 +2116,7 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
           SERVER_BATCH_UNSUPPORTED_LANGUAGES:
             value: ''
             category: ops_kill
@@ -2419,7 +2421,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           STT_GPU_FLEET_OFF:
-            value: 'false'
+            value: 'true'
             category: ops_kill
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
@@ -2633,7 +2635,7 @@ environments:
             category: ops_kill
             value: '100'
           STT_GPU_FLEET_OFF:
-            value: 'false'
+            value: 'true'
             category: ops_kill
           OMI_FLAGS_FIRESTORE_PROJECT:
             value: based-hardware
@@ -3181,7 +3183,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -3589,7 +3591,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -3991,7 +3993,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:
@@ -4324,7 +4326,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             STT_GPU_FLEET_OFF:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
             ENRICHMENT_TASKS_QUEUE:

@@ -108,6 +108,10 @@ EPISODE_MOMENT_LATENCY_SECONDS = _reuse_or_create(
 EPISODE_CLOSED_TOTAL = _reuse_or_create(
     Counter, 'omi_episode_closed_total', 'Episodes closed, by close reason.', ['reason']
 )
+CLOSE_CONFLICT_REASONS = frozenset({'recorded_window_overlap', 'recorded_window_incomplete', 'state_version_changed'})
+EPISODE_CLOSE_CONFLICT_TOTAL = _reuse_or_create(
+    Counter, 'omi_episode_close_conflict_total', 'Lazy episode closes deferred by a storage conflict.', ['reason']
+)
 EPISODE_PROVISIONAL_ITEMS_TOTAL = _reuse_or_create(
     Counter,
     'omi_episode_provisional_items_total',
@@ -207,6 +211,8 @@ def _prime() -> None:
             EPISODE_MOMENT_TOKENS_TOTAL.labels(kind=kind)
         for reason in CLOSE_REASON_LABELS:
             EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS))
+        for reason in CLOSE_CONFLICT_REASONS | {'other'}:
+            EPISODE_CLOSE_CONFLICT_TOTAL.labels(reason=_label(reason, CLOSE_CONFLICT_REASONS))
         for outcome in PROVISIONAL_OUTCOMES:
             EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=_label(outcome, PROVISIONAL_OUTCOMES))
         for outcome in BOUNDARY_OUTCOMES:
@@ -260,6 +266,15 @@ def record_episode_closed(reason: str) -> None:
         EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS)).inc()
     except Exception:
         pass
+
+
+def record_close_conflict(reason: str) -> str:
+    label = _label(reason, CLOSE_CONFLICT_REASONS)
+    try:
+        EPISODE_CLOSE_CONFLICT_TOTAL.labels(reason=_label(reason, CLOSE_CONFLICT_REASONS)).inc()
+    except Exception:
+        pass
+    return label
 
 
 def record_provisional_outcomes(counts: Mapping[str, int]) -> None:

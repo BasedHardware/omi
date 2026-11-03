@@ -20,6 +20,7 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
+from routers.listen.preview_custody import claim_preview_batch_custody, archive_preview_frame
 from config.server_batch import suppress_live as server_batch_suppresses_live
 from config.cloud_live_stt import resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
@@ -1334,11 +1335,7 @@ class ListenReceiver(ReplayFilterMixin):
             # Multi-channel audio never reaches the deferred-open seam in _flush_stt_buffer.
             self.cloud_live_suppressed = (local_preview or off) and not getattr(self.host, 'is_multi_channel', False)
             if self.cloud_live_suppressed:
-                # Deferred, never dropped: no cloud streaming STT session opens yet
-                # (neither vendor nor the Parakeet window leg). Live segments are what
-                # keep a listen conversation alive and register it for batch, so the
-                # first audio that reaches the socket opens the stream as usual. A
-                # local-preview phone journals pendant audio for batch and sends none.
+                # Local-preview leakage first claims batch custody; other deferred audio opens live.
                 self._cloud_live_deferred_by = 'local_preview' if local_preview else 'off'
                 return True
         admission = getattr(self, 'cap_admission', None)
@@ -2061,6 +2058,8 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        if buffer:
+            await claim_preview_batch_custody(self)
         if batch_only_live_path(getattr(self, 'host', None)):
             restore = getattr(self, 'visible_restore', None)
             if restore is not None:
@@ -2660,11 +2659,8 @@ class ListenReceiver(ReplayFilterMixin):
                     telemetry_call(self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate))
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
-                        # The decoded frame occupies an exact capture sample
-                        # range; ring buffer, STT buffer and pusher runs all
-                        # carry that position forward. The pusher projection
-                        # (opcode-101 start) is v2-only: with the flag off the
-                        # wire must stay byte-identical to the legacy session.
+                        # Ring, STT and pusher share exact capture samples. The
+                        # opcode-101 projection is v2-only; flag-off wire stays unchanged.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
                         if shadow is not None:  # D2 edge shadow copy, fire-and-forget
                             shadow.frame(start_sample, end_sample - start_sample, data)
@@ -2680,7 +2676,8 @@ class ListenReceiver(ReplayFilterMixin):
                                 payload=bytes(data),
                                 receipt_wall_time=now,
                             )
-                        await self.raw_archive.append(
+                        cancelled = await archive_preview_frame(
+                            self,
                             bytes(data),
                             self.host.state.current_conversation_id,
                             self.capture_timeline.wall(start_sample),
@@ -2694,6 +2691,8 @@ class ListenReceiver(ReplayFilterMixin):
                             if not buffer:
                                 self._stt_buffer_start_sample = start_sample
                             buffer.extend(decoded)
+                            if cancelled:
+                                raise asyncio.CancelledError
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
                             if self.capture_timeline_v2 or self.capture_timeline_spans:

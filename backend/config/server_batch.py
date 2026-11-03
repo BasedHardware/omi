@@ -15,6 +15,7 @@ from config.stt_provider_policy import (
 )
 
 MARKER = 'server_batch_only'
+PREVIEW_CUSTODY_MARKER = 'listen_preview_batch_custody'
 AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
 SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
 AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
@@ -156,7 +157,8 @@ def language_compatible(capture: Mapping, language: str | None) -> bool:
 
 def capture_compatible(host, capture: Mapping) -> bool:
     return not owned(capture) or bool(
-        language_compatible(capture, request_language(host)) and request_eligible(host, existing_capture=True)
+        language_compatible(capture, request_language(host))
+        and request_reason(host, existing_capture=True, capture=capture) is None
     )
 
 
@@ -166,7 +168,7 @@ def suppress_live(host) -> bool:
     from utils.observability.transcription import bounded_client_platform
 
     capture = getattr(host, 'batch_record_capture', None) or {}
-    reason = request_reason(host, existing_capture=owned(capture))
+    reason = request_reason(host, existing_capture=owned(capture), capture=capture)
     if not owned(capture) and not enabled():
         reason = 'not_enabled'
     if reason is None and not language_compatible(capture, request_language(host)):
@@ -192,7 +194,7 @@ def request_eligible(host, *, existing_capture: bool = False) -> bool:
     return request_reason(host, existing_capture=existing_capture) is None
 
 
-def request_reason(host, *, existing_capture: bool = False) -> str | None:
+def request_reason(host, *, existing_capture: bool = False, capture: Mapping | None = None) -> str | None:
     """A learned profile selects the cohort, never the recognizer language proof."""
     # Cap-paused bootstrap has no request yet and cannot own batch custody.
     if getattr(host, 'request', None) is None:
@@ -222,6 +224,16 @@ def request_reason(host, *, existing_capture: bool = False) -> str | None:
         or not os.getenv('HOSTED_PUSHER_API_URL')
     ):
         return 'pusher_unavailable'
+    # A preview promotion is its own durable admission, independent of the
+    # learned-profile/cohort gates for newly selected server-batch sessions.
+    if owned(capture or {}) and (capture or {}).get(PREVIEW_CUSTODY_MARKER):
+        return None
+    if owned(capture or {}) and ((capture or {}).get('external_data') or {}).get(PREVIEW_CUSTODY_MARKER):
+        return None
+    # This grants only lookup permission. Once loaded, capture_compatible checks
+    # the durable marker and language rather than admitting an unowned row.
+    if existing_capture and capture is None and getattr(host.request, 'local_preview', False):
+        return None
     # Lookup callers do not have the stored capture yet. Allow them to find a
     # prior durable owner across rollback; suppress_live separately requires it.
     if not existing_capture and not selected(host.request.uid, platform, host.request.source):

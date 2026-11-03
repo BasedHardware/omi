@@ -412,6 +412,8 @@ async def test_unowned_revoked_grant_returns_to_normal_cloud_path(harness, monke
     h = harness
     h.host.server_batch_only = False
     h.host.batch_record_capture = {}  # A grant alone is not durable server custody.
+    h.host.state.current_conversation_id = 'synthetic-unowned'
+    h.receiver._cloud_live_deferred_by = 'local_preview'
     h.host.request = ListenRequest(websocket=None, uid='owner', local_preview=True, sample_rate=16000)
     h.host.local_preview_batch = True
     h.receiver.visible_restore = None
@@ -467,6 +469,7 @@ async def test_unowned_revoked_grant_returns_to_normal_cloud_path(harness, monke
     h.raw.send.assert_called_once_with(data)
     assert connect.await_count == int(not already_open)
     assert not h.receiver.cloud_live_suppressed
+    assert not getattr(h.receiver, '_preview_batch_claims', ())
     h.dial.assert_not_awaited()  # Unowned sessions cannot enter paid visible restore.
 
 
