@@ -467,7 +467,10 @@ class SimStore:
         key = hash_owner(owner_id)
         removed = 0
         touched: list[tuple[str, str]] = []  # production purge re-copies these to the A2 shadow after commit
-        for (table, segment_id), job in sorted(self.rows.items()):
+        for table, segment_id in sorted(self.rows):
+            # Earlier deletions may repair this row's next pointer. Production
+            # _delete_job re-reads its snapshot inside each transaction too.
+            job = self.rows.get((table, segment_id), {})
             if table != 'jobs' or job.get('owner_key') != key:
                 continue
             binding = job.get('projection_binding') or {}
