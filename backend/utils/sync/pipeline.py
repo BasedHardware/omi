@@ -2313,7 +2313,9 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
     """
     closed_outcome = reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
     try:
-        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(outcome=closed_outcome).inc()
+        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(
+            outcome=reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
+        ).inc()
     except Exception:
         pass
     if outcome != SyncCaptureTimeReason.ACCEPTED:
