@@ -189,6 +189,8 @@ podMonitoring:
 recordSealRepair:
   # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
   enabled: true
+  # Retained for evening overlap and rollback; lead overrides false for the first peak.
+  suspend: true
   runtimeEnabled: true
   mode: apply
   workers: 8
@@ -196,6 +198,16 @@ recordSealRepair:
   # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
   # Refresh this map per ramp rung with --reuse-values; no worker restart.
   serverFlags: {}
+recordSealWorker:
+  enabled: true
+  # Ship-on kill switch: false idles slots without removing the rollback cron.
+  runtimeEnabled: true
+  # Same policy map as repair; refresh both during an overlap ramp.
+  serverFlags: {}
+  # One sixteenth of repair's 16-slot CPU/memory ceiling, per pod.
+  # At max 16: requests 1CPU/2Gi, limits 4CPU/8Gi, as repair today.
+  maxReplicas: 16
+  targetBacklogPerWorker: 4
 recordSealSweeper:
   # Ship on with the worker release; false removes the CronJob and its pods-list RBAC.
   enabled: true
