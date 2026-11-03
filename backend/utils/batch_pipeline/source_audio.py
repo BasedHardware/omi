@@ -78,12 +78,28 @@ def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_bucket
 
 
 def read_reference(
-    client, ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str], key: bytes, *, source_metadata=False
+    client,
+    ref: dict,
+    uid: str,
+    conversation_id: str,
+    allowed_buckets: set[str],
+    key: bytes,
+    *,
+    source_metadata=False,
+    read_budget=None,
 ) -> bytes:
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
     blob = client.bucket(ref['bucket']).blob(ref['path'], generation=generation)
-    leaf_timings.call('download_metadata', blob.reload, if_generation_match=generation, timeout=30, retry=None)
+    if read_budget is not None:
+        read_budget.begin()
+    leaf_timings.call(
+        'download_metadata',
+        blob.reload,
+        if_generation_match=generation,
+        timeout=read_budget.timeout(30) if read_budget is not None else 30,
+        retry=None,
+    )
     if source_metadata:
         # Admission needs the source metadata in the manifest, including the
         # legacy sample rate. Reuse this generation-pinned GET, not a second one.
@@ -92,7 +108,17 @@ def read_reference(
             ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
     if not blob.size or not 0 < blob.size <= MAX_SOURCE_BYTES:
         raise ValueError('retained audio source exceeds size budget')
-    raw = leaf_timings.call('download', blob.download_as_bytes, if_generation_match=generation, timeout=60, retry=None)
+    if read_budget is not None:
+        read_budget.reserve(blob.size)
+    raw = leaf_timings.call(
+        'download',
+        blob.download_as_bytes,
+        if_generation_match=generation,
+        timeout=read_budget.timeout(60) if read_budget is not None else 60,
+        retry=None,
+    )
+    if read_budget is not None:
+        read_budget.timeout(60)
     return decode_source(raw, ref, key)
 
 

@@ -16,7 +16,6 @@ def load_reference(store, uid, unit, conversation_id):
             job.get('owner_id') != uid
             or job.get('segment_id') != unit
             or binding.get('owner_id') != uid
-            or not binding.get('private_cloud_sync_enabled')
             or not any(
                 r.get('conversation_id') == conversation_id and r.get('speaker_scope') == f'final:batch:{unit}'
                 for r in receipts

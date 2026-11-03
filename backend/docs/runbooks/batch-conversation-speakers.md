@@ -67,37 +67,52 @@ historical conversations or undo already published names. No historical repair
 or production flag mutation is part of this code change.
 
 
-## Whole-conversation final pass (sync-on slice)
+## Whole-conversation final pass
 
 After the current resolver and speaker-evidence projection, before summary generation,
 `BATCH_FINAL_PASS_ENABLED` defaults on beneath `BATCH_CONVERSATION_SPEAKERS_ENABLED`.
 `BATCH_FINAL_PASS_PERCENT` defaults to 100 and uses the existing transcription-final-pass
 UID hash bucket. This knob is independent of the retiring shadow/legacy-sync flags.
-Only persisted `final:batch:` authority with private cloud sync reaches it during
-normal enrichment; bounded identity-only retries do not run it. Sync-off
-continues using ADR-0004's temporary centroid resolver. No enrollment is published.
+Persisted `final:batch:` authority reaches it during normal enrichment with either
+sync setting; bounded identity-only retries do not run it. No enrollment is published.
 
-The adapter assembles `audio_files` through `iter_audio_chunk_pcm`, separately for
-live PCM, sync Opus and raw stores. Like the shadow worker it trims duplicate leading
-samples and preserves gaps. It replays each encrypted, generation-pinned unit result's
-words and stable projection IDs, and requires exact decoded unit PCM equality on a
-fully covered store interval. Stored transcript offsets and lexical alignment never
-place a unit. Only one proven store is diarized per conversation; units from other
-stores, missing/expired artifacts, mixed-speaker segments and words in gaps retain
-the current resolver labels. Optional provider metadata loss also abstains. The
-artifact adapter's live privacy generation and deletion fences apply before/after
-reads and references are rechecked after inference. This writes no artifacts and
-never extends an existing cleanup deadline. Sync-on still needs its staged result
-and audio/manifest; enrichment after their cleanup abstains.
+The adapter reads each unit's encrypted, generation-pinned staged audio and result,
+placing that PCM and its words by the job's `capture_at`. It reconstructs exactly the
+projection IDs: record origin keeps the original unit, WAL uses `split_result` and
+its speech-span part IDs. Stored transcript offsets and lexical alignment never
+place a unit. It does not assemble conversation `audio_files` or compare lossy playback
+encodes with staged PCM. Native-record staging manifests still materialize their own
+pinned sources and slices, with their original PCM digest checks.
+
+All unit artifacts and every conversation segment must be accounted for before any
+label changes. Missing, expired, privacy-fenced or unplaceable units, conflicting
+overlapping capture clocks, and exhausted read budgets leave **all** resolver labels
+unchanged. Mixed-speaker segments and diarizer gap words individually abstain after
+a complete input assembly. Artifact privacy generation and deletion fences apply
+before/after reads; references and expiry are rechecked after inference. No artifact
+is written and no cleanup deadline is extended.
+
+Ordinary staged audio and results are scheduled for cleanup **24h after successful
+projection**, for both sync settings (`retention.expire_completed_segment`). This is
+separate from ADR-0004's temporary centroid TTL (24h after capture, shortened to 1h
+after completion). Enrichment within the existing staged-artifact window can serve
+sync-off too. Delayed enrichment after expiry abstains even if physical cleanup has
+not run. A native-record audio manifest can live longer, but its result still has
+the 24h window and every pinned source must remain available.
 
 `run_final_pass` uses community-1 through `/v2/diarization`, unchanged centroid naming,
 five-second evidence floor, thresholds, margin and joint owner arbitration. A manual
-owner or an owner in an unplaced unit reserves the identity. Manual receipts and
+owner reserves the identity. Manual receipts and
 stable segment IDs survive application under `final:batch:conversation:<id>`.
 Every failure, including incompatible embedding output, emits `record_fallback`
 and retains current resolver labels. There is
 one nonwaiting process slot, a 600-second deadline, a 7200-second PCM ceiling
-(`failed:too_long`), 128-unit/read limits, and the existing bounded audio reader.
+(`failed:too_long`), and a 128-unit limit. This invocation has its own read budget:
+180 seconds, 320 MiB of encrypted objects and 512 object reads, including result,
+audio and nested manifest sources. It is independent of the playback reader's
+30-second/64-MiB defaults. Reads stop before exceeding a byte/object limit and
+refuse results arriving after the deadline; exhausted budgets emit
+`failed:read_budget`, other coverage failures `failed:incomplete_coverage`.
 Budget reservations are Redis-atomic and charge attempts (including retries) before
 GPU work: `BATCH_FINAL_PASS_DAILY_AUDIO_HOURS=1200`,
 `BATCH_FINAL_PASS_HOURLY_AUDIO_HOURS=50`, `BATCH_FINAL_PASS_HOURLY_REQUESTS=1000`.

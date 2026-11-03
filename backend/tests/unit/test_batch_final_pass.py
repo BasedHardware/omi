@@ -1,14 +1,16 @@
-"""Exercise enrichment -> batch artifacts -> store proof -> shared final pass -> labels."""
+"""Exercise enrichment -> batch artifacts -> capture clock -> shared final pass -> labels."""
 
 import io
 import wave
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
 
+import httpx
+import time
 import fakeredis
 import numpy as np
 import pytest
@@ -25,10 +27,12 @@ from models.diarization import OMI_EMBEDDING_SPACE
 from models.structured import Structured
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
 from utils.batch_pipeline.projection_segments import projection_segments
+from utils.batch_pipeline.projection_parts import split_result
 from utils.conversations import final_pass_batch as batch, final_pass_pyannote as final, speaker_resolution as stage
 
 UID = 'synthetic-batch-owner'
 CAPTURE = 1000.0
+REAL_RESERVE_BUDGET = batch._reserve_budget
 
 
 def wav(pcm):
@@ -56,6 +60,8 @@ def lane(monkeypatch):
     )
     payload = {
         'audio_seconds': 8,
+        'speech_seconds': 8,
+        'speech_spans': [{'start': 0, 'end': 8}],
         'words_provider': 'parakeet',
         'words': [{'word': 'Hello', 'timestamp': [0.2, 2.8]}, {'word': 'there.', 'timestamp': [3, 5.8]}],
         'diarization': {'turns': [{'start': 0, 'end': 8, 'speaker': 'SPEAKER_00'}]},
@@ -101,25 +107,20 @@ def lane(monkeypatch):
         return items[unit], 'gs://fake/result#1', binding, ProjectionPolicy()
 
     monkeypatch.setattr(batch, 'load_reference', reference)
-    monkeypatch.setattr(
-        batch,
-        'artifacts_for',
-        lambda _: SimpleNamespace(load_result=lambda *_: payload, fetch_audio=lambda item: wav(audio[item.segment_id])),
-    )
-    chunks = [{'path': 'chunk.batch.enc', 'timestamp': CAPTURE, 'generation': 1}]
-    chunk_pcm = {'chunk.batch.enc': audio['unit-a'] + audio['unit-b']}
 
-    def session(*_):
-        return SimpleNamespace(chunks=chunks, deadline=float('inf'))
+    def result(item, uri, *, read_budget):
+        read_budget.begin()
+        read_budget.reserve(1024)
+        return payload
 
-    def iterator(uid, cid, wanted, *, session, chunk_filter):
-        for chunk in session.chunks:
-            if not chunk_filter(chunk):
-                continue
-            yield chunk['timestamp'], chunk_pcm[chunk['path']]
+    def fetch(item, *, read_budget):
+        read_budget.begin()
+        body = wav(audio[item.segment_id])
+        read_budget.reserve(len(body))
+        return body
 
-    monkeypatch.setattr(batch, 'AudioChunkReadSession', session)
-    monkeypatch.setattr(batch, 'iter_audio_chunk_pcm', iterator)
+    artifacts = SimpleNamespace(load_result=result, fetch_audio=fetch)
+    monkeypatch.setattr(batch, 'artifacts_for', lambda _: artifacts)
     monkeypatch.setattr(batch, '_reserve_budget', lambda _: True)
     monkeypatch.setattr(batch, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
     monkeypatch.setattr(final, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
@@ -127,9 +128,11 @@ def lane(monkeypatch):
 
     def diarize(pcm, *_args, **_kwargs):
         assert _args[0].backend == 'pyannote'
+        if _args[0].reserve_attempt is not None and not _args[0].reserve_attempt(len(pcm) / 32000):
+            raise RuntimeError('diarizer_attempt_budget')
         gpu.append(pcm)
         return {
-            'turns': [{'start': 0, 'end': 16, 'speaker': 'voice'}],
+            'turns': [{'start': 0, 'end': len(pcm) / 32000, 'speaker': 'voice'}],
             'overlaps': [],
             'centroids': {'voice': {'embedding': [1.0, 0.0], 'evidence_seconds': 12}},
             'embedding_space': OMI_EMBEDDING_SPACE,
@@ -149,8 +152,7 @@ def lane(monkeypatch):
         gpu=gpu,
         resolutions=resolutions,
         reads=reads,
-        chunks=chunks,
-        chunk_pcm=chunk_pcm,
+        artifacts=artifacts,
     )
 
 
@@ -189,19 +191,90 @@ def test_flag_off_retains_current_resolver_and_never_calls_diarizer(lane, monkey
         assert all(s.person_id == 'resolver-person' for s in lane.conversation.transcript_segments)
 
 
-@pytest.mark.parametrize('proven_store', ['live', 'sync'])
-def test_per_store_pcm_proof_and_unplaceable_unit_abstention(lane, proven_store):
-    # Two independent stores overlap in wall time; only one matches this unit.
-    lane.chunks.append({'path': 'chunk.opus.enc', 'timestamp': CAPTURE, 'generation': 2})
-    matching = lane.audio['unit-a'] + b'\x04\0' * (8 * 16000)
-    other = b'\x03\0' * (16 * 16000)
-    lane.chunk_pcm['chunk.opus.enc'] = matching if proven_store == 'sync' else other
-    lane.chunk_pcm['chunk.batch.enc'] = matching if proven_store == 'live' else other
-    segments = resolve(lane)
-    assert segments[0].is_user
-    assert segments[1].person_id == 'resolver-person' and not segments[1].is_user
-    assert lane.gpu == [matching]
-    assert lane.fallbacks
+@pytest.mark.parametrize('sync_on', [True, False])
+@pytest.mark.parametrize('record_origin', [True, False])
+def test_staged_pcm_and_projection_ids_with_speech_spans(lane, sync_on, record_origin):
+    lane.conversation.private_cloud_sync_enabled = sync_on
+    lane.conversation.audio_files = []  # No retained playback audio is required.
+    lane.binding = replace(lane.binding, private_cloud_sync_enabled=sync_on, record_origin=record_origin)
+    # The reference loader closes over the original fixture binding, so replace it.
+    original_reference = batch.load_reference
+
+    def reference(*args):
+        item, uri, _, _ = original_reference(*args)
+        return item, uri, lane.binding, ProjectionPolicy(authoritative_labels=True)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(batch, 'load_reference', reference)
+        parts = [
+            (part, output)
+            for item in lane.items.values()
+            for part, output in ([(item, lane.payload)] if record_origin else split_result(item, lane.payload))
+        ]
+        expected = [
+            s
+            for part, output in parts
+            for s in projection_segments(
+                part,
+                lane.binding,
+                output,
+                batch_segment_id=('unit-a' if part.capture_at < CAPTURE + 8 else 'unit-b'),
+                policy=ProjectionPolicy(authoritative_labels=True),
+            )
+        ]
+        for i, segment in enumerate(expected):
+            segment.start, segment.end = 900 + i * 8, 906 + i * 8
+        lane.conversation.transcript_segments = expected
+        before = [(s.id, s.text, s.start, s.end) for s in expected]
+        segments = resolve(lane)
+    assert all(s.is_user for s in segments)
+    assert lane.gpu == [lane.audio['unit-a'] + lane.audio['unit-b']]
+    assert [(s.id, s.text, s.start, s.end) for s in segments] == before
+    part_id = 'unit-a' if record_origin else uuid5(NAMESPACE_URL, 'batch-part:unit-a:0').hex
+    assert segments[0].id == str(uuid5(NAMESPACE_URL, f'batch:{part_id}:0'))
+
+
+@pytest.mark.parametrize(
+    'refusal', ['missing', 'expired', 'privacy', 'read_bytes', 'read_objects', 'read_time', 'segment']
+)
+def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusal):
+    original = batch.load_reference
+
+    def reference(*args):
+        if args[2] == 'unit-b':
+            if refusal in ('missing', 'expired'):
+                return None
+            if refusal == 'privacy':
+                raise BatchPrivacyBlocked('synthetic privacy fence')
+        return original(*args)
+
+    monkeypatch.setattr(batch, 'load_reference', reference)
+    original_fetch = lane.artifacts.fetch_audio
+
+    def fetch(item, *, read_budget):
+        assert read_budget.max_bytes == 320 * 1024 * 1024
+        assert read_budget.max_objects == 512
+        assert 170 < read_budget.deadline - time.monotonic() <= 180
+        if item.segment_id == 'unit-b':
+            if refusal == 'read_bytes':
+                read_budget.reserve(read_budget.max_bytes)
+            elif refusal == 'read_objects':
+                read_budget.objects = read_budget.max_objects
+            elif refusal == 'read_time':
+                read_budget.deadline = time.monotonic() - 1
+        return original_fetch(item, read_budget=read_budget)
+
+    monkeypatch.setattr(lane.artifacts, 'fetch_audio', fetch)
+    if refusal == 'segment':
+        lane.conversation.transcript_segments[-1].id = 'cannot-reconstruct'
+    metric = batch.OUTCOMES.labels(
+        lane='batch', outcome=('failed:read_budget' if refusal.startswith('read_') else 'failed:incomplete_coverage')
+    )
+    before = metric._value.get()
+    assert all(s.person_id == 'resolver-person' and not s.is_user for s in resolve(lane))
+    assert not lane.gpu and lane.fallbacks
+    assert metric._value.get() == before + 1
+    assert lane.fallbacks[-1]['reason'] == ('recovery_budget' if refusal.startswith('read_') else 'unavailable')
 
 
 def test_manual_receipt_beats_final_labels_and_reserves_owner(lane):
@@ -216,9 +289,7 @@ def test_manual_receipt_beats_final_labels_and_reserves_owner(lane):
 
 def test_too_long_skips_gpu_and_keeps_resolver_labels(lane):
     # The sparse span itself exceeds the limit; no huge test allocation needed.
-    lane.chunks.append({'path': 'late.batch.enc', 'timestamp': CAPTURE + 7201, 'generation': 1})
-    lane.conversation.audio_files[0].chunk_timestamps.append(CAPTURE + 7201)
-    lane.chunk_pcm['late.batch.enc'] = b'\x01\0'
+    lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 7201)
     before = batch.OUTCOMES.labels(lane='batch', outcome='failed:too_long')._value.get()
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert not lane.gpu and lane.fallbacks
@@ -255,12 +326,6 @@ def test_gap_words_abstain_whole_segment(lane, monkeypatch):
     segments = resolve(lane)
     assert segments[0].person_id == 'resolver-person'
     assert segments[1].is_user
-
-
-def test_sync_off_remains_on_existing_centroid_resolver(lane):
-    lane.conversation.private_cloud_sync_enabled = False
-    resolve(lane)
-    assert lane.resolutions and not lane.gpu and not lane.reads
 
 
 def test_cohort_uses_existing_hash_bucket_and_invalid_percent_refuses(monkeypatch, lane):
@@ -416,3 +481,117 @@ def test_pcm_iterator_filters_store_objects_before_timestamp_selection(monkeypat
     )
     assert result == [(CAPTURE, b'\x01\0')]
     assert fetched == ['store.opus.enc']  # Equal timestamps cannot select the other store.
+
+
+def test_sync_off_reference_available_until_24_hours_after_projection(reference_store, monkeypatch):
+    store, client = reference_store
+    job = client.rows[(store.namespace + '_jobs', 'unit-a')]
+    job['projection_binding']['private_cloud_sync_enabled'] = False
+    projected = datetime(2026, 11, 2, 10, tzinfo=timezone.utc)
+    due = projected + timedelta(hours=24)
+    for path, row in client.rows.items():
+        if path[0].endswith('_artifacts'):
+            row['cleanup_after'] = due
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls.current
+
+    Clock.current = due - timedelta(microseconds=1)
+    monkeypatch.setattr(references, 'datetime', Clock)
+    before = deepcopy(client.rows)
+    assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None
+    Clock.current = due
+    assert references.load_reference(store, UID, 'unit-a', 'conversation') is None
+    assert client.rows == before  # Reading never renews retention.
+
+
+@pytest.mark.parametrize('limited_by', ['daily', 'hourly', 'requests'])
+@pytest.mark.parametrize('allowed_attempts', [1, 2])
+def test_each_http_retry_is_charged_before_request(lane, monkeypatch, limited_by, allowed_attempts):
+    server = fakeredis.FakeServer()
+    monkeypatch.setattr(batch, 'create_bounded_redis_client', lambda _: fakeredis.FakeRedis(server=server))
+    # The fixture stubs admission; restore the real Redis reservation function.
+    monkeypatch.setattr(batch, '_reserve_budget', REAL_RESERVE_BUDGET)
+    for key in ('DAILY_AUDIO_HOURS', 'HOURLY_AUDIO_HOURS'):
+        monkeypatch.setenv('BATCH_FINAL_PASS_' + key, '100')
+    monkeypatch.setenv('BATCH_FINAL_PASS_HOURLY_REQUESTS', '100')
+    if limited_by == 'requests':
+        monkeypatch.setenv('BATCH_FINAL_PASS_HOURLY_REQUESTS', str(allowed_attempts))
+    else:
+        monkeypatch.setenv('BATCH_FINAL_PASS_' + limited_by.upper() + '_AUDIO_HOURS', str(16 * allowed_attempts / 3600))
+    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://synthetic.invalid')
+    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED', 'false')
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs['content'])
+        response = httpx.Response(
+            503 if len(calls) == 1 else 200,
+            request=httpx.Request('POST', url),
+            json={
+                'turns': [{'start': 0, 'end': 16, 'speaker': 'voice'}],
+                'overlaps': [],
+                'centroids': {'voice': {'embedding': [1.0, 0.0], 'evidence_seconds': 12}},
+                'embedding_space': OMI_EMBEDDING_SPACE,
+                'version': 'test',
+                'provenance': {'backend': 'pyannote'},
+            },
+        )
+        return response
+
+    monkeypatch.setattr(httpx, 'post', post)
+    # Exercise the real HTTP adapter rather than the lane's fake diarizer.
+    monkeypatch.setattr(
+        final, 'diarize_with_speech_compaction', lambda pcm, backend, *a, **kw: backend.diarize(pcm, **kw).model_dump()
+    )
+    segments = resolve(lane)
+    assert len(calls) == allowed_attempts
+    assert all(s.is_user for s in segments) == (allowed_attempts == 2)
+    client = fakeredis.FakeRedis(server=server)
+    hour = next(key for key in client.scan_iter('batch-final-pass:hour:*'))
+    day = next(key for key in client.scan_iter('batch-final-pass:day:*'))
+    assert int(client.hget(hour, 'calls')) == allowed_attempts
+    assert int(client.hget(hour, 'audio_ms')) == 16000 * allowed_attempts
+    assert int(client.hget(day, 'audio_ms')) == 16000 * allowed_attempts
+    if allowed_attempts == 1:
+        assert all(s.person_id == 'resolver-person' for s in segments)
+        assert lane.fallbacks
+
+
+def test_capture_clock_places_staged_pcm_and_words_across_gap(lane, monkeypatch):
+    lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 10)
+    received = []
+    original = batch.run_final_pass
+
+    def run(pcm, words, *args, **kwargs):
+        received.extend(words)
+        return original(pcm, words, *args, **kwargs)
+
+    monkeypatch.setattr(batch, 'run_final_pass', run)
+    assert all(s.is_user for s in resolve(lane))
+    assert lane.gpu == [lane.audio['unit-a'] + b'\0' * (2 * 32000) + lane.audio['unit-b']]
+    assert [w['timestamp'] for w in received] == [[0.2, 2.8], [3, 5.8], [10.2, 12.8], [13, 15.8]]
+
+
+def test_overlapping_incompatible_unit_clocks_keep_all_labels(lane):
+    lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 4)
+    metric = batch.OUTCOMES.labels(lane='batch', outcome='failed:incomplete_coverage')
+    before = metric._value.get()
+    assert all(s.person_id == 'resolver-person' for s in resolve(lane))
+    assert not lane.gpu and lane.fallbacks
+    assert metric._value.get() == before + 1
+
+
+def test_staged_read_budget_can_exceed_playback_64_mib_limit(lane, monkeypatch):
+    original = lane.artifacts.fetch_audio
+
+    def fetch(item, *, read_budget):
+        # Account for a large object without allocating it in a fast unit test.
+        read_budget.reserve(65 * 1024 * 1024)
+        return original(item, read_budget=read_budget)
+
+    monkeypatch.setattr(lane.artifacts, 'fetch_audio', fetch)
+    assert all(s.is_user for s in resolve(lane))
+    assert len(lane.gpu) == 1
