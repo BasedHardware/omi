@@ -83,24 +83,29 @@ void main() {
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               home: const Scaffold(body: TranscriptWidgets()))));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       // An in-flight summary must leave the list and the selection action editable.
       unawaited(detail.reprocessConversation());
       await tester.pump();
       expect(find.text('Fixture line a', findRichText: true), findsOneWidget);
       await tester.tap(find.byKey(const Key('transcript_select_lines')));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('transcript_select_a')));
       await tester.tap(find.byKey(const ValueKey('transcript_select_b')));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       await tester.tap(find.byKey(const Key('speaker_labeling_assign')));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       await tester.tap(find.byKey(const Key('speaker_quick_picker_person_maya')));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       expect(requests, hasLength(1));
       expect(requests.single.url, endsWith('/v1/episodes/episode/assign-speaker'));

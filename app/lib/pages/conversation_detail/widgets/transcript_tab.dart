@@ -495,7 +495,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           searchQuery: widget.searchQuery,
           currentResultIndex: widget.currentResultIndex,
           onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-          onSegmentTap: widget.onSegmentTap,
+          onSegmentTap: widget.onSegmentTap == null
+              ? null
+              : (TranscriptSegment segment) {
+                  final local = conversation.transcriptSegments.where((line) => line.id == segment.id).firstOrNull;
+                  if (local != null) widget.onSegmentTap?.call(local);
+                },
           onEditSegmentText: (segmentIndex) {
             final local = conversation.transcriptSegments.indexWhere((line) => line.id == segments[segmentIndex].id);
             if (local >= 0) _editSegmentText(provider, local);
@@ -513,6 +518,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             if (segments.isNotEmpty)
               _TranscriptHeading(
                 conversation: conversation,
+                segments: segments,
                 onSelect: provider.speakerLabelingSessionActive || _selection != null
                     ? null
                     : () => _beginSelection(provider),
@@ -547,18 +553,20 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
 /// "Transcript · 2 speakers" over the lines (Omi v8 transcript heading): how many voices took part,
 /// counting the owner once. The length is in the header's date chip, so it is not repeated here.
 class _TranscriptHeading extends StatelessWidget {
-  const _TranscriptHeading({required this.conversation, this.onSelect});
+  const _TranscriptHeading({required this.conversation, this.segments, this.onSelect});
 
   final ServerConversation conversation;
+  final List<TranscriptSegment>? segments;
 
   /// "Select": choose several lines and name their speaker at once. Null hides it (already labeling).
   final VoidCallback? onSelect;
 
   /// Missing or uncountable resolution omits the count, matching the header chip's uncounted
   /// "others" rule.
-  static int? _speakerCount(ServerConversation conversation, List<Person> people, String you) {
-    if (conversation.transcriptSegments.any((s) => s.sttProvider?.startsWith('on_device:') == true)) return null;
-    final participants = ConversationDetailMeta.participants(conversation.transcriptSegments,
+  static int? _speakerCount(
+      ServerConversation conversation, List<Person> people, String you, List<TranscriptSegment> segments) {
+    if (segments.any((s) => s.sttProvider?.startsWith('on_device:') == true)) return null;
+    final participants = ConversationDetailMeta.participants(segments,
         you: you, personName: (id) => personById(people, id)?.name, speakers: conversation.speakerResolution);
     if (participants.uncounted) return null;
     final count = participants.named.length + participants.unnamed;
@@ -578,7 +586,7 @@ class _TranscriptHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    final count = _speakerCount(conversation, people, l10n.you);
+    final count = _speakerCount(conversation, people, l10n.you, segments ?? conversation.transcriptSegments);
     final label = [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),

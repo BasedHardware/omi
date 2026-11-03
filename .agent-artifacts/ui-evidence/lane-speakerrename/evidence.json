@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-recording-rename-before.png",
+      "platform": "mobile-ios",
+      "description": "Base naming sheet with conversation-only segment list; synthetic fixture and real fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-recording-rename-after.png",
+      "platform": "mobile-ios",
+      "description": "Production naming sheet defaults to the whole recording; same synthetic fixture and real fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -85,7 +85,8 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
                 ? (current[line.segment.id] ?? line.segment)
                 : (cached['${line.conversationId}/${line.segment.id}'] ?? line.segment),
             scope: line.scope,
-            label: line.label),
+            label: line.label,
+            offset: line.offset),
     ], episodeId: result.episodeId);
     _recordingById.clear();
     _recordingById.addEntries(_recording!.lines.map((line) => MapEntry(line.segment.id, line)));
@@ -94,6 +95,8 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
     _recordingDisplaySegments = [
       for (final line in _recording!.lines)
         TranscriptSegment.fromJson(line.segment.toJson())
+          ..start = line.segment.start + line.offset
+          ..end = line.segment.end + line.offset
           ..speakerId = displayIds.putIfAbsent(
               line.voice ?? (line.conversationId, line.segment.speakerId), () => displayIds.length + 1),
     ];

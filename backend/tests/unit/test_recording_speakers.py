@@ -113,10 +113,15 @@ def test_non_episode_scope_fallback_includes_same_scope_only(recording, monkeypa
         for cid in ['c0', 'c1', 'c2']
     ]
     collection = SimpleNamespace(stream=lambda: iter(snapshots))
+    collection.select = lambda fields: collection
     client = SimpleNamespace(
         collection=lambda _: SimpleNamespace(document=lambda _: SimpleNamespace(collection=lambda _: collection))
     )
-    monkeypatch.setattr(service, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(
+        service,
+        'scope_conversation_ids',
+        lambda uid, scopes: decisions_db.scope_conversation_ids(uid, scopes, firestore_client=client),
+    )
     assert edit('u', 'c1', request(), None)['applied_count'] == 3
 
 
@@ -167,3 +172,15 @@ def test_live_receipt_lookup_cannot_join_a_different_scope(recording):
     receipt = decode(recording, 'c1')['manual_speaker_assignments']
     assert manual_voice_decision(receipt, 4, 'stream:1')['person_id'] == 'new'
     assert manual_voice_decision(receipt, 4, 'different-stream') is None
+
+
+def test_recording_transcript_is_ordered_at_recorded_offsets(recording):
+    from datetime import datetime, timedelta, timezone
+
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for n in range(3):
+        recording.rows[('users', 'u', 'conversations', f'c{n}')]['started_at'] = start + timedelta(minutes=n)
+    service.episodes_db.get_episode_for_conversation('u', 'c1')['conversation_ids'].reverse()
+    rows = service.transcript('u', 'c1')['conversations']
+    assert [row['id'] for row in rows] == ['c0', 'c1', 'c2']
+    assert [row['recording_offset_seconds'] for row in rows] == [0, 60, 120]

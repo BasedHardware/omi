@@ -121,4 +121,20 @@ void main() {
     ]);
     p.dispose();
   });
+  test('display positions and ids stay distinct without changing persistence identities', () async {
+    final p = ConversationDetailProvider(
+      assignSpeaker: (_, __, {isUser, personId, speakerId}) async => true,
+      fetchRecording: (_) async => RecordingTranscript([
+        RecordingLine('c1', line('a'), scope: 'first', label: 'SPEAKER_1'),
+        RecordingLine('c2', line('b'), scope: 'second', label: 'SPEAKER_1', offset: 60),
+      ]),
+    );
+    select(p);
+    await p.loadRecordingTranscript();
+    expect(p.recordingDisplaySegments.map((line) => line.speakerId).toSet(), hasLength(2));
+    expect(p.recordingDisplaySegments.last.start, 60);
+    expect(p.recordingSegments.last.start, 0);
+    expect(p.sourceSpeakerId('b', 99), 1);
+    p.dispose();
+  });
 }

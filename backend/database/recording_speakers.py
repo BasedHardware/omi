@@ -102,3 +102,23 @@ def prepare_assignment(
         if expected_voices
         else []
     )
+
+
+def scope_conversation_ids(uid, scopes, *, firestore_client=None):
+    """Historical scopes live in compressed transcripts; discover only within this UID."""
+    from database.conversations import decode_transcript_segments_verified
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection('conversations')
+    query = collection.select(['transcript_segments', 'transcript_segments_compressed', 'deleted'])
+    result = []
+    for snapshot in query.stream():
+        raw = snapshot.to_dict() or {}
+        if raw.get('deleted'):
+            continue
+        segments = decode_transcript_segments_verified(
+            uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
+        )
+        if any(s.get('speaker_id_scope') in scopes for s in segments):
+            result.append(snapshot.id)
+    return result

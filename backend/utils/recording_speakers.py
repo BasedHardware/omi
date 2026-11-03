@@ -8,7 +8,7 @@ queryable scope index. No timestamps or conversation-local speaker ids join rows
 from datetime import datetime, timezone
 
 from database import conversations as conversations_db, episodes as episodes_db
-from database._client import get_firestore_client
+from database.recording_speakers import scope_conversation_ids
 from models.transcript_segment import TranscriptSegment
 from models.recording_speakers import RecordingSpeakerRequest
 from utils.stt.speaker_identity import canonical_speaker_label
@@ -41,32 +41,33 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
             raise ValueError('Conversation is no longer in this recording')
         rows = [anchor if cid == conversation_id else conversations_db.get_conversation(uid, cid) for cid in ids]
     elif scopes:
-        collection = get_firestore_client().collection('users').document(uid).collection('conversations')
-        rows = []
-        for snapshot in collection.stream():
-            raw = snapshot.to_dict() or {}
-            if raw.get('deleted'):
-                continue
-            segments = conversations_db.decode_transcript_segments_verified(
-                uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
-            )
-            if any(s.get('speaker_id_scope') in scopes for s in segments):
-                rows.append(conversations_db.get_conversation(uid, snapshot.id))
+        rows = [conversations_db.get_conversation(uid, cid) for cid in scope_conversation_ids(uid, scopes)]
     else:
         rows = [anchor]
     return episode, [row for row in rows if row and not row.get('deleted')]
+
+
+def _recorded_start(row):
+    value = row.get('started_at') or row.get('created_at')
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    return value.timestamp() if isinstance(value, datetime) else None
 
 
 def transcript(uid, conversation_id):
     episode, rows = members(uid, conversation_id)
     if any(row.get('is_locked') for row in rows):
         raise PermissionError('Conversation is locked')
+    rows.sort(key=lambda row: (_recorded_start(row) or 0, row['id']))
+    starts = [value for row in rows if (value := _recorded_start(row)) is not None]
+    origin = min(starts) if starts else 0
     # Only fields needed by the picker. Avoid exposing server receipt/evidence internals.
     return {
         'episode_id': episode['id'] if episode else None,
         'conversations': [
             {
                 'id': row['id'],
+                'recording_offset_seconds': max(0, (_recorded_start(row) or origin) - origin),
                 'transcript_segments': [
                     dict(
                         TranscriptSegment(**dict(s, is_user=s.get('is_user', False))).model_dump(mode='json'),
@@ -132,7 +133,8 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
             segment_ids=selection.segment_ids,
             speaker_id=selection.speaker_id,
         )
-        selected = [s for s in row.get('transcript_segments') or [] if s.get('id') in selection.segment_ids]
+        selected_ids = set(selection.segment_ids)
+        selected = [s for s in row.get('transcript_segments') or [] if s.get('id') in selected_ids]
         for segment in selected:
             scope = segment.get('speaker_id_scope')
             known_voices(row, scope)

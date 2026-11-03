@@ -334,12 +334,13 @@ class ConversationDetailProvider extends ChangeNotifier
       return null;
     }
     speakerAssignmentStale = false;
-    final anchor = recordingSegments.where((line) => segmentIds.contains(line.id)).firstOrNull;
+    final selectedIds = segmentIds.toSet();
+    final anchor = recordingSegments.where((line) => selectedIds.contains(line.id)).firstOrNull;
     final voice = recordingLine(anchor?.id)?.voice;
     final anchorOwner = recordingLine(anchor?.id)?.conversationId ?? target.id;
     final selected = recordingSegments
         .where((line) => speakerId == null
-            ? segmentIds.contains(line.id)
+            ? selectedIds.contains(line.id)
             : voice != null
                 ? recordingLine(line.id)?.voice == voice
                 : line.speakerId == speakerId && (recordingLine(line.id)?.conversationId ?? target.id) == anchorOwner)

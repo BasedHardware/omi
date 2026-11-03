@@ -9,11 +9,12 @@ class StaleSpeakerException implements Exception {
 }
 
 class RecordingLine {
-  RecordingLine(this.conversationId, this.segment, {this.scope, this.label});
+  RecordingLine(this.conversationId, this.segment, {this.scope, this.label, this.offset = 0});
   final String conversationId;
   final TranscriptSegment segment;
   final String? scope;
   final String? label;
+  final double offset;
   (String, String)? get voice => scope == null || label == null ? null : (scope!, label!);
 }
 
@@ -38,7 +39,9 @@ Future<ApiResult<RecordingTranscript>> getRecordingTranscript(String conversatio
           for (final conversation in body['conversations'])
             for (final line in conversation['transcript_segments'])
               RecordingLine(conversation['id'], TranscriptSegment.fromJson(line),
-                  scope: line['speaker_id_scope'], label: line['stream_speaker'] ?? line['speaker']),
+                  scope: line['speaker_id_scope'],
+                  label: line['stream_speaker'] ?? line['speaker'],
+                  offset: (conversation['recording_offset_seconds'] as num?)?.toDouble() ?? 0),
         ], episodeId: body['episode_id']);
       },
     );
