@@ -1,3 +1,5 @@
+from utils.conversations import phase_shadow
+
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
@@ -865,6 +867,7 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
     return bool(conversation) and bool(conversation.get('deleted'))
 
 
+@phase_shadow.compare('home_visibility')
 def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation or is_soft_deleted(conversation):

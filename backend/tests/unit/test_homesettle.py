@@ -36,6 +36,27 @@ def test_hold_floor_without_lane_with_long_capture_window():
     assert not conversations.is_visible_conversation(floor())
 
 
+def test_phase_shadow_preserves_permanent_floor_verdict_without_mutating_rows(monkeypatch):
+    from utils.conversations import fragment_visibility, phase_shadow
+
+    started = NOW - timedelta(hours=12)
+    raw = floor(
+        started_at=started,
+        finished_at=started + timedelta(seconds=458),
+        structured={'title': 'Yeah.', 'title_provenance': 'server_minimum'},
+    )
+    before = deepcopy(raw)
+    observed = Mock()
+    monkeypatch.setattr(phase_shadow, 'observe', observed)
+    assert fragment_visibility.is_settling_fragment(raw, now=NOW.timestamp())
+    observed.assert_called_once_with('settling_hold', raw, True, now=NOW.timestamp())
+    observed.reset_mock()
+    parent = episode(started_at=started, last_activity_at=raw['finished_at'])
+    assert home_read.project_episode('u', parent, members={'a': raw}, list_row=True) is None
+    observed.assert_called_once_with('episode_member', raw, False, episode=parent)
+    assert raw == before
+
+
 @pytest.mark.parametrize('status', ['pending', 'processing', 'in_progress'])
 def test_unfinished_rows_never_settle_or_hide(monkeypatch, status):
     row = floor(status=status, episode_id='e')
