@@ -138,8 +138,12 @@ class EpisodeProvider extends ChangeNotifier {
     String? cursor;
     do {
       final result = await _fetchPage(from, to, cursor: cursor);
-      if (_disposed || generation != _homeGeneration || uid != SharedPreferencesUtil().uid || (!_enabled && !bootstrap))
+      if (_disposed ||
+          generation != _homeGeneration ||
+          uid != SharedPreferencesUtil().uid ||
+          (!_enabled && !bootstrap)) {
         return;
+      }
       if (result case ApiSuccess(:final data)) {
         if (!data.enabled) {
           _enabled = false;

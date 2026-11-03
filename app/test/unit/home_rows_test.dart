@@ -98,13 +98,17 @@ void main() {
       ..starred = true
       ..folderId = 'folder';
     final held = acknowledgeLoadedHomeMembers({
-      'e': [conversation('a'), conversation('unknown'), waiting('waiting', 0), waiting('locked', 1)]
+      'e': [conversation('a'), conversation('unknown'), waiting('waiting', 0)],
+      'locked-parent': [conversation('a'), waiting('locked', 1)],
+      'locked-metadata': [conversation('a'), waiting('unknown-lock', 1, locked: true)],
     }, [
       source,
       waiting('waiting', 0),
       waiting('locked', 1, locked: true)
     ]);
     expect(held['e'], [same(source)]);
+    expect(held.containsKey('locked-parent'), isFalse);
+    expect(held.containsKey('locked-metadata'), isFalse);
     final restored = retainSuppressedHomeMembers([], {source.id: held['e']!.single}, ['a']).single;
     expect(restored.starred, isTrue);
     expect(restored.folderId, 'folder');

@@ -27,6 +27,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/logger.dart';
 
 part 'conversation_visibility.dart';

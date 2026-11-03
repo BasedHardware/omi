@@ -370,11 +370,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         (oldest, day) => day.isBefore(oldest) ? day : oldest,
       );
       _initialOverlayPending = widget.requestInitialLoad && episodes != null;
-      var overlay = _initialOverlayPending
-          ? episodes!.refreshHome(initialFrom, today.add(const Duration(days: 1)), bootstrap: true)
-          : Future<void>.value();
+      Future<void> loadOverlay(DateTime from) =>
+          episodes!.refreshHome(from, today.add(const Duration(days: 1)), bootstrap: true).onError((error, stack) {
+            Logger.error('Initial Home overlay failed: $error');
+          });
+      var overlay = _initialOverlayPending ? loadOverlay(initialFrom) : Future<void>.value();
       try {
-        if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
+        if (widget.requestInitialLoad) {
           await conversationProvider.getInitialConversations(checkDailySummaries: false);
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
           // The first page may reach beyond seven days. Cover its actual range
@@ -382,23 +384,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           final days = conversationProvider.groupedConversations.keys;
           final oldest = days.isEmpty ? today : days.reduce((a, b) => a.isBefore(b) ? a : b);
           if (episodes != null && oldest.isBefore(initialFrom)) {
-            overlay = episodes.refreshHome(oldest, today.add(const Duration(days: 1)), bootstrap: true);
+            overlay = loadOverlay(oldest);
           }
-          final initialOverlay = overlay.onError((error, stack) {
-            Logger.error('Initial Home overlay failed: $error');
-          });
-          unawaited(
-            initialOverlay.whenComplete(() {
-              if (mounted) setState(() => _initialOverlayPending = false);
-            }),
-          );
-          await initialOverlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
-        } else if (widget.requestInitialLoad) {
-          // Still check for daily summaries even if conversations are cached
-          _scheduleDeferred(conversationProvider.checkHasDailySummaries);
-          overlay = overlay.onError((error, stack) {
-            Logger.error('Initial Home overlay failed: $error');
-          });
           unawaited(
             overlay.whenComplete(() {
               if (mounted) setState(() => _initialOverlayPending = false);
@@ -653,8 +640,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               : days.reduce((a, b) => a.isBefore(b) ? a : b);
           final to = DateTime(today.year, today.month, today.day + 1);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && episodesOn && !_isBootstrapping && !_initialOverlayPending)
+            if (mounted && episodesOn && !_isBootstrapping && !_initialOverlayPending) {
               unawaited(episodes!.refreshHome(from, to));
+            }
           });
           final projected = buildHomeRows(
             [for (final list in conversationsByDate.values) ...list],

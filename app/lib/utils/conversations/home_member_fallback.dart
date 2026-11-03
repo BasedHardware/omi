@@ -18,18 +18,21 @@ Map<String, List<ServerConversation>> acknowledgeLoadedHomeMembers(
   final loaded = {for (final c in source) c.id: c};
   return {
     for (final entry in episodes.entries)
-      entry.key: [
-        for (final member in entry.value)
-          if (loaded[member.id] case final c?
-              when c.status == ConversationStatus.completed &&
-                  !c.isHiddenFromDefaultList &&
-                  !c.isLocked &&
-                  !c.processingDeferred &&
-                  c.clientProcessing == null &&
-                  !c.summaryRetryable &&
-                  c.structured.title.trim().isNotEmpty)
-            c,
-      ],
+      // A locked member locks the whole episode row. Keep the original source
+      // payloads until that row offers access to every acknowledged member.
+      if (!entry.value.any((m) => m.isLocked || loaded[m.id]?.isLocked == true))
+        entry.key: [
+          for (final member in entry.value)
+            if (loaded[member.id] case final c?
+                when c.status == ConversationStatus.completed &&
+                    !c.isHiddenFromDefaultList &&
+                    !c.isLocked &&
+                    !c.processingDeferred &&
+                    c.clientProcessing == null &&
+                    !c.summaryRetryable &&
+                    c.structured.title.trim().isNotEmpty)
+              c,
+        ],
   };
 }
 

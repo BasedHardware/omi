@@ -27,9 +27,14 @@ void main() {
     final day = DateUtils.dateOnly(DateTime.now().subtract(const Duration(days: 10)));
     final a = ServerConversation(id: 'a', createdAt: day, startedAt: day, structured: Structured('Old fragment A', ''));
     final b = ServerConversation(id: 'b', createdAt: day, startedAt: day, structured: Structured('Old fragment B', ''));
+    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    var conversationCalls = 0;
     final conversations = ConversationProvider(
       isSignedIn: () => true,
-      conversationListFetcher: () async => throw StateError('cached first page should not refetch'),
+      conversationListFetcher: () {
+        conversationCalls++;
+        return page.future;
+      },
       dailySummariesChecker: () async => false,
     )
       ..conversations = [a, b]
@@ -56,6 +61,7 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(conversationCalls, 1, reason: 'cached rows still join the authoritative first fetch');
     expect(requestedFrom, isNotNull);
     expect(requestedFrom!.isAfter(day), isFalse, reason: 'the initial join must cover cached older pages');
     await tester.pump(const Duration(milliseconds: 600));
@@ -81,7 +87,7 @@ void main() {
                   conversationId: a.id,
                   startedAt: day,
                   endedAt: day,
-                  points: [EpisodePoint('Fixture')],
+                  points: const [EpisodePoint('Fixture')],
                 ),
               ],
             ),
@@ -89,6 +95,10 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Older grouped episode'), findsNothing, reason: 'the list has not landed yet');
+    page.complete((items: [a, b], ok: true));
     await tester.pump();
     await tester.pump();
     expect(find.text('Older grouped episode'), findsOneWidget);
@@ -145,7 +155,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Short clip match'), findsOneWidget);
+    expect(find.byKey(ValueKey(short.id)), findsOneWidget, reason: 'the exact source row remains reachable');
     expect(find.text('Retained member'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     conversations.dispose();
