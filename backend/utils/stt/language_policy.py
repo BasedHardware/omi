@@ -13,6 +13,8 @@ from typing import Any, Callable, Collection
 from config.refactor_modes import serving_for, shadow_or_serve
 from utils.llm.notes_refactor_metrics import shadow
 from config.stt_provider_policy import (
+    LANGUAGE_EQUIVALENCE,
+    canonical_language,
     SONIOX_PROVIDER,
     STTServingSurface,
     normalized_stt_language,
@@ -32,18 +34,10 @@ MAX_PENDING_DETECTIONS = 32
 MAX_DETECTION_CHARS = 512
 LIVE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 MIN_LEARNED_SESSIONS = 3
-# Only near-identical spoken language pairs belong here. Codes are normalized
-# to their base form before this intentionally small equivalence map is used.
-LANGUAGE_EQUIVALENCE = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
 MAX_SONIOX_LANGUAGE_HINTS = 3
 # Explicit declarations for config.refactor_modes' dynamically named cohort selectors.
 LANGUAGE_HINTS_SERVE_PERCENT_ENV = 'STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT'
 LANGUAGE_HINTS_SERVE_DIGESTS_ENV = 'STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S'
-
-
-def canonical_language(language: str | None) -> str:
-    code = normalized_stt_language(language)
-    return LANGUAGE_EQUIVALENCE.get(code, code)
 
 
 def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str, ...]:

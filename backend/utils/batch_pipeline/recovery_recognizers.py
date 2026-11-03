@@ -134,7 +134,7 @@ def canonical_wav(pcm):
 
 
 def validate_response(response, duration, spans, *, multilingual):
-    from diarizer.batch_pipeline import validate_words
+    from utils.batch_pipeline.word_validation import validate_words
 
     if not isinstance(response, tuple) or len(response) != 2:
         raise ValueError('response shape')

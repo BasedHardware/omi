@@ -574,13 +574,15 @@
       "entrypoints": [
         "diarizer.batch_pipeline_runtime",
         "scripts.record_seal_sweep",
-        "scripts.record_seal_repair_job"
+        "scripts.record_seal_repair_job",
+        "scripts.record_seal_worker"
       ],
       "image_import_smoke": false,
       "smoke_entrypoints": [
         "diarizer.batch_pipeline_runtime",
         "scripts.record_seal_sweep",
-        "scripts.record_seal_repair_job"
+        "scripts.record_seal_repair_job",
+        "scripts.record_seal_worker"
       ],
       "dependency_probe_smoke": true,
       "dependency_probe_exclusions": {

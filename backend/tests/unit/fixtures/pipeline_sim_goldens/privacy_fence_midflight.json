@@ -10,7 +10,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -38,7 +38,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m purged"
@@ -109,7 +109,7 @@
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-2",
-    "previous_segment_id": "seg-3",
+    "previous_segment_id": "seg-4",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 220.21,
@@ -157,7 +157,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m purged"
@@ -177,7 +177,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m purged"
@@ -185,7 +185,7 @@
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [
-    "unfinished_at_end"
+    "held"
    ],
    "result_artifact": null,
    "result_transitions": []
@@ -197,7 +197,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m purged"
@@ -241,7 +241,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -317,10 +317,10 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
-    "late_capture": true,
-    "log_sequence": 2,
+    "late_capture": false,
+    "log_sequence": 1,
     "owner_id": "owner-2",
-    "previous_segment_id": "seg-4",
+    "previous_segment_id": null,
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 494.07,
@@ -335,7 +335,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -417,9 +417,9 @@
    "final_result": {
     "conversation_id": "conv-2",
     "late_capture": false,
-    "log_sequence": 1,
+    "log_sequence": 2,
     "owner_id": "owner-2",
-    "previous_segment_id": null,
+    "previous_segment_id": "seg-3",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 328.42,
@@ -434,7 +434,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -533,7 +533,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -590,7 +590,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m purged"
@@ -610,7 +610,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -635,7 +635,7 @@
    "asr_empty": 12,
    "excluded_privacy_blocked": 2,
    "purged_jobs": 8,
-   "recovery_held": 2,
+   "recovery_held": 3,
    "recovery_recovered": 7,
    "recovery_tasks_enqueued": 12
   },
@@ -652,8 +652,8 @@
   "revision_drain": {
    "fire_and_forget:completed": 4,
    "fire_and_forget:stopped_at_horizon": 1,
-   "request_scoped:completed": 9,
-   "request_scoped:stopped_at_horizon": 3
+   "request_scoped:completed": 10,
+   "request_scoped:stopped_at_horizon": 2
   }
  },
  "uploads": [
