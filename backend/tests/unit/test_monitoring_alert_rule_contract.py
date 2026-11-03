@@ -1959,3 +1959,26 @@ def test_sync_failure_reason_and_firestore_commit_exhaustion_alerts():
         assert "Commit" in filters and "RESOURCE_EXHAUSTED" in filters, export_name
         assert fs["data"][2]["model"]["expression"] == "$B > 10", export_name
         assert fs["for"] == "5m", export_name
+
+
+def test_backfill_queue_wait_warning_uses_dispatched_histogram_and_sustained_p95():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-sync-backfill-queue-wait-high']
+        assert rule['data'][0]['datasourceUid'] == 'gmp-cloud-run'
+        assert rule['data'][0]['model']['expr'] == (
+            'histogram_quantile(0.95, sum by (le) (rate(omi_sync_queue_wait_seconds_bucket{'
+            'project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics",'
+            'namespace=~"backend-sync|backend-sync-backfill",lane="backfill"}[30m])))'
+        )
+        assert rule['data'][1]['model']['expression'] == '$A > 1800'
+        assert rule['for'] == '30m' and rule['labels']['severity'] == 'warning'
+        assert rule['noDataState'] == 'OK' and not rule['isPaused']
+        assert rule['labels']['owner'] == 'planscost'
+        assert rule['notification_settings'] == {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'group_by': ['alertname'],
+            'group_wait': '5m',
+            'group_interval': '1h',
+            'repeat_interval': '24h',
+            'mute_time_intervals': ['omi-tier-silent'],
+        }

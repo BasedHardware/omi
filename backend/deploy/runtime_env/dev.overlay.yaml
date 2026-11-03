@@ -580,6 +580,8 @@ overlay:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Lead ruling01d584: activation waits for approved CPU-role secret access.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
+          # One Modulate call for new guarded long units; 0 restores duration holds.
+          BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS: {value: '0', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
             category: service_auth

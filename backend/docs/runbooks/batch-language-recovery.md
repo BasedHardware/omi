@@ -87,9 +87,48 @@ recovery. Company-funded Soniox rechecks the batch allowance even for units
 originally admitted with customer-funded credentials. Guarded Modulate dispatch
 also rechecks company funding. With the feature enabled, a positive input-bound
 worker VAD receipt permits that existing Modulate attempt when CPU VAD has no
-spans, including captures above 60 seconds. An absent, zero or unbound receipt
-does not permit it. The configured independent-call cap still applies to Soniox;
-a longer unit that Modulate cannot recover remains held for a separately reviewed plan.
+spans, including captures above 60 seconds. For new guarded units with absent, zero or unbound worker evidence,
+`BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS` separately permits one
+Modulate attempt above 60 seconds through the configured cap (prod: **600 s**;
+dev and code default: **0**, disabled). Invalid/nonfinite values refuse this
+extension; the absolute ceiling is 7200 s. The master recovery flag and the
+existing company-funding recheck must both permit the call. Set the cap to `0`
+and redeploy backend-integration to restore the duration hold for new units.
+The existing worker-proof path is unchanged.
+
+This extension does not widen Soniox's 60-second ceiling or relax acoustic
+validation: Modulate empty settles `failed_held` with Modulate `empty` and
+Soniox `refused` receipts. Words without strict or valid bound worker VAD also
+stay `failed_held`, with a positive word-count receipt. Words with valid acoustic
+evidence use ordinary recovery settlement. Neither case fabricates silence or
+reopens an already `failed_held` intent; existing holds remain operator-owned.
+At the previously documented $0.03/audio-hour estimate, a 600-second attempt is
+$0.005; this is not a measured bill or an aggregate spend cap. Accepted empty
+and word responses retain existing metering; fleet volume must be sized by the lead.
+
+The global backfill daily-hours deployment setting is **1665** (3x the prior
+555), but binds only if `SYNC_BACKFILL_ADMISSION_LIMITS=true`; that separate
+control remains off. Cloud Tasks `sync-backfill-fresh` concurrency remains the
+production pacer. Its reviewed in-tree source is
+`backend/deploy/ops/prod.yaml` (`cloud_tasks.sync-backfill-fresh`: 90 concurrent
+dispatches / 15 dispatches per second). The lead separately sizes that config
+and uses `backend/scripts/ops_train.py` / `.github/workflows/config_train.yml`
+to plan, apply and verify it; these declarations are not live-state evidence.
+The warning rule `omi-sync-backfill-queue-wait-high` watches
+p95 `omi_sync_queue_wait_seconds{lane="backfill"}` above 1800 seconds for 30
+minutes. The existing buckets jump from 900 to 3600 s (no 1800 s boundary),
+so the quantile threshold is interpolated. This histogram samples tasks at execution, so it cannot detect a
+fully stalled queue with no dispatches; keep backlog/oldest-ready monitoring.
+The lead checks live rule state/history and sizes dispatch capacity separately.
+Rollback reverts the hours values and pauses the warning rule.
+
+When worker silence disposition is rolled back, sampled record units that reach
+empty ASR additionally emit `strict_silent_asr_empty` from the strict-VAD shadow
+counter if strict VAD confirms silence. This observation never changes the
+EMPTY_ASR quarantine, payload or accounting. With worker silence disposition on,
+this extra inspection does not run. `BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT=0`
+disables the observation; deploying worker source makes it available for future
+rollback qualification.
 Polling has a 120 s budget and 60-GET
 ceiling; individual requests have at most a 20 s I/O timeout. Cleanup uses two
 bounded requests. Recovery never automatically resubmits a timed-out job.
