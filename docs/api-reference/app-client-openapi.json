@@ -8683,6 +8683,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -8753,6 +8765,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -29388,6 +29412,13 @@
             "title": "Capture Completeness",
             "type": "string"
           },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenDeviceCoverage"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
           "first_observed_at": {
             "anyOf": [
               {
@@ -29637,6 +29668,40 @@
           "last_id"
         ],
         "title": "ScreenActivitySyncResponse",
+        "type": "object"
+      },
+      "ScreenDeviceCoverage": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "title": "First Observed At",
+            "type": "string"
+          },
+          "last_observed_at": {
+            "title": "Last Observed At",
+            "type": "string"
+          },
+          "synced_through": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Through"
+          }
+        },
+        "required": [
+          "device_id",
+          "first_observed_at",
+          "last_observed_at"
+        ],
+        "title": "ScreenDeviceCoverage",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {
@@ -30186,6 +30251,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -30260,6 +30337,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [

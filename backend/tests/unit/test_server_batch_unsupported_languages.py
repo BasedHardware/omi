@@ -1,5 +1,6 @@
 """Declared unsupported admission is bounded and never widens auto/GPU proof."""
 
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -167,15 +168,19 @@ def test_existing_supported_and_unknown_native_routes_do_not_enter_provider_outb
     outbox.assert_not_called()
 
 
+@lru_cache(maxsize=None)
+def _yaml(relative: str):
+    # The C loader keeps the 4k-line runtime manifest inside the fast-unit CPU budget.
+    text = (Path(__file__).resolve().parents[2] / relative).read_text(encoding='utf-8')
+    return yaml.load(text, Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_listen_rollout_stays_empty_until_the_separate_drainer_is_serving(environment):
-    backend = Path(__file__).resolve().parents[2]
     name = 'SERVER_BATCH_UNSUPPORTED_LANGUAGES'
-    chart = yaml.safe_load(
-        (backend / f'charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text()
-    )
+    chart = _yaml(f'charts/backend-listen/{environment}_omi_backend_listen_values.yaml')
     assert next(entry['value'] for entry in chart['env'] if entry['name'] == name) == ''
-    source = yaml.safe_load((backend / 'deploy/runtime_env/_base.yaml').read_text())
+    source = _yaml('deploy/runtime_env/_base.yaml')
     assert source['environment_shared']['gke']['backend-listen']['env'][name]['value'] == ''
-    manifest = yaml.safe_load((backend / 'deploy/runtime_env.yaml').read_text())
+    manifest = _yaml('deploy/runtime_env.yaml')
     assert manifest['environments'][environment]['gke']['backend-listen']['env'][name]['value'] == ''

@@ -117,8 +117,17 @@ bad image can latch again. Network-core uploads are forbidden in SAFE.
 Before writing TRIAL, completion seals a retained `dfu_pending` intent. If reset
 lands after the NVS commit but before clearing the RAM latch, the next boot
 reads only bootstate: TRIAL for this firmware overrides the stale latch and
-starts a fresh count-1 trial; SAFE or a failed read retains the latch. The intent
-is consumed before that read so an NVS hang cannot permanently prevent SAFE.
+starts a fresh count-1 trial. A successful read without a matching TRIAL
+(including SAFE or no value) clears the retry budget and retains the latch.
+Resolving has a budget of three backend attempts, including failed initialization
+or reads. Before each attempt, RAM is sealed with the remaining budget and a
+mandatory bypass boot. If the attempt fails or hangs, the following warm boot
+skips the backend read and reaches SAFE; only a later boot may retry. Thus reads
+can occur on boots 1, 3 and 5 after the interrupted transaction, with SAFE
+reachable on boots 2, 4 and every boot after exhaustion even if every read hangs.
+No automatic reboot is added: a bypass boot stays reachable in SAFE until reset.
+SAFE persistence is deferred while a retry is outstanding so it cannot overwrite
+the committed TRIAL. Exhaustion leaves the latch in SAFE with no further reads.
 Ordinary warm latches do not reread settings: an old TRIAL must not erase a
 later crash loop. This is the sole warm-latch settings exception, needed to
 resolve the interrupted transaction; no `app_settings_init()` or bond loading
@@ -131,8 +140,14 @@ persistence attempt cannot overwrite a completed DFU's TRIAL.
 The record is 48 bytes inside a 64-byte DTS `zephyr,retained-ram` reservation
 at `0x2006FF00–0x2006FF40`. The application linker owns it as `.omi_retained`
 NOLOAD. CRC-32/ISO-HDLC covers every preceding byte (including magic, reset
-cause, full firmware field and transaction/persistence bits). Count saturates
-at 255, latch reason must be 0–3, fatal and the two bits must be 0–1. Magic,
+cause, full firmware field and transaction/persistence fields). Count saturates
+at 255, latch reason must be 0–3, fatal and persistence attempt must be 0–1.
+The existing 32-bit `dfu_pending` word at byte offset 36 encodes only these states:
+0 idle, 1 initial resolve, 2 bypass with two retries remaining, 3 retry with two
+remaining, 4 bypass with one retry remaining, 5 final retry. All other values
+invalidate the record, even with a matching CRC. The original pending value 1
+still starts resolution. Field offsets, the 48-byte size, format magic and CRC
+coverage (bytes 0–43, CRC at 44–47) are unchanged by the retry budget. Magic,
 version, CRC or range mismatch invalidates the whole record; no field from it
 can supply a latch. A cold/invalid record can still restore a separately valid
 NVS SAFE. All mutations, including fatal, reseal the CRC. The format magic is
@@ -156,9 +171,12 @@ SHA256 `345f6b77aa32407ed2aaf33c8d2d7809b37e37a68f920ad30fd5fb647a4d1f5a`:
 | rpmsg/IPC | `0x20070000–0x20080000` |
 
 These ranges prove separation from PCD/IPC, **not** from MCUboot runtime RAM.
-No generated MCUboot `.map` or full CV1 SDK was available on the implementation
-host. The requested fielded-loader map proof and warm-reset retention test are
-therefore still qualification gates, not a claimed pass. Before release, take
+Warm-reset retention through the installed jig MCUboot was measured on
+2026-11-03. Four fault-injection runs (driver hang, settings hang, watchdog
+starvation, hard fault) each observed the CRC-valid record count go 1, 2, 3, 4
+across watchdog and fatal resets, and the bootloader region hash matched the
+pinned baseline in every run. No generated MCUboot `.map` was available, so the
+static map proof is still open. To close it, take
 the map from the build corresponding to the installed jig baseline (not a
 new/unrelated loader), record its artifact/source identity and run:
 
@@ -203,6 +221,10 @@ They also corrupt each retained byte with magic intact, check ranges independent
 of CRC, reject image-1 and resumed network-slot chunks, ignore unknown/stopped
 completions, and reproduce reset after committing same-version TRIAL while RAM
 still says latched. A later crash loop with that old TRIAL must still latch.
+Resolve tests cover transient read failure followed by TRIAL, three-attempt
+exhaustion for read/init errors, watchdog resets inside read/init with a mandatory
+SAFE boot after each hang, successful non-TRIAL cancellation, deferred SAFE
+persistence, and retry range validation with recomputed CRCs.
 The suite also runs the existing audio-packet and nine-milestone parser tests,
 slot geometry and the release build guard. It does not emulate torn NVS writes,
 WDT enforcement, Nordic faults, Bluetooth or MCUboot.

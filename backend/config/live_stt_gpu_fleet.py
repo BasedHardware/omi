@@ -12,3 +12,8 @@ from collections.abc import Mapping
 def gpu_fleet_off(env: Mapping[str, str] | None = None) -> bool:
     raw = os.getenv('STT_GPU_FLEET_OFF', 'false') if env is None else env.get('STT_GPU_FLEET_OFF', 'false')
     return raw.strip().lower() in {'true', '1', 'on', 'yes'}
+
+
+def streaming_parakeet_slot_enabled() -> bool:
+    """Rollback only the plain streaming slot; window and PTT policies are separate."""
+    return os.getenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'false').strip().lower() in {'true', '1', 'on', 'yes'}

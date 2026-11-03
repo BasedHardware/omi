@@ -280,6 +280,8 @@ def _build_l1_messages(
         f"Return at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items. If the source contains more, "
         f"keep the highest-value durable facts and decisions first.\n\n"
         f"What NOT to extract:\n"
+        f"- Explicit reminder requests (\"remind me to ...\") and one-off to-dos: these belong in action items, not durable facts.\n"
+        f"- Current-session instructions to an AI assistant, unless they independently state a durable fact.\n"
         f"- AI assistant chatter, nudges, generic praise (\"great job!\", \"you can do it!\")\n"
         f"- Third-party storytelling, movie plots, game narration, article content {who}\n"
         f"  didn't engage with.\n"

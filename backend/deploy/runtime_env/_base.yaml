@@ -19,6 +19,7 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -340,7 +341,7 @@ environment_shared:
           value: '30'
           category: rollout
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,parakeet
+          value: modulate-velma-2,soniox
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
