@@ -14891,4 +14891,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
+
+  @override
+  String get episodeFinishingUp => 'กำลังดำเนินการให้เสร็จ…';
 }

@@ -325,6 +325,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
+  bool _initialOverlayPending = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -362,12 +363,40 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
+      final today = DateUtils.dateOnly(DateTime.now());
+      _initialOverlayPending = widget.requestInitialLoad && episodes != null;
+      var overlay = _initialOverlayPending
+          ? episodes!
+              .refreshHome(today.subtract(const Duration(days: 7)), today.add(const Duration(days: 1)), bootstrap: true)
+          : Future<void>.value();
       try {
         if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
-          await conversationProvider.getInitialConversations();
+          await conversationProvider.getInitialConversations(checkDailySummaries: false);
+          _scheduleDeferred(conversationProvider.checkHasDailySummaries);
+          // The first page may reach beyond seven days. Cover its actual range
+          // under the same single deadline, rather than exposing older members.
+          final days = conversationProvider.groupedConversations.keys;
+          final oldest = days.isEmpty ? today : days.reduce((a, b) => a.isBefore(b) ? a : b);
+          if (episodes != null && oldest.isBefore(today.subtract(const Duration(days: 7)))) {
+            overlay = episodes.refreshHome(oldest, today.add(const Duration(days: 1)), bootstrap: true);
+          }
+          final initialOverlay = overlay.onError((error, stack) {
+            Logger.error('Initial Home overlay failed: $error');
+          });
+          unawaited(initialOverlay.whenComplete(() {
+            if (mounted) setState(() => _initialOverlayPending = false);
+          }));
+          await initialOverlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         } else if (widget.requestInitialLoad) {
           // Still check for daily summaries even if conversations are cached
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
+          overlay = overlay.onError((error, stack) {
+            Logger.error('Initial Home overlay failed: $error');
+          });
+          unawaited(overlay.whenComplete(() {
+            if (mounted) setState(() => _initialOverlayPending = false);
+          }));
+          await overlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         }
       } finally {
         if (mounted) setState(() => _isBootstrapping = false);
@@ -610,12 +639,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               : days.reduce((a, b) => a.isBefore(b) ? a : b);
           final to = DateTime(today.year, today.month, today.day + 1);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) unawaited(episodes!.refreshHome(from, to));
+            if (mounted && !_isBootstrapping && !_initialOverlayPending) unawaited(episodes!.refreshHome(from, to));
           });
           final projected = buildHomeRows(
             [for (final list in conversationsByDate.values) ...list],
             episodes!.homeEpisodes,
             enabled: true,
+            finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
             deletedIds: {...convoProvider.memoriesToDelete.keys, ...episodes.hiddenHomeMembers},
             knownConversations: snapshot.conversations,
@@ -723,7 +753,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
-              if (showTypedStatus &&
+              if (_isBootstrapping)
+                _buildLoadingShimmer()
+              else if (_initialOverlayPending)
+                SliverToBoxAdapter(
+                  child: OmiLoadingState(label: context.l10n.episodeFinishingUp),
+                )
+              else if (showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
                   !hasProcessingConversations &&

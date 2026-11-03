@@ -1,3 +1,4 @@
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
@@ -41,6 +42,24 @@ Episode episode(
     );
 
 void main() {
+  test('server omissions remain reachable when an overlay is replaced, on any page', () {
+    final a = conversation('a');
+    final b = conversation('b');
+    final old = conversation('unfetched-older', hours: -300);
+    final local = retainSuppressedHomeMembers([old], {'a': a, 'b': b}, ['a', 'b']);
+    final loaded = buildHomeRows(
+        local,
+        [
+          episode(members: [a, b])
+        ],
+        enabled: true);
+    expect(loaded.map((r) => r.conversation.id), containsAll(['episode:e', old.id]));
+    expect(loaded.any((r) => r.conversation.id == a.id), isFalse);
+    final replaced = buildHomeRows(local, [], enabled: true);
+    expect(replaced.map((r) => r.conversation.id).toSet(), {'a', 'b', old.id});
+    expect(retainSuppressedHomeMembers([a, b], {'a': a}, ['a', 'unknown']).length, 2);
+  });
+
   for (final live in [false, true]) {
     test('processing owns one episode slot with live=$live, even before retained metadata arrives', () {
       final a = conversation('a');
@@ -197,6 +216,17 @@ void main() {
     final row = buildHomeRows([conversation('a'), conversation('b')], [e], enabled: true).single;
     expect(row.conversation.structured.title, 'Title a');
     expect(row.conversation.structured.emoji, '☕');
+  });
+
+  test('uncomposed episode never echoes the first member title', () {
+    final a = conversation('a');
+    final b = conversation('b');
+    final e = episode(members: [a, b], moments: const [], closedAt: start);
+    final row = buildHomeRows([a, b], [e],
+            enabled: true, finishingTitle: 'Finishing up…', now: start.add(const Duration(minutes: 1)))
+        .single;
+    expect(row.conversation.structured.title, 'Finishing up…');
+    expect(a.structured.title, 'Title a');
   });
 
   group('closed episode waiting for its summary', () {

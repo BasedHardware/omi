@@ -30,6 +30,7 @@ import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/logger.dart';
 
 part 'conversation_visibility.dart';
+part 'conversation_home_fetch.dart';
 part 'conversation_processing.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
@@ -205,6 +206,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   List<ServerConversation> get displayedConversations =>
       List<ServerConversation>.unmodifiable(groupedConversations.values.expand((group) => group));
 
+  Map<String, List<ServerConversation>> Function()? heldHomeEpisodes;
   final ConversationListFetcher? _conversationListFetcher;
   final ConversationLifecycleFetcher _conversationLifecycleFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
@@ -970,8 +972,8 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       processingRowsAtStart,
       {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
     );
-    _conversationServerOffset = result.items.length;
-    _conversationServerHasMore = !result.truncated && result.items.length >= _conversationPageSize;
+    _conversationServerOffset = result.storageCount;
+    _conversationServerHasMore = !result.truncated && result.storageCount >= _conversationPageSize;
     _conversationServerLoadedIds
       ..clear()
       ..addAll(result.items.map((conversation) => conversation.id));
@@ -1139,14 +1141,14 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _initialFetchRetryCount = 0;
   }
 
-  Future<void> getInitialConversations() async {
+  Future<void> getInitialConversations({bool checkDailySummaries = true}) async {
     // A manual/initial entry gets a fresh retry budget so pull-to-refresh
     // can recover even after the auto-retries were exhausted.
     _cancelInitialFetchRetry();
     final fetched = await fetchConversations();
     if (!fetched || !_isSignedIn()) return;
     unawaited(refreshFoldedNoiseCounts());
-    await checkHasDailySummaries();
+    if (checkDailySummaries) await checkHasDailySummaries();
   }
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
@@ -1321,46 +1323,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     );
   }
 
-  ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
-      _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
-    return switch (typed) {
-      ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
-      ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
-    };
-  }
-
-  Future<({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})>
-      _getConversationsFromServer() async {
-    final typedApi = _conversationApi;
-    if (typedApi != null) {
-      final (startDate, endDate) = _getDateFilterRange();
-      final typed = await typedApi.list(
-        includeDiscarded: showDiscardedConversations,
-        startDate: startDate,
-        endDate: endDate,
-        folderId: selectedFolderId,
-        starred: showStarredOnly ? true : null,
-      );
-      return _packTypedConversationList(typed);
-    }
-    final fetcher = _conversationListFetcher;
-    if (fetcher != null) {
-      final result = await fetcher();
-      return (items: result.items, ok: result.ok, truncated: false, typed: null);
-    }
-
-    final (startDate, endDate) = _getDateFilterRange();
-
-    final result = await getConversationsResult(
-      includeDiscarded: showDiscardedConversations,
-      startDate: startDate,
-      endDate: endDate,
-      folderId: selectedFolderId,
-      starred: showStarredOnly ? true : null,
-    );
-    return (items: result.items, ok: result.ok, truncated: result.truncated, typed: null);
-  }
-
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
     conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
     groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed =
@@ -1387,11 +1349,18 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       List<ServerConversation> items,
       bool ok,
       bool truncated,
+      int storageCount,
       ApiResult<List<ServerConversation>>? typed
     }) pageResult;
     if (conversationPageFetcherOverride != null) {
       final fetched = await conversationPageFetcherOverride!.call();
-      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+      pageResult = (
+        items: fetched.items,
+        ok: fetched.ok,
+        truncated: fetched.truncated,
+        storageCount: fetched.items.length,
+        typed: null
+      );
     } else if (typedApi != null) {
       pageResult = _packTypedConversationList(
         await typedApi.list(
@@ -1405,7 +1374,10 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         ),
       );
     } else {
+      var storageCount = 0;
       final fetched = await getConversationsResult(
+        heldHomeEpisodes: _homeEpisodeAcknowledgements,
+        onStorageCount: (count) => storageCount = count,
         offset: pageOffset,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
@@ -1413,7 +1385,8 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
       );
-      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+      pageResult =
+          (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, storageCount: storageCount, typed: null);
     }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
@@ -1425,8 +1398,8 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       return false;
     }
     final newConversations = pageResult.items;
-    _conversationServerOffset += newConversations.length;
-    _conversationServerHasMore = !pageResult.truncated && newConversations.length >= _conversationPageSize;
+    _conversationServerOffset += pageResult.storageCount;
+    _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;
     _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     conversations.addAll(

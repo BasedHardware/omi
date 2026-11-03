@@ -26324,6 +26324,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
+
+  /// Neutral Home row title while an episode summary is being completed.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing up…'**
+  String get episodeFinishingUp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

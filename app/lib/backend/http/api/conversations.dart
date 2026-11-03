@@ -19,6 +19,7 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
@@ -94,6 +95,8 @@ Future<List<ServerConversation>> getConversations({
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
+  Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+  void Function(int)? onStorageCount,
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
@@ -115,7 +118,18 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     starred: starred,
   );
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  final held = <String, ServerConversation>{};
+  final pairs = <String>[];
+  for (final entry in heldHomeEpisodes.entries) {
+    for (final member in entry.value) {
+      if (pairs.length == 50) break;
+      pairs.add('${entry.key}:${member.id}');
+      held[member.id] = member;
+    }
+    if (pairs.length == 50) break;
+  }
+  var response = await makeApiCall(
+      url: url, headers: {if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;
@@ -126,8 +140,13 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         size: bodyBytes.length,
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
-    Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
+    onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    // Preserve an exact local fallback for each server omission. If a later
+    // overlay refresh drops this episode, its members can still render on Home.
+    final retained =
+        retainSuppressedHomeMembers(memories, held, (response.headers['x-omi-home-suppressed-ids'] ?? '').split(','));
+    Logger.debug('getConversations length: ${retained.length}');
+    return (items: retained, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
   return (items: <ServerConversation>[], ok: false, truncated: false);

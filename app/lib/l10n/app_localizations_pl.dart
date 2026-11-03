@@ -15007,4 +15007,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.';
+
+  @override
+  String get episodeFinishingUp => 'Kończenie…';
 }

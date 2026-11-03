@@ -22,6 +22,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     Set<String> deletedIds = const {},
     List<ServerConversation> knownConversations = const [],
     List<ServerConversation> processingConversations = const [],
+    String? finishingTitle,
     DateTime? now}) {
   if (!enabled) return [for (final c in conversations) HomeRow(c)];
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
@@ -48,7 +49,9 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           createdAt: episode.startedAt,
           startedAt: episode.startedAt,
           finishedAt: episode.lastActivityAt,
-          structured: pending.first.structured,
+          structured: retainedIds.length > 1
+              ? Structured(finishingTitle ?? '', '', emoji: pending.first.structured.emoji)
+              : pending.first.structured,
         ),
         episodeConversationIds: episode.conversationIds.toSet(),
         episode: episode,
@@ -77,7 +80,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           createdAt: episode.startedAt,
           startedAt: episode.startedAt,
           finishedAt: episode.lastActivityAt,
-          structured: primary.structured,
+          structured: Structured(finishingTitle ?? '', '', emoji: primary.structured.emoji),
         ),
         episodeConversationIds: episode.conversationIds.toSet(),
         episode: episode.copyWith(members: members),

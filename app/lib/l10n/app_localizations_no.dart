@@ -14968,4 +14968,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talere og den endelige transkripsjonen dukker opp her under opplasting.';
+
+  @override
+  String get episodeFinishingUp => 'Fullfører…';
 }

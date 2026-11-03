@@ -14998,4 +14998,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
+
+  @override
+  String get episodeFinishingUp => 'Pabeidz…';
 }

@@ -39,6 +39,8 @@ class EpisodeProvider extends ChangeNotifier {
   List<Episode> get homeEpisodes => enabled && _ownerUid == SharedPreferencesUtil().uid ? _homeEpisodes : const [];
   String? _homeKey;
   DateTime? _homeReadAt;
+  DateTime? _homeFrom;
+  DateTime? _homeTo;
   Timer? _homeHold;
   int _homeGeneration = 0;
 
@@ -56,6 +58,10 @@ class EpisodeProvider extends ChangeNotifier {
     if (identical(provider, _homeConversations)) return;
     _homeConversations?.removeListener(_syncHomeVisibility);
     _homeConversations = provider;
+    provider.heldHomeEpisodes = () => {
+          for (final episode in homeEpisodes)
+            if (!episode.live && episode.members.isNotEmpty) episode.id: episode.members,
+        };
     _homeVisibilityRows = null;
     provider.addListener(_syncHomeVisibility);
     _syncHomeVisibility();
@@ -87,6 +93,8 @@ class EpisodeProvider extends ChangeNotifier {
 
   void invalidateHome() {
     _homeReadAt = null;
+    _homeFrom = null;
+    _homeTo = null;
     _homeGeneration++;
   }
 
@@ -97,12 +105,22 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// Load all pages atomically so partially loaded membership never splits an episode on Home.
-  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false}) async {
+  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false, bool bootstrap = false}) async {
     _ensureOwner();
-    if (!_enabled) return;
+    if (!_enabled && !bootstrap) return;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
-    if (!force && key == _homeKey && _homeReadAt != null && _clock().difference(_homeReadAt!) < pollInterval) return;
+    if (!force &&
+        _homeReadAt != null &&
+        _clock().difference(_homeReadAt!) < pollInterval &&
+        _homeFrom != null &&
+        _homeTo != null &&
+        !from.isBefore(_homeFrom!) &&
+        !to.isAfter(_homeTo!)) {
+      return;
+    }
     _homeKey = key;
+    _homeFrom = from;
+    _homeTo = to;
     _homeReadAt = _clock();
     final generation = ++_homeGeneration;
     final uid = _ownerUid;
@@ -111,7 +129,8 @@ class EpisodeProvider extends ChangeNotifier {
     String? cursor;
     do {
       final result = await _fetchPage(from, to, cursor: cursor);
-      if (_disposed || generation != _homeGeneration || uid != SharedPreferencesUtil().uid || !_enabled) return;
+      if (_disposed || generation != _homeGeneration || uid != SharedPreferencesUtil().uid || (!_enabled && !bootstrap))
+        return;
       if (result case ApiSuccess(:final data)) {
         if (!data.enabled) {
           _enabled = false;
@@ -120,6 +139,7 @@ class EpisodeProvider extends ChangeNotifier {
           notifyListeners();
           return;
         }
+        _enabled = true;
         for (final episode in data.episodes) {
           collected[episode.id] = _ended.contains(episode.id) ? episode.copyWith(live: false) : episode;
         }
@@ -216,6 +236,8 @@ class EpisodeProvider extends ChangeNotifier {
     _homeVisibilityRows = null;
     _homeKey = null;
     _homeReadAt = null;
+    _homeFrom = null;
+    _homeTo = null;
     _homeGeneration++;
     _byConversation.clear();
     _cachedAt.clear();
