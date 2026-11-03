@@ -1,6 +1,10 @@
 # ADR-0008: Private recurring voices from batch finalization
 
-Status: accepted. Decider: David, 2026-11-03 (implementation request).
+- Status: Accepted
+- Date: 2026-11-03
+- Deciders: David (binding rulings in the recurring-voice implementation request)
+- Owner: speaker rollout lead
+- Review by: 2026-11-17
 
 Identity is automatic and inferred, with precision first and no enrollment opt-in.
 Confident whole-conversation clusters may teach private, per-user profiles. An
@@ -15,6 +19,8 @@ using a per-user key and AAD binding user and voice IDs. The user document holds
 ciphertext hashes as authority. Authentication, malformed data, unavailable
 consent and concurrent deletion all deny publication. Transactions revalidate
 the source, consent generation, account fence and person roster generation.
+Recurring learning requires a complete voiceprint read; owner, entitlement or
+person-roster read failures abort the pass before inference or publication.
 
 Learning requires Omi-v2 256-dimensional evidence of at least 30 seconds, at
 least two voices, an owner print, owner distance greater than .50, and no manual
@@ -26,6 +32,9 @@ Retries do not extend contribution timestamps. Rejected profiles supply negative
 evidence and never identify speech. Conflicting assignments retract source
 contributions and unbind. Binding requires the current person print within .35;
 a drifting or missing authoritative print withdraws future naming.
+Bound profiles refresh from qualifying later clusters under the same consistency
+and owner-exclusion guards. Conversation retraction preserves a rejection while
+any of its retained evidence remains.
 
 The maximum contribution age is 90 days. A candidate that never recurs expires
 at 30 days. Reads enforce age regardless of TTL cleanup latency. Sealed document

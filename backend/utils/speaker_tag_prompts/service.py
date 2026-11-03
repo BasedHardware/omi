@@ -86,7 +86,7 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
 from utils.speaker_tag_prompts import embedding_cache as owner_embedding_cache
-from utils.speaker_tag_prompts.recurring import metric_origin
+from utils.speaker_tag_prompts.recurring import metric_origin, current_ids
 
 logger = logging.getLogger(__name__)
 
@@ -444,6 +444,7 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
             timed_out = True
             return False
 
+    recurring_ids = current_ids(uid, conversations)
     prompts = select_prompts(
         conversations,
         now=now,
@@ -452,6 +453,7 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
         answered=voice_profiles_db.answered_prompt_ids(state, now),
         people=people,
         recurring_uid=uid,
+        recurring_profile_ids=recurring_ids,
         stored_people=stored_people,
         pinned=pinned,
         ignored=voice_profiles_db.ignored_voice_keys(state),
@@ -493,6 +495,7 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
                 next(c for c in conversations if c['id'] == prompt.conversation_id),
                 prompt.segment_ids,
                 prompt.origin.value,
+                recurring_ids,
             ),
         ).inc()
     return SpeakerTagPromptsResponse(prompts=prompts, first_time=first_time, save_other_voice_profiles=save_others)
@@ -742,10 +745,9 @@ def apply_answer(
     # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
     # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
-    conversation = (
-        (conversations_db.get_conversation(uid, request.conversation_id) or {})
-        if answer == SpeakerTagPromptAnswer.skip
-        else {}
+    conversation = conversations_db.get_conversation(uid, request.conversation_id) or {}
+    origin = metric_origin(
+        uid, conversation, request.segment_ids, request.origin.value, current_ids(uid, [conversation])
     )
     person_id: Optional[str] = None
     person_enrolled = False
@@ -801,7 +803,11 @@ def apply_answer(
                 raise TagPromptInvalid('person_id is required')
             rejection = {'kind': 'not_person', 'person_id': request.suggested_person_id}
         else:
-            rejection = None
+            rejection = (
+                {'kind': 'not_a_person', 'person_id': None}
+                if request.answer == SpeakerTagPromptAnswer.not_a_person
+                else None
+            )
         conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
@@ -830,7 +836,7 @@ def apply_answer(
     SPEAKER_TAG_PROMPT_ANSWERS.labels(
         kind=request.kind.value,
         answer=answer.value,
-        origin=metric_origin(uid, conversation, request.segment_ids, request.origin.value),
+        origin=origin,
     ).inc()
     SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=outcome.value).inc()
     emit_product_event(
@@ -838,7 +844,7 @@ def apply_answer(
         event='Speaker Tag Prompt Answered',
         properties={
             'kind': request.kind.value,
-            'origin': request.origin.value,
+            'origin': origin,
             'answer': answer.value,
             'quality_outcome': outcome.value,
             'first_time': request.first_time,

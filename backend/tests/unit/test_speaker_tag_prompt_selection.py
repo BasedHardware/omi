@@ -495,5 +495,6 @@ def test_recurring_mentions_are_bounded_whole_names():
     people = [
         {'id': 'ann', 'name': 'Ann', 'is_user_created': True},
         {'id': 'alice', 'name': 'Alice', 'is_user_created': True},
+        {'id': 'inferred_alice', 'name': 'Alice'},
     ]
     assert mentioned_people(conversation, people) == ['alice']

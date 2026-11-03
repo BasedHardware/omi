@@ -679,7 +679,7 @@ async def test_fleet_snapshot_runs_beside_the_sweep_not_ahead_of_its_work(monkey
     # Discovery proceeds while the aggregation still runs: the gauge is no
     # longer awaited work sitting ahead of the drain.
     for _ in range(400):
-        if 'staging' in seen:
+        if 'staging' in seen and 'snapshot-start' in seen:
             break
         await asyncio.sleep(0.005)
     assert 'staging' in seen and 'snapshot-start' in seen

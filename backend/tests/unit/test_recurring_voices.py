@@ -107,7 +107,7 @@ def test_codec_binds_uid_and_voice_id_fails_closed(monkeypatch):
 
 
 def test_additive_field_is_persisted_without_changing_openapi():
-    segment = TranscriptSegment(text='hello', start=0, end=30, recurring_voice_id='private-id')
+    segment = TranscriptSegment(text='hello', start=0, end=30, is_user=False, recurring_voice_id='private-id')
     assert segment.model_dump()['recurring_voice_id'] == 'private-id'
     assert segment.model_dump(mode='json')['recurring_voice_id'] == 'private-id'
     assert 'recurring_voice_id' not in TranscriptSegment.model_json_schema()['properties']
@@ -135,7 +135,10 @@ def test_transaction_fences_concurrent_optout_source_change_and_deletion(store):
     from types import SimpleNamespace
 
     conversation = SimpleNamespace(
-        id='c1', transcript_segments=[TranscriptSegment(text='x', start=0, end=30, speaker_id_scope='final:batch:x')]
+        id='c1',
+        transcript_segments=[
+            TranscriptSegment(text='x', start=0, end=30, is_user=False, speaker_id_scope='final:batch:x')
+        ],
     )
     expected = db.checkpoint('u', 'c1', firestore_client=store)
     assert db.learn('u', conversation, CENTROIDS, PRINTS, expected, firestore_client=store) == {
@@ -152,3 +155,40 @@ def test_transaction_fences_concurrent_optout_source_change_and_deletion(store):
     assert store.rows[('users', 'u')][db.INDEX] == {}
     assert not store.rows[('users', 'u', db.COLLECTION, next(iter(previous[('users', 'u')][db.INDEX])))].get('sealed')
     assert db.learn('u', conversation, CENTROIDS, PRINTS, expected, firestore_client=store) == {}
+
+
+def test_replays_cannot_extend_candidate_retention_or_create_more_than_three():
+    profiles = evaluate()[0]
+    vid = next(iter(profiles))
+    following, _, events, _ = p.evaluate(
+        CENTROIDS, PRINTS, profiles, 'c1', NOW + 31 * 86400, created_ids=[vid], evidence_at=NOW
+    )
+    assert not following and 'created' not in events
+    following, _, events, _ = p.evaluate(CENTROIDS, PRINTS, {}, 'c1', NOW, created_ids=['old1', 'old2', 'old3'])
+    assert not following and 'created' not in events
+
+
+def test_kill_switch_and_percent_are_nested_under_batch_admission(monkeypatch):
+    from types import SimpleNamespace
+
+    batch = [SimpleNamespace(speaker_id_scope='final:batch:x', provider_speaker=None)]
+    live = [SimpleNamespace(speaker_id_scope='listen:x', provider_speaker=None)]
+    assert flags.recurring_enabled_for('u', batch)
+    assert not flags.recurring_enabled_for('u', live)
+    monkeypatch.setenv('BATCH_FINAL_PASS_ENABLED', 'false')
+    assert not flags.recurring_enabled_for('u', batch)
+    monkeypatch.setenv('BATCH_FINAL_PASS_ENABLED', 'true')
+    monkeypatch.setenv('SPEAKER_RECURRING_PERCENT', '0')
+    assert not flags.recurring_enabled_for('u', batch)
+    monkeypatch.setenv('SPEAKER_RECURRING_PERCENT', 'nan')
+    assert not flags.recurring_enabled_for('u', batch)
+    monkeypatch.setenv('SPEAKER_RECURRING_PERCENT', '100')
+    monkeypatch.setenv('SPEAKER_RECURRING_VOICES_ENABLED', 'false')
+    assert not flags.recurring_enabled_for('u', batch)
+
+
+def test_near_misses_are_suggestions_never_names():
+    near = (np.array(VOICE) * 0.45 + np.array(OTHER) * np.sqrt(1 - 0.45**2)).tolist()
+    assert p.near_misses(VOICE, {'near': near, 'owner': OWNER, 'user': VOICE}) == [
+        {'person_id': 'near', 'level': 1, 'suggest': False}
+    ]

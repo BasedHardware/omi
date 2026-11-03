@@ -299,6 +299,7 @@ def select_prompts(
     answered: set,
     people: Mapping[str, str],
     recurring_uid: Optional[str] = None,
+    recurring_profile_ids: Optional[AbstractSet[str]] = None,
     stored_people: Sequence[Mapping[str, Any]] = (),
     limit: int = DEFAULT_LIMIT,
     pinned: AbstractSet[str] = frozenset(),
@@ -421,7 +422,7 @@ def select_prompts(
                     )
 
         for run in unnamed:
-            recurring = recurring_run(recurring_uid, conversation, run.segment_ids)
+            recurring = recurring_run(recurring_uid, conversation, run.segment_ids, recurring_profile_ids)
             voice = run_voice_candidates(segments, run.segment_ids) if prior_enabled or recurring else {}
             near = next(
                 (pid for pid, entry in voice.items() if entry['suggest'] and pid in pinned and pid in people), None

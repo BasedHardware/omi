@@ -84,8 +84,11 @@ def publish(
     person = user.collection('people').document(person_id)
     source = user.collection('conversations').document(conversation_id)
 
+    binding_events = []
+
     @firestore.transactional
     def commit(transaction):
+        binding_events.clear()
         if not policy.enabled():
             return False
         with external_write_fence(uid, transaction=transaction, firestore_client=client):
@@ -144,10 +147,29 @@ def publish(
             )
             if entries is None or policy.vector(entries, now.timestamp(), owner.get('speaker_embedding')) is None:
                 return False
+            from database import recurring_voice_assignments
+
             blob = policy.seal(uid, person_id, entries)
+            projected_person = {**current, 'id': person_id, policy.POOL_FIELD: blob}
+            projected_owner = {**owner, **policy.authority_after(owner, {person_id: blob})}
+            recurring, events = recurring_voice_assignments.prepare(
+                transaction,
+                user,
+                projected_owner,
+                conversation_id,
+                segments,
+                segments,
+                receipt,
+                contribution['segment_ids'],
+                person_id=person_id,
+                person=projected_person,
+            )
+            binding_events.extend(events)
             authority_update = policy.authority_after(owner, {person_id: blob})
             # All reads precede writes. A retry sees corrections, consent and deletion
             # atomically; never resurrect a profile from a stale audio snapshot.
+            if recurring is not None:
+                recurring_voices.write_profiles(transaction, user, owner, recurring)
             transaction.update(
                 person,
                 {
@@ -164,7 +186,11 @@ def publish(
             transaction.update(user, {OWNER_INDEX: sorted(set([*index, person_id])), **authority_update})
             return True
 
-    return _client.run_transactional(client, commit)
+    stored = _client.run_transactional(client, commit)
+    if stored:
+        for event in binding_events:
+            recurring_voices.profile_event(event)
+    return stored
 
 
 def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> None:

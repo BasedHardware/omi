@@ -268,6 +268,8 @@ def test_delete_conversation_leaves_its_group_first(monkeypatch):
     fake_db = MagicMock()
     overlay_ref = MagicMock()
     owner = fake_db.collection.return_value.document.return_value
+    owner.get.return_value.to_dict.return_value = {}
+    fake_ref.get.return_value.to_dict.return_value = {'id': 'desktop'}
     captures, overlays = MagicMock(), MagicMock()
     captures.document.return_value = fake_ref
     overlays.document.return_value = overlay_ref

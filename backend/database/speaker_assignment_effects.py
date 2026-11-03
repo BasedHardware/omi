@@ -14,7 +14,8 @@ from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
 from database.people_generation import bump_people_generation
-from database import speaker_learning_jobs as learning_jobs
+from database import speaker_learning_jobs as learning_jobs, recurring_voice_assignments, recurring_voices
+from utils.observability.recurring_voices import profile_event
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
 from utils.person_evidence import person_updates_for_assignment
@@ -25,6 +26,7 @@ from utils.speakers import auto_enroll
 class AssignmentBookkeeping:
     enabled: bool = True
     involved: bool = False
+    recurring_events: tuple = ()
 
 
 def run_assignment_transaction(client: Any, assign: Any) -> Any:
@@ -33,12 +35,16 @@ def run_assignment_transaction(client: Any, assign: Any) -> Any:
     @firestore.transactional
     def apply(transaction):
         bookkeeping.involved = False
+        bookkeeping.recurring_events = ()
         return assign(transaction, bookkeeping)
 
     try:
         from database._client import run_transactional
 
-        return run_transactional(client, apply)
+        result = run_transactional(client, apply)
+        for event in bookkeeping.recurring_events:
+            profile_event(event)
+        return result
     except (Aborted, ValueError) as error:
         aborted = (isinstance(error, Aborted) and error.__context__ is None) or (
             isinstance(error, ValueError) and isinstance(error.__cause__, Aborted)
@@ -49,7 +55,10 @@ def run_assignment_transaction(client: Any, assign: Any) -> Any:
     record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
     from database._client import run_transactional
 
-    return run_transactional(client, apply, attempts=1)
+    result = run_transactional(client, apply, attempts=1)
+    for event in bookkeeping.recurring_events:
+        profile_event(event)
+    return result
 
 
 def persist_assignment_effects(
@@ -121,6 +130,21 @@ def persist_assignment_effects(
             pool_changes[pid] = change[auto_enroll.POOL_FIELD]
     if pool_changes:
         owner_update.update(auto_enroll.authority_after(user_doc, pool_changes))
+    recurring, recurring_events = recurring_voice_assignments.prepare(
+        transaction,
+        user_ref,
+        user_doc,
+        conversation_id,
+        before,
+        segments,
+        receipt,
+        resolved,
+        person_id=person_id,
+        person=docs.get(person_id),
+        is_user=is_user,
+        rejection=rejection,
+        train=use_for_speech_training,
+    )
     if bookkeeping.enabled:
         bookkeeping.involved = True
         projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}
@@ -154,6 +178,9 @@ def persist_assignment_effects(
             updates = job_updates
             if events:
                 receipt[learning_jobs.JOB_EVENTS_KEY] = events
+    if recurring is not None and user_doc:
+        recurring_voices.write_profiles(transaction, user_ref, user_doc, recurring)
+        bookkeeping.recurring_events = tuple(recurring_events)
     if owner_update:
         transaction.update(user_ref, owner_update)
     for pid, update in updates.items():

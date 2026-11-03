@@ -18,6 +18,7 @@ from database.batch_final_pass import load_reference
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
 from utils.speakers.recurring_voices import near_misses
+from utils.product_telemetry import emit_product_event
 from database.batch_pipeline_store import FirestoreStore
 from database.redis_db import create_bounded_redis_client
 from models.conversation import ConversationSpeakers
@@ -237,7 +238,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
     expected = None
     if recurring_enabled_for(uid, conversation.transcript_segments):
         try:
-            expected = recurring_voices.checkpoint(uid, conversation.id)
+            expected = recurring_voices.checkpoint(uid, conversation.id, receipt=receipt)
         except Exception:
             record_fallback(
                 component='stt_selection',
@@ -246,7 +247,10 @@ def _run(uid, conversation, receipt, load_prints, apply):
                 reason='unavailable',
                 outcome='degraded',
             )
-    cache = {key: {'embedding': vector} for key, vector in load_prints(uid, allow_audio_repair=False).items()}
+    print_options = {'allow_audio_repair': False}
+    if expected is not None:
+        print_options['require_complete'] = True
+    cache = {key: {'embedding': vector} for key, vector in load_prints(uid, **print_options).items()}
     words.sort(key=lambda w: w['timestamp'])
     passed, outcome = run_final_pass(
         pcm,
@@ -370,6 +374,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
                 )
             segment.speaker_identity_status = 'user' if segment.is_user else 'not_user' if pid else 'no_match'
     projected = {s.id: s for s in candidate.transcript_segments}
+    speech_mix = dict(owner=0.0, person=0.0, recurring=0.0, unnamed=0.0)
     for word in outcome['assignments']:
         segment = projected.get(word['segment_id'])
         if segment is not None:
@@ -378,6 +383,17 @@ def _run(uid, conversation, receipt, load_prints, apply):
                 if segment.is_user
                 else 'person' if segment.person_id else 'recurring' if segment.recurring_voice_id else 'unnamed'
             )
-            identity_speech(kind, word['timestamp'][1] - word['timestamp'][0])
+            seconds = max(0, word['timestamp'][1] - word['timestamp'][0])
+            identity_speech(kind, seconds)
+            speech_mix[kind] += seconds
     conversation.transcript_segments = candidate.transcript_segments
     conversation.speaker_resolution = candidate.speaker_resolution
+    emit_product_event(
+        uid=uid,
+        event='Batch Speaker Identity Mix',
+        properties={
+            **speech_mix,
+            'recurring_cohort': 'on' if recurring_enabled_for(uid, conversation.transcript_segments) else 'off',
+            'speakers': len(voice_ids),
+        },
+    )

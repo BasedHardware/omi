@@ -56,6 +56,8 @@ def open_profile(uid, voice_id, blob):
             )
         ):
             return None
+        if len({e['conversation_id'] for e in entries}) != len(entries):
+            return None
         return profile
     except Exception:
         return None
@@ -102,7 +104,7 @@ def _source_token(source):
     return hashlib.sha256(json.dumps(source, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def checkpoint(uid, conversation_id, *, firestore_client=None):
+def checkpoint(uid, conversation_id, *, receipt=None, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user = client.collection('users').document(uid)
     generation = generation_ref(user).get().to_dict()
@@ -110,6 +112,14 @@ def checkpoint(uid, conversation_id, *, firestore_client=None):
     source = user.collection('conversations').document(conversation_id).get().to_dict() or {}
     if not pools.retained(owner) or source.get('private_cloud_sync_enabled') is not True:
         return None
+    if receipt is not None:
+        from database.conversations import decode_manual_speaker_assignments
+
+        current = decode_manual_speaker_assignments(
+            uid, source.get('manual_speaker_assignments'), bool(source.get('manual_speaker_assignments_compressed'))
+        )
+        if current != receipt:
+            return None
     return (owner.get(PRIVACY_VERSION, 0), _source_token(source), generation)
 
 
@@ -153,11 +163,29 @@ def learn(uid, conversation, centroids, prints, expected, *, owner_reserved=Fals
                 current_prints[pid] = pools.usable(uid, {**row, 'id': pid}, owner) or usable_person_voiceprint(row)
             profiles = read_profiles(transaction, user, owner)
             now = datetime.now(timezone.utc).timestamp()
+            first_at = source.get('speaker_recurring_observed_at', now)
+            if not isinstance(first_at, (float, int)) or not 0 <= now - first_at <= pools.MAX_AGE_SECONDS:
+                return {}, [], []
+            created_ids = source.get('speaker_recurring_created_ids') or []
             following, labels, events, outcomes = policy.evaluate(
-                centroids, current_prints, profiles, conversation.id, now, owner_reserved=owner_reserved
+                centroids,
+                current_prints,
+                profiles,
+                conversation.id,
+                now,
+                owner_reserved=owner_reserved,
+                created_ids=created_ids,
+                evidence_at=first_at,
             )
             events.extend('expired' for vid in profiles if policy.active(profiles[vid], now) is None)
             write_profiles(transaction, user, owner, following)
+            transaction.update(
+                user.collection('conversations').document(conversation.id),
+                {
+                    'speaker_recurring_observed_at': first_at,
+                    'speaker_recurring_created_ids': sorted(set(created_ids) | (set(following) - set(profiles))),
+                },
+            )
             return labels, events, outcomes
 
     labels, events, outcomes = _client.run_transactional(client, commit)
@@ -179,3 +207,26 @@ def prepare_retraction(transaction, user, owner, *, conversations=None, person_i
         if updated:
             following[vid] = updated
     return following
+
+
+def suggestable_ids(uid, *, firestore_client=None):
+    """Current retained authority, never a cached segment marker alone."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user = client.collection('users').document(uid)
+
+    @firestore.transactional
+    def read(transaction):
+        owner = user.get(transaction=transaction).to_dict() or {}
+        if not pools.retained(owner):
+            return set()
+        profiles = read_profiles(transaction, user, owner)
+        now = datetime.now(timezone.utc).timestamp()
+        return {
+            vid
+            for vid, profile in profiles.items()
+            if (current := policy.active(profile, now))
+            and current['state'] in {'recurring', 'bound'}
+            and policy.vector(current, now, owner.get('speaker_embedding')) is not None
+        }
+
+    return _client.run_transactional(client, read)
