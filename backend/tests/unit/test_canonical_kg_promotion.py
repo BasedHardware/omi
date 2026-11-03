@@ -278,3 +278,11 @@ def test_invalidate_kg_prunes_citations(monkeypatch):
     mock_prune.assert_called_once()
     assert mock_prune.call_args.args == ("uid-canonical", ["mem_a", "mem_b"])
     assert "db_client" in mock_prune.call_args.kwargs
+
+
+def test_kg_bookkeeping_does_not_advance_product_sync_timestamp():
+    from utils.memory.canonical_kg_promotion import set_canonical_memory_kg_extracted
+
+    client = MagicMock()
+    assert set_canonical_memory_kg_extracted('synthetic-user', 'synthetic-memory', db_client=client)
+    client.document.return_value.update.assert_called_once_with({'kg_extracted': True})

@@ -1,9 +1,12 @@
 # Streaming GPU retirement
 
-Production ships `STT_GPU_FLEET_OFF=false` and the Parakeet guard unsuspended.
-The lead explicitly activates the switch on listen, pusher and all four Cloud Run
-roles after the cost and readiness gates below. The switch selects Soniox for managed live sessions, Modulate for prerecorded
-and PTT work, local ONNX for file VAD, and the existing vendor language probe.
+Production configuration declares `STT_GPU_FLEET_OFF=true`; merging the activation
+change authorizes rollout and must wait for the lead's G0-G3 cost and readiness gates.
+This source declaration is not evidence of serving state. The Parakeet guard stays
+unsuspended until the lead completes the caller rollout and drain below. The switch selects Soniox for managed live sessions, Modulate for prerecorded
+and PTT work, local ONNX for file VAD, and the existing vendor language probe unless `HOSTED_LID_API_URL` supplies a
+separately qualified language-ID service. An unavailable dedicated LID service
+returns to the vendor probe, never the retired shared endpoint.
 It denies Parakeet in static selection, the cost router, default fallback,
 idle failback and direct prerecorded calls. Existing sessions drain during the
 normal rollout. Custom user-funded STT follows its existing path.

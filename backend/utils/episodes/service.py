@@ -83,6 +83,7 @@ from utils.episodes.moment_order import newest_moments, timeline_moments
 from utils.episodes.state import apply_update, clean_text, is_placeholder_heading, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
 from utils.episodes.recorded_recovery import record_walk, record_windows, unconsumed_moments
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,11 @@ logger = logging.getLogger(__name__)
 _LAST_CLOSED_CACHE_MAX = 10_000
 _last_closed_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _last_closed_lock = threading.Lock()
+# An unchanged conflicted close must not retry its transaction on every Home poll.
+# Process-local and short-lived: other replicas and timeline changes can still settle it.
+_CLOSE_CONFLICT_RETRY_SECONDS = 60
+_close_conflicts: dict[str, tuple[tuple[Any, ...], float]] = {}
+_close_conflicts_lock = threading.Lock()
 _OUTPUT_LANGUAGE_CACHE_SECONDS = 4 * 60 * 60
 _OUTPUT_LANGUAGE_CACHE_MAX = 20_000
 _output_language_cache: dict[tuple[str, str, str, str, int], tuple[str, float]] = {}
@@ -1806,7 +1812,31 @@ def live_episode(uid: str, *, collaborators: Optional[Collaborators] = None) -> 
     c = collaborators or Collaborators()
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     now = _now(c)
-    episode = _close_stale_current(uid, episode, c, now)
+    fingerprint = (
+        (episode or {}).get('id'),
+        (episode or {}).get('state_version'),
+        (episode or {}).get('last_activity_at'),
+    )
+    with _close_conflicts_lock:
+        cached = _close_conflicts.get(uid)
+        deferred = cached is not None and cached[0] == fingerprint and time.monotonic() < cached[1]
+        if cached is not None and not deferred:
+            _close_conflicts.pop(uid, None)
+    if not deferred:
+        try:
+            episode = _close_stale_current(uid, episode, c, now)
+        except episodes_db.EpisodeConflict as error:
+            # Closing is lazy maintenance, not a prerequisite for reading. Never
+            # guess a new ownership boundary or retry a deterministic overlap here.
+            reason = metrics.record_close_conflict(str(error))
+            logger.warning('event=episode_close_conflict reason=%s', reason)
+            record_fallback(
+                component='other', from_mode='episode_close', to_mode='live_view', reason='other', outcome='degraded'
+            )
+            with _close_conflicts_lock:
+                if len(_close_conflicts) >= _LAST_CLOSED_CACHE_MAX:
+                    _close_conflicts.clear()
+                _close_conflicts[uid] = (fingerprint, time.monotonic() + _CLOSE_CONFLICT_RETRY_SECONDS)
     return visible_episode(uid, episode, firestore_client=c.firestore_client) if policy.is_live(episode) else None
 
 
@@ -1854,6 +1884,8 @@ def last_closed_episode(
 def reset_for_tests() -> None:
     with _last_closed_lock:
         _last_closed_cache.clear()
+    with _close_conflicts_lock:
+        _close_conflicts.clear()
     with _output_language_cache_lock:
         _output_language_cache.clear()
 

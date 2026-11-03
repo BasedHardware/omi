@@ -57,6 +57,46 @@ def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_
     assert "1 passed" in result.stdout
 
 
+@pytest.mark.parametrize("file_isolation", ["0", "1"])
+def test_explicit_file_list_honors_hermetic_e2e_paths(tmp_path, file_isolation):
+    selected_tests = tmp_path / "selected-tests.txt"
+    selected_tests.write_text(
+        "tests/unit/test_example.py\ntesting/e2e/test_listen_pusher_wire_contract.py\n", encoding="utf-8", newline="\n"
+    )
+    captured_arguments = tmp_path / "pytest-arguments.txt"
+    fake_python = tmp_path / "fake-python"
+    _write_executable(
+        fake_python,
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"-m\" && \"$2\" == \"pytest\" ]]; then\n"
+        "  printf '%s\\n' \"$@\" >> \"$CAPTURED_ARGUMENTS\"\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    result = subprocess.run(
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
+        cwd=BACKEND_DIR,
+        env=os.environ
+        | {
+            "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
+            "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
+            "BACKEND_PYTEST_FILE_ISOLATION": file_isolation,
+            "BACKEND_PYTEST_PARALLEL_SESSION": "0",
+            "BACKEND_PYTEST_XDIST": "0",
+            "BACKEND_PYTEST_WORKERS": "1",
+            "CAPTURED_ARGUMENTS": bash_path(captured_arguments, cwd=BACKEND_DIR),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    arguments = captured_arguments.read_text().splitlines()
+    assert arguments.count("tests/unit/test_example.py") == 1
+    assert arguments.count("testing/e2e/test_listen_pusher_wire_contract.py") == 1
+
+
 def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):
     selected_tests = tmp_path / "selected-tests.txt"
     selected_tests.write_text("tests/unit/test_example_failure.py\n", encoding="utf-8", newline="\n")

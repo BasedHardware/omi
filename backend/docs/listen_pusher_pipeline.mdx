@@ -6075,18 +6075,37 @@ journals every pendant frame, visible or not, through the mobile Standard batch
 route above (lossless WAL, `/v2/sync-local-files`, batch record), so the batch
 lane owns the transcript.
 
-Listen defers the cloud stream rather than dropping it. A listen conversation is
-kept alive, finalized and registered for batch only by live segments, so audio
-received with no stream would be deleted as an empty conversation. No provider
-socket opens at session start (no vendor, no Parakeet window leg); the first
-audio that reaches the socket (the journal refused it, e.g. low disk or a journal
-failure) opens today's stream and counts in
-`omi_listen_deferred_stream_opened_total{deferred_by}`. At teardown,
-`omi_listen_deferred_stream_open_seconds{deferred_by,provider}` observes how long
-that stream stayed open: an upper bound on its provider connection time, which
-separates a stop-time flush (seconds) from a session that streamed throughout.
-`CLOUD_LIVE_STT_MODE=off` uses the same deferral. Setting the kill switch off revokes at the next
-renewal; the client streams again and the stream opens on its first audio.
+Listen opens no cloud provider socket at session start. With
+`LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED` (default on), the first decoded audio that
+leaks through this socket claims durable server-batch ownership before original
+archive append. The transaction preserves metadata and sets
+`external_data.server_batch_only=true`,
+`external_data.listen_preview_batch_custody=true`, `record_lane_owner=batch_live_v1`
+and capture language (`multi` for auto/undeclared). Consent, lifecycle and owner
+checks must pass, and the archive must be durable. The STT buffer is cleared;
+the first-frame claim/archive handoff is joined through cancellation before
+decoded-buffer teardown; originals commit exact sample bounds and teardown registers the batch obligation
+without live transcript segments. A failed claim falls back to the previous live
+open once per recording, counted by
+`omi_listen_preview_batch_custody_total{outcome="live_fallback"}`; successful claims
+use outcome `promoted`. Durable claims survive rollback and reconnect, subject to
+privacy and request compatibility checks.
+
+Setting `LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED=false` restores deferred live opens
+for unclaimed recordings. `CLOUD_LIVE_STT_MODE=off` sessions without local-preview
+admission retain their previous deferred-open behavior. Live fallback opens count
+in `omi_listen_deferred_stream_opened_total{deferred_by}`; teardown records their
+connection lifetime in
+`omi_listen_deferred_stream_open_seconds{deferred_by,provider}`.
+
+Plain `parakeet` is excluded from streaming defaults and explicit model selection;
+`STT_STREAMING_PARAKEET_SLOT_ENABLED` defaults off and restores the default and
+connection-fallback slots when true, including an already-pinned two-vendor model
+list; no `STT_SERVICE_MODELS` literal change is needed. This does not change
+`parakeet-window`, PTT or prerecorded routing, and cannot override `STT_GPU_FLEET_OFF`.
+With the plain slot off, stale streaming lists containing `parakeet` also admit
+the canonical vendor defaults after their configured models. Managed sessions
+therefore fall through to Modulate/Soniox instead of refusing supported English.
 
 ### Forward canonical audio archive (default off)
 
