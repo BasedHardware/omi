@@ -11,3 +11,38 @@ List<ServerConversation> retainSuppressedHomeMembers(
       if (held[id] case final member? when present.add(id)) member,
   ];
 }
+
+/// Only acknowledge full, settled source snapshots that this client can restore.
+Map<String, List<ServerConversation>> acknowledgeLoadedHomeMembers(
+    Map<String, List<ServerConversation>> episodes, List<ServerConversation> source) {
+  final loaded = {for (final c in source) c.id: c};
+  return {
+    for (final entry in episodes.entries)
+      entry.key: [
+        for (final member in entry.value)
+          if (loaded[member.id] case final c?
+              when c.status == ConversationStatus.completed &&
+                  !c.isHiddenFromDefaultList &&
+                  !c.isLocked &&
+                  !c.processingDeferred &&
+                  c.clientProcessing == null &&
+                  !c.summaryRetryable &&
+                  c.structured.title.trim().isNotEmpty)
+            c,
+      ],
+  };
+}
+
+/// List reads omit transcripts. A title or summary is enough to keep a settled
+/// row ordinary; only completed, otherwise empty captures await speech here.
+bool awaitingHomeTranscript(ServerConversation c) =>
+    c.status == ConversationStatus.completed &&
+    !c.isHiddenFromDefaultList &&
+    !c.isLocked &&
+    !c.summaryRetryable &&
+    !c.processingDeferred &&
+    c.clientProcessing == null &&
+    c.photos.isEmpty &&
+    c.structured.title.trim().isEmpty &&
+    c.structured.overview.trim().isEmpty &&
+    !c.transcriptSegments.any((s) => s.text.trim().isNotEmpty);

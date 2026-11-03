@@ -41,7 +41,75 @@ Episode episode(
       emoji: '📝',
     );
 
+ServerConversation waiting(String id, int minute,
+        {bool locked = false, ConversationStatus status = ConversationStatus.completed}) =>
+    ServerConversation(
+      id: id,
+      createdAt: start.add(Duration(minutes: minute)),
+      startedAt: start.add(Duration(minutes: minute)),
+      finishedAt: start.add(Duration(minutes: minute + 1)),
+      structured: Structured('', ''),
+      isLocked: locked,
+      status: status,
+    );
+
 void main() {
+  test('queued empty captures form contiguous Processing runs with every member reachable', () {
+    final a = waiting('a', 0), b = waiting('b', 2), old = waiting('old', -20);
+    final rows =
+        buildHomeRows([a, b, old], [], enabled: false, groupAwaitingTranscript: true, processingTitle: 'Processing');
+    expect(rows.length, 2);
+    expect(rows.first.conversation.structured.title, 'Processing');
+    expect(rows.first.episode!.members.map((m) => m.id).toSet(), {'a', 'b'});
+    expect(rows.expand((r) => r.episodeConversationIds).toSet(), {'a', 'b', 'old'});
+    expect(rows.every((r) => r.isProcessing), isTrue);
+    expect(buildHomeRows([a, b], [], enabled: false).map((r) => r.conversation.id), ['a', 'b'],
+        reason: 'filtered views keep exact source matches');
+  });
+  test('awaiting speech stays in its episode after the summary deadline', () {
+    final a = waiting('a', 0), b = waiting('b', 2);
+    final rows = buildHomeRows([
+      a,
+      b
+    ], [
+      episode(members: [a, b], moments: [], closedAt: start)
+    ],
+        enabled: true,
+        now: start.add(const Duration(days: 1)),
+        finishingTitle: 'Finishing up…',
+        processingTitle: 'Processing',
+        groupAwaitingTranscript: true);
+    expect(rows.single.isProcessing, isTrue);
+    expect(rows.single.conversation.structured.title, 'Finishing up…');
+    expect(rows.single.episode!.members.length, 2);
+  });
+  test('ready, locked and in-flight rows break waiting runs and remain ordinary', () {
+    final ready = conversation('ready');
+    final locked = waiting('locked', 2, locked: true);
+    final pending = waiting('pending', 3, status: ConversationStatus.processing);
+    final rows = buildHomeRows([waiting('a', 0), ready, locked, pending], [],
+        enabled: false, groupAwaitingTranscript: true, processingTitle: 'Processing');
+    for (final c in [ready, locked, pending]) {
+      expect(rows.singleWhere((r) => r.conversation.id == c.id).conversation, same(c));
+    }
+  });
+  test('suppression acknowledges full loaded snapshots and keeps unknown or unsettled members visible', () {
+    final source = conversation('a')
+      ..starred = true
+      ..folderId = 'folder';
+    final held = acknowledgeLoadedHomeMembers({
+      'e': [conversation('a'), conversation('unknown'), waiting('waiting', 0), waiting('locked', 1)]
+    }, [
+      source,
+      waiting('waiting', 0),
+      waiting('locked', 1, locked: true)
+    ]);
+    expect(held['e'], [same(source)]);
+    final restored = retainSuppressedHomeMembers([], {source.id: held['e']!.single}, ['a']).single;
+    expect(restored.starred, isTrue);
+    expect(restored.folderId, 'folder');
+  });
+
   test('server omissions remain reachable when an overlay is replaced, on any page', () {
     final a = conversation('a');
     final b = conversation('b');

@@ -21,6 +21,45 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
+  testWidgets('Short clips keeps a matched floor member outside the episode overlay', (tester) async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final short = ServerConversation(
+        id: 'floor', createdAt: now, startedAt: now, structured: Structured('Short clip match', ''), discarded: true);
+    final retained = ServerConversation(id: 'retained', createdAt: now, structured: Structured('Retained member', ''));
+    final conversations =
+        ConversationProvider(isSignedIn: () => true, conversationListFetcher: () async => (items: [short], ok: true));
+    conversations.showShortConversations = true;
+    conversations.conversations = [short];
+    conversations.groupedConversations = {
+      DateTime(now.year, now.month, now.day): [short]
+    };
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+      fetchPage: (_, __, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [
+        Episode(
+            id: 'e',
+            live: false,
+            startedAt: now,
+            lastActivityAt: now,
+            conversationIds: ['floor', 'retained'],
+            members: [retained])
+      ])),
+    );
+    await episodes.refreshLive();
+    await episodes.refreshHome(now.subtract(const Duration(days: 1)), now.add(const Duration(days: 1)));
+    await tester.pumpWidget(
+        await buildTypedConversationScreen(conversations, episodes: episodes, initializePreferences: false));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Short clip match'), findsOneWidget);
+    expect(find.text('Retained member'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    conversations.dispose();
+    episodes.dispose();
+  });
   for (final delay in [const Duration(milliseconds: 200), const Duration(milliseconds: 800)]) {
     testWidgets('cold Home joins staggered providers, overlay delay $delay', (tester) async {
       SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});

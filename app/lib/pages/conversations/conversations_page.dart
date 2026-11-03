@@ -589,7 +589,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final hiddenByLive = episodeLive ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
+        final defaultHome = convoProvider.previousQuery.isEmpty &&
+            !_hasActiveFilter(convoProvider) &&
+            !convoProvider.showShortConversations &&
+            !convoProvider.showDiscardedConversations &&
+            !convoProvider.isSelectionModeActive;
+        final hiddenByLive =
+            episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
@@ -631,7 +637,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final projectedEpisodes = <String, HomeRow>{};
         final projectedMemberIds = <String>{};
         final projectedProcessingIds = <String>{};
-        if (episodesOn && showRecordings && !convoProvider.isSelectionModeActive) {
+        if (defaultHome) {
           final today = DateTime.now();
           final days = conversationsByDate.keys;
           final from = days.isEmpty
@@ -639,15 +645,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               : days.reduce((a, b) => a.isBefore(b) ? a : b);
           final to = DateTime(today.year, today.month, today.day + 1);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_isBootstrapping && !_initialOverlayPending) unawaited(episodes!.refreshHome(from, to));
+            if (mounted && episodesOn && !_isBootstrapping && !_initialOverlayPending)
+              unawaited(episodes!.refreshHome(from, to));
           });
           final projected = buildHomeRows(
             [for (final list in conversationsByDate.values) ...list],
-            episodes!.homeEpisodes,
-            enabled: true,
+            episodes?.homeEpisodes ?? const [],
+            enabled: episodesOn,
+            groupAwaitingTranscript: true,
+            processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
-            deletedIds: {...convoProvider.memoriesToDelete.keys, ...episodes.hiddenHomeMembers},
+            deletedIds: {...convoProvider.memoriesToDelete.keys, ...(episodes?.hiddenHomeMembers ?? const <String>{})},
             knownConversations: snapshot.conversations,
             processingConversations: snapshot.processingConversations,
           );
@@ -662,9 +671,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys}.toList()
           ..sort((a, b) => b.compareTo(a));
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
-        final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
-        final folding =
-            showRecordings && !convoProvider.isSelectionModeActive && !convoProvider.showDiscardedConversations;
+        final hidingBackground = episodesOn && defaultHome;
+        final folding = defaultHome;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,

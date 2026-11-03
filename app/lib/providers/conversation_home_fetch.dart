@@ -9,7 +9,7 @@ extension _ConversationHomeFetch on ConversationProvider {
           selectedStartDate == null &&
           !showShortConversations &&
           !isSelectionModeActive
-      ? heldHomeEpisodes?.call() ?? const {}
+      ? acknowledgeLoadedHomeMembers(heldHomeEpisodes?.call() ?? const {}, conversations)
       : const {};
   ({
     List<ServerConversation> items,
