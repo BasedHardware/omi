@@ -135,19 +135,37 @@ export function taskDueDays(
   return task.due_at ? daysUntilDue(task.due_at, now) : null;
 }
 
+export function editsDueAsDate(
+  task: Pick<ActionItem, 'due' | 'due_at' | 'reminder_origin'>,
+): boolean {
+  return task.due?.kind === 'date' || (!!task.reminder_origin && !task.due_at);
+}
+
 export function editAllDayDue(
-  due: NonNullable<ActionItem['due']>,
+  due: ActionItem['due'],
   date: Date,
 ): NonNullable<ActionItem['due']> {
   const value = formatDateInputValue(date);
-  return { ...due, date: value, expression: value, year_basis: null };
+  const base =
+    due?.kind === 'date'
+      ? due
+      : {
+          kind: 'date' as const,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+  return { ...base, date: value, expression: value, year_basis: null };
 }
 
 export function snoozeAllDayDue(
-  due: NonNullable<ActionItem['due']>,
+  due: ActionItem['due'],
   days: number,
   now: Date = new Date(),
 ): NonNullable<ActionItem['due']> {
+  if (due?.kind !== 'date' || !due.date) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + days);
+    return editAllDayDue(null, date);
+  }
   const remaining = taskDueDays({ due }, now) ?? 0;
   const [year, month, day] = due.date!.split('-').map(Number);
   const value = new Date(Date.UTC(year, month - 1, day + days - Math.min(0, remaining)))

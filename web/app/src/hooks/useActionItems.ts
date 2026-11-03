@@ -13,7 +13,12 @@ import {
 import { groupActionItems } from '@/lib/actionItemGroups';
 import { prependOrReplaceById } from '@/lib/actionItemList';
 import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
-import { taskDueDays, editAllDayDue, snoozeAllDayDue } from '@/lib/taskDue';
+import {
+  taskDueDays,
+  editsDueAsDate,
+  editAllDayDue,
+  snoozeAllDayDue,
+} from '@/lib/taskDue';
 import { formatDateInputValue } from '@/lib/dateInput';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
 
@@ -376,7 +381,7 @@ export function useActionItems(): UseActionItemsReturn {
       const item = items.find((i) => i.id === id);
       if (!item) return;
 
-      if (item.due?.kind === 'date') {
+      if (editsDueAsDate(item)) {
         const due = snoozeAllDayDue(item.due, days);
         setItems((prev) =>
           prev.map((i) => (i.id === id ? { ...i, due_at: null, due } : i)),
@@ -431,8 +436,7 @@ export function useActionItems(): UseActionItemsReturn {
       const item = items.find((i) => i.id === id);
       if (!item) return;
 
-      const due =
-        item.due?.kind === 'date' && date ? editAllDayDue(item.due, date) : null;
+      const due = editsDueAsDate(item) && date ? editAllDayDue(item.due, date) : null;
       const newDueAt = due ? null : date ? date.toISOString() : null;
 
       // Optimistic update
@@ -556,7 +560,7 @@ export function useActionItems(): UseActionItemsReturn {
   // Bulk snooze
   const bulkSnooze = useCallback(
     async (ids: string[], days: number) => {
-      if (items.some((i) => ids.includes(i.id) && i.due?.kind === 'date')) {
+      if (items.some((i) => ids.includes(i.id) && editsDueAsDate(i))) {
         await Promise.all(ids.map((id) => snooze(id, days)));
         return;
       }
@@ -586,7 +590,7 @@ export function useActionItems(): UseActionItemsReturn {
   // Bulk set due date (for no-due-date items)
   const bulkSetDueDate = useCallback(
     async (ids: string[], date: Date | null) => {
-      if (items.some((i) => ids.includes(i.id) && i.due?.kind === 'date')) {
+      if (items.some((i) => ids.includes(i.id) && editsDueAsDate(i))) {
         await Promise.all(ids.map((id) => setDueDate(id, date)));
         return;
       }
