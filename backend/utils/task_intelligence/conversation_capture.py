@@ -370,13 +370,6 @@ def _semantic_occurrences(action_items: Sequence[Any]) -> list[tuple[Any, str, i
     result: list[tuple[Any, str, int]] = []
     for action_item in action_items:
         semantic_key = _semantic_key(action_item)
-        if getattr(action_item, 'reminder_origin', None) is not None and semantic_key in occurrences:
-            # Repeated supporting turns confirm one reminder in this event.
-            previous = next(row[0] for row in result if row[1] == semantic_key)
-            previous.source_segment_ids = list(
-                dict.fromkeys([*previous.source_segment_ids, *action_item.source_segment_ids])
-            )
-            continue
         occurrence = occurrences.get(semantic_key, 0)
         occurrences[semantic_key] = occurrence + 1
         result.append((action_item, semantic_key, occurrence))

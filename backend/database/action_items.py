@@ -1079,8 +1079,6 @@ def update_action_item(
         True if updated successfully, False otherwise
     """
     # Prepare data
-    if 'due_at' in update_data and 'due' not in update_data:
-        update_data = {**update_data, 'due': None}
     update_data = _prepare_action_item_for_write(update_data, partial=True)
 
     user_ref = db.collection('users').document(uid)

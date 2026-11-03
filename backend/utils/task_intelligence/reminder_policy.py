@@ -44,6 +44,31 @@ def enabled() -> bool:
     return value is None or value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
+def source_input(conversation: Any) -> dict[str, Any]:
+    """Minimal recorded-clock/identity input for notes and its retry fingerprint."""
+    fields = (
+        'id',
+        'text',
+        'start',
+        'end',
+        'speaker_id',
+        'speaker_id_scope',
+        'is_user',
+        'person_id',
+        'speaker_label_source',
+        'speaker_identity_status',
+        'speaker_match_source',
+    )
+    return {
+        'started_at': getattr(conversation, 'recorded_start', None) or getattr(conversation, 'started_at', None),
+        'capture_timezone': getattr(conversation, 'capture_timezone', None),
+        'transcript_segments': [
+            {key: getattr(row, key, None) for key in fields}
+            for row in getattr(conversation, 'transcript_segments', ()) or ()
+        ],
+    }
+
+
 def instructions(base: str) -> str:
     return base + '\n\n' + REMINDER_RULES if enabled() else base
 
@@ -255,6 +280,8 @@ def prepare_reminder(
     context = getattr(item, 'context', None) or ''
     if due.kind == 'date' and due.date not in context:
         context = f'{context} Due {due.date} (all day, {due.timezone}).'.strip()
+    if due.kind == 'unresolved' and due.expression and due.expression not in context:
+        context = f'{context} Date needs review: {due.expression}.'.strip()
     if speaker.owner == 'unknown' and not context.startswith('Review speaker:'):
         context = f'Review speaker: confirm who requested this reminder. {context}'.strip()
     updates = dict(

@@ -636,9 +636,14 @@ def create_candidate(
             and claimed_candidate.status in {CandidateStatus.accepted, CandidateStatus.rejected}
         ):
             # A replay must not reopen completed/deleted/edited/rejected human work.
+            merged = _merge_candidate_annotations(claimed_candidate, proposal)
+            # Keep each supporting source revision intact, including after a human
+            # completes/edits the task. Creation history and task state stay immutable.
+            evidence_patch = [ref.model_dump(mode='python', exclude_none=True) for ref in merged.evidence_refs]
+            write_transaction.update(claimed_ref, {'evidence_refs': evidence_patch})
             alias_payload['candidate_id'] = claimed_candidate.candidate_id
             write_transaction.set(alias_ref, alias_payload)
-            return claimed_candidate
+            return claimed_candidate.model_copy(update={'evidence_refs': merged.evidence_refs})
         if (
             claimed_candidate is not None
             and (reusable_pending or reusable_active_accept)

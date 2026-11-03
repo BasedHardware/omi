@@ -162,6 +162,10 @@ def _notes_packet_identity(uid: str) -> dict[str, Any]:
 
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
     open_loop_out = kwargs.pop('open_loop_out', None)
+    from utils.task_intelligence import reminder_policy
+
+    if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
+        kwargs['reminder_source'] = reminder_policy.source_input(conversation)
     if not dedupe_enabled() or hashes is None:
         return generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     digest = fingerprint(

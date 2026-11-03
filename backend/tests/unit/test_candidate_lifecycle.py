@@ -2016,3 +2016,42 @@ def test_reminder_rollback_before_provider_attempt_cancels_claimed_intent(fake_d
     outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', candidate.candidate_id)]
     assert outbox['status'] == 'suppressed'
     assert outbox.get('provider_attempt_outcome') == 'not_sent'
+
+
+def test_reminder_repeats_preserve_each_exact_source_revision(fake_db):
+    def proposal(turn):
+        return reminder_proposal(
+            evidence_refs=[
+                {
+                    'kind': 'conversation',
+                    'id': 'synthetic-conversation',
+                    'scope': 'canonical',
+                    'transcript_segment_ids': [f'synthetic-turn-{turn}'],
+                    'version': f'synthetic-input-{turn}',
+                }
+            ]
+        )
+
+    first = candidates_db.create_candidate(
+        'user-1', proposal(1), idempotency_key='synthetic-repeat-1', account_generation=3
+    )
+    second = candidates_db.create_candidate(
+        'user-1', proposal(2), idempotency_key='synthetic-repeat-2', account_generation=3
+    )
+    assert first.candidate_id == second.candidate_id
+    assert [(ref.transcript_segment_ids, ref.version) for ref in second.evidence_refs] == [
+        (['synthetic-turn-1'], 'synthetic-input-1'),
+        (['synthetic-turn-2'], 'synthetic-input-2'),
+    ]
+    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'action_items', receipt.task_id)
+    fake_db.rows[path].update(description='Owner revised this', status='completed', completed=True)
+    before = deepcopy(fake_db.rows[path])
+    third = candidates_db.create_candidate(
+        'user-1', proposal(3), idempotency_key='synthetic-repeat-3', account_generation=3
+    )
+    assert third.candidate_id == first.candidate_id
+    assert len(third.evidence_refs) == 3
+    assert third.evidence_refs[2].transcript_segment_ids == ['synthetic-turn-3']
+    assert third.evidence_refs[2].version == 'synthetic-input-3'
+    assert fake_db.rows[path] == before

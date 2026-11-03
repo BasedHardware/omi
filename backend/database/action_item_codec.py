@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     action_item_data = dict(action_item_data)
+    if partial and 'due_at' in action_item_data and 'due' not in action_item_data:
+        action_item_data['due'] = None
     if action_item_data.get('due') is not None:
         from models.task_due import TaskDue
 

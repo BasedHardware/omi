@@ -283,6 +283,9 @@ class ActionItemResponse(BaseModel):
             # without storing a presentation suffix in the owner's editable text.
             data['description'] = f"{data.get('description', '')} (due {due['date']}, all day)"
             data['due_at'] = None
+        elif isinstance(due, dict) and due.get('kind') == 'unresolved' and due.get('expression'):
+            data['description'] = f"{data.get('description', '')} (date needs review: {due['expression']})"
+            data['due_at'] = None
         if "status" not in data and "completed" in data:
             if data.get("deleted"):
                 data["status"] = TaskStatus.cancelled
