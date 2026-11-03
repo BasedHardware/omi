@@ -113,6 +113,18 @@ def test_bind_racing_account_wipe_leaves_no_profile(recurring, monkeypatch, orde
     assert list(user.collection(recurring_voices.COLLECTION).stream()) == []
 
 
+def test_manual_binding_bumps_people_generation_atomically(recurring):
+    client, uid, user, _ = recurring
+    from database.people_generation import generation_ref
+
+    head = generation_ref(user)
+    before = (head.get().to_dict() or {}).get('generation', 0)
+    conversations.assign_conversation_speaker(uid, 'source', person_id='p', segment_ids=['s1'], firestore_client=client)
+    assert head.get().to_dict()['generation'] == before + 1
+    row = user.collection(recurring_voices.COLLECTION).document('v').get().to_dict()
+    assert recurring_voices.open_profile(uid, 'v', row['sealed'])['bound_person_id'] == 'p'
+
+
 @pytest.mark.parametrize('setting', ['save_other_voice_profiles', 'private_cloud_sync_enabled'])
 def test_optout_scrubs_paged_transcripts_preserving_concurrent_edits_and_encoding(recurring, monkeypatch, setting):
     client, uid, user, segments = recurring
@@ -135,6 +147,7 @@ def test_optout_scrubs_paged_transcripts_preserving_concurrent_edits_and_encodin
     monkeypatch.setattr(recurring_voice_privacy._client, 'run_transactional', concurrent_edit)
     speaker_auto_enroll.update_privacy(uid, {setting: False}, firestore_client=client)
     assert user.get().to_dict()[recurring_voices.INDEX] == {}
+    assert list(user.collection(recurring_voices.COLLECTION).stream()) == []
     for snapshot in user.collection('conversations').stream():
         raw = snapshot.to_dict()
         decoded = conversations.decode_transcript_segments_verified(
@@ -149,3 +162,74 @@ def test_optout_scrubs_paged_transcripts_preserving_concurrent_edits_and_encodin
             assert isinstance(raw['transcript_segments'], bytes)
     # Retry is harmless, including after the profile authority has been cleared.
     speaker_auto_enroll.update_privacy(uid, {setting: False}, firestore_client=client)
+
+
+@pytest.fixture
+def processing(recurring, monkeypatch):
+    from database import dream_dirty
+
+    client, uid, user, segments = recurring
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(dream_dirty, 'mark_dirty', lambda *a, **kw: None)
+    return client, uid, user, segments
+
+
+@pytest.mark.parametrize('writer', ['persist_processing_result_with_lifecycle', 'upsert_conversation_with_lifecycle'])
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('setting', ['save_other_voice_profiles', 'private_cloud_sync_enabled'])
+def test_scrub_then_late_processing_save_cannot_restore_pointer(processing, setting, level, writer):
+    client, uid, user, segments = processing
+    user.collection('conversations').document('source').update({'data_protection_level': level})
+    # The processor already holds the final pass result when consent changes.
+    late = dict(id='source', transcript_segments=segments, data_protection_level=level, status='completed')
+    speaker_auto_enroll.update_privacy(uid, {setting: False}, firestore_client=client)
+    assert list(user.collection(recurring_voices.COLLECTION).stream()) == []
+    result = getattr(conversations, writer)(uid, late)
+    if writer == 'persist_processing_result_with_lifecycle':
+        assert result is True
+    raw = user.collection('conversations').document('source').get().to_dict()
+    decoded = conversations.decode_transcript_segments_verified(
+        uid, raw['transcript_segments'], raw['transcript_segments_compressed']
+    )
+    assert decoded[0]['text'] == 'synthetic' and 'recurring_voice_id' not in decoded[0]
+    assert isinstance(raw['transcript_segments'], str if level == 'enhanced' else bytes)
+
+
+def test_processing_save_contending_with_optout_is_scrubbed(processing, monkeypatch):
+    client, uid, user, segments = processing
+    checked, resume, withdrawing = Event(), Event(), Event()
+    original = recurring_voices.active_ids
+
+    def pause(transaction, owner):
+        result = original(transaction, owner)
+        checked.set()
+        assert resume.wait(15), 'processing test timed out'
+        return result
+
+    def withdraw():
+        withdrawing.set()
+        speaker_auto_enroll.update_privacy(uid, {'save_other_voice_profiles': False}, firestore_client=client)
+
+    monkeypatch.setattr(recurring_voices, 'active_ids', pause)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        saving = pool.submit(
+            conversations.persist_processing_result_with_lifecycle,
+            uid,
+            dict(id='source', transcript_segments=segments, data_protection_level='enhanced', status='completed'),
+        )
+        try:
+            assert checked.wait(15)
+            optout = pool.submit(withdraw)
+            assert withdrawing.wait(15)
+            assert not optout.done()
+        finally:
+            resume.set()
+        assert saving.result(timeout=30) is True
+        optout.result(timeout=30)
+    raw = user.collection('conversations').document('source').get().to_dict()
+    decoded = conversations.decode_transcript_segments_verified(
+        uid, raw['transcript_segments'], raw['transcript_segments_compressed']
+    )
+    assert decoded[0]['text'] == 'synthetic' and 'recurring_voice_id' not in decoded[0]
+    assert list(user.collection(recurring_voices.COLLECTION).stream()) == []

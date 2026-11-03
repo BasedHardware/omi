@@ -169,7 +169,7 @@ def test_conversation_and_person_delete_remove_sealed_evidence(db):
     db.rows[('users', 'u')][store.INDEX]['v'] = store.pools.pool_token(blob)
     speaker_auto_enroll.revoke_person('u', 'p', firestore_client=db)
     assert db.rows[('users', 'u')][store.INDEX] == {}
-    assert db.rows[('users', 'u', store.COLLECTION, 'v')] == {}
+    assert ('users', 'u', store.COLLECTION, 'v') not in db.rows
 
 
 def test_real_assignment_transaction_binds_and_rejection_clears_authority(db, monkeypatch):
@@ -355,3 +355,49 @@ def test_assignment_http_response_cannot_return_a_revoked_pointer(db, assignment
     response = assignment_http.patch('/v1/conversations/c1/assign-speaker/1', params=params)
     assert response.status_code == 200, response.text
     assert 'recurring_voice_id' not in response.json()['transcript_segments'][0]
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('revocation', ['active', 'consent', 'sync', 'rejected', 'evicted', 'ttl', 'expired'])
+def test_processing_write_uses_transactional_profile_authority(db, level, revocation):
+    from database import conversations, recurring_voice_privacy
+
+    if revocation in {'consent', 'sync'}:
+        setting = 'save_other_voice_profiles' if revocation == 'consent' else 'private_cloud_sync_enabled'
+        db.rows[('users', 'u')][setting] = False
+    elif revocation == 'evicted':
+        db.rows[('users', 'u')][store.INDEX] = {}
+    elif revocation == 'ttl':
+        db.rows.pop(('users', 'u', store.COLLECTION, 'v'))
+    elif revocation in {'expired', 'rejected'}:
+        profile = store.open_profile('u', 'v', db.rows[('users', 'u', store.COLLECTION, 'v')]['sealed'])
+        if revocation == 'expired':
+            for entry in profile['entries']:
+                entry['at'] = NOW - store.pools.MAX_AGE_SECONDS - 1
+        else:
+            profile['state'] = 'rejected'
+        blob = store.seal('u', 'v', profile)
+        db.rows[('users', 'u', store.COLLECTION, 'v')]['sealed'] = blob
+        db.rows[('users', 'u')][store.INDEX]['v'] = store.pools.pool_token(blob)
+    data = conversations.encode_conversation_for_write('u', {'transcript_segments': segments()}, level)
+    data['data_protection_level'] = level
+    user = db.collection('users').document('u')
+    transaction = db.transaction()
+    recurring_voice_privacy.filter_processing_write(transaction, user, data)
+    transaction.update(user.collection('conversations').document('c1'), data)
+    decoded = conversations.decode_transcript_segments_verified(
+        'u', data['transcript_segments'], data['transcript_segments_compressed']
+    )
+    assert (decoded[0].get('recurring_voice_id') == 'v') == (revocation == 'active')
+    assert decoded[0]['text'] == 'hello'
+    assert isinstance(data['transcript_segments'], str if level == 'enhanced' else bytes)
+
+
+def test_processing_without_recurring_pointer_never_reads_profile_authority(db, monkeypatch):
+    from database import recurring_voice_privacy
+
+    monkeypatch.setattr(store, 'active_ids', lambda *a: pytest.fail('unexpected recurring read'))
+    user = db.collection('users').document('u')
+    data = {'transcript_segments': [{'text': 'plain'}]}
+    recurring_voice_privacy.filter_processing_write(db.transaction(), user, data)
+    assert data == {'transcript_segments': [{'text': 'plain'}]}

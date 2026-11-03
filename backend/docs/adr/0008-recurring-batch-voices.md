@@ -48,6 +48,8 @@ deletion clears bound profiles; privacy opt-out clears all profiles atomically
 with consent and increments the existing privacy generation. Account wipe
 removes the user subtree. Every recurring-profile mutation reuses the account
 deletion fence within its transaction. Cleanup never depends on the feature switch.
+Eviction, retraction and opt-out delete removed profile documents in the same
+transaction as the authority update; they never leave unexpiring empty documents.
 
 A transcript's `recurring_voice_id` is a revocable pointer. Conversation readers
 and suggestion readers honor it only while consent holds and the authoritative
@@ -60,6 +62,9 @@ IDs at a time and re-reads/rewrites one transcript per transaction, preserving
 its protection level and concurrent edits. A failed sweep propagates for retry;
 repeating the opt-out retries the idempotent sweep from the start. Readers deny
 links throughout cleanup, including on a sweep failure.
+Processing saves recheck consent and active profile authority in their transcript
+write transaction. A save before opt-out is scrubbed; a late save after the scan
+cannot restore a revoked pointer. This also applies to legacy processing upserts.
 
 Ship on by default, nested under batch-final-pass admission, with
 `SPEAKER_RECURRING_VOICES_ENABLED` as the kill switch and

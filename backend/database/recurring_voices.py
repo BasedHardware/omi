@@ -88,16 +88,19 @@ def write_profiles(transaction, user, owner, profiles):
     index = {}
     for vid in set(_index(owner)) | set(profiles):
         profile = profiles.get(vid)
-        blob = seal(user.id, vid, profile) if profile else None
-        expiry = min(e['at'] + pools.MAX_AGE_SECONDS for e in profile['entries']) if profile else 0
-        if profile and profile['state'] == 'candidate':
+        ref = user.collection(COLLECTION).document(vid)
+        if not profile:
+            transaction.delete(ref)
+            continue
+        blob = seal(user.id, vid, profile)
+        expiry = min(e['at'] + pools.MAX_AGE_SECONDS for e in profile['entries'])
+        if profile['state'] == 'candidate':
             expiry = min(expiry, min(e['at'] for e in profile['entries']) + policy.CANDIDATE_AGE)
         transaction.set(
-            user.collection(COLLECTION).document(vid),
-            {'sealed': blob, 'expires_at': datetime.fromtimestamp(expiry, timezone.utc)} if blob else {},
+            ref,
+            {'sealed': blob, 'expires_at': datetime.fromtimestamp(expiry, timezone.utc)},
         )
-        if blob:
-            index[vid] = pools.pool_token(blob)
+        index[vid] = pools.pool_token(blob)
     transaction.update(user, {INDEX: index})
 
 
@@ -213,6 +216,22 @@ def prepare_retraction(transaction, user, owner, *, conversations=None, person_i
     return following
 
 
+def active_ids(transaction, user):
+    """Read current authority in the caller's transaction, before any writes."""
+    owner = user.get(transaction=transaction).to_dict() or {}
+    if not pools.retained(owner):
+        return set()
+    profiles = read_profiles(transaction, user, owner)
+    now = datetime.now(timezone.utc).timestamp()
+    return {
+        vid
+        for vid, profile in profiles.items()
+        if (current := policy.active(profile, now))
+        and current['state'] in {'recurring', 'bound'}
+        and policy.vector(current, now, owner.get('speaker_embedding')) is not None
+    }
+
+
 def suggestable_ids(uid, *, firestore_client=None):
     """Current retained authority, never a cached segment marker alone."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -220,17 +239,6 @@ def suggestable_ids(uid, *, firestore_client=None):
 
     @firestore.transactional
     def read(transaction):
-        owner = user.get(transaction=transaction).to_dict() or {}
-        if not pools.retained(owner):
-            return set()
-        profiles = read_profiles(transaction, user, owner)
-        now = datetime.now(timezone.utc).timestamp()
-        return {
-            vid
-            for vid, profile in profiles.items()
-            if (current := policy.active(profile, now))
-            and current['state'] in {'recurring', 'bound'}
-            and policy.vector(current, now, owner.get('speaker_embedding')) is not None
-        }
+        return active_ids(transaction, user)
 
     return _client.run_transactional(client, read)

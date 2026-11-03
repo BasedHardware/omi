@@ -160,6 +160,9 @@ Recurring IDs are revocable pointers: readers drop them when consent or an activ
 profile is missing, or after rejection. Opt-out additionally scrubs stored IDs
 in pages of 100, with one transcript per transaction. If cleanup fails, repeat
 the opt-out to retry the idempotent sweep; read-time revocation remains active.
+Processing saves validate consent and active profiles in the transcript write
+transaction, preventing late processing results from undoing the scrub. Profile
+removal deletes the document atomically with its authority-index update.
 Expiry and eviction leave only inert stored pointers until transcript deletion.
 
 Controls: `SPEAKER_RECURRING_VOICES_ENABLED=false` stops new learning, matching

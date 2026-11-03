@@ -9,6 +9,38 @@ from utils.observability.fallback import record_fallback
 SCRUB_PAGE_SIZE = 100
 
 
+def filter_processing_write(transaction, user, data):
+    """Fence a late processing save against opt-out and profile revocation.
+
+    The owner/profile reads share the transcript write's transaction. Either
+    the save wins and the opt-out scrub erases it, or the save observes revoked
+    authority (including on retry) and cannot restore a scrubbed pointer.
+    """
+    from database import conversations
+
+    if 'transcript_segments' not in data:
+        return
+    segments = conversations._decode_transcript_segments_blob(  # pyright: ignore[reportPrivateUsage]
+        user.id,
+        data['transcript_segments'],
+        bool(data.get('transcript_segments_compressed')),
+        require_decryption=True,
+    )
+    if not any('recurring_voice_id' in s for s in segments):
+        return
+    allowed = recurring_voices.active_ids(transaction, user)
+    changed = False
+    for segment in segments:
+        if 'recurring_voice_id' in segment and segment['recurring_voice_id'] not in allowed:
+            segment.pop('recurring_voice_id')
+            changed = True
+    if changed:
+        data['transcript_segments'] = conversations._protect_json_value(  # pyright: ignore[reportPrivateUsage]
+            segments, user.id, data.get('data_protection_level', 'standard')
+        )
+        data['transcript_segments_compressed'] = True
+
+
 def filter_segments(uid, segments, *, firestore_client=None):
     """Read boundary: never expose a stale, expired or rejected recurring link."""
     if not any(isinstance(s, dict) and s.get('recurring_voice_id') for s in segments):
@@ -29,6 +61,8 @@ def scrub_transcripts(uid, *, firestore_client):
     Retries start from the beginning and are idempotent. A concurrent edit is
     re-read rather than overwritten; a wipe fences the write. Consent/profile
     readers revoke links immediately, including while this sweep is running.
+    Processing saves validate authority in their write transaction, so a save
+    after this scan passed its document cannot put the pointer back.
     """
     from database import conversations
 

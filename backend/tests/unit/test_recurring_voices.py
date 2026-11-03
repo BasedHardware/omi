@@ -107,10 +107,13 @@ def test_codec_binds_uid_and_voice_id_fails_closed(monkeypatch):
 
 
 def test_additive_field_is_persisted_without_changing_openapi():
+    from models.developer_transcript import SimpleTranscriptSegment
+
     segment = TranscriptSegment(text='hello', start=0, end=30, is_user=False, recurring_voice_id='private-id')
     assert segment.model_dump()['recurring_voice_id'] == 'private-id'
     assert segment.model_dump(mode='json')['recurring_voice_id'] == 'private-id'
     assert 'recurring_voice_id' not in TranscriptSegment.model_json_schema()['properties']
+    assert 'recurring_voice_id' not in SimpleTranscriptSegment(**segment.model_dump()).model_dump(mode='json')
 
 
 @pytest.fixture
@@ -156,7 +159,7 @@ def test_transaction_fences_concurrent_optout_source_change_and_deletion(store):
     store.rows[('users', 'u', 'conversations', 'c1')].pop('deleted')
     speaker_auto_enroll.update_privacy('u', {'save_other_voice_profiles': False}, firestore_client=store)
     assert store.rows[('users', 'u')][db.INDEX] == {}
-    assert not store.rows[('users', 'u', db.COLLECTION, next(iter(previous[('users', 'u')][db.INDEX])))].get('sealed')
+    assert ('users', 'u', db.COLLECTION, next(iter(previous[('users', 'u')][db.INDEX]))) not in store.rows
     assert db.learn('u', conversation, CENTROIDS, PRINTS, expected, firestore_client=store) == {}
 
 
@@ -169,6 +172,24 @@ def test_replays_cannot_extend_candidate_retention_or_create_more_than_three():
     assert not following and 'created' not in events
     following, _, events, _ = p.evaluate(CENTROIDS, PRINTS, {}, 'c1', NOW, created_ids=['old1', 'old2', 'old3'])
     assert not following and 'created' not in events
+
+
+def test_people_mutation_after_checkpoint_refuses_recurring_publication(store):
+    from types import SimpleNamespace
+    from database.people_generation import write_person
+
+    expected = db.checkpoint('u', 'c1', firestore_client=store)
+    person = store.collection('users').document('u').collection('people').document('new-person')
+    write_person(store, person, 'set', {'speaker_embedding': VOICE})
+    before = deepcopy(store.rows)
+    conversation = SimpleNamespace(
+        id='c1',
+        transcript_segments=[
+            TranscriptSegment(text='x', start=0, end=30, is_user=False, speaker_id_scope='final:batch:x')
+        ],
+    )
+    assert db.learn('u', conversation, CENTROIDS, PRINTS, expected, firestore_client=store) == {}
+    assert store.rows == before and not store.transactions[-1].has_written
 
 
 def test_kill_switch_and_percent_are_nested_under_batch_admission(monkeypatch):

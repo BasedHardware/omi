@@ -28,8 +28,9 @@ class _FakeSnapshot:
 
 
 class _FakeDocumentReference:
-    def __init__(self, client: '_FakeFirestoreClient'):
+    def __init__(self, client: '_FakeFirestoreClient', document_id: str):
         self._client = client
+        self.id = document_id
 
     def get(self, transaction=None) -> _FakeSnapshot:
         return _FakeSnapshot(self._client.document)
@@ -42,8 +43,8 @@ class _FakeCollectionReference:
     def __init__(self, client: '_FakeFirestoreClient'):
         self._client = client
 
-    def document(self, _document_id: str) -> Any:
-        return self._client.doc_ref
+    def document(self, document_id: str) -> Any:
+        return _FakeDocumentReference(self._client, document_id)
 
     def collection(self, _collection_id: str) -> '_FakeCollectionReference':
         return self
@@ -85,7 +86,6 @@ class _FakeFirestoreClient:
         self.commit_errors = list(commit_errors or [])
         self.commits: List[Dict[str, Any] | None] = []
         self.transactions: List[_FakeTransaction] = []
-        self.doc_ref = _FakeDocumentReference(self)
 
     def collection(self, _collection_id: str) -> _FakeCollectionReference:
         return _FakeCollectionReference(self)
