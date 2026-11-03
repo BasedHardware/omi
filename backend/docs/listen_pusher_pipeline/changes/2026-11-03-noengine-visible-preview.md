@@ -12,6 +12,13 @@ Wire ordering, the closed counter labels, and the default-on
 The existing restore cohort and durable server batch ownership remain required;
 15 seconds visible dwell and hide-to-close keep the cost bound on screen.
 
+Renewal revocations use the same sticky transition and clear the declaration so
+owned sessions can attach restore. Without durable server custody, revoked or
+rescinded sessions instead retain an existing normal cloud stream or open the
+normal non-preview stream on their next flush, with the existing demand policy.
+Their audio must not enter the batch-only clear path. This returns those sessions
+to their baseline cost without expanding the paid visible-restore cohort.
+
 The rollout lead deploys the server first, then ships the Dart mobile build.
 PR #24508 was open when implementation started; its server-batch-only grants and
 grant-based restore gate compose with this declaration-and-grant rescind.

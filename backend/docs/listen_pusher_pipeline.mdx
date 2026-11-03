@@ -6078,7 +6078,8 @@ failure) opens today's stream and counts in
 that stream stayed open: an upper bound on its provider connection time, which
 separates a stop-time flush (seconds) from a session that streamed throughout.
 `CLOUD_LIVE_STT_MODE=off` uses the same deferral. Setting the kill switch off revokes at the next
-renewal; the client streams again and the stream opens on its first audio.
+renewal; the declaration is cleared and the session stays revoked. Owned captures
+attach visible restore; unowned captures resume their ordinary non-preview path.
 
 A granted Flutter client whose engine settles unavailable (or exhausts its one
 runtime retry) sends `{"type":"local_preview_engine_unavailable","reason":"locale_asset_missing"}`
@@ -6091,11 +6092,16 @@ sockets do not declare local preview. No engine-available message can un-rescind
 the event. Otherwise listen clears the grant and replaces the immutable request
 with its declaration cleared. Renewal never re-grants. The counter is
 `omi_listen_local_preview_engine_unavailable_total{client_platform,reason}` (bounded
-labels, once per granted socket). Rescinded audio routes through `VisibleRestore.flush`,
-never a full cloud deferred open. Paid restore still requires durable
+labels, once per granted socket). Renewal revocations use the same sticky state
+transition and restore attachment, independently of the engine-event kill switch.
+Rescinded or revoked audio with durable batch custody routes through
+`VisibleRestore.flush`, never a full cloud deferred open. Paid restore requires durable
 `owned(batch_record_capture)` and the existing mobile visible-restore cohort, with
 15 seconds stable transcript visibility before opening Modulate and immediate
-close when hidden. Missing ownership cannot open a stream. Deploy server first,
+close when hidden. Without durable ownership, the session instead retains or opens
+its normal non-preview cloud stream with its existing demand policy. Its audio is
+not cleared by the batch-only flush path. This restores baseline cloud cost; it
+does not expand paid visible restore. Deploy server first,
 then the Dart app build; unknown control kinds remain no-ops for older servers.
 
 ### Forward canonical audio archive (default off)

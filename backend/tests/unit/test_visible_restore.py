@@ -14,6 +14,7 @@ from routers.listen import (
 )
 from routers.listen.contracts import ListenRequest
 from routers.listen.receiver import ListenReceiver
+from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.local_preview import renew_local_preview
 from config.server_batch import owned
 from utils.observability import demand_cohort
@@ -77,6 +78,27 @@ async def flush(h, data=b'\x01\x00' * 160, *, settle=True):
     buffer = bytearray(data)
     await ListenReceiver._flush_stt_buffer(h.receiver, buffer)
     assert buffer == b''
+
+
+async def revoke_grant(h, monkeypatch, cause):
+    if cause == 'engine':
+        monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
+        await ListenReceiver._handle_text(
+            h.receiver, json.dumps({'type': 'local_preview_engine_unavailable', 'reason': 'os_engine_unavailable'})
+        )
+    else:
+        monkeypatch.setenv('LOCAL_PREVIEW_BATCH_ENABLED', 'false')
+        # Policy revocations must work independently of the engine-event kill switch.
+        monkeypatch.setenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'false')
+        monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'false')
+        h.host.receiver = h.receiver
+        await ListenSessionRuntime.refresh_mobile_batch_admission(h.host)
+    assert not h.host.local_preview_batch
+    assert not h.host.request.local_preview
+    assert h.host._local_preview_engine_rescinded
+    monkeypatch.setenv('LOCAL_PREVIEW_BATCH_ENABLED', 'true')
+    assert not renew_local_preview(h.host)
+    assert not local_preview_module.admit_local_preview(h.host)
 
 
 @pytest.mark.asyncio
@@ -331,7 +353,10 @@ async def test_without_capture_clock_hidden_audio_still_offsets_new_provider_wor
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('server_batch_only', [True, False])
-async def test_engine_rescind_routes_only_visible_restore_with_durable_custody(harness, monkeypatch, server_batch_only):
+@pytest.mark.parametrize('cause', ['engine', 'renewal'])
+async def test_revoked_grant_routes_only_visible_restore_with_durable_custody(
+    harness, monkeypatch, server_batch_only, cause
+):
     h = harness
     monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
     h.host.server_batch_only = server_batch_only
@@ -345,17 +370,7 @@ async def test_engine_rescind_routes_only_visible_restore_with_durable_custody(h
     legacy = AsyncMock(side_effect=AssertionError('full cloud stream'))
     monkeypatch.setattr(receiver_module.legacy_recovery, 'flush_stt_buffer', legacy)
     h.receiver.initialize_stt = AsyncMock(side_effect=AssertionError('full cloud initialization'))
-    await ListenReceiver._handle_text(
-        h.receiver,
-        json.dumps(
-            {
-                'type': 'local_preview_engine_unavailable',
-                'reason': 'os_engine_unavailable',
-            }
-        ),
-    )
-    assert not h.host.request.local_preview
-    assert not renew_local_preview(h.host)
+    await revoke_grant(h, monkeypatch, cause)
     assert owned(h.host.batch_record_capture)
     h.restore = h.receiver.visible_restore
     assert h.restore is not None
@@ -391,23 +406,68 @@ async def test_engine_rescind_routes_only_visible_restore_with_durable_custody(h
 
 
 @pytest.mark.asyncio
-async def test_rescind_without_durable_owner_never_opens_full_cloud(harness, monkeypatch):
+@pytest.mark.parametrize('cause', ['engine', 'renewal'])
+@pytest.mark.parametrize('already_open', [False, True])
+async def test_unowned_revoked_grant_returns_to_normal_cloud_path(harness, monkeypatch, cause, already_open):
     h = harness
     h.host.server_batch_only = False
-    h.host.batch_record_capture = {}  # A declaration/grant is not durable server custody.
-    h.host._local_preview_engine_rescinded = True
+    h.host.batch_record_capture = {}  # A grant alone is not durable server custody.
+    h.host.request = ListenRequest(websocket=None, uid='owner', local_preview=True, sample_rate=16000)
+    h.host.local_preview_batch = True
     h.receiver.visible_restore = None
-    h.receiver.cloud_live_suppressed = True
-    h.receiver.initialize_stt = AsyncMock(side_effect=AssertionError('full stream'))
+    h.receiver.cloud_live_suppressed = not already_open
+    h.receiver.stt_socket = h.raw if already_open else None
+    h.receiver.stt_sockets_multi = []
+    h.receiver.note_deferred_stream_opened = Mock()
+    h.receiver.ensure_live_demand_routing = Mock()
+    monitor = h.receiver._stt_death_monitor_task = Mock()
+    demand = h.receiver.live_demand = object()
+
+    # Exercise the real initialization and flush routing; fake only provider IO
+    # and unrelated demand/metering dependencies at their existing seams.
+    h.host.spawn = lambda coro, **kw: coro.close()
+    monkeypatch.setattr(receiver_module, 'capture_batch_preview', Mock())
+    monkeypatch.setattr(receiver_module, 'attach_live_demand', Mock(return_value=None))
+    monkeypatch.setattr(receiver_module, 'should_initialize_vad_gate', lambda **kw: False)
+    monkeypatch.setattr(receiver_module, 'record_live_connection', Mock())
+    h.receiver.recovery = None
+    h.receiver._monitor_stt_death = AsyncMock()
+    h.receiver._serving_provider = lambda: 'soniox'
+    monkeypatch.setattr(receiver_module, 'managed_chain_enabled', lambda host: True)
+    connect = AsyncMock(return_value=h.raw)
+    h.receiver._managed_live_chain = SimpleNamespace(connect=connect)
+    h.receiver._create_stt_socket = lambda *args, **kw: ListenReceiver._connect_stt_socket(h.receiver, *args, **kw)
+    h.receiver.initialize_stt = lambda: ListenReceiver._initialize_stt(h.receiver)
+    h.receiver._drain_stt_sockets = AsyncMock(side_effect=AssertionError('unexpected initialization failure'))
+    h.receiver._window_ring = lambda: None
+    h.receiver._resilient_audio = None
+    h.receiver._capture = Mock()
+    h.receiver._failover_stt_socket = AsyncMock(side_effect=AssertionError('unexpected failover'))
+    h.host.state.fair_use_dg_budget_exhausted = False
+    h.host.state.fair_use_track_dg_usage = False
+    h.host.state.dg_usage_ms_pending = 0
+    h.host.state.stt_terminal_failure = False
+
+    async def send(websocket, state, *, stt_socket, buffer, **kwargs):
+        stt_socket.send(bytes(buffer))
+        buffer.clear()
+        return True
+
+    monkeypatch.setattr(receiver_module, 'flush_live_stt_buffer', send)
+    await revoke_grant(h, monkeypatch, cause)
     assert not owned(h.host.batch_record_capture)
-    restore_module.attach_visible_restore(h.receiver)
     assert h.receiver.visible_restore is None
-    assert await h.receiver._open_deferred_stream()
-    buffer = bytearray(b'\x00\x01')
-    await ListenReceiver._flush_stt_buffer(h.receiver, buffer)
+    monitor.cancel.assert_not_called()
+    assert h.receiver.live_demand is demand
+    h.raw.finish.assert_not_called()
+    data = b'\x00\x01' * 160
+    buffer = bytearray(data)
+    await ListenReceiver._flush_stt_buffer(h.receiver, buffer, force=True)
     assert not buffer
-    h.receiver.initialize_stt.assert_not_awaited()
-    h.dial.assert_not_awaited()
+    h.raw.send.assert_called_once_with(data)
+    assert connect.await_count == int(not already_open)
+    assert not h.receiver.cloud_live_suppressed
+    h.dial.assert_not_awaited()  # Unowned sessions cannot enter paid visible restore.
 
 
 @pytest.mark.asyncio

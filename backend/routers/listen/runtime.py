@@ -38,7 +38,7 @@ from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
-from routers.listen.local_preview import renew_local_preview
+from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -1011,16 +1011,16 @@ class ListenSessionRuntime:
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
+        was_local_preview = bool(getattr(self, 'local_preview_batch', False))
         if renew_local_preview(self):
-            # The local-preview lane owns its own admission (batch lane + private
-            # sync, pinned at session start). Integrations degrade by ruling.
+            # Local-preview admission is pinned; integrations degrade by ruling.
             self.mobile_standard_batch = True
             return
+        if was_local_preview:
+            restore_non_preview_path(self.receiver)
         if mobile_standard_batch_rollout_enabled():
             await warm_rollout_cohorts(self.request.uid)
-        # Conservatively retain live delivery for ANY enabled integration. This
-        # covers transcript consumers as well as audio consumers, and fails
-        # closed if their inventory cannot be read. Re-evaluate on reconnect.
+        # Keep live delivery for any enabled integration; inventory errors retain live.
         checked = getattr(self, '_mobile_batch_checked_at', -float('inf'))
         now = time.monotonic()
         if now - checked < 30:

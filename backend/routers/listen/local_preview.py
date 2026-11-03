@@ -20,6 +20,8 @@ from prometheus_client import Counter, Histogram
 
 from config.batch_live_preview import local_preview_batch_owned
 from config.cloud_live_stt import OFF, STREAM, local_preview_batch_enabled
+from config.server_batch import owned
+from routers.listen.visible_restore import attach_visible_restore
 from utils.metrics import (
     OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
     OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
@@ -109,7 +111,7 @@ def renew_local_preview(host) -> bool:
     """Lease renewal: the kill switch revokes mid-session; nothing else re-admits."""
 
     if getattr(host, 'local_preview_batch', False) and not local_preview_batch_enabled():
-        host.local_preview_batch = False
+        revoke_local_preview(host, reason='kill_switch')
     return bool(getattr(host, 'local_preview_batch', False))
 
 
@@ -166,17 +168,39 @@ def rescind_local_preview(host, payload) -> bool:
         pass  # Telemetry never interrupts capture.
     if os.getenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'true').strip().lower() in {'false', '0', 'off', 'no'}:
         return False
+    revoke_local_preview(host, reason='engine_error')
+    return True
+
+
+def revoke_local_preview(host, *, reason: str) -> None:
+    """Share the one-way state transition for engine failure and lease revocation."""
     host.local_preview_batch = False
+    host._local_preview_pinned = True
     host.request = replace(host.request, local_preview=False)
     host._local_preview_engine_rescinded = True
     record_fallback(
         component='stt_live_session',
         from_mode='local_preview',
-        to_mode='visible_restore',
-        reason='engine_error',
+        to_mode='visible_restore' if batch_only_live_path(host) else 'live',
+        reason=reason,
         outcome='degraded',
     )
-    return True
+
+
+def batch_only_live_path(host) -> bool:
+    """Revoked grants suppress the normal stream only with durable batch custody."""
+    if getattr(host, '_local_preview_engine_rescinded', False) is True:
+        return owned(getattr(host, 'batch_record_capture', None) or {})
+    return getattr(host, 'server_batch_only', False) is True
+
+
+def restore_non_preview_path(receiver) -> None:
+    """Keep owned captures visible-only; unowned captures retain their normal live path."""
+    if batch_only_live_path(receiver.host):
+        close_rescinded_stream(receiver)
+        attach_visible_restore(receiver)
+    # Otherwise leave any existing provider and demand policy intact. A deferred
+    # session opens its normal non-preview stream on the next audio flush.
 
 
 def record_cloud_live_saved_seconds(receiver, request, decoded_audio_bytes: int) -> None:

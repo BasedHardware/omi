@@ -351,7 +351,8 @@ async def test_not_batch_lane_keeps_todays_stream(monkeypatch):
 @pytest.mark.asyncio
 async def test_local_preview_grants_mobile_batch_without_inventory_reads(monkeypatch):
     runtime = object.__new__(ListenSessionRuntime)
-    runtime.request = SimpleNamespace(uid='batch-owner')
+    runtime.request = ListenRequest(websocket=None, uid='batch-owner', local_preview=True)
+    runtime.receiver = make_receiver(runtime)
     runtime.local_preview_batch = True
     runtime.persistence = SimpleNamespace(call=AsyncMock(side_effect=AssertionError('inventory read')))
     monkeypatch.setattr(runtime_module, 'warm_rollout_cohorts', AsyncMock(side_effect=AssertionError('cohort')))
@@ -395,11 +396,11 @@ async def test_engine_unavailable_counts_once_and_rescind_is_sticky(monkeypatch,
     if switch is not None:
         monkeypatch.setenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', switch)
     enabled = switch in {None, 'true'}
-    host = make_host()
+    host = make_host(batch_record_capture={'record_lane_owner': 'batch_live_v1', 'server_batch_only': True})
     assert admit_local_preview(host)
     fake = make_receiver(host)
     attach = Mock()
-    monkeypatch.setattr(receiver_module, 'attach_visible_restore', attach)
+    monkeypatch.setattr(local_preview_module, 'attach_visible_restore', attach)
     labels = dict(client_platform='ios', reason='locale_asset_missing')
     before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
     original_request = host.request
@@ -425,7 +426,7 @@ async def test_engine_unavailable_reason_and_platform_are_bounded(monkeypatch, r
     host = make_host(client_device_context=SimpleNamespace(platform='unbounded-platform'))
     assert admit_local_preview(host)
     fake = make_receiver(host)
-    monkeypatch.setattr(receiver_module, 'attach_visible_restore', Mock())
+    monkeypatch.setattr(local_preview_module, 'attach_visible_restore', Mock())
     labels = dict(client_platform='unknown', reason='engine_error')
     before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
     await ListenReceiver._handle_text(fake, json.dumps({'type': 'local_preview_engine_unavailable', 'reason': raw}))
@@ -437,7 +438,7 @@ async def test_engine_unavailable_reason_and_platform_are_bounded(monkeypatch, r
 async def test_unknown_control_and_ungranted_engine_event_are_noops(monkeypatch, kind):
     fake = make_receiver(make_host(local_preview=False, local_preview_batch=False))
     attach = Mock(side_effect=AssertionError('restore attached'))
-    monkeypatch.setattr(receiver_module, 'attach_visible_restore', attach)
+    monkeypatch.setattr(local_preview_module, 'attach_visible_restore', attach)
     await ListenReceiver._handle_text(fake, json.dumps({'type': kind, 'reason': 'engine_error'}))
     assert fake.host.local_preview_batch is False
     assert fake.host.request.local_preview is False

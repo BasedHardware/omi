@@ -85,7 +85,9 @@ later sockets from declaring; capture end resets it. The server clears the grant
 and declaration and may attach the existing visible Modulate restore, only with
 durable server batch custody and the existing visible-restore cohort. Renewals
 never re-grant. Restore opens only after 15 s of on-screen visibility and closes
-when hidden; flushed audio never opens the full cloud stream. Deploy server
+when hidden. Unowned sessions return to their normal non-preview cloud path,
+including any existing demand policy. A renewal revocation uses the same sticky
+transition and clears the declaration for restore. Deploy server
 first, then the Dart app build. `LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` is on unless
 set off; off counts the event and keeps the existing server grant.
 
