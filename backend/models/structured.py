@@ -1,3 +1,5 @@
+from models.task_due import ReminderIntent, ReminderOrigin, TaskDue
+
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +45,9 @@ except ModuleNotFoundError:
         created_at: Optional[datetime] = Field(default=None, description='When the action item was created')
         updated_at: Optional[datetime] = Field(default=None, description='When the action item was last updated')
         due_at: Optional[datetime] = Field(default=None, description='When the action item is due')
+        due: Optional[TaskDue] = None
+        reminder_intent: Optional[ReminderIntent] = None
+        reminder_origin: Optional[ReminderOrigin] = None
         completed_at: Optional[datetime] = Field(default=None, description='When the action item was completed')
         conversation_id: Optional[str] = Field(
             default=None, description='ID of the conversation this action item came from'

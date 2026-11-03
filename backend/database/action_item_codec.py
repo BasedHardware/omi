@@ -10,6 +10,12 @@ logger = logging.getLogger(__name__)
 def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     action_item_data = dict(action_item_data)
+    if action_item_data.get('due') is not None:
+        from models.task_due import TaskDue
+
+        due = TaskDue.model_validate(action_item_data['due'])
+        action_item_data['due'] = due.model_dump(mode='python')
+        action_item_data['due_at'] = due.instant if due.kind == 'instant' else None
     if not partial or 'status' in action_item_data or 'completed' in action_item_data:
         status = action_item_data.get('status')
         completed = action_item_data.get('completed')

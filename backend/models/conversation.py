@@ -475,6 +475,7 @@ class Conversation(BaseModel):
     updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    capture_timezone: Optional[str] = Field(default=None, max_length=128)
     recorded_start: Optional[datetime] = None
     recorded_end: Optional[datetime] = None
     arrival_at: Optional[datetime] = None
@@ -815,6 +816,7 @@ class CreateConversation(BaseModel):
         # after validation carries that decision through the existing conversion.
         return None
 
+    capture_timezone: Optional[str] = Field(default=None, max_length=128)
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]

@@ -1,3 +1,6 @@
+import type { ActionItem } from '@/types/conversation';
+import { formatDateInputValue } from '@/lib/dateInput';
+
 export interface TaskDueStatus {
   text: string;
   isOverdue: boolean;
@@ -36,7 +39,11 @@ export function formatDueStatus(dueAt: string, now: Date = new Date()): TaskDueS
     return { text: 'Due tomorrow', isOverdue: false, isToday: false };
   } else if (diffDays <= 7) {
     return {
-      text: `Due ${due.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+      text: `Due ${due.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      })}`,
       isOverdue: false,
       isToday: false,
     };
@@ -76,4 +83,75 @@ export function formatDueBadge(
       isOverdue: false,
     };
   }
+}
+
+/** A calendar date is never decoded as a viewer-local due instant. */
+export function allDayDue(
+  due:
+    | { kind: string; date?: string | null; timezone?: string | null }
+    | null
+    | undefined,
+  now: Date = new Date(),
+): TaskDueStatus | null {
+  if (due?.kind !== 'date' || !due.date || !due.timezone) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: due.timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = (key: string) => parts.find((p) => p.type === key)?.value;
+  const today = `${part('year')}-${part('month')}-${part('day')}`;
+  return {
+    text: `${due.date} · All day`,
+    isOverdue: due.date < today,
+    isToday: due.date === today,
+  };
+}
+
+export function taskDueDays(
+  task: {
+    due_at?: string | null;
+    due?: { kind: string; date?: string | null; timezone?: string | null } | null;
+  },
+  now: Date = new Date(),
+): number | null {
+  const due = task.due;
+  if (due?.kind === 'date' && due.date && due.timezone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: due.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const value = (key: string) => Number(parts.find((p) => p.type === key)?.value);
+    const [year, month, day] = due.date.split('-').map(Number);
+    return Math.round(
+      (Date.UTC(year, month - 1, day) -
+        Date.UTC(value('year'), value('month') - 1, value('day'))) /
+        86400000,
+    );
+  }
+  return task.due_at ? daysUntilDue(task.due_at, now) : null;
+}
+
+export function editAllDayDue(
+  due: NonNullable<ActionItem['due']>,
+  date: Date,
+): NonNullable<ActionItem['due']> {
+  const value = formatDateInputValue(date);
+  return { ...due, date: value, expression: value, year_basis: 'spoken' };
+}
+
+export function snoozeAllDayDue(
+  due: NonNullable<ActionItem['due']>,
+  days: number,
+  now: Date = new Date(),
+): NonNullable<ActionItem['due']> {
+  const remaining = taskDueDays({ due }, now) ?? 0;
+  const [year, month, day] = due.date!.split('-').map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day + days - Math.min(0, remaining)))
+    .toISOString()
+    .slice(0, 10);
+  return { ...due, date: value, expression: value, year_basis: 'spoken' };
 }

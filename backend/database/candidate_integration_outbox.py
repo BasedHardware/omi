@@ -234,6 +234,19 @@ def claim_candidate_integration_dispatch(
             return _ClaimApply()
         if terminal or live_lease:
             return _ClaimApply()
+        from utils.task_intelligence.reminder_policy import enabled as reminders_enabled, POLICY_REVISION
+
+        if (
+            payload.get('policy_revision') == POLICY_REVISION
+            and not reminders_enabled()
+            and external_id is None
+            and payload.get('provider_attempt_outcome', 'not_sent') == 'not_sent'
+        ):
+            write_transaction.update(
+                outbox_ref,
+                {'status': 'suppressed', 'resolution_reason': 'reminder_policy_disabled', 'updated_at': claim_time},
+            )
+            return _ClaimApply()
         if external_id is not None:
             if action_ref is not None and action_snapshot is not None and action_snapshot.exists:
                 marker = recorded_export_action_fields(
@@ -375,6 +388,19 @@ def note_candidate_integration_provider_attempt(
             return False
         payload = _snapshot_dict(snapshot)
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
+            return False
+        from utils.task_intelligence.reminder_policy import enabled as reminders_enabled, POLICY_REVISION
+
+        if (
+            payload.get('policy_revision') == POLICY_REVISION
+            and not reminders_enabled()
+            and payload.get('provider_attempt_outcome', 'not_sent') == 'not_sent'
+            and not _recorded_external_task_id(payload)
+        ):
+            write_transaction.update(
+                outbox_ref,
+                {'status': 'suppressed', 'resolution_reason': 'reminder_policy_disabled', 'updated_at': noted_at},
+            )
             return False
         patch: dict[str, Any] = {
             'provider_attempt_outcome': outcome,

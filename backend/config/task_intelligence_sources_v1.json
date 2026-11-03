@@ -237,6 +237,8 @@
       "owner_paths": [
         "backend/utils/conversations/process_conversation.py",
         "backend/utils/conversations/merge_conversations.py",
+        "backend/utils/task_intelligence/conversation_capture.py",
+        "backend/utils/task_intelligence/reminder_policy.py",
         "backend/routers/conversations.py"
       ],
       "test_adapter": "transcript_capture_v2",

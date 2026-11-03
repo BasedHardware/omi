@@ -55,6 +55,7 @@ class SummaryTaskRow:
                     description=self.item.description,
                     owner=TaskOwner(self.item.capture_owner or 'unknown'),
                     due_at=self.item.due_at,
+                    due=self.item.due.model_dump(mode='python') if self.item.due else None,
                     due_confidence=1.0 if self.item.due_at else None,
                 ),
                 'capture_confidence': self.item.capture_confidence if self.item.capture_confidence is not None else 0.5,
@@ -62,11 +63,15 @@ class SummaryTaskRow:
                     self.item.ownership_confidence if self.item.ownership_confidence is not None else 0.5
                 ),
                 'source_surface': 'conversation',
+                'reminder_origin': (
+                    self.item.reminder_origin.model_dump(mode='python') if self.item.reminder_origin else None
+                ),
                 'evidence_refs': [
                     EvidenceRef(
                         kind=EvidenceKind.conversation,
                         scope=EvidenceScope.canonical,
                         id=self.conversation_id,
+                        version=self.item.reminder_origin.input_revision if self.item.reminder_origin else None,
                         transcript_segment_ids=self.item.source_segment_ids,
                     )
                 ],

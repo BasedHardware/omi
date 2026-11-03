@@ -208,7 +208,17 @@ def _canonical_request_value(value: Any) -> Any:
 
 
 def _proposal_request_hash(uid: str, account_generation: int, proposal: CandidateCreate) -> str:
-    canonical = _canonical_request_value(proposal.model_dump(mode='python'))
+    payload = proposal.model_dump(mode='python')
+    if payload.get('reminder_origin') is None:
+        payload.pop('reminder_origin', None)
+    for change in (payload.get('task_change'), (payload.get('workstream_proposal') or {}).get('anchor_task')):
+        if isinstance(change, dict) and change.get('due') is None:
+            change.pop('due', None)
+    origin = payload.get('reminder_origin')
+    if origin:
+        # Processing time is an observation, not retry identity.
+        origin.pop('extracted_at', None)
+    canonical = _canonical_request_value(payload)
     encoded = json.dumps(canonical, sort_keys=True, separators=(',', ':'))
     return _stable_contract_id('request', uid, account_generation, encoded)
 
@@ -258,6 +268,15 @@ def pending_candidate_semantic_identity(proposal: CandidateCreate) -> Optional[s
         workstream_id=proposal.workstream_id,
     )
     encoded = json.dumps(semantic_payload, sort_keys=True, separators=(',', ':'))
+    if proposal.reminder_origin is not None:
+        # Equal wording on unrelated days is not the same reminder. An event/alias
+        # authority can later supply cross-device identity; never guess one here.
+        scope = sorted(ref.id for ref in proposal.evidence_refs if ref.kind.value == 'conversation')
+        due = task_change.due
+        precision = (
+            (due.kind, due.date, due.timezone, due.expression if due.kind == 'unresolved' else None) if due else None
+        )
+        encoded = json.dumps([semantic_payload, scope, precision], sort_keys=True, separators=(',', ':'))
     return _stable_contract_id('semantic', PENDING_CANDIDATE_SEMANTIC_VERSION, encoded)
 
 
@@ -612,6 +631,15 @@ def create_candidate(
             and not candidate_has_lapsed(claimed_candidate, now=now_value)
         )
         if (
+            proposal.reminder_origin is not None
+            and claimed_candidate is not None
+            and claimed_candidate.status in {CandidateStatus.accepted, CandidateStatus.rejected}
+        ):
+            # A replay must not reopen completed/deleted/edited/rejected human work.
+            alias_payload['candidate_id'] = claimed_candidate.candidate_id
+            write_transaction.set(alias_ref, alias_payload)
+            return claimed_candidate
+        if (
             claimed_candidate is not None
             and (reusable_pending or reusable_active_accept)
             and claimed_ref is not None
@@ -806,6 +834,14 @@ def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datet
     if not isinstance(candidate.task_change, TaskCreatePayload):
         raise CandidateConflictError('task create Candidate has invalid payload')
     task = candidate.task_change.model_dump(mode='python', exclude_none=True)
+    if candidate.reminder_origin is not None:
+        task['reminder_origin'] = candidate.reminder_origin.model_dump(mode='python')
+        task['conversation_id'] = next(
+            (ref.id for ref in candidate.evidence_refs if ref.kind.value == 'conversation'), None
+        )
+        if candidate.reminder_origin.review_reason == 'owner_unresolved':
+            # Acceptance is an explicit user confirmation, never a capture gesture.
+            task['owner'] = TaskOwner.user.value
     task.update(
         {
             'id': task_id,
@@ -834,6 +870,10 @@ def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, 
     if not isinstance(candidate.task_change, TaskChangePayload):
         raise CandidateConflictError('task mutation Candidate has invalid payload')
     patch = candidate.task_change.model_dump(mode='python', exclude_unset=True)
+    if candidate.task_change.due is not None:
+        patch['due_at'] = candidate.task_change.due.instant
+    elif 'due_at' in patch and 'due' not in patch:
+        patch['due'] = None
     if candidate.goal_id is not None:
         patch['goal_id'] = candidate.goal_id
     if candidate.workstream_id is not None:
@@ -1004,6 +1044,23 @@ def resolve_task_candidate(
         if summary_row is not None:
             write_transaction.update(summary_row.reference, summary_row.linked_patch(task_id))
 
+        creation_receipt = None
+        if candidate.proposed_action == CandidateAction.create and candidate.reminder_origin is not None:
+            creation_receipt = {
+                'receipt_id': _stable_contract_id('task-create', task_id, account_generation),
+                'task_id': task_id,
+                'revision': 1,
+                'operation': 'create',
+                'after_status': 'active',
+                'source_channel': 'conversation',
+                'actor_kind': 'authenticated_owner',
+                'actor_id': uid,
+                'event_at': resolved_at,
+                'evidence_refs': [ref.model_dump(mode='python', exclude_none=True) for ref in candidate.evidence_refs],
+                'idempotency_key': candidate.idempotency_key,
+                'history_coverage': 'reminder_creation_only',
+            }
+            write_transaction.update(task_ref, {'creation_receipt': creation_receipt})
         candidate_patch = {
             'status': CandidateStatus.accepted.value,
             'resolution_reason': 'accepted',
@@ -1011,6 +1068,8 @@ def resolve_task_candidate(
             'resolved_at': resolved_at,
             'expires_at': None,
         }
+        if creation_receipt is not None:
+            candidate_patch['creation_receipt'] = creation_receipt
         write_transaction.update(candidate_ref, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
             write_transaction.set(
@@ -1021,6 +1080,11 @@ def resolve_task_candidate(
                     'task_id': task_id,
                     'account_generation': account_generation,
                     'status': 'pending',
+                    **(
+                        {'policy_revision': candidate.reminder_origin.policy_revision}
+                        if candidate.reminder_origin
+                        else {}
+                    ),
                     'attempt_count': 0,
                     'created_at': resolved_at,
                     'updated_at': resolved_at,

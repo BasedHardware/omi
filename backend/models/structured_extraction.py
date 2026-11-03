@@ -4,6 +4,7 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from models.task_due import ReminderIntent
 from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
@@ -81,6 +82,7 @@ def _keep_usable_content(data: Any, element_models: Dict[str, Type[BaseModel]]) 
 
 
 class ExtractedActionItem(BaseModel):
+    reminder_intent: Optional[ReminderIntent] = None
     description: str = Field(description="The action item to be completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
     capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
@@ -131,6 +133,7 @@ class ExtractedActionItem(BaseModel):
     def to_action_item(self) -> ActionItem:
         return ActionItem(
             description=self.description,
+            reminder_intent=self.reminder_intent.model_dump(mode='python') if self.reminder_intent else None,
             due_at=self.due_at,
             capture_kind=self.capture_kind,
             capture_confidence=self.capture_confidence,

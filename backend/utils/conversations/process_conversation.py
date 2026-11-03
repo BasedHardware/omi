@@ -686,6 +686,13 @@ def _get_structured(
                 output_language_code=user_language,
                 tz=tz_str,
                 task_intelligence_capture=task_intelligence_capture,
+                reminder_source={
+                    'started_at': getattr(main_conv, 'recorded_start', None) or conv_started_at,
+                    'capture_timezone': getattr(main_conv, 'capture_timezone', None),
+                    'transcript_segments': [
+                        segment.model_dump(mode='python') for segment in main_conv.transcript_segments
+                    ],
+                },
                 existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                 trusted_wake_word_markers=has_wake_word_marker,
                 meeting_context=meeting_context_block,
@@ -2111,7 +2118,9 @@ def _save_action_items(
         _write_action_items(uid, conversation, trigger)
         return
 
-    conversation.structured.action_items = filter_extracted_items(uid, conversation.structured.action_items)
+    conversation.structured.action_items = filter_extracted_items(
+        uid, conversation.structured.action_items, conversation=conversation
+    )
 
     try:
         wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
