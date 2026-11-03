@@ -149,6 +149,8 @@ def rescind_local_preview(host, payload) -> bool:
         reason = LocalPreviewEngineUnavailableReason(payload.get('reason'))
     except (TypeError, ValueError):
         reason = LocalPreviewEngineUnavailableReason.OTHER
+    if reason == LocalPreviewEngineUnavailableReason.UNKNOWN:
+        reason = LocalPreviewEngineUnavailableReason.OTHER
     try:
         platform = getattr(getattr(host, 'client_device_context', None), 'platform', None)
         OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL.labels(

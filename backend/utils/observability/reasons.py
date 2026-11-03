@@ -498,6 +498,7 @@ class LiveSttReason(StrEnum):
 class LocalPreviewEngineUnavailableReason(StrEnum):
     """LivePreviewReason failure wire values; unknown client input folds to OTHER."""
 
+    UNKNOWN = 'unknown'
     OS_TOO_OLD = 'os_too_old'
     OS_ENGINE_UNAVAILABLE = 'os_engine_unavailable'
     LOCALE_UNSUPPORTED = 'locale_unsupported'
