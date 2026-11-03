@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 from database.audio_timeline import get_extension_for_path
 from utils import encryption
 from utils.other.raw_audio_read import read_pack, select_raw_pcm
+from utils.other.raw_audio import decode_capture
 from utils.other.audio_frame_table import resampled_samples
 
 RECONCILE_MAX_OBJECTS = 64
@@ -84,11 +85,23 @@ def _raw_chunk_object_pcm(
         return None, size
     if len(pcm) % 2:
         return None, size
+    if 'raw_capture_rate' in chunk and chunk['raw_capture_rate'] != sample_rate:
+        # Framed projections store native PCM. Compare a whole-object rendition
+        # using the same decoder as raw custody, then select each frame's bounds.
+        # Never skip a committed projection just because its rate differs.
+        try:
+            pcm = decode_capture(
+                pcm,
+                {'format': 'pcm16le', 'sample_rate': str(chunk['raw_capture_rate']), 'channels': '1'},
+                sample_rate,
+            )
+        except Exception:
+            return None, size
     return pcm, size
 
 
 def _chunk_samples(chunk, sample_rate):
-    if 'raw_capture_rate' not in chunk:
+    if 'raw_capture_rate' not in chunk or sample_rate == 16000:
         return chunk['span']['samples']
     offset = chunk['raw_capture_offset_samples']
     rate = chunk['raw_capture_rate']
@@ -100,8 +113,6 @@ def _chunk_samples(chunk, sample_rate):
 def _chunk_pcm(pcm, chunk, sample_rate):
     """Select a span only after caching and charging its entire immutable object."""
     if 'raw_capture_rate' in chunk:
-        if chunk['raw_capture_rate'] != sample_rate and not chunk['path'].startswith('raw-live/'):
-            raise ValueError('framed replay rate cannot be verified')
         return select_raw_pcm(pcm, chunk, sample_rate)
     else:
         if 'raw_offset_samples' not in chunk:
@@ -155,9 +166,7 @@ def verify_frame_overlaps(
             lo, hi = max(start, old_start), min(end, old_end)
             if hi <= lo:
                 continue
-            if capture_rate != sample_rate and not (
-                'raw_capture_rate' in chunk and chunk['path'].startswith(f'raw-live/{uid}/')
-            ):
+            if capture_rate != sample_rate and 'raw_capture_rate' not in chunk:
                 raise ValueError('framed replay rate cannot be verified')
             key = (chunk.get('bucket'), chunk['path'], chunk.get('generation'))
             if key not in decoded:
@@ -280,7 +289,9 @@ def reconcile_committed_prefix(
             break
         chunk, offset_samples = candidates[0]
         source = bucket_for(chunk.get('bucket')) if bucket_for is not None and chunk.get('bucket') else bucket
-        pcm, charged = _raw_chunk_object_pcm(source, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen)
+        pcm, charged = _raw_chunk_object_pcm(
+            source, chunk, uid, deadline, RECONCILE_MAX_BYTES - bytes_seen, sample_rate
+        )
         downloads += 1
         bytes_seen += charged
         if pcm is None or bytes_seen > RECONCILE_MAX_BYTES:
