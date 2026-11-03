@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
 
 from config.policy import resolve_batch_policy
@@ -429,6 +430,9 @@ async def drain_recordings(store) -> bool:
 
     try:
         segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
+        # Every replica selects the same oldest page; a per-replica order keeps
+        # replicas from admitting the same rows at once and exhausting contention.
+        random.shuffle(segments)
         remaining = iter(segments)
         # Join every worker even on failure; a retry must not overlap unfinished
         # work from this pass. Across replicas the existing intake/partial CAS
