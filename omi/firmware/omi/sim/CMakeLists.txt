@@ -10,10 +10,11 @@ endif()
 # portable settings/time/feedback code; replace device boundaries at link time.
 target_sources(app PRIVATE
   ../src/main.c
+  ../src/safe_mode.c
   ../src/settings.c
   ../src/rtc.c
   ../src/feedback.c
   stubs.c
 )
 # Do not add src/lib/core: its features.h would shadow glibc's <features.h>.
-target_include_directories(app PRIVATE ../src)
+target_include_directories(app PRIVATE ../src .)

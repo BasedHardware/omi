@@ -12,6 +12,8 @@
 #include "lib/core/sd_card.h"
 #include "lib/core/storage.h"
 #include "lib/core/transport.h"
+#include "safe_mode.h"
+#include "safe_mode_sim_mgmt.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
 
@@ -129,4 +131,35 @@ int mic_start(void)
     __ASSERT(mic_callback != NULL, "main must register microphone callback first");
     LOG_INF("SIM: Microphone started (stub; no PCM generated)");
     return 0;
+}
+
+static struct mgmt_callback *sim_dfu_callback;
+void mgmt_callback_register(struct mgmt_callback *callback)
+{
+    sim_dfu_callback = callback;
+}
+
+bool transport_advertising_started(void)
+{
+    return true;
+}
+int transport_start_safe(void)
+{
+    return 0;
+}
+
+void safe_mode_run(void)
+{
+    printk("Safe mode initialized: BLE DFU only\n");
+    printk("Safe mode feed loop started\n");
+    for (;;) {
+        watchdog_feed();
+        k_msleep(1000);
+#ifdef CONFIG_OMI_SIM_FINISH_DFU
+        if (sim_dfu_callback) {
+            sim_dfu_callback->callback(sim_dfu_callback->event_id, MGMT_CB_OK, NULL, NULL, NULL, NULL, 0);
+            sim_dfu_callback = NULL;
+        }
+#endif
+    }
 }

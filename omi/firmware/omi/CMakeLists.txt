@@ -3,9 +3,12 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 enable_language(C ASM) # OPUS
 
 project(omi)
+include(cmake/safe-mode-build.cmake)
+zephyr_linker_sources(SECTIONS src/safe_mode.ld)
 
 file(GLOB app_sources
     src/main.c
+    src/safe_mode.c
     src/mic.c
     src/battery.c
     src/led.c

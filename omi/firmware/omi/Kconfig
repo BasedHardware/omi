@@ -113,4 +113,34 @@ config OMI_WATCHDOG_TIMEOUT_MS
          operations can run longer (e.g. SD/LFS pre-warm) to avoid false
          watchdog resets."
 
+config OMI_SAFE_MODE_BOOT_LIMIT
+    int "Failed boots before recovery"
+    range 1 20
+    default 3
+
+config OMI_SAFE_MODE_GOOD_UPTIME_S
+    int "Healthy main-loop uptime before GOOD (seconds)"
+    range 1 3600
+    default 60
+
+config OMI_FAULT_INJECT
+    bool "DEVELOPMENT ONLY: safe-mode fault injection"
+    depends on DEBUG
+    default n
+    help
+      Also requires -DOMI_DEVELOPMENT_BUILD=ON. Release builds reject this.
+
+choice OMI_FAULT_INJECT_KIND
+    prompt "Fault to inject on every normal trial"
+    depends on OMI_FAULT_INJECT
+    default OMI_FAULT_INJECT_HARD_FAULT
+
+config OMI_FAULT_INJECT_HARD_FAULT
+    bool "Fatal error before BLE"
+config OMI_FAULT_INJECT_DRIVER_HANG
+    bool "POST_KERNEL driver-init hang"
+config OMI_FAULT_INJECT_WDT_STARVE
+    bool "Stop feeding WDT at uptime 30 seconds"
+endchoice
+
 endmenu
