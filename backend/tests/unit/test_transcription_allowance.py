@@ -233,10 +233,13 @@ def test_desktop_free_and_release_probe_remain_managed_without_trial_state(monke
     _situate(monkeypatch, sub, plan=PlanType.basic)
     allowance = sub.resolve_transcription_allowance('omi-release-probe', source='desktop')
     assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('managed', None, 'release_probe')
-    # An ordinary uid in the same expired-trial situation stays blocked: the
-    # exemption is the exact non-human identity, not the account state.
-    blocked = sub.resolve_transcription_allowance('uid', source='desktop')
-    assert (blocked.mode, blocked.remaining_seconds, blocked.reason) == ('managed', BASIC_CAP, 'plan_within_allowance')
+    # Ordinary Free accounts keep their managed minutes too.
+    ordinary = sub.resolve_transcription_allowance('uid', source='desktop')
+    assert (ordinary.mode, ordinary.remaining_seconds, ordinary.reason) == (
+        'managed',
+        BASIC_CAP,
+        'plan_within_allowance',
+    )
 
 
 def test_transient_reasons_cover_only_unresolved_lookups_not_real_exhaustion(sub) -> None:

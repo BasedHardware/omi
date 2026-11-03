@@ -27,17 +27,21 @@ def _function(path, name, namespace):
 def test_trial_metadata_retains_every_shipped_desktop_field_without_lookups(uid):
     namespace = {
         'TrialMetadata': TrialMetadata,
-        'TRIAL_LENGTH_SECONDS': 3 * 24 * 60 * 60,
-        'TRIAL_FEATURES': [
-            'unlimited_recordings',
-            'unlimited_transcription',
-            'unlimited_memories',
-            'unlimited_insights',
-            '30_chat_questions_per_month',
-        ],
+        '_effective_chat_limit': lambda plan: 30,
         'get_plan_display_name': lambda plan: 'Free' if plan == PlanType.basic else pytest.fail('unexpected plan'),
         'PlanType': PlanType,
     }
+    tree = ast.parse((BACKEND / 'utils/subscription.py').read_text())
+    constants = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id in {'TRIAL_LENGTH_SECONDS', 'TRIAL_FEATURES'}
+            for target in node.targets
+        )
+    ]
+    exec(compile(ast.Module(body=constants, type_ignores=[]), 'trial constants', 'exec'), namespace)
     answer = _function('utils/subscription.py', 'get_trial_metadata', namespace)(uid)
     assert answer.model_dump() == {
         'trial_started_at': None,
@@ -45,7 +49,13 @@ def test_trial_metadata_retains_every_shipped_desktop_field_without_lookups(uid)
         'trial_remaining_seconds': 0,
         'trial_expired': False,
         'trial_duration_seconds': 259200,
-        'trial_features': namespace['TRIAL_FEATURES'],
+        'trial_features': [
+            'unlimited_listening',
+            'unlimited_transcription',
+            'unlimited_memories',
+            'unlimited_insights',
+            '30_chat_questions_per_month',
+        ],
         'plan_after_trial': 'Free',
     }
 

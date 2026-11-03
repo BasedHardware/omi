@@ -841,8 +841,7 @@ def get_chat_quota_snapshot(
 
     Platform is retained for callers; all platforms use the real plan quota.
     """
-    # Flagged quota display and admission share the same authority, including
-    # Free accounts use the same budget authority as paid tiers.
+    # Flagged quota display and admission share one authority on Free and paid tiers.
     enforcing = ladder_policy.budget_enforcement_enabled()
     subscription = None
     shared_budget = None
