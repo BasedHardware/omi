@@ -80,6 +80,8 @@ class Provider(migration.PartitionTransport):
         self.calls.append((path, deepcopy(payload)))
         namespace = payload['namespace']
         if path in {'vectors/upsert', 'vectors/delete'}:
+            if namespace == getattr(self, 'unsent_namespace', None):
+                raise migration.WriteNotSent('connection refused before the request was sent')
             if self.before_write:
                 self.before_write(path, payload)
             if path == 'vectors/upsert':
@@ -851,7 +853,9 @@ def test_http_exact_missing_namespace_is_only_a_delete_or_initial_inventory_noop
         return httpx.Response(404, json={'code': 5, 'message': 'Namespace not found'})
 
     with httpx.Client(transport=httpx.MockTransport(missing)) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         assert transport.write('vectors/delete', 'missing', ids=['id']) == 0
         assert list(transport.owned_pages('missing', 'owner')) == [[]]
         with pytest.raises(httpx.HTTPStatusError):
@@ -865,7 +869,9 @@ def test_http_other_failures_never_become_successful_delete(status, message):
     with httpx.Client(
         transport=httpx.MockTransport(lambda request: httpx.Response(status, json={'code': 5, 'message': message}))
     ) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         with pytest.raises(httpx.HTTPStatusError):
             transport.write('vectors/delete', 'missing', ids=['id'])
 
@@ -878,7 +884,9 @@ def test_namespace_disappearing_after_first_inventory_page_is_not_complete_inven
         return httpx.Response(404, json={'code': 5, 'message': 'Namespace not found'})
 
     with httpx.Client(transport=httpx.MockTransport(disappearing)) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         with pytest.raises(httpx.HTTPStatusError):
             list(transport.owned_pages('namespace', 'test-owner'))
 
@@ -931,6 +939,78 @@ def test_copy_timeout_keeps_unknown_outcome_blocking_cutover(setup):
     route = state.get_route(key, firestore_client=db)
     assert route.primary_namespace == key.family
     assert route.pending_count + route.uncertain_count > 0
+
+
+def test_write_that_never_left_is_a_known_noop_not_an_unknown_outcome(setup):
+    key, db, provider, runner = setup
+    provider.unsent_namespace = key.partition_namespace
+    with pytest.raises(migration.WriteNotSent):
+        runner.qualify('run', dimension=2)
+    route = state.get_route(key, firestore_client=db)
+    assert route.primary_namespace == key.family
+    assert route.pending_count == 0 and route.uncertain_count == 0
+    provider.unsent_namespace = None
+    receipt = runner.qualify('run', dimension=2)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+class _Post:
+    def __init__(self, error=None):
+        self.error, self.headers = error, []
+
+    def __call__(self, url, json, headers):
+        self.headers.append(headers)
+        if self.error:
+            raise self.error
+        request = httpx.Request('POST', url)
+        return httpx.Response(200, json={}, headers={'x-pinecone-request-lsn': '7'}, request=request)
+
+
+def test_an_injected_read_client_is_never_reused_for_writes():
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={}))) as client:
+        transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key', client=client)
+        try:
+            assert transport.client is client
+            assert transport.write_client is not client
+        finally:
+            transport.write_client.close()
+
+
+def test_writes_use_the_no_keepalive_client_and_carry_a_request_id(monkeypatch):
+    transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key')
+    try:
+        assert transport.write_client is not transport.client
+        reads, writes = _Post(), _Post()
+        monkeypatch.setattr(transport.client, 'post', reads)
+        monkeypatch.setattr(transport.write_client, 'post', writes)
+        transport.call('query', {'namespace': 'ns1'})
+        assert transport.write('vectors/upsert', 'ns1', vectors=[]) == 7
+        assert 'X-Request-Id' not in reads.headers[0]
+        assert writes.headers[0]['X-Request-Id'] == transport.last_write_request_id
+    finally:
+        transport.close()
+
+
+@pytest.mark.parametrize(
+    'error, unsent',
+    [
+        (httpx.ConnectError('refused'), True),
+        (httpx.ConnectTimeout('slow connect'), True),
+        (httpx.RemoteProtocolError('Server disconnected without sending a response.'), False),
+        (httpx.ReadTimeout('no response'), False),
+    ],
+)
+def test_only_connect_phase_failures_count_as_not_sent(monkeypatch, error, unsent):
+    transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key')
+    try:
+        monkeypatch.setattr(transport.write_client, 'post', _Post(error))
+        monkeypatch.setattr(transport.client, 'post', _Post(error))
+        with pytest.raises(migration.WriteNotSent if unsent else type(error)):
+            transport.write('vectors/upsert', 'ns1', vectors=[])
+        with pytest.raises(type(error)):
+            transport.call('query', {'namespace': 'ns1'})
+    finally:
+        transport.close()
 
 
 def test_rollback_reconciles_from_current_primary_instead_of_restoring_stale_copy(setup):

@@ -24,6 +24,16 @@ class MigrationNotReady(RuntimeError):
     """A failed qualification leaves the old route active."""
 
 
+class WriteNotSent(MigrationNotReady):
+    """The connection failed before any request bytes left: a known no-op, not an unknown outcome."""
+
+
+WRITE_PATHS = frozenset({'vectors/upsert', 'vectors/update', 'vectors/delete'})
+# Connect-phase failures happen before the request is written to the wire. Any
+# later failure (write/read timeout, a server disconnect) stays an unknown outcome.
+NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
 def bounded_upsert_batches(records: list[dict], namespace: str) -> Iterator[list[dict]]:
     """Keep wide vectors and metadata below Pinecone's 2 MB request limit."""
     overhead = len(json.dumps({'namespace': namespace, 'vectors': []}).encode())
@@ -117,17 +127,45 @@ IDENTITY_FIELDS = {
 class PartitionTransport:
     """REST transport retains LSN headers that the normal SDK hides."""
 
-    def __init__(self, host: str, api_key: str, *, client: httpx.Client | None = None):
+    def __init__(
+        self,
+        host: str,
+        api_key: str,
+        *,
+        client: httpx.Client | None = None,
+        write_client: httpx.Client | None = None,
+    ):
         if not host.endswith('.pinecone.io') or '/' in host:
             raise ValueError('Expected an index host from the Pinecone control plane')
         self.host = host
         self.client = client or httpx.Client(timeout=60)
+        # Mutations never reuse a pooled connection: a server that closed an idle
+        # keep-alive connection turns the next request on it into a disconnect
+        # without a response, an unknown outcome that blocks the owner.
+        # Never alias an injected read client: its pool would bring keep-alive back.
+        self.write_client = write_client or httpx.Client(timeout=60, limits=httpx.Limits(max_keepalive_connections=0))
         self.headers = {'Api-Key': api_key, 'X-Pinecone-Api-Version': '2025-10'}
         self.read_units = 0.0
         self.write_units = 0.0
+        # Client request id of the most recent mutation, kept for reconciliation evidence.
+        self.last_write_request_id: str | None = None
+
+    def close(self) -> None:
+        self.client.close()
+        if self.write_client is not self.client:
+            self.write_client.close()
 
     def call(self, path: str, payload: dict) -> tuple[dict, dict]:
-        response = self.client.post(f'https://{self.host}/{path}', json=payload, headers=self.headers)
+        headers, client = self.headers, self.client
+        if path in WRITE_PATHS:
+            self.last_write_request_id = uuid4().hex
+            headers, client = {**self.headers, 'X-Request-Id': self.last_write_request_id}, self.write_client
+        try:
+            response = client.post(f'https://{self.host}/{path}', json=payload, headers=headers)
+        except NOT_SENT_ERRORS as error:
+            if path in WRITE_PATHS:
+                raise WriteNotSent(f'Connection failed before the {path} request was sent') from error
+            raise
         response.raise_for_status()
         body = response.json()
         usage = body.get('usage') or {}
@@ -357,8 +395,8 @@ class OwnerMigration:
             with external_write_fence(self.key.uid, firestore_client=self.firestore_client):
                 attempted = True
                 yield
-        except BaseException:
-            if attempted and ids != [BARRIER_ID]:
+        except BaseException as error:
+            if attempted and ids != [BARRIER_ID] and not isinstance(error, WriteNotSent):
                 state.mark_mutation_uncertain(self.key, ticket, firestore_client=self.firestore_client)
             else:
                 state.finish_mutation(self.key, ticket, firestore_client=self.firestore_client)
