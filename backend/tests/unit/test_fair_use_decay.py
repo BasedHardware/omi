@@ -183,3 +183,16 @@ def test_warning_entry_or_qualifying_violation_stamps_quiet_deadline(state_store
     row = state_store[PATH]
     assert row['stage'] == 'warning'
     assert before + PERIOD <= row['warning_until'] <= datetime.now(timezone.utc) + PERIOD
+
+
+@pytest.mark.parametrize('stage', ['warning', 'throttle'])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_admin_entry_writes_deadline_unless_switch_off(state_store, monkeypatch, stage, enabled):
+    monkeypatch.setattr(admin, 'FAIR_USE_THROTTLE_DECAY_ENABLED', enabled)
+    state_store[PATH] = {}
+    assert admin.set_user_stage('decay-user', stage=stage, admin_id='admin')['stage'] == stage
+    row = state_store[PATH]
+    if enabled:
+        assert row[f'{stage}_until'] == row['stage_entered_at'] + PERIOD
+    else:
+        assert row == {'stage': stage}
