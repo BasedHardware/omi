@@ -41,10 +41,12 @@ def validate_selection(current, expected_voices):
     if expected_voices is None:
         return
     from utils.live_speaker_carry import voice_segments
+    from utils.manual_speaker_assignments import assignment_segments
 
-    by_id = {s.get('id'): s for s in current['transcript_segments']}
+    normalized = dict(current, transcript_segments=assignment_segments(current))
+    by_id = {s.get('id'): s for s in normalized['transcript_segments']}
     scoped = {
-        scope: {label: {s['id'] for s in rows} for label, rows in voice_segments(current, scope).items()}
+        scope: {label: {s['id'] for s in rows} for label, rows in voice_segments(normalized, scope).items()}
         for scope in {voice[0] for voice in expected_voices.values() if voice is not None and voice[0]}
     }
     for sid, voice in expected_voices.items():

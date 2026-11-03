@@ -297,6 +297,17 @@ def donor_selected_ids(
     return [s['id'] for s in selected if s.get('id')]
 
 
+def assignment_segments(conversation: Mapping[str, Any]) -> list[dict]:
+    """Use the same stable legacy identities for projection and receipt writes."""
+    segments = [dict(segment) for segment in conversation.get('transcript_segments') or []]
+    for index, segment in enumerate(segments):
+        if not segment.get('id') and conversation.get('id'):
+            segment['id'] = legacy_conversation_segment_id(conversation['id'], index)
+        if segment.get('speaker_id') is None:
+            segment['speaker_id'] = TranscriptSegment(**segment).speaker_id
+    return segments
+
+
 def manual_assignment(
     conversation: dict,
     *,
@@ -312,13 +323,7 @@ def manual_assignment(
 ) -> tuple[list[dict], dict, list[str], set[str]]:
     rejection = normalize_rejection(rejection)
     validate_assignment_range(time_range)
-    segments = [dict(segment) for segment in conversation.get('transcript_segments', [])]
-
-    for index, segment in enumerate(segments):
-        if not segment.get('id') and conversation.get('id'):
-            segment['id'] = legacy_conversation_segment_id(conversation['id'], index)
-        if segment.get('speaker_id') is None:
-            segment['speaker_id'] = TranscriptSegment(**segment).speaker_id
+    segments = assignment_segments(conversation)
     if segment_index is not None:
         indices = [segment_index] if 0 <= segment_index < len(segments) else []
     elif speaker_id is not None and not segment_ids:

@@ -13,7 +13,7 @@ from models.transcript_segment import TranscriptSegment
 from models.recording_speakers import RecordingSpeakerRequest
 from utils.stt.speaker_identity import canonical_speaker_label
 from utils.live_speaker_carry import carried_receipt, voice_segments
-from utils.manual_speaker_assignments import manual_assignment
+from utils.manual_speaker_assignments import assignment_segments, manual_assignment
 from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.observability.fallback import record_fallback
 
@@ -66,7 +66,9 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         ]
     else:
         rows = [anchor]
-    return episode, [row for row in rows if row and not row.get('deleted')]
+    return episode, [
+        dict(row, transcript_segments=assignment_segments(row)) for row in rows if row and not row.get('deleted')
+    ]
 
 
 def _recorded_start(row):

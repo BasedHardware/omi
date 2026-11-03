@@ -106,6 +106,32 @@ def test_unscoped_rows_only_change_the_source_member(recording):
     assert edit('u', 'c1', request(), None)['applied_count'] == 1
 
 
+@pytest.mark.parametrize('whole', [True, False])
+def test_legacy_unstored_ids_remain_stable_and_editable(recording, whole):
+    from models.transcript_segment import legacy_conversation_segment_id
+
+    line = recording.rows[('users', 'u', 'conversations', 'c1')]['transcript_segments'][0]
+    for key in ['id', 'speaker_id', 'speaker_id_scope']:
+        line.pop(key)
+    expected_id = legacy_conversation_segment_id('c1', 0)
+    for _ in range(2):
+        rows = service.transcript('u', 'c1')['conversations']
+        projected = next(row for row in rows if row['id'] == 'c1')['transcript_segments'][0]
+        assert projected['id'] == expected_id
+        assert projected['speaker_id'] == 0
+    body = request(
+        whole=whole,
+        selections=[
+            RecordingSelection(conversation_id='c1', segment_ids=[expected_id], speaker_id=0 if whole else None)
+        ],
+    )
+    assert edit('u', 'c1', body, None)['applied_count'] == 1
+    row = decode(recording, 'c1')
+    assert row['transcript_segments'][0]['person_id'] == 'new'
+    assert row['manual_speaker_assignments']['segments'][expected_id]['person_id'] == 'new'
+    assert decode(recording, 'c0')['transcript_segments'][0]['person_id'] == 'old'
+
+
 def test_non_episode_scope_fallback_includes_same_scope_only(recording, monkeypatch):
     monkeypatch.setattr(service.episodes_db, 'get_episode_for_conversation', lambda *a: None)
     snapshots = [
