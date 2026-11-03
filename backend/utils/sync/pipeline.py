@@ -200,6 +200,8 @@ from utils.sync.capture_clock import (
     capture_clock_offset,
     capture_time_rejection,
     clamp_capture_time,
+    early_capture_clock_offset,
+    is_early_capture_time,
 )
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.recording_intent import user_selected_recording
@@ -1548,6 +1550,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     redrive_mode: str | None = None,
     recording_session_id: str | None = None,
     capture_time_offset: float = 0.0,
+    early_capture_offset: float = 0.0,
 ):
     if cap_dispatch_lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
@@ -1782,6 +1785,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
 
         timestamp = get_timestamp_from_path(path)
         clock_run = clock_run_from_path(path)
+        if is_early_capture_time(timestamp) and early_capture_offset:
+            capture_time_offset = early_capture_offset
         # Legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
@@ -2318,6 +2323,8 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
             reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason),
             ahead_seconds,
         )
+    if outcome is SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED:
+        record_fallback(component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
@@ -2357,7 +2364,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             _record_capture_time_admission(rejection, ahead_seconds=ahead_seconds)
             raise SyncCaptureTimeRejected()
         _record_capture_time_admission(
-            SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED,
+            (
+                SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED
+                if is_early_capture_time(timestamp)
+                else SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED
+            ),
             ahead_seconds=max(0.0, ahead_seconds),
         )
 
@@ -2599,6 +2610,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
     audio_end_seconds: Optional[float] = None,
     raw_capture_paths: Optional[list[str]] = None,
     redrive_mode: Optional[str] = None,
+    capture_received_at: Optional[float] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -3281,11 +3293,22 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     max(get_timestamp_from_path(path) + get_wav_duration(path) for path in segmented_paths)
                 ),
             )
+            request_early_offset = await run_blocking(
+                sync_executor,
+                lambda: early_capture_clock_offset(
+                    [
+                        get_timestamp_from_path(path) + get_wav_duration(path)
+                        for path in segmented_paths
+                        if is_early_capture_time(get_timestamp_from_path(path))
+                    ],
+                    now=capture_received_at if capture_received_at is not None else time.time(),
+                ),
+            )
 
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
-            segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
+            segment_list = sorted(segmented_paths, key=lambda path: (get_timestamp_from_path(path), path))
             assignment_turnstile = _OrderedTurnstile(segment_list)
             segment_targets: dict = {}
             segment_binding_reasons: dict = {}
@@ -3295,7 +3318,12 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                         db_executor,
                         plan_segment_targets,
                         segment_list,
-                        get_timestamp_from_path,
+                        lambda path: get_timestamp_from_path(path)
+                        + (
+                            request_capture_offset - request_early_offset
+                            if request_early_offset and is_early_capture_time(get_timestamp_from_path(path))
+                            else 0
+                        ),
                         get_wav_duration,
                         uid,
                         str(recording_session_id),
@@ -3357,6 +3385,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                     capture_time_offset=request_capture_offset,
+                    early_capture_offset=request_early_offset,
                 )
                 if deferred_outcome.get('provider'):
                     with segment_lock:

@@ -104,3 +104,22 @@ def test_intake_context_rejects_missing_duplicate_oversized_and_truncated(tmp_pa
         audio.with_context(unit.wav, {'text': 'x' * 65536})
     with pytest.raises(ValueError):
         audio.read_context(frozen[:-1])
+
+
+def test_early_capture_batch_keeps_raw_identity_and_order_with_receipt_clock(tmp_path):
+    receipt = 1800000000.0
+    # Reverse input order, separated enough to produce two units.
+    paths = [pcm(tmp_path, 788918500, 16000), pcm(tmp_path, 788918400, 16000)]
+    units = list(capture_decode.decode_units(paths, received_at=receipt))
+    assert [u.capture_at for u in units] == [788918400, 788918500]
+    assert [u.stored_capture_at for u in units] == [receipt - 101, receipt - 1]
+    assert [u.duration_seconds for u in units] == [1, 1]
+    assert units[-1].stored_capture_at + units[-1].duration_seconds == receipt
+
+
+def test_receipt_clock_does_not_change_normal_or_future_batch_units(tmp_path):
+    receipt = 1800000000.0
+    paths = [pcm(tmp_path, receipt - 100, 16000), pcm(tmp_path, receipt + 170, 16000)]
+    units = list(capture_decode.decode_units(paths, received_at=receipt))
+    assert [u.capture_at for u in units] == [receipt - 100, receipt + 170]
+    assert all(u.stored_capture_at is None for u in units)

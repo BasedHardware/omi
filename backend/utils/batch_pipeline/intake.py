@@ -678,7 +678,9 @@ async def accept_upload(
             return replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
-                capture_at=unit.capture_at,
+                capture_at=(
+                    unit.stored_capture_at if getattr(unit, 'stored_capture_at', None) is not None else unit.capture_at
+                ),
                 duration_seconds=unit.duration_seconds,
                 unit_kind='conversation' if conversation_id else 'capture_span',
                 conversation_id=conversation_id

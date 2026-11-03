@@ -207,6 +207,8 @@ from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
+    early_capture_clock_offset,
+    is_early_capture_time,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -624,6 +626,7 @@ async def sync_local_files_v2(
     # Empty/torn-header clips contain no audio frames. Acknowledge them before
     # clock/age admission; a bogus date on zero audio has nothing to recover.
     upload_filenames = [f.filename or '' for f in files]
+    capture_received_at = time.time()
     try:
         files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
     except EmptySyncUpload:
@@ -833,8 +836,15 @@ async def sync_local_files_v2(
                 admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
                 audio_start_seconds = float(audio_start_seconds)
                 audio_end_seconds = min(float(audio_end_seconds), admitted_end)
-                session_clock_offset = capture_clock_offset(max(admitted_file_starts))
-                if session_clock_offset > 0:
+                early_starts = [value for value in admitted_file_starts if is_early_capture_time(value)]
+                session_clock_offset = (
+                    early_capture_clock_offset(early_starts, now=capture_received_at)
+                    if len(early_starts) == len(admitted_file_starts)
+                    else 0.0
+                )
+                if not session_clock_offset:
+                    session_clock_offset = capture_clock_offset(max(admitted_file_starts))
+                if session_clock_offset:
                     audio_start_seconds -= session_clock_offset
                     audio_end_seconds -= session_clock_offset
 
@@ -930,6 +940,7 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    'capture_received_at': capture_received_at,
                     'recording_session_id': recording_session_id,
                     'audio_start_seconds': (
                         audio_start_seconds if isinstance(audio_start_seconds, (int, float)) else None
@@ -1220,6 +1231,7 @@ async def sync_local_files_v2(
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
                 'enqueued_at': time.time(),
+                'capture_received_at': capture_received_at,
                 'lane': lane_decision.lane.value,
                 'capture_time_trust': lane_decision.trust.value,
                 'recording_age_seconds': lane_decision.maximum_age_seconds,
@@ -1471,6 +1483,7 @@ async def sync_local_files_v2(
                             recording_session_id=recording_session_id,
                             audio_start_seconds=audio_start_seconds,
                             audio_end_seconds=audio_end_seconds,
+                            capture_received_at=capture_received_at,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -3071,6 +3084,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     recording_session_id=recording_session_id,
                     audio_start_seconds=audio_start_seconds,
                     audio_end_seconds=audio_end_seconds,
+                    capture_received_at=payload.get('capture_received_at'),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
         except BackfillStoragePressure:

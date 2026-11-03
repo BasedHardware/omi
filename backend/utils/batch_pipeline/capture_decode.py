@@ -4,10 +4,12 @@ import audioop
 import os
 import struct
 import wave
+from dataclasses import replace
 from collections.abc import Generator
 
 from utils.batch_pipeline.audio import RATE, AudioUnit, audio_unit
-from utils.sync.files import MAX_SYNC_FRAME_BYTES, decode_files_to_wav, get_timestamp_from_path
+from utils.sync.files import MAX_SYNC_FRAME_BYTES, decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.capture_clock import early_capture_clock_offset, is_early_capture_time
 
 UNIT_FRAMES = 3600 * RATE
 MAX_JOIN_GAP_FRAMES = 30 * RATE
@@ -50,7 +52,11 @@ canonical_pcm = _canonical
 
 
 def decode_units(
-    paths: list[str], *, max_seconds: float = 3600, coverage_context: dict | None = None
+    paths: list[str],
+    *,
+    max_seconds: float = 3600,
+    coverage_context: dict | None = None,
+    received_at: float | None = None,
 ) -> Generator[AudioUnit, None, None]:
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
     if unit_frames < 1 or max_seconds > 7200:
@@ -66,6 +72,25 @@ def decode_units(
         from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
 
         wavs, source_maps, generated = prepare((coverage_context or {}).get('uid'), wavs, frames, coverage_context)
+        early_offset = (
+            early_capture_clock_offset(
+                [
+                    float(get_timestamp_from_path(path)) + get_wav_duration(path)
+                    for path in wavs
+                    if is_early_capture_time(get_timestamp_from_path(path))
+                ],
+                now=received_at,
+            )
+            if received_at is not None
+            else 0.0
+        )
+
+        def packed_unit(start, pcm, runs):
+            unit = provenance_unit(audio_unit(start, pcm), runs)
+            if early_offset and is_early_capture_time(start):
+                unit = replace(unit, stored_capture_at=start - early_offset)
+            return unit
+
         pending = bytearray()
         pending_runs = []
         start = 0.0
@@ -77,7 +102,7 @@ def decode_units(
             end = start + len(pending) / (2 * RATE)
             gap = round((capture - end) * RATE)
             if pending and (gap < 0 or gap > MAX_JOIN_GAP_FRAMES or len(pending) + gap * 2 >= unit_frames * 2):
-                yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
+                yield packed_unit(start, bytes(pending), pending_runs)
                 pending.clear()
                 pending_runs = []
             if not pending:
@@ -93,12 +118,12 @@ def decode_units(
                 pending.extend(pcm[offset : offset + take])
                 offset += take
                 if len(pending) == unit_frames * 2:
-                    yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
+                    yield packed_unit(start, bytes(pending), pending_runs)
                     pending.clear()
                     pending_runs = []
                     start = capture + offset / (2 * RATE)
         if pending:
-            yield provenance_unit(audio_unit(start, bytes(pending)), pending_runs)
+            yield packed_unit(start, bytes(pending), pending_runs)
     finally:
         for path in set(wavs) | set(expected) | generated:
             if os.path.exists(path):

@@ -31,6 +31,7 @@ from utils.sync.empty_upload import nonempty_manifest_claims
 from utils.sync.files import get_timestamp_from_path
 from utils.sync.pipeline import _retrieve_file_paths_v2
 from utils.sync.upload_names import canonical_sync_upload_filenames
+from utils.sync.content_id import compute_sync_content_id
 
 
 def _capture_time_counter(outcome: str) -> float:
@@ -45,6 +46,7 @@ def _filename(seconds_from_now: float) -> str:
 @pytest.fixture(autouse=True)
 def _default_skew(monkeypatch):
     monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
+    monkeypatch.delenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', raising=False)
 
 
 # --- shared window ---
@@ -65,6 +67,12 @@ def test_beyond_tolerance_future_capture_time_is_rejected_with_closed_reason():
 
 
 def test_pre_2024_capture_time_is_rejected_with_closed_reason():
+    # Kill switch restores the original refusal policy at every admission seam.
+    with patch.dict('os.environ', {'SYNC_EARLY_CAPTURE_CLAMP_ENABLED': 'false'}):
+        _assert_pre_2024_rejected()
+
+
+def _assert_pre_2024_rejected():
     assert capture_time_rejection(datetime(2023, 12, 31, tzinfo=timezone.utc)) is SyncCaptureTimeReason.REJECTED_EARLY
     with pytest.raises(CaptureTimeWindowError) as exc_info:
         parse_sync_filename_timestamp('audio_omi_opus_16000_1_fs160_1704067199.bin')
@@ -129,6 +137,7 @@ def test_retrieve_file_paths_v2_accepts_and_stages_within_tolerance_skew(tmp_pat
     ],
 )
 def test_retrieve_file_paths_v2_rejects_implausible_times_typed(tmp_path, monkeypatch, filename, expected_outcome):
+    monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
     monkeypatch.chdir(tmp_path)
     before = _capture_time_counter(expected_outcome)
 
@@ -213,6 +222,62 @@ def test_clamp_capture_time_moves_only_future_times():
     now = datetime.now(timezone.utc).timestamp()
     assert capture_clock.clamp_capture_time(now - 10, now=now) == now - 10
     assert capture_clock.clamp_capture_time(now + 170, now=now) == now
+
+
+EARLY_NAME = 'audio_omi_opus_16000_1_fs160_788918400.bin'  # 1995-01-01
+
+
+def test_1995_capture_is_admitted_with_closed_metric_and_content_free_log(tmp_path, monkeypatch, caplog):
+    monkeypatch.chdir(tmp_path)
+    before = _capture_time_counter('accepted_early_clamped')
+    with caplog.at_level('INFO'):
+        paths = _retrieve_file_paths_v2([_Upload(EARLY_NAME)], 'synthetic-sensitive-owner', 'job')
+    assert Path(paths[0]).name == EARLY_NAME
+    assert parse_sync_filename_timestamp(EARLY_NAME) == 788918400
+    assert capture_clock.clamp_capture_time(788918400, now=1800000000) == 1800000000
+    assert _capture_time_counter('accepted_early_clamped') == before + 1
+    lines = [r.getMessage() for r in caplog.records if 'event=sync_capture_time' in r.getMessage()]
+    assert len(lines) == 1 and 'outcome=accepted_early_clamped' in lines[0]
+    assert 'synthetic-sensitive-owner' not in lines[0] and EARLY_NAME not in lines[0]
+
+
+def test_early_clock_uses_paced_recovery_without_expiring_bogus_age():
+    now = 1800000000
+    decision = lanes.classify_sync_lane([EARLY_NAME], client_device_id='pendant', now=now)
+    assert decision.lane is lanes.SyncLane.BACKFILL
+    assert decision.trust is lanes.CaptureTimeTrust.UNTRUSTED
+    assert decision.automatic_recovery_allowed
+    assert decision.oldest_capture_at == decision.newest_capture_at == now
+    sibling = f'audio_omi_opus_16000_1_fs160_{now - 31 * 86400}.bin'
+    mixed = lanes.classify_sync_lane([EARLY_NAME, sibling], client_device_id='pendant', now=now)
+    assert not mixed.automatic_recovery_allowed and mixed.reason == 'lookback_exceeded'
+
+
+def test_v2_1995_clock_kill_switch_restores_typed_400(client, monkeypatch):
+    monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
+    response = _post_sync(client, EARLY_NAME)
+    assert response.status_code == 400, response.text
+    assert response.json()['code'] == 'invalid_capture_time'
+
+
+def test_early_retry_keeps_raw_name_content_identity_and_reuses_receipt(client, monkeypatch):
+    monkeypatch.setattr(router, 'compute_sync_content_id', compute_sync_content_id)
+    claims = Mock(side_effect=[{'outcome': 'held', 'result': {}}, {'outcome': 'completed', 'result': {}}])
+    monkeypatch.setattr(router, 'claim_sync_content', claims)
+    first = _post_sync(client, EARLY_NAME)
+    retry = _post_sync(client, EARLY_NAME)
+    assert first.status_code == retry.status_code == 202
+    assert claims.call_count == 2
+    assert claims.call_args_list[0].args[1] == claims.call_args_list[1].args[1]
+    assert first.json()['status'] == retry.json()['status'] == 'completed'
+
+
+def test_early_request_offset_preserves_capture_order_and_duration():
+    receipt = 1800000000.0
+    offset = capture_clock.early_capture_clock_offset([788918410.0, 788918470.0], now=receipt)
+    assert 788918470.0 - offset == receipt
+    assert 788918400.0 - offset < 788918460.0 - offset
+    assert (788918470.0 - offset) - (788918460.0 - offset) == 10
 
 
 # --- one request-wide server-clock offset (fix round) ---
@@ -425,6 +490,20 @@ def test_skewed_segment_stores_the_full_duration_pair():
     assert duration == pytest.approx(10.0, abs=0.05)
     assert stored['started_at'].timestamp() == pytest.approx(now_test - 10, abs=1.0)
     assert stored['finished_at'].timestamp() <= datetime.now(timezone.utc).timestamp()
+
+
+def test_1995_segment_stores_receipt_clock_pair_without_losing_duration():
+    from tests.unit.test_sync_cross_job_assignment import conversations
+
+    receipt = datetime.now(timezone.utc).timestamp()
+    raw = 788918400.0
+    offset = capture_clock.early_capture_clock_offset([raw + 10], now=receipt)
+    store, _response, closest_seen, _now_test = _run_skewed_segment(raw, offset, False)
+    (stored,) = conversations(store)
+    assert stored['started_at'].timestamp() == pytest.approx(receipt - 10, abs=0.01)
+    assert stored['finished_at'].timestamp() == pytest.approx(receipt, abs=0.01)
+    assert (stored['finished_at'] - stored['started_at']).total_seconds() == pytest.approx(10)
+    assert closest_seen['start'] == pytest.approx(receipt - 10, abs=0.01)
 
 
 @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
