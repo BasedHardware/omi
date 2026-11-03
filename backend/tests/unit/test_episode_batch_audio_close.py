@@ -196,3 +196,30 @@ async def test_unclosed_active_audio_does_not_gain_premature_membership(monkeypa
     host = SimpleNamespace(state=SimpleNamespace(current_conversation_id='capture'), receiver=None)
     assert await close.close_batch_archive(host, 'capture', row) is row
     attach.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_failed_archive_seal_returns_before_membership_or_finalization(monkeypatch):
+    row = capture(server_batch_audio_closed=False)
+    archive = SimpleNamespace(close=AsyncMock())
+    seal = Mock(return_value=False)
+    attach = Mock(side_effect=AssertionError('uncommitted archive cannot attach'))
+    read = Mock(side_effect=AssertionError('failed seal cannot reread'))
+    monkeypatch.setattr(close, 'close_server_batch_audio', seal)
+    monkeypatch.setattr(close, 'attach_closed_batch_capture', attach)
+    monkeypatch.setattr(close.conversations, 'get_conversation', read)
+
+    async def persisted(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='owner'),
+        state=SimpleNamespace(current_conversation_id='capture', active=False),
+        receiver=SimpleNamespace(raw_archive=archive),
+        persistence=SimpleNamespace(call=persisted),
+    )
+    assert await close.close_batch_archive(host, 'capture', row) is None
+    archive.close.assert_awaited_once()
+    seal.assert_called_once_with('owner', 'capture')
+    attach.assert_not_called()
+    read.assert_not_called()

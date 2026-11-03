@@ -483,4 +483,8 @@ conversation reread. `utils.episodes.batch_close` checks ownership, privacy,
 retention and episode/recorded-time admission, then calls `service.attach_recorded`
 with committed audio bounds. Live and sync attachment use that same primitive;
 neither the current pointer nor processing time selects a batch capture's owner.
-This metadata write does not require client-seen or schedule model work.
+This metadata-only attachment is an explicit exception to the client-seen rule
+above: ownership must exist before transcription, even when an older client has
+not acknowledged episodes. It retains episode and recorded-time admission,
+adds no model work, and does not change paid-work gates. An attachment error
+emits shared `record_fallback` degraded telemetry before finalization repairs it.
