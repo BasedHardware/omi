@@ -66,8 +66,10 @@ unless deliberately qualifying that separate operation.
 The record is 36 bytes inside a 64-byte DTS `zephyr,retained-ram` reservation
 at `0x2006FF00–0x2006FF40`. The application linker owns it as `.omi_retained`
 NOLOAD. Link assertions reject overlap with data/BSS/noinit (including static
-stacks/heaps) and excess size. The node is excluded
-from MCUboot's DTS with `CONFIG_MCUBOOT`; bootloader configuration is unchanged.
+stacks/heaps) and excess size. The node lives in `omi/app.overlay`, selected
+only by the application; shared board DTS and bootloader configuration are
+unchanged. Kconfig conditionals in shared DTS are not a valid isolation guard
+because Zephyr processes devicetree before Kconfig.
 The PM map is deliberately unchanged; a reserved-memory node by itself would
 **not** exclude bytes from NCS Partition Manager's RAM allocation, hence the
 explicit linker reservation/assertions instead of shrinking `sram_primary`.
@@ -205,8 +207,13 @@ factory hex is only for an independently authorized baseline restore; follow
    restart` despite the expected watchdog-disable warning. No battery ADC or
    critical-battery shutdown was added to the minimal recovery path.
 6. **Custody.** With preexisting recordings, record ring INFO `read_seq`,
-   `write_seq`, `ring_id` before entry and compare after recovery. Safe mode
-   never calls SD/storage/capture initialization or mutates the raw ring.
+   `write_seq`, `ring_id` before entry and compare after recovery. During the
+   safe interval all three must remain unchanged. After normal capture resumes,
+   legitimate appends may advance `write_seq`, and acknowledged phone drains
+   may advance `read_seq`; account for those rather than requiring a frozen
+   write pointer while recording. Require the same ring identity and preserved
+   preexisting audio. Safe mode never calls SD/storage/capture initialization
+   or mutates the raw ring.
    Existing backlog durability improvements are outside this release. Safe
    mode suspends new capture visibly (red pulse/diagnostics); it cannot
    recover recordings lost before entry or promise recording while repairing.

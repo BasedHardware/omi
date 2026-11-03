@@ -72,7 +72,7 @@ def inside(cache, safe_mode=False):
         ZEPHYR_BASE=str(sdk / "zephyr"),
     )
     clone("https://github.com/nrfconnect/sdk-nrf", "v2.9.0", sdk / "nrf", 300)
-    checked(["git", "-C", sdk / "nrf", "diff", "--exit-code", "HEAD"], timeout=10)
+    checked(["git", "-C", sdk / "nrf", "diff", "--exit-code", "HEAD"], timeout=120)
     if subprocess.check_output(["git", "-C", sdk / "nrf", "rev-parse", "HEAD"], text=True).strip() != NCS_SHA:
         raise RuntimeError("NCS manifest is not the expected v2.9.0 revision")
     # Only the pinned NCS Zephyr tree is needed. No radio, bootloader, Nordic
@@ -80,7 +80,7 @@ def inside(cache, safe_mode=False):
     clone("https://github.com/nrfconnect/sdk-zephyr", "v3.7.99-ncs2", sdk / "zephyr", 600)
     if subprocess.check_output(["git", "-C", sdk / "zephyr", "rev-parse", "HEAD"], text=True).strip() != ZEPHYR_SHA:
         raise RuntimeError("unexpected Zephyr revision")
-    checked(["git", "-C", sdk / "zephyr", "diff", "--exit-code", "HEAD"], timeout=10)
+    checked(["git", "-C", sdk / "zephyr", "diff", "--exit-code", "HEAD"], timeout=120)
     def boot(name, overlay=None):
         build = cache / ("build" if name == "boot" else "build-" + name)
         command = ["cmake", "-S", sim, "-B", build, "-GNinja",
