@@ -244,6 +244,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
         "CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS": "30",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+        "HOSTED_LID_API_URL": "",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://172.16.48.49/diarizer",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
