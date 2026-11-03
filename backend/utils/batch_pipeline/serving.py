@@ -14,6 +14,7 @@ from config.batch_pipeline import (
     recovery_owner_only_enabled,
     recovery_dispatch_interval_seconds,
     projection_hold_recovery_enabled,
+    serving_metrics_min_refresh_seconds,
 )
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
@@ -300,7 +301,7 @@ def serving_for_stage(stage: str) -> Serving:
 
 @lru_cache(maxsize=1)
 def _metrics() -> QueueMetrics:
-    return QueueMetrics()
+    return QueueMetrics(min_refresh_seconds=serving_metrics_min_refresh_seconds())
 
 
 def start_serving_from_env():

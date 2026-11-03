@@ -406,6 +406,34 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+SERVING_METRICS_MIN_REFRESH_DEFAULT = 30.0
+SERVING_METRICS_MIN_REFRESH_MAX = 60.0
+
+
+def serving_metrics_min_refresh_seconds() -> float:
+    """Ship-on: one queue-gauge refresh per serving instance per interval.
+
+    Every serving instance refreshed the same global gauges on each 20 s
+    supervisor tick and each scrape; the policy-hold walk in ``oldest`` made
+    that about 1.6M Firestore reads/h at 28 instances. The guard calls the
+    sample blind after 120 s, so the cap stays at 60 s. ``off`` or a value
+    <= 0 is the kill switch: refresh on every call. Malformed or out-of-range
+    values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', '').strip().lower()
+    if not raw:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= SERVING_METRICS_MIN_REFRESH_MAX else SERVING_METRICS_MIN_REFRESH_DEFAULT
+
+
 ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
 ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
 
