@@ -216,6 +216,10 @@ HELM_MUTATIONS = {
     'worker_without_independent_recovery',
     'worker_without_independent_recovery_default_off',
 }
+SOURCE_DEFAULT_MUTATIONS = {
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
 
 
 @dataclass
@@ -237,7 +241,7 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
         # Source-default mutations need a fresh reader inventory; manifest/chart
         # mutations can reuse the baseline AST scan.
-        readers = None if name == 'worker_without_independent_recovery' else baseline.readers
+        readers = None if name in SOURCE_DEFAULT_MUTATIONS else baseline.readers
         context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
