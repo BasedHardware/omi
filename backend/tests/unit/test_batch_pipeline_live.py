@@ -24,10 +24,14 @@ from utils.batch_pipeline import record_provider
 
 
 @pytest.mark.asyncio
-async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog):
+@pytest.mark.parametrize("partial_last", [False, True])
+async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog, partial_last):
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '4')
+    # Exercise both page orders: a randomized drain need not pick the slow
+    # coordinator before its ordinary work. The fake must not depend on it.
+    monkeypatch.setattr(live.random, 'shuffle', lambda rows: rows.sort(key=lambda sid: (sid == '0') == partial_last))
     store = MemoryStore()
     for i in range(10):
         store.rows['jobs', str(i)] = {
@@ -49,7 +53,6 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
             else:
                 if active == 4:
                     full.set()
-                await slow.wait()
                 await full.wait()
                 completed.append(1)
         finally:
@@ -60,6 +63,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
         task = asyncio.create_task(live.drain_recordings(store))
         try:
             await asyncio.wait_for(full.wait(), timeout=1)
+            await asyncio.wait_for(slow.wait(), timeout=1)
             for _ in range(50):
                 if len(completed) == 9:
                     break
@@ -69,6 +73,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
             assert peak == 4
         finally:
             release.set()
+            full.set()  # A failed assertion must still release the fake workers.
             await task
     events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
     assert len(events) == 1
