@@ -519,6 +519,16 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
 
+    unit_reads = []
+    original_run_blocking = live.run_blocking
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        if fn is next:
+            assert executor is live.storage_executor
+            unit_reads.append(1)
+        return await original_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(live, 'run_blocking', run_blocking)
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
@@ -623,6 +633,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         assert ('content', 'synthetic/' + content) not in store.rows
         return
     result = await live.admit_recording(store, pending, now=1)
+    assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     assert store.rows['jobs', segment]['state'] == 'ready'
     assert manifests[0]['references'][0]['generation'] == 1
