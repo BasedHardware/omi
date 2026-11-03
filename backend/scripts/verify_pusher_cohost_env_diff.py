@@ -105,7 +105,6 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
         # Listen admits/suppresses managed live STT; pusher only retains audio.
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
-        'SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_SERVING_ENABLED',
@@ -244,6 +243,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
             "SERVER_BATCH_ONLY_MOBILE_PERCENT",
+            # Same listen-only admission path for learned auto-language mobile captures.
+            "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
             # Only listen opens visibility-gated Modulate previews; pusher
             # retains raw custody/finalization and never evaluates this cohort.
             "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",

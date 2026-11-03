@@ -2423,7 +2423,6 @@ environments:
           STT_GPU_FLEET_OFF:
             value: 'true'
             category: ops_kill
-          SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT: {value: '100', category: rollout}
           LISTEN_FINALIZATION_REPLAY_ENABLED:
             value: 'true'
             category: ops_kill

@@ -134,8 +134,6 @@ env:
     value: "10"
   - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
     value: ""
-  - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
-    value: "0"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
