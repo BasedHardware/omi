@@ -41,6 +41,8 @@ def lane(monkeypatch):
         owner=True,
         stripe_obj=None,
         deletion_blocked=False,
+        # Subscriptions Stripe holds on the checkout customer, by id.
+        customer_subs={},
     )
 
     async def run_blocking(executor, fn, *args, **kwargs):
@@ -90,7 +92,24 @@ def lane(monkeypatch):
     monkeypatch.setattr(
         payment.stripe.Subscription,
         'retrieve',
-        lambda *args: stripe.Subscription.construct_from(state.stripe_obj, 'fixture'),
+        lambda sub_id, *args: stripe.Subscription.construct_from(
+            state.customer_subs.get(sub_id, state.stripe_obj), 'fixture'
+        ),
+    )
+
+    def list_subscriptions(customer=None, status=None, **kwargs):
+        # Stripe semantics: no status lists every subscription not canceled.
+        subs = [sub for sub in state.customer_subs.values() if sub['customer'] == customer]
+        subs = (
+            [sub for sub in subs if sub['status'] == status]
+            if status
+            else [sub for sub in subs if sub['status'] != 'canceled']
+        )
+        return SimpleNamespace(data=[stripe.Subscription.construct_from(sub, 'fixture') for sub in subs])
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'list', list_subscriptions)
+    monkeypatch.setattr(
+        payment.subscription_utils, 'get_plan_type_from_price_id', lambda price: PlanType(price.removeprefix('price_'))
     )
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', effect('stripe_metadata'))
     monkeypatch.setattr(payment.stripe.Subscription, 'cancel', effect('stripe_cancel'))
@@ -322,7 +341,12 @@ def test_schedule_write_failure_is_currently_acknowledged(lane):
 
 @pytest.mark.parametrize(
     'stored_plan,same_id,duplicate',
-    [(PlanType.basic, True, False), (PlanType.plus, True, True), (PlanType.plus, False, False)],
+    [
+        (PlanType.basic, True, False),
+        (PlanType.plus, True, True),
+        (PlanType.plus, False, False),
+        (PlanType.basic, False, False),
+    ],
 )
 def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan, same_id, duplicate):
     lane.current = Subscription(plan=stored_plan, stripe_subscription_id='sub-current' if same_id else 'sub-old')
@@ -348,7 +372,8 @@ def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan
         assert [name for name, _ in lane.calls] == ['conversations', 'memories', 'actions', 'fair_use']
     else:
         assert lane.current.plan == PlanType.plus
-        assert [name for name, _ in lane.calls] == (['stripe_cancel'] if stored_plan == PlanType.plus else []) + [
+        # A different stored subscription is replaced whatever plan it projects.
+        assert [name for name, _ in lane.calls] == ([] if same_id else ['stripe_cancel']) + [
             'customer',
             'write',
             'credits',
@@ -753,3 +778,101 @@ def test_unresolved_checkout_preserves_cache_and_valid_stored_plan_effects(
     assert isinstance(result, payment.RetryableBillingSkip) == ledger_enabled
     if ledger_enabled:
         assert _call_names(lane) == expected
+
+
+def _plan_sub(sub_id, status, created, plan='plus', uid='fixture-user', **fields):
+    return {
+        'id': sub_id,
+        'object': 'subscription',
+        'status': status,
+        'created': created,
+        'customer': 'cus-fixture',
+        'metadata': {'uid': uid},
+        'cancel_at_period_end': False,
+        'current_period_start': NOW - 100,
+        'current_period_end': NOW + 100,
+        'items': {'data': [{'price': {'id': f'price_{plan}', 'currency': 'usd', 'unit_amount': 2999}}]},
+        **fields,
+    }
+
+
+def _stripe_cancels(lane):
+    return [args for name, args in lane.calls if name == 'stripe_cancel']
+
+
+def test_checkout_cancels_a_stored_past_due_subscription_projected_to_basic(lane):
+    """past_due is stored as Basic, yet Stripe keeps retrying its open invoice."""
+    lane.current = Subscription(plan=PlanType.basic, stripe_subscription_id='sub-old')
+    lane.customer_subs = {
+        'sub-old': _plan_sub('sub-old', 'past_due', NOW - 2000),
+        'sub-current': _plan_sub('sub-current', 'active', NOW - 10),
+    }
+    lane.event = _checkout_event()
+    run(lane)
+    assert _stripe_cancels(lane) == [('sub-old',)]
+    assert (lane.current.plan, lane.current.stripe_subscription_id) == (PlanType.plus, 'sub-current')
+
+
+def test_checkout_leaves_an_already_ended_stored_subscription_alone(lane):
+    lane.current = Subscription(plan=PlanType.basic, stripe_subscription_id='sub-old')
+    lane.customer_subs = {
+        'sub-old': _plan_sub('sub-old', 'canceled', NOW - 2000),
+        'sub-current': _plan_sub('sub-current', 'active', NOW - 10),
+    }
+    lane.event = _checkout_event()
+    run(lane)
+    assert _stripe_cancels(lane) == []
+
+
+@pytest.mark.parametrize('old_status', ['past_due', 'trialing', 'active'])
+def test_checkout_cancels_older_chargeable_subscriptions_after_the_created_event_overwrote_the_row(lane, old_status):
+    """The new subscription's created event often lands first, so the stored row already
+    names it and the old subscription is only visible in Stripe."""
+    lane.current = Subscription(
+        plan=PlanType.plus,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id='sub-current',
+        current_period_end=NOW + 100,
+    )
+    lane.customer_subs = {
+        'sub-old': _plan_sub('sub-old', old_status, NOW - 2000),
+        'sub-current': _plan_sub('sub-current', 'active', NOW - 10),
+    }
+    lane.event = _checkout_event()
+    assert run(lane) == {'status': 'success', 'message': 'Subscription already processed.'}
+    assert _stripe_cancels(lane) == [('sub-old',)]
+
+
+def test_checkout_keeps_newer_foreign_and_non_charging_subscriptions(lane):
+    lane.current = Subscription(
+        plan=PlanType.plus,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id='sub-current',
+        current_period_end=NOW + 100,
+    )
+    lane.customer_subs = {
+        'sub-current': _plan_sub('sub-current', 'active', NOW - 10),
+        # A checkout that completed after this one keeps the newest, whatever the delivery order.
+        'sub-newer': _plan_sub('sub-newer', 'active', NOW),
+        'sub-foreign': _plan_sub('sub-foreign', 'past_due', NOW - 2000, uid='someone-else'),
+        'sub-app': _plan_sub('sub-app', 'past_due', NOW - 2000, plan='marketplace_app'),
+        'sub-ending': _plan_sub('sub-ending', 'active', NOW - 2000, cancel_at_period_end=True),
+        'sub-declined': _plan_sub('sub-declined', 'incomplete', NOW - 2000),
+    }
+    lane.event = _checkout_event()
+    run(lane)
+    assert _stripe_cancels(lane) == []
+
+
+def test_replaced_subscription_lookup_failure_still_cancels_the_stored_one(lane, monkeypatch):
+    lane.current = Subscription(plan=PlanType.plus, stripe_subscription_id='sub-old')
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+
+    def unavailable(**kwargs):
+        raise stripe.APIConnectionError('unavailable')
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'list', unavailable)
+    lane.event = _checkout_event()
+    run(lane)
+    assert _stripe_cancels(lane) == [('sub-old',)]
+    assert lane.current.stripe_subscription_id == 'sub-current'

@@ -91,9 +91,18 @@ def transition(current: Subscription | None, event: ResolvedStripeEvent) -> Tran
     check fails. No IO, mutation or telemetry happens here.
     """
     if event.event_type == 'checkout.session.completed':
-        if current and current.stripe_subscription_id and current.plan in PAID_PLAN_TYPES:
-            if current.stripe_subscription_id == event.subscription_id:
-                return Transition(current, outcome='duplicate_checkout')
+        stored_id = current.stripe_subscription_id if current else None
+        if current and stored_id and current.plan in PAID_PLAN_TYPES and stored_id == event.subscription_id:
+            return Transition(current, outcome='duplicate_checkout')
+        # Replace the stored subscription whatever plan it projects: past_due is
+        # stored as Basic while Stripe keeps retrying its open invoice. A `pi_`
+        # organization grant is a one-time payment, not a subscription.
+        if (
+            stored_id
+            and event.subscription_id
+            and stored_id != event.subscription_id
+            and not stored_id.startswith('pi_')
+        ):
             return Transition(current, ('cancel_old_subscription',), 'replacement_checkout')
         return Transition(current, outcome='new_checkout')
     if event.event_type in {

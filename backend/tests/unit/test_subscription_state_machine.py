@@ -64,3 +64,20 @@ def test_schedule_cancel_is_copy_and_checkout_duplicate_has_no_effects():
     decision = transition(candidate, ResolvedStripeEvent('checkout.session.completed', 'sub-one', None, 100))
     assert decision.outcome == 'duplicate_checkout'
     assert decision.effects == ()
+
+
+def test_checkout_replaces_a_stored_subscription_projected_to_basic():
+    # past_due projects to Basic, yet Stripe keeps retrying that subscription's open invoice.
+    current = Subscription(plan=PlanType.basic, stripe_subscription_id='sub-past-due')
+    decision = transition(current, ResolvedStripeEvent('checkout.session.completed', 'sub-new', None, 100))
+    assert decision.outcome == 'replacement_checkout'
+    assert decision.effects == ('cancel_old_subscription',)
+    assert decision.next_state is current
+
+
+def test_checkout_without_a_subscription_or_over_a_one_time_grant_replaces_nothing():
+    paid = Subscription(plan=PlanType.plus, stripe_subscription_id='sub-paid')
+    grant = Subscription(plan=PlanType.plus, stripe_subscription_id='pi_one_time_grant')
+    for current, new_id in ((paid, None), (grant, 'sub-new')):
+        decision = transition(current, ResolvedStripeEvent('checkout.session.completed', new_id, None, 100))
+        assert (decision.outcome, decision.effects) == ('new_checkout', ())
