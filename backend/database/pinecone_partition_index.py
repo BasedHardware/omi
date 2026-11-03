@@ -142,7 +142,7 @@ class OwnerIndex:
                 for target in targets:
                     existing = self.index.fetch(ids=ids, namespace=target)
                     self._check_records(_field(existing, 'vectors').values())
-        except Exception:
+        except BaseException:
             # Only reads/validation have occurred, so this is a known no-op.
             state.finish_mutation(key, ticket, firestore_client=self.firestore_client)
             raise
@@ -151,7 +151,7 @@ class OwnerIndex:
             if method == 'delete':
                 # Privacy deletion also covers the unserved rollback copy.
                 _provider_mutation(self.index, method, args, other, kwargs)
-        except Exception:
+        except BaseException:
             self._uncertain(key, ticket)
             raise
         state.finish_mutation(key, ticket, write_lsn=lsn, firestore_client=self.firestore_client)
@@ -160,9 +160,9 @@ class OwnerIndex:
     def _uncertain(self, key: state.PartitionKey, ticket: state.MutationTicket) -> None:
         try:
             state.mark_mutation_uncertain(key, ticket, firestore_client=self.firestore_client)
-        except Exception:
+        except BaseException:
             # A failed state write leaves the original durable pending marker.
-            logger.error('Could not persist uncertain Pinecone operation key=%s', key.document_id)
+            logger.error('event=pinecone_mutation outcome=uncertain_settlement_failed')
 
     def upsert(self, *, vectors: Sequence[Mapping[str, Any]], namespace: str, **kwargs: Any) -> Any:
         self._check_records(vectors)
@@ -214,7 +214,7 @@ class OwnerIndex:
                     raise state.PartitionStateError('Pinecone delete did not provide a freshness receipt')
                 if target == ticket.primary_namespace:
                     primary_lsn = lsn
-        except Exception:
+        except BaseException:
             self._uncertain(key, ticket)
             raise
         finished = state.finish_mutation(key, ticket, write_lsn=primary_lsn, firestore_client=self.firestore_client)

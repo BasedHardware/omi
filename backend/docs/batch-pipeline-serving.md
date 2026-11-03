@@ -1115,7 +1115,11 @@ content/client completion on the deployed release before expanding admission.
 ### Owner-chain wake after recovery
 
 `BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED` defaults to `true` (kill
-switch: `false` restores the generic sweep after recovery). A settled recovery
+switch: `false` disables the request's owner-chain walk). With
+`BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED` on, the recovered result receipt
+remains durable and the periodic projection sweep handles it when this flag is
+off; ordinary global reconciliation still runs its generic sweep in that call.
+A settled recovery
 re-enters the ordered merge and commits at its owner's log tail, behind that
 owner's unprojected rows, which the per-instance cursors may already have
 passed. Waiting for the assignment and follow-up cursors to come back around
@@ -1124,8 +1128,11 @@ took 5–12 minutes for one backlog owner during the 5% ramp. After
 reconcile now drains that owner's merge and walks the owner's result log from
 its `projection_watermark`, following `previous_segment_id` links (and erased
 receipts) in chain order. It stops at the first row whose assignment does not
-advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
-afterwards as before, and any error in the wake falls back to it.
+advance the watermark, or after 64 rows or 30 seconds. The generic sweep
+continues after owner projection on ordinary global reconciliation. Owner-only
+recovery requests do not run a generic sweep; the independent periodic serving
+owner handles global scans and retries. Any interrupted projection remains in
+the durable receipt for that sweep.
 
 `BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED` defaults to `true` (kill
 switch: `false`). The wake's merge drain releases the recovered unit at once.

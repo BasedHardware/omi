@@ -1,9 +1,11 @@
 """Worker death, stale claims and retry custody on the real Redis fence."""
 
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+from threading import Event
 import sys
 import time
 from types import SimpleNamespace
@@ -231,9 +233,34 @@ class Client:
 
 @pytest.mark.parametrize('status', [0, 1])
 async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatch, status):
+    from database import pinecone_partition_state as state
+    from database import pinecone_mutation_lifecycle as lifecycle
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from utils.executors import start_background_task
     from utils.sync import cap_hold_lifecycle
 
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
+    for name in ('_begin_mutation', '_mark_mutation_uncertain'):
+        monkeypatch.setattr(state, name, getattr(state, name).to_wrap)
+    db = StrictFirestore()
+    key = state.PartitionKey('synthetic-index', 'ns1', 'synthetic-owner')
+    state.begin_mutation(key, affected_ids=['synthetic-vector'], firestore_client=db)
+    entered, release, settled = Event(), Event(), Event()
+    drain = state.drain_mutations
+    lifespan_drain = lifecycle.drain_on_shutdown
+
+    def delayed_settlement():
+        entered.set()
+        assert release.wait(5)
+        result = drain()
+        settled.set()
+        return result
+
+    async def lifespan_wait(callback):
+        await lifespan_drain(callback, timeout=0.5)
+
+    monkeypatch.setattr(state, 'drain_mutations', delayed_settlement)
+    monkeypatch.setattr(lifecycle, 'drain_on_shutdown', lifespan_wait)
     closed = asyncio.Event()
     drained = asyncio.Event()
 
@@ -254,6 +281,11 @@ async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatc
         assert code == status
         assert closed.is_set()
         assert drained.is_set()
+        assert settled.is_set()
+        route = state.get_route(key, firestore_client=db)
+        assert route.pending_count == 0
+        assert route.uncertain_count == 1
+        assert route.latest_write_lsn == 0
         raise Exited
 
     monkeypatch.setattr(cap_hold_lifecycle, 'ACTIVE', {Hold()})
@@ -261,15 +293,25 @@ async def test_normal_child_exit_flushes_holds_and_drains_owned_tasks(monkeypatc
     monkeypatch.setattr(worker_job.os, '_exit', exit_process)
     task = start_background_task(tail(), name='test:worker-exit-tail')
     await asyncio.sleep(0)
+    entry = asyncio.create_task(worker_job.process_entry(LEASE))
     try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        # Simulate settlement outliving the bounded lifespan wait. A normal
+        # child must remain alive until the actual metadata write completes.
+        await asyncio.sleep(0.75)
+        assert not entry.done()
+        release.set()
         with pytest.raises(Exited):
-            await worker_job.process_entry(LEASE)
+            await asyncio.wait_for(entry, 5)
     finally:
+        release.set()
+        await asyncio.gather(entry, return_exceptions=True)
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
 
 async def test_lease_loss_exits_before_flushing_past_its_fence(monkeypatch):
+    from database import pinecone_partition_state as state
     from utils.sync import cap_hold_lifecycle
 
     flush = AsyncMock()
@@ -284,6 +326,7 @@ async def test_lease_loss_exits_before_flushing_past_its_fence(monkeypatch):
 
     monkeypatch.setattr(worker_job, 'run', AsyncMock(side_effect=asyncio.CancelledError))
     monkeypatch.setattr(cap_hold_lifecycle, 'flush_active', flush)
+    monkeypatch.setattr(state, 'drain_mutations', lambda: pytest.fail('drain after lease loss'))
     monkeypatch.setattr(worker_job.os, '_exit', exit_process)
     with pytest.raises(Exited):
         await worker_job.process_entry(LEASE)
@@ -296,6 +339,16 @@ def test_bootstrap_refuses_unpinned_customer_project_before_clients(monkeypatch,
     monkeypatch.setenv('OMI_CUSTOMER_DATA_PROJECT', project)
     with pytest.raises(RuntimeError, match='explicit stage and customer data project'):
         worker_job.bootstrap()
+
+
+def test_blank_credential_env_is_unset_so_adc_uses_workload_identity(monkeypatch):
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+    monkeypatch.setenv('SERVICE_ACCOUNT_JSON', '  ')
+    monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', '/keys/kept.json')
+    worker_job.drop_blank_credential_env()
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ
+    assert 'SERVICE_ACCOUNT_JSON' not in os.environ
+    assert os.environ['FIREBASE_AUTH_CREDENTIALS_PATH'] == '/keys/kept.json'
 
 
 async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monkeypatch):

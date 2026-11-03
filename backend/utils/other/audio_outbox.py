@@ -14,7 +14,7 @@ from typing import Any
 from utils.other import storage
 from utils.other.raw_audio import CapturePack, decode_capture
 from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, record_failure
-from utils.other.audio_frame_table import FRAME_SCHEMA, validate_frames
+from utils.other.audio_frame_table import FRAME_SCHEMA, MAX_MANIFEST_BYTES, validate_frames
 
 
 @dataclass(frozen=True)
@@ -102,6 +102,8 @@ def commit_capture(
             'capture_end_checkpoint': frames[-1] if frames else None,
         }
         payload = json.dumps(manifest, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+        if framed and len(payload) > MAX_MANIFEST_BYTES:
+            raise ValueError('frame manifest exceeds reader bound; producer remains unacknowledged')
         manifest_path = storage.archive_capture_bytes(
             uid,
             payload,
@@ -117,6 +119,10 @@ def commit_capture(
         )
         manifest_blob = bucket.blob(manifest_path)
         manifest_generation = _generation(manifest_blob)
+        # The reader bounds stored bytes before decrypting. Check the actual
+        # immutable object's size too, including any encryption envelope.
+        if framed and (manifest_blob.size is None or manifest_blob.size > MAX_MANIFEST_BYTES):
+            raise ValueError('frame manifest exceeds reader bound; producer remains unacknowledged')
         manifest_digest = hashlib.sha256(payload).hexdigest()
         if (manifest_blob.metadata or {}).get('sha256') != manifest_digest:
             raise ValueError('audio custody manifest digest mismatch')

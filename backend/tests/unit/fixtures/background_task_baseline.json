@@ -92,6 +92,13 @@
       "why": "reviewed recoverable: unfinished follow-ups stay in the durable projection_pending query and are re-launched by the next serving pass after restart"
     },
     {
+      "path": "utils/batch_pipeline/projection_followup.py",
+      "function": "ProjectionFollowups.launch_targeted",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed recoverable: this is only a wakeup after the result receipt is persisted; process loss leaves the same receipt pending for the serving pass, and failed steps retry from that receipt. test_batch_pipeline_recovery_owner_only.py and test_batch_pipeline_projection_followup.py cover owner scope and retry custody"
+    },
+    {
       "path": "utils/batch_pipeline/projection_prefetch.py",
       "function": "ChainPrefetch._scout",
       "kind": "executor.submit",

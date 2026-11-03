@@ -56,12 +56,10 @@ spec:
             matchLabels:
               namespace: {{ .Release.Namespace }}
         target:
-          # Fleet worker_flight busy seconds per second, i.e. demand for the
-          # exclusive GPU chain each replica exists to hold. The 0.5 average
-          # is ~89% of the measured healthy per-worker chain ceiling (0.56,
-          # hpafit 2026-11-01 replay: 0 starved minutes over 24h; the prior
-          # ready-backlog metric thrashed 10-16 replicas during a stockout
-          # while GPU demand stayed under 3 GPU-equivalents).
+          # Fleet worker_flight wall seconds per second, including executor
+          # wait and host work after the pump acquires its exclusive GPU slot.
+          # Defaults and measured/synthetic replay limits live in values.yaml
+          # and docs/batch-pipeline-worker.md; this is not GPU kernel duty.
           type: AverageValue
           averageValue: {{ .instance.chainTarget | quote }}
 {{- end }}
