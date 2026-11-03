@@ -1,4 +1,4 @@
-"""A sync-timed window is proven on the sync store alone when the live store overlaps it."""
+"""Speaker windows are proven and cut on their own store when the other store overlaps."""
 
 from types import SimpleNamespace
 
@@ -8,6 +8,7 @@ from models.conversation import Conversation
 from tests.unit.test_conversation_speaker_resolution_stage import (
     STARTED,
     FakeAudio,
+    VOICES,
     _conversation,
     _span_manifest,
     env,  # noqa: F401
@@ -15,6 +16,7 @@ from tests.unit.test_conversation_speaker_resolution_stage import (
 )
 from utils.conversations import speaker_sync_store as store
 from utils.conversations.audio_placement import AudioPlacement, prepare_audio_coverage
+from utils.speakers import processing as speaker_evidence
 
 SR = stage.SAMPLE_RATE
 ORIGIN = STARTED.timestamp()
@@ -67,6 +69,8 @@ def two_stores(monkeypatch):
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'serve')
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SERVE_PERCENT', '100')
     monkeypatch.delenv(store.SPEAKER_SYNC_STORE_ENV, raising=False)
+    monkeypatch.setattr(speaker_evidence, '_roster', lambda *_: [])
+    monkeypatch.setattr(speaker_evidence.storage, 'store_evidence', lambda *a, **kw: None)
     files = [
         _span_manifest(
             ORIGIN, [(c['span']['start'], c['span']['start'] + c['span']['samples'] / SR) for c in chunks[:-1]]
@@ -112,11 +116,14 @@ def test_outside_the_cohort_the_recording_still_refuses(env, two_stores, monkeyp
     assert conversation.speaker_resolution.status == 'unavailable'
 
 
-def test_final_batch_segments_stay_refused_because_their_store_is_unknown(env, two_stores):  # noqa: F811
+def test_final_batch_segments_are_never_proven_on_the_sync_store(env, two_stores):  # noqa: F811
     _, diarizer = env
     files, reads = two_stores
     conversation = _resolve(files, scopes=['final:batch:unit'] * len(PLAN))
-    assert diarizer.calls == 0 and reads == []
+    # Only the first window has a live-store coverage hole; later windows use
+    # the live voice even though the sync store carries the two desired voices.
+    assert diarizer.calls == len(PLAN) - 1
+    assert reads == ['0.batch.enc']
     assert conversation.speaker_resolution.status == 'unavailable'
 
 
@@ -177,7 +184,7 @@ def _run(monkeypatch, chunks, segments, placements, *, limit_hit=False):
             }
         ]
     )
-    return store.sync_store_placements('u1', 'c1', segments, placements, index, 100.0, float('inf'), max_spans=100)
+    return store.single_store_placements('u1', 'c1', segments, placements, index, 100.0, float('inf'), max_spans=100)
 
 
 TWO_STORES = [_chunk('a.opus.enc', 100.0, 20), _chunk('b.batch.enc', 100.0, 20, is_batch=True)]
@@ -192,7 +199,8 @@ def test_promotes_a_window_only_its_own_store_covers(monkeypatch):
     'label,chunks,segment,reason',
     [
         ('live scope', TWO_STORES, _segment('s', 2.0, 6.0, 'soniox:1'), 'untrusted_clock'),
-        ('batch scope', TWO_STORES, _segment('s', 2.0, 6.0, 'final:batch:u'), 'untrusted_clock'),
+        ('bare batch scope', TWO_STORES, _segment('s', 2.0, 6.0, 'final:batch:'), 'untrusted_clock'),
+        ('conversation scope', TWO_STORES, _segment('s', 2.0, 6.0, 'final:batch:conversation:c1'), 'untrusted_clock'),
         ('bare scope', TWO_STORES, _segment('s', 2.0, 6.0, 'sync:'), 'untrusted_clock'),
         ('other refusal', TWO_STORES, _segment('s', 2.0, 6.0), 'unplaced'),
         ('already placed', TWO_STORES, _segment('s', 2.0, 6.0), 'sync'),
@@ -247,3 +255,135 @@ def test_proof_stops_early_enough_to_embed_what_it_proved(monkeypatch, two_store
     )
     assert session.verified_segment_ids == {s.id for s in pending}
     assert session.deadline == 1040.0 - 3 * stage.PER_WINDOW_EMBED_RESERVE_SECONDS
+
+
+@pytest.fixture
+def batch_stores(monkeypatch):
+    """Live PCM carries two voices; overlapping sync PCM carries the wrong voice."""
+    live = FakeAudio(PLAN)
+    chunks = [
+        _chunk(f'{i}.batch.enc', start, len(data) / 2 / SR, is_batch=True)
+        for i, (start, data) in enumerate(live.chunks)
+    ]
+    chunks.append(_chunk('wrong.opus.enc', ORIGIN + 1.0, 32))
+    pcm = {f'{i}.batch.enc': data for i, (_, data) in enumerate(live.chunks)}
+    pcm['wrong.opus.enc'] = b'\x70\x17' * int(32 * SR)
+    reads = []
+    session = _session_class(chunks, pcm, reads)
+    monkeypatch.setattr(stage, 'AudioChunkReadSession', session)
+    monkeypatch.setattr(store, 'AudioChunkReadSession', session)
+    monkeypatch.delenv('SPEAKER_BATCH_STORE_ENABLED', raising=False)
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')  # Batch authority supplies the cohort.
+    monkeypatch.setattr(
+        stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0], 'person': VOICES[1]}
+    )
+    files = [
+        _span_manifest(
+            ORIGIN, [(c['span']['start'], c['span']['start'] + c['span']['samples'] / SR) for c in chunks[:-1]]
+        ),
+        _span_manifest(ORIGIN, [(ORIGIN + 1.0, ORIGIN + 33.0)], file_id='af2'),
+    ]
+    return files, reads, chunks
+
+
+def _batch_conversation(files, *, resolved_scopes=False):
+    conversation = _conversation(PLAN, scopes=[f'final:batch:unit{i // 2}' for i in range(len(PLAN))])
+    conversation.audio_files = files
+    for segment in conversation.transcript_segments:
+        segment.speaker_match_source = 'batch_pyannote'
+        segment.speaker_identity_status = 'no_match'
+        if resolved_scopes:
+            segment.provider_speaker = {
+                'id': segment.speaker_id,
+                'scope': segment.speaker_id_scope,
+                'provider': 'parakeet',
+            }
+            segment.speaker_id_scope = 'final:batch:conversation:c1'
+    return conversation
+
+
+def _assert_batch_voices(conversation, reads):
+    assert reads and all(path.endswith('.batch.enc') for path in reads)
+    assert conversation.speaker_resolution.status == 'resolved'
+    ids = [s.speaker_id for s in conversation.transcript_segments]
+    assert len(set(ids)) == 2 and ids[:2] == ids[2:4] == ids[4:6] == ids[6:8] and ids[0] != ids[1]
+    for segment, voice in zip(conversation.transcript_segments, PLAN):
+        assert segment.is_user == (voice == 0)
+        assert segment.person_id == ('person' if voice == 1 else None)
+
+
+def test_final_batch_windows_resolve_on_live_store_alone(env, batch_stores, caplog):  # noqa: F811
+    files, reads, _ = batch_stores
+    conversation = _batch_conversation(files)
+    with caplog.at_level('INFO', logger=store.__name__):
+        stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == len(PLAN)
+    _assert_batch_voices(conversation, reads)
+    assert 'event=conversation_speaker_sync_store candidates=8 proven=8 batch_proven=8' in caplog.text
+
+
+def test_batch_kill_switch_restores_untrusted_clock(env, batch_stores, monkeypatch):  # noqa: F811
+    files, reads, _ = batch_stores
+    enabled = _batch_conversation(files)
+    stage.resolve_speakers_for_processing('u1', enabled)
+    _assert_batch_voices(enabled, reads)
+    env[0].clear()
+    reads.clear()
+    calls = env[1].calls
+    monkeypatch.setenv('SPEAKER_BATCH_STORE_ENABLED', 'false')
+    disabled = _batch_conversation(files)
+    refusals = []
+    locate = stage.locate
+
+    def spy(*args, **kwargs):
+        placement = locate(*args, **kwargs)
+        refusals.append(placement.reason)
+        return placement
+
+    monkeypatch.setattr(stage, 'locate', spy)
+    stage.resolve_speakers_for_processing('u1', disabled)
+    assert refusals == ['untrusted_clock'] * len(PLAN)
+    assert env[1].calls == calls and reads == []
+    assert disabled.speaker_resolution.status == 'unavailable'
+
+
+def test_live_store_hole_abstains_only_affected_windows_without_sync_fallback(env, batch_stores):  # noqa: F811
+    files, reads, chunks = batch_stores
+    chunks.pop(1)  # Live coverage ends at 20s; sync still covers the entire tail.
+    conversation = _batch_conversation(files)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == 5
+    assert reads == ['0.batch.enc']
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert conversation.transcript_segments[0].is_user
+    assert conversation.transcript_segments[1].person_id == 'person'
+    for segment in conversation.transcript_segments[5:]:
+        assert segment.speaker_id_scope.startswith('final:batch:unit')
+        assert not segment.is_user and segment.person_id is None
+
+
+def test_resolved_batch_scopes_use_the_retained_provider_unit(env, batch_stores):  # noqa: F811
+    files, reads, _ = batch_stores
+    conversation = _batch_conversation(files, resolved_scopes=True)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == len(PLAN)
+    _assert_batch_voices(conversation, reads)
+
+
+def test_manual_receipt_wins_after_batch_store_resolution(env, batch_stores, monkeypatch):  # noqa: F811
+    files, reads, _ = batch_stores
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda *_: {'segments': {'s1': {'is_user': False, 'person_id': 'manual-person'}}},
+    )
+    conversation = _batch_conversation(files)
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert env[1].calls == len(PLAN)
+    assert reads and all(path.endswith('.batch.enc') for path in reads)
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert conversation.transcript_segments[0].is_user
+    assert conversation.transcript_segments[3].person_id == 'person'
+    manual = conversation.transcript_segments[1]
+    assert manual.person_id == 'manual-person' and not manual.is_user
+    assert manual.speaker_label_source == 'manual'

@@ -57,8 +57,13 @@ the whole-recording refusal; set it on processing services. Refusals appear by r
 `conversation_speaker_audio_evidence` log line.
 
 Inside that cohort, a `sync:` segment refused only because `.batch.enc` overlaps it is proven and cut on
-`.opus.enc` alone. `final:batch:` segments stay refused: desktop record units are timed on `.batch.enc` and the
-conversation does not say which store timed a segment. `SPEAKER_SYNC_STORE_ENABLED=false` restores the refusal.
+`.opus.enc` alone. Persisted `final:batch:{unit}` segments come from desktop record-origin units timed on the
+live store, so overlapping-store refusals are proven and cut on `is_batch` / `.batch.enc` / `.batch.bin` chunks
+alone. After conversation resolution, the original unit scope in `provider_speaker.scope` supplies that proof;
+a `final:batch:conversation:` scope alone does not. A live-store coverage hole abstains only its affected
+windows and never falls back to sync audio. `SPEAKER_SYNC_STORE_ENABLED=false` restores the sync refusal;
+`SPEAKER_BATCH_STORE_ENABLED=false` independently restores the batch refusal. Both switches default on inside
+the per-window cohort. The `conversation_speaker_sync_store` log includes `batch_proven` beside the total proof count.
 
 Rollback: set `BATCH_CONVERSATION_SPEAKERS_ENABLED=false` on processing hosts.
 That stops automatic batch linking/naming, including when speaker-evidence mode

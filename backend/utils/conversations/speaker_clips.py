@@ -4,7 +4,7 @@ import math
 from typing import List, Optional, Tuple
 
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS
-from utils.conversations.speaker_sync_store import in_sync_store
+from utils.conversations.speaker_sync_store import in_store
 from utils.other.audio_chunks import AudioChunkReadSession
 from utils.stt.conversation_speakers import MIN_EMBED_SECONDS
 
@@ -34,7 +34,7 @@ def verified_clip(
     end: float,
     *,
     windows: Optional[List[Tuple[float, float]]] = None,
-    sync_store_only: bool = False,
+    store: Optional[str] = None,
 ) -> Tuple[Optional[bytes], str]:
     """Assemble at most 15s from the invocation's generation-pinned decoded cache.
 
@@ -55,7 +55,7 @@ def verified_clip(
     for chunk in sorted(session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp'])):
         chunk_start = chunk.get('span', {}).get('start', chunk['timestamp'])
         pcm, _ = session.cache.get(chunk['path'], (None, 'missing_blob'))
-        if pcm is None or (sync_store_only and not in_sync_store(chunk)):
+        if pcm is None or (store is not None and not in_store(chunk, store)):
             continue
         chunk_end = chunk_start + len(pcm) / (SAMPLE_RATE * 2)
         if chunk_end <= position or chunk_start >= end:

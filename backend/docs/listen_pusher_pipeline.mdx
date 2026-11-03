@@ -4318,6 +4318,15 @@ timestamps. This deliberately leaves some real mixed recordings unavailable.
 Sync scopes keep their `sync` reason and the v2 marker still wins wherever it
 exists, so span-bearing mixed live+sync conversations resolve.
 
+Within the per-window speaker cohort, `SPEAKER_SYNC_STORE_ENABLED` and
+`SPEAKER_BATCH_STORE_ENABLED` default on. For overlapping-store `untrusted_clock`
+refusals, `sync:` unit windows use only sync objects; persisted `final:batch:`
+unit windows use only live `is_batch` / `.batch.enc` / `.batch.bin` objects.
+Resolved batch conversation scopes require the retained provider unit scope.
+Each switch accepts false/0/off/no to restore its store's refusal independently.
+Proof, decoded coverage and embedding clip assembly all use the selected store;
+an uncovered window never borrows the other store's audio.
+
 A span overlap is not union coverage. When two separate `chunk_spans` entries
 intersect — nested, identical, or chained across more than two — their
 intersection names audio that could have come from either stored object, and
