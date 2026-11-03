@@ -90,8 +90,14 @@ def search_parity(old: list[dict], new: list[dict], tolerance: float = SEARCH_SC
     if len(old_scores) != len(old) or len(new_scores) != len(new) or len(old) != len(new):
         raise MigrationNotReady('Search result membership differs; preserve source route')
     shared = old_scores.keys() & new_scores.keys()
-    if any(abs(old_scores[i] - new_scores[i]) > tolerance for i in shared):
-        raise MigrationNotReady('Search scores differ; preserve source route')
+    drifts = [abs(old_scores[i] - new_scores[i]) for i in shared]
+    over = sum(1 for drift in drifts if drift > tolerance)
+    if over:
+        # Numbers only (no IDs): the journal keeps them so drift near the tolerance can be measured, not guessed.
+        raise MigrationNotReady(
+            f'Search scores differ (max |diff| {max(drifts):.2e} > tolerance {tolerance:.0e} '
+            f'for {over} of {len(shared)} shared ids); preserve source route'
+        )
     old_floor = min(old_scores.values(), default=0.0)
     new_floor = min(new_scores.values(), default=0.0)
     if any(old_scores[i] - new_floor > tolerance for i in old_scores.keys() - shared) or any(
