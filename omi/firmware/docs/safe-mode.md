@@ -251,9 +251,13 @@ factory hex is only for an independently authorized baseline restore; follow
    `-DEXTRA_CONF_FILE=/absolute/fault.conf -DOMI_DEVELOPMENT_BUILD=ON`. With
    sysbuild, pass `-Domi_EXTRA_CONF_FILE=...` and set `OMI_DEVELOPMENT_BUILD=1`
    in the environment, because sysbuild does not forward an image-prefixed
-   `OMI_DEVELOPMENT_BUILD` to the app. Do not set `CMAKE_BUILD_TYPE` on a CV1
-   build: NCS then looks for a build-type `pm_static` file and silently drops
-   the pinned partition map. Use the production `omi.conf` as the base.
+   `OMI_DEVELOPMENT_BUILD` to the app. The guard also rejects the NCS default
+   `MinSizeRel` build type, so pass `-Domi_CMAKE_BUILD_TYPE=Debug`. A build type
+   makes NCS look for a build-type `pm_static` file and silently drop the pinned
+   partition map, so also pass `-DPM_STATIC_YML_FILE=/absolute/partitions.yml`,
+   copied from a normal build's `build/partitions.yml`, and check that the fault
+   build's app, littlefs and settings addresses match it. Use the production
+   `omi.conf` as the base.
    Do not publish these artifacts. Omission of the development opt-in must
    fail CMake with `OMI_FAULT_INJECT is forbidden in release builds`;
    the default Kconfig value is n. Inspect the final app `.config` before use.
