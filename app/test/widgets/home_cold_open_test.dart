@@ -21,37 +21,128 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
+  testWidgets('cached older members wait for their full episode range before first paint', (tester) async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final day = DateUtils.dateOnly(DateTime.now().subtract(const Duration(days: 10)));
+    final a = ServerConversation(id: 'a', createdAt: day, startedAt: day, structured: Structured('Old fragment A', ''));
+    final b = ServerConversation(id: 'b', createdAt: day, startedAt: day, structured: Structured('Old fragment B', ''));
+    final conversations = ConversationProvider(
+      isSignedIn: () => true,
+      conversationListFetcher: () async => throw StateError('cached first page should not refetch'),
+      dailySummariesChecker: () async => false,
+    )
+      ..conversations = [a, b]
+      ..groupedConversations = {
+        day: [a, b],
+      }
+      ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+    final overlay = Completer<ApiResult<EpisodePageRead>>();
+    DateTime? requestedFrom;
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+      fetchPage: (from, to, {cursor}) {
+        requestedFrom = from;
+        return overlay.future;
+      },
+    );
+    await tester.pumpWidget(
+      await buildTypedConversationScreen(
+        conversations,
+        episodes: episodes,
+        initializePreferences: false,
+        requestInitialLoad: true,
+      ),
+    );
+    await tester.pump();
+    expect(requestedFrom, isNotNull);
+    expect(requestedFrom!.isAfter(day), isFalse, reason: 'the initial join must cover cached older pages');
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text(a.structured.title), findsNothing);
+    expect(find.text(b.structured.title), findsNothing);
+    overlay.complete(
+      ApiSuccess(
+        EpisodePageRead(
+          enabled: true,
+          episodes: [
+            Episode(
+              id: 'older-episode',
+              live: false,
+              startedAt: day,
+              lastActivityAt: day.add(const Duration(minutes: 20)),
+              closedAt: day.add(const Duration(minutes: 20)),
+              conversationIds: [a.id, b.id],
+              members: [a, b],
+              title: 'Older grouped episode',
+              moments: [
+                EpisodeMoment(
+                  id: 'm',
+                  conversationId: a.id,
+                  startedAt: day,
+                  endedAt: day,
+                  points: [EpisodePoint('Fixture')],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Older grouped episode'), findsOneWidget);
+    expect(find.text(a.structured.title), findsNothing);
+    expect(find.text(b.structured.title), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    conversations.dispose();
+    episodes.dispose();
+  });
   testWidgets('Short clips keeps a matched floor member outside the episode overlay', (tester) async {
     SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
     await SharedPreferencesUtil.init();
     final now = DateTime.now();
     final short = ServerConversation(
-        id: 'floor', createdAt: now, startedAt: now, structured: Structured('Short clip match', ''), discarded: true);
+      id: 'floor',
+      createdAt: now,
+      startedAt: now,
+      structured: Structured('Short clip match', ''),
+      discarded: true,
+    );
     final retained = ServerConversation(id: 'retained', createdAt: now, structured: Structured('Retained member', ''));
-    final conversations =
-        ConversationProvider(isSignedIn: () => true, conversationListFetcher: () async => (items: [short], ok: true));
+    final conversations = ConversationProvider(
+      isSignedIn: () => true,
+      conversationListFetcher: () async => (items: [short], ok: true),
+    );
     conversations.showShortConversations = true;
     conversations.conversations = [short];
     conversations.groupedConversations = {
-      DateTime(now.year, now.month, now.day): [short]
+      DateTime(now.year, now.month, now.day): [short],
     };
     final episodes = EpisodeProvider(
       fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
       lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
-      fetchPage: (_, __, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [
-        Episode(
-            id: 'e',
-            live: false,
-            startedAt: now,
-            lastActivityAt: now,
-            conversationIds: ['floor', 'retained'],
-            members: [retained])
-      ])),
+      fetchPage: (_, __, {cursor}) async => ApiSuccess(
+        EpisodePageRead(
+          enabled: true,
+          episodes: [
+            Episode(
+              id: 'e',
+              live: false,
+              startedAt: now,
+              lastActivityAt: now,
+              conversationIds: ['floor', 'retained'],
+              members: [retained],
+            ),
+          ],
+        ),
+      ),
     );
     await episodes.refreshLive();
     await episodes.refreshHome(now.subtract(const Duration(days: 1)), now.add(const Duration(days: 1)));
     await tester.pumpWidget(
-        await buildTypedConversationScreen(conversations, episodes: episodes, initializePreferences: false));
+      await buildTypedConversationScreen(conversations, episodes: episodes, initializePreferences: false),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('Short clip match'), findsOneWidget);
@@ -66,7 +157,11 @@ void main() {
       await SharedPreferencesUtil.init();
       final now = DateTime.now();
       final a = ServerConversation(
-          id: 'a', createdAt: now, startedAt: now, structured: Structured('Um, so the idea is…', ''));
+        id: 'a',
+        createdAt: now,
+        startedAt: now,
+        structured: Structured('Um, so the idea is…', ''),
+      );
       final b = ServerConversation(id: 'b', createdAt: now, startedAt: now, structured: Structured('Thank you.', ''));
       final summaries = Completer<bool?>();
       final page = Completer<({List<ServerConversation> items, bool ok})>();
@@ -85,8 +180,14 @@ void main() {
           return overlay.future;
         },
       );
-      await tester.pumpWidget(await buildTypedConversationScreen(conversations,
-          episodes: episodes, initializePreferences: false, requestInitialLoad: true));
+      await tester.pumpWidget(
+        await buildTypedConversationScreen(
+          conversations,
+          episodes: episodes,
+          initializePreferences: false,
+          requestInitialLoad: true,
+        ),
+      );
       await tester.pump();
       expect(pageCalls, 1, reason: 'overlay starts concurrently, before conversations land');
       page.complete((items: [a, b], ok: true));
@@ -96,17 +197,24 @@ void main() {
         expect(find.text(a.structured.title), findsNothing);
         expect(find.text(b.structured.title), findsNothing);
       }
-      overlay.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [
-        Episode(
-          id: 'e',
-          live: false,
-          startedAt: now,
-          lastActivityAt: now,
-          closedAt: now,
-          conversationIds: const ['a', 'b'],
-          members: [a, b],
-        )
-      ])));
+      overlay.complete(
+        ApiSuccess(
+          EpisodePageRead(
+            enabled: true,
+            episodes: [
+              Episode(
+                id: 'e',
+                live: false,
+                startedAt: now,
+                lastActivityAt: now,
+                closedAt: now,
+                conversationIds: const ['a', 'b'],
+                members: [a, b],
+              ),
+            ],
+          ),
+        ),
+      );
       await tester.pump();
       await tester.pump();
       expect(find.text('Finishing up…'), findsOneWidget);

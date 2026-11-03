@@ -63,7 +63,7 @@ enum _ConversationListRowKind {
   conversation,
   recording,
   noiseFold,
-  groupSpacer
+  groupSpacer,
 }
 
 typedef _ConversationListRow = ({
@@ -157,9 +157,10 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
     noiseFoldSignature: Object.hash(
-        identityHashCode(conversations.foldedNoiseCounts),
-        Object.hashAll(conversations.foldedNoiseByDate.keys),
-        Object.hashAllUnordered(conversations.revealedNoiseDates)),
+      identityHashCode(conversations.foldedNoiseCounts),
+      Object.hashAll(conversations.foldedNoiseByDate.keys),
+      Object.hashAllUnordered(conversations.revealedNoiseDates),
+    ),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -364,10 +365,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
       final today = DateUtils.dateOnly(DateTime.now());
+      final initialFrom = conversationProvider.groupedConversations.keys.fold<DateTime>(
+        today.subtract(const Duration(days: 7)),
+        (oldest, day) => day.isBefore(oldest) ? day : oldest,
+      );
       _initialOverlayPending = widget.requestInitialLoad && episodes != null;
       var overlay = _initialOverlayPending
-          ? episodes!
-              .refreshHome(today.subtract(const Duration(days: 7)), today.add(const Duration(days: 1)), bootstrap: true)
+          ? episodes!.refreshHome(initialFrom, today.add(const Duration(days: 1)), bootstrap: true)
           : Future<void>.value();
       try {
         if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
@@ -377,15 +381,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           // under the same single deadline, rather than exposing older members.
           final days = conversationProvider.groupedConversations.keys;
           final oldest = days.isEmpty ? today : days.reduce((a, b) => a.isBefore(b) ? a : b);
-          if (episodes != null && oldest.isBefore(today.subtract(const Duration(days: 7)))) {
+          if (episodes != null && oldest.isBefore(initialFrom)) {
             overlay = episodes.refreshHome(oldest, today.add(const Duration(days: 1)), bootstrap: true);
           }
           final initialOverlay = overlay.onError((error, stack) {
             Logger.error('Initial Home overlay failed: $error');
           });
-          unawaited(initialOverlay.whenComplete(() {
-            if (mounted) setState(() => _initialOverlayPending = false);
-          }));
+          unawaited(
+            initialOverlay.whenComplete(() {
+              if (mounted) setState(() => _initialOverlayPending = false);
+            }),
+          );
           await initialOverlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         } else if (widget.requestInitialLoad) {
           // Still check for daily summaries even if conversations are cached
@@ -393,9 +399,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           overlay = overlay.onError((error, stack) {
             Logger.error('Initial Home overlay failed: $error');
           });
-          unawaited(overlay.whenComplete(() {
-            if (mounted) setState(() => _initialOverlayPending = false);
-          }));
+          unawaited(
+            overlay.whenComplete(() {
+              if (mounted) setState(() => _initialOverlayPending = false);
+            }),
+          );
           await overlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         }
       } finally {
@@ -631,8 +639,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 for (final entry in convoProvider.groupedConversations.entries)
                   entry.key: [
                     for (final c in entry.value)
-                      if (!hiddenByLive.contains(c.id)) c
-                  ]
+                      if (!hiddenByLive.contains(c.id)) c,
+                  ],
               };
         final projectedEpisodes = <String, HomeRow>{};
         final projectedMemberIds = <String>{};
@@ -691,7 +699,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 withLive,
                 [
                   for (final c in snapshot.processingConversations)
-                    if (!projectedMemberIds.contains(c.id)) c
+                    if (!projectedMemberIds.contains(c.id)) c,
                 ],
                 DateTime.now())
             : withLive;
@@ -764,9 +772,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               if (_isBootstrapping)
                 _buildLoadingShimmer()
               else if (_initialOverlayPending)
-                SliverToBoxAdapter(
-                  child: OmiLoadingState(label: context.l10n.episodeFinishingUp),
-                )
+                SliverToBoxAdapter(child: OmiLoadingState(label: context.l10n.episodeFinishingUp))
               else if (showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
@@ -902,8 +908,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           date: row.date,
-                          fillingSeconds: homeRowFilling(filling, row.conversation!.id,
-                              projectedEpisodes[row.conversation!.id]?.episodeConversationIds),
+                          fillingSeconds: homeRowFilling(
+                            filling,
+                            row.conversation!.id,
+                            projectedEpisodes[row.conversation!.id]?.episodeConversationIds,
+                          ),
                           homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:
