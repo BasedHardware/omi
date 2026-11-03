@@ -10,6 +10,14 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.record_seal_worker.pending_page',
+            domains={'namespace': namespaces, 'after': [None, (datetime(2026, 10, 1, tzinfo=timezone.utc), 'pending')]},
+            neutrals={
+                'horizon': (datetime(2026, 11, 1, tzinfo=timezone.utc), 'finite pass cutoff only'),
+                'limit': (64, 'bounded page size only'),
+            },
+        ),
+        DriverEntry(
             'utils.batch_pipeline.record_seal_cluster_repair.discover',
             domains={
                 'after': [
@@ -329,8 +337,12 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',
-            domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready', 'record_pending']},
-            neutrals={'now': (1.0, 'timestamp operand only'), 'limit': (100, 'bounded page size')},
+            domains={
+                'namespace': namespaces,
+                'state': ['leased', 'retry', 'result_ready', 'record_pending'],
+                'limit': [1, 100, 500, 999],
+            },
+            neutrals={'now': (1.0, 'timestamp operand only')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.oldest',

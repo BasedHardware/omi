@@ -171,7 +171,7 @@ def test_missing_key_refuses_before_http(monkeypatch):
 
 @pytest.mark.parametrize('seconds', [0.5, 61, 7200])
 def test_second_chance_is_ship_on_and_separate_from_guarded_cap(key, monkeypatch, seconds):
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     monkeypatch.delenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', raising=False)
     assert module.authorization(seconds, second_chance=True)
     with pytest.raises(module.SonioxBatchError):
