@@ -50,7 +50,12 @@ audio capture and battery checks remain clean. David owns each expansion and
 reviews the first cohort before the next expansion; no automatic expansion is
 scheduled. Keep the prior eligible release published while observing the ramp.
 
-`/v2/firmware/latest` hashes the supplied `device_id` with SHA-256, takes the
+The app supplies `device_id` as the lowercase hex SHA-256 of the normalized DIS
+serial's UTF-8 bytes, never the raw serial. Both automatic discovery and the
+firmware update page use the serial already read from the pendant. If no serial
+is available, the parameter is omitted.
+
+`/v2/firmware/latest` hashes the supplied `device_id` again with SHA-256, takes the
 first eight digest bytes as a big-endian integer modulo 100, and admits buckets
 below `rollout_percent`. The hash excludes the release version, so cohorts are
 stable and nested. Selection retains publication order, firmware minimums and
@@ -58,19 +63,16 @@ newer-version checks; an excluded device receives its newest eligible release,
 or the existing 404/no-update response. Missing `rollout_percent` means 100%,
 preserving existing releases. Invalid explicit policies exclude the release.
 
-**Current client limitation:** `app/lib/backend/http/api/device.dart` sends only
-`device_model`, `firmware_revision`, `hardware_revision` and `manufacturer_name`.
-None is a device identifier. This PR does not synthesize one from those fields,
-an account or a random value. The optional backend `device_id` admits identified
-clients; existing unidentified clients are excluded from percentages below 100
-and retain an earlier eligible release. Consequently the default 1% release is
-held from those clients. Device cohort rollout requires a client that sends its
-existing device identifier and qualification of that identifier's stability.
+New releases start at 1% of devices on an app build that sends `device_id`.
+Older app builds and devices without a usable DIS serial receive a new release
+only at 100%, retaining an earlier eligible release during the ramp. David
+expands each cohort after the health checks above; there is no automatic ramp.
 
 Set `blocked:true` in the same block to stop all new offers, even at 100%.
-The stable and exact-version endpoints also honor the block and exclude partial
-rollouts when no identifier is supplied, preventing alternate discovery paths
-from bypassing the hold. This cannot cancel an in-progress download/install or
+The stable and exact-version endpoints also honor the block. Stable discovery
+excludes partial rollouts because it has no device identifier. Explicit version
+requests ignore `rollout_percent` for support and emergency reverts, but return
+404 for a blocked release. This cannot cancel an in-progress download/install or
 recall a cached/direct asset URL. Release metadata is normally cached for five
 minutes; during GitHub failures the shared helper may serve last-known-good
 metadata for up to a day. Verify fresh responses after any body edit; this is

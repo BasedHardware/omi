@@ -1041,6 +1041,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       firmwareRevision: device.firmwareRevision,
       hardwareRevision: device.hardwareRevision,
       manufacturerName: device.manufacturerName,
+      serialNumber: device.serialNumber,
     );
 
     var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(

@@ -4,7 +4,8 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 import routers.firmware as fw
 
@@ -94,3 +95,29 @@ def test_blocked_release_is_also_unavailable_by_version_and_stable():
     assert fw._find_release_by_version(releases, 'Omi_CV1', (3, 0, 21)) is None
     with patch.object(fw, 'get_omi_github_releases', AsyncMock(return_value=releases)):
         assert asyncio.run(fw.get_stable_version('Omi CV 1'))['version'] == '3.0.20'
+
+
+@pytest.mark.parametrize('blocked', ['true', 'True', ' TRUE ', 'invalid', ''])
+@pytest.mark.parametrize('percent', ['1', '100'])
+def test_explicit_version_endpoint_returns_404_for_blocked_release(blocked, percent):
+    app = FastAPI()
+    app.include_router(fw.router)
+    releases = [release('3.0.21', f'blocked:{blocked}\nrollout_percent:{percent}')]
+    with patch.object(fw, 'get_omi_github_releases', AsyncMock(return_value=releases)):
+        with TestClient(app) as client:
+            response = client.get('/v2/firmware/version', params={'device_model': 'Omi CV 1', 'version': '3.0.21'})
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize('percent', ['0', '1', '99'])
+def test_explicit_version_endpoint_ignores_rollout_percent_for_support_and_reverts(percent):
+    app = FastAPI()
+    app.include_router(fw.router)
+    releases = [release('3.0.21', f'blocked:false\nrollout_percent:{percent}')]
+    with patch.object(fw, 'get_omi_github_releases', AsyncMock(return_value=releases)):
+        with TestClient(app) as client:
+            response = client.get('/v2/firmware/version', params={'device_model': 'Omi CV 1', 'version': '3.0.21'})
+            stable = client.get('/v2/firmware/stable', params={'device_model': 'Omi CV 1'})
+    assert response.status_code == 200
+    assert response.json()['version'] == '3.0.21'
+    assert stable.status_code == 404
