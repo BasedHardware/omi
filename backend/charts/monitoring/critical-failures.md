@@ -21,13 +21,12 @@ the executable definitions. Every rule contains the action, scope and threshold.
 | `omi-batch-unit-unpublished-2h` | New unpublished unit >7200 seconds, sample <900 seconds old; 5m | Inspect the overdue leg and use the custody/recovery runbook; retain staged audio. |
 | `omi-batch-held-backlog-growing` | Assignment-held stock >1000 and 1h growth >50, sample <900 seconds old; 15m | Inspect assignment/projection recovery and compare inflow with drain rate. |
 | `omi-enrichment-queue-depth-page` | Native Cloud Tasks enrichment depth, 5m maximum >6000; 15m | Check dispatch, worker responses and drain rate before adding capacity. |
-| `omi-finalization-dead-letter-stock` | Global finalization dead-letter stock >45000; 15m | Split reasons and use fenced recovery; never delete jobs. |
 | `omi-stt-vendor-benched-page` | Soniox or Modulate minimum stage <=25; 15m | Inspect provider errors and GateState; get recovery approval before clearing a bench. |
 | `omi-modulate-credit-page` | Any Modulate `provider_budget_exhausted` close in 15m; 1m | Billing owner verifies and restores credits before an account-circuit reset. |
 | `omi-soniox-budget-exhausted` (existing) | Any Soniox `provider_budget_exhausted` close in 5m; immediate | Verify Soniox balance and restore credits before resetting its circuit. |
 | `omi-incluster-guard-unsafe-page` | Any unsafe guard signal in 15m; 1m | Read verdict/reason and whether rollback completed; coordinate recovery with the lead. |
 
-Batch and finalization stocks are replicated global gauges: take `max`, never
+Batch stocks are replicated global gauges: take `max`, never
 `sum` across worker/listen pods. Summing multiplies the backlog by replica count.
 The low-stage selector names the two serving paid targets; retired Parakeet's
 persistent low stage must not cause this page. A pristine NaN stage does not
@@ -52,9 +51,9 @@ the GMP-compatible Cloud Monitoring API. No query reads account records.
 * Native enrichment history starts Nov1. Nov1 max 1216 and Nov2 max 5261 sit
   below 6000; Nov3 reaches 22552. Nov2 is a quiet reference for this alert,
   not proof that all product paths were healthy that day.
-* Finalization dead-letter stock is present throughout the seven-day local
-  window: 37730 grows to 49812. Oct28 max 38288 and Oct30 max 42509 are below
-  45000. This alarm detects worsening stock; it does not bless historical debt.
+* Finalization blocked-BYOK dwell and dead-letter stock/age coverage belong to
+  [PR #24533](https://github.com/BasedHardware/omi/pull/24533). This change adds
+  no duplicate finalization rule; the lead must include that PR in the release.
 * Paid-vendor stages are present for the full local window, including extended
   Modulate stage 5..25 and Nov3 benches. A 15m pending duration excludes short
   stage dips; stage 100 is the normal control. The bench itself is actionable

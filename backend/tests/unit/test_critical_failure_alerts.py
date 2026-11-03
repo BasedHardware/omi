@@ -35,7 +35,6 @@ def test_all_critical_rules_are_imported_gated_and_deliver_to_humans():
     [
         ('omi-batch-held-backlog-growing', 1, 0),
         ('omi-enrichment-queue-depth-page', 21563, 5261),
-        ('omi-finalization-dead-letter-stock', 49812, 38288),
         ('omi-stt-vendor-benched-page', 25, 100),
         ('omi-modulate-credit-page', 1, 0),
         ('omi-incluster-guard-unsafe-page', 1, 0),
