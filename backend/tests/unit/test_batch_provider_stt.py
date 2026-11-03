@@ -1,6 +1,7 @@
 """C8 provider-STT stage on the real admission, intent and merge transactions (synthetic only)."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -221,6 +222,26 @@ def test_provider_enqueue_is_idempotent_and_immutable(world):
         store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0, policy=POLICY))
     with pytest.raises(ValueError):
         provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
+
+
+@pytest.mark.parametrize('timing_store', [None, 'batch', 'sync'])
+def test_provider_job_timing_store_is_optional_durable_and_immutable(world, timing_store):
+    _, store = world
+    work = replace(item('p1', 10), timing_store=timing_store)
+    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
+    assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY))
+    row = job(store, work.segment_id)
+    if timing_store is None:
+        assert 'timing_store' not in row
+    else:
+        assert row['timing_store'] == timing_store
+    assert not store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY))
+    if timing_store is None:
+        store.run(lambda tx: tx.put('jobs', work.segment_id, {**row, 'timing_store': None}))
+        assert not store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY))
+    for other in {None, 'batch', 'sync'} - {timing_store}:
+        with pytest.raises(ValueError, match='different immutable work'):
+            store.run(lambda tx: enqueue(tx, replace(work, timing_store=other), 102.0, policy=POLICY))
 
 
 # --- the stage ----------------------------------------------------------------------------------
