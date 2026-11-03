@@ -171,9 +171,12 @@ SHA256 `345f6b77aa32407ed2aaf33c8d2d7809b37e37a68f920ad30fd5fb647a4d1f5a`:
 | rpmsg/IPC | `0x20070000–0x20080000` |
 
 These ranges prove separation from PCD/IPC, **not** from MCUboot runtime RAM.
-No generated MCUboot `.map` or full CV1 SDK was available on the implementation
-host. The requested fielded-loader map proof and warm-reset retention test are
-therefore still qualification gates, not a claimed pass. Before release, take
+Warm-reset retention through the installed jig MCUboot was measured on
+2026-11-03. Four fault-injection runs (driver hang, settings hang, watchdog
+starvation, hard fault) each observed the CRC-valid record count go 1, 2, 3, 4
+across watchdog and fatal resets, and the bootloader region hash matched the
+pinned baseline in every run. No generated MCUboot `.map` was available, so the
+static map proof is still open. To close it, take
 the map from the build corresponding to the installed jig baseline (not a
 new/unrelated loader), record its artifact/source identity and run:
 
