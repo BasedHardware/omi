@@ -79,13 +79,9 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
             return cached[1]
     packs = []
     for index, blob in enumerate(
-<<<<<<< HEAD
-        bucket.list_blobs(prefix=f'raw-live/{uid}/{conversation_id}/', timeout=10, retry=_PACK_LIST_RETRY)
-=======
         bucket.list_blobs(
             prefix=f'raw-live/{uid}/{conversation_id}/', timeout=io_timeout(deadline, timeout), retry=None
         )
->>>>>>> origin/main
     ):
         if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('raw capture index budget exhausted')

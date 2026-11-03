@@ -1360,66 +1360,6 @@ def list_audio_chunks(
             append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
 
     if regional and regional != private_cloud_sync_bucket:
-<<<<<<< HEAD
-        chunks = list({item['path']: item for item in chunks}.values())
-    sample_clock = source_identity
-    if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
-        try:
-            packs = list_packs(bucket, uid, conversation_id)
-            raw_chunks = uncovered_raw_packs(packs, chunks)
-            sample_clock = sample_clock or bool(raw_chunks)
-            chunks.extend(raw_chunks)
-        except Exception as error:
-            if require_archive:
-                raise
-            # The pack listing rides the storage SDK's own availability retry
-            # (raw_audio_read._PACK_LIST_RETRY), so reaching this arm means a
-            # budget of replays already drained. The listing is a read
-            # preference over the legacy chunks this call already carries:
-            # losing it degrades the merge to today's PCM-only coverage, and
-            # the next session lists again. A blip the SDK itself replays is
-            # therefore a quiet degrade — warning, shared fallback event, no
-            # traceback (the prod sensor counts every traceback as a true
-            # error, and this family burned ×36/30m as
-            # ``raw archive listing failed``); permanent refusals and unknown
-            # faults keep the loud classification.
-            if _is_pack_listing_blip(error):
-                logger.warning(
-                    'Raw archive pack listing degraded behind a storage blip; retaining legacy chunks uid=%s conversation_id=%s',
-                    uid,
-                    conversation_id,
-                )
-                record_fallback(
-                    component='other',
-                    from_mode='raw_archive',
-                    to_mode='legacy_chunks',
-                    reason=_listing_blip_reason(error),
-                    outcome='degraded',
-                )
-            else:
-                logger.exception(
-                    'Raw archive pack listing failed; retaining legacy chunks uid=%s conversation_id=%s',
-                    uid,
-                    conversation_id,
-                )
-                record_fallback(
-                    component='other',
-                    from_mode='raw_archive',
-                    to_mode='legacy_chunks',
-                    reason='other',
-                    outcome='exhausted',
-                )
-    if sample_clock:
-        for chunk in chunks:
-            span = chunk.get('span')
-            if span and span['start'] != chunk['timestamp']:
-                # Identity keeps the sample clock after late encoded uploads
-                # cover the last raw fragment, and across archive kill-switch
-                # changes. Filename rounding never changes source identity.
-                chunk['legacy_timestamp'] = chunk['timestamp']
-                chunk['timestamp'] = span['start']
-    return sorted(chunks, key=lambda x: x['timestamp'])
-=======
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
     raw_chunks = raw_chunks_for_listing(
         bucket,
@@ -1436,7 +1376,6 @@ def list_audio_chunks(
         list_raw=list_packs,
     )
     return finish_audio_listing(chunks, raw_chunks, source_identity)
->>>>>>> origin/main
 
 
 def _is_pack_listing_blip(error: BaseException) -> bool:
