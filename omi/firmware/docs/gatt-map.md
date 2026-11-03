@@ -10,9 +10,12 @@ application services register in this order for `omi.conf`: button, haptic,
 audio, settings, features, time sync, storage, diagnostics. Optional accelerometer
 and speaker services retain their existing conditional registration sites.
 Every characteristic expands to a declaration followed by its value; CCC entries
-below follow their owning value. Existing attributes retain their relative order;
-backlog settings additions follow the original charging CCC, and diagnostics is
-registered once, after storage. Absolute handles can change; discover by UUID.
+below follow their owning value. Relative to fielded 3.0.21, which has no
+diagnostics service and registers storage last, existing attributes keep their
+relative order. Backlog settings additions follow the original charging CCC, and
+diagnostics registers once, after storage. That is a change from the unreleased
+07f3866 candidate, which placed diagnostics before storage. Absolute handles can
+change; discover by UUID.
 
 | Service | Characteristic / descriptor order |
 | --- | --- |
