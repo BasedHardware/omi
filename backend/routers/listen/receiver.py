@@ -1303,7 +1303,7 @@ class ListenReceiver(ReplayFilterMixin):
             return await ListenReceiver._initialize_stt(self)
 
     async def _initialize_stt(self) -> bool:
-        if getattr(self.host, '_local_preview_engine_rescinded', False):
+        if getattr(self.host, '_local_preview_engine_rescinded', False) is True:
             self.cloud_live_suppressed = True
             attach_visible_restore(self)
             return True
