@@ -260,6 +260,14 @@ def test_v2_1995_clock_kill_switch_restores_typed_400(client, monkeypatch):
     assert response.json()['code'] == 'invalid_capture_time'
 
 
+def test_v2_early_clamp_does_not_admit_malformed_marker(client):
+    before = _capture_time_counter('rejected_malformed')
+    response = _post_sync(client, 'audio_omi_opus_16000_1_fs160_sd-marker.bin')
+    assert response.status_code == 400, response.text
+    assert response.json()['code'] == 'invalid_capture_time'
+    assert _capture_time_counter('rejected_malformed') == before + 1
+
+
 def test_early_retry_keeps_raw_name_content_identity_and_reuses_receipt(client, monkeypatch):
     monkeypatch.setattr(router, 'compute_sync_content_id', compute_sync_content_id)
     claims = Mock(side_effect=[{'outcome': 'held', 'result': {}}, {'outcome': 'completed', 'result': {}}])
