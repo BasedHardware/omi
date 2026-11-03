@@ -6,7 +6,6 @@ Encrypted embeddings bound repeat work; missing audio abstains and manual receip
 from __future__ import annotations
 
 from config.transcription_final_pass import authoritative_for
-from utils.conversations.final_pass_batch import run_batch_final_pass
 from config.batch_conversation_speakers import (
     BATCH_CONVERSATION_SCOPE,
     enabled as batch_speakers_enabled,
@@ -960,6 +959,8 @@ def resolve_speakers_for_processing(
         # The whole pass is the last automatic authority, after the evidence
         # projection, and must have a successfully read manual receipt.
         if receipt_read and resolution_enabled() and budget_seconds is None:
+            from utils.conversations.final_pass_batch import run_batch_final_pass
+
             run_batch_final_pass(
                 uid,
                 conversation,
