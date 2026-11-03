@@ -114,7 +114,7 @@ def scope_conversation_ids(uid, scopes, *, firestore_client=None):
     result = []
     for snapshot in query.stream():
         raw = snapshot.to_dict() or {}
-        if raw.get('deleted'):
+        if raw.get('deleted') or not raw.get('transcript_segments'):
             continue
         segments = decode_transcript_segments_verified(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))

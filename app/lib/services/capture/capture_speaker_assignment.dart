@@ -5,6 +5,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 
+typedef CaptureSpeakerSaveOutcome = ({bool saved, int lines, bool stale});
+
 /// Serial persistence with immediate labels; capture owns the stream publication.
 mixin CaptureSpeakerAssignment on ChangeNotifier {
   ServerConversation? get speakerAssignmentConversation;
@@ -21,8 +23,8 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
   Future<void> _speakerAssignmentTail = Future.value();
   final Expando<int> _liveLabelGeneration = Expando<int>();
   int _liveLabelSequence = 0;
-  bool speakerAssignmentStale = false;
-  int lastSpeakerAppliedCount = 0;
+  final Expando<int> _pendingLiveLabels = Expando<int>();
+  final Expando<(bool, String?, String?)> _confirmedLiveLabels = Expando<(bool, String?, String?)>();
 
   Future<bool> assignSpeakerToConversation(
     int speakerId,
@@ -30,6 +32,7 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
     String personName,
     List<String> segmentIds, {
     bool applyToSpeaker = false,
+    ValueChanged<CaptureSpeakerSaveOutcome>? onSettled,
   }) async {
     final conversationId = speakerAssignmentConversation?.id;
     final sessionId = activeCaptureSessionId;
@@ -45,6 +48,8 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
         segments.where((line) => applyToSpeaker ? line.speakerId == speakerId : targets.contains(line.id)).toList();
     final before = {for (final line in selected) line: (line.isUser, line.personId, line.speakerLabelSource)};
     for (final line in selected) {
+      if ((_pendingLiveLabels[line] ?? 0) == 0) _confirmedLiveLabels[line] = before[line];
+      _pendingLiveLabels[line] = (_pendingLiveLabels[line] ?? 0) + 1;
       _liveLabelGeneration[line] = generation;
       line.isUser = personId == 'user';
       line.personId = line.isUser || personId.isEmpty ? null : personId;
@@ -54,10 +59,11 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
     speakerLabelsChanged();
     if (!speakerAssignmentClosed) notifyListeners();
     var committed = false;
+    var staleFailure = false;
+    var appliedCount = 0;
     try {
       await previous;
       if (speakerAssignmentClosed || identity != speakerAssignmentIdentity) return false;
-      speakerAssignmentStale = false;
       final finalPersonId = personId.isEmpty ? (await actions.createPerson(personName))?.id : personId;
       if (finalPersonId == null ||
           finalPersonId.isEmpty ||
@@ -73,7 +79,11 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
       );
       if (!saved) return false;
       committed = true;
-      lastSpeakerAppliedCount = actions.lastSpeakerAppliedCount;
+      for (final line in selected) {
+        _confirmedLiveLabels[line] =
+            (finalPersonId == 'user', finalPersonId == 'user' ? null : finalPersonId, 'manual');
+      }
+      appliedCount = actions.lastSpeakerAppliedCount;
       if (speakerAssignmentClosed ||
           speakerAssignmentIdentity != identity ||
           speakerAssignmentConversation?.id != conversationId ||
@@ -90,22 +100,32 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
       publishSpeakerAssignment(speakerId, finalPersonId, personName, targets, applyToSpeaker, generation);
       return true;
     } catch (error) {
-      speakerAssignmentStale = error is StaleSpeakerException;
+      staleFailure = error is StaleSpeakerException;
       return false;
     } finally {
       if (!committed) {
         for (final line in selected) {
           if (_liveLabelGeneration[line] != generation) continue;
-          final original = before[line]!;
+          final original = _confirmedLiveLabels[line] ?? before[line]!;
           line.isUser = original.$1;
           line.personId = original.$2;
           line.speakerLabelSource = original.$3;
         }
         speakerLabelsChanged();
       }
-      taggingSegmentIds = taggingSegmentIds.where((id) => !targets.contains(id)).toList();
+      final remaining = List<String>.of(taggingSegmentIds);
+      for (final id in targets) {
+        remaining.remove(id);
+      }
+      taggingSegmentIds = remaining;
+      for (final line in selected) {
+        _pendingLiveLabels[line] = (_pendingLiveLabels[line] ?? 1) - 1;
+      }
       finished.complete();
       if (!speakerAssignmentClosed) notifyListeners();
+      if (!speakerAssignmentClosed && identity == speakerAssignmentIdentity) {
+        onSettled?.call((saved: committed, lines: appliedCount, stale: staleFailure));
+      }
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api/recording_speakers.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -468,6 +469,87 @@ void main() {
     expect(actions.assignmentCalls, 2);
     expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
     provider.dispose();
+  });
+
+  test('overlapping live renames stay protected until the last save finishes', () async {
+    final firstGate = Completer<bool>();
+    final secondGate = Completer<bool>();
+    final actions = MockCaptureExternalActions()..assignmentCompleter = firstGate;
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'overlap',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    await Future<void>.delayed(Duration.zero);
+    final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a']);
+    actions.assignmentCompleter = secondGate;
+    firstGate.complete(true);
+    expect(await first, isTrue);
+    expect(provider.taggingSegmentIds, contains('a'));
+    expect(provider.segments.single.personId, 'sam');
+    secondGate.complete(true);
+    expect(await second, isTrue);
+    expect(provider.taggingSegmentIds, isEmpty);
+    expect(provider.segments.single.personId, 'sam');
+    provider.dispose();
+  });
+
+  test('overlapping failed live saves restore committed labels and keep each error specific', () async {
+    for (final firstSaved in [false, true]) {
+      final firstGate = Completer<bool>();
+      final secondGate = Completer<bool>();
+      final actions = MockCaptureExternalActions()..assignmentCompleter = firstGate;
+      final provider = CaptureProvider(
+          externalActions: actions,
+          inProgressConversationLoader: () async {},
+          conversationLocationCapture: _CountingConversationLocationCapture());
+      provider.applyInProgressConversation(ServerConversation.fromJson({
+        'id': 'failed-overlap',
+        'created_at': '2026-09-21T00:00:00Z',
+        'started_at': null,
+        'finished_at': null,
+        'structured': {},
+        'status': 'in_progress',
+        'transcript_segments': [_segment('a', 'one').toJson()],
+      }));
+      provider.onSegmentReceived([_segment('a', 'one')]);
+      await Future<void>.delayed(Duration.zero);
+      final outcomes = <({bool saved, int lines, bool stale})>[];
+      final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a'], onSettled: outcomes.add);
+      await Future<void>.delayed(Duration.zero);
+      final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a'], onSettled: outcomes.add);
+      actions.assignmentCompleter = secondGate;
+      if (firstSaved) {
+        firstGate.complete(true);
+      } else {
+        firstGate.completeError(const StaleSpeakerException());
+      }
+      expect(await first, firstSaved);
+      expect(provider.segments.single.personId, 'sam');
+      expect(provider.taggingSegmentIds, contains('a'));
+      expect(outcomes.single.stale, !firstSaved);
+      if (firstSaved) {
+        secondGate.completeError(const StaleSpeakerException());
+      } else {
+        secondGate.complete(false);
+      }
+      expect(await second, isFalse);
+      expect(provider.segments.single.personId, firstSaved ? 'maya' : null);
+      expect(provider.taggingSegmentIds, isEmpty);
+      expect(outcomes.last.stale, firstSaved);
+      provider.dispose();
+    }
   });
 
   test('manual save requires acknowledgment and respects selected scope', () async {

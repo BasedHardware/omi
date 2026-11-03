@@ -112,6 +112,7 @@ def test_non_episode_scope_fallback_includes_same_scope_only(recording, monkeypa
         SimpleNamespace(id=cid, to_dict=lambda cid=cid: recording.rows[('users', 'u', 'conversations', cid)])
         for cid in ['c0', 'c1', 'c2']
     ]
+    snapshots.append(SimpleNamespace(id='empty', to_dict=lambda: {'transcript_segments': None}))
     collection = SimpleNamespace(stream=lambda: iter(snapshots))
     collection.select = lambda fields: collection
     client = SimpleNamespace(

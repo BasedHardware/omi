@@ -471,25 +471,27 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       defaultApplyToSpeaker: true,
       wholeRecording: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        unawaited(provider
-            .assignSpeakerToConversation(
+        final identity = provider.speakerAssignmentIdentity;
+        var reported = false;
+        unawaited(provider.assignSpeakerToConversation(
           speakerId,
           personId,
           personName,
           segmentIds,
           applyToSpeaker: applyToSpeaker,
-        )
-            .then((saved) {
-          if (!mounted) return;
-          if (saved) {
-            OmiFeedback.confirm(context, context.l10n.speakerLabelLinesLabeled(provider.lastSpeakerAppliedCount));
-          } else {
-            OmiFeedback.error(
-                context,
-                provider.speakerAssignmentStale
-                    ? context.l10n.speakerSelectionChanged
-                    : context.l10n.failedToSaveCheckConnection);
-          }
+          onSettled: (result) {
+            if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+            reported = true;
+            if (result.saved) {
+              OmiFeedback.confirm(context, context.l10n.speakerLabelLinesLabeled(result.lines));
+            } else {
+              OmiFeedback.error(context,
+                  result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);
+            }
+          },
+        ).then((saved) {
+          if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+          if (!saved && !reported) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
           setState(() {});
         }));
         return true;
@@ -548,15 +550,27 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
     ];
     OmiHaptics.light();
+    final identity = provider.speakerAssignmentIdentity;
+    var reported = false;
     final ok = await provider.assignSpeakerToConversation(
       segment.speakerId,
       person.id,
       person.name,
       ids,
       applyToSpeaker: true,
+      onSettled: (result) {
+        if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+        reported = true;
+        if (result.saved) {
+          OmiHaptics.success();
+        } else {
+          OmiFeedback.error(
+              context, result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);
+        }
+      },
     );
-    if (!mounted) return;
-    ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
+    if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+    if (!ok && !reported) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
   }
 
   Widget _buildTranscriptTimelineItem(
