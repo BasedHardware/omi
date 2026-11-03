@@ -2,6 +2,7 @@ import 'package:omi/pages/conversation_detail/conversation_recording_speakers.da
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 import 'package:omi/backend/http/api/recording_speakers.dart';
+import 'package:omi/backend/schema/recording_speakers.dart';
 
 import 'package:flutter/material.dart';
 

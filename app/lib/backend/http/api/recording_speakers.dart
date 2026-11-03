@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/schema/recording_speakers.dart';
 import 'package:omi/env/env.dart';
 
 class StaleSpeakerException implements Exception {
@@ -19,28 +20,6 @@ class PartialSpeakerAssignmentException implements Exception {
   final Set<String> failed;
   final int appliedCount;
   final bool stale;
-}
-
-class RecordingLine {
-  RecordingLine(this.conversationId, this.segment, {this.scope, this.label, this.offset = 0});
-  final String conversationId;
-  final TranscriptSegment segment;
-  final String? scope;
-  final String? label;
-  final double offset;
-  (String, String)? get voice {
-    final voiceScope = scope ?? segment.recordingVoice?.$1;
-    final voiceLabel = label ?? segment.recordingVoice?.$2;
-    if (voiceScope == null || voiceScope.isEmpty || voiceLabel == null || voiceLabel.isEmpty) return null;
-    return (voiceScope, voiceLabel);
-  }
-}
-
-class RecordingTranscript {
-  RecordingTranscript(this.lines, {this.episodeId, this.enabled = true});
-  final bool enabled;
-  final List<RecordingLine> lines;
-  final String? episodeId;
 }
 
 typedef RecordingAssignmentCall = Future<ApiResult<int>> Function(
@@ -82,7 +61,23 @@ Future<ApiResult<int>> assignRecordingSpeakers(String conversationId, List<Map<S
       }),
     ),
     send: send,
-    decode: (body) => jsonDecode(body) as Map<String, dynamic>,
+    decode: (raw) {
+      final body = jsonDecode(raw);
+      if (body is! Map<String, dynamic>) throw const FormatException('Invalid speaker assignment response');
+      if (body['enabled'] != false) {
+        final outcomes = body['conversations'];
+        if (body['applied_count'] is! int ||
+            outcomes is! List ||
+            outcomes.any((row) =>
+                row is! Map<String, dynamic> ||
+                row['conversation_id'] is! String ||
+                row['applied_count'] is! int ||
+                (row['error'] != null && row['error'] is! String))) {
+          throw const FormatException('Invalid speaker assignment outcomes');
+        }
+      }
+      return body;
+    },
   );
   if (result is ApiFailure<Map<String, dynamic>>) {
     if (result.problem.statusCode == 404 || result.problem.detail == 'recording_speaker_rename_disabled') {
@@ -93,7 +88,7 @@ Future<ApiResult<int>> assignRecordingSpeakers(String conversationId, List<Map<S
   }
   final body = (result as ApiSuccess<Map<String, dynamic>>).data;
   if (body['enabled'] == false) return _assignLegacy(conversationId, selections, personId, send);
-  final outcomes = (body['conversations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  final outcomes = (body['conversations'] as List).cast<Map<String, dynamic>>();
   final failures = outcomes.where((row) => row['error'] != null).toList();
   final count = body['applied_count'] as int;
   if (failures.isNotEmpty) {

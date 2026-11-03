@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/recording_speakers.dart';
+import 'package:omi/backend/schema/recording_speakers.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
@@ -66,7 +67,16 @@ void main() {
                 personId: personId, wholeRecording: wholeRecording, episodeId: episodeId, send: (request) async {
           requests.add(request);
           return http.Response(
-              stale ? '{"detail":{"code":"stale_speaker"}}' : '{"applied_count":2}', stale ? 409 : 200);
+              stale
+                  ? '{"detail":{"code":"stale_speaker"}}'
+                  : jsonEncode({
+                      'applied_count': 2,
+                      'conversations': [
+                        {'conversation_id': 'c1', 'applied_count': 1},
+                        {'conversation_id': 'c2', 'applied_count': 1}
+                      ]
+                    }),
+              stale ? 409 : 200);
         }),
         reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => ongoing.future),
       )..selectedDate = conversation.createdAt;

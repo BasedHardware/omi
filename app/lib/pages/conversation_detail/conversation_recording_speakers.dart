@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/recording_speakers.dart';
+import 'package:omi/backend/schema/recording_speakers.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';

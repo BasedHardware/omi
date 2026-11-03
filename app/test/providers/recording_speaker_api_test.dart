@@ -61,6 +61,31 @@ void main() {
     expect(requests.last.url, endsWith('/conversations/c1/segments/assign-bulk'));
     expect((result as ApiFailure<int>).problem.statusCode, 409);
   });
+  for (final response in [
+    {'applied_count': 1},
+    {'applied_count': 1, 'conversations': null},
+    {
+      'applied_count': 1,
+      'conversations': [
+        {'conversation_id': 'c1'}
+      ]
+    },
+  ]) {
+    test('malformed member outcomes are a decode failure: $response', () async {
+      final result = await assignRecordingSpeakers(
+          'c1',
+          [
+            {
+              'conversation_id': 'c1',
+              'segment_ids': ['a']
+            }
+          ],
+          personId: 'maya',
+          wholeRecording: false,
+          send: (_) async => http.Response(jsonEncode(response), 200));
+      expect((result as ApiFailure<int>).problem.kind, ApiProblemKind.decode);
+    });
+  }
   test('all stale member outcomes show stale feedback rather than claiming partial success', () async {
     await expectLater(
         assignRecordingSpeakers(
