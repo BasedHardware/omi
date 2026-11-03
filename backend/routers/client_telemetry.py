@@ -29,6 +29,7 @@ from database.client_telemetry_ops import (
 )
 from utils.client_telemetry_metrics import record_ingest
 from utils.executors import db_executor, run_blocking
+from utils.home_rows_metric import observe_home_rows
 from utils.other.endpoints import get_current_user_uid
 
 logger = logging.getLogger(__name__)
@@ -124,8 +125,6 @@ async def post_client_telemetry_batch(request: Request, uid: str = Depends(get_c
 @router.post("/v1/telemetry/home-rows", tags=["telemetry"])
 async def post_home_rows(request: Request, uid: str = Depends(get_current_user_uid)) -> Any:
     """Record the visible Home row count. The daily peak is what the board averages."""
-    from utils.home_rows_metric import observe_home_rows
-
     try:
         payload = await request.json()
     except Exception:

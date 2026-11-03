@@ -11,10 +11,22 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from utils.metrics import OMI_HOME_ROWS_USER_DAY_COUNT, OMI_HOME_ROWS_USER_DAY_SUM
+from prometheus_client import Counter
 
 MAX_ROWS = 500
 MAX_KEYS = 50_000
+
+# Names include _total so the exported series matches the Cloud Monitoring type.
+OMI_HOME_ROWS_USER_DAY_SUM = Counter(
+    'omi_home_rows_user_day_sum_total',
+    'Sum of per-user daily peak visible Home row counts. Never labeled by uid.',
+)
+OMI_HOME_ROWS_USER_DAY_COUNT = Counter(
+    'omi_home_rows_user_day_count_total',
+    'User-days that reported a Home row count. Never labeled by uid.',
+)
+OMI_HOME_ROWS_USER_DAY_SUM.inc(0)
+OMI_HOME_ROWS_USER_DAY_COUNT.inc(0)
 
 _lock = threading.Lock()
 _peaks: dict[tuple[str, str], int] = {}
