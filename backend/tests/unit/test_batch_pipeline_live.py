@@ -28,6 +28,8 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '4')
+    # This fixture deliberately starts the blocking partial in the first group.
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: None)
     store = MemoryStore()
     for i in range(10):
         store.rows['jobs', str(i)] = {
@@ -68,12 +70,38 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
             assert not task.done()
             assert peak == 4
         finally:
+            slow.set()
+            full.set()
             release.set()
             await task
     events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
     assert len(events) == 1
     assert 'row_count=10 partial_count=1 seconds=' in events[0]
     assert all(row['state'] == 'record_pending' and 'expires_at' not in row for row in store.rows.values())
+
+
+@pytest.mark.asyncio
+async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
+    from utils.batch_pipeline import live
+
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse())
+    store = MemoryStore()
+    for segment in ('first', 'second', 'third'):
+        store.rows['jobs', segment] = {
+            'segment_id': segment,
+            'state': 'record_pending',
+            'available_at': 0,
+        }
+    admitted = []
+
+    async def admit(store, pending):
+        admitted.append(pending['segment_id'])
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    assert await live.drain_recordings(store)
+    assert admitted == ['third', 'second', 'first']
 
 
 @pytest.mark.asyncio
