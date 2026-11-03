@@ -230,7 +230,8 @@ void safe_mode_settings_ready(int status)
 static int read_bootstate(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg, void *param)
 {
     ARG_UNUSED(param);
-    if (*name) {
+    /* Zephyr passes NULL for an exact subtree match, not an empty string. */
+    if (name && *name) {
         return 0;
     }
     return safe_mode_settings_set("bootstate", len, read_cb, cb_arg);

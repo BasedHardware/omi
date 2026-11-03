@@ -68,7 +68,7 @@ int settings_load_subtree_direct(const char *key, settings_load_direct_cb cb, vo
 {
     assert(!strcmp(key, "omi/bootstate"));
     loads++;
-    return disk.state ? cb("", sizeof(disk), read_disk, NULL, param) : 0;
+    return disk.state ? cb(NULL, sizeof(disk), read_disk, NULL, param) : 0;
 }
 static void boot(uint32_t reason, bool load_settings)
 {
