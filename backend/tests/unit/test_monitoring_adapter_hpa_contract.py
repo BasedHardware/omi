@@ -15,6 +15,7 @@ from scripts.diff_prod_adapter import (
     BATCH_PIPELINE_RULE,
     BATCH_PIPELINE_CAPACITY_RULE,
     BATCH_PIPELINE_CHAIN_RULE,
+    RECORD_SEAL_RULE,
     PARAKEET_QUEUE_RULES,
     compare,
     expected_config,
@@ -115,7 +116,9 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     supplied = yaml.safe_load((CHARTS / 'batch-pipeline-worker/prometheus-adapter-rules.yaml').read_text())
     capacity = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as']]
     chain = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as']]
-    assert actual + capacity + chain == supplied['external']
+    seal = [r for r in rules if r['name']['as'] == RECORD_SEAL_RULE['name']['as']]
+    assert seal == [RECORD_SEAL_RULE]
+    assert seal + actual + capacity + chain == supplied['external']
     assert capacity == [BATCH_PIPELINE_CAPACITY_RULE]
     query = capacity[0]['metricsQuery']
     assert 'max by (namespace, worker_release, priority)' in query
@@ -217,7 +220,9 @@ def _comparison_inputs():
     config = {'externalRules': values['external'], 'rules': values['custom']}
     live = copy.deepcopy(config)
     live['externalRules'].remove(NLLB_RULE)
-    listen = live['externalRules'][0]
+    listen = next(
+        rule for rule in live['externalRules'] if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
+    )
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
     # Captured pre-upgrade queries, independent of the candidate values above.
