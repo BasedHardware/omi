@@ -268,7 +268,7 @@ def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusa
     if refusal == 'segment':
         lane.conversation.transcript_segments[-1].id = 'cannot-reconstruct'
     metric = batch.OUTCOMES.labels(
-        lane='batch', outcome=('failed:read_budget' if refusal.startswith('read_') else 'failed:incomplete_coverage')
+        lane='batch', outcome=('failed_read_budget' if refusal.startswith('read_') else 'failed_incomplete_coverage')
     )
     before = metric._value.get()
     assert all(s.person_id == 'resolver-person' and not s.is_user for s in resolve(lane))
@@ -290,10 +290,10 @@ def test_manual_receipt_beats_final_labels_and_reserves_owner(lane):
 def test_too_long_skips_gpu_and_keeps_resolver_labels(lane):
     # The sparse span itself exceeds the limit; no huge test allocation needed.
     lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 7201)
-    before = batch.OUTCOMES.labels(lane='batch', outcome='failed:too_long')._value.get()
+    before = batch.OUTCOMES.labels(lane='batch', outcome='failed_too_long')._value.get()
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert not lane.gpu and lane.fallbacks
-    assert batch.OUTCOMES.labels(lane='batch', outcome='failed:too_long')._value.get() == before + 1
+    assert batch.OUTCOMES.labels(lane='batch', outcome='failed_too_long')._value.get() == before + 1
 
 
 def test_diarizer_error_falls_back_to_current_resolver(lane, monkeypatch):
@@ -577,7 +577,7 @@ def test_capture_clock_places_staged_pcm_and_words_across_gap(lane, monkeypatch)
 
 def test_overlapping_incompatible_unit_clocks_keep_all_labels(lane):
     lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 4)
-    metric = batch.OUTCOMES.labels(lane='batch', outcome='failed:incomplete_coverage')
+    metric = batch.OUTCOMES.labels(lane='batch', outcome='failed_incomplete_coverage')
     before = metric._value.get()
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert not lane.gpu and lane.fallbacks

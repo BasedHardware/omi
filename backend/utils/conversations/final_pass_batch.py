@@ -27,6 +27,7 @@ from utils.conversations.final_pass_assignment import assign_words
 from utils.conversations.final_pass_pyannote import run_final_pass, OUTCOMES, OWNER_DELTA
 from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import BatchFinalPassOutcome, ReasonFamily, reason_label
 from utils.stt.conversation_speakers import Identity, significant_capture_speaker_ids
 from utils.stt.diarization import HttpDiarizer
 from utils.sync.stage import current_stage
@@ -82,7 +83,9 @@ def _reserve_budget(seconds):
 
 
 def _fallback(outcome):
-    OUTCOMES.labels(lane='batch', outcome=outcome).inc()
+    OUTCOMES.labels(
+        lane='batch', outcome=reason_label(ReasonFamily.BATCH_FINAL_PASS, outcome, BatchFinalPassOutcome)
+    ).inc()
     logger.info('event=batch_final_pass outcome=%s', outcome)
     record_fallback(
         component='stt_selection',
@@ -90,8 +93,8 @@ def _fallback(outcome):
         to_mode='legacy_speaker_matching',
         reason=(
             'recovery_budget'
-            if outcome in {'failed:read_budget', 'skipped_budget'}
-            else 'unavailable' if outcome == 'failed:incomplete_coverage' else 'other'
+            if outcome in {'failed_read_budget', 'skipped_budget'}
+            else 'unavailable' if outcome == 'failed_incomplete_coverage' else 'other'
         ),
         outcome='degraded',
     )
@@ -188,14 +191,14 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply):
     try:
         _run(uid, conversation, receipt, load_prints, apply)
     except OverflowError:
-        _fallback('failed:too_long')
+        _fallback('failed_too_long')
     except ArtifactReadLimit:
-        _fallback('failed:read_budget')
+        _fallback('failed_read_budget')
     except IncompleteCoverage:
-        _fallback('failed:incomplete_coverage')
+        _fallback('failed_incomplete_coverage')
     except Exception as error:
         logger.warning('event=batch_final_pass outcome=failed exception_type=%s', type(error).__name__)
-        _fallback('failed:batch_audio')
+        _fallback('failed_batch_audio')
     finally:
         _SLOTS.release()
 
@@ -245,10 +248,10 @@ def _run(uid, conversation, receipt, load_prints, apply):
     if passed is None:
         return  # Shared runner records its service/timeout fallback.
     if outcome.get('naming_outcome') == 'incompatible_space':
-        _fallback('failed:incompatible_space')
+        _fallback('failed_incompatible_space')
         return
     if not all(check() for check in checks) or not final_pass_enabled_for(uid, conversation.transcript_segments):
-        _fallback('failed:revoked')
+        _fallback('failed_revoked')
         return
     labels_by_voice = {s.speaker: s for s in passed if s.speaker is not None}
     by_segment = {}
@@ -266,11 +269,11 @@ def _run(uid, conversation, receipt, load_prints, apply):
     voice_ids = {}
     for segment_id, labels in by_segment.items():
         if None in labels:
-            _fallback('failed:unassigned_words')
+            _fallback('failed_unassigned_words')
             continue
         voices = set(labels)
         if len(voices) != 1:
-            _fallback('failed:unassigned_words')
+            _fallback('failed_unassigned_words')
             continue
         voice = voices.pop()
         if voice not in voice_ids:

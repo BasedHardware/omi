@@ -121,12 +121,12 @@ stable segment IDs survive application under `final:batch:conversation:<id>`.
 Every failure, including incompatible embedding output, emits `record_fallback`
 and retains current resolver labels. There is
 one nonwaiting process slot, a 600-second deadline, a 7200-second PCM ceiling
-(`failed:too_long`), and a 128-unit limit. This invocation has its own read budget:
+(`failed_too_long`), and a 128-unit limit. This invocation has its own read budget:
 180 seconds, 320 MiB of encrypted objects and 512 object reads, including result,
 audio and nested manifest sources. It is independent of the playback reader's
 30-second/64-MiB defaults. Reads stop before exceeding a byte/object limit and
 refuse results arriving after the deadline; exhausted budgets emit
-`failed:read_budget`, other coverage failures `failed:incomplete_coverage`.
+`failed_read_budget`, other coverage failures `failed_incomplete_coverage`.
 Budget reservations are Redis-atomic and charge attempts (including retries) before
 GPU work: `BATCH_FINAL_PASS_DAILY_AUDIO_HOURS=1200`,
 `BATCH_FINAL_PASS_HOURLY_AUDIO_HOURS=50`, `BATCH_FINAL_PASS_HOURLY_REQUESTS=1000`.
