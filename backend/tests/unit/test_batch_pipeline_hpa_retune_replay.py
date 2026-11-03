@@ -1,4 +1,4 @@
-"""Replay proof that the batch worker HPA returns to its floor at 25% load (batchretune, 2026-11-02).
+"""Measured 25%-load replay and synthetic full-volume models for the batch HPA.
 
 At 02:30Z on 2026-11-02 the batch pool held 8 L4 nodes at ~2% GPU. Two faults in
 the max-of-two shape (#24256) combine there:
@@ -130,12 +130,12 @@ def test_chart_and_adapter_return_to_the_floor_without_queueing():
     chain_column = _served_chain_column()
     trace = _replay(series, _metrics(config, chain_column), config)
     mean = sum(trace) / len(trace)
-    # Measured at 25%: GPU work averages ~1.1 chain s/s, about two workers at
+    # Measured at 25%: flight wall time averages ~1.1 chain s/s, about two workers at
     # target. The fleet should sit at or just above the floor of 4.
     assert mean <= 5.5, (chain_column, mean)
     assert max(trace) <= 7, (chain_column, max(trace))
     # Timeliness: per-worker 5m chain demand stays below the hot line in every
-    # minute, so a smaller fleet never queues flights behind each other.
+    # minute. This is a headroom proxy, not a measurement of backlog latency.
     hot = [
         (epoch, replicas, demand)
         for epoch, replicas, demand in zip(series['epoch'], trace, series['chain_5m_per_pod'])
@@ -152,6 +152,45 @@ def test_fleet_held_at_the_live_size_sheds_to_the_floor():
     assert next(i for i, replicas in enumerate(trace) if replicas <= 5) <= 60
     assert config['min_replicas'] in trace
     assert trace[-1] <= 6
+
+
+# Scale fleet totals only: the fixture names ending in _per_pod already sum
+# deduplicated pod rates across the fleet. Epochs and missing samples stay intact.
+# 3.7 * the measured mean 10m rate models ~4.19 chain s/s, not a new prod capture.
+FULL_VOLUME_SCALE = 3.7
+
+
+def _full_volume_model():
+    return {
+        name: values if name == 'epoch' else [None if value is None else value * FULL_VOLUME_SCALE for value in values]
+        for name, values in _load().items()
+    }
+
+
+def test_full_volume_model_reduces_mean_replicas_against_previous_targets():
+    # Model only: replay measured served work as exogenous demand. It cannot
+    # establish latency or prove this workload fits the resulting capacity.
+    config = _config()
+    series = _full_volume_model()
+    chain_column = _served_chain_column()
+    trace = _replay(series, _metrics(config, chain_column), config)
+    before = dict(config, ready_target=32, chain_target=0.5)
+    previous = _replay(series, _metrics(before, chain_column), before)
+    assert sum(trace) / len(trace) < sum(previous) / len(previous)
+    assert config['min_replicas'] == 4 and 4 in trace
+
+
+def test_full_volume_model_cannot_qualify_eight_workers_without_hot_minutes():
+    # The proposed <=8/no-hot acceptance is internally inconsistent: peak
+    # scaled 5m fleet wall demand needs 18 workers at the existing hot line,
+    # beyond even the unchanged prod ceiling. Do not dilute the hot threshold
+    # or describe this synthetic replay as full-volume qualification.
+    config = _config()
+    series = _full_volume_model()
+    peak = max(value for value in series['chain_5m_per_pod'] if value is not None)
+    needed = math.ceil(peak / HOT_CHAIN_PER_WORKER)
+    assert needed > 8
+    assert needed > config['max_replicas']
 
 
 def _step_load(ready_target, chain_window, config, minutes=90, step_at=10, base=1.1, high=5.8):
@@ -191,3 +230,13 @@ def test_sustained_load_step_is_absorbed_about_as_fast_as_before():
     before_worst, before_caught = _step_load(16, 2, dict(config, chain_target=0.5))
     assert worst <= before_worst + 1, (worst, before_worst)
     assert caught is not None and caught <= before_caught + 2, (caught, before_caught)
+
+
+def test_full_volume_sustained_step_has_bounded_backlog_wait_and_catchup():
+    # Synthetic sustained step, including the five-minute provisioning delay;
+    # fleet targets must keep modeled wait far below the 30-minute soft bound.
+    config = _config()
+    window = int(re.search(r'(\d+)m$', _served_chain_column().replace('_per_pod', '')).group(1))
+    worst, caught = _step_load(config['ready_target'], window, config, base=4.05, high=12)
+    assert worst <= 10, worst
+    assert caught is not None and caught <= 30, caught
