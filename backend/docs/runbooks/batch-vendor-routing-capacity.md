@@ -12,7 +12,7 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | 3 |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | preserve audited live min 6 / max 12; reductions need a new lead decision |
 | L4 node pool minimum | GKE `batch-pipeline-pool` (operator-managed, not in this repo) | lead / op1 | previous minimum |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
@@ -22,6 +22,16 @@ All of these are config, not code constants. Changing one is a values or
 config-train change, never a code change.
 
 ## GPU floor
+
+**Current bounds (2026-11-03, lead af6df5): baseline/min 6, max 12.** The
+read-only live check confirmed min 6 / max 12, with 11 desired replicas. The
+chart preserves those bounds; Helm's existing lookup preserves the live replica
+count on upgrades. The earlier four-worker sizing below is historical, not a
+rollback target or evidence that six workers have the same cost or capacity.
+Recheck Ready on-demand capacity before any later roll; do not scale down to
+the earlier baseline as part of an observability rollback.
+
+### Earlier four-worker sizing (2026-11-01)
 
 David's requirement (11-01): keep GPUs even when a vendor is cheaper, because
 Modulate has outages. Modulate had six hard or degraded events in six weeks;
@@ -333,7 +343,7 @@ Leave the floor alone. On close, watch `vendor_held` drain at the queue rate.
 
 **L4 stockout.** The floor holds and scale-up fails. Do not delete or recreate
 pool nodes, and do not lower the floor to free quota. Deep backlog is
-tolerated; audio is durable while it waits. If the floor itself drops below 4
+tolerated; audio is durable while it waits. If the floor itself drops below 6
 Ready (a node lost to maintenance), vendors carry the overflow only where
 overflow is armed (section above) and only for fresh units; check that no
 vendor is also unhealthy before expanding any percent.

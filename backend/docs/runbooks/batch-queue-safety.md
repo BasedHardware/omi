@@ -61,7 +61,9 @@ serving image identity, then a new bounded age/BLIND reading, and read back the
 live alert UID, page tier, receiver and absence of the agent mute interval.
 Do not test notification delivery by notifying users.
 
-Rollback: restore the prior worker and guard chart and restore the Grafana rule
-backup through the documented importer. Disposition/redrive cannot be undone by
+Rollback: restore the prior worker image and guard chart and restore the Grafana
+rule backup through the documented importer. Preserve the audited worker HPA
+min 6 / max 12 and baseline 6; do not restore the stale 4/16 chart values.
+Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
 replan after an uncertain result.
