@@ -19,6 +19,7 @@ from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
+from config.record_drain import record_drain_batch, record_drain_concurrency
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -44,22 +45,6 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-
-
-def _drain_setting(name: str, default: int, maximum: int) -> int:
-    try:
-        value = int(os.getenv(name, str(default)))
-    except ValueError:
-        value = default
-    return max(1, min(value, maximum))
-
-
-def record_drain_batch() -> int:
-    return _drain_setting('RECORD_DRAIN_BATCH', 100, 500)
-
-
-def record_drain_concurrency() -> int:
-    return _drain_setting('RECORD_DRAIN_CONCURRENCY', 16, 64)
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
