@@ -1431,7 +1431,7 @@ class ListenReceiver(ReplayFilterMixin):
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
-            self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
+            self._stt_death_monitor_task = self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             self.cap_paused = False
 
             return True

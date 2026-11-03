@@ -429,6 +429,10 @@ async def test_rescind_retires_an_already_open_journal_carveout_before_restore(h
         return task
 
     h.host.spawn = spawn
+    monitor = asyncio.create_task(asyncio.sleep(3600))
+    recovery = asyncio.create_task(asyncio.sleep(3600))
+    h.receiver._stt_death_monitor_task = monitor
+    h.receiver._replay_recovery_task = recovery
     begin = Mock()
     abort = AsyncMock()
     monkeypatch.setattr(local_preview_module, 'begin_stream_close', begin)
@@ -439,7 +443,8 @@ async def test_rescind_retires_an_already_open_journal_carveout_before_restore(h
     assert h.receiver.cloud_live_suppressed
     assert h.receiver.stt_socket is None
     assert h.receiver.visible_restore is not None
-    await asyncio.gather(*closing)
+    await asyncio.gather(*closing, monitor, recovery, return_exceptions=True)
+    assert monitor.cancelled() and recovery.cancelled()
     abort.assert_awaited_once_with(previous, timeout=2)
     h.dial.assert_not_awaited()
     await h.receiver.visible_restore.shutdown()

@@ -205,6 +205,12 @@ def record_cloud_live_saved_seconds(receiver, request, decoded_audio_bytes: int)
 def close_rescinded_stream(receiver) -> None:
     """Retire any journal-refusal carve-out before a visible-only stream can open."""
     receiver.cloud_live_suppressed = True
+    monitor = getattr(receiver, '_stt_death_monitor_task', None)
+    if monitor is not None:
+        monitor.cancel()  # Optional preview has its own non-terminal health monitor.
+    recovery = getattr(receiver, '_replay_recovery_task', None)
+    if recovery is not None:
+        recovery.cancel()
     socket = getattr(receiver, 'stt_socket', None)
     receiver.stt_socket = None
     if socket is None:
