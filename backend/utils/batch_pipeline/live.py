@@ -395,12 +395,26 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     concurrency = record_drain_concurrency()
     segments, partial_count = [], 0
     privacy_blocked = False
+    # Every admission rewrites the owner's scheduler row, so two local workers
+    # admitting one owner only exhaust each other's contention retries. Leave
+    # the busy owner's other rows due for the next pass instead.
+    busy_owners = set()
 
     async def drain_one(segment):
-        nonlocal partial_count, privacy_blocked
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
             return
+        owner = pending.get('owner_id')
+        if owner in busy_owners:
+            return
+        busy_owners.add(owner)
+        try:
+            await admit_and_defer(segment, pending)
+        finally:
+            busy_owners.discard(owner)
+
+    async def admit_and_defer(segment, pending):
+        nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
         failed = False
         try:

@@ -553,7 +553,10 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
-        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},'
+        r'\n        {"name": "BATCH_CONTROL_CANDIDATE_FANOUT", "value": "16"},'
+        r'\n        {"name": "BATCH_ADMISSION_PARALLEL_CALLS", "value": "true"},'
+        r'\n        {"name": "BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS", "value": "10"},',
         payload,
         flags=re.DOTALL,
     )

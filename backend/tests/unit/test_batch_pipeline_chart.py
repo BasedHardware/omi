@@ -135,10 +135,10 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'worker_release': 'synthetic-worker',
         'namespace': 'synthetic',
     }
-    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
+    assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '41'}
     assert chain['external']['metric']['name'] == 'omi_batch_pipeline_gpu_chain_busy_seconds'
     assert chain['external']['metric']['selector']['matchLabels'] == {'namespace': 'synthetic'}
-    assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.5'}
+    assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '0.56'}
 
 
 def test_enabled_chart_refuses_unpinned_image_and_unsampled_scale_to_zero():
@@ -335,8 +335,8 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
         # namespace's chain metric covers the whole fleet, so both targets
         # double: each pool HPA buys half of either demand instead of buying
         # it twice.
-        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '64'}
-        assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1'}
+        assert ready['external']['target'] == {'type': 'AverageValue', 'averageValue': '82'}
+        assert chain['external']['target'] == {'type': 'AverageValue', 'averageValue': '1.12'}
     assert (
         deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
         == 'synthetic-worker-spot'
@@ -758,3 +758,32 @@ def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
     assert env['STT_CAP_DISPATCH_COHORT'] == 'uid:synthetic'
     assert env['STT_CAP_DISPATCH_LANES'] == 'batch'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
+
+
+@pytest.mark.parametrize('rollback', [False, True])
+def test_control_loop_defaults_and_value_only_rollback_render(tmp_path, rollback):
+    # JSON is a string: Helm cannot deep-merge the enabled key into an empty map.
+    overrides = tmp_path / 'rollback.yaml'
+    overrides.write_text(
+        "worker:\n  controlCandidateFanout: 64\n  admissionParallelCalls: false\n  idlePollMaxSeconds: 2\n  firestoreReadLevers: '{}'\n"
+    )
+    arguments = ['-f', str(overrides)] if rollback else []
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc.get('kind') == 'Deployment')
+    env = {
+        entry['name']: entry.get('value') for entry in deployment['spec']['template']['spec']['containers'][0]['env']
+    }
+    expected = ('64', 'false', '2', '{}') if rollback else ('16', 'true', '10', '{"batch_privacy_memoize":100}')
+    assert (
+        tuple(
+            env[key]
+            for key in (
+                'BATCH_CONTROL_CANDIDATE_FANOUT',
+                'BATCH_ADMISSION_PARALLEL_CALLS',
+                'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
+                'FIRESTORE_READ_LEVERS',
+            )
+        )
+        == expected
+    )

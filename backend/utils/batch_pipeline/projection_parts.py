@@ -5,7 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from utils.batch_pipeline.contracts import MAX_PROJECTION_PARTS, projection_speech_spans
 from utils.sync.vad_segments import merge_and_cap_vad_segments
-from diarizer.batch_pipeline import validate_words
+from utils.batch_pipeline.word_validation import validate_words
 
 
 def stamp_speaker(segment, item, payload, authoritative, batch_segment_id):

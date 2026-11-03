@@ -206,18 +206,34 @@ class ArtifactStore:
         self._unchanged(item, context)
         return None
 
-    def _read(self, item: WorkItem, uri: str, kind: str, limit: int) -> bytes:
+    def _read(self, item: WorkItem, uri: str, kind: str, limit: int, *, read_budget=None) -> bytes:
         context = self.authorize(item)
         if item.privacy_generation is None or context.generation != item.privacy_generation:
             raise PermissionError('batch artifacts require the admitted privacy generation')
         name, generation = self._reference(item, uri, kind)
         blob = self.bucket.blob(name, generation=generation)
-        leaf_timings.call('download_metadata', blob.reload, if_generation_match=generation, timeout=30, retry=None)
+        if read_budget is not None:
+            read_budget.begin()
+        leaf_timings.call(
+            'download_metadata',
+            blob.reload,
+            if_generation_match=generation,
+            timeout=read_budget.timeout(30) if read_budget is not None else 30,
+            retry=None,
+        )
         if not blob.size or not 0 < blob.size <= limit + len(MAGIC) + 28:
             raise ValueError('stored batch artifact exceeds bounded payload size')
+        if read_budget is not None:
+            read_budget.reserve(blob.size)
         sealed = leaf_timings.call(
-            'download', blob.download_as_bytes, if_generation_match=generation, timeout=60, retry=None
+            'download',
+            blob.download_as_bytes,
+            if_generation_match=generation,
+            timeout=read_budget.timeout(60) if read_budget is not None else 60,
+            retry=None,
         )
+        if read_budget is not None:
+            read_budget.timeout(60)
         if len(sealed) > limit + len(MAGIC) + 28 or not sealed.startswith(MAGIC):
             raise ValueError('invalid batch artifact envelope')
         offset = len(MAGIC)
@@ -288,8 +304,8 @@ class ArtifactStore:
     def load_record_plan(self, item: WorkItem, uri: str) -> dict:
         return json.loads(self._read(item, uri, 'audio', RESULT_LIMIT))
 
-    def fetch_audio(self, item: WorkItem) -> bytes:
-        body = self._read(item, item.audio_uri, 'audio', AUDIO_LIMIT)
+    def fetch_audio(self, item: WorkItem, *, read_budget=None) -> bytes:
+        body = self._read(item, item.audio_uri, 'audio', AUDIO_LIMIT, read_budget=read_budget)
         if body.startswith(RECORD_MAGIC):
             conversation_id = item.conversation_id
             if not conversation_id:
@@ -302,7 +318,13 @@ class ArtifactStore:
                 body,
                 item,
                 lambda ref: read_reference(
-                    self.client, ref, item.owner_id, conversation_id, allowed, self.key_for_owner(item.owner_id)
+                    self.client,
+                    ref,
+                    item.owner_id,
+                    conversation_id,
+                    allowed,
+                    self.key_for_owner(item.owner_id),
+                    read_budget=read_budget,
                 ),
             )
             self.authorize(item)
@@ -344,8 +366,8 @@ class ArtifactStore:
         self.load_result(item, uri)
         return uri
 
-    def load_result(self, item: WorkItem, uri: str) -> dict[str, Any]:
-        payload = json.loads(self._read(item, uri, 'results', RESULT_LIMIT))
+    def load_result(self, item: WorkItem, uri: str, *, read_budget=None) -> dict[str, Any]:
+        payload = json.loads(self._read(item, uri, 'results', RESULT_LIMIT, read_budget=read_budget))
         if not isinstance(payload, dict):
             raise ValueError('batch result must be a JSON object')
         return payload
