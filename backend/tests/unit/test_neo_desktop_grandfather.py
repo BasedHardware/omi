@@ -18,7 +18,6 @@ import pytest
 
 # Import database before utils.subscription to satisfy the circular import.
 import database.users  # noqa: F401
-import utils.subscription as subscription_mod
 
 from models.users import PlanType, Subscription  # noqa: E402
 from utils.subscription import (  # noqa: E402
@@ -27,7 +26,6 @@ from utils.subscription import (  # noqa: E402
     DESKTOP_ACCESS_TIER_FREE,
     DESKTOP_ACCESS_TIER_FULL,
     effective_desktop_access_tier,
-    get_remaining_transcription_seconds,
     neo_grandfather_until,
     plan_grants_desktop,
 )

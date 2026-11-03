@@ -1,23 +1,8 @@
 """Listen admission retains the disabled trial answer on every client source."""
 
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
-
 import pytest
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
-
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-RUNTIME_SRC_PATH = BACKEND_DIR / 'routers' / 'listen' / 'runtime.py'
-PAYMENT_SRC_PATH = BACKEND_DIR / 'routers' / 'payment.py'
-USERS_SRC_PATH = BACKEND_DIR / 'routers' / 'users.py'
-SUBSCRIPTION_SRC_PATH = BACKEND_DIR / 'utils' / 'subscription.py'
-
-
-def _read_source(path):
-    with open(path, encoding='utf-8') as f:
-        return f.read()
 
 
 class FakeWebSocket:

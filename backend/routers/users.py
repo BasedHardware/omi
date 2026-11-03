@@ -1680,16 +1680,7 @@ def get_user_paywall_status(
 
 @router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
 def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
-    """Structured trial metadata for the calling user.
-
-    Returns trial timing info (start, end, remaining seconds, expired flag)
-    plus the list of features available during trial and the plan the user
-    falls to after trial expiry. Used by desktop clients to render countdown
-    banners and pre-expiry upgrade nudges.
-
-    Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
-    (trial is irrelevant to them — they have full access).
-    """
+    """Retain the disabled trial's constant metadata for released desktop decoders."""
     return get_trial_metadata(uid)
 
 

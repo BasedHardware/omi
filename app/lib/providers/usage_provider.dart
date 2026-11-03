@@ -178,11 +178,12 @@ class UsageProvider with ChangeNotifier {
 
   bool get isOutOfCredits {
     final allowance = _subscription?.transcriptionAllowance;
-    if (allowance?.isBlocked == true) return true;
-    if (allowance?.isOnDevice != true) return false;
+    if (allowance == null) return false;
+    if (allowance.isBlocked) return true;
+    if (!allowance.isOnDevice) return false;
     // These reasons refuse a billed socket temporarily; they do not mean the
     // user spent their credits and must not present an upgrade as the remedy.
-    if (allowance!.reason == 'allowance_unavailable' || allowance.reason == 'usage_invalid') return false;
+    if (allowance.reason == 'allowance_unavailable' || allowance.reason == 'usage_invalid') return false;
     return true;
   }
 

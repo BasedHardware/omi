@@ -68,7 +68,6 @@ def boundary(monkeypatch):
             HTTPException=HTTPException,
             RELEASE_PROBE_UID='omi-release-probe',
             ladder_v1=SimpleNamespace(enforce_chat_budget=Mock(return_value=False)),
-            is_trial_paywalled=Mock(return_value=False),
             request_has_byok_provider=lambda provider: byok.get_byok_key(provider),
             _request_has_llm_byok_key=lambda: any(
                 byok.get_byok_key(p) for p in ('openai', 'openrouter', 'gemini', 'anthropic')
