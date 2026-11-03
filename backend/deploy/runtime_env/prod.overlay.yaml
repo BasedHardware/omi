@@ -48,6 +48,10 @@ overlay:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
+        # Fleet-off live residual goes to batch, not Soniox (David 11-03). The listen chart pins
+        # SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT at the serving 100. Rollback: UNSUPPORTED '' and HINTABLE 100.
+        SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh', category: ops_kill}
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:

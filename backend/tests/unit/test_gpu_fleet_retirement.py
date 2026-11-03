@@ -36,8 +36,9 @@ def test_switch_preserves_existing_routing_until_deployed(monkeypatch):
 def test_retirement_preserves_batch_vendors_and_never_reactivates_gpu_defaults(retired):
     from config.policy.listen import service_models
 
-    assert service_models(['parakeet-window', 'modulate-velma-2']) == ['soniox']
-    assert default_models_for_surface(STTServingSurface.STREAMING) == ('soniox',)
+    assert service_models(['parakeet-window', 'modulate-velma-2']) == ['modulate-velma-2', 'soniox']
+    assert default_models_for_surface(STTServingSurface.STREAMING) == ('modulate-velma-2', 'soniox')
+    assert provider_is_enabled('modulate', STTServingSurface.STREAMING)
     assert default_models_for_surface(STTServingSurface.PRERECORDED) == ('modulate-velma-2',)
     assert default_models_for_surface(STTServingSurface.PTT) == ('modulate-velma-2',)
     assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
@@ -49,10 +50,13 @@ def test_cost_router_and_explicit_registry_cannot_escape_retirement(retired):
     from config.live_stt_registry import Target
     from utils.stt.live_router import permission_reason
 
-    for family, target_id in [('parakeet', 'parakeet-window'), ('modulate', 'modulate-velma-2')]:
-        target = Target(target_id, family, 0)
-        assert not target.capable('en')
-        assert permission_reason(target, None, 'en', engine_models={'parakeet': target_id}) == 'capability'
+    parakeet = Target('parakeet-window', 'parakeet', 0)
+    assert not parakeet.capable('en')
+    assert permission_reason(parakeet, None, 'en', engine_models={'parakeet': 'parakeet-window'}) == 'capability'
+    # Modulate is a vendor, not a fleet GPU: live residual stays on it instead of Soniox.
+    modulate = Target('modulate-velma-2', 'modulate', 0)
+    assert modulate.capable('en')
+    assert permission_reason(modulate, None, 'en') != 'capability'
     assert Target('soniox', 'soniox', 0).capable('ja')
 
 
@@ -89,8 +93,10 @@ def test_static_selection_and_preferred_gpu_cannot_bypass_retirement(retired, mo
     selected = streaming.get_stt_service_for_language(
         language, preferred_service='parakeet', window_uid='synthetic-owner', prefer_window=True
     )
-    assert selected[0] == streaming.STTService.soniox
-    assert streaming.get_stt_service_for_language(language, exclude=frozenset({'soniox'}))[0] is None
+    assert selected[0] == streaming.STTService.modulate
+    assert selected[0] != streaming.STTService.parakeet
+    fallback = streaming.get_stt_service_for_language(language, exclude=frozenset({'soniox', 'modulate'}))
+    assert fallback[0] is None
 
 
 def test_direct_prerecorded_call_preserves_audio_and_language_contract(retired, monkeypatch):
@@ -309,7 +315,7 @@ def test_production_callers_cannot_resolve_retired_endpoints(source, monkeypatch
         selected = streaming_module.get_stt_service_for_language(
             language, preferred_service='parakeet', window_uid='synthetic-owner', prefer_window=True
         )
-        assert selected[0] == streaming_module.STTService.soniox
+        assert selected[0] == streaming_module.STTService.modulate
         assert pre_recorded.get_prerecorded_service(language)[0] == 'modulate'
         assert (
             streaming_module.get_stt_service_for_language(language, surface=STTServingSurface.PTT)[0]
