@@ -497,6 +497,12 @@ def batch_queries(namespace):
     sel = '{namespace="' + namespace + '"}'
     return {
         'oldest_age': f'max(omi_batch_pipeline_oldest_age_seconds{sel})',
+        # Prometheus max ignores NaNs when another priority has a finite age.
+        # Count them separately so one saturated priority cannot look healthy.
+        'age_incomplete': (
+            f'(count(omi_batch_pipeline_oldest_age_seconds{sel} != '
+            f'omi_batch_pipeline_oldest_age_seconds{sel}) or vector(0))'
+        ),
         'retry_age': f'max(omi_batch_pipeline_retry_age_seconds{sel})',
         'freshness': f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{sel})',
         'scrape_age': f'max(time() - timestamp(omi_batch_pipeline_metrics_refreshed_at_seconds{sel}))',
@@ -508,6 +514,7 @@ def evaluate_batch(values):
     unknown = ['new_projection_obligations_unavailable', 'audio_custody_unavailable', 'proven_speech_loss_unavailable']
     blind = any(not finite(values.get(k)) for k in batch_queries('unused'))
     blind = blind or values.get('freshness', 0) > 120 or values.get('scrape_age', 0) > 120
+    blind = blind or values.get('age_incomplete', 0) > 0
     trips = [] if blind else (['uncommitted_job_age_over_30m'] if values['oldest_age'] > 1800 else [])
     return {
         'verdict': 'TRIP' if trips else 'BLIND' if blind else 'PARTIAL',

@@ -238,8 +238,15 @@ A fresh `omi_batch_pipeline_oldest_age_seconds > 1800` emits **TRIP**,
 measures from enqueue, skipping durable allowance policy holds
 (`compute_decision` outcome=held reason=allowance_exhausted; 131 such holds
 kept this proxy tripped permanently on 2026-10-25) within a bounded 500-row
-FIFO prefix; a prefix filled entirely by holds fails toward tripping on the
-oldest hold's age rather than a fresh zero. It still includes legitimate deep
+FIFO prefix. Dispositioned queue states (`dead`, `quarantined`, `committed`,
+`privacy_blocked`) are excluded; completed terminal markers on `result_ready`
+still owe a commit. A full exempt prefix with a sentinel reports NaN and
+**BLIND**, rather than inventing a late commitment from a policy hold. A
+separate NaN count prevents another finite priority from masking blindness.
+The page-tier Grafana rules in `../monitoring/alerts/batch-queue-safety.json`
+cover a fresh commitment older than two hours and sustained queue blindness;
+the lead must import them. See the [runbook](../../docs/runbooks/batch-queue-safety.md).
+It still includes legitimate deep
 queues; it cannot identify new
 jobs or prove a projection wedge. Retry age is
 logged, not another rollback condition. Usable readings without that trip are

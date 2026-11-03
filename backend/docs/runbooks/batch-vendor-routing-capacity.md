@@ -203,8 +203,10 @@ predicates:
   due plus the stale grace), so a dead redrive still alerts. The lead decides
   the bound before it is coded.
 - **F4 (in-cluster batch verdict):** `batch_pipeline_store.oldest()` skips
-  only allowance holds and fails toward the oldest hold past 500 holds, so a
-  large `vendor_held` population drives `uncommitted_job_age_over_30m`.
+  allowance/vendor holds and dispositioned rows; past 500 exempt rows it reports
+  an incomplete NaN age (BLIND). Overdue vendor redrives still count as real
+  commitments; a saturated live-hold prefix pages the blind alarm instead of
+  inventing `uncommitted_job_age_over_30m` from a hold.
 
 Provider units never enter `ready_for_capacity`, so they cannot buy GPUs
 through the HPA. `vendor_held` units that reroute to the ring do.

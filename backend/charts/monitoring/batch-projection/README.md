@@ -1,5 +1,10 @@
 # Batch projection and timeliness alarms
 
+The all-epoch compute-queue alarm and bounded-scan blindness page are in
+`../alerts/batch-queue-safety.json`; see
+`../../../docs/runbooks/batch-queue-safety.md`. They are independent of the
+epoch-scoped delivery rules below. They do not waive held recovery or custody.
+
 `alerts.yaml` holds the projection-obligation PrometheusRule. Prod runs no Alertmanager, so that file is a record,
 not a live route. Live alerts are Grafana-managed rules in `../alerts/*.json`.
 

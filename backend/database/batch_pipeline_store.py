@@ -597,22 +597,20 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         .limit(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
         .stream()
     )
-    oldest_hold: float | None = None
     scanned = 0
     for doc in docs:
         scanned += 1
         if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
             break  # the sentinel row exists: the scan was truncated
         job = doc.to_dict()
-        if is_policy_hold(job):
-            oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
+        if is_queue_dispositioned(job) or is_policy_hold(job):
             continue
         return job['enqueued_at']
-    if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
-        # An unmeasured commitment may exist beyond the bound, so fail toward
-        # tripping on the oldest hold's age instead of publishing a false fresh
-        # zero.
-        return oldest_hold
+    if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+        # An unmeasured commitment may exist beyond the bound. NaN is an
+        # incomplete measurement, never a hold misreported as late work or a
+        # false fresh zero. The guard and alert route treat this as blindness.
+        return float('nan')
     return None
 
 
@@ -647,16 +645,31 @@ def control_candidates(
     return [doc.id for doc in docs]
 
 
+def is_queue_dispositioned(job: dict[str, Any]) -> bool:
+    """Custody has left the compute queue; recovery/projection have their own alarms.
+
+    A completed terminal marker alone is insufficient: result_ready still owes
+    its ordered commit. Unknown states remain measured, so schema drift fails closed.
+    """
+    return job.get('state') in {'dead', 'quarantined', 'committed', 'privacy_blocked'}
+
+
 def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
-    docs = list(
+    docs = iter(
         client.collection(f'{namespace}_jobs')
         .where('priority', '==', priority)
         .where('retry_started_at', '>=', 0)
         .order_by('retry_started_at')
-        .limit(1)
+        .limit(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
         .stream()
     )
-    return docs[0].to_dict()['retry_started_at'] if docs else None
+    for index, doc in enumerate(docs):
+        if index == OLDEST_POLICY_HOLD_SCAN_LIMIT:
+            return float('nan')
+        job = doc.to_dict()
+        if not is_queue_dispositioned(job) and not is_policy_hold(job):
+            return job['retry_started_at']
+    return None
 
 
 # 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs

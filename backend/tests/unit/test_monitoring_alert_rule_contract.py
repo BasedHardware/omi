@@ -94,6 +94,23 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
     }
 
 
+def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_page():
+    for export_name, rules in _all_rule_exports().items():
+        late = rules['omi-batch-queue-uncommitted-2h']
+        assert late['data'][2]['model']['expression'] == '$A > 7200 && $B < 120', export_name
+        assert 'namespace="prod-omi-backend"' in late['data'][0]['model']['expr']
+        blind = rules['omi-batch-queue-safety-blind']
+        expr = blind['data'][0]['model']['expr']
+        assert ' != ' in expr and 'count(' in expr
+        assert '>= bool 900' in expr and 'or vector(1)' in expr
+        for rule in (late, blind):
+            assert rule['for'] == '5m'
+            assert rule['labels']['tier'] == 'page'
+            assert rule['labels']['audience'] == 'human'
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert not rule['notification_settings']['mute_time_intervals']
+
+
 def test_pusher_db_saturation_sums_task_kinds_and_tracks_configured_capacity():
     for export_name, rules in _all_rule_exports().items():
         rule = rules['omi-pusher-db-executor-saturated']

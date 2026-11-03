@@ -1,4 +1,5 @@
 from dataclasses import replace
+import math
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry
@@ -442,12 +443,12 @@ def test_firestore_oldest_walks_past_policy_holds():
     from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
 
     # Review r1/r2 P1s: a scan truncated at the bound with holds in every row
-    # must fail toward tripping on the oldest hold's age - a fresh zero could
+    # must report an incomplete scan - a fresh zero could
     # bless a ramp while a real commitment sits unmeasured just past the bound.
     # A FIFO that is exactly as long as the bound, or shorter, is not
     # truncated: zero is truthful.
     truncated = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)])
-    assert oldest(truncated, 'omi', 2) == 0.0
+    assert math.isnan(oldest(truncated, 'omi', 2))
     exactly_bound = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)])
     assert oldest(exactly_bound, 'omi', 2) is None
     just_short = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT - 1)])
@@ -458,6 +459,70 @@ def _deep_oldest_age(registry):
     return registry.get_sample_value(
         'omi_batch_pipeline_oldest_age_seconds',
         {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+    )
+
+
+@pytest.mark.parametrize('state', ['dead', 'quarantined', 'committed', 'privacy_blocked'])
+def test_oldest_and_retry_skip_dispositioned_rows_but_keep_completed_result_ready(state):
+    from database.batch_pipeline_store import oldest, oldest_retry
+
+    class Doc:
+        def __init__(self, job):
+            self.job = job
+
+        def to_dict(self):
+            return self.job
+
+    class Query:
+        def __init__(self, jobs):
+            self.jobs = jobs
+
+        def collection(self, *args):
+            return self
+
+        def where(self, *args):
+            return self
+
+        def order_by(self, *args):
+            return self
+
+        def limit(self, limit):
+            self.bound = limit
+            return self
+
+        def stream(self):
+            return iter(Doc(job) for job in self.jobs[: self.bound])
+
+    disposed = {'state': state, 'enqueued_at': 1, 'retry_started_at': 2, 'merge_pending': True}
+    active = {
+        'state': 'result_ready',
+        'enqueued_at': 100,
+        'retry_started_at': 200,
+        'merge_pending': True,
+        'terminal_disposition': {'state': 'completed'},
+    }
+    assert oldest(Query([disposed, active]), 'synthetic', 0) == 100
+    assert oldest_retry(Query([disposed, active]), 'synthetic', 0) == 200
+    assert oldest(Query([disposed]), 'synthetic', 0) is None
+    assert oldest_retry(Query([disposed]), 'synthetic', 0) is None
+    assert math.isnan(oldest(Query([disposed] * 501), 'synthetic', 0))
+    assert math.isnan(oldest_retry(Query([disposed] * 501), 'synthetic', 0))
+
+
+def test_incomplete_age_sample_preserves_nan_without_blocking_other_queue_signals():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    store.oldest = lambda priority, ready_only: None if ready_only or priority else float('nan')
+    metrics.refresh(store, 1000)
+    labels = {'priority': 'fresh', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert math.isnan(registry.get_sample_value('omi_batch_pipeline_oldest_age_seconds', labels))
+    assert registry.get_sample_value('omi_batch_pipeline_ready_age_seconds', labels) == 0
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_metrics_refreshed_at_seconds', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+        )
+        == 1000
     )
 
 
