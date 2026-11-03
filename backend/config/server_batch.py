@@ -7,13 +7,33 @@ from collections.abc import Mapping
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.policy import cohort_bucket
 from config.policy.batch import parse_percent
-from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
+    normalized_stt_language,
+    canonical_language,
+)
 
 MARKER = 'server_batch_only'
 PREVIEW_CUSTODY_MARKER = 'listen_preview_batch_custody'
 AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
 SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
 AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
+# Fixed policy vocabulary, independent of operator input; Japanese is measured
+# but can never enter the experiment.
+UNSUPPORTED = MODULATE_SUPPORTED_LANGUAGES - SUPPORTED - AUTO_LANGUAGES
+
+
+def unsupported_languages() -> frozenset[str]:
+    codes = {
+        normalized_stt_language(code.strip()) for code in os.getenv('SERVER_BATCH_UNSUPPORTED_LANGUAGES', '').split(',')
+    }
+    return frozenset(codes & UNSUPPORTED - {'ja'})
+
+
+def bounded_language(language: str | None) -> str:
+    code = normalized_stt_language(language)
+    return code if code in UNSUPPORTED else 'other'
 
 
 def undeclared(host) -> bool:
@@ -82,7 +102,7 @@ def eligible(capture: Mapping, owner_id: str, *, batch_admitted: bool = False) -
         and not external.get('onboarding_session_id')
         and capture.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
         and (
-            normalized_stt_language(capture.get('language')) in SUPPORTED
+            normalized_stt_language(capture.get('language')) in SUPPORTED | unsupported_languages()
             or (
                 normalized_stt_language(capture.get('language')) in AUTO_LANGUAGES
                 and auto_selected(owner_id, capture.get('client_platform'))
@@ -156,6 +176,7 @@ def suppress_live(host) -> bool:
     try:
         OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL.labels(
             decision='suppressed' if suppressed else 'live',
+            language=bounded_language(request_language(host)),
             reason=reason_label(ReasonFamily.LIVE_STT, reason or 'suppressed', ServerBatchSuppressionReason),
             client_platform=bounded_client_platform(
                 getattr(getattr(host, 'client_device_context', None), 'platform', None)
@@ -227,13 +248,23 @@ def request_reason(host, *, existing_capture: bool = False, capture: Mapping | N
             return 'language_auto'
         if getattr(profile, 'source', None) != 'learned':
             return 'profile_mismatch'
-    elif language not in SUPPORTED:
+    elif language not in SUPPORTED and language not in unsupported_languages():
         return 'language_unsupported'
+    # Only the newly admitted declared-language path may have unsupported
+    # expected codes. Supported declarations and auto retain their old gates.
+    profile_languages = SUPPORTED
+    profile_primary = primary
+    declared_primary = language
+    if language in UNSUPPORTED:
+        allowed = unsupported_languages()
+        profile_languages = SUPPORTED | allowed | {canonical_language(code) for code in allowed}
+        profile_primary = canonical_language(primary)
+        declared_primary = canonical_language(language)
     if (
-        (not auto and primary not in SUPPORTED)
-        or (not auto and primary != language)
+        (not auto and profile_primary not in profile_languages)
+        or (not auto and profile_primary != declared_primary)
         or not expected
-        or not all(normalized_stt_language(code) in SUPPORTED for code in expected)
+        or not all(normalized_stt_language(code) in profile_languages for code in expected)
     ):
         return 'profile_mismatch'
     return None

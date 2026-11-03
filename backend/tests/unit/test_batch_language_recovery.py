@@ -1,27 +1,54 @@
 """Synthetic language-guard recovery, paid-intent fencing and measured receipts."""
 
 from copy import deepcopy
+from dataclasses import asdict
 import io
+from types import SimpleNamespace
 import wave
 from unittest.mock import Mock, AsyncMock
 
 import pytest
 
-from config.batch_language_recovery import allowed, below_silence_threshold
+from config.batch_language_recovery import allowed, below_silence_threshold, language_guarded
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_recognizer_receipts import record_recognizer
+from database.batch_pipeline_quarantine_recovery import recovery_candidates
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
-from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row, PARTIAL_ACCOUNTING
+from tests.unit.test_batch_pipeline_quarantine_recovery import (
+    setup,
+    legacy_dependencies,
+    row,
+    PARTIAL_ACCOUNTING,
+    _CandidateQuery,
+)
 from tests.unit.test_batch_pipeline_speech_redrive import enabled
 from tests.unit.test_batch_pipeline_empty_disposition import SERVING_ENV
 from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure, independent_silence_payload, result_outcome
 from utils.batch_pipeline.speech_redrive import redrive_one
 from utils.batch_pipeline.contracts import vad_receipt
+from utils.batch_pipeline import quarantine_recovery as recovery_module
+from utils.batch_pipeline.provider_stt import PENDING, ProviderSttStage, SttRoute
 
 WORDS = [{'text': 'Synthetic.', 'timestamp': [1, 2], 'speaker': '0'}]
+
+
+def test_independent_recovery_is_ship_on_with_hard_audio_bound(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', raising=False)
+    assert allowed(60)
+    assert not allowed(60.01)
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    assert not allowed(5)
+
+
+@pytest.mark.parametrize('source', ['worker_failure', 'stt_route'])
+def test_language_guard_includes_unsupported_provider_route(source):
+    field = 'reason' if source == 'worker_failure' else 'provider_reason'
+    assert language_guarded({source: {field: 'unsupported_language'}})
+    assert not language_guarded({'stt_route': {'stt_route': 'parakeet', 'provider_reason': 'none'}})
 
 
 def guarded(setup, monkeypatch, legacy_dependencies, *, speech=1, automatic=True):
@@ -50,6 +77,64 @@ def guarded(setup, monkeypatch, legacy_dependencies, *, speech=1, automatic=True
     recovery = setup[-1]
     recovery.stt = transcribe
     return client, store, binding, artifacts, modulate, soniox, recovery, old
+
+
+@pytest.mark.parametrize('answer', [[], WORDS])
+def test_zh_provider_empty_enters_sweep_and_spends_one_bounded_soniox(setup, monkeypatch, legacy_dependencies, answer):
+    client, store, binding, artifacts, modulate, soniox, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+    monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    job = row(client)
+    job.pop('worker_failure')
+    job.update(
+        state=PENDING,
+        merge_pending=True,
+        stt_route=asdict(SttRoute('provider', 'unsupported_language', 'modulate', 'zh')),
+    )
+    worker = Mock(side_effect=RecoveryFailure('response_validation', 'empty_asr'))
+    stage = ProviderSttStage(
+        store,
+        artifacts,
+        stt=worker,
+        allowed=lambda *_: True,
+        inspect=lambda *_: (b'\0' * 160000, 5, [{'start': 0, 'end': 1}]),
+        failover_routes=lambda _: ('modulate',),
+        armed=lambda: False,
+        clock=lambda: 100,
+    )
+    assert stage.run('bad').outcome == 'done'
+    assert row(client)['state'] == 'quarantined'
+    assert row(client)['recovery_state'] == 'held'
+    assert row(client)['measured_held_vad_speech_seconds'] == 1
+    assert worker.call_args.kwargs['service'] == 'modulate'
+    worker.assert_called_once()
+
+    def candidates(*args, **kwargs):
+        docs = {key[1]: data for key, data in client.rows.items() if key[0] == f'{store.namespace}_jobs'}
+        query_client = SimpleNamespace(collection=lambda _: _CandidateQuery(docs))
+        return recovery_candidates(query_client, *args[1:], **kwargs)
+
+    monkeypatch.setattr(recovery_module, 'recovery_candidates', candidates)
+    soniox.return_value = (answer, 'zh')
+    assert candidates(client, store.namespace, None) == [('bad', binding.owner_id)]
+    assert recovery.sweep() == {('recovered' if answer else 'failed_held'): 1}
+    assert row(client)['recovery_state'] == ('recovered' if answer else 'failed_held')
+    receipts = row(client)['recovery']['recognizers']
+    assert receipts['modulate']['outcome'] == 'empty'
+    assert receipts['soniox']['outcome'] == ('words' if answer else 'empty')
+    if answer:
+        payload = artifacts.persist_recovery_result.call_args.args[1]
+        assert payload['words_provider'] == 'soniox' and payload['language'] == 'zh'
+        assert payload['words'][0]['word'] == 'Synthetic.'
+        assert row(client)['result']['outcome'] == 'success'
+    else:
+        assert not row(client).get('result')
+        artifacts.persist_recovery_result.assert_not_called()
+    assert recovery.sweep() == {}
+    modulate.assert_called_once()
+    soniox.assert_called_once()
 
 
 @pytest.mark.parametrize('speech', [0.032, 0.064, 0.320, 4.384])

@@ -100,6 +100,8 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Listen admits/suppresses managed live STT; pusher only retains audio.
+        'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_SERVING_ENABLED',

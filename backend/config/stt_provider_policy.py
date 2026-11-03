@@ -214,6 +214,16 @@ def normalized_stt_language(language: str | None) -> str:
     return language.split('-')[0].split('_')[0].lower()
 
 
+# Profile equivalence is not provider capability or a change to the recorded
+# language. Only near-identical spoken pairs belong in this small map.
+LANGUAGE_EQUIVALENCE: Final[Mapping[str, str]] = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
+
+
+def canonical_language(language: str | None) -> str:
+    code = normalized_stt_language(language)
+    return LANGUAGE_EQUIVALENCE.get(code, code)
+
+
 # Soniox rejects any ``language_hints`` entry outside this vocabulary with
 # ``400 invalid_request Invalid language hint`` at the config frame, killing the
 # socket after the WebSocket upgrade already succeeded (prod backend-listen,

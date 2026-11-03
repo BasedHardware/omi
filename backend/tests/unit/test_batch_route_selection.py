@@ -12,7 +12,7 @@ from database import rollout_cohorts as ramp_store
 from utils.batch_pipeline import route_selection as rs
 from utils.batch_pipeline import vendor_route_contracts as c
 from utils.batch_pipeline import vendor_route_metrics as m
-from utils.batch_pipeline.provider_stt import resolve_route
+from utils.batch_pipeline.provider_stt_admission import resolve_route
 from utils.observability.reasons import VendorHealthReason, VendorRouteReason as Reason, VendorRouteTableOutcome
 from utils.rollout import runtime_percent
 
