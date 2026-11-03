@@ -142,16 +142,19 @@ class Worker:
         self.active = None
         self.scan_at = 0
 
-    def close(self, *, clear_pending=True):
+    def close(self, *, clear_pending=True, backoff=False):
         if self.active:
             process, _, claim = self.active
-            # Reap FIRST. A failed release leaves a safe expiring claim.
+            # Reap FIRST. Preemption leaves the short claim to expire; only
+            # completed attempts get refusal/budget backoff. Failed release
+            # also leaves a safe expiring claim.
             try:
                 repair.stop(process)
             finally:
                 self.active = None
-            with SweepBudget(10).interrupt_io():
-                claims.release(self.client, self.namespace, claim)
+            if backoff:
+                with SweepBudget(10).interrupt_io():
+                    claims.release(self.client, self.namespace, claim)
         if clear_pending:
             self.pending.clear()
 
@@ -168,7 +171,7 @@ class Worker:
                 disposition = 'budget_exhausted'
             if disposition:
                 self.metrics.outcome(disposition, max(0, time.time() - claim['finished_at'].timestamp()))
-                self.close(clear_pending=False)
+                self.close(clear_pending=False, backoff=True)
         # Sampling continues during the child walk. Bounded main-thread IO
         # adds at most 10s cleanup latency, still well inside the 360s claim.
         if self.clock() >= self.scan_at:

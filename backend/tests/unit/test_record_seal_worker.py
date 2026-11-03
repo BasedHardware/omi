@@ -118,19 +118,17 @@ def slot(source, monkeypatch, process):
     return instance, metrics
 
 
-def test_termination_reaps_before_release_and_preserves_audio(source, monkeypatch):
+def test_preemption_reaps_preserves_audio_and_reclaims_at_expiry(source, monkeypatch):
     process = Process()
     instance, _ = slot(source, monkeypatch, process)
-    release = claims.release
-
-    def after_reap(*a, **kw):
-        assert process.killed and process.stdout.closed
-        return release(*a, **kw)
-
-    monkeypatch.setattr(claims, 'release', after_reap)
+    original = instance.active[2]
+    expires = source[1].rows[JOB_PATH]['seal_claim']['expires_at']
     instance.close()
-    assert instance.active is None
+    assert instance.active is None and process.killed and process.stdout.closed
     assert not source[1].rows[PATH].get('record_audio_closed')
+    assert claims.acquire(source[1], 'batch_pipeline_dev', 'pending', clock=lambda: expires - 1) is None
+    replacement = claims.acquire(source[1], 'batch_pipeline_dev', 'pending', clock=lambda: expires)
+    assert replacement and replacement['token'] != original['token']
 
 
 def test_budget_exhaustion_advances_to_other_rows_and_backs_off(source, monkeypatch):

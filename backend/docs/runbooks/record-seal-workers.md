@@ -27,10 +27,11 @@ the exact job and invalidates an old plan; apply always rechecks the row and
 privacy. Claim ownership is for avoiding wasted walks, not seal authority.
 Concurrent cron walks are still possible during overlap; only one apply seals.
 
-After reaping a child, release only the matching token and back off one hour.
+After a completed attempt, reap the child, release only the matching token and back off one hour.
 This applies to refusals, budget expiry and ambiguous results; no proof class is
 redriven or force-closed. Partial rows stay out of seal debt. SIGTERM reaps the
-process group before release; abrupt pod death relies on the expiry. Inherited
+process group and leaves the short claim to expire without refusal backoff;
+abrupt pod death also relies on the expiry. Inherited
 270s child IO cancellation and the parent's deadline remain unchanged.
 
 ## Metrics and deployment order
