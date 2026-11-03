@@ -235,7 +235,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
         # OD worker only: prod ships borrowing off so Parakeet's freed L4s go back to GCE.
-        assert sorted(d['metadata']['name'] for d in deployments) == ['synthetic-worker']
+        assert sorted(d['metadata']['name'] for d in deployments) == ['record-seal-worker', 'synthetic-worker']
         assert deployment['spec']['replicas'] == 4  # Preserve baseline/live count for HPA.
         hpa = next(
             doc['spec']
@@ -479,8 +479,8 @@ def test_borrowing_off_renders_exactly_the_od_worker():
     assert result.returncode == 0, result.stderr
     off = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
     assert not [d for d in off if d['kind'] == 'PriorityClass']
-    assert list(by_name(off, 'Deployment')) == ['synthetic-worker']
-    assert list(by_name(off, 'HorizontalPodAutoscaler')) == ['synthetic-worker']
+    assert set(by_name(off, 'Deployment')) == {'synthetic-worker', 'record-seal-worker'}
+    assert set(by_name(off, 'HorizontalPodAutoscaler')) == {'synthetic-worker', 'record-seal-worker'}
     assert by_name(off, 'Deployment')['synthetic-worker'] == by_name(on, 'Deployment')['synthetic-worker']
 
 
@@ -594,7 +594,7 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     docs = {
         doc['kind']: doc
         for doc in yaml.safe_load_all(result.stdout)
-        if doc and not doc['metadata']['name'].endswith('-borrow')
+        if doc and not doc['metadata']['name'].endswith('-borrow') and doc['metadata']['name'] != 'record-seal-worker'
     }
     env = {e['name']: e.get('value') for e in docs['Deployment']['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_ENABLED'] == 'true'

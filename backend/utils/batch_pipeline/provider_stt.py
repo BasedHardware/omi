@@ -16,7 +16,8 @@ the vendor again. A vendor-side failure may fail over to one other vendor (a
 second attempt, never the same vendor twice once billed); when no permitted
 vendor is healthy the unit parks in non-terminal ``vendor_held`` with its audio
 and owner order intact and is redriven later. Only exhausted attempts, or our own
-failures, settle terminal ``failed_held`` as before.
+failures, settle terminal ``failed_held`` as before. Guarded validated-empty
+exhaustion instead enters the bounded quarantine recovery while enabled.
 """
 
 from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
@@ -32,6 +33,7 @@ from uuid import uuid4
 import wave
 
 from config.batch_conversation_speakers import vendor_turns_enabled
+from config.batch_language_recovery import enabled as independent_recovery_enabled, language_guarded
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
 from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
@@ -251,6 +253,19 @@ def attempts_of(job: dict) -> list[VendorAttempt]:
     ]
 
 
+def _exhausted_recovery_state(job: dict) -> str:
+    """Only guarded validated-empty answers may spend the bounded recovery intent."""
+    attempts = attempts_of(job)
+    if (
+        independent_recovery_enabled()
+        and language_guarded(job)
+        and attempts
+        and attempts[-1].outcome == VendorAttemptOutcome.EMPTY_VALIDATED
+    ):
+        return 'held'
+    return 'failed_held'
+
+
 def bounding_attempts(attempts: list[VendorAttempt]) -> list[VendorAttempt]:
     """The records a new attempt is bounded by. Once the records are full, a trailing settled
     unbilled refusal (429, credits, client breaker) processed nothing, so the next attempt takes
@@ -425,7 +440,8 @@ class ProviderSttStore:
 
         A failure fails over only when the attempt outcome is a vendor-side failover outcome and
         ``check_new_attempt`` still admits one of ``failover_to``; otherwise it is terminal
-        failed-held, never 'held', so quarantine recovery cannot spend another call. Returns
+        failed-held. Guarded validated-empty attempts enter bounded quarantine recovery
+        while its kill switch is on. Returns
         ``'failover'`` for the pending transition, ``'settled'`` otherwise, False when the
         attempt is no longer the unit's current one (a late result: nothing is written).
         """
@@ -471,7 +487,7 @@ class ProviderSttStore:
                     failure='worker_failed',
                     quarantine_reason='worker_failed',
                     quarantined_at=now,
-                    recovery_state='failed_held',
+                    recovery_state=_exhausted_recovery_state(job),
                 )
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
@@ -486,7 +502,7 @@ class ProviderSttStore:
     def terminal(
         self, segment_id: str, now: float, failure: dict, *, measured_held_vad_speech_seconds: float | None = None
     ) -> bool:
-        """Terminal failed-held for a pending unit no vendor may serve any more (attempts spent)."""
+        """Quarantine an exhausted unit; guarded empty answers may enter bounded recovery."""
 
         def commit(tx):
             job, _ = self.fence.checked(tx, segment_id)
@@ -500,7 +516,7 @@ class ProviderSttStore:
                 failure='worker_failed',
                 quarantine_reason='worker_failed',
                 quarantined_at=now,
-                recovery_state='failed_held',
+                recovery_state=_exhausted_recovery_state(job),
             )
             job.setdefault('provider_intent', {})['failure'] = {'stage': failure['stage'], 'reason': failure['reason']}
             _record_held_vad(job, measured_held_vad_speech_seconds)
