@@ -28,8 +28,12 @@ class QueueMetrics:
         worker_release: str = 'unscoped',
         namespace: str = 'unscoped',
         capacity_sampling: bool = False,
+        min_refresh_seconds: float = 0.0,
     ):
         self.scope = (worker_release, namespace)
+        # Serving instances share one global queue; workers keep 0 for the HPA.
+        self.min_refresh_seconds = min_refresh_seconds
+        self._refresh_due = 0.0
         self.capacity_sampling = capacity_sampling
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
@@ -181,6 +185,9 @@ class QueueMetrics:
     def refresh(self, store: Store, now: float) -> None:
         # Collect every query before changing gauges. Failed refresh retains last
         # values and does not advance freshness; adapters must reject stale data.
+        # A skipped call inside the interval reads nothing and changes nothing.
+        if now < self._refresh_due:
+            return
         samples = []
         for priority in Priority:
             pending = store.oldest(int(priority), ready_only=False)
@@ -212,6 +219,7 @@ class QueueMetrics:
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
             self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
         self.refreshed_at.labels(*self.scope).set(now)
+        self._refresh_due = now + self.min_refresh_seconds
         if capacity:
             for priority, count in capacity:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
