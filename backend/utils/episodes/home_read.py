@@ -9,6 +9,8 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from utils.conversations import phase_shadow
+
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
@@ -264,16 +266,19 @@ def project_episode(
     hidden = 0
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
-        if (
-            row is None
-            or not conversations.is_visible_conversation(row)
-            or is_relevance_discarded(row)
-            or row.get('sync_merged_into')
-        ):
+        if row is None:
+            continue
+        visible = not (
+            not conversations.is_visible_conversation(row) or is_relevance_discarded(row) or row.get('sync_merged_into')
+        )
+        if not visible:
+            phase_shadow.observe('episode_member', row, False, episode=episode)
             continue
         if list_row and _too_short_for_a_home_row(row):
+            phase_shadow.observe('episode_member', row, False, episode=episode)
             hidden += 1
             continue
+        phase_shadow.observe('episode_member', row, True, episode=episode)
         structured: dict[str, Any] = row.get('structured') or {}
         retained.append(
             {

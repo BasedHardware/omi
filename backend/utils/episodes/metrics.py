@@ -31,7 +31,7 @@ from config.episodes import EST_INPUT_USD_PER_MTOK, EST_OUTPUT_USD_PER_MTOK
 disable_created_metrics()
 
 
-def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[str], **kwargs):
+def reuse_or_create(factory, name: str, documentation: str, labelnames: list[str], **kwargs):
     """Module-reload-safe collector: reuse only an identical registration, else raise."""
     registered = getattr(REGISTRY, '_names_to_collectors', {})
     existing = registered.get(name) if isinstance(registered, Mapping) else None
@@ -80,64 +80,64 @@ BOUNDARY_OUTCOMES = frozenset(
     }
 )
 
-EPISODE_MOMENT_UPDATES_TOTAL = _reuse_or_create(
+EPISODE_MOMENT_UPDATES_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_updates_total',
     'Per-moment incremental episode updates by trigger and outcome. Never labeled by uid.',
     ['trigger', 'outcome'],
 )
-EPISODE_MOMENT_TOKENS_TOTAL = _reuse_or_create(
+EPISODE_MOMENT_TOKENS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_tokens_total',
     'Tokens spent by the per-moment incremental update (kind=input|output).',
     ['kind'],
 )
-EPISODE_MOMENT_COST_USD_TOTAL = _reuse_or_create(
+EPISODE_MOMENT_COST_USD_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_cost_usd_total',
     'Estimated USD for per-moment updates at the gpt-5-nano rate card; the gateway ledger is authoritative.',
     [],
 )
-EPISODE_MOMENT_LATENCY_SECONDS = _reuse_or_create(
+EPISODE_MOMENT_LATENCY_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_moment_update_latency_seconds',
     'Model latency of the per-moment incremental update.',
     ['outcome'],
     buckets=(0.25, 0.5, 1, 2, 3, 5, 8, 13, 20),
 )
-EPISODE_CLOSED_TOTAL = _reuse_or_create(
+EPISODE_CLOSED_TOTAL = reuse_or_create(
     Counter, 'omi_episode_closed_total', 'Episodes closed, by close reason.', ['reason']
 )
 CLOSE_CONFLICT_REASONS = frozenset({'recorded_window_overlap', 'recorded_window_incomplete', 'state_version_changed'})
-EPISODE_CLOSE_CONFLICT_TOTAL = _reuse_or_create(
+EPISODE_CLOSE_CONFLICT_TOTAL = reuse_or_create(
     Counter, 'omi_episode_close_conflict_total', 'Lazy episode closes deferred by a storage conflict.', ['reason']
 )
-EPISODE_PROVISIONAL_ITEMS_TOTAL = _reuse_or_create(
+EPISODE_PROVISIONAL_ITEMS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_provisional_items_total',
     'Provisional items at reconciliation: kept (became a saved task), dropped, dismissed by the user.',
     ['outcome'],
 )
-EPISODE_WRAPUP_LATENCY_SECONDS = _reuse_or_create(
+EPISODE_WRAPUP_LATENCY_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_wrapup_latency_seconds',
     'Seconds from the end of an episode-closing conversation to its finished notes.',
     ['reason'],
     buckets=(5, 15, 30, 60, 120, 300, 600, 1200, 3600),
 )
-EPISODE_BOUNDARY_TOTAL = _reuse_or_create(
+EPISODE_BOUNDARY_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_boundary_total',
     'Moment boundary decisions against the open episode.',
     ['outcome'],
 )
-EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = _reuse_or_create(
+EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moments_skipped_no_client_total',
     'Admitted moments, finalization tails and conversation attaches skipped because the user has no client that called /v1/episodes.',
     ['trigger'],
 )
-EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
+EPISODE_LIVE_SESSIONS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_live_sessions_total',
     'Admitted live conversations at their first speech, by whether a capable client was seen (true|false).',
@@ -160,13 +160,13 @@ COMPOSE_OUTCOMES = frozenset(
         'error',
     }
 )
-EPISODE_COMPOSE_TOTAL = _reuse_or_create(
+EPISODE_COMPOSE_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_total',
     'Closed-episode composer runs by outcome. Never labeled by uid.',
     ['outcome'],
 )
-EPISODE_COMPOSE_SECONDS = _reuse_or_create(
+EPISODE_COMPOSE_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_compose_seconds',
     'Wall time of a composer run, including its model call.',
@@ -174,7 +174,7 @@ EPISODE_COMPOSE_SECONDS = _reuse_or_create(
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
 )
 HOME_MEMBER_OUTCOMES = frozenset({'shown', 'hidden_below_floor'})
-EPISODE_HOME_MEMBERS_TOTAL = _reuse_or_create(
+EPISODE_HOME_MEMBERS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_home_members_total',
     'Conversations considered for Home list rows by outcome. Never labeled by uid.',
@@ -182,7 +182,7 @@ EPISODE_HOME_MEMBERS_TOTAL = _reuse_or_create(
 )
 CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
 CLIENT_REQUEST_OUTCOMES = frozenset({'admitted', 'channel_closed', 'not_admitted'})
-EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
+EPISODE_CLIENT_REQUESTS_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_client_requests_total',
     'Episodes API calls by X-Omi-App-Channel (beta|store|unknown) and outcome (admitted|channel_closed|not_admitted).',

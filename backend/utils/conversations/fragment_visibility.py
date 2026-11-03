@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
+from utils.conversations import phase_shadow
 
 BATCH_RECORD_OWNERS = frozenset({'batch_live_v1', 'batch_sync_v1'})
 SETTLING_ROW_MAX_SECONDS = 60
@@ -143,6 +144,7 @@ def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
     return not is_user_curated(data)
 
 
+@phase_shadow.compare('settling_hold')
 def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -> bool:
     """Whether a short batch-owned row should wait off Home for its audio.
 
