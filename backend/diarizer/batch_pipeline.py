@@ -64,6 +64,7 @@ from utils.batch_pipeline.stage_timings import StageTimings
 from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
@@ -727,6 +728,18 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                staged_audio_invalid = (
+                    stage == WorkerValidationStage.FETCH_DECODE.value
+                    and isinstance(exc, ValueError)
+                    and str(exc)
+                    in {
+                        'staging requires 16kHz mono PCM16 WAV',
+                        'invalid staged audio length',
+                        'truncated staged WAV',
+                    }
+                )
+                if staged_audio_invalid:
+                    reason = WorkerValidationReason.STAGED_AUDIO_INVALID.value
                 state = states.get(item.segment_id, {})
                 measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
@@ -757,11 +770,12 @@ class PipelineWorker:
                             worker_vad_receipt=receipt,
                         )
                     )
-                elif isinstance(exc, BatchValidationError) and (
-                    reason == 'unsupported_language' or worker_validation_disposition_enabled()
+                elif staged_audio_invalid or (
+                    isinstance(exc, BatchValidationError)
+                    and (reason == 'unsupported_language' or worker_validation_disposition_enabled())
                 ):
-                    # Repeating the same validated GPU failure cannot establish
-                    # silence or corrupt audio. End this chain now and retain
+                    # Repeating terminal validation cannot repair staged bytes
+                    # or establish silence. End this chain now and retain
                     # custody for the independent privacy-fenced recovery path.
                     results.append(ValidationFailureWork(item.segment_id, stage, reason, measured_vad, receipt))
                 elif safety_net_enabled():
