@@ -1,6 +1,7 @@
 """Worker death, stale claims and retry custody on the real Redis fence."""
 
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -338,6 +339,16 @@ def test_bootstrap_refuses_unpinned_customer_project_before_clients(monkeypatch,
     monkeypatch.setenv('OMI_CUSTOMER_DATA_PROJECT', project)
     with pytest.raises(RuntimeError, match='explicit stage and customer data project'):
         worker_job.bootstrap()
+
+
+def test_blank_credential_env_is_unset_so_adc_uses_workload_identity(monkeypatch):
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+    monkeypatch.setenv('SERVICE_ACCOUNT_JSON', '  ')
+    monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', '/keys/kept.json')
+    worker_job.drop_blank_credential_env()
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ
+    assert 'SERVICE_ACCOUNT_JSON' not in os.environ
+    assert os.environ['FIREBASE_AUTH_CREDENTIALS_PATH'] == '/keys/kept.json'
 
 
 async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monkeypatch):
