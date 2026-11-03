@@ -13,7 +13,6 @@ from utils import screen_vector_entitlements
 
 import database.users as users_db
 import database.user_usage as user_usage_db
-from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
