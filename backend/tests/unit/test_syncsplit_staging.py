@@ -119,6 +119,22 @@ def test_actual_rpc_client_authenticates_without_emitting_token(tmp_path):
     assert len(requests) == 1
 
 
+def test_claim_polls_past_an_empty_wrap_and_still_checks_the_job(monkeypatch, tmp_path):
+    probe = kit.Probe(BASE, tmp_path / 'unused-token')
+    monkeypatch.setattr(kit.time, 'sleep', lambda _: None)
+    fixture = {'uid': 'u', 'job_id': 'j', 'epoch': 1}
+    try:
+        polls = iter([{'lease': None}, {'lease': {'payload': {'job_id': 'j'}, 'token': 't'}}])
+        monkeypatch.setattr(probe, 'rpc', lambda operation: next(polls))
+        assert probe.claim(fixture)['token'] == 't'
+
+        monkeypatch.setattr(probe, 'rpc', lambda operation: {'lease': {'payload': {'job_id': 'other'}, 'token': 't'}})
+        with pytest.raises(kit.ProbeRefused, match='claim mismatch'):
+            probe.claim(fixture)
+    finally:
+        probe.http.close()
+
+
 def test_plan_never_validates_or_loads_credentials(monkeypatch, capsys):
     monkeypatch.setattr('sys.argv', ['syncsplit', 'plan'])
     monkeypatch.setattr(kit, 'validate_configuration', lambda *args: pytest.fail('credentialed path'))
