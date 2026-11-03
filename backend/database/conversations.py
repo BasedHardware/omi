@@ -52,6 +52,8 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
+from database.conversation_home_titles import neutralize_legacy_list_titles
+from utils.conversations.home_titles import apply_user_title, project_home
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -663,21 +665,11 @@ def prepare_conversation_for_read(
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
         data['discarded'] = True
-    # User titles are durable overrides. Conversation processing owns the
-    # generated title, but must never erase an explicit user edit.
-    user_title = effective_user_title(data.get('user_title'))
-    if user_title is not None:
-        structured = data.get('structured')
-        if not isinstance(structured, dict):
-            structured = {}
-            data['structured'] = structured
-        structured['title'] = user_title
+    apply_user_title(data, effective_user_title(data.get('user_title')))
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
-        from utils.agent_capabilities.transcripts import project
-
-        return project(
+        return project_home(
             uid,
             conversation_recorded_time.hydrate(_decrypt_conversation_data(data, uid)),
             firestore_client=firestore_client,
@@ -700,9 +692,8 @@ def prepare_conversation_for_read(
         reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
-    from utils.agent_capabilities.transcripts import project
 
-    return project(
+    return project_home(
         uid, conversation_recorded_time.hydrate(data), firestore_client=firestore_client, read_budget=read_budget
     )
 
@@ -1957,6 +1948,7 @@ def get_conversations_without_photos(
                 'sync_relevance_user_kept',
                 'has_photos',
                 'folder_user_set',
+                'episode_id',
                 *SETTLING_FIELDS,
             }
         )
@@ -1994,7 +1986,7 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    return _collect_visible_conversation_page(
+    rows = _collect_visible_conversation_page(
         conversations_ref,
         limit=limit,
         offset=offset,
@@ -2013,6 +2005,10 @@ def get_conversations_without_photos(
             starred=starred,
         ),
     )
+
+    if list_fields_only:
+        neutralize_legacy_list_titles(uid, rows, budget=budget)
+    return rows
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)

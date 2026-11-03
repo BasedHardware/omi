@@ -1000,7 +1000,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
-    version_check = ListVersionCheck.start(request, uid, 'conversations')
+    from utils.episodes.home_membership import HELD_EPISODES_HEADER
+
+    held_request = request is not None and bool(request.headers.get(HELD_EPISODES_HEADER))
+    version_check = ListVersionCheck.start(None if held_request else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified
 
@@ -1023,6 +1026,25 @@ def get_conversations(
         list_fields_only=True,
     )
 
+    from utils.episodes.home_membership import (
+        HELD_EPISODES_HEADER,
+        PAGE_SIZE_HEADER,
+        SUPPRESSED_HEADER,
+        suppress_held_members,
+    )
+
+    held = request.headers.get(HELD_EPISODES_HEADER, '') if request is not None else ''
+    # Search/archive filters must show their exact matches. Only Home opts in.
+    if held and not (
+        include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
+    ):
+        if response is not None:
+            response.headers[PAGE_SIZE_HEADER] = str(len(conversations))
+        original = conversations
+        conversations = suppress_held_members(uid, conversations, held)
+        if response is not None:
+            kept = {row['id'] for row in conversations}
+            response.headers[SUPPRESSED_HEADER] = ','.join(row['id'] for row in original if row['id'] not in kept)
     _heal_locked_conversations_if_eligible(uid, conversations)
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
@@ -1031,7 +1053,9 @@ def get_conversations(
     # Paid lock recovery depends on the current allowance (including rollover)
     # and must run on every locked-page read, even without a source mutation.
     version_check.finish(
-        response, truncated=budget.truncated, cacheable=not any(row.get('is_locked') for row in conversations)
+        response,
+        truncated=budget.truncated,
+        cacheable=not held_request and not any(row.get('is_locked') for row in conversations),
     )
     return conversations
 

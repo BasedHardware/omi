@@ -160,13 +160,16 @@ def test_each_page_has_bounded_episode_reads_and_chunked_member_reads(store, mon
 
     def counted_batch(refs, **kwargs):
         batches.append(len(refs))
-        assert kwargs['field_paths'] == home_read.MEMBER_FIELDS
+        assert kwargs['field_paths'] in (
+            home_read.MEMBER_FIELDS,
+            ['transcript_segments', 'transcript_segments_compressed'],
+        )
         return get_all(refs, **kwargs)
 
     monkeypatch.setattr(store, 'get_all', counted_batch)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     projected = home_read.project_episodes('u', rows, firestore_client=store)
-    assert batches == [50, 50, 21]
+    assert batches == [50, 50, 21, 50, 50, 21]
     assert [len(row['members']) for row in projected] == [120, 10]
 
 
@@ -201,6 +204,8 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
     live = service.live_episode
     c = service.Collaborators(firestore_client=store, now=lambda: START + timedelta(minutes=3))
     monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
+    idle_close = home_read._close_idle_episode
+    monkeypatch.setattr(home_read, '_close_idle_episode', lambda uid, row, **kw: idle_close(uid, row, collaborators=c))
     monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()
     app.include_router(router.router)
@@ -322,7 +327,6 @@ def test_only_the_short_member_leaves_a_longer_episode(monkeypatch):
         {'user_title': 'mine'},
         {'has_photos': True},
         {'sync_relevance_user_kept': True},
-        {'finished_at': START + timedelta(seconds=60)},
         {'summary_blocked_reason': None},
         {'status': 'in_progress'},
         {'structured': {'title': 'short', 'overview': 'has notes'}},

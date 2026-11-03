@@ -158,20 +158,6 @@ def _owner_name(uid: str, c: Collaborators) -> str:
         return 'You'
 
 
-def _conversation_language(uid: str, conversation_id: str, c: Collaborators) -> Optional[str]:
-    """The conversation's dominant language tag, for moments the stream did not carry one."""
-    if not conversation_id:
-        return ''
-    try:
-        row = conversations_db.get_conversation_raw_snapshot(
-            uid, conversation_id, field_paths=['language'], firestore_client=c.firestore_client
-        )
-        return str((row or {}).get('language') or '')
-    except Exception as error:
-        logger.warning('event=episode_moment conversation_language_failed exception_type=%s', type(error).__name__)
-        return None
-
-
 def _language_cache_get(key: tuple[str, str, str, str, int]) -> Optional[str]:
     now = time.monotonic()
     with _output_language_cache_lock:
@@ -208,7 +194,7 @@ def _episode_language_inputs(
     conversation_key = ('conversation', uid, session_id, moment.conversation_id, client_key)
     conversation_language = _language_cache_get(conversation_key)
     if conversation_language is None:
-        stored = _conversation_language(uid, moment.conversation_id, c)
+        stored = episode_language.conversation_language(uid, moment.conversation_id, c.firestore_client)
         authority = stored if stored is not None and stored.strip() else (moment.language or '')
         conversation_language = episode_language.normalize_language(authority)
         if not conversation_language:
@@ -948,7 +934,9 @@ def _record_moment_once(
     if episode_output_language_pinned():
         session_id = str(base.get('primary_conversation_id') or moment.conversation_id)
         conversation_language, preference = _episode_language_inputs(uid, session_id, moment, c)
-        output_language = episode_language.resolve_episode_language(uid, conversation_language, preference=preference)
+        output_language = episode_language.resolve_episode_language(
+            uid, conversation_language, preference=preference, segments=moment.segments
+        )
         prior = episode_language.state_language(base, hint_language=conversation_language)
         if prior and not episode_language.languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
@@ -960,7 +948,9 @@ def _record_moment_once(
             known_item_ids=known_ids,
             now=now,
             tz_name=_tz(uid, c),
-            invoke=episode_language.resolved_invoke(uid, output_language or conversation_language, c.invoke),
+            invoke=episode_language.resolved_invoke(
+                uid, conversation_language, c.invoke, output_language=output_language
+            ),
             conversation_language=conversation_language,
             output_language=output_language or None,
             repair_instruction=repair,

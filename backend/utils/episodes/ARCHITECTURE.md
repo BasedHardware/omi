@@ -269,8 +269,9 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
   Runs on a small background pool, one run per episode at a time; never raises.
-- `project_episodes` leaves out a member that closed in under a minute with no notes
-  because it fell under the notes floor, unless the user curated it. Lookups and
+- `project_episodes` and the conversation list leave out completed below-floor
+  rows permanently, regardless of capture duration, age or lane, unless the user
+  curated them. Only unsettled provisional rows have a two-hour hold deadline. Lookups and
   search still reach it. Kill switch `HOME_HIDE_BELOW_FLOOR_ROWS` (on unless set off, read
   per request; changing it takes a new backend revision). Telemetry:
   `omi_episode_home_members_total{outcome}`.
@@ -380,6 +381,19 @@ transaction, including its four-hour cuts. This makes cap placement independent
 of arrival order. Old episode IDs redirect to the resulting window. Existing
 live/user/calendar boundaries stay authoritative; no historical scan/backfill
 is performed outside intake. Member/window/query budgets fail closed.
+
+Home list membership suppression is default-on via `HOME_HIDE_EPISODE_MEMBERS`,
+but requires admission, `episodes:client_seen` and this client's held replacement.
+`X-Omi-Home-Episode-Ids` acknowledges at most 50 exact `episode_id:conversation_id`
+pairs from its loaded metadata. The server checks extant, unmerged episodes and
+retained completed members; unknown/unfetched episodes and unfinished rows stay
+visible. Old clients send no acknowledgement and keep their rows. The response's
+`X-Omi-Conversation-Page-Size` preserves the original page cursor and
+`X-Omi-Home-Suppressed-Ids` identifies omissions whose exact held snapshots the
+app retains locally, so replacing the overlay cannot orphan those members.
+Search and other filtered consumers do not opt in. No membership or title is
+written by this read projection. Idle-closing reads schedule compose immediately;
+the bounded missed-compose safety net still covers other closed episodes.
 
 Each membership CAS writes `conversation.episode_id` alongside its overlay
 link. A conversation crossing the cap stays with its starting episode; only

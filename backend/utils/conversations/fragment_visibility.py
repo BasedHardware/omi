@@ -22,6 +22,7 @@ SETTLING_ROW_MAX_SECONDS = 60
 # The batch timeliness alarm: a row still unsettled here is an incident to show, not a fragment to hide.
 SETTLING_MAX_HOLD_SECONDS = 2 * 60 * 60
 SETTLING_FIELDS = (
+    'summary_blocked_reason',
     'record_lane_owner',
     'record_projection_revision',
     'record_upload_failed',
@@ -143,31 +144,49 @@ def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
     return not is_user_curated(data)
 
 
-def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -> bool:
-    """Whether a short batch-owned row should wait off Home for its audio.
+def is_completed_below_floor(data: Mapping[str, Any]) -> bool:
+    """A settled content verdict has no expiry; curation still releases it."""
+    decision = data.get('relevance_decision')
+    return bool(
+        _value(data.get('status')) == 'completed'
+        and not is_user_curated(data)
+        and (
+            data.get('summary_blocked_reason') == 'content_below_floor'
+            or (isinstance(decision, Mapping) and decision.get('reason') == 'content_below_floor')
+        )
+    )
 
-    Live text on a batch-owned row is provisional: batch replaces it or a later
-    recording absorbs the row. Until then a short row reads as a confusing
-    fragment ("Brief Conversation Fragment", 45s). Only presentation waits, so
-    this is no discard and no low-signal verdict; nothing is stored. Readers
-    enforce the deadline, so a lost worker cannot hide a recording forever.
+
+def is_settling_fragment(data: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """Hold minimum/floor rows across capture lanes, without discarding speech.
+
+    Batch-owned short provisional rows retain their existing hold too. User
+    curation releases every hold. Only unsettled rows expire after two hours;
+    a completed below-floor verdict stays off Home permanently.
     """
     from config.episodes import home_hide_below_floor_rows_enabled
 
     if not home_hide_below_floor_rows_enabled():
         return False
-    if data.get('record_lane_owner') not in BATCH_RECORD_OWNERS or is_user_curated(data):
+    if is_completed_below_floor(data):
+        return True
+    if is_user_curated(data):
         return False
     if data.get('record_projection_revision') or data.get('record_upload_failed') or data.get('record_audio_partial'):
         return False
     if _value(data.get('status')) != 'completed':
         return False
     started, finished = data.get('started_at'), data.get('finished_at')
-    if not isinstance(started, datetime) or not isinstance(finished, datetime):
+    if not isinstance(finished, datetime):
         return False
     current = datetime.now(timezone.utc).timestamp() if now is None else now
     if current - finished.timestamp() >= SETTLING_MAX_HOLD_SECONDS:
         return False
     structured = data.get('structured')
     server_minimum = isinstance(structured, Mapping) and structured.get('title_provenance') == 'server_minimum'
-    return server_minimum or (finished - started).total_seconds() < SETTLING_ROW_MAX_SECONDS
+    batch_short = (
+        isinstance(started, datetime)
+        and data.get('record_lane_owner') in BATCH_RECORD_OWNERS
+        and (finished - started).total_seconds() < SETTLING_ROW_MAX_SECONDS
+    )
+    return server_minimum or batch_short

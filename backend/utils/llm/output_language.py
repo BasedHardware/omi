@@ -31,9 +31,21 @@ def language_preference(uid: str) -> str:
     try:
         return normalize_language(users_db.get_user_language_preference(uid) if uid else None)
     except Exception:
-        return ''  # A preference-read outage falls through to the capture language, never fails the artifact.
+        return ''  # A preference-read outage uses the guarded capture fallback, never fails the artifact.
 
 
-def resolve_output_language(uid: str, conversation_language: str | None) -> str:
-    """Explicit user preference, then capture language, then English. Never infer from noise."""
-    return language_preference(uid) or normalize_language(conversation_language) or 'en'
+def capture_output_language(conversation_language: str | None, segments=None, *, preference: str = '') -> str:
+    """Explicit preference; otherwise a non-English capture needs transcript agreement."""
+    preferred = normalize_language(preference)
+    if preferred:
+        return preferred
+    capture = normalize_language(conversation_language)
+    if capture and capture.split('-', 1)[0] != 'en':
+        from utils.episodes.output_language import dominant_segment_language, languages_match
+
+        return capture if languages_match(capture, dominant_segment_language(segments)) else 'en'
+    return capture or 'en'
+
+
+def resolve_output_language(uid: str, conversation_language: str | None, segments=None) -> str:
+    return capture_output_language(conversation_language, segments, preference=language_preference(uid))
