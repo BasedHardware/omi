@@ -96,6 +96,7 @@ printf 'test:%s:%s:%s:%s:%s:%s\\n' \\
         'PYTHON': shell_python,
         'RUNNER_LOG': str(log_path),
         'RUNNER_SHELL_LOG': bash_path(log_path, cwd=REPO_ROOT),
+        'BACKEND_PYTEST_WORKERS': 'auto',
     }
     result = subprocess.run(
         bash_command(runner, '--changed-files', changed_files, cwd=REPO_ROOT),
@@ -205,6 +206,7 @@ def _run_shard(tmp_path: Path, backend: Path, runner: Path, arguments: list[str]
         'RUNNER_SHELL_LOG': bash_path(log_path, cwd=REPO_ROOT),
         'TESTS_OUT': bash_path(tests_out, cwd=REPO_ROOT),
         'FIXTURE_SELECTION': ''.join(f'{path}\n' for path in SORTED_PATHS),
+        'BACKEND_PYTEST_WORKERS': os.environ.get('FIXTURE_WORKERS', 'auto'),
     }
     result = subprocess.run(
         bash_command(runner, *arguments, cwd=REPO_ROOT),
@@ -215,6 +217,17 @@ def _run_shard(tmp_path: Path, backend: Path, runner: Path, arguments: list[str]
         capture_output=True,
     )
     return result, log_path, tests_out
+
+
+def test_runner_honors_explicit_low_worker_count_without_changing_guards(tmp_path, monkeypatch):
+    backend, runner = _sharded_fixture(tmp_path)
+    monkeypatch.setenv('FIXTURE_WORKERS', '1')
+
+    result, log_path, tests_out = _run_shard(tmp_path, backend, runner, ['--all'], 'low-workers')
+
+    assert result.returncode == 0, result.stderr
+    assert log_path.read_text().splitlines()[-1] == GUARD_ENV_LINE.removesuffix('auto') + '1'
+    assert tests_out.read_text().splitlines() == SORTED_PATHS
 
 
 @pytest.mark.parametrize('mode', ['--all', '--changed-files'])
