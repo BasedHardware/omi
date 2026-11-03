@@ -1185,8 +1185,9 @@ overlay:
           SYNC_BACKFILL_ENABLED:
             value: 'true'
             category: rollout
+          # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
-            value: '555'
+            value: '1665'
             category: rollout
           SYNC_BACKFILL_INFLIGHT_LIMIT:
             value: 'false'
@@ -1539,8 +1540,9 @@ overlay:
           SYNC_BACKFILL_ENABLED:
             value: 'true'
             category: rollout
+          # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
-            value: '555'
+            value: '1665'
             category: rollout
           SYNC_BACKFILL_INFLIGHT_LIMIT:
             value: 'false'
@@ -1654,6 +1656,8 @@ overlay:
           # Activated at runtime 2026-10-27 02:07Z (lead 5da7dc/ebc45a) after the 5% unsupported-language held
           # loop; declared here so a train carries the serving value instead of resetting it to false.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'true', category: ops_kill}
+          # Lead hold: keep disabled until newly admitted words have independent acoustic evidence.
+          BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS: {value: '0', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-hhibjajaja-uc.a.run.app
             category: service_auth
