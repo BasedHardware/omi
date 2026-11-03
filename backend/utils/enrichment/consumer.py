@@ -119,6 +119,19 @@ class EnrichmentConsumer:
         return enrich_conversation
 
     def process(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
+        # Covers every store/gateway call below, including the effects-only path and the empty-output strike.
+        # A consumer-side write that already moved ownership makes the release refuse, so that settles STALE.
+        try:
+            return self._deliver(claim, heartbeat)
+        except Exception as error:
+            if not _transient_dependency(error):
+                raise
+            logger.warning(
+                'event=enrichment_consumer outcome=retry reason=dependency exception_type=%s', type(error).__name__
+            )
+            return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=time.time())
+
+    def _deliver(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
         from config.summary_guarantee import ADMITTED_OWNER, preserves_admitted
         from database._client import get_firestore_client
         from database.summary_processing import record_empty_failure
@@ -206,13 +219,6 @@ class EnrichmentConsumer:
                 return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
             record_delivery('summary', 'failed')
             empty_blocked = True
-        except Exception as error:
-            if not _transient_dependency(error):
-                raise
-            logger.warning(
-                'event=enrichment_consumer outcome=retry reason=dependency exception_type=%s', type(error).__name__
-            )
-            return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
         finally:
             ADMITTED_OWNER.reset(tokens[4])
             summary_delivery.REPAIR_CONTEXT.reset(tokens[3])

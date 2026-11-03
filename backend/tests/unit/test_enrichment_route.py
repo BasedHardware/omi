@@ -271,6 +271,33 @@ def test_transient_dependency_faults_release_the_lease_as_409(rows, client, monk
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, monkeypatch):
+    """Luna r1: a store fault inside ``record_empty_failure`` is outside the callback's except clauses."""
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', Mock(side_effect=_remapped_aborted()))
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, lambda *_: SimpleNamespace(structured={'title': 'Synthetic'}))
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):
+    """Luna r1: the effects-only branch runs before the callback block."""
+    from utils.conversations import lazy_enrichment
+
+    rows[0][KEY]['effects_only'] = True
+    monkeypatch.setattr(lazy_enrichment, 'enrich_settled', Mock(side_effect=_gateway_status(503)))
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, Mock())
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
 def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client, monkeypatch):
     import httpx
 
