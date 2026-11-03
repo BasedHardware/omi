@@ -15,6 +15,7 @@ from database import users as users_db, redis_db
 from config.refactor_modes import serving_for, uid_digest
 from models.speaker_evidence import SpeakerEvidence, VoiceCluster, SpeakerCandidate, ClusterSimilarity
 from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from utils.conversations.transcript_for_llm import render_cluster_transcript
 from utils.episodes import incremental, moment_render
 from utils.llm import notes_packet as packet
@@ -334,7 +335,9 @@ def test_short_clip_shadow_does_not_serve_minimum(monkeypatch):
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv(packet.FLAG, 'shadow')
     conversation = SimpleNamespace(
-        transcript_segments=[TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0)],
+        transcript_segments=[
+            TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0, is_user=False)
+        ],
         photos=[],
     )
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation) is None
@@ -412,7 +415,6 @@ def processing():
 )
 def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, trigger_name):
     from utils.conversations.processing_trigger import ProcessingTrigger
-    from models.transcript_segment import TranscriptSegment
 
     monkeypatch.setenv(packet.FLAG, 'serve')
     monkeypatch.setattr(processing.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
@@ -421,7 +423,9 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         processing, 'should_discard_conversation', lambda *_args, **_kwargs: pytest.fail('paid discard')
     )
     conversation = SimpleNamespace(
-        transcript_segments=[TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0)],
+        transcript_segments=[
+            TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0, is_user=False)
+        ],
         language='en',
         started_at=START,
         photos=[],
