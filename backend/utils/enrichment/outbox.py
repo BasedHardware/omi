@@ -813,7 +813,7 @@ def sweep(
 
     ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite);
     an injected creator stands in for the queue binding and the named-task probe. ``cursor=False`` (the
-    contract (b) outbox, invariant 8) scans from the oldest due row instead of resuming the shared
+    optional oldest-first scan) scans from the oldest due row instead of resuming the shared
     ``sync_reprocess_scan`` checkpoint. An expired lease is fenced and re-woken under a new token, and
     ``wake_check_after`` throttles a row only once its wake was created.
     """
