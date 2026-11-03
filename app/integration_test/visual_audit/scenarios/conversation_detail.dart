@@ -2,6 +2,7 @@
 // recordings sheet of a grouped capture, and the people chip.
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
@@ -13,6 +14,9 @@ import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
+import 'package:omi/services/on_device/on_device_provenance.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -182,8 +186,12 @@ final conversationDetailScenarios = <AuditScenario>[
         startedAt: startedAt,
         finishedAt: startedAt.add(const Duration(minutes: 5, seconds: 49)),
         status: ConversationStatus.completed,
-        structured: Structured('Call about the venue deposit', 'Confirmed the deposit and the Friday walkthrough.',
-            emoji: '\u{1F4DE}', category: 'personal'),
+        structured: Structured(
+          'Call about the venue deposit',
+          'Confirmed the deposit and the Friday walkthrough.',
+          emoji: '\u{1F4DE}',
+          category: 'personal',
+        ),
         transcriptSegments: [
           line('0', 0, 12, 'Hi, calling about the deposit for the twelfth.'),
           line('1', 12, 40, 'Yes, it is confirmed. Do you still want the walkthrough on Friday?', mine: true),
@@ -205,8 +213,10 @@ final conversationDetailScenarios = <AuditScenario>[
       );
       await _pumpDetail(a, conversation, tab: _transcriptTab);
       expect(find.byKey(const ValueKey('detail_audio_player')), findsOneWidget);
-      await a.shot('Open the transcript: the player explains the short recording instead of showing -0:03',
-          step: 'transcript');
+      await a.shot(
+        'Open the transcript: the player explains the short recording instead of showing -0:03',
+        step: 'transcript',
+      );
     },
   ),
   AuditScenario(
@@ -420,6 +430,28 @@ final conversationDetailScenarios = <AuditScenario>[
       );
       await _pumpDetail(a, conversation);
       await a.shot('No people chip is shown');
+    },
+  ),
+  AuditScenario(
+    id: 'conversation-iphone-summary',
+    title: 'Summary line: transcribed and summarized on this iPhone',
+    page: 'lib/pages/on_device/on_device_provenance_section.dart (OnDeviceProvenanceSection)',
+    state: 'A phone-made summary saved to keep live hours; the line names this iPhone',
+    run: (a) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final controller = OnDeviceTranscriptionController(manageNativeCustody: false, canSummarizeOnPhone: true)
+          ..debugActivate();
+        controller.recordProvenance(
+          'demo-summary',
+          const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.savingLiveHours),
+        );
+        await a.pump(OnDeviceProvenanceSection(conversationId: 'demo-summary', controller: controller));
+        expect(find.text('Transcribed and summarized on this iPhone'), findsOneWidget);
+        await a.shot('The iPhone summary line');
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     },
   ),
 ];
