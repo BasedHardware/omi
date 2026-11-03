@@ -105,9 +105,12 @@ async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch):
+@pytest.mark.parametrize('reverse', [False, True])
+async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch, reverse):
     from utils.batch_pipeline import live
 
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '2')
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse() if reverse else None)
     store = MemoryStore()
     store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
     store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
@@ -116,7 +119,7 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch)
 
     def run(body):
         result = original_run(body)
-        if result.get('broken'):
+        if isinstance(result, dict) and result.get('broken'):
             raise RuntimeError('synthetic store failure')
         return result
 
