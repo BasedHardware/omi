@@ -544,6 +544,6 @@ _driver(
     domains={'apply': [False, True]},
     neutrals={'now': (10000.0, 'hold-age/range operand only; same membership queries')},
     setup=_enrichment_redrive_rows,
-    profile='operator-stalled-enrichment-redrive',
+    profile='operational-stalled-enrichment-redrive',
     serving=False,
 )
