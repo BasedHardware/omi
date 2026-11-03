@@ -1895,7 +1895,7 @@ def test_reminder_accept_atomic_creation_receipt_and_wire_precision(fake_db):
     assert not any('action_items' in path for path in fake_db.rows)
     receipt = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
     row = fake_db.rows[('users', 'user-1', 'action_items', receipt.task_id)]
-    assert row.get('due_at') is None
+    assert row['due_at'] is None
     assert row['due']['date'] == '2027-01-15'
     assert row['conversation_id'] == 'synthetic-conversation'
     audit = row['creation_receipt']
@@ -1911,7 +1911,7 @@ def test_reminder_accept_atomic_creation_receipt_and_wire_precision(fake_db):
     wire = ActionItemResponse.model_validate(row).model_dump(mode='json')
     assert wire['due_at'] is None
     assert wire['due']['kind'] == 'date'
-    assert '2027-01-15' in wire['description']  # compatibility for date-unaware clients
+    assert wire['description'] == 'Renew the library card'  # owner-editable text stays exact
     second = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
     assert not second.newly_resolved
     assert fake_db.rows[('users', 'user-1', 'action_items', receipt.task_id)] == row

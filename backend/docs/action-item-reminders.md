@@ -24,9 +24,9 @@ promotes a bare `is_user`, name or cluster number into identity.
 `due` distinguishes none, local date, explicit instant and unresolved expression.
 Date-only reminders keep `due_at=null`; there is no notification hour or scheduling
 intent. Web task rows/cards and note next steps render the all-day date; grouping
-uses that date's IANA timezone. Old clients can ignore additive fields: the task
-response includes the date in its description projection, and notes carry it in
-context. The stored editable description is not changed. A legacy date edit clears
+uses that date's IANA timezone. Old clients can ignore additive fields: due_at is explicitly null in storage
+and on the wire, and notes carry the date in their existing context field.
+Owner-editable task descriptions stay exact. A legacy date edit clears
 old precision; owner edits and completion survive extraction replay.
 
 Dates use the recording's source timestamp plus cited offsets and

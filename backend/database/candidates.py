@@ -839,6 +839,9 @@ def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datet
     if not isinstance(candidate.task_change, TaskCreatePayload):
         raise CandidateConflictError('task create Candidate has invalid payload')
     task = candidate.task_change.model_dump(mode='python', exclude_none=True)
+    if candidate.task_change.due is not None and candidate.task_change.due.kind != 'instant':
+        # Released no-deadline readers distinguish an explicit null from a missing field.
+        task['due_at'] = None
     if candidate.reminder_origin is not None:
         task['reminder_origin'] = candidate.reminder_origin.model_dump(mode='python')
         task['conversation_id'] = next(
