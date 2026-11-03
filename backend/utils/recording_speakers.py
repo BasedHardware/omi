@@ -18,7 +18,7 @@ from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.observability.fallback import record_fallback
 
 
-def members(uid, conversation_id, *, episode_id=None):
+def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
     episode = (
         episodes_db.get_episode(uid, episode_id)
         if episode_id
@@ -31,7 +31,10 @@ def members(uid, conversation_id, *, episode_id=None):
         raise LookupError('Conversation not found')
     if anchor.get('is_locked'):
         raise PermissionError('Conversation is locked')
-    scopes = {s.get('speaker_id_scope') for s in anchor.get('transcript_segments') or []} - {None, ''}
+    scopes = ({s.get('speaker_id_scope') for s in anchor.get('transcript_segments') or []} | set(extra_scopes)) - {
+        None,
+        '',
+    }
     if episode:
         ids = episode.get('conversation_ids') or []
         if conversation_id not in ids:
@@ -80,6 +83,24 @@ def transcript(uid, conversation_id):
 def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks, *, episode_id=None):
     episode, rows = members(uid, conversation_id, episode_id=episode_id)
     by_id = {row['id']: row for row in rows}
+    if episode is None:
+        # A selected sibling can contain a later provider scope absent in the
+        # open row. Join using the selected voice's scope, never the open row's
+        # speaker number (and never bridge the names of different scopes).
+        selected_scopes = (
+            {body.voice.speaker_id_scope}
+            if body.voice
+            else {
+                s.get('speaker_id_scope')
+                for selection in body.selections
+                for s in (by_id.get(selection.conversation_id) or {}).get('transcript_segments') or []
+                if s.get('id') in selection.segment_ids and s.get('speaker_id_scope')
+            }
+        )
+        anchor_scopes = {s.get('speaker_id_scope') for s in by_id[conversation_id].get('transcript_segments') or []}
+        if selected_scopes - anchor_scopes:
+            _, rows = members(uid, conversation_id, extra_scopes=selected_scopes)
+            by_id = {row['id']: row for row in rows}
     targets = {}
     voice_cache, segment_voice_cache, expanded = {}, {}, set()
 
@@ -167,9 +188,19 @@ def recording_carry(uid, previous, active_scope):
     """Use the latest scoped decisions even when the last member has no such voice."""
     from database import recording_speakers as decisions_db
 
+    if not active_scope:
+        return {}
     try:
         decisions = decisions_db.read(uid, active_scope)
-        if not isinstance(decisions, dict) or any(not isinstance(entry, dict) for entry in decisions.values()):
+        if not isinstance(decisions, dict) or any(
+            not isinstance(entry, dict)
+            or not isinstance(entry.get('speaker_id'), int)
+            or entry.get('speaker_id_scope') != active_scope
+            or not isinstance(entry.get('stream_speaker'), str)
+            or not entry.get('stream_speaker')
+            or not isinstance(entry.get('decided_at', ''), str)
+            for entry in decisions.values()
+        ):
             raise ValueError('Malformed recording decisions')
     except Exception:
         record_fallback(component='other', from_mode='other', to_mode='incumbent', reason='other', outcome='degraded')
