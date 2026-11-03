@@ -22,6 +22,7 @@ import math
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
@@ -124,7 +125,7 @@ def test_fixture_reproduces_the_pinned_pool():
     assert sum(trace[-60:]) / 60 >= 14
 
 
-def test_chart_and_adapter_return_to_the_floor_without_queueing():
+def test_current_volume_chart_and_adapter_replay_preserves_headroom():
     config = _config()
     series = _load()
     chain_column = _served_chain_column()
@@ -132,8 +133,9 @@ def test_chart_and_adapter_return_to_the_floor_without_queueing():
     mean = sum(trace) / len(trace)
     # Measured at 25%: flight wall time averages ~1.1 chain s/s, about two workers at
     # target. The fleet should sit at or just above the floor of 4.
-    assert mean <= 5.5, (chain_column, mean)
-    assert max(trace) <= 7, (chain_column, max(trace))
+    # Lock the rounded reported replay mean within one hundredth of a pod.
+    assert mean == pytest.approx(4.34, abs=0.01), (chain_column, mean)
+    assert max(trace) == 5, (chain_column, max(trace))
     # Timeliness: per-worker 5m chain demand stays below the hot line in every
     # minute. This is a headroom proxy, not a measurement of backlog latency.
     hot = [
@@ -176,7 +178,16 @@ def test_full_volume_model_reduces_mean_replicas_against_previous_targets():
     trace = _replay(series, _metrics(config, chain_column), config)
     before = dict(config, ready_target=32, chain_target=0.5)
     previous = _replay(series, _metrics(before, chain_column), before)
-    assert sum(trace) / len(trace) < sum(previous) / len(previous)
+    mean = sum(trace) / len(trace)
+    assert mean == pytest.approx(10.99, abs=0.01), mean
+    assert max(trace) == 16, max(trace)
+    hot = [
+        (epoch, replicas, demand)
+        for epoch, replicas, demand in zip(series['epoch'], trace, series['chain_5m_per_pod'])
+        if demand is not None and demand > HOT_CHAIN_PER_WORKER * replicas
+    ]
+    assert len(hot) <= 7, hot
+    assert mean < sum(previous) / len(previous)
     assert config['min_replicas'] == 4 and 4 in trace
 
 

@@ -9,6 +9,11 @@ The targets ship on when the authorized lead applies chart values. Restore
 32/0.5 to roll back. There are no new env, wire or payload contracts and no
 admission-cohort change. Full-volume capacity remains unqualified: the
 synthetic 3.7x fixture cannot satisfy the proposed eight-worker/no-hot bound.
+The planscost lead accepts a staged apply at today's volume, with timeliness
+and T3/hard-3 observation for one shed cycle plus 24h and rollback to 32/0.5
+on regression. Before streaming retirement doubles batch volume, the lead
+decides whether to raise maxReplicas above 16 (the replay needs 18 for zero
+hot minutes). This PR leaves the ceiling unchanged.
 
 [Worker sizing evidence and apply prerequisites](../../batch-pipeline-worker.md#retune-apply-and-rollback-lead)
 include replay results, profiling/freshness requirements, alarm/index readiness

@@ -357,8 +357,15 @@ A separate sustained-step model (4.05 -> 12 chain s/s) has worst backlog wait
 5.06 minutes and catches up in 22 minutes. This models served work as demand,
 fixed per-pod supply and provisioning; it does not establish production latency,
 throughput or savings. In particular, it does not substantiate ~5 pods, $47/day
-saved or flat 4,514 audio-h/day at full volume. Fresh capacity qualification is
-required before full-volume expansion; do not raise the 16 ceiling here.
+saved or flat 4,514 audio-h/day at full volume. The planscost lead accepts a
+staged apply at today's volume (2026-11-03), watching timeliness and T3/hard-3
+signals for one shed cycle plus 24h and restoring 32/0.5 on regression. The old
+32/0.5 targets need more pods on average in the full-volume replay; both shapes
+reach the same 16-pod ceiling, so that capacity gap is not introduced by this
+retune. The seven hot minutes (versus five before) remain an expansion risk.
+Before streaming retirement doubles batch volume, the lead decides whether to
+raise maxReplicas above 16 as a separately qualified capacity step; the replay
+needs 18 for zero hot minutes. This PR leaves maxReplicas at 16.
 See `tests/unit/test_batch_pipeline_hpa_retune_replay.py`.
 
 The four-worker production floor, 16-worker ceiling, 1800s scale-down window
@@ -401,16 +408,17 @@ closed.
    Verify fresh successful samples and handling of the 2h, stale and scan-blind
    states. Rules default to agent tier with Telegram muted; confirm an operator
    is watching them. They are alert-only, not an automatic rollback guard.
-4. Confirm qualification for the actual admitted workload before applying.
-   This change only preserves the measured 25% fixture checks; if the fleet is
-   already at full volume, hold this retune until fresh capacity/throughput
-   qualification passes. Apply the reviewed values at the qualified cohort
-   and observe a full shed cycle (60 min with fresh replay history; roughly 90 min if prior high
-   recommendations persist), then monitor for 24h. Arm any
-   retune guard only after a full lookback of the new state. Check completed
-   audio per pod-hour and total throughput, backlog latency, all timeliness
-   legs, GPU duty, pull backoff and obligation age. No cohort expansion is
-   authorized by this retune or its synthetic replay.
+4. Apply the reviewed 40/0.6 values in a staged apply at today's volume, per
+   the planscost lead's 2026-11-03 decision. Watch timeliness and T3/hard-3
+   signals through one shed cycle (60 min with fresh replay history; roughly
+   90 min if prior high recommendations persist) plus 24h. Arm any retune
+   guard only after a full lookback of the new state. Check completed audio
+   per pod-hour and total throughput, backlog latency, all timeliness legs,
+   GPU duty, pull backoff and obligation age. Restore 32/0.5 on regression.
+   Before streaming retirement doubles batch volume, the lead must decide
+   whether to raise maxReplicas above 16: the synthetic replay needs 18 for
+   zero hot minutes. That decision and any separately qualified ceiling
+   increase are outside this PR; this apply keeps min 4 / max 16.
 5. Use [ADR-0001](adr/0001-trip-floors-t2-t3-t5.md) as the cited T3 policy:
    obligation >900s / job >1800s freezes at <=50% and rolls back above 50%;
    always-rollback backstops are p95 record latency >30 min sustained 30 min,
