@@ -11,6 +11,8 @@ Wire ordering, the closed counter labels, and the default-on
 [mobile local-preview contract](../../listen_pusher_pipeline.mdx#mobile-local-preview-lane-kill-switch-default-on).
 The existing restore cohort and durable server batch ownership remain required;
 15 seconds visible dwell and hide-to-close keep the cost bound on screen.
+Engine-unavailable metric reasons use a closed `StrEnum`; unknown or malformed
+client reasons count as `other` rather than the recognized `engine_error` reason.
 
 Renewal revocations use the same sticky transition and clear the declaration so
 owned sessions can attach restore. Without durable server custody, revoked or

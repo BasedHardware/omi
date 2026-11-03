@@ -495,6 +495,20 @@ class LiveSttReason(StrEnum):
     NO_TEXT = 'no_text'
 
 
+class LocalPreviewEngineUnavailableReason(StrEnum):
+    """LivePreviewReason failure wire values; unknown client input folds to OTHER."""
+
+    OS_TOO_OLD = 'os_too_old'
+    OS_ENGINE_UNAVAILABLE = 'os_engine_unavailable'
+    LOCALE_UNSUPPORTED = 'locale_unsupported'
+    LOCALE_ASSET_MISSING = 'locale_asset_missing'
+    SPEECH_PERMISSION_DENIED = 'speech_permission_denied'
+    BUNDLED_NOT_INSTALLED = 'bundled_not_installed'
+    BUNDLED_NOT_BUILT = 'bundled_not_built'
+    ENGINE_ERROR = 'engine_error'
+    OTHER = 'other'
+
+
 class LocalPreviewOutcome(StrEnum):
     """Mobile local-preview lane admission at listen session start (routers/listen/local_preview.py)."""
 

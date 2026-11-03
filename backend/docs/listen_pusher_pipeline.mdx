@@ -6108,7 +6108,7 @@ A granted Flutter client whose engine settles unavailable (or exhausts its one
 runtime retry) sends `{"type":"local_preview_engine_unavailable","reason":"locale_asset_missing"}`
 before flushing held binary audio through the ordinary socket-refusal path. The
 reason is a closed engine-failure value; unknown/malformed reasons count as
-`engine_error`. The app sends it once per socket and latches per capture so later
+`other`. The app sends it once per socket and latches per capture so later
 sockets do not declare local preview. No engine-available message can un-rescind.
 
 `LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` defaults on; false/0/off/no counts and ignores

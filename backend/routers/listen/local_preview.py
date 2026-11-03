@@ -27,7 +27,12 @@ from utils.metrics import (
     OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
-from utils.observability.reasons import LocalPreviewOutcome, ReasonFamily, reason_label
+from utils.observability.reasons import (
+    LocalPreviewEngineUnavailableReason,
+    LocalPreviewOutcome,
+    ReasonFamily,
+    reason_label,
+)
 from utils.observability.transcription import bounded_client_platform
 from utils.stt.outcomes import bounded_provider
 from utils.stt.provider_stream_end import begin_stream_close
@@ -131,22 +136,6 @@ def note_deferred_stream_closed(receiver) -> None:
         pass  # Telemetry never blocks teardown.
 
 
-# Mirrors LivePreviewReason's failure wire values; arbitrary client input is
-# never a metric label. Unknown/malformed reasons collapse to engine_error.
-ENGINE_UNAVAILABLE_REASONS = frozenset(
-    {
-        'os_too_old',
-        'os_engine_unavailable',
-        'locale_unsupported',
-        'locale_asset_missing',
-        'speech_permission_denied',
-        'bundled_not_installed',
-        'bundled_not_built',
-        'engine_error',
-    }
-)
-
-
 def rescind_local_preview(host, payload) -> bool:
     """Count once per granted socket and revoke one-way, including lease renewal."""
     if (
@@ -156,13 +145,15 @@ def rescind_local_preview(host, payload) -> bool:
     ):
         return False
     host._local_preview_engine_reported = True
-    raw = payload.get('reason')
-    reason = raw if isinstance(raw, str) and raw in ENGINE_UNAVAILABLE_REASONS else 'engine_error'
+    try:
+        reason = LocalPreviewEngineUnavailableReason(payload.get('reason'))
+    except (TypeError, ValueError):
+        reason = LocalPreviewEngineUnavailableReason.OTHER
     try:
         platform = getattr(getattr(host, 'client_device_context', None), 'platform', None)
         OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL.labels(
             client_platform=bounded_client_platform(platform),
-            reason=reason,
+            reason=reason_label(ReasonFamily.LIVE_STT, reason, LocalPreviewEngineUnavailableReason),
         ).inc()
     except Exception:
         pass  # Telemetry never interrupts capture.

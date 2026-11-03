@@ -420,14 +420,32 @@ async def test_engine_unavailable_counts_once_and_rescind_is_sticky(monkeypatch,
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('raw', ['unbounded-client-input', None, [], {}])
-async def test_engine_unavailable_reason_and_platform_are_bounded(monkeypatch, raw):
+@pytest.mark.parametrize(
+    'raw, expected',
+    [
+        ('os_too_old', 'os_too_old'),
+        ('os_engine_unavailable', 'os_engine_unavailable'),
+        ('locale_unsupported', 'locale_unsupported'),
+        ('locale_asset_missing', 'locale_asset_missing'),
+        ('speech_permission_denied', 'speech_permission_denied'),
+        ('bundled_not_installed', 'bundled_not_installed'),
+        ('bundled_not_built', 'bundled_not_built'),
+        ('engine_error', 'engine_error'),
+        ('unbounded-client-input', 'other'),
+        (None, 'other'),
+        ([], 'other'),
+        ({}, 'other'),
+    ],
+)
+async def test_engine_unavailable_counter_preserves_known_reasons_and_counts_unknown_as_other(
+    monkeypatch, raw, expected
+):
     monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
     host = make_host(client_device_context=SimpleNamespace(platform='unbounded-platform'))
     assert admit_local_preview(host)
     fake = make_receiver(host)
     monkeypatch.setattr(local_preview_module, 'attach_visible_restore', Mock())
-    labels = dict(client_platform='unknown', reason='engine_error')
+    labels = dict(client_platform='unknown', reason=expected)
     before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
     await ListenReceiver._handle_text(fake, json.dumps({'type': 'local_preview_engine_unavailable', 'reason': raw}))
     assert counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels) == before + 1
