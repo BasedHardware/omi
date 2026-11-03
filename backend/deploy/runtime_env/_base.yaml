@@ -62,6 +62,9 @@ environment_shared:
         CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS:
           value: '30'
           category: rollout
+        BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+        BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+        BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
@@ -915,6 +918,9 @@ environment_shared:
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1289,6 +1295,9 @@ environment_shared:
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1647,6 +1656,9 @@ environment_shared:
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1996,6 +2008,9 @@ environment_shared:
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout

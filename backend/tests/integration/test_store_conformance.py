@@ -283,6 +283,10 @@ def test_control_candidate_picks_lowest_service_then_availability(h):
     assert h.store.control_candidate(1, 'batch', 60.0) == 'low'  # 'later' ties on service; availability breaks it
     assert h.store.control_candidate(0, 'batch', 10.0) is None
     assert h.store.control_candidate(1, 'live', 10.0) == 'later'  # live availability and service tie: key breaks it
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker') == ['low', 'high']
+    choices = h.store.control_candidates(1, 'batch', 60.0, worker_id='worker')
+    assert set(choices[:2]) == {'low', 'later'} and choices[-1] == 'high'
+    assert h.store.control_candidate(1, 'batch', 60.0, worker_id='worker', exclude=choices[:2]) == 'high'
     with pytest.raises(ValueError):
         h.store.control_candidate(3, 'batch', 1.0)
     with pytest.raises(ValueError):

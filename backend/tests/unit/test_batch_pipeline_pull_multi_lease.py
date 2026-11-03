@@ -69,9 +69,9 @@ class SnapshotStore(MemoryStore):
         self.counts['claims'] += 1
         return super().acquire_pull_claim(shard, token, now, ttl)
 
-    def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+    def control_candidates(self, priority, pool, now, *, worker_id=''):
         self.counts['candidate_queries'] += 1
-        return super().control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)
+        return super().control_candidates(priority, pool, now, worker_id=worker_id)
 
 
 def owners_in_shard(n, start=0):

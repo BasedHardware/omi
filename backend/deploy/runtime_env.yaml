@@ -38,6 +38,9 @@ environments:
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -775,6 +778,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1038,6 +1044,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1331,6 +1340,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1605,6 +1617,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -2114,6 +2129,9 @@ environments:
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+          BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+          BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -2953,6 +2971,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -3336,6 +3357,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -3748,6 +3772,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -4121,6 +4148,9 @@ environments:
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}

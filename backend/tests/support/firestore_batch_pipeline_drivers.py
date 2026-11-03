@@ -245,6 +245,23 @@ def entries():
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
             neutrals={'transaction': (None, 'transaction binding only')},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.control_candidates',
+            covered_by=('database.batch_pipeline_store.control_candidates',),
+            reason='thin store adapter forwards namespace and bounded query arguments unchanged',
+            expect_observed=False,
+            body_digest='4607399a809defc07a0ede0263df09499a31611722b63ae993bd108a9abaa391',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.control_candidates',
+            domains={
+                'namespace': namespaces,
+                'priority': [0, 1, 2],
+                'pool': ['batch', 'live'],
+                'worker_id': ['', 'worker-a'],
+            },
+            neutrals={'now': (1.0, 'eligibility timestamp operand only')},
+        ),
         DriverEntry(
             'database.batch_pipeline_store.control_candidate',
             domains={

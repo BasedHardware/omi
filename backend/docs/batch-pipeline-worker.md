@@ -442,3 +442,54 @@ silence decision; the GPU worker never infers silence from empty text or from
 words outside its core. Speech gets the once-only legacy recovery attempt.
 See [serving recovery](batch-pipeline-serving.md#dark-empty-asr-disposition) for
 closed diagnostics, historical held-unit disposition and rollback semantics.
+
+### Control-loop read and latency budget
+
+Worker defaults ship on. `worker.controlCandidateFanout` maps to
+`BATCH_CONTROL_CANDIDATE_FANOUT` (16; integer clamp 1–64, malformed → 16).
+Each spread-mode priority pass queries one sorted candidate list, excludes busy
+claims locally, and refreshes at most once after a committed control change.
+Eligible deficit rounds keep retrying the head, so fresh work cannot be bypassed.
+Service remains the primary rank and worker affinity breaks ties within the
+bounded query prefix. Set 64 to restore the previous query width; list reuse
+remains active. `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy selection.
+
+`worker.firestoreReadLevers: '{"batch_privacy_memoize":100}'` renders
+`FIRESTORE_READ_LEVERS='{"batch_privacy_memoize":100}'` on worker pods only.
+The existing transaction-local memo enrolls each first read in the conflict set,
+including commit-boundary privacy checks, and is rebuilt on transaction retry.
+Set `worker.firestoreReadLevers: '{}'` in the override values file to disable it. A string avoids Helm's deep-map
+merge retaining the enabled default when an empty map is supplied. Serving-role
+complete lever literals and privacy fences are unchanged.
+
+`worker.admissionParallelCalls` maps to `BATCH_ADMISSION_PARALLEL_CALLS`
+(default true; false restores serial flight calls). First-seen owner groups are
+packed into calls of at most four leases. Up to four owner-disjoint calls run
+on the dedicated admission executor, orchestrated asynchronously. Shared-owner
+calls stay serial within one Pump/process, including across flights and
+synchronous provider re-checks. Locks last until the HTTP leaf returns after an async timeout. The
+server's eight-second clamp, fail-closed receipts, flight size and serial outer
+timeout bound remain unchanged. The synchronous provider dispatch re-check
+remains serial to keep thread-pool coordinators from waiting on child pools.
+Same-owner admission can still overlap across worker pods; the existing
+per-replica funding/fair-use check-then-act overshoot bound is unchanged.
+
+`worker.idlePollMaxSeconds` maps to `BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS`
+(default 10, finite clamp 2–30 seconds; malformed → 10). Empty lane waits follow
+2, 4, 8, 10, 10 seconds; productive work resets the next empty wait to 2 seconds.
+Set 2 to restore fixed polling. Maintenance has an independent one-second task
+for both one- and multi-flight pumps, and production queue gauges keep their
+independent runtime sampler. Shutdown interrupts every idle wait.
+
+Lead apply steps (this change does not deploy): publish the reviewed worker
+image through the normal release workflow, then upgrade the existing worker
+release using the prod values and that immutable image digest. Confirm the
+four rendered env values on every worker variant/process. At flat throughput,
+soak 24 hours watching custody_missing, terminal_speech, failed_held_speech,
+T3 obligation age (900-second trip), the two-hour timeliness alarm, pull backoff,
+and admission timeout/unevaluated shares. Compare completed audio seconds per
+pod-hour and DCGM utilization. Arm rollback automation only after a full new-state
+lookback window. On regression, set fanout 64, parallel false, idle max 2 and
+lever JSON string `'{}'` and roll worker pods through the same Helm release. No index or
+schema change is required. Claimed read/cost/throughput savings are estimates;
+this PR does not establish production acceptance or measured savings.

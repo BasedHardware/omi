@@ -174,6 +174,28 @@ def shared_live_enabled() -> bool:
     return resolve_stage_policy('', 'scheduler').shared_live
 
 
+def control_candidate_fanout() -> int:
+    """Bound hint reads; 64 restores the previous candidate query width."""
+    try:
+        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16'))
+    except ValueError:
+        return 16
+    return min(64, max(1, value))
+
+
+def admission_parallel_calls_enabled() -> bool:
+    return os.getenv('BATCH_ADMISSION_PARALLEL_CALLS', 'true').strip().lower() != 'false'
+
+
+def idle_poll_max_seconds() -> float:
+    """Bound empty-lane backoff; 2 restores fixed polling."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', '10'))
+    except ValueError:
+        return 10.0
+    return min(30.0, max(2.0, value)) if math.isfinite(value) else 10.0
+
+
 SCHEDULER_SHARDS = 64
 
 

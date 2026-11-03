@@ -98,6 +98,9 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        'BATCH_CONTROL_CANDIDATE_FANOUT',
+        'BATCH_ADMISSION_PARALLEL_CALLS',
+        'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_SERVING_ENABLED',

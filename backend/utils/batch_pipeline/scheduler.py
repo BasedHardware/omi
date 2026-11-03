@@ -395,11 +395,15 @@ class Scheduler:
             spread = shard_spread_enabled()
             excluded = set()
             busy = False
+            candidates = None
+            refreshed = False
             for _ in range(128):
                 if spread:
-                    shard = self.store.control_candidate(
-                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
-                    )
+                    if candidates is None:
+                        candidates = self.store.control_candidates(
+                            int(priority), self.pool, now, worker_id=self.worker_id
+                        )
+                    shard = next((key for key in candidates if key not in excluded), None)
                 else:
                     shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
@@ -419,6 +423,15 @@ class Scheduler:
                     excluded.add(shard)
                     busy = True
                     continue
+                if spread:
+                    if not eligible:
+                        excluded.add(shard)
+                    # Refresh at most once after a committed control change,
+                    # never after a busy claim. Deficit rounds can keep retrying
+                    # the eligible head without another hint query.
+                    if not refreshed:
+                        candidates = None
+                        refreshed = True
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.
                     continue
