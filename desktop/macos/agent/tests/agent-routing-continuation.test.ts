@@ -223,3 +223,40 @@ describe("the control tools report what the router decided", () => {
     });
   });
 });
+
+describe("a follow-up that rules out the session's own agent", () => {
+  it("continues on that agent but says it could not honour the exclusion", async () => {
+    // A session's adapter is fixed for its lifetime, so the run still happens
+    // on it; until now it happened without a word.
+    const { kernel } = harnessWith("acp", "hermes");
+    const spawned = await spawn(kernel, "start the task", "exclude-1");
+
+    const replied = await follow(kernel, spawned.session.sessionId, "keep going, but don't use claude");
+
+    expect(replied.run).toBeDefined();
+    expect(replied.sessionAgentExcluded).toEqual({
+      adapterId: "acp",
+      message:
+        "This task is running on Claude Code and a task can't switch agents, so it is continuing on Claude Code. Start a new task to use a different agent.",
+    });
+  });
+
+  it("says nothing when the agent ruled out is not the session's", async () => {
+    const { kernel } = harnessWith("acp", "hermes");
+    const spawned = await spawn(kernel, "start the task", "exclude-2");
+
+    const replied = await follow(kernel, spawned.session.sessionId, "keep going, but don't use hermes");
+
+    expect(replied.run).toBeDefined();
+    expect(replied.sessionAgentExcluded).toBeUndefined();
+  });
+
+  it("says nothing on an ordinary follow-up", async () => {
+    const { kernel } = harnessWith("acp", "hermes");
+    const spawned = await spawn(kernel, "start the task", "exclude-3");
+
+    const replied = await follow(kernel, spawned.session.sessionId, "keep going");
+
+    expect(replied.sessionAgentExcluded).toBeUndefined();
+  });
+});

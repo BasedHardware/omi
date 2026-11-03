@@ -210,6 +210,20 @@ export function agentSubstitutionNotice(route: AgentRoute, ranOn: string) {
   };
 }
 
+/**
+ * What to tell the user when a follow-up rules out the agent its session runs
+ * on. A session's adapter is fixed for its lifetime, so the follow-up still runs
+ * there; this only makes sure that happens out loud. Undefined otherwise.
+ */
+export function sessionAgentExclusionNotice(utterance: string, sessionAdapterId: string) {
+  if (!negatedAgentsFrom(utterance).includes(sessionAdapterId as MentionableAgentId)) return undefined;
+  const name = agentDisplayName(sessionAdapterId as MentionableAgentId);
+  return {
+    adapterId: sessionAdapterId,
+    message: `This task is running on ${name} and a task can't switch agents, so it is continuing on ${name}. Start a new task to use a different agent.`,
+  };
+}
+
 function namesOf(agents: ReadonlySet<string>): string {
   return [...agents].map((id) => agentDisplayName(id as MentionableAgentId)).join(", ");
 }

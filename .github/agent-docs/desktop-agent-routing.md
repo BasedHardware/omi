@@ -37,7 +37,9 @@ fails those suites rather than passing quietly.
    carries a `refusal` and `spawn_background_agent` answers with
    `noAgentAvailable` rather than starting on the profile default, which could be
    the agent they excluded. An unnamed task with nothing eligible keeps the
-   default.
+   default. A follow-up that rules out its own session's agent still runs there,
+   because a session's adapter is fixed for its lifetime, and
+   `send_agent_message` says so with `sessionAgentExcluded`.
 4. **Fallback reacts to the terminal run event, never to the spawn.**
    `spawnBackgroundAgent` returns a receipt and runs the adapter asynchronously
    (`void execution` in `kernel-runs.ts`), so a spawn-time retry loop cannot

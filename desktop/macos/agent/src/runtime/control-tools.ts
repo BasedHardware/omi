@@ -16,7 +16,7 @@ import type {
 } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
 import { AGENT_FALLBACK_CHAIN_KEY } from "./agent-fallback.js";
-import { agentSubstitutionNotice } from "./agent-routing.js";
+import { agentSubstitutionNotice, sessionAgentExclusionNotice } from "./agent-routing.js";
 import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot, maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
@@ -1121,6 +1121,9 @@ export async function handleAgentControlToolCall(
         }
         const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
         const agentSubstituted = namedRoute ? agentSubstitutionNotice(namedRoute, adapterId) : undefined;
+        const sessionAgentExcluded = parsed.adapterId
+          ? undefined
+          : sessionAgentExclusionNotice(parsed.prompt, adapterId);
         assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -1160,6 +1163,7 @@ export async function handleAgentControlToolCall(
         const result = routed.result;
         return stringifyToolResult({
           ...(agentSubstituted ? { agentSubstituted } : {}),
+          ...(sessionAgentExcluded ? { sessionAgentExcluded } : {}),
           routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),
