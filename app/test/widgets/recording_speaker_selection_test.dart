@@ -108,7 +108,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       expect(requests, hasLength(1));
-      expect(requests.single.url, endsWith('/v1/episodes/episode/assign-speaker'));
+      expect(Uri.parse(requests.single.url).path, endsWith('v1/episodes/episode/assign-speaker'));
+      expect(requests.single.method, 'PATCH');
       final body = jsonDecode(requests.single.body);
       expect((body['selections'] as List).map((s) => s['conversation_id']), ['c1', 'c2']);
       expect(body['whole_recording'], isFalse);
@@ -118,6 +119,7 @@ void main() {
       await tester.pump();
       detail.leaveSpeakerLabelingSession('c1');
       await tester.pump();
+      await tester.pump(const Duration(seconds: 6));
       await tester.pumpWidget(const SizedBox.shrink());
       outcome.dispose();
       people.dispose();
