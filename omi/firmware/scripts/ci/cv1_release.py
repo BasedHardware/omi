@@ -89,6 +89,7 @@ def stage(build, out, ver, include_network, context):
     repackage(build / 'dfu_application.zip', out / names[0], include_network)
     with zipfile.ZipFile(out / names[0]) as archive:
         validate_signed_version(archive, ver)
+        signed_sha256 = hashlib.sha256(archive.read('omi.signed.bin')).hexdigest()
     shutil.copyfile(build / 'merged.hex', out / names[1])
     shutil.copyfile(build / 'merged_CPUNET.hex', out / names[2])
     require(all((out / name).stat().st_size for name in names), 'Empty release asset')
@@ -97,13 +98,15 @@ def stage(build, out, ver, include_network, context):
         mode='build-only',
         version=ver,
         include_network_core=include_network,
+        signed_sha256=signed_sha256,
         sha256={name: digest(out / name) for name in names},
     )
     (out / 'qa-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
 
 
-def validate_run(run, workflow_id, repo, sha, run_id):
+def validate_run(run, workflow_id, repo, sha, run_id, run_attempt):
     require(str(run['id']) == run_id, 'QA run ID mismatch')
+    require(str(run['run_attempt']) == run_attempt, 'QA run attempt mismatch')
     require(run['repository']['full_name'] == repo, 'QA repository mismatch')
     require(run['workflow_id'] == workflow_id and run['path'] == WORKFLOW, 'QA run must use this workflow')
     require(run['event'] == 'workflow_dispatch', 'QA run must be manually dispatched')
@@ -111,7 +114,7 @@ def validate_run(run, workflow_id, repo, sha, run_id):
     require(run['head_sha'] == sha, 'QA source SHA must equal the published ref SHA')
 
 
-def validate_assets(out, run, ver, include_network):
+def validate_assets(out, run, ver, include_network, tested_signed_sha256):
     data = json.loads((out / 'qa-provenance.json').read_text())
     expected = {
         'mode': 'build-only',
@@ -134,23 +137,50 @@ def validate_assets(out, run, ver, include_network):
         manifest = ota_manifest(archive)
         validate_signed_version(archive, ver)
         require(len(manifest['files']) == (2 if include_network else 1), 'QA OTA image count mismatch')
+        require(
+            hashlib.sha256(archive.read('omi.signed.bin')).hexdigest() == tested_signed_sha256.lower(),
+            'Bench-tested signed image SHA-256 mismatch',
+        )
 
 
 def gh(*args):
     return subprocess.check_output(['gh', *args], text=True)
 
 
-def promote(out, ver, include_network, run_id, repo, sha, ref):
-    require(ref == 'refs/heads/main', 'Publishing is allowed only from main')
+def validate_promotion_inputs(run_id, run_attempt, tested_signed_sha256):
     require(re.fullmatch(r'[1-9][0-9]*', run_id or ''), 'Publishing requires qa_run_id')
+    require(re.fullmatch(r'[1-9][0-9]*', run_attempt or ''), 'Publishing requires qa_run_attempt')
+    require(re.fullmatch(r'[0-9a-fA-F]{64}', tested_signed_sha256 or ''), 'Publishing requires tested_signed_sha256')
+
+
+def validate_policy(rollout, blocked, emergency=False):
+    require(re.fullmatch(r'[0-9]+', rollout) and 0 <= int(rollout) <= 100, 'rollout_percent must be 0-100')
+    require(emergency or int(rollout) <= 1, 'Normal publish rollout_percent must be 0 or 1')
+    require(blocked in ('true', 'false'), 'blocked must be true or false')
+
+
+def promote(out, ver, include_network, run_id, run_attempt, tested_signed_sha256, repo, sha, ref):
+    require(ref == 'refs/heads/main', 'Publishing is allowed only from main')
+    validate_promotion_inputs(run_id, run_attempt, tested_signed_sha256)
     workflow = json.loads(gh('api', f'repos/{repo}/actions/workflows/firmware_release.yml'))
-    run = json.loads(gh('api', f'repos/{repo}/actions/runs/{run_id}'))
-    validate_run(run, workflow['id'], repo, sha, run_id)
+    run = json.loads(gh('api', f'repos/{repo}/actions/runs/{run_id}/attempts/{run_attempt}'))
+    validate_run(run, workflow['id'], repo, sha, run_id, run_attempt)
     # Do not rebuild or repackage after download: these are the bytes tested on the bench.
     with tempfile.TemporaryDirectory() as temp:
         download = Path(temp)
-        gh('run', 'download', run_id, '--repo', repo, '--name', ARTIFACT, '--dir', str(download))
-        validate_assets(download, run, ver, include_network)
+        # The artifact API is run-wide, so only use the attempt-scoped name.
+        gh(
+            'run',
+            'download',
+            run_id,
+            '--repo',
+            repo,
+            '--name',
+            f'{ARTIFACT}-{run_id}-{run_attempt}',
+            '--dir',
+            str(download),
+        )
+        validate_assets(download, run, ver, include_network, tested_signed_sha256)
         shutil.copytree(download, out)
         (out.parent / 'cv1-validated-run.json').write_text(json.dumps({'run': run, 'workflow_id': workflow['id']}))
 
@@ -168,9 +198,14 @@ def main():
     if args.command == 'prepare':
         if publishing:
             require(env['GITHUB_REF'] == 'refs/heads/main', 'Publishing is allowed only from main')
-            require(re.fullmatch(r'[1-9][0-9]*', env.get('QA_RUN_ID', '')), 'Publishing requires qa_run_id')
+            validate_promotion_inputs(
+                env.get('QA_RUN_ID', ''), env.get('QA_RUN_ATTEMPT', ''), env.get('TESTED_SIGNED_SHA256', '')
+            )
         else:
-            require(not env.get('QA_RUN_ID'), 'qa_run_id is only valid when publishing')
+            require(
+                not any(env.get(key) for key in ('QA_RUN_ID', 'QA_RUN_ATTEMPT', 'TESTED_SIGNED_SHA256')),
+                'QA promotion inputs are only valid when publishing',
+            )
             text = conf.read_text()
             for key in ('CONFIG_BT_DIS_FW_REV_STR', 'CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION'):
                 text, count = re.subn(rf'^{key}=.*$', f'{key}="{ver}"', text, flags=re.M)
@@ -178,8 +213,7 @@ def main():
                     text += f'\n{key}="{ver}"\n'
             conf.write_text(text)
         rollout = env.get('ROLLOUT_PERCENT', '1')
-        require(re.fullmatch(r'[0-9]+', rollout) and 0 <= int(rollout) <= 100, 'rollout_percent must be 0-100')
-        require(env.get('BLOCKED', 'false') in ('true', 'false'), 'blocked must be true or false')
+        validate_policy(rollout, env.get('BLOCKED', 'false'), env.get('EMERGENCY_REVERT') == 'true')
         with open(env['GITHUB_OUTPUT'], 'a') as output:
             output.write(f'ver={ver}\ntag=Omi_CV1_v{ver}\n')
     elif args.command == 'stage':
@@ -199,40 +233,57 @@ def main():
             ver,
             include_network,
             env.get('QA_RUN_ID', ''),
+            env.get('QA_RUN_ATTEMPT', ''),
+            env.get('TESTED_SIGNED_SHA256', ''),
             env['GITHUB_REPOSITORY'],
             env['GITHUB_SHA'],
             env['GITHUB_REF'],
         )
     else:
         require(publishing and env['GITHUB_REF'] == 'refs/heads/main', 'Publishing is allowed only from main')
-        require(re.fullmatch(r'[1-9][0-9]*', env.get('QA_RUN_ID', '')), 'Publishing requires qa_run_id')
+        validate_promotion_inputs(
+            env.get('QA_RUN_ID', ''), env.get('QA_RUN_ATTEMPT', ''), env.get('TESTED_SIGNED_SHA256', '')
+        )
+        validate_policy(
+            env.get('ROLLOUT_PERCENT', '1'), env.get('BLOCKED', 'false'), env.get('EMERGENCY_REVERT') == 'true'
+        )
         # Recheck the promotion receipt and bytes immediately before the write.
         receipt = json.loads((out.parent / 'cv1-validated-run.json').read_text())
         validate_run(
-            receipt['run'], receipt['workflow_id'], env['GITHUB_REPOSITORY'], env['GITHUB_SHA'], env['QA_RUN_ID']
+            receipt['run'],
+            receipt['workflow_id'],
+            env['GITHUB_REPOSITORY'],
+            env['GITHUB_SHA'],
+            env['QA_RUN_ID'],
+            env['QA_RUN_ATTEMPT'],
         )
-        validate_assets(out, receipt['run'], ver, include_network)
-        # Refuse an existing tag, including one without a release.
-        exists = subprocess.run(
-            ['gh', 'api', f"repos/{env['GITHUB_REPOSITORY']}/git/ref/tags/Omi_CV1_v{ver}"],
-            capture_output=True,
-            text=True,
-        )
-        require(exists.returncode != 0 and '404' in exists.stderr, 'Tag exists or tag lookup failed')
+        validate_assets(out, receipt['run'], ver, include_network, env['TESTED_SIGNED_SHA256'])
+        tag = f'Omi_CV1_v{ver}'
+        repo = env['GITHUB_REPOSITORY']
+        sha = receipt['run']['head_sha']
+        # Atomic create: an existing ref (even without a release) must fail.
+        gh('api', '--method', 'POST', f'repos/{repo}/git/refs', '-f', f'ref=refs/tags/{tag}', '-f', f'sha={sha}')
+        tag_ref = json.loads(gh('api', f'repos/{repo}/git/ref/tags/{tag}'))
+        require(tag_ref['object']['type'] == 'commit' and tag_ref['object']['sha'] == sha, 'Release tag SHA mismatch')
         gh(
             'release',
             'create',
-            f'Omi_CV1_v{ver}',
+            tag,
             '--repo',
-            env['GITHUB_REPOSITORY'],
+            repo,
+            '--draft',
+            '--verify-tag',
             '--title',
             f'Omi CV1 Firmware v{ver}',
             '--notes-file',
             env['BODY_FILE'],
-            '--target',
-            env['GITHUB_SHA'],
             *(str(out / name) for name in asset_names(ver)),
         )
+        created = json.loads(gh('api', f'repos/{repo}/releases/tags/{tag}'))
+        require(created['draft'] and created['tag_name'] == tag, 'Release tag or draft mismatch')
+        tag_ref = json.loads(gh('api', f"repos/{repo}/git/ref/tags/{created['tag_name']}"))
+        require(tag_ref['object']['type'] == 'commit' and tag_ref['object']['sha'] == sha, 'Release tag SHA mismatch')
+        gh('release', 'edit', tag, '--repo', repo, '--draft=false')
 
 
 if __name__ == '__main__':

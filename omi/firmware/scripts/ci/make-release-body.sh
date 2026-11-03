@@ -29,6 +29,30 @@ set -euo pipefail
 : "${VER:?}"
 : "${OUT:?}"
 
+# Match line stripping and first-colon splitting in
+# backend/utils/github_releases.py:extract_key_value_pairs. Validate every
+# interpolated input, including prose outside the block, before writing a file.
+python3 - <<'PY'
+import os
+
+keys = {
+    'release_firmware_version', 'minimum_firmware_required', 'minimum_app_version',
+    'minimum_app_version_code', 'ota_update_steps', 'is_legacy_secure_dfu',
+    'rollout_percent', 'blocked', 'changelog',
+}
+for name in (
+    'TITLE', 'VER', 'CHANGELOG', 'MIN_FW', 'MIN_APP', 'MIN_APP_CODE',
+    'OTA_STEPS', 'IS_LEGACY_SECURE_DFU', 'ROLLOUT_PERCENT', 'BLOCKED', 'HOW_TO_FLASH',
+):
+    value = os.environ.get(name, '')
+    if 'KEY_VALUE_START' in value or 'KEY_VALUE_END' in value:
+        raise SystemExit(f'{name} contains a release metadata delimiter')
+    for line in value.split('\n'):
+        parts = line.strip().split(':', 1)
+        if len(parts) == 2 and parts[0].strip() in keys:
+            raise SystemExit(f'{name} contains reserved release metadata key: {parts[0].strip()}')
+PY
+
 {
   echo "## $TITLE"
   echo
@@ -54,6 +78,8 @@ set -euo pipefail
   fi
 
   echo "<!-- KEY_VALUE_START"
+  echo "changelog:${CHANGELOG:-Bug fixes and improvements}"
+  # Authoritative policy/version keys are last as defense in depth.
   echo "release_firmware_version:$VER"
   if [ -n "${MIN_FW:-}" ];       then echo "minimum_firmware_required:$MIN_FW"; fi
   if [ -n "${MIN_APP:-}" ];      then echo "minimum_app_version:$MIN_APP"; fi
@@ -62,7 +88,6 @@ set -euo pipefail
   if [ -n "${IS_LEGACY_SECURE_DFU:-}" ]; then echo "is_legacy_secure_dfu:$IS_LEGACY_SECURE_DFU"; fi
   if [ -n "${ROLLOUT_PERCENT:-}" ]; then echo "rollout_percent:$ROLLOUT_PERCENT"; fi
   if [ -n "${BLOCKED:-}" ]; then echo "blocked:$BLOCKED"; fi
-  echo "changelog:${CHANGELOG:-Bug fixes and improvements}"
   echo "KEY_VALUE_END -->"
 } > "$OUT"
 

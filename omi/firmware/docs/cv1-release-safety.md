@@ -15,19 +15,24 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    only when intentionally testing a paired app/radio update. This changes zip
    packaging only: MCUboot, partitions, sysbuild layout, `merged.hex` and
    `merged_CPUNET.hex` are untouched.
-3. Download `cv1-qa-release` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
+3. Download `cv1-qa-release-<run ID>-<attempt>` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
    through the stock app. Record the run ID, attempt, asset SHA-256 from
    `qa-provenance.json`, phone/app version, device identity and health results.
+   The bench receipt must also report the SHA-256 of `omi.signed.bin` extracted
+   from that zip (not the zip hash); compare it with `signed_sha256` in provenance.
    Use the separate `cv1-bench-symbols-v<version>` app ELF for debugger symbols
    (including `curr_tick` when present in that build). Symbols are never released.
    This workflow verifies provenance, not that someone performed physical QA.
 4. After approval to publish, dispatch from main with `publish=publish` and
-   `qa_run_id=<tested run ID>`. Use the same `version` and network-core opt-in
+   `qa_run_id=<tested run ID>`, `qa_run_attempt=<tested attempt>` and
+   `tested_signed_sha256=<bench-reported omi.signed.bin SHA-256>`.
+   All three inputs are required for publish. Use the same `version` and network-core opt-in
    as QA. Example (operator procedure, not an instruction to run now):
 
    ```bash
    gh workflow run firmware_release.yml --ref main \
-     -f publish=publish -f qa_run_id=123456789 \
+     -f publish=publish -f qa_run_id=123456789 -f qa_run_attempt=1 \
+     -f tested_signed_sha256='<64 hex characters from the bench receipt>' \
      -f version=3.0.22 -f changelog='Release notes'
    ```
 
@@ -35,15 +40,26 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    successfully as a manual build-only run, and have the exact SHA of the main
    ref being published. Artifacts bind the run attempt, version, network opt-in
    and asset checksums. Missing/expired/old-format artifacts fail closed. A
-   rerun invalidates an earlier attempt's receipt: download and test again.
+   rerun cannot replace a tested attempt: promotion queries the exact attempt
+   and downloads only its run-and-attempt-scoped artifact name. It never falls
+   back to the old run-wide artifact name. Older artifacts need a new QA build
+   and bench receipt. A mismatched bench signed-image hash fails closed.
    Advancing main requires a new QA build at that SHA. No rebuild, signing,
    repackaging or renaming occurs on publish. Only the tested zip and two factory
-   hex files are attached. Existing tags are refused.
+   hex files are attached. The git refs API atomically creates the tag at the
+   tested SHA and refuses existing tags. A release is created as a draft and its
+   tag is verified again before publication. If verification fails, it stays a
+   draft; inspect the tag/draft before an approved cleanup and retry.
 
 ## Rollout plan: new releases start at 1%, and David expands
 
 The workflow writes `rollout_percent:1` and `blocked:false` in the existing
-`KEY_VALUE` release-body block. Inputs can explicitly override either. David
+`KEY_VALUE` release-body block. A normal publish permits only 0% or 1%; wider
+cohorts require editing the published body later. `emergency_revert=true`
+explicitly permits an initial cohort up to 100%. `blocked` remains configurable.
+The body generator rejects inputs containing lines parsed as policy/version
+keys or metadata delimiters, and writes authoritative metadata after changelog.
+David
 expands the cohort by editing **that block** (for example 1 → 10 → 50 → 100)
 only after the current cohort's install success, reconnect, firmware identity,
 audio capture and battery checks remain clean. David owns each expansion and

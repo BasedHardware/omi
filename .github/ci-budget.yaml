@@ -4244,6 +4244,11 @@
               "required": "false",
               "type": "string"
             },
+            "qa_run_attempt": {
+              "default": "",
+              "description": "Required for publish: exact bench-tested attempt of qa_run_id",
+              "type": "string"
+            },
             "qa_run_id": {
               "default": "",
               "description": "Required for publish: successful build-only run of this workflow at the same SHA",
@@ -4251,8 +4256,13 @@
             },
             "rollout_percent": {
               "default": "1",
-              "description": "Initial device cohort percentage; David expands by editing the release body",
+              "description": "Initial cohort: 0 or 1 only (emergency_revert permits up to 100); expand by editing the body",
               "type": "number"
+            },
+            "tested_signed_sha256": {
+              "default": "",
+              "description": "Required for publish: bench-reported SHA-256 of omi.signed.bin",
+              "type": "string"
             },
             "version": {
               "default": "",

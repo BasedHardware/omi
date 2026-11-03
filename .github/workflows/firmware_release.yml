@@ -54,12 +54,20 @@ on:
         description: 'Required for publish: successful build-only run of this workflow at the same SHA'
         type: string
         default: ''
+      qa_run_attempt:
+        description: 'Required for publish: exact bench-tested attempt of qa_run_id'
+        type: string
+        default: ''
+      tested_signed_sha256:
+        description: 'Required for publish: bench-reported SHA-256 of omi.signed.bin'
+        type: string
+        default: ''
       include_network_core:
         description: 'Explicitly include image 1 in OTA (must match the tested QA run)'
         type: boolean
         default: false
       rollout_percent:
-        description: 'Initial device cohort percentage; David expands by editing the release body'
+        description: 'Initial cohort: 0 or 1 only (emergency_revert permits up to 100); expand by editing the body'
         type: number
         default: 1
       blocked:
@@ -99,6 +107,8 @@ jobs:
       VERSION_INPUT: ${{ inputs.version }}
       PUBLISH: ${{ inputs.publish }}
       QA_RUN_ID: ${{ inputs.qa_run_id }}
+      QA_RUN_ATTEMPT: ${{ inputs.qa_run_attempt }}
+      TESTED_SIGNED_SHA256: ${{ inputs.tested_signed_sha256 }}
       INCLUDE_NETWORK_CORE: ${{ inputs.include_network_core }}
       EMERGENCY_REVERT: ${{ inputs.emergency_revert }}
       ROLLOUT_PERCENT: ${{ inputs.rollout_percent }}
@@ -184,7 +194,7 @@ jobs:
         if: ${{ inputs.publish != 'publish' }}
         uses: actions/upload-artifact@v7
         with:
-          name: cv1-qa-release
+          name: cv1-qa-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/cv1-assets/*
           if-no-files-found: error
 
