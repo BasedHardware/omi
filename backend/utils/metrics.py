@@ -1198,7 +1198,7 @@ OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
 OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL = Counter(
     'omi_listen_server_batch_suppression_total',
     'Server batch suppression decisions at STT initialization (including reinitialization), closed reason set',
-    ['decision', 'reason', 'client_platform'],
+    ['decision', 'reason', 'client_platform', 'language'],
 )
 
 OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
