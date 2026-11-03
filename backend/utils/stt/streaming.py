@@ -971,7 +971,7 @@ def get_stt_service_for_language(
     )
     if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
         language_profile,
-        service_models(stt_service_models),
+        service_models(stt_service_models, surface=surface),
         exclude,
         lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
         and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
@@ -1058,7 +1058,7 @@ def get_stt_service_for_language(
                 outcome='degraded',
             )
 
-    models = service_models(stt_service_models)
+    models = service_models(stt_service_models, surface=surface)
     if configured_chain_enabled() and window_uid is None:
         models = [model for model in models if model.strip() != 'parakeet-window']
     selected, parakeet_fallback_reason = select(models)

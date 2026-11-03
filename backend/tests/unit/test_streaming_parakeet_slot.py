@@ -67,3 +67,39 @@ def test_primary_readiness_resolves_non_modulate_providers(monkeypatch, provider
     monkeypatch.delenv('STT_GPU_FLEET_OFF', raising=False)
     monkeypatch.setattr(streaming, 'stt_service_models', [provider.value])
     assert streaming._primary_streaming_service() == provider
+
+
+@pytest.mark.parametrize('pinned', [False, True])
+@pytest.mark.parametrize('exclude,expected', [(frozenset(), 'modulate'), (frozenset({'modulate'}), 'soniox')])
+def test_retired_plain_only_managed_chain_falls_through_to_vendors(monkeypatch, pinned, exclude, expected):
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'false')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'false')
+    monkeypatch.setenv('SONIOX_API_KEY', 'test-soniox-key')
+    monkeypatch.setattr(streaming, 'stt_service_models', ['parakeet'])
+    policy = ListenSessionPolicy(service_models=('parakeet',)) if pinned else None
+    token = current_listen_policy.set(policy)
+    try:
+        service, language, _ = streaming.get_stt_service_for_language(
+            'en', multi_lang_enabled=False, preferred_service='parakeet', window_uid='test-user', exclude=exclude
+        )
+        assert service.value == expected
+        assert language == 'en'
+        assert not streaming.parakeet_is_configured_fallback('en')
+        assert service_models(['parakeet']) == ['parakeet', 'modulate-velma-2', 'soniox']
+        if policy is not None:
+            assert policy.service_models == ('parakeet',)
+    finally:
+        current_listen_policy.reset(token)
+
+
+def test_streaming_retirement_does_not_rewrite_ptt_models(monkeypatch):
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'false')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'false')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.invalid')
+    monkeypatch.setattr(streaming, 'stt_service_models', ['parakeet'])
+    assert (
+        streaming.get_stt_service_for_language(
+            'en', multi_lang_enabled=False, surface=streaming.STTServingSurface.PTT, preferred_service='parakeet'
+        )[0]
+        == streaming.STTService.parakeet
+    )

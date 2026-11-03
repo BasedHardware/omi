@@ -17,6 +17,7 @@ import os
 from config.policy.batch import cohort_bucket
 from config.policy.parts import PolicyPart, policy_environment, source_role
 from config.live_stt_gpu_fleet import gpu_fleet_off, streaming_parakeet_slot_enabled
+from config.stt_provider_policy import STTServingSurface, default_models_for_surface
 
 if TYPE_CHECKING:
     from config.live_stt_registry import Target
@@ -261,14 +262,22 @@ def account_circuit_cooldown() -> float:
     return float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
 
 
-def service_models(default: list[str]) -> list[str]:
+def service_models(default: list[str], *, surface: STTServingSurface = STTServingSurface.STREAMING) -> list[str]:
     if gpu_fleet_off():
         return ['soniox']  # Also build the vendor callback when an old secret/policy omitted it.
     policy = current_listen_policy.get()
     models = list(policy.service_models) if policy is not None else list(default)
+    if surface != STTServingSurface.STREAMING:
+        return models
+    configured = {model.strip() for model in models}
     # Roll back every selector and connector, including an already-pinned list.
-    if streaming_parakeet_slot_enabled() and 'parakeet' not in {model.strip() for model in models}:
-        models.append('parakeet')
+    if streaming_parakeet_slot_enabled():
+        if 'parakeet' not in configured:
+            models.append('parakeet')
+    elif 'parakeet' in configured:
+        # A stale plain-only list must retain a vendor path after retirement,
+        # including managed sessions that deliberately do not retry defaults.
+        models.extend(model for model in default_models_for_surface(surface) if model not in configured)
     return models
 
 
@@ -292,7 +301,6 @@ def resolve_listen_policy(
     uid: str, *, flags: Mapping[str, str] | None = None, models=None, liveness_grace_seconds=None
 ) -> ListenSessionPolicy:
     from config.live_demand import resolve_live_demand
-    from config.stt_provider_policy import STTServingSurface, default_models_for_surface
 
     env = policy_environment(flags)
     invalid_fields = []

@@ -6055,6 +6055,9 @@ Plain `parakeet` is excluded from streaming defaults and explicit model selectio
 connection-fallback slots when true, including an already-pinned two-vendor model
 list; no `STT_SERVICE_MODELS` literal change is needed. This does not change
 `parakeet-window`, PTT or prerecorded routing, and cannot override `STT_GPU_FLEET_OFF`.
+With the plain slot off, stale streaming lists containing `parakeet` also admit
+the canonical vendor defaults after their configured models. Managed sessions
+therefore fall through to Modulate/Soniox instead of refusing supported English.
 
 ### Forward canonical audio archive (default off)
 

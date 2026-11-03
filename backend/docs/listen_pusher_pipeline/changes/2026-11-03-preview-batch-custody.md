@@ -29,6 +29,15 @@ Modulate and Soniox keep their order unless the client requests Parakeet. The `p
 are unchanged. `STT_GPU_FLEET_OFF` wins over the rollback switch, and Windows
 PTT/transcribe continues selecting Modulate.
 
+Parakeet-only hermetic wire and emulator stacks explicitly enable the plain
+slot to exercise their local provider stub. With the slot off, a stale plain
+streaming list gains the canonical Modulate/Soniox fallbacks in the effective
+model getter, including pinned managed sessions; supported English no longer
+ends at admission with 1008. PTT model lists and the window-only lane keep their
+separate surface policies. Production listener and pusher values already list
+the vendors. The gauntlet's optional bounded `--startup-timeout` changes only
+local process bind deadlines on loaded hosts; its default budgets are unchanged.
+
 Lead applies after PR review/CI: deploy listener, pusher and backend/backend-sync/
 backend-sync-backfill/backend-integration from the same merged revision. Defaults
 need no env override. This PR does not activate fleet-off or alter GPU replicas.
