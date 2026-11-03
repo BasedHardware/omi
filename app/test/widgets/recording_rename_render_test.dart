@@ -62,7 +62,7 @@ void main() {
     OmiColors.active = OmiPalette.dark;
     final boundary = GlobalKey();
     if (output.isNotEmpty) await tester.runAsync(loadFonts);
-    final people = PeopleProvider(loadPeople: () async => PeopleListResponse(people: []))
+    final people = PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))
       ..people = [
         Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026)),
         Person(id: 'sam', name: 'Sam', createdAt: DateTime(2026), updatedAt: DateTime(2026)),
@@ -104,7 +104,7 @@ void main() {
             ))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    if (output.isNotEmpty)
+    if (output.isNotEmpty) {
       await tester.runAsync(() async {
         final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         final image = await render.toImage(pixelRatio: 3);
@@ -112,6 +112,7 @@ void main() {
         await Directory(output).create(recursive: true);
         await File('$output/$frame.png').writeAsBytes(bytes!.buffer.asUint8List());
       });
+    }
     await tester.pumpWidget(const SizedBox.shrink());
     people.dispose();
     debugDefaultTargetPlatformOverride = null;

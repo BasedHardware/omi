@@ -231,6 +231,7 @@ class CaptureController extends ChangeNotifier
     return _captureEvidenceIdentity.rootFor(sync, sync.captureEvidenceGeneration, _preferences.uid);
   }
 
+  @override
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
 
@@ -765,6 +766,7 @@ class CaptureController extends ChangeNotifier
 
   ServerConversation? _conversation;
   DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
+  @override
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
