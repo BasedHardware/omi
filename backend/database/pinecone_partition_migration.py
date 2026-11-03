@@ -127,7 +127,14 @@ IDENTITY_FIELDS = {
 class PartitionTransport:
     """REST transport retains LSN headers that the normal SDK hides."""
 
-    def __init__(self, host: str, api_key: str, *, client: httpx.Client | None = None):
+    def __init__(
+        self,
+        host: str,
+        api_key: str,
+        *,
+        client: httpx.Client | None = None,
+        write_client: httpx.Client | None = None,
+    ):
         if not host.endswith('.pinecone.io') or '/' in host:
             raise ValueError('Expected an index host from the Pinecone control plane')
         self.host = host
@@ -135,7 +142,8 @@ class PartitionTransport:
         # Mutations never reuse a pooled connection: a server that closed an idle
         # keep-alive connection turns the next request on it into a disconnect
         # without a response, an unknown outcome that blocks the owner.
-        self.write_client = client or httpx.Client(timeout=60, limits=httpx.Limits(max_keepalive_connections=0))
+        # Never alias an injected read client: its pool would bring keep-alive back.
+        self.write_client = write_client or httpx.Client(timeout=60, limits=httpx.Limits(max_keepalive_connections=0))
         self.headers = {'Api-Key': api_key, 'X-Pinecone-Api-Version': '2025-10'}
         self.read_units = 0.0
         self.write_units = 0.0

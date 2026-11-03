@@ -853,7 +853,9 @@ def test_http_exact_missing_namespace_is_only_a_delete_or_initial_inventory_noop
         return httpx.Response(404, json={'code': 5, 'message': 'Namespace not found'})
 
     with httpx.Client(transport=httpx.MockTransport(missing)) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         assert transport.write('vectors/delete', 'missing', ids=['id']) == 0
         assert list(transport.owned_pages('missing', 'owner')) == [[]]
         with pytest.raises(httpx.HTTPStatusError):
@@ -867,7 +869,9 @@ def test_http_other_failures_never_become_successful_delete(status, message):
     with httpx.Client(
         transport=httpx.MockTransport(lambda request: httpx.Response(status, json={'code': 5, 'message': message}))
     ) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         with pytest.raises(httpx.HTTPStatusError):
             transport.write('vectors/delete', 'missing', ids=['id'])
 
@@ -880,7 +884,9 @@ def test_namespace_disappearing_after_first_inventory_page_is_not_complete_inven
         return httpx.Response(404, json={'code': 5, 'message': 'Namespace not found'})
 
     with httpx.Client(transport=httpx.MockTransport(disappearing)) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         with pytest.raises(httpx.HTTPStatusError):
             list(transport.owned_pages('namespace', 'test-owner'))
 
@@ -958,6 +964,16 @@ class _Post:
             raise self.error
         request = httpx.Request('POST', url)
         return httpx.Response(200, json={}, headers={'x-pinecone-request-lsn': '7'}, request=request)
+
+
+def test_an_injected_read_client_is_never_reused_for_writes():
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={}))) as client:
+        transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key', client=client)
+        try:
+            assert transport.client is client
+            assert transport.write_client is not client
+        finally:
+            transport.write_client.close()
 
 
 def test_writes_use_the_no_keepalive_client_and_carry_a_request_id(monkeypatch):

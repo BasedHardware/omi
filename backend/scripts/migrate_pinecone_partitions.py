@@ -351,7 +351,12 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
                 status = 'qualification_failed'
             # These exceptions carry only fixed messages written in our own code,
             # never provider text, so the reason is safe to keep for diagnosis.
-            failure = {'error_type': type(error).__name__, 'reason': str(error)[:200]}
+            failure = {
+                'error_type': type(error).__name__,
+                'reason': str(error)[:200],
+                # A write can apply and still fail here (e.g. no LSN header): keep its id for reconciliation.
+                'last_write_request_id': transport.last_write_request_id,
+            }
             atomic_json(journal_path, {**journal, 'status': status, **failure, 'attempt': attempt})
             return {**result, 'status': status, **failure}
         except Exception as error:
