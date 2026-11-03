@@ -1220,7 +1220,7 @@ environments:
             MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
-              value: '555'
+              value: '1665'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -1506,7 +1506,7 @@ environments:
               value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
-              value: '555'
+              value: '1665'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -1771,6 +1771,9 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'false'
+              category: ops_kill
+            BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS:
+              value: '0'
               category: ops_kill
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
@@ -3519,7 +3522,7 @@ environments:
             MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
-              value: '555'
+              value: '1665'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -3924,7 +3927,7 @@ environments:
               value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
-              value: '555'
+              value: '1665'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -4310,6 +4313,9 @@ environments:
               category: service_auth
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS:
+              value: '0'
               category: ops_kill
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app

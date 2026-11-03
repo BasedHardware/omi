@@ -1555,9 +1555,10 @@ environment_shared:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
             value: '25'
             category: rollout
+          # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
-            value: '555'
+            value: '1665'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -1906,9 +1907,10 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'on'
+          # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
-            value: '555'
+            value: '1665'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
