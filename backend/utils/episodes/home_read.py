@@ -133,19 +133,9 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
     }
 
 
-def _close_idle_episode(uid: str, episode: dict[str, Any], *, collaborators: Any = None) -> dict[str, Any]:
-    """List reads share idle close's immediate, uncapped compose scheduling."""
-    c = collaborators or service.Collaborators()
-    if service.policy.idle_close_due(episode, service._now(c)) and service._close(
-        uid, episode, 'idle', c, now=service._now(c)
-    ):
-        return episodes.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
-    return episode
-
-
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
     c = service.Collaborators(firestore_client=firestore_client)
-    settled = [_close_idle_episode(uid, row, collaborators=c) for row in rows]
+    settled = [service.settle_episode_for_read(uid, row, c) for row in rows]
     just_closed = {
         new['id'] for old, new in zip(rows, settled) if old.get('status') == 'live' and new.get('status') == 'closed'
     }

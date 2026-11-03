@@ -440,12 +440,12 @@ def _decode_transcript_segments_strict(
 ) -> List[Any]:
     from utils.conversations.speaker_grouping_storage import reveal_segments
 
-    segments = _decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
+    segments = decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
     reveal_segments(segments, uid)
     return segments
 
 
-def _decode_transcript_segments_blob(
+def decode_transcript_segments_blob(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.

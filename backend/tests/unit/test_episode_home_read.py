@@ -204,8 +204,8 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
     live = service.live_episode
     c = service.Collaborators(firestore_client=store, now=lambda: START + timedelta(minutes=3))
     monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
-    idle_close = home_read._close_idle_episode
-    monkeypatch.setattr(home_read, '_close_idle_episode', lambda uid, row, **kw: idle_close(uid, row, collaborators=c))
+    settle = service.settle_episode_for_read
+    monkeypatch.setattr(service, 'settle_episode_for_read', lambda uid, row, _c: settle(uid, row, c))
     monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()
     app.include_router(router.router)

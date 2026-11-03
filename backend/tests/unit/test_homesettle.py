@@ -276,3 +276,25 @@ def test_list_projection_retains_pagination_and_filtered_reachability(monkeypatc
     response.headers.clear()
     assert home_membership.project_list('u', rows, request, response, filtered=True) == rows
     assert response.headers == {}
+
+
+@pytest.mark.parametrize('latest_status', ['closed', 'live'])
+def test_idle_list_read_uses_the_winner_of_a_concurrent_close_or_activity_update(monkeypatch, latest_status):
+    stale = episode(status='live', last_activity_at=NOW - timedelta(hours=3))
+    latest = dict(stale, status=latest_status, last_activity_at=NOW)
+    close = Mock(return_value=False)
+    monkeypatch.setattr(service, '_close', close)
+    monkeypatch.setattr(home_read.episodes, 'get_episode', lambda *a, **kw: latest)
+    monkeypatch.setattr(
+        home_read,
+        '_read_members',
+        lambda *a, **kw: {'a': floor(summary_blocked_reason=None), 'b': floor(summary_blocked_reason=None)},
+    )
+    checked = []
+    monkeypatch.setattr(home_read, 'schedule_missed_composes', lambda uid, rows, wires: checked.extend(rows))
+    wires = home_read.project_episodes('u', [stale])
+    assert wires[0]['status'] == latest_status
+    assert wires[0]['last_activity_at'] == NOW
+    close.assert_called_once()
+    # A parallel closer already scheduled compose; the list must not schedule it again.
+    assert checked == ([] if latest_status == 'closed' else [latest])

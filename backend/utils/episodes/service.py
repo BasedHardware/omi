@@ -419,6 +419,15 @@ def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
     return min(now, end)
 
 
+def settle_episode_for_read(uid: str, episode: dict[str, Any], c: Collaborators) -> dict[str, Any]:
+    """Idle-close and read back the winner, including a concurrent close/activity update."""
+    now = _now(c)
+    if policy.idle_close_due(episode, now):
+        _close(uid, episode, 'idle', c, now=now)
+        return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
+    return episode
+
+
 def _close_stale_current(
     uid: str, episode: Optional[Mapping[str, Any]], c: Collaborators, now: datetime
 ) -> Optional[dict[str, Any]]:

@@ -53,7 +53,7 @@ def neutralize_legacy_list_titles(uid: str, rows: List[Dict[str, Any]], *, budge
             if raw.get('transcript_segments') is None:
                 continue
             row = candidates[snapshot.id]
-            segments = conversations._decode_transcript_segments_blob(
+            segments = conversations.decode_transcript_segments_blob(
                 uid,
                 raw.get('transcript_segments'),
                 bool(raw.get('transcript_segments_compressed')),
