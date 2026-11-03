@@ -1126,6 +1126,12 @@ def _prepare_controller(store, create_world):
             return store.rows.get(('users', uid, 'conversations', conversation_id))
         if name == 'set_in_progress_conversation_id':
             return None
+        if name == 'arm':
+            # Main's create path arms the quiet check through persistence;
+            # the fake store doesn't model that collection — record only.
+            return None
+        if name == 'persist_conversation_policy':
+            return None
         return fn(*args, **kwargs)
 
     host.persistence = SimpleNamespace(call=call)

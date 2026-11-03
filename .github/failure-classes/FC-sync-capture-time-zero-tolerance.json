@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-capture-time-zero-tolerance",
+  "violated_contract": "Sync upload admission must keep real captured audio admissible when the capturing phone clock runs ahead of the server clock, and refuse only implausible capture times (bogus device stamps, pre-2024 fragments) with a typed, client-actionable error. A zero-tolerance future-time check in the filename parser rejects genuine live-capture recordings (prod 24h to 2026-10-26: ~980/day, median 171 s, max 349 s ahead) with a terminal 400 that released clients never retry, while a configured skew tolerance (SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS) silently fails to apply because the parser raises before it is consulted.",
+  "canonical_prevention": "One shared future-skew window (SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS, default sized above the observed skew tail) governs every capture-time check — filename parsing, the v2 staging gate, and lane classification — so no check is stricter than the policy; within-window times are accepted without untrusted-backfill demotion and clamped to server now for stored/ordered times, and refusals carry code 'invalid_capture_time' with per-file closed-reason dispositions counted in omi_sync_capture_time_total.",
+  "canonical_prevention_artifact": [
+    "backend/utils/sync/capture_clock.py",
+    "backend/tests/unit/test_sync_capture_time_skew.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/capture_clock.py",
+    "backend/utils/request_validation.py",
+    "backend/utils/sync/lanes.py",
+    "backend/utils/sync/pipeline.py"
+  ],
+  "status": "open"
+}

@@ -51,6 +51,7 @@ COPY backend/services/ ./services/
 COPY backend/testing/parity_pack_v0/ ./testing/parity_pack_v0/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
+COPY backend/omi_logging.py ./omi_logging.py
 
 EXPOSE 8080
 USER 10001:10001

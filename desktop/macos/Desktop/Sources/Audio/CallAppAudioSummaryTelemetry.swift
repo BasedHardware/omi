@@ -75,3 +75,39 @@ enum CallAppAudioSummaryTelemetry {
     ]
   }
 }
+
+/// Bounded on-edge evidence using the same bundle dimension as daily audio summaries.
+/// Never includes window titles, Meet codes, pids, or device identifiers.
+struct MeetingDetectionEvidence: Sendable {
+  static let eventName = "Desktop Meeting Confirmed"
+  let bundleIDs: [String]
+  let titleMatched: Bool
+  let titlesReadable: Bool
+  let processInputAPIAvailable: Bool
+  let mode: String
+
+  init(snapshot: CallAudioSnapshot, mode: AssistantSettings.AudioRecordingMode, processInputAPIAvailable: Bool) {
+    var bundles = MeetingCallObservation.nativeApps(snapshot: snapshot)
+    let windows = MeetingCallObservation.liveBrowserWindows(
+      snapshot: snapshot, processInputAPIAvailable: processInputAPIAvailable)
+    for window in windows { bundles.insert(window.bundleID.lowercased()) }
+    if !snapshot.browserTitlesReadable {
+      for process in snapshot.processes where process.isRunningInput {
+        if let browser = MeetingCallObservation.browserFamily(process.bundleID) { bundles.insert(browser) }
+      }
+    }
+    bundleIDs = Array(bundles.sorted().prefix(CallAppAudioSummaryRanking.dailyBundleCap))
+    titleMatched = !windows.isEmpty
+    titlesReadable = snapshot.browserTitlesReadable
+    self.processInputAPIAvailable = processInputAPIAvailable
+    self.mode = mode.rawValue
+  }
+
+  var properties: [String: Any] {
+    [
+      "platform": "macos", "bundle_ids": bundleIDs, "browser_title_matched": titleMatched,
+      "browser_titles_readable": titlesReadable, "process_input_api_available": processInputAPIAvailable,
+      "recording_mode": mode, "confirmation_seconds": MeetingDetectionTiming.confirmationPeriod,
+    ]
+  }
+}

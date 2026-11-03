@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "id": "FC-marker-absence-read-as-unapplied",
+ "violated_contract": "A repair keyed on an optional marker may treat the marker's absence as proof the marked side effect never ran only if some writer could have committed the record without the side effect. When every writer that produces the record commits record and side effect in one transaction, a record predating the marker is already applied, and re-applying the side effect counts it twice.",
+ "canonical_prevention": "Derive the repair's premise from the writer population that could have produced the row. The live cap receipt's writers — the one deployed before the usage_applied marker existed and the one after — both commit the receipt and its summary increment in one transaction, so an existing receipt without the marker is already counted: the repair stamps the marker without incrementing, on both the live commit path and the recovery path.",
+ "evidence_prs": [],
+ "scope_hints": [
+  "backend/utils/sync/live_cap_manifest.py",
+  "backend/utils/sync/live_cap_staging.py"
+ ],
+ "canonical_prevention_artifact": [
+  "backend/utils/sync/live_cap_manifest.py"
+ ],
+ "status": "open"
+}

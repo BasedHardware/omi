@@ -286,3 +286,28 @@ def test_direct_attempt_rows_keep_the_same_bounded_tags(monkeypatch):
     assert row['feature'] == 'desktop_proactivity'
     assert row['product_lane'] == 'memory'
     assert row['client_platform'] == 'macos'
+
+
+def test_delivery_timeout_preserves_completed_provider_attempt(monkeypatch, capsys):
+    attempts = []
+    monkeypatch.setattr(telemetry_module, 'schedule_managed_attempt', attempts.append)
+    state = telemetry()
+    state.uid = 'synthetic-user'
+    state.identify('models/gemini-2.5-flash:generateContent')
+    state.defer_terminal = True
+    state.note_dispatch(telemetry_module.UpstreamRoute('http://provider.test', {}, {}, 'vertex_ai', 'server', 'us'))
+    state.observe_gemini_response(
+        {'usageMetadata': {'promptTokenCount': 4, 'candidatesTokenCount': 2, 'totalTokenCount': 6}}
+    )
+    state.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='body')
+    assert len(attempts) == 1
+    assert not capsys.readouterr().out
+    state.flush_terminal(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
+    assert len(attempts) == 1
+    row = build_managed_attempt_event(attempts[0]).as_dict()
+    assert row['outcome'] == 'success'
+    assert row['error_class'] == 'none'
+    event = json.loads(capsys.readouterr().out)
+    assert event['outcome'] == 'provider_timeout'
+    assert event['total_token_count'] == 6
+    assert event['upstream_status'] == 200

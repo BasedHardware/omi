@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from llm_gateway.gateway.config_loader import GatewayConfig
+from llm_gateway.gateway.dream_lanes import DREAM_LANES, resolve_dream_route
 from llm_gateway.gateway.credentials import is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
@@ -12,7 +13,7 @@ from llm_gateway.gateway.errors import (
     GatewayModelNotFoundError,
     GatewayUnsupportedModelError,
 )
-from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface, ProviderRef, CredentialMode
+from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
 from llm_gateway.gateway.validator import (
     ValidatedChatCompletionRequest,
     ValidatedEmbeddingRequest,
@@ -78,6 +79,10 @@ def resolve_chat_completion_route(
 
     _validate_route_matches_lane(lane, active_route, pointer_name='active_route')
     _validate_route_matches_lane(lane, lkg_route, pointer_name='last_known_good')
+
+    if lane.lane_id in DREAM_LANES:
+        active_route = resolve_dream_route(active_route, request)
+        lkg_route = resolve_dream_route(lkg_route, request)
 
     return ResolvedRoute(
         lane=lane,
@@ -161,18 +166,8 @@ def select_lkg_route_for_failure(
 
 def is_lkg_eligible(active_route: RouteArtifact, failure_class: FailureClass | str) -> bool:
     normalized_failure_class = _normalize_failure_class(failure_class)
-    if (
-        active_route.lane_id in {'omi:auto:dream-reasoning', 'omi:auto:dream-verify'}
-        and normalized_failure_class == FailureClass.PROVIDER_429_OMI_PAID
-        and normalized_failure_class not in active_route.fallback_policy.never_fallback_on
-        and active_route.credential_policy.mode == CredentialMode.OMI_PAID
-        and active_route.primary.provider == 'gemini'
-        and active_route.provider_options.get('reserved_capacity_only') is True
-        and active_route.fallbacks == [ProviderRef(provider='openai', model='gpt-6-luna')]
-    ):
-        # A dedicated-route 429 is a reservation outage. Use the already
-        # configured reservation-outage policy on both Dream lanes.
-        normalized_failure_class = FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+    if active_route.lane_id in DREAM_LANES:
+        return False
     if normalized_failure_class in NEVER_LKG_FAILURE_CLASSES or is_byok_failure_class(normalized_failure_class):
         return False
     if normalized_failure_class in set(active_route.fallback_policy.never_fallback_on):

@@ -15,18 +15,23 @@ from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.messaging.access import require_access, SeatFull
-from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachment, Principal, ReentryEvent
+from utils.messaging.contracts import ChannelMessage, Principal, ReentryEvent
 from utils.messaging.history import history_tool
+from utils.messaging.album_turn import inbox_message, prepare_for_generation
 from utils.messaging.outbound import ChannelReplySink
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
 from utils.messaging.undo import UndoStore
 from utils.observability.fallback import record_fallback
 
 
+def channel_name(channel):
+    return {'imessage': 'iMessage', 'whatsapp': 'WhatsApp', 'telegram': 'Telegram'}.get(channel, 'This channel')
+
+
 def help_text(channel):
     """What Omi can do here, in the channel's own command words."""
-    imessage = channel == 'imessage'
-    new, unlink, undo = ('new chat', 'unlink', 'undo') if imessage else ('/new', '/unlink', 'the Undo button')
+    text_commands = channel in ('imessage', 'whatsapp')
+    new, unlink, undo = ('new chat', 'unlink', 'undo') if text_commands else ('/new', '/unlink', 'the Undo button')
     return (
         'Ask me anything about your conversations, tasks and memories. For example:\n'
         '• What did I talk about with Sam yesterday?\n'
@@ -43,6 +48,14 @@ class ChannelTurnError(RuntimeError):
     def __init__(self, reason):
         super().__init__('Channel turn failed')
         self.reason = reason
+
+
+class TurnSuperseded(Exception):
+    """A newer user message arrived before any of this reply reached the user."""
+
+
+# How often a running reply checks for a newer message that replaces it.
+SUPERSEDE_POLL_SECONDS = 2.0
 
 
 def _worker_shutting_down():
@@ -71,6 +84,38 @@ class Gateway:
         self.adapter = adapter
         self.store = store or MessagingStore()
         self.turn, self.admission, self.wake = turn, admission, wake
+        # Turn-scoped providers (Keiki) settle an inbound turn once its row is done. An
+        # undo replies after its row completes, so its turn settles when the undo does.
+        self._settle_deferred = set()
+
+    async def _settle_provider_turn(self, message, ok):
+        if not hasattr(self.adapter, 'settled'):
+            return
+        try:
+            await self.adapter.settled(message, ok)
+        except Exception as error:
+            from utils.messaging.metrics import FAILURES
+
+            # The row is already done, so nothing retries this; an open turn blocks the
+            # contact's next turn until the provider's deadline. Count it so it can alarm.
+            FAILURES.labels(self.adapter.channel, 'settle_failed').inc()
+            logging.getLogger(__name__).warning(
+                'Messaging provider settle failed provider=%s error_type=%s status_code=%s',
+                self.adapter.provider,
+                type(error).__name__,
+                getattr(error, 'status_code', None),
+            )
+
+    async def _settle_unhandled(self, body):
+        try:
+            await self.adapter.unhandled(body)
+        except Exception:
+            from utils.messaging.metrics import FAILURES
+
+            # Already acknowledged, so the provider will not redeliver: count it like any
+            # other settle failure so an open turn can alarm.
+            FAILURES.labels(self.adapter.channel, 'settle_failed').inc()
+            raise
 
     def _reply_sink(self, message, **kwargs):
         async def reply_target():
@@ -88,6 +133,9 @@ class Gateway:
             logging.getLogger(__name__).info(
                 'Messaging ignored provider=%s reason=non_turn_event', self.adapter.provider
             )
+            if hasattr(self.adapter, 'unhandled'):
+                # Settling a declined turn is a provider call: never hold the acknowledgement on it.
+                start_background_task(self._settle_unhandled(body), name='messaging-provider-unhandled')
         paths = []
         for message in messages:
             if (message.channel, message.provider) != (self.adapter.channel, self.adapter.provider):
@@ -183,7 +231,7 @@ class Gateway:
         logging.getLogger(__name__).error(
             'Messaging job failed provider=%s reason=%s error_type=%s status_code=%s',
             self.adapter.provider,
-            reason,
+            bounded,
             type(error).__name__,
             getattr(error, 'status_code', None),
         )
@@ -200,15 +248,22 @@ class Gateway:
         )
         try:
             async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
-                return await self._process_claimed(path, payload)
+                result = await self._process_claimed(path, payload)
         except BaseException as error:
             if not _worker_shutting_down() and isinstance(error, (Exception, asyncio.CancelledError)):
                 # Retain the running row and its reconciliation evidence, but a
                 # fully unwound failure must no longer block newer FIFO jobs.
                 await run_blocking(db_executor, self.store.settle, path)
                 self._log_failure(error)
+                await self._settle_provider_turn(inbox_message(payload), False)
                 return None  # settled failure: drain the next head, without replay
             raise
+        else:
+            # False is a lease miss: the row is pending again and its turn stays open.
+            message = inbox_message(payload)
+            if result is not False and message.provider_message_id not in self._settle_deferred:
+                await self._settle_provider_turn(message, True)
+            return result
         finally:
             # A lease miss puts this head back to pending. Waking it here spins
             # the worker until the lease disappears. The holder, or the periodic
@@ -228,10 +283,7 @@ class Gateway:
                 )
 
     async def _process_claimed(self, path, payload):
-        payload['received_at'] = datetime.fromisoformat(payload['received_at'])
-        payload['media'] = tuple(Artifact(**a) for a in payload['media'])
-        payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
-        message = ChannelMessage(**payload)
+        message = inbox_message(payload)
 
         async def inbox_guard():
             await run_blocking(db_executor, self.store.assert_running, path)
@@ -253,7 +305,7 @@ class Gateway:
                 link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
             except SeatFull:
                 await self._reply_sink(message, guard=inbox_guard).finish(
-                    'iMessage is full — join the waitlist in Omi.'
+                    channel_name(message.channel) + ' is full — join the waitlist in Omi.'
                 )
                 await run_blocking(db_executor, self.store.complete, path)
                 return True
@@ -303,10 +355,10 @@ class Gateway:
                     'Your paid Omi plan has ended. Renew in Omi to chat here.'
                     if reason == 'paid_plan'
                     else (
-                        'iMessage requires Operator or Architect. Update your plan in Omi.'
+                        channel_name(message.channel) + ' requires Operator or Architect. Update your plan in Omi.'
                         if reason == 'channel_plan'
                         else (
-                            'Your iMessage seat is unavailable. Join the waitlist in Omi.'
+                            'Your ' + channel_name(message.channel) + ' seat is unavailable. Join the waitlist in Omi.'
                             if reason == 'seat_cap'
                             else 'This channel is currently unavailable for your account. Check Chat Apps in Omi.'
                         )
@@ -412,55 +464,79 @@ class Gateway:
                                 await run_blocking(db_executor, self._assert_link, message, link)
 
                             undo_sink = self._reply_sink(message, guard=undo_guard)
+                            if hasattr(self.adapter, 'settled'):
+                                self._settle_deferred.add(message.provider_message_id)
                             start_background_task(
                                 self._undo_action(uid, session, message, undo_sink), name='messaging-undo-action'
                             )
                 else:
-                    if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
-                        message = replace(
-                            message, attachments=tuple(item for item in message.attachments if not item.voice)
+                    prepared = True
+                    from utils.messaging.adapters.media import MediaPreparationError
+
+                    try:
+                        message = await prepare_for_generation(
+                            self.adapter,
+                            self.store,
+                            path,
+                            message,
+                            uid,
+                            session,
+                            guard,
+                            allow_voice=link.get('voice_notes', True) is not False,
                         )
-                    if (
-                        link.get('voice_notes', True) is False
-                        and not message.text.strip()
-                        and not message.attachments
-                        and not message.media
-                    ):
-                        await sink.finish('Voice notes are turned off for this chat. Send a text message instead.')
-                    else:
-                        prepared = True
-                        if hasattr(self.adapter, 'prepare'):
-                            from utils.messaging.adapters.media import MediaPreparationError
+                    except MediaPreparationError as error:
+                        from utils.messaging.metrics import FAILURES
 
-                            try:
-                                message = await self.adapter.prepare(message, uid, session, guard)
-                            except MediaPreparationError as error:
-                                from utils.messaging.metrics import FAILURES
-
-                                FAILURES.labels(message.channel, error.reason).inc()
-                                logging.getLogger(__name__).info(
-                                    'Messaging media refused provider=%s reason=%s', self.adapter.provider, error.reason
-                                )
-                                await sink.finish(error.reply)
-                                prepared = False
-                        if prepared:
-                            if message.quoted_message_id and not message.quoted_text:
-                                quoted_events = await run_blocking(db_executor, self.store.events, uid, session['id'])
-                                quote = next(
-                                    (
-                                        row['content'][:2000]
-                                        for row in reversed(quoted_events)
-                                        if message.quoted_message_id in row.get('provider_message_ids', [])
-                                    ),
-                                    None,
-                                )
-                                message = replace(
-                                    message,
-                                    quoted_text=quote or 'Quoted message is outside the available chat context.',
-                                )
-                            await self._turn(
-                                uid, session, message, link, Principal(uid), reply_sink=sink, turn_guard=turn_guard
+                        if error.reason != 'voice_disabled':
+                            FAILURES.labels(message.channel, error.reason).inc()
+                        logging.getLogger(__name__).info(
+                            'Messaging media refused provider=%s reason=%s', self.adapter.provider, error.reason
+                        )
+                        await sink.finish(error.reply)
+                        prepared = False
+                    if prepared:
+                        if message.quoted_message_id and not message.quoted_text:
+                            quoted_events = await run_blocking(db_executor, self.store.events, uid, session['id'])
+                            quote = next(
+                                (
+                                    row['content'][:2000]
+                                    for row in reversed(quoted_events)
+                                    if message.quoted_message_id in row.get('provider_message_ids', [])
+                                ),
+                                None,
                             )
+                            message = replace(
+                                message,
+                                quoted_text=quote or 'Quoted message is outside the available chat context.',
+                            )
+
+                        async def superseded():
+                            return await run_blocking(db_executor, self.store.superseding_pending, path)
+
+                        await self._turn(
+                            uid,
+                            session,
+                            message,
+                            link,
+                            Principal(uid),
+                            reply_sink=sink,
+                            turn_guard=turn_guard,
+                            superseded=superseded,
+                        )
+            except TurnSuperseded:
+                # Nothing reached the user and nothing was changed: stop quietly (no
+                # apology) and free the chat, so the newer message is answered next with
+                # this one still in its history.
+                from utils.messaging.metrics import TURNS
+
+                await stop_typing()
+                TURNS.labels(self.adapter.channel, 'superseded').inc()
+                logging.getLogger(__name__).info('Messaging turn superseded provider=%s', self.adapter.provider)
+                assert session is not None  # a turn only runs after its session and lease exist
+                try:
+                    await run_blocking(db_executor, self.store.complete, path)
+                finally:
+                    await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
             except BaseException as error:
                 # Keep the inbox row running: its effects still need reconciliation.
                 # A task that is still cancelling may have executor work in flight,
@@ -515,6 +591,10 @@ class Gateway:
                 logging.getLogger(__name__).error(
                     'Messaging undo error reply failed error_type=%s', type(send_error).__name__
                 )
+        finally:
+            if message.provider_message_id in self._settle_deferred:
+                self._settle_deferred.discard(message.provider_message_id)
+                await self._settle_provider_turn(message, True)
 
     async def reenter(self, message, event: ReentryEvent, *, principal: Principal):
         link = await run_blocking(db_executor, self.store.lookup, message)
@@ -586,7 +666,19 @@ class Gateway:
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
             await self._wake_pending(message)
 
-    async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None, turn_guard=None):
+    async def _turn(
+        self,
+        uid,
+        session,
+        message,
+        link,
+        principal,
+        *,
+        event=None,
+        reply_sink=None,
+        turn_guard=None,
+        superseded=None,
+    ):
         def guard():
             self._assert_link(message, link)
             if turn_guard is not None:
@@ -642,6 +734,7 @@ class Gateway:
         )
         context_token = surface_runtime.set(runtime)
         stream = None
+        frames = None
         terminal = False
         turn_error = False
         reply_event = None
@@ -656,7 +749,8 @@ class Gateway:
                 sink,
                 principal=principal,
             )
-            async for frame in stream:
+            frames = _frames_until_superseded(stream, superseded, lambda: _replaceable(sink, runtime))
+            async for frame in frames:
                 if frame.startswith('data: '):
                     await sink.text(frame[6:].removesuffix('\n\n').replace('__CRLF__', '\n'))
                 elif frame.startswith('done: '):
@@ -695,6 +789,18 @@ class Gateway:
             # terminal yield. Close in this task's context, before resetting it.
             # Cancellation injects CancelledError at the next await; catch it so
             # the indicator still stops and the context token is always reset.
+            if frames is not None:
+                # Stops the supersede watcher when the loop body raised mid-stream.
+                try:
+                    await frames.aclose()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'Messaging frame wrapper close failed provider=%s error_type=%s',
+                        self.adapter.provider,
+                        type(error).__name__,
+                    )
             if stream is not None and hasattr(stream, 'aclose'):
                 try:
                     await stream.aclose()
@@ -788,21 +894,19 @@ class Gateway:
         for payload in await run_blocking(
             db_executor, self.store.claim_expired, self.adapter.channel, self.adapter.provider
         ):
-            payload['received_at'] = datetime.fromisoformat(payload['received_at'])
-            payload['media'] = tuple(Artifact(**a) for a in payload.get('media', ()))
-            payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
-            message = ChannelMessage(**payload)
+            message = inbox_message(payload)
             link = await run_blocking(db_executor, self.store.lookup, message)
-            if not link or not link.get('active'):
-                continue
+            if link and link.get('active'):
 
-            async def guard():
-                await run_blocking(db_executor, self._assert_link, message, link)
+                async def guard():
+                    await run_blocking(db_executor, self._assert_link, message, link)
 
-            try:
-                await self._reply_sink(message, guard=guard).finish('Sorry, that took too long — please resend.')
-            except Exception as error:
-                self._log_failure(error)
+                try:
+                    await self._reply_sink(message, guard=guard).finish('Sorry, that took too long — please resend.')
+                except Exception as error:
+                    self._log_failure(error)
+            # An expired row will never run: release the provider's turn too.
+            await self._settle_provider_turn(message, False)
 
     async def drain(self, *, limit=100):
         paths = await run_blocking(
@@ -899,3 +1003,51 @@ async def _try_typing(sink, active=True):
             outcome='degraded',
         )
         logging.getLogger(__name__).warning('Messaging typing failed error_type=%s', type(error).__name__)
+
+
+def _replaceable(sink, runtime):
+    """A reply may be replaced only while the user has seen none of it and no tool changed anything."""
+    return (
+        not sink.finished
+        and not sink.delivered_ids
+        and not getattr(sink, 'drafted', False)
+        and not runtime.action_receipts
+    )
+
+
+async def _frames_until_superseded(stream, superseded, replaceable):
+    """Yield the turn's frames, raising TurnSuperseded once a newer message replaces it.
+
+    A side task checks every SUPERSEDE_POLL_SECONDS and the turn stops at its next
+    frame. Frames are consumed in this task, never a helper task, so context variables
+    set inside the reply stream stay in one context. Without ``superseded`` it is a
+    plain pass-through.
+    """
+    if superseded is None:
+        async for frame in stream:
+            yield frame
+        return
+    replaced = asyncio.Event()
+
+    async def watch():
+        while not replaced.is_set():
+            await asyncio.sleep(SUPERSEDE_POLL_SECONDS)
+            try:
+                if replaceable() and await superseded():
+                    replaced.set()
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging supersede check failed error_type=%s', type(error).__name__
+                )
+
+    watcher = asyncio.create_task(watch())
+    try:
+        async for frame in stream:
+            # A terminal frame is delivered as before: its answer is already persisted.
+            terminal = frame.startswith('done: ') or frame.startswith('error: ')
+            if not terminal and replaced.is_set() and replaceable():
+                raise TurnSuperseded()
+            yield frame
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)

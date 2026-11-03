@@ -6,9 +6,38 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
 
 SCHEMA_GROUPS = {
+    'pending_work': {
+        'output': DEFAULT_OUTPUT_DIR / 'pending_work_wire.g.dart',
+        'schemas': (
+            'PendingWorkItem',
+            'PendingWorkSnapshot',
+            'AttentionRetryStatus',
+            'AttentionItem',
+            'AttentionItemsPage',
+            'AttentionRetryResponse',
+            'AttentionRetryAllOperation',
+            'AttentionRetryAllResponse',
+            'RetryAllRequest',
+            'SeenRequest',
+        ),
+    },
     'budget_choice': {
         'output': DEFAULT_OUTPUT_DIR / 'budget_choice_wire.g.dart',
         'schemas': ('BudgetChoiceRequest', 'BudgetChoiceRecord', 'BudgetChoiceResponse', 'BudgetChoiceWriteResponse'),
+    },
+    'episodes': {
+        'output': DEFAULT_OUTPUT_DIR / 'episodes_wire.g.dart',
+        'schemas': (
+            'EpisodeMember',
+            'EpisodeListResponse',
+            'EpisodeMoment',
+            'EpisodePoint',
+            'EpisodeProvisionalItem',
+            'Episode',
+            'EpisodeLiveResponse',
+            'EpisodeLookupResponse',
+            'EpisodeWrapUpRequest',
+        ),
     },
     'messaging': {
         'output': DEFAULT_OUTPUT_DIR / 'messaging_wire.g.dart',
@@ -68,7 +97,12 @@ SCHEMA_GROUPS = {
             'ReviewAnswerReceipt',
             'ChangeRef',
             'ReviewChange',
+            'ReviewChangeDiff',
             'ReviewChangesResponse',
+            'OpenLoopCard',
+            'OpenLoopCardsResponse',
+            'OpenLoopAnswerRequest',
+            'OpenLoopAnswerResponse',
         ),
     },
     'entity_pages': {
@@ -93,16 +127,6 @@ SCHEMA_GROUPS = {
             'EntityPage',
             'EntityCorrection',
             'EntitiesResponse',
-        ),
-    },
-    'proactivity': {
-        'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
-        'schemas': (
-            'ProactivityTarget',
-            'ProactivityFeedItem',
-            'ProactivityFeedResponse',
-            'ProactivityOutcomeRequest',
-            'ProactivityOutcomeResponse',
         ),
     },
     'frame_requests': {
@@ -162,6 +186,7 @@ SCHEMA_GROUPS = {
             'ConversationSpeakers',
             'AudioTimelineProvenance',
             'Conversation',
+            'RecordAudioPartial',
             'ProjectedActionItem',
             'ProjectedSection',
             'ProjectedEvent',
@@ -194,6 +219,7 @@ SCHEMA_GROUPS = {
             'UndoChatReceiptResponse',
             'MessageConversationStructured',
             'MessageConversation',
+            'ChatFileVideo',
             'FileChat',
             'ChartDataPoint',
             'ChartDataset',
@@ -383,6 +409,7 @@ SCHEMA_GROUPS = {
             'FcmTokenResponse',
             'DeleteKnowledgeGraphResponse',
             'KnowledgeGraphResponse',
+            'CanonicalKnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
             'StatusResponse',
@@ -418,6 +445,7 @@ SCHEMA_GROUPS = {
             'AppCreateResponse',
             'AppMigrationResponse',
             'McpAddServerResponse',
+            'McpAuthorizeResponse',
             'AppDescriptionGenerationResponse',
             'AppDescriptionEmojiGenerationResponse',
             'AppPromptsGenerationResponse',
@@ -454,6 +482,10 @@ SCHEMA_GROUPS = {
     'users': {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
+            'AccountDeletionLossSummary',
+            'AccountDeletionStatusResponse',
+            'AccountDeletionRestoreResponse',
+            'AccountDeletionActionResponse',
             'MobileFeedbackReceipt',
             'UserStatusResponse',
             'UserWebhooksStatusResponse',
@@ -497,6 +529,9 @@ SCHEMA_GROUPS = {
             'SubscriptionPlan',
             'PhoneCallQuota',
             'TranscriptionAllowanceSnapshot',
+            'HeldAudioRecording',
+            'HeldAudioSummary',
+            'ProcessingBacklog',
             'UserSubscriptionResponse',
             'UsageStats',
             'UsageHistoryPoint',
@@ -546,6 +581,8 @@ SCHEMA_GROUPS = {
             'PaymentCheckoutSessionResponse',
             'PaymentUpgradeSubscriptionResponse',
             'CustomerPortalSessionResponse',
+            'RetentionOfferResponse',
+            'YearlySwitchResponse',
             'PlanLimits',
             'routers__payment__PricingOption',
             'AvailablePlansResponse',
@@ -559,13 +596,14 @@ SCHEMA_GROUPS = {
         'schemas': (
             'Evidence',
             'MemoryCaptureContext',
-            'MemoryUseAction',
-            'MemoryUseRequest',
-            'MemoryUseResponse',
             'MemoryDB',
             'MemoryEditResponse',
             'MemoryRevertRequest',
         ),
+    },
+    'flags': {
+        'output': DEFAULT_OUTPUT_DIR / 'flags_wire.g.dart',
+        'schemas': ('ClientFlag', 'ClientFlagsResponse'),
     },
     'goals': {
         'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',

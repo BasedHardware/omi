@@ -47,7 +47,11 @@ class _Host:
         self._woken_by_shutdown = woken_by_shutdown
         self._results_by_function = {
             'get_processing_conversations': processing,
-            'get_stale_in_progress_conversations': stale_in_progress or [],
+            'get_stale_recovery_page': stale_in_progress or [],
+            # Main's lifecycle loop consults the episode-boundary decision on
+            # every poll; the gate defaults to shadow and the decision for a
+            # row without episode evidence is the legacy action.
+            'conversation_decision': 'legacy',
         }
         self.waited: list[float] = []
         self.persistence = SimpleNamespace(call=self._call)
@@ -1115,7 +1119,9 @@ class _CreateConversationHost:
             return self._existing
         if fn.__name__ == 'resolve_live_continuation':
             return None
-        if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation', 'create_in_progress_conversation'):
+        if fn.__name__ == 'create_in_progress_conversation':
+            return True  # the real lifecycle returns whether this call created the row
+        if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation'):
             return None
         return None
 

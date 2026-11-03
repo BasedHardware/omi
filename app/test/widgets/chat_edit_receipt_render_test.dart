@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/edit_receipt_block.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 /// Renders every receipt state on one iPhone-width screen. With
 /// `--dart-define=OMI_EDIT_RECEIPT_UI_EVIDENCE_DIR=<dir>` it also loads the
@@ -69,11 +70,12 @@ void main() {
             'CupertinoSystemDisplay',
             '.SF UI Text',
             '.SF UI Display',
+            'SF Pro Display',
             'FlutterTest'
           ]) {
             final loader = FontLoader(family)
-              ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYMEDIUM.OTF'))
-              ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYREGULAR.OTF'));
+              ..addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'))
+              ..addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
             await loader.load();
           }
         });

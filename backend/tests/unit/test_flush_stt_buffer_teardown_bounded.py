@@ -495,7 +495,8 @@ def test_window_verdict_matrix_for_flush_arm_decisions():
         fail=lambda reason, **kw: raw.failures.append(reason),
     )
     assert window_replay_action(ring, backed, big, RATE * 8) == 'failover'
-    assert raw.failures == ['capacity_full']
+    # Main renamed the reason: session-local replay lag is not provider capacity.
+    assert raw.failures == ['replay_ring_overflow']
 
     # A packet that fits the horizon is appended, whatever the wrapper.
     small_ring = ResilientAudio(RATE, ring_seconds=30, strict_replay=True, recovery_enabled=True)

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-queued-delivery-invalidated-by-redrive",
+  "violated_contract": "A dispatch retry deadline is not evidence that an execution owner expired. Advancing the execution epoch before delivery invalidates queued tasks; when queue delay exceeds the retry interval, every delivery is stale and the durable queue livelocks.",
+  "canonical_prevention": "Keep the execution epoch stable while dispatching and use a separate persisted dispatch attempt for idempotent replacement task names. Advance the execution epoch only when recovering expired running work. Exercise delayed original and replacement deliveries after repeated redrives, including flag-off draining, and retain the expired-running fence regression.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_backfill_uid_sequencer.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/sync_backfill_sequencer.py",
+    "backend/utils/sync/uid_sequencer.py",
+    "backend/utils/cloud_tasks.py"
+  ],
+  "status": "open"
+}

@@ -223,12 +223,16 @@ def provider():
 @contextmanager
 def _captured_filter_writes():
     calls: list = []
-    original = llm_chat.add_filter_category_item
+    # Main removed the dead filter-category seeding; the stub tolerates its absence.
+    original = getattr(llm_chat, 'add_filter_category_item', None)
     llm_chat.add_filter_category_item = lambda uid, category, value: calls.append((category, value))
     try:
         yield calls
     finally:
-        llm_chat.add_filter_category_item = original
+        if original is not None:
+            llm_chat.add_filter_category_item = original
+        else:
+            del llm_chat.add_filter_category_item
 
 
 @contextmanager
@@ -583,16 +587,16 @@ def test_text_boundary_returns_exact_empty_shape(provider):
     assert _text_call() == {"people": [], "topics": [], "entities": [], "dates": []}
 
 
-def test_successful_extraction_still_seeds_the_filter_categories(provider):
+def test_successful_extraction_seeds_no_filter_categories(provider):
     provider.outcomes = [_Extraction()]
     with _captured_filter_writes() as writes:
         metadata = _transcript_call()
     assert metadata["people"] == ["david"]
-    assert ("people", "david") in writes
-    assert ("topics", "running") in writes
+    # Main removed the dead filter-category seeding: nothing is written.
+    assert writes == []
 
 
-def test_failed_extraction_never_seeds_the_filter_categories(provider):
+def test_failed_extraction_seeds_no_filter_categories(provider):
     provider.outcomes = [_api_timeout(), _api_timeout()]
     with _captured_filter_writes() as writes:
         assert _transcript_call() == _EMPTY
@@ -926,7 +930,7 @@ def test_usage_tracked_once_across_message_and_text_retries(provider):
     assert len(usage_calls) == 1
 
 
-def test_message_and_text_lanes_never_seed_filters_on_failure(provider):
+def test_message_and_text_lanes_seed_no_filters_on_failure(provider):
     provider.outcomes = [ValueError("bad shape")]
     with _captured_filter_writes() as writes:
         assert _message_call() == _EMPTY

@@ -1,8 +1,9 @@
 """Shared fail-open server capture seam; no content or raw identity properties.
 
-Credential admission stays family-scoped: product/integration/extraction use
-POSTHOG_PROJECT_API_KEY (legacy POSTHOG_API_KEY only when project is absent),
-billing uses POSTHOG_BILLING_API_KEY, and MCP uses POSTHOG_EVENTS_API_KEY.
+Credential admission stays family-scoped: product/integration/extraction prefer
+POSTHOG_PRODUCT_CAPTURE_TOKEN, then use POSTHOG_PROJECT_API_KEY (legacy
+POSTHOG_API_KEY only when project is absent); billing uses
+POSTHOG_BILLING_API_KEY, and MCP uses POSTHOG_EVENTS_API_KEY.
 An absent/invalid family key disables that family: no cross-family fallback.
 In particular, project=disabled plus a valid billing key enables billing only.
 At most one lazy SDK per family holds its own immutable capture key. Product
@@ -47,7 +48,13 @@ BUILD_CHANNELS = frozenset(
         'unknown',
     }
 )
-_CAPTURE_KEYS = ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_EVENTS_API_KEY', 'POSTHOG_BILLING_API_KEY', 'POSTHOG_API_KEY')
+_CAPTURE_KEYS = (
+    'POSTHOG_PRODUCT_CAPTURE_TOKEN',
+    'POSTHOG_PROJECT_API_KEY',
+    'POSTHOG_EVENTS_API_KEY',
+    'POSTHOG_BILLING_API_KEY',
+    'POSTHOG_API_KEY',
+)
 BILLING_EVENTS = frozenset(
     {
         'Billing Subscription Started',
@@ -68,7 +75,11 @@ def _capture_project_key(event: str) -> Optional[str]:
     elif event in MCP_EVENTS:
         raw = os.getenv('POSTHOG_EVENTS_API_KEY')
     else:
-        raw = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
+        raw = (
+            os.getenv('POSTHOG_PRODUCT_CAPTURE_TOKEN')
+            or os.getenv('POSTHOG_PROJECT_API_KEY')
+            or os.getenv('POSTHOG_API_KEY')
+        )
     key = raw.strip() if raw else ''
     if key.startswith('phc_'):
         return key
@@ -151,7 +162,6 @@ def server_event_properties(uid: str, properties: Mapping[str, Any]) -> dict[str
     experiment = properties.get('experiment_id')
     if isinstance(experiment, str) and experiment in {
         'EXP-001-day3-reengagement',
-        'EXP-002-desktop-identity-memory-v1',
     }:
         safe['experiment_id'] = experiment
     context = _context.get()

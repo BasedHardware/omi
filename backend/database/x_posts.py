@@ -16,6 +16,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,8 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
     with overlapping pages only ever inserts each post once.
     """
     if not posts:
+        return 0
+    if account_deletion_blocks_user_work(uid):
         return 0
 
     coll = _posts_ref(uid)
@@ -84,6 +87,8 @@ def get_pending_memory_extraction_posts(uid: str, limit: int = 200) -> List[Dict
     import as successfully extracted.
     """
     bounded_limit = max(1, min(limit, 500))
+    if account_deletion_blocks_user_work(uid):
+        return []
     pending: List[Dict[str, Any]] = []
     for snapshot in _posts_ref(uid).stream():
         raw = snapshot.to_dict()

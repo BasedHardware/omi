@@ -612,6 +612,42 @@ def test_live_gcloud_indexes_do_not_alias_implicit_terminal_document_id():
     ) == {implicit_signature: 'READY'}
 
 
+@pytest.mark.parametrize('namespace', ['batch_pipeline_dev', 'batch_pipeline_prod'])
+@pytest.mark.parametrize(
+    ('collection_suffix', 'native_fields'),
+    [
+        ('jobs', ['state', 'lease_until', '__name__']),
+        ('results', ['projection_state', 'committed_at', '__name__']),
+        ('control', ['p0_active', 'p0_service', 'p0_batch_available_at', '__name__']),
+    ],
+)
+def test_batch_pipeline_indexes_match_native_admin_shape(namespace, collection_suffix, native_fields):
+    collection = f'{namespace}_{collection_suffix}'
+    target = next(
+        index
+        for index in firebase_index_manifest()['indexes']
+        if index['collectionGroup'] == collection
+        and [field['fieldPath'] for field in index['fields'] if field['fieldPath'] != '__name__'] == native_fields[:-1]
+    )
+    # Firestore Admin always returns the terminal document-key ordering. The
+    # strict readiness gate must match it without enabling the legacy alias.
+    live_index = {
+        'name': f'projects/prod-project/databases/(default)/collectionGroups/{collection}/indexes/native-index',
+        'queryScope': 'COLLECTION',
+        'fields': [{'fieldPath': field, 'order': 'ASCENDING'} for field in native_fields],
+        'state': 'READY',
+    }
+
+    def runner(_command, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
+
+    live = reconcile_firestore_indexes.list_live_indexes(project='prod-project', database='(default)', runner=runner)
+    signature = reconcile_firestore_indexes._index_signature(target)
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={signature}, live_indexes=live, project='prod-project', database='(default)'
+    ) == {signature: 'READY'}
+
+
 @pytest.mark.parametrize('check_only', [False, True])
 def test_writer_and_check_only_share_exact_signature_matching(monkeypatch, check_only, tmp_path):
     implicit_signature = (

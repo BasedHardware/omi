@@ -19,6 +19,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
@@ -31,6 +32,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class UsagePage extends StatefulWidget {
@@ -727,6 +729,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                 ],
               ],
               if (stats != null) ..._buildAllowanceMeters(provider.subscription),
+              const HeldAudioUsageSection(),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),
@@ -822,8 +825,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     final l10n = context.l10n;
     final numberFormatter = NumberFormat.decimalPattern(l10n.localeName);
     final used = sub.chatQuotaUsed;
-    final limits = sub.subscription.limits;
-    final color = Colors.blue.shade300;
 
     final String value;
     String? usageText;
@@ -831,16 +832,17 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     double percentage = 0.0;
 
     if (sub.chatQuotaUnit == 'cost_usd') {
-      value = '\$${used.toStringAsFixed(2)}';
-      final limit = limits.chatCostUsdPerMonth;
+      value = formatBillingPrice((used * 100).round(), 'usd');
+      final limit = sub.subscription.limits.chatCostUsdPerMonth;
       if (limit != null && limit > 0) {
-        usageText = l10n.chatUsedOfLimitCompute(used.toStringAsFixed(2), limit.toStringAsFixed(0));
-        displayText = '$value / \$${limit.toStringAsFixed(0)}';
+        final formattedLimit = formatBillingPrice((limit * 100).round(), 'usd');
+        usageText = l10n.chatUsedOfLimitCompute(value, formattedLimit);
+        displayText = '$value / $formattedLimit';
         percentage = (used / limit).clamp(0.0, 1.0);
       }
     } else {
       value = '${numberFormatter.format(used.toInt())} ${l10n.chatTitle}';
-      final limit = limits.chatQuestionsPerMonth;
+      final limit = sub.subscription.limits.chatQuestionsPerMonth;
       if (limit != null && limit > 0) {
         usageText = l10n.chatUsedOfLimitMessages(numberFormatter.format(used.toInt()), numberFormatter.format(limit));
         displayText = '${numberFormatter.format(used.toInt())} / ${numberFormatter.format(limit)}';
@@ -876,7 +878,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
               LinearProgressIndicator(
                 value: percentage,
                 backgroundColor: OmiColors.surface3,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade300),
                 minHeight: 4,
                 borderRadius: OmiRadius.pillAll,
               ),

@@ -1,3 +1,0 @@
-{
-  "change": "Pendant recordings waiting in Offline Sync upload four times as much audio per request, so a large backlog clears faster."
-}

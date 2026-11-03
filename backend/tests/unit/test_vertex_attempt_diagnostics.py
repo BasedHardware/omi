@@ -6,6 +6,7 @@ import json
 import pytest
 
 from llm_gateway.gateway.config_loader import load_gateway_config
+from llm_gateway.gateway.schemas import ProviderRef
 from llm_gateway.gateway.vertex_diagnostics import (
     request_id_context,
     vertex_attempt_labels,
@@ -77,7 +78,7 @@ async def test_attempt_context_isolated_between_requests_and_reset_after_error()
                 assert labels['request_id'] == request_id
                 assert labels['lane'] == route.lane_id
                 with pytest.raises(RuntimeError):
-                    with vertex_attempt_scope(route, route.fallbacks[0]):
+                    with vertex_attempt_scope(route, ProviderRef(provider='openai', model='gpt-6-luna')):
                         assert vertex_attempt_labels()['lane'] == 'unknown'
                         raise RuntimeError('synthetic')
                 assert vertex_attempt_labels() == labels

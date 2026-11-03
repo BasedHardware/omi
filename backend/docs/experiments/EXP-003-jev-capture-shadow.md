@@ -1,7 +1,11 @@
 # EXP-003 — Jev capture shadow
 
+**Outcome: no-go — concluded 2026-10-17.** On David's labels, Jev called 14 pairs “same” and got 3 wrong: **79% precision**, below the preregistered 90% bar. The re-summary half is dropped. The proposal is replaced by the deterministic shared-speech matcher in [`overlap_shared_speech.py`](../../utils/conversations/overlap_shared_speech.py), controlled by `CAPTURE_SHARED_SPEECH_MODE`; see the [shared-speech runbook](../operational/capture-shared-speech.md). The removed shadow was log-only and never changed grouping or summaries.
+
+The sections below preserve the preregistered design and original readout procedure; the temporary readout script was removed with the shadow.
+
 **Owner:** David. **Registered:** 2026-09-27. **Decision deadline:** 2026-10-18T00:00:00Z.
-**State:** allowlist-only in dev and prod. David approved vendor use for one UID on 2026-09-27. Percentage stays 0. The code default remains off, and the hard auto-off is still 2026-10-18T00:00:00Z.
+**State at experiment close:** allowlist-only in dev and prod. David approved vendor use for one UID on 2026-09-27. Percentage stayed 0. The code default remained off, with a hard auto-off at 2026-10-18T00:00:00Z.
 
 ## Hypotheses and fixed treatment
 

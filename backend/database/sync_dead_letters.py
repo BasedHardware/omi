@@ -41,6 +41,7 @@ FAILURE_CODES = frozenset(
         'stt_failed',
         'llm_failed',
         'empty_structured_guard',
+        'sync_budget_chain_exhausted',
         'unknown',
     }
 )

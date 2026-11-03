@@ -20,6 +20,7 @@ from utils.executors import db_executor, run_blocking, storage_executor
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.other.storage import download_speaker_embedding_cache
 from utils.speaker_permissions import named_speaker_prompts_allowed
+from utils.speaker_tag_prompts.keys import ignored_voice_key
 from utils.speaker_tag_prompts.selection import MAX_CLIP_SECONDS, speaker_id_of
 from utils.stt.conversation_speakers import (
     MIN_EMBED_SECONDS,
@@ -31,6 +32,8 @@ from utils.stt.conversation_speakers import (
     voice_cosine_distance,
 )
 from utils.stt.voiceprints import usable_person_voiceprint
+from database import speaker_auto_enroll as auto_enroll_db
+from utils.speakers.auto_enroll import POOL_FIELD
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 
 LOOKBACK = timedelta(days=30)
@@ -104,7 +107,7 @@ def _conversation_matches(
         if speaker_id >= 0
         and speaker_id != OMI_SPEAKER_ID_SENTINEL
         and str(speaker_id) not in decided_speakers
-        and voice_profiles_db.ignored_voice_key(conversation_id, speaker_id) not in ignored
+        and ignored_voice_key(conversation_id, speaker_id) not in ignored
         and all(
             not segment.get('is_user') and segment.get('person_id') is None and segment['id'] not in decided_segments
             for segment in segments
@@ -177,7 +180,19 @@ def _competing_voiceprints(uid: str) -> dict[str, np.ndarray]:
     prints = {}
     # 'user' is the owner identity that select_speaker_match reserves.
     competitors = [('user', users_db.get_user_speaker_embedding(uid))]
-    competitors += [(person.get('id'), usable_person_voiceprint(person)) for person in users_db.get_people(uid) or []]
+    people = users_db.get_people(uid) or []
+    allowed = auto_enroll_db.context(uid) if any(p.get(POOL_FIELD) for p in people) else {}
+    competitors += [
+        (
+            person.get('id'),
+            (
+                usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=allowed)
+                if allowed
+                else usable_person_voiceprint(person)
+            ),
+        )
+        for person in people
+    ]
     for identity, raw in competitors:
         if raw is None:
             continue
@@ -201,7 +216,14 @@ async def find_person_voice_matches(uid: str, person_id: str) -> VoiceMatchesRes
             raise LookupError('Person not found')
         if not await _read(db_executor, partial(named_speaker_prompts_allowed, uid), deadline):
             return VoiceMatchesResponse()
-        raw_print = usable_person_voiceprint(person)
+        allowed = (
+            await _read(db_executor, partial(auto_enroll_db.context, uid), deadline) if person.get(POOL_FIELD) else {}
+        )
+        raw_print = (
+            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=allowed)
+            if allowed
+            else usable_person_voiceprint(person)
+        )
         if raw_print is None:
             return VoiceMatchesResponse()
         voiceprint = unit_voice_vector(raw_print)

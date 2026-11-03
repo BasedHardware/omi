@@ -34,6 +34,13 @@ def retire(item):
         raise ValueError('Dismissal and retirement change status only')
 
 
+def required_intake(item):
+    if item.after or not item.before.strip() or '#' in item.target or '#' in item.other:
+        raise ValueError('Required intake preserves the submission; other optionally names its existing duplicate')
+    if item.other and item.other == item.target:
+        raise ValueError('Required intake needs a distinct survivor')
+
+
 def language(item):
     if item.other or not item.after.strip() or len(item.after) > 32:
         raise ValueError('Language requires a bounded tag, not a second record')

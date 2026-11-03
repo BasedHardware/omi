@@ -1,0 +1,7 @@
+{
+  "version": "0.12.501",
+  "date": "2026-10-18",
+  "changes": [
+    "Added compact timestamps below summary sections to jump directly to the supporting transcript"
+  ]
+}

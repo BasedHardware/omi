@@ -2,16 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/http/api/review.dart' as review_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
+import 'package:omi/pages/activity/needs_attention_section.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/pages/review/review_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -24,13 +30,30 @@ Future<({List<DailySummary> items, bool ok})> _loadActivityRecaps() => getDailyS
 ///
 /// Opening or leaving the page marks everything seen. A dot marks what arrived since the last visit,
 /// and only for the delight items that light Home's bell.
+///
+/// Work that could not finish sits above the feed in a Needs attention section; showing it marks it
+/// seen on every device.
 class ActivityPage extends StatefulWidget {
-  const ActivityPage({super.key, this.loadRecaps, this.loadChanges, this.seen, this.probeDreamReport});
+  const ActivityPage({
+    super.key,
+    this.loadRecaps,
+    this.loadChanges,
+    this.seen,
+    this.probeDreamReport,
+    this.pendingWork,
+    this.captureWedgeMonitor,
+  });
 
   final RecentRecapsLoader? loadRecaps;
   final ReviewChangesLoader? loadChanges;
   final ActivitySeen? seen;
   final Future<bool> Function()? probeDreamReport;
+
+  /// Injectable for tests; defaults to [PendingWorkStore.instance].
+  final PendingWorkStore? pendingWork;
+
+  /// Injectable for tests and visual audits; defaults to [CaptureWedgeMonitor.instance].
+  final CaptureWedgeMonitor? captureWedgeMonitor;
 
   @override
   State<ActivityPage> createState() => _ActivityPageState();
@@ -53,6 +76,8 @@ class _ChangeItem extends _ActivityItem {
 
 class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver {
   late final ActivitySeen _seen = widget.seen ?? ActivitySeen.instance;
+  late final PendingWorkStore _pendingWork = widget.pendingWork ?? PendingWorkStore.instance;
+  late final CaptureWedgeMonitor _captureMonitor = widget.captureWedgeMonitor ?? CaptureWedgeMonitor.instance;
 
   /// The last visit before this one: items newer than it get a dot.
   late final int _previousVisitMs;
@@ -74,11 +99,20 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   DateTime? _shownThrough;
   StreamSubscription<void>? _arrivals;
 
+  /// Rebuild when capture attention arrives or leaves: an empty feed otherwise
+  /// commits the build to the empty-state branch, where nothing listens to the
+  /// monitor, and a capture problem that begins while the reader stays on the
+  /// page would light the bell without ever showing its row.
+  void _onCaptureAttentionChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _previousVisitMs = _seen.seenAtMs;
+    _captureMonitor.addListener(_onCaptureAttentionChanged);
     // A daily-summary notification while Activity is on screen shows here, not only on Home.
     _arrivals = recapArrivals.listen((_) => _refresh());
     _refresh();
@@ -93,6 +127,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _captureMonitor.removeListener(_onCaptureAttentionChanged);
     _arrivals?.cancel();
     final shown = _shownThrough;
     if (shown != null) _seen.markSeen(through: shown);
@@ -116,8 +151,11 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final results = await Future.wait<Object>([
       (widget.loadRecaps ?? _loadActivityRecaps)(),
       (widget.loadChanges ?? review_api.getReviewChanges)(),
+      _pendingWork.refresh().then((_) => true),
     ]);
     if (!mounted || generation != _generation) return;
+    // The section is on screen now: its items stop lighting the bell here and on the Mac.
+    unawaited(_pendingWork.markSeen());
     final loaded = results[0] as ({List<DailySummary> items, bool ok});
     // A refresh that started before a deletion may still return the deleted recap.
     final recaps = (items: loaded.items.where((r) => !_deletedIds.contains(r.id)).toList(), ok: loaded.ok);
@@ -135,12 +173,12 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final changesFailed = changes is ApiFailure<ReviewChangesPage> && changes.problem.kind != ApiProblemKind.notFound;
     final anyFailed = !recaps.ok || changesFailed;
     if (recaps.ok) {
-      _seen.observe(recaps.items.map((r) => r.createdAt));
+      _seen.observe(ActivitySeen.recapArrivals(recaps.items));
       // Through the newest recap shown, too: a server clock ahead of the phone's must not leave a
       // recap already seen lighting the bell. Recaps that arrive after this load are still news.
       var through = _shownThrough != null && _shownThrough!.isAfter(startedAt) ? _shownThrough! : startedAt;
-      for (final r in recaps.items) {
-        if (r.createdAt.isAfter(through)) through = r.createdAt;
+      for (final at in ActivitySeen.recapArrivals(recaps.items)) {
+        if (at.isAfter(through)) through = at;
       }
       _shownThrough = through;
     }
@@ -178,21 +216,27 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       _recaps = _recaps.where((r) => r.id != deletedId).toList();
       _rebuildItems();
     });
-    _seen.observe(_recaps.map((r) => r.createdAt));
+    _seen.observe(ActivitySeen.recapArrivals(_recaps));
   }
 
   bool _isNew(_ActivityItem item) =>
-      item is _RecapItem && _previousVisitMs > 0 && item.at.millisecondsSinceEpoch > _previousVisitMs;
+      item is _RecapItem &&
+      item.summary.createdAtKnown &&
+      _previousVisitMs > 0 &&
+      item.at.millisecondsSinceEpoch > _previousVisitMs;
 
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
+    final attention = NeedsAttentionSection(store: _pendingWork, captureMonitor: _captureMonitor);
+    final hasAttention =
+        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor);
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();
     } else if (_failed) {
       body = OmiErrorState(message: l.activityLoadFailed, onRetry: _refresh);
-    } else if (_items.isEmpty) {
+    } else if (_items.isEmpty && !hasAttention) {
       // Still pullable: a recap that lands while the page is open is one pull away.
       body = RefreshIndicator(
         onRefresh: _refresh,
@@ -216,6 +260,25 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       );
     } else {
       final dates = OmiDateFormat.of(context);
+      // The capture rows are on screen in this build (the failed/empty branches
+      // above never mount the section). Marking after the frame — not in the
+      // load path — keeps the bell lit when a failed load would have hidden
+      // rows the user never saw, and covers attention that arrives while the
+      // page is already open. Only the episodes this build included count as
+      // seen: an incident declared after the build stays unseen until a frame
+      // shows its row, so a stale callback cannot extinguish the bell first.
+      final builtThrough = <DateTime>[
+        if (_captureMonitor.storageAtRisk != null) _captureMonitor.storageAtRisk!.engagedAt,
+        if (_captureMonitor.uploadStall != null) _captureMonitor.uploadStall!.since,
+        if (_captureMonitor.acuteEpisode != null) _captureMonitor.acuteEpisode!.declaredAt,
+      ].fold<DateTime?>(null, (a, b) => a == null || b.isAfter(a) ? b : a);
+      // A build with no capture rows shows nothing to mark seen; advancing the
+      // timestamp then would be the stale-callback bug this snapshot prevents.
+      if (builtThrough != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _captureMonitor.markCaptureAttentionSeen(through: builtThrough);
+        });
+      }
       final groups = <(String, List<_ActivityItem>)>[];
       for (final item in _items) {
         final header = dates.dayHeader(item.at);
@@ -236,6 +299,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
                 padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
                 child: OmiPartialNotice(message: l.activityLoadFailed, onRetry: _refresh),
               ),
+            attention,
             for (final (header, items) in groups) ...[
               _DayHeader(label: header),
               _ActivityGroup(

@@ -6,6 +6,8 @@ latency optimization for each listener process, not a fleet-wide coordinator.
 
 from __future__ import annotations
 
+from config.policy.listen import fallback_liveness_grace
+
 import asyncio
 import logging
 import os
@@ -14,9 +16,76 @@ import time
 import weakref
 from typing import Any, Callable, Final, NamedTuple
 
-from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN
+from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN, OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL
+from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
+
+# Trip-counter zero baseline: same closed reason vocabulary the serve/serve
+# funnel reports, plus 'untyped' for trips whose caller could not name a cause.
+_CIRCUIT_TRIP_PROVIDERS: Final = ('deepgram', 'modulate', 'parakeet', 'soniox')
+_CIRCUIT_TRIP_CLASSES: Final = (
+    'auth',
+    'capacity_full',
+    'config_incomplete',
+    'connection_lost',
+    'empty_streak',
+    'first_text_deadline',
+    'modulate_serve_error',
+    'provider_429',
+    'provider_5xx',
+    'provider_auth_rejected',
+    'provider_budget_exhausted',
+    'provider_rate_limited',
+    'quota',
+    'send_failed',
+    'timeout',
+    'untyped',
+)
+
+
+def circuit_trip_reason(error_class: str) -> str:
+    """Normalize known causes without guessing that capacity is an outage.
+
+    Keep the detailed error_class for existing queries. The reason dimension
+    groups auth/quota, server faults, latency, empty output and connection
+    failures; capacity and unknown remain explicit rather than misclassified.
+    """
+    if error_class in {'auth', 'provider_auth_rejected'}:
+        return 'auth'
+    if error_class in {'quota', 'provider_budget_exhausted', 'provider_rate_limited', 'provider_429'}:
+        return 'quota'
+    if error_class in {'provider_5xx', 'modulate_serve_error'}:
+        return '5xx'
+    if error_class == 'timeout':
+        return 'latency'
+    if error_class in {'first_text_deadline', 'empty_streak', 'no_text'}:
+        return 'no_text'
+    if error_class in {'connection_lost', 'send_failed'}:
+        return 'connect'
+    return 'capacity' if error_class == 'capacity_full' else 'unknown'
+
+
+def initialize_stt_circuit_trip_children() -> None:
+    """Pre-create the trip counter's zero children; never raises.
+
+    A lazily created counter's first sample already holds an outage's opening
+    burst and increase() reads it as zero, so the trip a dashboards reads at
+    breaker-open must exist before the first trip happens.
+    """
+
+    try:
+        for provider in _CIRCUIT_TRIP_PROVIDERS:
+            for kind in ('selection', 'account'):
+                for error_class in _CIRCUIT_TRIP_CLASSES:
+                    OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(
+                        provider=provider, kind=kind, error_class=error_class, reason=circuit_trip_reason(error_class)
+                    )
+    except Exception:
+        pass
+
+
+initialize_stt_circuit_trip_children()
 
 
 class _SelectionState(NamedTuple):
@@ -49,7 +118,7 @@ async def fallback_socket_is_serving(socket: Any) -> bool:
     that dies moments afterwards, so the outage never reaches ops (#11752).
     """
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + STT_FALLBACK_LIVENESS_GRACE_SECONDS
+    deadline = loop.time() + fallback_liveness_grace(STT_FALLBACK_LIVENESS_GRACE_SECONDS)
     while True:
         if getattr(socket, 'is_connection_dead', False):
             return False
@@ -286,8 +355,34 @@ class ProviderCircuitBreaker:
             self._selection_snapshot = None
             self._publish_state()
 
-    def record_failure(self) -> None:
+    def _note_trip(self, error_class: str | None, *, kind: str, was_open: bool) -> None:
+        """Count a real closed/half-open -> open transition by bounded cause.
+
+        Observability only: never raises, never mutates state. ``was_open``
+        suppresses re-arming escalations so one outage counts once per trip,
+        not once per serve death that extends its bench. Selection evidence
+        accumulated while an account bench holds the provider lives in the
+        shadow snapshot and never transitions ``self._state``, so it is not
+        counted here either.
+        """
+        if self._provider_label is None or was_open:
+            return
+        try:
+            bounded_class = (
+                error_class if isinstance(error_class, str) and error_class in LIVE_STT_REASONS else 'untyped'
+            )
+            OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(
+                provider=self._provider_label,
+                kind=kind,
+                error_class=bounded_class,
+                reason=circuit_trip_reason(bounded_class),
+            ).inc()
+        except Exception:
+            pass
+
+    def record_failure(self, error_class: str | None = None) -> None:
         with self._lock:
+            was_open = self._state == 'open'
             self._probes_in_flight = 0
             if self._state == 'half_open':
                 self._state = 'open'
@@ -295,6 +390,11 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 if self._opened_by_serve_error:
                     self._remaining_successes_to_close = self._serve_error_successes_to_close
+                self._note_trip(
+                    error_class,
+                    kind='account' if self._account_cooldown is not None else 'selection',
+                    was_open=was_open,
+                )
                 self._publish_state()
                 return
             if self._account_cooldown is not None:
@@ -332,9 +432,10 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 self._opened_by_serve_error = False
                 self._remaining_successes_to_close = 1
+                self._note_trip(error_class, kind='selection', was_open=was_open)
                 self._publish_state()
 
-    def record_serve_failure(self) -> None:
+    def record_serve_failure(self, error_class: str | None = None) -> None:
         """Open the circuit after a provider died while serving a session.
 
         Serve-time deaths cannot flow through ``record_failure``: a provider
@@ -348,8 +449,12 @@ class ProviderCircuitBreaker:
         circuit for the serve-error cooldown. Re-admission requires more than
         one half-open success so a 5xx storm that still accepts connects
         cannot flap the breaker every 30s.
+
+        ``error_class`` is telemetry only (the trip counter's cause label);
+        it never changes which bench opens.
         """
         with self._lock:
+            was_open = self._state == 'open'
             self._probes_in_flight = 0
             # Escalate: each serve death within an unbroken benching cycle
             # arms a longer next window (baseline for the first death, doubled
@@ -374,15 +479,16 @@ class ProviderCircuitBreaker:
             self._opened_at = self._clock()
             self._opened_by_serve_error = True
             self._remaining_successes_to_close = self._serve_error_successes_to_close
+            self._note_trip(error_class, kind='selection', was_open=was_open)
             self._publish_state()
 
     def record_rejection(self, reason: str) -> None:
         if reason in EXPECTED_REJECTIONS:
             self.record_success()
             return
-        self.record_failure()
+        self.record_failure(error_class=reason)
 
-    def record_account_rejection(self) -> None:
+    def record_account_rejection(self, error_class: str | None = None) -> None:
         """Open the circuit for the account cooldown after an account-level rejection.
 
         An HTTP 402 (payment required / balance exhausted) is not evidence about
@@ -395,7 +501,7 @@ class ProviderCircuitBreaker:
         single probe success closes (the account is served again the moment it
         is actually usable).
         """
-        self.record_account_failure(self._account_cooldown_seconds)
+        self.record_account_failure(self._account_cooldown_seconds, error_class=error_class)
 
     def deferred_result_callbacks(self) -> tuple[Callable[[], None], Callable[[], None]]:
         """A batch adapter proves health on its first POST, not local construction."""
@@ -424,8 +530,9 @@ class ProviderCircuitBreaker:
         with self._lock:
             self._probes_in_flight = max(0, self._probes_in_flight - 1)
 
-    def record_account_failure(self, cooldown_seconds: float = 1800) -> None:
+    def record_account_failure(self, cooldown_seconds: float = 1800, error_class: str | None = None) -> None:
         with self._lock:
+            was_open = self._state == 'open'
             self._probes_in_flight = 0
             if self._account_cooldown is None:
                 self._selection_snapshot = _SelectionState(
@@ -441,6 +548,7 @@ class ProviderCircuitBreaker:
             self._account_cooldown = max(1, cooldown_seconds)
             self._opened_by_serve_error = False
             self._remaining_successes_to_close = 1
+            self._note_trip(error_class, kind='account', was_open=was_open)
             self._publish_state()
 
     def observe_serving(self) -> None:
@@ -551,19 +659,19 @@ class ProviderCircuitBreaker:
 
         return settle, settle
 
-    def refresh_gauge_if_account_bench_elapsed(self) -> None:
-        """Publish the gauges when this breaker's account bench has elapsed.
+    def refresh_gauge_if_bench_elapsed(self) -> None:
+        """Publish the gauges when this breaker's active bench has elapsed.
 
-        Read-only observation of the clock: only an open, account-armed bench
+        Read-only observation of the clock: only an open bench
         whose cooldown has expired republishes (as 0 for both kinds — the next
         ``allow_request`` would admit a probe). Breaker state is never mutated,
         so the periodic refresh below cannot change admit/reject behavior.
         """
 
         with self._lock:
-            if self._account_cooldown is None or self._state != 'open':
+            if self._state != 'open':
                 return
-            if self._clock() - self._opened_at < self._account_cooldown:
+            if self._clock() - self._opened_at < self._active_cooldown():
                 return
         self._publish_state()
 
@@ -619,17 +727,16 @@ def _gauge_refresh_iteration() -> None:
 
 
 def refresh_published_circuit_gauges() -> None:
-    """Re-publish gauges whose account bench has elapsed on the clock alone.
+    """Re-publish gauges whose selection/account bench elapsed on the clock.
 
-    Only elapsed account benches are refreshed: every other state already
-    published the same value at its transition, so re-publishing it cannot
-    change anything. Never raises, and never mutates breaker state — this is
+    An idle, benched target may receive no next dial to refresh either kind.
+    Never raises, and never mutates breaker state — this is
     the read side observing the clock, not a dial.
     """
 
     for breaker in list(_published_breakers):
         try:
-            breaker.refresh_gauge_if_account_bench_elapsed()
+            breaker.refresh_gauge_if_bench_elapsed()
         except Exception:
             continue
 

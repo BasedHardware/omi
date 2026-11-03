@@ -7,16 +7,27 @@ import json
 import math
 import os
 import re
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
-from zoneinfo import ZoneInfo
+from utils.model_text import (
+    UNTRUSTED_LEGEND,
+    ContextWindow,
+    DisplayClock,
+    ToolTimeError,
+    count_header,
+    format_instant,
+    format_span,
+    parse_tool_time,
+    truncation_note,
+    untrusted_block,
+)
+from utils.user_clock import clock_for_config
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.screen_activity as screen_activity_db
 import database.vector_db as vector_db
-import database.notifications as notification_db
 from database._client import db as firestore_db
 from utils.llm.clients import gemini_embed_query
 import logging
@@ -93,6 +104,28 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return agent_config_context.get()
     except LookupError:
         return None
+
+
+def _chat_context_window(config: Any, clock: DisplayClock) -> ContextWindow:
+    """The chat turn's window: the attached chat timeframe when the client sent one, else the last 24 hours.
+
+    Harness tool rule 1: a time-range tool defaults to the run's context window. Chat shows the
+    model local times labelled with their zone, so naive scope bounds are read in that zone.
+    """
+    cfg: Dict[str, Any] = cast(Optional[Dict[str, Any]], config) or _agent_config() or {}
+    configurable: Any = cfg.get('configurable')
+    scope: Any = cast(Dict[str, Any], configurable).get('chat_scope') if isinstance(configurable, dict) else None
+    if isinstance(scope, dict):
+        bounds = cast(Dict[str, Any], scope)
+        start, end = bounds.get('start_date'), bounds.get('end_date')
+    else:
+        start = end = None
+    if start or end:
+        try:
+            return ContextWindow.from_bounds(start, end, label='chat timeframe', naive_tz=clock.tz)
+        except ToolTimeError:
+            logger.warning('screen activity: unreadable chat_scope dates; using the last 24 hours')
+    return ContextWindow.trailing_day()
 
 
 def _get_uid(config: RunnableConfig) -> Optional[str]:
@@ -234,6 +267,55 @@ def _bounded_evidence_text(value: Any, limit: int) -> str:
     return ' '.join(value.split()).strip()[:limit]
 
 
+def _format_screen_untrusted_fields(
+    *,
+    ocr_text: str,
+    raw_ocr: Any,
+    window_title: str,
+    raw_window_title: Any,
+    lookup_failed: bool,
+) -> Tuple[str, bool]:
+    """Format OCR and title excerpts, returning whether a trust legend is needed."""
+    result = ""
+    has_untrusted = False
+    if window_title:
+        has_untrusted = True
+        result += f"  Window: {untrusted_block('screen window title', window_title)}\n"
+        if isinstance(raw_window_title, str):
+            normalized_title = ' '.join(raw_window_title.split()).strip()
+            if len(normalized_title) > len(window_title):
+                result += (
+                    "  "
+                    + truncation_note(
+                        shown=len(window_title),
+                        total=len(normalized_title),
+                        unit="window-title characters",
+                        how_to_get_more="Ask about a specific screen record to inspect the full title.",
+                    )
+                    + "\n"
+                )
+    if ocr_text:
+        has_untrusted = True
+        preview = ocr_text[:200]
+        if isinstance(raw_ocr, str) and len(raw_ocr) > 200:
+            preview += "..."
+        result += f"  Text: {untrusted_block('screen OCR text', preview)}\n"
+        if isinstance(raw_ocr, str) and len(raw_ocr) > 200:
+            result += (
+                "  "
+                + truncation_note(
+                    shown=200,
+                    total=len(raw_ocr),
+                    unit="OCR characters",
+                    how_to_get_more="Narrow the query to inspect the full screen record.",
+                )
+                + "\n"
+            )
+    elif lookup_failed:
+        result += "  Text: OCR text unavailable (lookup failed).\n"
+    return result, has_untrusted
+
+
 def _append_screen_evidence_reference(
     evidence_references: Optional[List[Any]],
     *,
@@ -320,32 +402,21 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
             result = clipped
         truncated = True
     if truncated:
-        result += (
-            "\n\n[Only a subset of the observed apps and windows is shown here to stay within limits; more may exist. "
-            "Summarize what is shown and tell the user they can ask about a specific app or a "
-            "narrower date range for the rest.]"
+        shown = len(re.findall(r"(?m)^\*\*.*\*\* — \d+ observations$", result))
+        result += "\n\n" + truncation_note(
+            shown=shown,
+            total=None,
+            cut=True,
+            unit="app records",
+            how_to_get_more="Ask about a specific app or a narrower date range.",
         )
     return result
 
 
-def _resolve_display_tz(uid: str) -> tzinfo:
-    # Render timestamps in the user's timezone so a chat answer shows screen-activity matches in the
-    # same timezone as conversation matches (conversation_tools renders in the user's timezone too).
-    # Fall back to UTC on any failure: no timezone set, an invalid IANA name, or a Firestore error
-    # reading it (a transient lookup error must not fail an otherwise successful search).
-    try:
-        tz_name = notification_db.get_user_time_zone(uid)
-        if tz_name:
-            return ZoneInfo(tz_name)
-    except Exception:
-        logger.warning("search_screen_activity_tool - could not resolve user timezone, using UTC")
-    return timezone.utc
-
-
 @tool
 def get_screen_activity_tool(
-    start_date: str,
-    end_date: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     app_filter: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
@@ -359,8 +430,10 @@ def get_screen_activity_tool(
     Requires the Omi desktop app to be installed and running.
 
     Args:
-        start_date: Start of the range (ISO format with timezone, e.g. "2025-01-15T00:00:00+00:00")
-        end_date: End of the range (ISO format with timezone)
+        start_date: Optional start of the range, ISO 8601 (e.g. "2025-01-15T00:00:00-08:00"). Offsets are
+            converted; a time without an offset is in the user's timezone. Omit start_date and end_date to use
+            the attached chat timeframe, or the last 24 hours.
+        end_date: Optional end of the range, same format.
         app_filter: Optional app name to filter to a single application
 
     Returns:
@@ -373,12 +446,14 @@ def get_screen_activity_tool(
     uid = _get_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
+    clock = clock_for_config(config or _agent_config(), uid)
 
     try:
-        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    except ValueError:
-        return "Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM."
+        start_dt, end_dt = _chat_context_window(config, clock).resolve(
+            start_date, end_date, naive_tz=clock.tz, start_field='start_date', end_field='end_date'
+        )
+    except ToolTimeError as error:
+        return f"Error: {error}"
 
     try:
         summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
@@ -398,18 +473,25 @@ def get_screen_activity_tool(
     coverage = summary.get('coverage') or {}
     rows_truncated = coverage.get('truncated') is True
     result = (
-        f"Screen Activity Summary ({total} synced screen observations):\n"
+        f"Screen Activity Summary ({total} synced screen observations, {format_span(start_dt, end_dt, clock)}):\n"
         "Observations are sampled, not measured usage durations or proof of intent. "
         "Capture and sync completeness are unknown.\n"
     )
     if rows_truncated:
         result += (
-            f"Partial query: only the earliest {total} observations are summarized; later observations exist. "
-            "Narrow the date range to inspect the rest.\n"
+            truncation_note(
+                shown=total,
+                total=None,
+                cut=True,
+                unit="observations",
+                how_to_get_more="Only the earliest observations were summarized; narrow the date range to inspect the rest.",
+            )
+            + "\n"
         )
     if coverage.get('first_observed_at') and coverage.get('last_observed_at'):
         result += (
-            f"Summarized observations (UTC): {coverage['first_observed_at']} to {coverage['last_observed_at']}. "
+            f"Summarized observations: {format_instant(coverage['first_observed_at'], clock)} to "
+            f"{format_instant(coverage['last_observed_at'], clock)}. "
             "These bounds do not establish continuous activity or current capture status.\n"
         )
     result += "\n"
@@ -427,8 +509,17 @@ def get_screen_activity_tool(
     total_apps = len(sorted_apps)
     sorted_apps, apps_truncated = _cap_apps_for_llm(sorted_apps)
     if apps_truncated:
-        result += f"(showing {len(sorted_apps)} of {total_apps} apps, ranked by observation count)\n\n"
+        result += (
+            count_header(
+                "Apps by observation count",
+                shown=len(sorted_apps),
+                total=total_apps,
+                order="most observations first",
+            )
+            + "\n\n"
+        )
 
+    has_untrusted = False
     for app_name, data in sorted_apps:
         count = data['count']
         titles = data.get('window_titles', [])
@@ -437,11 +528,43 @@ def get_screen_activity_tool(
 
         result += f"**{app_name}** — {count} observations\n"
         if first and last:
-            result += f"  Observed (UTC): {first} to {last}\n"
+            result += f"  Observed: {format_instant(first, clock)} to {format_instant(last, clock)}\n"
         if titles:
-            result += f"  Sampled windows: {', '.join(titles[:5])}\n"
+            normalized_titles = [' '.join(title.split()).strip() for title in titles if isinstance(title, str)]
+            shown_titles = normalized_titles[:5]
+            if shown_titles:
+                has_untrusted = True
+                result += "  Sampled windows:\n"
+                for title in shown_titles:
+                    result += (
+                        "  " + untrusted_block("screen window title", title[:MAX_SCREEN_EVIDENCE_TITLE_CHARS]) + "\n"
+                    )
+                    if len(title) > MAX_SCREEN_EVIDENCE_TITLE_CHARS:
+                        result += (
+                            "  "
+                            + truncation_note(
+                                shown=MAX_SCREEN_EVIDENCE_TITLE_CHARS,
+                                total=len(title),
+                                unit="window-title characters",
+                                how_to_get_more="Ask about a specific window title for a narrower excerpt.",
+                            )
+                            + "\n"
+                        )
+                if len(normalized_titles) > len(shown_titles):
+                    result += (
+                        "  "
+                        + truncation_note(
+                            shown=len(shown_titles),
+                            total=len(normalized_titles),
+                            unit="window titles",
+                            how_to_get_more="Ask about a specific app to inspect its other sampled windows.",
+                        )
+                        + "\n"
+                    )
         result += "\n"
 
+    if has_untrusted:
+        result += "\n" + UNTRUSTED_LEGEND
     return _bounded_screen_activity_result(result.strip(), apps_truncated)
 
 
@@ -531,6 +654,13 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 def _screen_vectors_disabled(uid: str) -> bool:
     """Server-owned account opt-out; absent configuration preserves existing accounts."""
+    from config.ladder_v1 import enabled
+
+    if enabled('LADDER_V1_PRO_GATES_ENABLED'):
+        from utils import ladder_v1
+
+        if ladder_v1.feature_allowed(uid, 'screen_context') is False:
+            return True
     tokens = _parse_csv_tokens(os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS'))
     return uid in tokens or '*' in tokens
 
@@ -562,8 +692,9 @@ def search_screen_activity_tool(
 
     Args:
         query: Natural language description of what to search for in screen content
-        start_date: Optional start date filter (ISO format with timezone)
-        end_date: Optional end date filter (ISO format with timezone)
+        start_date: Optional start date filter, ISO 8601; offsets are converted and a time without an
+            offset is in the user's timezone
+        end_date: Optional end date filter, same format
         limit: Number of results to return (default 10, max 20)
 
     Returns:
@@ -577,19 +708,16 @@ def search_screen_activity_tool(
 
     limit = max(1, min(limit, 20))
 
-    # Parse optional date filters to unix timestamps
-    start_ts = None
-    end_ts = None
-    if start_date:
-        try:
-            start_ts = int(datetime.fromisoformat(start_date.replace('Z', '+00:00')).timestamp())
-        except ValueError:
-            pass
-    if end_date:
-        try:
-            end_ts = int(datetime.fromisoformat(end_date.replace('Z', '+00:00')).timestamp())
-        except ValueError:
-            pass
+    # Parse optional date filters to unix timestamps. An unreadable date is an error, never a
+    # silently unfiltered search.
+    clock = clock_for_config(config or _agent_config(), uid)
+    try:
+        start_dt = parse_tool_time(start_date, field='start_date', naive_tz=clock.tz)
+        end_dt = parse_tool_time(end_date, field='end_date', naive_tz=clock.tz)
+    except ToolTimeError as error:
+        return f"Error: {error}"
+    start_ts = int(start_dt.timestamp()) if start_dt else None
+    end_ts = int(end_dt.timestamp()) if end_dt else None
 
     fallback_enabled = _env_flag_enabled('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', default=True)
     reason = None
@@ -632,9 +760,17 @@ def search_screen_activity_tool(
     ts_by_id = {sid: m.get('timestamp', 0) for sid, m in zip(screenshot_ids, valid_matches)}
 
     docs_by_id = {m['screenshot_id']: m['keyword_doc'] for m in valid_matches if 'keyword_doc' in m}
-    display_tz = _resolve_display_tz(uid)
     evidence_references = _evidence_references(config)
-    result = f"Found {len(valid_matches)} screen activity matches for '{query}':\n\n"
+    result = (
+        count_header(
+            f"Screen activity matches for '{query}'",
+            shown=len(valid_matches),
+            order="screen search rank order",
+            more_may_exist=len(valid_matches) >= limit,
+        )
+        + "\n\n"
+    )
+    has_untrusted = False
 
     for sid in screenshot_ids:
         score = scores_by_id.get(sid, 0)
@@ -645,7 +781,7 @@ def search_screen_activity_tool(
             ts_str = 'Unknown'
         else:
             try:
-                ts_str = datetime.fromtimestamp(captured_at_ms / 1000, tz=display_tz).strftime('%Y-%m-%d %H:%M:%S')
+                ts_str = format_instant(captured_at_ms / 1000, clock)
             except (OverflowError, OSError, ValueError):
                 ts_str = 'Unknown'
 
@@ -653,11 +789,14 @@ def search_screen_activity_tool(
         ocr_text = ''
         ocr_preview = ''
         window_title = ''
+        raw_ocr: Any = None
+        raw_window_title: Any = None
+        ocr_lookup_failed = False
         try:
-            from database.read_boundary import parse_snapshot_or_none
-
             doc_data = docs_by_id.get(sid)
             if doc_data is None:
+                from database.read_boundary import parse_snapshot_or_none
+
                 doc = (
                     firestore_db.collection('users')
                     .document(uid)
@@ -668,19 +807,27 @@ def search_screen_activity_tool(
                 doc_data = parse_snapshot_or_none(dict, doc)
             if doc_data is not None:
                 raw_ocr = doc_data.get('ocrText')
+                raw_window_title = doc_data.get('windowTitle')
                 # Keep the legacy text result's 200-character behavior; the normalized, longer
                 # preview is only for the structured evidence reference.
                 ocr_text = raw_ocr[:200] if isinstance(raw_ocr, str) else ''
                 ocr_preview = _bounded_evidence_text(raw_ocr, MAX_SCREEN_EVIDENCE_SUMMARY_CHARS)
-                window_title = _bounded_evidence_text(doc_data.get('windowTitle'), MAX_SCREEN_EVIDENCE_TITLE_CHARS)
+                window_title = _bounded_evidence_text(raw_window_title, MAX_SCREEN_EVIDENCE_TITLE_CHARS)
         except Exception:
-            pass
+            ocr_lookup_failed = True
 
         result += (
             f"- **{ts_str}** | {app_name} (relevance: {score if score == 'keyword' else _bounded_relevance(score)})\n"
         )
-        if ocr_text:
-            result += f"  Text: {ocr_text[:200]}...\n"
+        untrusted_fields, match_has_untrusted = _format_screen_untrusted_fields(
+            ocr_text=ocr_text,
+            raw_ocr=raw_ocr,
+            window_title=window_title,
+            raw_window_title=raw_window_title,
+            lookup_failed=ocr_lookup_failed,
+        )
+        result += untrusted_fields
+        has_untrusted = has_untrusted or match_has_untrusted
         result += "\n"
 
         _append_screen_evidence_reference(
@@ -692,4 +839,14 @@ def search_screen_activity_tool(
             ocr_preview=ocr_preview,
         )
 
+    if has_untrusted:
+        result += "\n" + UNTRUSTED_LEGEND
+    if len(valid_matches) >= limit:
+        result += "\n" + truncation_note(
+            shown=len(valid_matches),
+            total=None,
+            cut=True,
+            unit="screen activity matches",
+            how_to_get_more="Narrow the date range or use a more specific query to inspect additional matches.",
+        )
     return result.strip()

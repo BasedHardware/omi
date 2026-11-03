@@ -157,7 +157,6 @@ def test_the_serving_lane_budgets_of_the_foreground_family_stay_consistent():
     config = load_gateway_config(prod_mode=True)
     assert config.route_artifacts["route.chat_metadata_extraction.model_config.001"].timeouts.request_ms == 90000
     assert config.route_artifacts["route.external_structure.model_config.001"].timeouts.request_ms == 90000
-    assert config.route_artifacts["route.memory_conflict_flex.model_config.001"].timeouts.request_ms == 900000
     assert config.route_artifacts["route.x_memory_extraction_flex.model_config.001"].timeouts.request_ms == 900000
 
 

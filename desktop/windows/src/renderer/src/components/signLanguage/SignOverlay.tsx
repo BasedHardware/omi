@@ -6,6 +6,37 @@ import type { TranslationResult, SignGloss } from '../../../../shared/types'
 
 const FALLBACK_POSE_HOLD_MS = 6000
 
+/**
+ * Mounts the overlay only while sign-language translation is enabled. The panel
+ * is fixed bottom-right above everything, so leaving it up while the feature is
+ * off covers controls underneath it (e.g. Home's "Connect" button).
+ */
+export function SignLanguageOverlayGate(): React.JSX.Element | null {
+  const [enabled, setEnabled] = useState(false)
+
+  useEffect(() => {
+    let changedLive = false
+    let cancelled = false
+    const unsubscribe = window.omi?.onSignLanguageEnabledChanged?.((next) => {
+      changedLive = true
+      setEnabled(next)
+    })
+    window.omi
+      ?.signLanguageGetEnabled?.()
+      .then((initial) => {
+        // A toggle that landed while this was in flight is newer; keep it.
+        if (!cancelled && !changedLive) setEnabled(initial)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [])
+
+  return enabled ? <SignLanguageOverlay /> : null
+}
+
 export function SignLanguageOverlay(): React.JSX.Element {
   const [currentGloss, setCurrentGloss] = useState<string>('IDLE')
   const [currentSWR, setCurrentSWR] = useState<string>('')

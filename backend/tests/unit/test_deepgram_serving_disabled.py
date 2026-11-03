@@ -1,9 +1,10 @@
-"""Regression coverage for Deepgram serving: hosted restored, guard rails kept.
+"""Regression coverage for Deepgram retirement (2026-08-27, no contract).
 
-The rails the removal introduced still hold and are asserted here: batch never
-silently gains a paid provider, a runtime without credentials skips Deepgram
-instead of failing mid-session, and a deployment that declares self-hosting can
-never fall back to the hosted API.
+The rails asserted here: no surface admits Deepgram — not a dg-* slot in the
+chain, not a self-hosted flag, not a BYOK key — batch never silently gains a
+paid provider, a runtime without credentials degrades to Velma instead of
+failing mid-session, and the endpoint guards stay for anyone reviving the
+self-hosted client.
 """
 
 import pytest
@@ -19,17 +20,18 @@ from config.stt_provider_policy import (
 )
 
 
-def test_streaming_selects_hosted_deepgram_when_configured(monkeypatch):
-    monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3'])
+def test_streaming_never_selects_retired_hosted_deepgram_when_configured(monkeypatch):
+    """A chain that still lists dg-nova-3 with a live client must degrade, not route."""
+    monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', object())
     monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
 
     service, language, model = streaming.get_stt_service_for_language('en', multi_lang_enabled=False)
 
-    assert service == streaming.STTService.deepgram
+    assert service == streaming.STTService.modulate
     assert language == 'en'
-    assert model == 'nova-3'
+    assert model == 'velma-2'
 
 
 def test_streaming_skips_deepgram_when_no_client_is_configured(monkeypatch):
@@ -72,21 +74,21 @@ def test_prerecorded_still_ignores_a_deepgram_model_configuration(monkeypatch):
     assert model == 'velma-2'
 
 
-def test_streaming_can_select_explicit_self_hosted_deepgram(monkeypatch):
-    monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3'])
+def test_streaming_never_selects_retired_self_hosted_deepgram(monkeypatch):
+    """Retirement covers the self-hosted deployment: the flag alone routes nothing."""
+    monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', True)
     monkeypatch.setattr(streaming, 'deepgram', object())
     monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
 
-    service, language, model = streaming.get_stt_service_for_language('en')
+    service, _, model = streaming.get_stt_service_for_language('en')
 
-    assert service == streaming.STTService.deepgram
-    assert language == 'multi'
-    assert model == 'nova-3'
+    assert service == streaming.STTService.modulate
+    assert model == 'velma-2'
 
 
-def test_byok_keeps_deepgram_selectable_without_an_account_key(monkeypatch):
-    """A BYOK user brings their own credential, so a keyless runtime still serves them."""
+def test_byok_does_not_reactivate_retired_deepgram(monkeypatch):
+    """Retirement outranks BYOK: a user key never re-admits a retired provider."""
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', None)
@@ -95,9 +97,8 @@ def test_byok_keeps_deepgram_selectable_without_an_account_key(monkeypatch):
 
     service, _, model = streaming.get_stt_service_for_language('en', multi_lang_enabled=False)
 
-    assert service == streaming.STTService.deepgram
-    assert model == 'nova-3'
-    assert streaming._deepgram_client_for_request() is not None
+    assert service == streaming.STTService.modulate
+    assert model == 'velma-2'
 
 
 def test_managed_client_is_not_built_at_import(monkeypatch):
@@ -131,9 +132,9 @@ def test_self_hosted_endpoint_must_be_set_when_self_hosting_is_declared():
         streaming._require_self_hosted_deepgram_endpoint('')
 
 
-def test_policy_keeps_hosted_and_self_hosted_deepgram_distinct():
-    assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
-    assert provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
+def test_policy_retires_both_deepgram_deployments_on_every_surface():
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
+    assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)

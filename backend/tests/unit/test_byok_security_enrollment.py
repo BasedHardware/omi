@@ -179,6 +179,8 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
 
+        monkeypatch.setattr(users.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
+
         response = users.get_user_subscription_endpoint(
             request=Request({'type': 'http', 'headers': []}), uid='validated-byok-user'
         )
@@ -243,7 +245,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(enforcement, 'get_byok_key', lambda _provider: None)
         monkeypatch.setattr(enforcement, 'is_marketplace_reviewer', lambda _uid: False)
         monkeypatch.setattr(enforcement, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
-        monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid: paid)
+        monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid, **kwargs: paid)
         monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {'transcription_seconds': used})
         monkeypatch.setattr(users, 'resolve_transcription_allowance', enforcement.resolve_transcription_allowance)
         # A divergent free-tier overlay must not replace the actual paid budget.

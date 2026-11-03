@@ -136,6 +136,27 @@ def test_missing_evidence_is_returned_and_successful_resubmission_is_counted_wit
     assert store.rows == before and not store.transactions
 
 
+def test_same_turn_resubmission_resolves_rejected_call_before_finish(store, monkeypatch):
+    active = session(store, monkeypatch)
+    edit = {'kind': 'dismiss_person', 'target': 'people/junk', 'reason': 'Synthetic junk detection'}
+
+    async def model(mount, messages):
+        return turn(
+            [
+                call('propose_edit', {'edit': edit}),
+                call('propose_edit', {'edit': {**edit, 'evidence': ['conversations/one']}}, 2),
+                call('finish', {'summary': 'Staged one synthetic correction.'}, 3),
+            ]
+        )
+
+    result = asyncio.run(active.run(model, deadline_seconds=5))
+
+    assert result.reason == 'finished'
+    assert len(active.staged) == 1
+    assert active.counters['resubmits_succeeded'] == 1
+    assert active.rejections['schema'] == 1
+
+
 def test_empty_backlog_can_search_read_and_stage_hunt_work(store, monkeypatch):
     active = session(store, monkeypatch, seed_records=False)
     step = 0
@@ -213,9 +234,9 @@ def test_malformed_tool_payloads_and_unknown_tools_do_not_abort_the_session(stor
     assert active.rejections['agent_unknown_tool'] == 1 and not active.staged
 
 
-def test_all_profiles_bound_light_users_and_leave_verifier_headroom():
-    light, heavy = SessionLimits.for_size(3), SessionLimits.for_size(1000)
+def test_all_profiles_bound_light_users_without_a_static_verifier_hold():
+    light, medium, heavy = SessionLimits.for_size(3), SessionLimits.for_size(20), SessionLimits.for_size(1000)
     assert light.turns == heavy.turns == 64 and light.read_bytes < heavy.read_bytes
-    assert light.tokens < heavy.tokens
-    assert light.verification_tokens > 0 and heavy.verification_tokens < heavy.tokens
+    assert light.tokens == 375000 and medium.tokens == 625000 and heavy.tokens == 1000000
+    assert light.verification_tokens == medium.verification_tokens == heavy.verification_tokens == 0
     assert SessionLimits.for_size(3, token_ceiling=32000).tokens == 32000

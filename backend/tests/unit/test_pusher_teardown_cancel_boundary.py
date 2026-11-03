@@ -544,6 +544,9 @@ class TestWindDownDataPreservation:
     @pytest.mark.asyncio
     async def test_winddown_uploads_queued_private_cloud_audio(self, runtime, monkeypatch):
         gate = _set_gate(monkeypatch)
+        # Main's durable-audio custody lane postdates this test; pin the legacy
+        # private-cloud-sync path it was written for.
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         # A real (short) window: the workers must land the data while the
         # session is still winding down — the production contract (25s window,
         # workers flush on their timers inside it).
@@ -621,6 +624,8 @@ class TestWindDownDataPreservation:
         # retry_at wait: a failed upload retries immediately so the bounded
         # drain is spent landing data, not sleeping.
         gate = _set_gate(monkeypatch)
+        # Main's durable-audio custody lane postdates this test.
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         monkeypatch.setattr(pusher, 'PUSHER_DRAIN_WIND_DOWN_SECONDS', 0.5)
         monkeypatch.setattr(pusher, 'run_blocking', self._passthrough_blocking())
         monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
@@ -724,6 +729,8 @@ class TestWindDownDataPreservation:
         # chunk through the switch boundary; that queued chunk must land in
         # GCS during the wind-down window like any other queued data.
         gate = _set_gate(monkeypatch)
+        # Main's durable-audio custody lane postdates this test.
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         monkeypatch.setattr(pusher, 'PUSHER_DRAIN_WIND_DOWN_SECONDS', 0.5)
         monkeypatch.setattr(pusher, 'run_blocking', self._passthrough_blocking())
         monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)

@@ -51,6 +51,12 @@ from utils.stt import (
     streaming as st,
 )
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, CHAIN_EXHAUSTED_SKIPPED
+
+def _labeled_value(counter):
+    """Read one series of a cohort-labeled counter (main's demand_cohort label)."""
+    from utils.observability.demand_cohort import demand_cohort
+    return counter.labels(demand_cohort=demand_cohort())._value.get()
+
 from tests.unit.test_parakeet_window_live import runtime  # noqa: F401 -- pytest fixture re-export
 
 
@@ -145,7 +151,7 @@ async def test_full_window_with_circuit_skipped_fallbacks_parks_the_fresh_sessio
     window = AsyncMock(side_effect=AssertionError('a full slot must not dial the window'))
     modulate = AsyncMock(side_effect=AssertionError('an open circuit must not be dialled'))
     soniox = AsyncMock(side_effect=AssertionError('an open circuit must not be dialled'))
-    exhausted_before = CHAIN_EXHAUSTED._value.get()
+    exhausted_before = _labeled_value(CHAIN_EXHAUSTED)
     skipped_before = CHAIN_EXHAUSTED_SKIPPED._value.get()
     try:
         with pytest.raises(live_chain.ProviderChainUnavailable) as raised:
@@ -166,7 +172,7 @@ async def test_full_window_with_circuit_skipped_fallbacks_parks_the_fresh_sessio
     soniox.assert_not_awaited()
     assert not episode.attempted_targets
     assert not episode.exhausted
-    assert CHAIN_EXHAUSTED._value.get() == exhausted_before
+    assert _labeled_value(CHAIN_EXHAUSTED) == exhausted_before
     assert CHAIN_EXHAUSTED_SKIPPED._value.get() - skipped_before == 1
 
 
@@ -532,7 +538,7 @@ async def test_terminal_episode_park_does_not_fire_and_metric_stays_split(monkey
     episode.state = recovery_state.RecoveryState.exhausted
     token = recovery_state.current_recovery.set(episode)
     skipped_before = CHAIN_EXHAUSTED_SKIPPED._value.get()
-    exhausted_before = _ce._value.get()
+    exhausted_before = _labeled_value(_ce)
     try:
         with pytest.raises(live_chain.LiveChainExhausted):
             await live_chain.connect_configured_chain(
@@ -547,7 +553,7 @@ async def test_terminal_episode_park_does_not_fire_and_metric_stays_split(monkey
     finally:
         recovery_state.current_recovery.reset(token)
     assert CHAIN_EXHAUSTED_SKIPPED._value.get() == skipped_before
-    assert _ce._value.get() - exhausted_before == 1
+    assert _labeled_value(_ce) - exhausted_before == 1
 
 
 @pytest.mark.asyncio
@@ -968,7 +974,7 @@ async def test_earned_exhaustion_leaves_skipped_counter_untouched():
     episode = _episode()
     token = recovery_state.current_recovery.set(episode)
     skipped_before = CHAIN_EXHAUSTED_SKIPPED._value.get()
-    exhausted_before = CHAIN_EXHAUSTED._value.get()
+    exhausted_before = _labeled_value(CHAIN_EXHAUSTED)
     try:
         with pytest.raises(live_chain.LiveChainExhausted):
             await live_chain.connect_configured_chain(
@@ -981,7 +987,7 @@ async def test_earned_exhaustion_leaves_skipped_counter_untouched():
             )
     finally:
         recovery_state.current_recovery.reset(token)
-    assert CHAIN_EXHAUSTED._value.get() - exhausted_before == 1
+    assert _labeled_value(CHAIN_EXHAUSTED) - exhausted_before == 1
     assert CHAIN_EXHAUSTED_SKIPPED._value.get() == skipped_before
 
 

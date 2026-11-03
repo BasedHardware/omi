@@ -12,7 +12,6 @@ RUNTIME_DOCKERFILES = (
     ROOT / "backend" / "pusher" / "Dockerfile",
     ROOT / "backend" / "modal" / "Dockerfile",
     ROOT / "backend" / "modal" / "Dockerfile.notifications_job",
-    ROOT / "backend" / "modal" / "Dockerfile.memory_maintenance_job",
     ROOT / "backend" / "diarizer" / "Dockerfile",
     ROOT / "backend" / "nllb_translation" / "Dockerfile",
     ROOT / "plugins" / "Dockerfile",

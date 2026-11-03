@@ -248,7 +248,12 @@ prometheus:
           - source_labels: [__meta_kubernetes_service_name]
             regex: "(.*)-prometheus-stackdriver-exporter"
             action: keep
-      # Exporter namespace allowlist includes notifications-job (GMP cluster=__run__).
+      # Two exporter releases feed this one job (GMP cluster=__run__):
+      # dev-omi-cloud-run-metrics-exporter imports every omi_* family from the
+      # non-sync Cloud Run services; dev-omi-cloud-run-sync-metrics-exporter
+      # imports only the consumed families from the sync services. Keeping one job
+      # name keeps every job="cloud-run-application-metrics" query, min(up) and
+      # max(stackdriver_monitoring_last_scrape_error) covering both.
       - job_name: cloud-run-application-metrics
         # A prod scrape is ~28MB and takes 6-10s because the exporter queries
         # Cloud Monitoring inline. The default 10s scrape_timeout cut every
@@ -265,7 +270,7 @@ prometheus:
               - "dev-omi-monitoring"
         relabel_configs:
           - source_labels: [__meta_kubernetes_service_name]
-            regex: "dev-omi-cloud-run-metrics-exporter"
+            regex: "dev-omi-cloud-run-(sync-)?metrics-exporter"
             action: keep
         metric_relabel_configs:
           # The Stackdriver exporter mangles every imported name into

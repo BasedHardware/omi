@@ -48,7 +48,9 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     Callback from Notion Oauth.
     """
 
-    uid = state
+    uid = get_notion().uid_from_state(state)
+    if not uid:
+        raise HTTPException(status_code=400, detail='Invalid OAuth state')
 
     # Get access token
     oauth_ok = get_notion().get_access_token(code)

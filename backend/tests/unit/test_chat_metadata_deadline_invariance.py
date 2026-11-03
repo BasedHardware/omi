@@ -399,7 +399,7 @@ def test_metadata_extraction_cache_binding_contract_holds_on_the_new_feature(mon
 
     monkeypatch.setattr(llm_chat, "get_llm", _get_llm)
     monkeypatch.setattr(llm_chat, "track_usage", lambda *a, **k: nullcontext())
-    monkeypatch.setattr(llm_chat, "add_filter_category_item", lambda *a, **k: None)
+    monkeypatch.setattr(llm_chat, "add_filter_category_item", lambda *a, **k: None, raising=False)
     monkeypatch.setattr(real_prompt_cache, "gpt56_explicit_cache_enabled", lambda: True)
     monkeypatch.setattr(real_prompt_cache, "_byok_request", lambda: False)
     monkeypatch.setattr(gateway_client, "should_route_features_through_gateway", lambda: True)

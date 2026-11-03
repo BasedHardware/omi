@@ -243,6 +243,34 @@ def _fake_redis(monkeypatch):
     return fake
 
 
+def test_first_party_chatgpt_narrow_scope_request_is_widened_to_read_floor():
+    """ChatGPT's directory flow requests only `memories.read`; the hosted
+    registry and the Connect-an-Agent screens expect the standard read set, so
+    normalization widens first-party ChatGPT requests to the read floor (and
+    re-consent can then upgrade legacy narrow grants via scope union)."""
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+    assert mcp_oauth.normalize_scopes('memories.read', client) == sorted(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR)
+    # Even a request that already names two floor scopes comes back complete.
+    assert mcp_oauth.normalize_scopes('memories.read conversations.read', client) == sorted(
+        mcp_oauth.CHATGPT_READ_SCOPE_FLOOR
+    )
+    # Write scopes are never implied by the floor: a narrow read-only request
+    # widens to read scopes only, never adds memories.write on its own.
+    assert 'memories.write' not in mcp_oauth.normalize_scopes('memories.read', client)
+    # Third-party and public clients are untouched: what they ask for is what
+    # they get.
+    public = mcp_oauth.get_client('omi-mcp-public')
+    assert mcp_oauth.normalize_scopes('memories.read', public) == ['memories.read']
+    assert mcp_oauth.normalize_scopes(None, public) == sorted(
+        item for item in public['allowed_scopes'] if item.endswith('.read')
+    )
+    third_party = {
+        'id': 'https://cursor.com/oauth/mcp-client.json',
+        'allowed_scopes': ['memories.read', 'conversations.read'],
+    }
+    assert mcp_oauth.normalize_scopes('memories.read', third_party) == ['memories.read']
+
+
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     client = mcp_oauth.get_client('omi-chatgpt-prod')
     assert client['token_endpoint_auth_method'] == 'none'
@@ -284,7 +312,10 @@ def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
 
     auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
     assert auth_context['uid'] == 'user-1'
-    assert auth_context['scopes'] == ['conversations.read', 'memories.read']
+    # First-party ChatGPT clients get the read-scope floor widened onto any
+    # narrow explicit request, so a memories.read+conversations.read request
+    # yields the whole floor (see test_first_party_chatgpt_narrow_scope_request_is_widened_to_read_floor).
+    assert auth_context['scopes'] == sorted(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR)
 
 
 def test_consent_transaction_creates_grant_and_code_together():

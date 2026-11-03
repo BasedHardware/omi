@@ -25,6 +25,16 @@ ENV = {
 
 
 def flag(key: str, role: str = "enable", row: str = "expected", **overrides: object) -> dict[str, object]:
+    lifecycle = overrides.get("lifecycle", "rollout")
+    decision = overrides.get("decision", "pending")
+    terminal = overrides.get(
+        "terminal",
+        (
+            "keep"
+            if lifecycle in {"ops_kill", "config_switch"}
+            else {"graduate": "on", "ship": "on", "kill": "off", "keep": "keep"}.get(decision, "undecided")
+        ),
+    )
     entry: dict[str, object] = {
         "key": key,
         "aliases": [],
@@ -33,10 +43,11 @@ def flag(key: str, role: str = "enable", row: str = "expected", **overrides: obj
         "surfaces": ["backend"],
         "summary": "Fixture gate",
         "fail": "closed",
-        "owner": "unowned",
+        "owner": "tester",
         "created": "2026-08-01",
         "review_by": "2026-10-15",
         "decision": "pending",
+        "terminal": terminal,
         "posthog": {"row": row, "role": role},
     }
     entry.update(overrides)
@@ -45,7 +56,9 @@ def flag(key: str, role: str = "enable", row: str = "expected", **overrides: obj
     return entry
 
 
-def registry(flags: list[dict[str, object]], retired: list[dict[str, object]] | None = None) -> dict[str, list[dict[str, object]]]:
+def registry(
+    flags: list[dict[str, object]], retired: list[dict[str, object]] | None = None
+) -> dict[str, list[dict[str, object]]]:
     return {"flags": flags, "ignore": [], "retired": retired or []}
 
 

@@ -65,6 +65,12 @@ class _FakeDocumentReference:
     def update(self, payload: Dict[str, Any]) -> None:
         self._client.writes.append(('update', payload))
 
+    @property
+    def parent(self) -> '_FakeCollectionReference':
+        # Main's people-generation bump walks person_ref.parent.parent to the
+        # user doc for the generation counter; serve it from the same fake.
+        return _FakeCollectionReference(self._client)
+
     def set(self, payload: Dict[str, Any], merge: bool = False) -> None:
         self._client.writes.append(('set', payload))
 
@@ -78,6 +84,10 @@ class _FakeCollectionReference:
 
     def collection(self, _collection_id: str) -> '_FakeCollectionReference':
         return self
+
+    @property
+    def parent(self) -> '_FakeDocumentReference':
+        return self._client.doc_ref
 
 
 class _FakeTransaction:
@@ -102,10 +112,16 @@ class _FakeTransaction:
         self.rolled_back = True
 
     def set(self, _doc_ref: Any, payload: Dict[str, Any], merge: bool = False) -> None:
-        self.payload = payload
+        if self.payload is None:
+            self.payload = dict(payload)
+        else:
+            self.payload.update(payload)  # same-document atomic batch (people-generation bump rides the domain write)
 
     def update(self, _doc_ref: Any, payload: Dict[str, Any]) -> None:
-        self.payload = payload
+        if self.payload is None:
+            self.payload = dict(payload)
+        else:
+            self.payload.update(payload)
 
     def get(self, doc_ref: Any) -> '_FakeSnapshot':
         return doc_ref.get()

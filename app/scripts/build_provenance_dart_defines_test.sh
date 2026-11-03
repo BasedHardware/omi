@@ -154,6 +154,39 @@ fi
 grep -F "does not match checked-out HEAD" "$err" >/dev/null \
   || fail "mismatched source identity did not fail loudly"
 
+# checkout_release_source_pin.sh detached HEAD to the pin after main moved:
+# CM_COMMIT is the cloned tip, recorded as OMI_RELEASE_PIN_CLONED_TIP.
+git -C "$repo" commit -q --allow-empty -m tip
+tip_sha="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" checkout -q --detach "$head_sha"
+(
+  cd "$repo"
+  run_script CM_COMMIT="$tip_sha" OMI_RELEASE_SOURCE_SHA="$head_sha" OMI_RELEASE_PIN_CLONED_TIP="$tip_sha" >"$out"
+)
+parse_defines "$out"
+[[ "$sha" == "$head_sha" ]] || fail "pinned checkout SHA: got $sha"
+# Without the recorded tip, or with a pin that is not HEAD, the mismatch still fails.
+for case_env in "OMI_RELEASE_SOURCE_SHA=$head_sha" \
+  "OMI_RELEASE_PIN_CLONED_TIP=$tip_sha"; do
+  if (
+    cd "$repo"
+    run_script CM_COMMIT="$tip_sha" "$case_env" >"$out" 2>"$err"
+  ); then
+    fail "accepted CM_COMMIT mismatch with only $case_env"
+  fi
+  grep -F "CM_COMMIT does not match checked-out HEAD" "$err" >/dev/null \
+    || fail "CM_COMMIT mismatch with only $case_env did not fail loudly"
+done
+# A recorded tip that HEAD is not an ancestor of fails too.
+git -C "$repo" checkout -q --detach "$tip_sha"
+if (
+  cd "$repo"
+  run_script CM_COMMIT="$head_sha" OMI_RELEASE_SOURCE_SHA="$tip_sha" OMI_RELEASE_PIN_CLONED_TIP="$head_sha" >"$out" 2>"$err"
+); then
+  fail "accepted a pin that is not an ancestor of CM_COMMIT"
+fi
+git -C "$repo" checkout -q --detach "$head_sha"
+
 # Whitespace in BUILD_NUMBER fails the build
 if (
   cd "$repo"

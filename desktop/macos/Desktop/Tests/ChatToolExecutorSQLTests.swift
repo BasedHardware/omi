@@ -310,6 +310,29 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     XCTAssertTrue(result.contains("call get_work_context"))
   }
 
+  func testExecuteSQLQueryFailureReturnsErrorPrefixedResult() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-query-failure-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (appName TEXT)")
+    }
+
+    // The local agent API calls execute_sql with read_only; SQLite rejects the unknown column.
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT windowTitle FROM screenshots", "read_only": true],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    // The local agent API reports a tool failure only for an "Error:" result; any other text is
+    // returned to its clients as a successful (HTTP 200, ok: true) result.
+    XCTAssertTrue(result.hasPrefix("Error: "), result)
+  }
+
   func testExecuteSQLRendersStoredGRDBDateInPinnedLocalTimeWithZoneLabel() async throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("execute-sql-datetime-localization-\(UUID().uuidString)", isDirectory: true)

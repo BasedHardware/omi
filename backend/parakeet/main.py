@@ -28,6 +28,7 @@ from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
 # Importing utils.logging_config in the NeMo process hits NeMo's utils package.
 from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
 from transcribe import (
+    detect_language_from_text,
     transcribe_file,
     transcribe_file_v2,
     set_gpu_worker,
@@ -36,6 +37,8 @@ from transcribe import (
 )
 from stream_handler import StreamSession, warmup_rnnt_decoder
 from admission import StreamAdmissionController
+from bounded_audio import submit_audio
+import language_gate
 
 # INFO/DEBUG to stdout, WARNING+ to stderr. Also quiets httpx/httpcore.
 # The internal HTTP LB already logs every request (successes sampled, errors in
@@ -54,6 +57,13 @@ ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket c
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
 PENDING_REQUESTS = Gauge('parakeet_batch_pending_requests', 'Pending requests in batch engine queue')
 LANE_PENDING = Gauge('parakeet_batch_lane_pending_requests', 'Pending batch requests by lane', ['lane'])
+LANE_OLDEST = Gauge('parakeet_batch_lane_oldest_pending_seconds', 'Age of oldest queued GPU quantum', ['lane'])
+SERVICE_RTF = Histogram(
+    'parakeet_service_seconds_per_audio_second',
+    'GPU batch service seconds / summed audio seconds; excludes upload, queue, diarization',
+    ['lane'],
+    buckets=(0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1),
+)
 LANE_QUEUE_WAIT = Histogram(
     'parakeet_batch_lane_queue_wait_seconds',
     'Time waiting before GPU batch assembly by lane',
@@ -105,13 +115,59 @@ PRERECORDED_REQUESTS = Counter(
     'parakeet_prerecorded_requests_total', 'Pre-recorded requests excluding live windowed TDT', ['status']
 )
 
+LID_REQUESTS = Counter('parakeet_language_id_requests_total', 'Language gate requests', ['status'])
+LID_ROUTES = Counter('parakeet_language_id_routes_total', 'Language gate verdicts', ['route', 'bucket'])
+LID_DURATION = Histogram(
+    'parakeet_language_id_duration_seconds', 'Language gate wall time including GPU queue', buckets=_ASR_BUCKETS
+)
+OUTPUT_LANGUAGE = Counter(
+    'parakeet_output_language_total',
+    'Text language of /v2 transcripts with at least 24 letters; non-P25 output is the wrong-language alarm',
+    ['bucket'],
+)
+_LID_MAX_INFLIGHT = 16
+# Callers send at most 30 s; anything far larger is a misuse and must not be decoded into RAM.
+_LID_MAX_UPLOAD_BYTES = 16 * 1024 * 1024
+_lid_inflight = 0
+_OUTPUT_ALARM_MIN_LETTERS = 24
+_LANGUAGE_BUCKETS = frozenset({'en', 'ja', 'zh', 'ko', 'vi', 'hi', 'ar', 'th'})
+
+
+def language_bucket(code: str) -> str:
+    """Closed label set: en, other_p25, the paid languages seen in prod, or other."""
+    code = (code or '').split('-')[0].lower()
+    if code in _LANGUAGE_BUCKETS:
+        return code
+    return 'other_p25' if code in language_gate.PARAKEET_LANGUAGES else 'other'
+
+
+def _record_output_language(result: Dict[str, Any]) -> None:
+    text = result.get('text') or ''
+    if sum(ch.isalpha() for ch in text) < _OUTPUT_ALARM_MIN_LETTERS:
+        return
+    detected = result.get('detected_language')
+    if detected is None:
+        # /v1 (voice messages, undiarized prerecorded) carries no language field.
+        detected = detect_language_from_text(text)
+    OUTPUT_LANGUAGE.labels(bucket=language_bucket(str(detected or ''))).inc()
+
+
+def _record_output_language_quietly(result: Dict[str, Any]) -> None:
+    try:
+        _record_output_language(result)
+    except Exception:
+        pass
+
+
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
 stream_admission: Optional[StreamAdmissionController] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
+_lid_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="language-id")
 _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+_packing_enabled = os.getenv('PARAKEET_PACKING_ENABLED', 'false').lower() == 'true'
 _LIVE_QUEUE_BUDGET_CAP_SECONDS = 8.0
 _TIMEOUT_HEADER = "X-Omi-STT-Timeout-Seconds"
 
@@ -177,8 +233,16 @@ async def lifespan(app: FastAPI):
             vram_bytes_per_t2=float(os.getenv("PARAKEET_VRAM_BYTES_PER_T2", "136.6")),
             starvation_timeout_sec=float(os.getenv("PARAKEET_STARVATION_TIMEOUT", "5.0")),
             max_inflight=int(os.getenv("PARAKEET_MAX_INFLIGHT", "2")),
+            packing=_packing_enabled,
+            on_service_time=lambda lane, seconds, audio: (
+                SERVICE_RTF.labels(lane=lane).observe(seconds / audio) if audio > 0 else None
+            ),
         )
         await batch_engine.start()
+        # Scrapes must refresh gauges even when nobody polls /batch/metrics.
+        # The snapshot is produced on the owning event loop, never on the
+        # prometheus ASGI worker thread (which must not mutate asyncio futures).
+        app.state.pressure_task = asyncio.create_task(_refresh_pressure_metrics())
         logger.info("Server started, GPU model loading in background...")
     else:
         logger.info("Parakeet ASR server ready (NIM mode)")
@@ -188,6 +252,12 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down...")
     if batch_engine:
+        app.state.pressure_task.cancel()
+        try:
+            await app.state.pressure_task
+        except asyncio.CancelledError:
+            pass
+    if batch_engine:
         await batch_engine.stop()
     if gpu_worker:
         gpu_worker.stop()
@@ -195,6 +265,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/metrics", cast(Any, make_asgi_app()))
+
+
+async def _refresh_pressure_metrics() -> None:
+    while True:
+        if batch_engine is not None:
+            snapshot = batch_engine.pressure_snapshot()
+            PENDING_REQUESTS.set(snapshot['pending_requests'])
+            for lane in ('live', 'backfill'):
+                LANE_PENDING.labels(lane=lane).set(snapshot[f'{lane}_pending_requests'])
+                LANE_OLDEST.labels(lane=lane).set(snapshot[f'{lane}_oldest_pending_seconds'])
+        await asyncio.sleep(0.1)
 
 
 def _write_file(path: str, data: bytes) -> None:
@@ -211,7 +292,8 @@ def _remove_file(path: str) -> None:
 
 @app.post("/v1/transcribe", response_model=None)
 async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
-    lane = 'live' if request.headers.get('X-Omi-STT-Surface') == 'live-window' else 'backfill'
+    surface = request.headers.get('X-Omi-STT-Surface')
+    lane = 'live' if surface == 'live-window' or (_packing_enabled and surface == 'live-stream') else 'backfill'
     prerecorded = lane == 'backfill'
     request_start = time.monotonic()
     if gpu_worker is not None and not gpu_worker.is_ready:
@@ -271,8 +353,20 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
 
         if batch_engine is not None:
             submit_called = True
-            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True, lane=lane, queue_deadline=queue_deadline))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
-            return JSONResponse(content=_transcribe_from_gpu_result(result))
+            result = await submit_audio(
+                batch_engine,
+                file_path,
+                _io_pool,
+                packing=_packing_enabled,
+                owns_file=True,
+                lane=lane,
+                queue_deadline=queue_deadline,
+            )
+            body = _transcribe_from_gpu_result(result)
+            if prerecorded:
+                # langdetect is CPU work; keep it off the event loop and off the response path.
+                _io_pool.submit(_record_output_language_quietly, body)
+            return JSONResponse(content=body)
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
             return result
@@ -369,7 +463,7 @@ async def transcribe_v2(
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            gpu_result = await submit_audio(batch_engine, file_path, _io_pool, packing=_packing_enabled)
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             result = cast(
                 Dict[str, Any],
@@ -391,6 +485,7 @@ async def transcribe_v2(
                     cast(Any, functools.partial(transcribe_file_v2, file_path, diarize=diarize, **speaker_bounds)),
                 ),
             )
+        _record_output_language_quietly(result)
         return result
     except QueueFullError:
         status = "error"
@@ -410,6 +505,58 @@ async def transcribe_v2(
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
         await loop.run_in_executor(_io_pool, _remove_file, file_path)
+
+
+def _decode_for_language(data: bytes) -> Any:
+    samples, sample_rate = cast(Any, sf.read(_io.BytesIO(data), dtype='float32', always_2d=False))  # type: ignore[reportUnknownMemberType]  # soundfile partially typed
+    return language_gate.to_mono_16k(samples, int(sample_rate))
+
+
+@app.post("/v2/language", response_model=None)
+async def language_v2(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+    """Spoken-language gate: does this audio belong on Parakeet-25? Never decodes text."""
+    global _lid_inflight
+    model = gpu_worker.language_id_model if gpu_worker is not None else None
+    if gpu_worker is None or not gpu_worker.is_ready or model is None:
+        LID_REQUESTS.labels(status='unavailable').inc()
+        return JSONResponse(
+            status_code=503, content={"detail": "Language gate unavailable", "error": "lid_unavailable"}
+        )
+    if _lid_inflight >= _LID_MAX_INFLIGHT:
+        LID_REQUESTS.labels(status='busy').inc()
+        return JSONResponse(status_code=503, content={"detail": "Language gate busy", "error": "lid_busy"})
+    _lid_inflight += 1
+    t0 = time.monotonic()
+    status = 'error'
+    loop = asyncio.get_running_loop()
+    try:
+        data = await file.read()
+        if len(data) > _LID_MAX_UPLOAD_BYTES:
+            status = 'too_large'
+            return JSONResponse(status_code=413, content={"detail": "Probe too large", "error": "too_large"})
+        try:
+            samples = await loop.run_in_executor(_io_pool, _decode_for_language, data)
+        except Exception:
+            status = 'bad_audio'
+            return JSONResponse(status_code=422, content={"detail": "Unreadable audio", "error": "bad_audio"})
+        del data
+        seconds = len(samples) / language_gate.SAMPLE_RATE
+        if seconds < language_gate.MIN_SECONDS:
+            verdict = language_gate.decide({}, seconds, model)
+        else:
+            probabilities = await loop.run_in_executor(_lid_pool, gpu_worker.submit_language_sync, samples)
+            verdict = language_gate.decide(probabilities, seconds, model)
+        status = 'success'
+        LID_ROUTES.labels(route=verdict.route, bucket=language_bucket(verdict.language)).inc()
+        return verdict.as_dict()
+    except Exception as e:
+        # Callers treat any non-200 as "gate unavailable" and keep their vendor path.
+        logger.error("Language gate request failed (exception_type=%s)", type(e).__name__)
+        return JSONResponse(status_code=503, content={"detail": "Language gate failed", "error": "lid_error"})
+    finally:
+        _lid_inflight -= 1
+        LID_DURATION.observe(time.monotonic() - t0)
+        LID_REQUESTS.labels(status=status).inc()
 
 
 _WS_RECEIVE_TIMEOUT = 30.0

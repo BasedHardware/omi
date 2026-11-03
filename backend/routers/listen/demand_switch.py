@@ -8,12 +8,15 @@ Policy handovers do not consume transport-failure episode allowances.
 import asyncio
 
 from config.live_demand import resolve_live_demand
+from config.live_stt_replay import replay_prefix_margin_seconds
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
 from utils.stt.live_failure import PendingLiveFailover, live_stt_socket_is_dead, live_stt_terminal_reason
 from utils.stt.recovery_state import LiveRecoveryController, RecoveryState, current_recovery
 from utils.stt.replay_delivery import abort_replay_socket, socket_replay_limits
 from utils.stt import replay_delivery
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.stt.provider_stream_end import US_FAILOVER, note_stream_close_intent
 from utils.stt.socket import release_live_stt_socket
 
 
@@ -84,6 +87,8 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         # Demand may change during the dial; do not install a cheap candidate
         # after a visible report or rollback.
         try:
+            if lane == 'parakeet':
+                await warm_rollout_cohorts(host.request.uid)
             if lane == 'parakeet' and (
                 not demand.window_permitted
                 or demand.policy.state != 'hidden'
@@ -117,6 +122,10 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         replay = ring.snapshot() if ring is not None else ()
         replay_seconds = sum(len(data) for _, data in replay) / (2 * host.request.sample_rate)
         prefix_budget = min(replay_delivery.REPLAY_PREFIX_SECONDS, candidate_recovery.remaining() or 0)
+        # A handover replays the whole unanswered ring uncut, so the same
+        # margin the failure path holds back from its snapshot bounds what a
+        # healthy source may hand over; past it, keep serving rather than cut.
+        prefix_budget = max(0.0, prefix_budget - replay_prefix_margin_seconds())
         if replay_seconds > prefix_budget * limits.rate:
             raw.retire_for_replay()
             await abort_replay_socket(raw)
@@ -141,6 +150,7 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         if ring is not None:
             receiver._window_replay_cutoff_sample = ring.finalized_sample
         hop = PendingLiveFailover(from_mode=old_selection[0].value, to_mode=selected[0].value, reason='normal_close')
+        note_stream_close_intent(previous, US_FAILOVER)
         try:
             await abort_replay_socket(previous)
             release_live_stt_socket(previous)

@@ -138,6 +138,12 @@ class _DocumentRef:
     def collection(self, name: str) -> '_CollectionRef':
         return _CollectionRef(self._client, self.path + (name,))
 
+    @property
+    def parent(self) -> '_CollectionRef':
+        # Main's quiet-debt convergence walks job doc -> parent collection ->
+        # parent doc (user); serve the walk from the fake's path arithmetic.
+        return _CollectionRef(self._client, self.path[:-1])
+
 
 class _CollectionRef:
     def __init__(self, client: '_CustodyFakeClient', path: Tuple[str, ...]):
@@ -146,6 +152,10 @@ class _CollectionRef:
 
     def document(self, doc_id: str) -> _DocumentRef:
         return _DocumentRef(self._client, self.path + (doc_id,))
+
+    @property
+    def parent(self) -> '_DocumentRef':
+        return _DocumentRef(self._client, self.path[:-1])
 
 
 class _FakeTransaction:
@@ -908,9 +918,16 @@ def test_reconciler_counts_a_drained_budget_as_skipped(
         )
 
     monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'cloud_tasks')
+    # Main's reconcile gates on the Cloud Tasks binding being configured; the
+    # branch fakes never set the binding env, so satisfy the gate directly.
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(
         service.jobs_db, 'recover_stranded_byok_jobs', lambda **_kw: {'scanned': 0, 'blocked': 0, 'errors': 0}
     )
+    # Main's reconcile also advances the per-row backoff after each pass; the
+    # fake store doesn't model it — record instead of raising.
+    monkeypatch.setattr(service.jobs_db, 'defer_finalization_replay', lambda *a, **k: None)
+    monkeypatch.setattr(service.jobs_db, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_kw: 0.0)
     monkeypatch.setattr(
         service.jobs_db,
         'get_finalization_replay_candidates',
@@ -938,9 +955,16 @@ def test_reconciler_keeps_the_loud_shape_for_a_real_failure(
         raise RuntimeError(f'unrelated datastore failure for {job_id}')
 
     monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'cloud_tasks')
+    # Main's reconcile gates on the Cloud Tasks binding being configured; the
+    # branch fakes never set the binding env, so satisfy the gate directly.
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(
         service.jobs_db, 'recover_stranded_byok_jobs', lambda **_kw: {'scanned': 0, 'blocked': 0, 'errors': 0}
     )
+    # Main's reconcile also advances the per-row backoff after each pass; the
+    # fake store doesn't model it — record instead of raising.
+    monkeypatch.setattr(service.jobs_db, 'defer_finalization_replay', lambda *a, **k: None)
+    monkeypatch.setattr(service.jobs_db, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_kw: 0.0)
     monkeypatch.setattr(
         service.jobs_db,
         'get_finalization_replay_candidates',
@@ -1343,9 +1367,16 @@ def test_burst_on_one_hot_row_does_not_poison_its_neighbors(
         }
 
     monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'cloud_tasks')
+    # Main's reconcile gates on the Cloud Tasks binding being configured; the
+    # branch fakes never set the binding env, so satisfy the gate directly.
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(
         service.jobs_db, 'recover_stranded_byok_jobs', lambda **_kw: {'scanned': 0, 'blocked': 0, 'errors': 0}
     )
+    # Main's reconcile also advances the per-row backoff after each pass; the
+    # fake store doesn't model it — record instead of raising.
+    monkeypatch.setattr(service.jobs_db, 'defer_finalization_replay', lambda *a, **k: None)
+    monkeypatch.setattr(service.jobs_db, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_kw: 0.0)
     monkeypatch.setattr(
         service.jobs_db,
         'get_finalization_replay_candidates',

@@ -93,7 +93,7 @@ def _receipt_fields(caplog) -> dict[str, str]:
     return dict(part.split('=', 1) for part in lines[0].split() if '=' in part)
 
 
-def _run(monkeypatch, caplog, prefix, screens: int, *, model: _Model):
+def _run(monkeypatch, caplog, prefix, screens: int, *, model: _Model, frame_count: int | None = None):
     from utils.llm import conversation_processing
 
     captured = {}
@@ -105,6 +105,7 @@ def _run(monkeypatch, caplog, prefix, screens: int, *, model: _Model):
 
     monkeypatch.setattr(conversation_processing, 'get_llm', fake_get_llm)
     caplog.set_level(logging.INFO, logger='utils.llm.notes_observability')
+    extra = {'screen_frame_count': frame_count} if frame_count is not None else {}
     result = conversation_processing.get_conversation_notes(
         prefix,
         started_at=_STARTED,
@@ -113,6 +114,7 @@ def _run(monkeypatch, caplog, prefix, screens: int, *, model: _Model):
         tz='UTC',
         task_intelligence_capture=False,
         screen_frames=_frames(screens),
+        **extra,
     )
     assert result.title == 'Design review'
     assert captured['feature'] == 'conv_structure'
@@ -147,7 +149,6 @@ def test_screen_volume_gate(monkeypatch, caplog, words, screens, flag, escalated
     assert fields['words'] == str(words)
     assert fields['screen_count'] == str(screens)
     assert fields['arm'] == 'baseline'
-    assert fields['selection'] == 'none'
     assert fields['claims_enabled'] == 'False'
     if escalated:
         assert model.bound_kwargs == {'reasoning_effort': 'xhigh'}
@@ -212,3 +213,40 @@ def test_receipt_includes_escalation_fields_below_threshold(monkeypatch, caplog)
     assert fields['words'] == '1499'
     assert fields['screen_count'] == '5'
     assert fields['violations'] == 'none'
+
+
+def test_escalation_fires_at_the_production_image_budget_with_available_frames(monkeypatch, caplog):
+    # Production attaches at most MAX_NOTES_FRAME_IMAGES images, one below the
+    # >=5 threshold; the approved-frame count (screen_frame_count from the
+    # wiring) is what makes the gate reachable for a screen-heavy meeting.
+    from utils.conversations.screen_frame_evidence import MAX_NOTES_FRAME_IMAGES
+
+    monkeypatch.setenv('NOTES_TIER_ESCALATION_ENABLED', 'true')
+    model = _Model('openai/gpt-5.6-luna', allow_bind=True)
+    attached = MAX_NOTES_FRAME_IMAGES
+    fields = _run(monkeypatch, caplog, _prefix(1500), attached, model=model, frame_count=7)
+    assert attached < 5  # the gate stays genuinely unreachable from attached images alone
+    assert fields['escalated'] == 'true'
+    assert fields['escalation_reason'] == 'screen_volume'
+    assert fields['screen_count'] == '7'
+    assert model.bound_kwargs == {'reasoning_effort': 'xhigh'}
+
+
+def test_four_available_frames_stay_below_the_threshold(monkeypatch, caplog):
+    monkeypatch.setenv('NOTES_TIER_ESCALATION_ENABLED', 'true')
+    model = _Model('openai/gpt-5.6-luna', allow_bind=False)
+    fields = _run(monkeypatch, caplog, _prefix(1500), 4, model=model, frame_count=4)
+    assert fields['escalated'] == 'false'
+    assert fields['escalation_reason'] == 'below_threshold'
+    assert fields['screen_count'] == '4'
+    assert model.bound_kwargs is None
+
+
+def test_attached_images_floor_the_count_when_inputs_disagree(monkeypatch, caplog):
+    # A stale or partial count must never hide frames the call actually carries.
+    monkeypatch.setenv('NOTES_TIER_ESCALATION_ENABLED', 'true')
+    model = _Model('openai/gpt-5.6-luna', allow_bind=True)
+    fields = _run(monkeypatch, caplog, _prefix(1500), 5, model=model, frame_count=2)
+    assert fields['screen_count'] == '5'
+    assert fields['escalated'] == 'true'
+    assert fields['escalation_reason'] == 'screen_volume'

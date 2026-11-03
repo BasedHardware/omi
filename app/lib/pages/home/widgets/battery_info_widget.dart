@@ -8,10 +8,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/device.dart';
@@ -77,16 +80,18 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   PlatformManager.instance.analytics.batteryIndicatorClicked();
                 },
                 children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: Image.asset(
-                      DeviceUtils.getDeviceImagePath(
-                        deviceType: connectedDevice.type,
-                        modelNumber: connectedDevice.modelNumber,
-                        deviceName: connectedDevice.name,
+                  _SyncRing(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: Image.asset(
+                        DeviceUtils.getDeviceImagePath(
+                          deviceType: connectedDevice.type,
+                          modelNumber: connectedDevice.modelNumber,
+                          deviceName: connectedDevice.name,
+                        ),
+                        fit: BoxFit.contain,
                       ),
-                      fit: BoxFit.contain,
                     ),
                   ),
                   // Only show battery indicator and percentage when battery level is valid (> 0)
@@ -195,6 +200,30 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
           },
         );
       },
+    );
+  }
+}
+
+/// The quiet sync indicator: a thin ring circles the device glyph while offline sync or
+/// processing runs. No words on the pill; the device page says what is happening.
+class _SyncRing extends StatelessWidget {
+  const _SyncRing({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final syncing = context.select<SyncProvider?, bool>((s) => s?.isSyncing ?? false);
+    final processing =
+        context.select<ConversationProvider?, bool>((c) => c?.processingConversations.isNotEmpty ?? false);
+    return ListenableBuilder(
+      listenable: PendingWorkStore.instance,
+      builder: (context, _) => OmiActivityRing(
+        key: const Key('device_pill_sync_ring'),
+        active: syncing || processing || PendingWorkStore.instance.pending.isNotEmpty,
+        diameter: 22,
+        child: child,
+      ),
     );
   }
 }
@@ -363,7 +392,8 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       return;
     }
     if (context.mounted) {
-      routeToPage(context, ConversationCapturingPage(topConversationId: captureProvider.topConversationId));
+      routeToPage(context,
+          LiveEpisodePage(topConversationId: captureProvider.topConversationId, initialTab: LiveEpisodeTab.transcript));
     }
   }
 

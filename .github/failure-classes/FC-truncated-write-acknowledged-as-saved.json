@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-truncated-write-acknowledged-as-saved",
+  "violated_contract": "A write endpoint must not answer success after storing less than it was sent. PATCH /v1/users/transcription-preferences replaces the account's whole custom vocabulary, but set_user_transcription_preferences stored only vocabulary[:100] while the route still answered {'status': 'ok'}. The mobile app takes that answer to mean the list it sent is saved, so it kept and showed every term, and web kept its optimistic list. Terms past 100 looked saved, were never used for transcription, and were gone at the next load, with no error anywhere.",
+  "canonical_prevention": "Enforce a storage limit at the route boundary by refusing the over-limit request with a 4xx before anything is written, so every client's existing failed-save path keeps its previous state. A trim in the data layer may stay as a backstop but must never be the only enforcement behind a success answer. A write that legitimately stores something other than what it was sent must return what it stored, so the client can show that instead.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_transcription_vocabulary_limit.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/users.py",
+    "backend/database/users.py"
+  ],
+  "status": "open"
+}

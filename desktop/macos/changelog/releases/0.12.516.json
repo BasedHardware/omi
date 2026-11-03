@@ -1,0 +1,7 @@
+{
+  "version": "0.12.516",
+  "date": "2026-10-20",
+  "changes": [
+    "Fixed custom vocabulary saves looking failed and reverting when the confirmation read failed, even though the account had already stored the change"
+  ]
+}

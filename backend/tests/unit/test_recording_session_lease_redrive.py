@@ -596,11 +596,13 @@ async def test_redriven_renewal_advances_the_durable_fence(expired_id_store, mon
     whole False cycle decayed the fence for the rest of the minute."""
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    # Three retirements exhaust run_transactional's internal fresh-id restarts,
-    # so the retirement surfaces at the lifecycle boundary as the classified
-    # transient (False) — the exact decay signal the redrive exists for. The
-    # cycle's second attempt then commits on a clean data plane.
-    expired_id_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 3
+    # Nine retirements exhaust run_transactional's three fresh-id restarts in
+    # EACH of the outer budget's three chains (main's contention classifier
+    # now treats a retired id as retryable, so the boundary replays whole
+    # chains): the budget then surfaces the classified transient (False) at
+    # the lifecycle boundary — the exact decay signal the redrive exists
+    # for. The cycle's next tick then commits on a clean data plane.
+    expired_id_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 9
     host = _RenewalHost(expired_id_store, clock)
     controller = LiveConversationController(host, clock=clock)
 
@@ -619,7 +621,10 @@ async def test_converged_cycle_redrives_to_a_clean_no_op(expired_id_store, monke
     waiting: idempotent per minute, never stuck because a fence moved once."""
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
-    expired_id_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 3
+    # Nine retirements: the outer budget's three chains each burn their three
+    # inner fresh-id restarts before the transient surfaces (see the redrive
+    # test above for the merged-boundary arithmetic).
+    expired_id_store.commit_errors = [InvalidArgument('400 The referenced transaction has expired')] * 9
     host = _RenewalHost(expired_id_store, clock)
     controller = LiveConversationController(host, clock=clock)
 

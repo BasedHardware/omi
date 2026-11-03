@@ -66,6 +66,18 @@ def _load_turnstile_class():
 # ---------------------------------------------------------------------------
 
 
+def test_newest_backfill_still_assigns_one_recording_chronologically(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    turnstile = _load_turnstile_class()(['earlier', 'middle', 'later'])
+    assert not turnstile.wait_turn('later', timeout=0)
+    assert turnstile.wait_turn('earlier', timeout=0)
+    turnstile.complete('earlier')
+    assert not turnstile.wait_turn('later', timeout=0)
+    assert turnstile.wait_turn('middle', timeout=0)
+    turnstile.complete('middle')
+    assert turnstile.wait_turn('later', timeout=0)
+
+
 @pytest.mark.slow
 class TestOrderedTurnstile:
     def test_serializes_in_given_order_despite_reverse_readiness(self):
@@ -145,12 +157,6 @@ class TestCallersUseOrderedAssignment:
             'get_closest_conversation_to_timestamps'
         ), 'turn must be acquired before the closest-conversation lookup'
 
-    def test_v1_sorts_segments_and_passes_turnstile(self):
-        body = _async_function_body(_read_sync_source(), 'sync_local_files')
-        assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
-        assert '_OrderedTurnstile(' in body
-        assert 'assignment_turnstile,' in body, 'v1 must pass the turnstile to process_segment'
-
     def test_v2_sorts_segments_and_passes_turnstile(self):
         body = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
         assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
@@ -159,9 +165,7 @@ class TestCallersUseOrderedAssignment:
 
     def test_both_pipelines_reprocess_merged_conversations(self):
         source = _read_sync_source()
-        v1 = _async_function_body(source, 'sync_local_files')
         v2 = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
-        assert '_reprocess_merged_conversations' in v1
         assert '_reprocess_merged_conversations' in v2
 
     def test_merge_path_records_merged_conversation(self):

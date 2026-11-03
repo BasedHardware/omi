@@ -202,6 +202,26 @@ def test_cloud_text_rollback_preserves_error_stream(monkeypatch):
     assert 'failure' in err.getvalue() and 'normal' not in err.getvalue()
 
 
+def test_text_default_keeps_cloud_split_until_json_opt_in(monkeypatch):
+    monkeypatch.setenv('K_SERVICE', 'backend')
+    out, err = io.StringIO(), io.StringIO()
+    logs.configure_logging('backend', default_format='text', stdout=out, stderr=err)
+    logging.info('normal')
+    logging.error('failure')
+    assert out.getvalue() == 'INFO root: normal\n'
+    assert err.getvalue() == 'ERROR root: failure\n'
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    out = io.StringIO()
+    logs.configure_logging('backend', default_format='text', stdout=out)
+    logging.info('opted in')
+    assert json.loads(out.getvalue())['message'] == 'opted in'
+
+
+def test_invalid_default_format_is_rejected():
+    with pytest.raises(ValueError):
+        logs.configure_logging('backend', default_format='JSON')
+
+
 def test_requested_level_constrains_named_loggers():
     output = io.StringIO()
     logs.configure_logging('test', level=logging.ERROR, stdout=output)
@@ -361,3 +381,14 @@ def test_executor_adoption_copies_context_without_leaking(monkeypatch):
     worker, outside = map(json.loads, output.getvalue().splitlines())
     assert worker['logging.googleapis.com/trace'].endswith('/' + 'a' * 32)
     assert 'logging.googleapis.com/trace' not in outside
+
+
+def test_successful_liveness_is_filtered_but_failure_is_kept(monkeypatch):
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.StringIO()
+    logs.configure_logging('nllb', access_policy='keep', stdout=output)
+    logger = logging.getLogger('uvicorn.access')
+    logger.info('%s %s %s %s %s', 'client', 'GET', '/live', '1.1', 200)
+    assert not output.getvalue()
+    logger.info('%s %s %s %s %s', 'client', 'GET', '/live', '1.1', 503)
+    assert json.loads(output.getvalue())['logger'] == 'uvicorn.access'

@@ -6,6 +6,7 @@ import uuid
 
 import fakeredis
 import pytest
+from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -89,7 +90,7 @@ def test_terminal_compaction_keeps_real_poll_response(redis, monkeypatch, fenced
     assert 'last_error' not in finalized
     assert 'stage_timings' not in finalized['result']
     assert finalized['result']['repeat_failure_fingerprint'] == 'a' * 64
-    assert sync_router._terminal_repeat_failure_kwargs(finalized) == (
+    assert terminal_repeat_failure_kwargs(finalized) == (
         {'failure_key': 'persistent_persistence', 'failure_fingerprint': 'a' * 64} if failed else {}
     )
     assert len(redis.get(key)) < len(json.dumps(old_terminal).encode()) / 2

@@ -106,6 +106,9 @@ def test_stalled_redis_socket_returns_legacy_and_releases_slot(monkeypatch):
                 accepted.set()
                 release.wait(3)
 
+    # This test hosts its own fake Redis peer and must exercise the real
+    # socket I/O against it, so opt out of the unit-session Redis block.
+    monkeypatch.setenv('OMI_HERMETIC_ALLOW_FAKE_REDIS', '1')
     monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
     monkeypatch.setenv('REDIS_DB_PORT', str(port))
     monkeypatch.delenv('REDIS_DB_PASSWORD', raising=False)
@@ -129,3 +132,13 @@ def test_stalled_redis_socket_returns_legacy_and_releases_slot(monkeypatch):
     finally:
         release.set()
         peer.join(3)
+
+
+def test_sync_final_pass_exception_log_contains_class_without_message(caplog):
+    with caplog.at_level('WARNING', logger=sync.__name__):
+        assert sync.run_sync_final_pass(
+            'synthetic', b'secret malformed audio', [], [], {}, scope='synthetic', owner_reserved=False
+        ) == (None, {'outcome': 'failed:sync_audio'})
+    matching = [record.getMessage() for record in caplog.records if 'exception_type=' in record.getMessage()]
+    assert len(matching) == 1 and 'exception_type=' in matching[0]
+    assert 'secret malformed audio' not in matching[0] and 'synthetic' not in matching[0]

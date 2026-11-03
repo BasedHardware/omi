@@ -1,3 +1,5 @@
+# GKE-only alternative; production uses deploy/messaging/maintenance-job.json + Scheduler.
+# Never enable both schedulers.
 # Opt in only after applying indexes and supplying the admitted backend image.
 enabled: false
 image: ""

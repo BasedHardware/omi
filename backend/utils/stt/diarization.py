@@ -24,16 +24,32 @@ class HttpDiarizer:
         url = os.getenv(variable, '').rstrip('/')
         if not url:
             raise ValueError('diarizer_unconfigured')
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError
-        response = httpx.post(
-            url + '/v2/diarization',
-            content=pcm,
-            headers={'Content-Type': 'audio/pcm'},
-            timeout=httpx.Timeout(remaining, connect=min(5, remaining)),
-        )
-        response.raise_for_status()
+        attempts_left = 2
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError
+            try:
+                response = httpx.post(
+                    url + '/v2/diarization',
+                    content=pcm,
+                    headers={'Content-Type': 'audio/pcm'},
+                    timeout=httpx.Timeout(remaining, connect=min(5, remaining)),
+                )
+                response.raise_for_status()
+            except (httpx.TransportError, httpx.HTTPStatusError) as error:
+                # Inference is stateless and idempotent; one retry covers a batch
+                # pod disappearing mid-request (node preemption, HPA scale-down).
+                transient = isinstance(error, httpx.TransportError) or error.response.status_code >= 500
+                if not transient or attempts_left == 1:
+                    raise
+                attempts_left -= 1
+                continue
+            # httpx read timeouts bound each chunk wait, not total wall time;
+            # never accept a result that arrived past the caller's deadline.
+            if time.monotonic() > deadline:
+                raise TimeoutError
+            break
         result = DiarizationResult.model_validate(response.json())
         if result.provenance.get('backend') != self.backend:
             raise ValueError('diarizer_backend_mismatch')

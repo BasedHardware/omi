@@ -193,6 +193,11 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.meetingNoteScreenshotsEnabled.rawValue)
   var meetingNoteScreenshotsEnabled: Bool = true
 
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue)
+  var meetingMemoryBriefsEnabled: Bool = false
+  @State var meetingBriefAccessRequestGeneration = 0
+  @State var meetingBriefCalendarAccessUnavailable = false
+
   // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
   // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
   // edit and PATCHed straight back — see the toggle's `onChange` in SettingsContentView+Rewind.swift.
@@ -270,6 +275,10 @@ struct SettingsContentView: View {
 
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
+  /// The value the account last confirmed for `dailySummaryEnabled`, or `nil` until Settings has
+  /// read it. A failed save puts the toggle back; see `updateDailySummarySettings(enabled:)`.
+  @State var savedDailySummaryEnabled: Bool?
+  @State var dailySummaryEnabledError: String?
   @State var dailySummaryHour: Int = 22
   @State var dailySummaryDepth: DailySummaryDepth = .brief
   @State var savedDailySummaryDepth: DailySummaryDepth = .brief
@@ -290,13 +299,25 @@ struct SettingsContentView: View {
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
+  @State var savedRecordingPermissionEnabled: Bool?
+  @State var recordingPermissionError: String?
   @State var privateCloudSyncEnabled: Bool = true
+  @State var savedPrivateCloudSyncEnabled: Bool?
+  @State var privateCloudSyncError: String?
   @State var isTrackingExpanded: Bool = false
 
   // Transcription settings (from backend)
   @State var singleLanguageMode: Bool = false
+  /// The custom vocabulary the account last confirmed it holds, or `nil` until Settings has read it.
+  /// A failed save puts it back; see `TranscriptionVocabularySaver`.
+  @State var savedVocabularyList: [String]?
+  @State var vocabularySaveError: String?
   @State var newVocabularyWord: String = ""
   @State var vocabularyList: [String] = []
+  /// Whether `vocabularyList` was read from the account rather than shown from the local copy.
+  /// A save replaces the account's whole list; see `TranscriptionVocabularyWriter`.
+  @State var vocabularyLoadedFromAccount: Bool = false
+  @State var isReadingVocabulary: Bool = false
 
   // Language setting
   @State var userLanguage: String = "en"
@@ -334,6 +355,11 @@ struct SettingsContentView: View {
   var subscriptionError: String? {
     get { viewModel.subscriptionError }
     nonmutating set { viewModel.subscriptionError = newValue }
+  }
+
+  var subscriptionConfirmation: String? {
+    get { viewModel.subscriptionConfirmation }
+    nonmutating set { viewModel.subscriptionConfirmation = newValue }
   }
 
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]

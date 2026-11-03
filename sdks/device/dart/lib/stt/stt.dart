@@ -37,7 +37,8 @@ class DeepgramTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
+    _channel =
+        channel ??
         IOWebSocketChannel.connect(
           Uri.parse(deepgramWsUrl(sampleRate: sampleRate)),
           headers: {'Authorization': 'Token $apiKey'},
@@ -105,8 +106,7 @@ class ParakeetTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
-        WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
+    _channel = channel ?? WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
     _sub = _channel.stream.listen(
       (event) {
         if (event is! String) return;

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-pending-queue-without-dispatch-owner",
+  "violated_contract": "Every durable pending queue entry must retain a discoverable dispatch owner, including across duplicate admission, active completion and expiry retirement. A lost immediate kick must not remove its recovery path.",
+  "canonical_prevention": "Use one transactional owner-creation primitive for admission and repair with consistent owner-first read order. Retain fencing epochs on release, transactionally remove empty owners from the hot reconcile range by omitting reconcile_at, and atomically wake them on admission. Reconcile missing owners from a bounded rotating pending scan with a configurable staggered deadline honored by fallback claims and waiting retirement. Cover admission/release/parking contention, monotonic epochs, a stuck lease behind more than 300 empty owners, idempotent staggered repair, and flag-off idle-owner behavior.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_backfill_uid_sequencer.py",
+    "backend/tests/integration/test_sync_backfill_retirement_emulator.py",
+    "backend/tests/unit/test_sync_cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/sync_backfill_sequencer.py",
+    "backend/utils/sync/uid_sequencer.py"
+  ],
+  "status": "open"
+}

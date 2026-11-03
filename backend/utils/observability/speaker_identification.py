@@ -5,6 +5,8 @@ from typing import Any, Sequence
 
 from prometheus_client import Counter
 
+from utils.log_sanitizer import hash_log_identifier
+
 logger = logging.getLogger(__name__)
 SYNC_SPEAKER_DECISIONS = Counter(
     'omi_sync_speaker_decisions_total', 'Batch voice match attempts, including missing evidence.', ['outcome']
@@ -37,9 +39,9 @@ def record_speaker_review(
         outcome = 'confirmed' if old_identity == new_identity else 'corrected'
         SYNC_SPEAKER_REVIEWS.labels(outcome=outcome).inc()
         logger.info(
-            'speaker_id_review surface=sync uid=%s conversation=%s segment=%s outcome=%s',
+            'speaker_id_review surface=sync uid=%s conversation_hash=%s segment_hash=%s outcome=%s',
             uid,
-            conversation_id,
-            old.get('id'),
+            hash_log_identifier(conversation_id),
+            hash_log_identifier(old.get('id')),
             outcome,
         )

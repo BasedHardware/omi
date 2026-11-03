@@ -1093,7 +1093,10 @@ async def test_v2_envelope_turns_uncertain_on_no_frame_close(caplog):
     await session.connect()
     session.audio_timeline_active = True
     session.last_synced_conversation_id = 'conv-1'
-    session.audio_bytes_send(b'\x01' * 100, received_at=1000.0)
+    # Main's audio custody (AudioBackpressure on an over-budget frame) postdates
+    # this test; the envelope contract needs an accepted run, so send within the
+    # 8-byte fixture budget.
+    session.audio_bytes_send(b'\x01' * 8, received_at=1000.0)
 
     with caplog.at_level(logging.INFO, logger=SESSION_LOGGER):
         await session._audio_bytes_flush()

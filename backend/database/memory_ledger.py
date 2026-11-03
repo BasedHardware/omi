@@ -93,6 +93,48 @@ def _mutation_memory_ids(mutations: List[Dict[str, Any]]) -> set[str]:
     return ids
 
 
+def _legacy_commit_fences_need_exact_reads(
+    *,
+    transaction: Any,
+    database: Any,
+    collections: MemoryCollections,
+) -> bool:
+    """Cheap transactional probes that pre-screen the per-memory privacy fences.
+
+    The fences below only fire on a tombstoned override, a tombstoned item, or
+    an unreadable document. Most users have no ``memory_historical_overrides``
+    document and no tombstoned item at all, so two limit-1 existence queries
+    replace the two phantom per-memory lookups that dominated Firestore
+    NOT_FOUND read volume (cost card C015): an empty query bills a single read
+    instead of one NOT_FOUND lookup per mutation id.
+
+    Returns True — run the exact per-memory reads — when either probe matches,
+    so every fence outcome is unchanged for users with suppression history.
+    A probe this backend cannot run (test fakes, partial SDK surfaces)
+    conservatively returns True.
+    """
+    probes = (
+        collections.memory_historical_overrides,
+        (collections.memory_items, 'tombstoned'),
+    )
+    for entry in probes:
+        path, status = entry if isinstance(entry, tuple) else (entry, None)
+        try:
+            # Function-level import: stubbed test environments replace
+            # google.cloud.firestore_v1 wholesale; the ImportError (like any
+            # probe failure) conservatively selects the exact reads below.
+            from google.cloud.firestore_v1 import FieldFilter  # type: ignore[reportMissingImports]
+
+            query = database.collection(path).limit(1)
+            if status is not None:
+                query = query.where(filter=FieldFilter('status', '==', status))
+            if any(getattr(doc, 'exists', False) for doc in transaction.get(query)):
+                return True
+        except Exception:
+            return True
+    return False
+
+
 def _assert_legacy_commit_privacy_fences(
     *,
     transaction: Any,
@@ -117,6 +159,12 @@ def _assert_legacy_commit_privacy_fences(
     if len(memory_ids) > 200:
         raise LegacyCommitPrivacyFence('legacy memory commit identity inventory is too large')
     collections = MemoryCollections(uid=uid)
+    if not _legacy_commit_fences_need_exact_reads(
+        transaction=transaction,
+        database=database,
+        collections=collections,
+    ):
+        return
     for memory_id in memory_ids:
         item_snapshot = _document(database, f'{collections.memory_items}/{memory_id}').get(transaction=transaction)
         item_exists = getattr(item_snapshot, 'exists', False)

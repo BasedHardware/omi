@@ -13,6 +13,7 @@ import zlib
 from database import review_store
 from models.agent_refs import cited_value
 from models.transcript_segment import legacy_conversation_segment_id
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_document_get
 
 
 def original_fingerprint(uid, raw, indices=None):
@@ -73,7 +74,7 @@ def entries(edit, current, *, authority, change_id):
     return result
 
 
-def project(uid, conversation, *, firestore_client=None):
+def project(uid, conversation, *, firestore_client=None, read_budget: ListReadBudget | None = None):
     if not conversation.get('has_transcript_corrections') or 'transcript_segments' not in conversation:
         return conversation
     try:
@@ -82,10 +83,14 @@ def project(uid, conversation, *, firestore_client=None):
         rows = (
             review_store.require_doc(uid, inline)['source']
             if inline is not None
-            else load_entries(uid, key, firestore_client=firestore_client)
+            else load_entries(uid, key, firestore_client=firestore_client, read_budget=read_budget)
         )
         conversation['transcript_segments'] = apply_entries(conversation['transcript_segments'], rows)
         filter_projected_translations(uid, conversation)
+    except ListReadBudgetExhausted:
+        # A bounded recall must stop; captured speech is not a successful
+        # correction projection after its read deadline has expired.
+        raise
     except Exception:
         # Rendering must remain available even with stale anchors, missing or
         # corrupt encrypted data, or storage outages. Transaction writers are strict.
@@ -129,17 +134,11 @@ def filter_projected_translations(uid, conversation):
         ]
 
 
-def load_entries(uid, conversation_id, *, firestore_client=None, transaction=None):
+def load_entries(uid, conversation_id, *, firestore_client=None, transaction=None, read_budget=None):
     """Owner-scoped overlay read, including use inside a source-bind transaction."""
     client = firestore_client or review_store.client()
-    raw = (
-        client.collection('users')
-        .document(uid)
-        .collection('transcript_corrections')
-        .document(conversation_id)
-        .get(transaction=transaction)
-        .to_dict()
-    )
+    reference = client.collection('users').document(uid).collection('transcript_corrections').document(conversation_id)
+    raw = budgeted_document_get(reference, read_budget, transaction=transaction).to_dict()
     if raw is None:
         raise review_store.ReviewConflict('Transcript correction overlay unavailable')
     rows = review_store.require_doc(uid, raw).get('source')

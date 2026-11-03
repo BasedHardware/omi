@@ -13,7 +13,10 @@ from pathlib import Path
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import auth_http  # noqa: E402
 
 API_BASE = "https://api.anthropic.com"
 API_VERSION = "2023-06-01"
@@ -81,7 +84,11 @@ def safe_error_message(body: bytes, api_key: str) -> str:
     return "No safe API error message was provided."
 
 
-def fetch_all(endpoint: str, parameters: dict, api_key: str, *, opener=urlopen, max_pages: int = 50) -> dict:
+def _open(request, timeout=30):
+    return auth_http.open_authenticated(request, timeout=timeout)
+
+
+def fetch_all(endpoint: str, parameters: dict, api_key: str, *, opener=_open, max_pages: int = 50) -> dict:
     """GET every result page from one allowlisted report endpoint."""
     if endpoint not in SAFE_PATHS:
         raise ValueError("Endpoint is not allowlisted for this read-only client")
@@ -105,6 +112,8 @@ def fetch_all(endpoint: str, parameters: dict, api_key: str, *, opener=urlopen, 
         try:
             with opener(request, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8"))
+        except auth_http.RedirectRefused:
+            raise RuntimeError("Anthropic Admin API redirect refused") from None
         except HTTPError as exc:
             raise RuntimeError(
                 f"Anthropic Admin API returned HTTP {exc.code}: {safe_error_message(exc.read(), api_key)}"

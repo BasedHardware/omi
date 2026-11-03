@@ -51,6 +51,47 @@ private actor SystemCalendarUploaderStub: DesktopMeetingUploading {
 final class SystemCalendarMeetingContextServiceTests: XCTestCase {
   private let referenceDate = Date(timeIntervalSince1970: 1_750_000_000)
 
+  func testContinuityReadsOnlyActiveAuthorizedEventsCoveringBothSidesAndNeverUploads() async {
+    let provider = SystemCalendarProviderStub(
+      state: .allowed,
+      snapshots: [
+        snapshot(
+          id: "same", title: "Call", start: referenceDate.addingTimeInterval(-600),
+          end: referenceDate.addingTimeInterval(10)),
+        snapshot(
+          id: "next", title: "Next", start: referenceDate.addingTimeInterval(-10),
+          end: referenceDate.addingTimeInterval(600)),
+        snapshot(
+          id: "all-day", title: "Day", start: referenceDate.addingTimeInterval(-600),
+          end: referenceDate.addingTimeInterval(600), isAllDay: true),
+        snapshot(
+          id: "canceled", title: "Canceled", start: referenceDate.addingTimeInterval(-600),
+          end: referenceDate.addingTimeInterval(600), isCanceled: true),
+      ])
+    let uploader = SystemCalendarUploaderStub()
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: uploader)
+    let ids = await service.activeEventIDs(now: referenceDate, covering: referenceDate.addingTimeInterval(-150))
+    XCTAssertEqual(ids, ["same"])
+    let expired = await service.activeEventIDs(
+      now: referenceDate.addingTimeInterval(10),
+      covering: referenceDate.addingTimeInterval(-150))
+    XCTAssertEqual(expired, [], "cached events still expire at their actual end")
+    let counts = await provider.counts()
+    let uploads = await uploader.uploadedPayloads()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 1)
+    XCTAssertTrue(uploads.isEmpty)
+    for state in [SystemCalendarAuthorizationState.notDetermined, .unavailable] {
+      let blocked = SystemCalendarProviderStub(state: state)
+      let service = SystemCalendarMeetingContextService(provider: blocked, uploader: uploader)
+      let ids = await service.activeEventIDs(now: referenceDate)
+      let counts = await blocked.counts()
+      XCTAssertTrue(ids.isEmpty)
+      XCTAssertEqual(counts.requests, 0)
+      XCTAssertEqual(counts.reads, 0)
+    }
+  }
+
   func testPayloadSelectionIsBoundedDeduplicatedAndPrivacyScoped() throws {
     let interval = DateInterval(
       start: referenceDate.addingTimeInterval(-1_800),
@@ -161,6 +202,36 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
     let counts = await provider.counts()
     XCTAssertEqual(uploaded.map(\.calendarEventID), ["event-1"])
     XCTAssertEqual(counts.reads, 2)
+  }
+
+  func testMeetingBriefReadNeverPromptsOrUploads() async {
+    let event = snapshot(
+      id: "upcoming", title: "Design sync",
+      start: referenceDate.addingTimeInterval(900), end: referenceDate.addingTimeInterval(1800))
+    let provider = SystemCalendarProviderStub(state: .allowed, snapshots: [event])
+    let uploader = SystemCalendarUploaderStub()
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: uploader)
+
+    let events = await service.upcomingAuthorizedEvents(now: referenceDate, horizon: 3600)
+
+    XCTAssertEqual(events.map(\.calendarEventID), ["upcoming"])
+    let counts = await provider.counts()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 1)
+    let uploaded = await uploader.uploadedPayloads()
+    XCTAssertTrue(uploaded.isEmpty)
+  }
+
+  func testMeetingBriefReadWithoutGrantIsSilent() async {
+    let provider = SystemCalendarProviderStub(state: .notDetermined)
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: SystemCalendarUploaderStub())
+
+    let events = await service.upcomingAuthorizedEvents(now: referenceDate, horizon: 3600)
+
+    XCTAssertTrue(events.isEmpty)
+    let counts = await provider.counts()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 0)
   }
 
   private func snapshot(

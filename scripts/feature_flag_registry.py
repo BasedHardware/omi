@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -18,13 +18,18 @@ KINDS = {"env", "posthog", "bundle", "server_capability", "build_define", "fires
 LIFECYCLES = {"experiment", "rollout", "ops_kill", "config_switch"}
 SURFACES = {"backend", "macos", "windows", "web-app", "web-admin", "web-frontend", "mobile", "llm-gateway"}
 FAILS = {"open", "closed", "inverted"}
-DECISIONS = {"pending", "graduate", "ship", "kill", "keep"}
+DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep", "with_legacy"}
+TERMINALS = {"on", "off", "keep", "undecided"}
+REVIEW_GRACE_DAYS = 7
+RAMP_REQUIRED_FROM = date(2026, 10, 21)
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
 FLAG_SUFFIX = re.compile(r"(?:_ENABLED|_MODE|_KILL_SWITCH|_COHORT|_PERCENT|_PAUSED|_STOP|_SHADOW(?:_[A-Z0-9]+)?)$")
 SWIFT_FLAG = re.compile(
     r'\bstatic\s+let\s+\w*(?:flagName|FlagName|FlagKey|Flag|enabledFlag|killSwitchFlag|enableFlag)\s*=\s*"([^"\n]+)"'
 )
 SWIFT_LITERAL = re.compile(r'\bisFeatureEnabled\s*\(\s*"([^"\n]+)"')
+SWIFT_STRING_CONSTANT = re.compile(r'\bstatic\s+let\s+([A-Za-z_]\w*)\s*=\s*"([^"\n]+)"')
+SWIFT_POSTHOG_CONSTANT_READ = re.compile(r'\bgetFeatureFlag\s*\(\s*(?:Self\.)?([A-Za-z_]\w*)\s*[,)]')
 SWIFT_HEADER = re.compile(
     r'\blet\s+(?:canonicalLifecycleExposed|deviceScopeSupported|defaultDeleteSupported|beliefEnabled)Header\s*=\s*"(X-Omi-[^"\n]+)"'
 )
@@ -32,10 +37,18 @@ SWIFT_HARDCODED = re.compile(
     r'\bstatic\s+var\s+(isWorkstreamPoolingEnabled|isProactiveCandidatesEnabled|isEnabled)\s*:'
 )
 DART_DEFINITION = re.compile(r"\bExperimentDefinition(?:<[^>]+>)?\s*\(\s*key\s*:\s*['\"]([^'\"\n]+)['\"]")
-DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
+DART_MASTER = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
+# PostHog keys on TypeScript clients: `static readonly enabledFlag = 'web-…'`.
+TS_POSTHOG_FLAG = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\"\n]+)['\"]")
+# Cataloged server-side Node switches are runtime env reads, not build defines.
+# Restrict discovery to known names so this does not re-inventory every legacy
+# private Node setting while registering a new runtime switch.
+NODE_RUNTIME_ENV = re.compile(r"\bprocess\.env\.((?!NEXT_PUBLIC_)[A-Z][A-Z0-9_]*)")
 CHART_KEY = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Z][A-Z0-9_]+)")
 MANIFEST_KEY = re.compile(r"^\s*([A-Z][A-Z0-9_]+):(?:\s|$)")
+ACTION_ENV_ARG = re.compile(r"--(?:update|set)-env-vars(?:=|\s+)(?:\"([^\"]*)\"|'([^']*)'|([^\s\\]+))", re.S)
+ACTION_ASSIGNMENT = re.compile(r"^\s*([A-Z][A-Z0-9_]+)=([^,\s]+)")
 
 
 @dataclass(frozen=True)
@@ -47,6 +60,55 @@ class Read:
 
 def load_registry(path: Path) -> dict[str, list[dict[str, Any]]]:
     return _parse_yaml_subset(path)
+
+
+def _ramp_applies_to(entry: dict[str, Any]) -> bool:
+    return entry.get("lifecycle") == "rollout" and (
+        entry.get("decision") in {"pending", "undecided"} or entry.get("terminal") == "undecided"
+    )
+
+
+def _single_user_cohort_step(step: str) -> bool:
+    normalized = step.strip().casefold().replace("_", " ")
+    return bool(
+        re.search(r"\b(?:single|one|1)[ -]?(?:user|person|uid)\b", normalized)
+        or re.search(r"\buid\s*[:=]\s*[a-z0-9_-]+\b", normalized)
+        or re.search(r"(?:^|\s)@[a-z0-9_.-]+$", normalized)
+        or re.search(r"\b[a-z][a-z0-9.'-]*[- ]only$", normalized)
+        or re.fullmatch(r"[a-z0-9.+-]+@[a-z0-9.-]+", normalized)
+    )
+
+
+def _validate_ramp(entry: dict[str, Any], label: str, errors: list[str]) -> None:
+    if "ramp" not in entry:
+        return
+    ramp = entry["ramp"]
+    if not isinstance(ramp, dict):
+        errors.append(f"{label}: ramp must be an object")
+        return
+    cohorts = ramp.get("cohorts")
+    if (
+        not isinstance(cohorts, list)
+        or not cohorts
+        or any(not isinstance(step, str) or not step.strip() for step in cohorts)
+    ):
+        errors.append(f"{label}: ramp.cohorts must be a nonempty list of nonempty strings")
+    elif _single_user_cohort_step(cohorts[-1]):
+        errors.append(f"{label}: ramp.cohorts terminal step must not be single-user (David-only is never terminal)")
+    for field in ("clean_metric", "expander"):
+        if not isinstance(ramp.get(field), str) or not ramp[field].strip():
+            errors.append(f"{label}: ramp.{field} is required")
+    try:
+        done_by = date.fromisoformat(ramp["done_by"])
+    except (KeyError, TypeError, ValueError):
+        errors.append(f"{label}: ramp.done_by must be an ISO date")
+    else:
+        try:
+            review_by = date.fromisoformat(entry["review_by"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if done_by > review_by:
+            errors.append(f"{label}: ramp.done_by must be on or before review_by")
 
 
 def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path = ROOT) -> list[str]:
@@ -77,6 +139,28 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 ):
                     if entry.get(field) not in allowed:
                         errors.append(f"{label}: invalid {field}: {entry.get(field)!r}")
+                lifecycle = entry.get("lifecycle")
+                decision = entry.get("decision")
+                terminal = entry.get("terminal")
+                if "terminal" not in entry:
+                    errors.append(f"{label}: terminal is required")
+                elif terminal not in TERMINALS:
+                    errors.append(f"{label}: invalid terminal: {terminal!r}")
+                if lifecycle in {"ops_kill", "config_switch"} and terminal != "keep":
+                    errors.append(f"{label}: {lifecycle} terminal must be keep")
+                if lifecycle in {"rollout", "experiment"} and entry.get("owner") == "unowned":
+                    errors.append(f"{label}: {lifecycle} owner must not be unowned")
+                terminal_for_decision = {
+                    "graduate": "on",
+                    "ship": "on",
+                    "kill": "off",
+                    "keep": "keep",
+                    "with_legacy": "off",
+                }
+                if decision in terminal_for_decision and terminal != terminal_for_decision[decision]:
+                    errors.append(f"{label}: decision {decision} requires terminal {terminal_for_decision[decision]}")
+                if decision == "kill_after_readout" and (lifecycle != "experiment" or terminal != "undecided"):
+                    errors.append(f"{label}: kill_after_readout requires experiment lifecycle and undecided terminal")
                 surfaces = entry.get("surfaces")
                 if not isinstance(surfaces, list) or not surfaces or any(s not in SURFACES for s in surfaces):
                     errors.append(f"{label}: invalid surfaces")
@@ -89,6 +173,18 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                             date.fromisoformat(entry[field])
                         except (TypeError, ValueError):
                             errors.append(f"{label}: {field} must be an ISO date")
+                _validate_ramp(entry, label, errors)
+                if _ramp_applies_to(entry) and "ramp" not in entry:
+                    try:
+                        created = date.fromisoformat(entry["created"])
+                    except (KeyError, TypeError, ValueError):
+                        pass
+                    else:
+                        if created >= RAMP_REQUIRED_FROM:
+                            errors.append(
+                                f"{label}: ramp is required for pending/undecided rollout rows created on or after "
+                                f"{RAMP_REQUIRED_FROM.isoformat()}"
+                            )
                 if entry.get("lifecycle") in {"experiment", "rollout"} and "review_by" not in entry:
                     errors.append(f"{label}: review_by is required for experiment/rollout")
                 if entry.get("lifecycle") in {"ops_kill", "config_switch"} and "review_by" in entry:
@@ -132,7 +228,7 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 if kind == "posthog":
                     if entry.get("posthog") != {"row": "delete"}:
                         errors.append(f"{label}: retired posthog rows require posthog row: delete")
-                elif kind in {"hardcoded", "env"}:
+                elif kind in {"hardcoded", "env", "server_capability"}:
                     if "posthog" in entry:
                         errors.append(f"{label}: retired hardcoded/env entries must omit posthog")
                 else:
@@ -180,7 +276,8 @@ def relevant_code(path: str) -> bool:
 
 def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]:
     if not any(
-        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var")
+        token in text
+        for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var", "kill_switch")
     ):
         return []
     tree = ast.parse(text, filename=path)
@@ -280,7 +377,11 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
             patterns = (
                 (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER)
                 if path.endswith(".swift")
-                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE,)
+                else (
+                    (DART_DEFINITION, DART_MASTER)
+                    if path.endswith(".dart")
+                    else (BUILD_DEFINE, TS_POSTHOG_FLAG, NODE_RUNTIME_ENV)
+                )
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):
@@ -292,7 +393,19 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
                         if pattern is BUILD_DEFINE
                         else match[1]
                     )
+                    if pattern is NODE_RUNTIME_ENV and key not in known:
+                        continue
                     if not key.startswith("--"):
+                        matches.append((key, text.count("\n", 0, match.start()) + 1))
+            if path.endswith(".swift"):
+                constants: dict[str, list[tuple[str, int]]] = {}
+                for match in SWIFT_STRING_CONSTANT.finditer(text):
+                    if not _in_client_comment(text, match.start()):
+                        constants.setdefault(match[1], []).append((match[2], match.start()))
+                for match in SWIFT_POSTHOG_CONSTANT_READ.finditer(text):
+                    definitions = constants.get(match[1], [])
+                    if not _in_client_comment(text, match.start()) and len(definitions) == 1:
+                        key, _ = definitions[0]
                         matches.append((key, text.count("\n", 0, match.start()) + 1))
             if path.endswith("ContextBucketsFeature.swift"):
                 for match in SWIFT_HARDCODED.finditer(text):
@@ -317,9 +430,50 @@ def extract_deploy_declarations(root: Path) -> list[Read]:
         for lineno, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
             pattern = CHART_KEY if "/charts/" in file.as_posix() else MANIFEST_KEY
             match = pattern.match(line)
-            if match and FLAG_SUFFIX.search(match[1]):
+            if match and (FLAG_SUFFIX.search(match[1]) or "ALLOWLIST" in match[1]):
                 reads.append(Read(match[1], file.relative_to(root).as_posix(), lineno))
     return reads
+
+
+def extract_action_declarations(root: Path) -> list[Read]:
+    """Find ramp-percent/allowlist values emitted by deploy actions and prod workflows."""
+    files = list((root / ".github/actions").rglob("action.yml"))
+    files.extend((root / ".github/workflows").glob("*prod*.y*ml"))
+    reads: list[Read] = []
+    for file in files:
+        if not file.is_file():
+            continue
+        text = file.read_text(encoding="utf-8")
+        for match in ACTION_ENV_ARG.finditer(text):
+            payload = next((value for value in match.groups() if value is not None), "")
+            line = text.count("\n", 0, match.start()) + 1
+            for item in payload.replace("\\\n", "").split(","):
+                key, separator, _ = item.partition("=")
+                key = key.strip()
+                if separator and ("PERCENT" in key or "ALLOWLIST" in key):
+                    reads.append(Read(key, file.relative_to(root).as_posix(), line))
+        if file.as_posix().endswith(".github/actions/sync-backfill-lifecycle/action.yml"):
+            in_output = False
+            for lineno, raw in enumerate(text.splitlines(), 1):
+                if 'echo "sync_backfill_env_vars<<EOF"' in raw:
+                    in_output = True
+                    continue
+                if in_output and 'echo "EOF"' in raw:
+                    break
+                if in_output:
+                    assignment = ACTION_ASSIGNMENT.match(raw.strip().removeprefix('echo "').removesuffix('"'))
+                    if assignment and ("PERCENT" in assignment[1] or "ALLOWLIST" in assignment[1]):
+                        reads.append(Read(assignment[1], file.relative_to(root).as_posix(), lineno))
+    return reads
+
+
+def duplicate_declaration_sources(declarations: list[Read]) -> dict[str, list[str]]:
+    """Return ramp-percent/allowlist keys declared in multiple source files."""
+    sources: dict[str, set[str]] = {}
+    for declaration in declarations:
+        if "PERCENT" in declaration.key or "ALLOWLIST" in declaration.key:
+            sources.setdefault(declaration.key, set()).add(declaration.path)
+    return {key: sorted(paths) for key, paths in sorted(sources.items()) if len(paths) > 1}
 
 
 def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]:
@@ -329,4 +483,15 @@ def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]
         if entry.get("lifecycle") in {"rollout", "experiment"}
         and entry.get("review_by")
         and date.fromisoformat(entry["review_by"]) < as_of
+    )
+
+
+def overdue_beyond_grace(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]:
+    """Return rollout/experiment rows whose review date plus the grace has passed."""
+    return sorted(
+        entry["key"]
+        for entry in registry.get("flags", [])
+        if entry.get("lifecycle") in {"rollout", "experiment"}
+        and entry.get("review_by")
+        and date.fromisoformat(entry["review_by"]) + timedelta(days=REVIEW_GRACE_DAYS) < as_of
     )

@@ -141,6 +141,51 @@ extension SettingsContentView {
     ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
   }
 
+  /// Claude's account state under the AI Provider picker. Without the Connect
+  /// button, a signed-out Claude chat pointed the user here with no way to sign in.
+  @ViewBuilder
+  var claudeConnectionRow: some View {
+    if chatProvider?.isClaudeConnected == true {
+      HStack {
+        Image(systemName: "checkmark.circle.fill")
+          .foregroundColor(Ink.listeningGreen)
+          .scaledFont(size: OmiType.caption)
+        Text("Connected to Claude")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+        Spacer()
+
+        Button("Disconnect") {
+          Task {
+            await chatProvider?.disconnectClaude()
+          }
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.errorRed)
+      }
+    } else {
+      HStack {
+        Image(systemName: "person.badge.key")
+          .foregroundColor(Ink.secondary)
+          .scaledFont(size: OmiType.caption)
+        Text("Not connected to Claude")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+        Spacer()
+
+        Button("Connect Claude") {
+          Task {
+            await chatProvider?.connectClaude()
+          }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+      }
+    }
+  }
+
   var aiChatSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       // AI Provider card
@@ -185,28 +230,9 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+          if chatBridgeMode == "claudeCode" {
             GlassSeparator()
-
-            HStack {
-              Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Ink.listeningGreen)
-                .scaledFont(size: OmiType.caption)
-              Text("Connected to Claude")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Spacer()
-
-              Button("Disconnect") {
-                Task {
-                  await chatProvider?.disconnectClaude()
-                }
-              }
-              .buttonStyle(.plain)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-            }
+            claudeConnectionRow
           }
         }
       }

@@ -6,7 +6,6 @@ import { Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MemoryCard } from './MemoryCard';
 import type { Memory, MemoryVisibility } from '@/types/conversation';
-import type { MemoryUseAction } from '@/lib/api';
 
 interface MemoryListProps {
   memories: Memory[];
@@ -18,7 +17,6 @@ interface MemoryListProps {
   onToggleVisibility: (id: string, visibility: MemoryVisibility) => Promise<boolean>;
   onAccept?: (id: string) => Promise<boolean>;
   onReject?: (id: string) => Promise<boolean>;
-  onSetUse?: (id: string, action: MemoryUseAction) => Promise<boolean>;
   highlightedMemoryId?: string | null;
   selectedIds?: string[];
   onToggleSelect?: (id: string) => void;
@@ -36,7 +34,6 @@ export function MemoryList({
   onToggleVisibility,
   onAccept,
   onReject,
-  onSetUse,
   highlightedMemoryId,
   selectedIds,
   onToggleSelect,
@@ -150,7 +147,6 @@ export function MemoryList({
                 onToggleVisibility={onToggleVisibility}
                 onAccept={onAccept}
                 onReject={onReject}
-                onSetUse={onSetUse}
                 isHighlighted={highlightedMemoryId === memory.id}
                 isSelected={selectedIds?.includes(memory.id)}
                 onToggleSelect={onToggleSelect}

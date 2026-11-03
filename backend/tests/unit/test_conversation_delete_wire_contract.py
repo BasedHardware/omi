@@ -15,6 +15,7 @@ drift: the router declaration and the generated app-client OpenAPI spec.
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -24,6 +25,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from routers import conversations
+from database.legal_holds import DestructiveOperationInProgress
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 APP_CLIENT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
@@ -73,6 +75,7 @@ def _delete_client(monkeypatch) -> TestClient:
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
+    monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
     monkeypatch.setattr(conversations.action_items_db, 'get_action_items_by_conversation', lambda *args, **kwargs: [])
@@ -92,3 +95,51 @@ def test_conversation_delete_answers_204_with_an_empty_body_over_http(monkeypatc
 
     assert response.status_code == 204
     assert response.content == b''
+
+
+def test_busy_delete_leaves_no_tombstone_or_cleanup_and_remains_retryable(monkeypatch):
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: False)
+
+        @contextmanager
+        def busy(*args, **kwargs):
+            raise DestructiveOperationInProgress('synthetic busy account')
+            yield
+
+        monkeypatch.setattr(conversations, 'destructive_operation_gate', busy)
+        response = client.delete('/v1/conversations/conversation-1?cascade=true')
+
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'account_gate_busy'}
+    assert response.headers['Retry-After'] == '2'
+    conversations.conversation_tombstones.record_deletion.assert_not_called()
+    conversations.delete_owner_prompt_embedding_cache.assert_not_called()
+    conversations.delete_conversation_and_frame_evidence.assert_not_called()
+
+
+def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypatch):
+    events = []
+    with _delete_client(monkeypatch) as client:
+
+        def retraction_required(*args, **kwargs):
+            assert events == ['gate', 'intent']
+            return False
+
+        monkeypatch.setattr(conversations, 'retraction_can_be_skipped', retraction_required)
+
+        @contextmanager
+        def gate(*args, **kwargs):
+            events.append('gate')
+            yield 'synthetic-token'
+            events.append('release')
+
+        monkeypatch.setattr(conversations, 'destructive_operation_gate', gate)
+        conversations.conversation_tombstones.record_deletion.side_effect = lambda *args: events.append('intent')
+        conversations.MemoryService.return_value.retract_conversation_memories.side_effect = (
+            lambda *args: events.append('retract')
+        )
+        conversations.delete_conversation_and_frame_evidence.side_effect = lambda *args: events.append('delete')
+        response = client.delete('/v1/conversations/conversation-1?cascade=true')
+
+    assert response.status_code == 204
+    assert events == ['gate', 'intent', 'retract', 'delete', 'release']

@@ -389,7 +389,7 @@ def test_audio_only_row_admits_without_touching_the_transcript_decoder(monkeypat
     assert job['selfheal_audio_file_ids'] == ['clip-1']
 
 
-def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys):
+def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys, monkeypatch):
     """A SERVER_RECOVERY run producing only the deterministic minimum must raise
     the typed error before the persist transaction and before derived-effect
     fanout — the durable row keeps its in-progress state and content."""
@@ -404,6 +404,8 @@ def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys):
     from models.structured import Structured
     from models.transcript_segment import TranscriptSegment
     from utils.conversations.recovery import RecoveryStructureUnavailableError
+
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
 
     fakes: dict = {}
     for name in _STUBBED:
@@ -422,7 +424,7 @@ def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys):
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='a captured line',
+                text='a captured line followed by enough words to stay above the conservative recovery floor today',
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,
