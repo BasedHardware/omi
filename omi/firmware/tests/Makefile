@@ -11,7 +11,7 @@ test:
 	$(BUILD_DIR)/test_safe_mode
 	$(CC) $(CPPFLAGS) $(CFLAGS) test_watchdog.c -o $(BUILD_DIR)/test_watchdog
 	$(BUILD_DIR)/test_watchdog
-	$(CC) $(CFLAGS) -I../omi/src/lib/core ../omi/src/lib/core/audio_packet_logic.c ../omi/tests/host/audio_packet_logic_test.c -o $(BUILD_DIR)/test_audio_packet_logic
+	$(CC) $(CFLAGS) -iquote ../omi/src/lib/core ../omi/src/lib/core/audio_packet_logic.c ../omi/tests/host/audio_packet_logic_test.c -o $(BUILD_DIR)/test_audio_packet_logic
 	$(BUILD_DIR)/test_audio_packet_logic
 	python3 check_ota_slot_geometry.py
 	python3 test_build_guard.py
