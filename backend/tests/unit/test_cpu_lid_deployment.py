@@ -54,15 +54,14 @@ def test_cpu_lid_chart_renders_an_independent_cpu_release():
     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     declared = manifest['environments']['prod']['gke']['parakeet-lid']['env']
     assert all(env[name] == entry['value'] for name, entry in declared.items())
+    # Callers stay off the CPU release until it passes acceptance (runbook step 4); a URL
+    # without the release makes every probe 404 into paid vendor LID.
     for peer in ('pusher', 'backend-listen'):
-        assert (
-            manifest['environments']['prod']['gke'][peer]['env']['HOSTED_LID_API_URL']['value']
-            == 'http://172.16.160.20/lid'
-        )
+        assert manifest['environments']['prod']['gke'][peer]['env']['HOSTED_LID_API_URL']['value'] == ''
     services = manifest['environments']['prod']['cloud_run']['services']
     for service in services.values():
         if 'HOSTED_LID_API_URL' in service.get('env', {}):
-            assert service['env']['HOSTED_LID_API_URL']['value'] == 'http://172.16.160.20/lid'
+            assert service['env']['HOSTED_LID_API_URL']['value'] == ''
 
 
 @pytest.mark.parametrize(
