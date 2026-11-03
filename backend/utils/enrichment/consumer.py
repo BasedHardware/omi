@@ -12,6 +12,7 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | redirected | STALE redirected | consumer: ``custody.transfer_redirect`` moved the obligation |
 | blocked (empty budget spent) | STALE empty_output_blocked | consumer: ``record_empty_failure`` retired it |
 | callback pending / empty output | RETRY callback_pending | ``release``: 409, the queue retry claims again |
+| transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
 A consumer-side write leaves nothing for ``run_push`` to settle, so it reports STALE: this delivery no
 longer owns a lease. Every lease heartbeats (120s lease, 30s beat), so a long summary never outlives it.
@@ -34,6 +35,39 @@ from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
 
 logger = logging.getLogger(__name__)
+
+_TRANSIENT_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _transient_dependency(error: BaseException) -> bool:
+    """A Firestore or LLM-gateway transport fault (typed, never message text), anywhere in the cause chain.
+
+    Prod 11-03: Firestore ``Aborted`` on the conversation claim and gateway embedding 503s/read timeouts
+    answered 500. A 500 keeps the 120s lease, so the queue's own retry is consumed as BUSY and the
+    obligation waits for the maintenance sweep; a 409 releases the lease and the retry claims again.
+    """
+    import httpx
+    from google.api_core import exceptions as google_errors
+
+    transient = (
+        google_errors.Aborted,
+        google_errors.DeadlineExceeded,
+        google_errors.InternalServerError,
+        google_errors.ServiceUnavailable,
+        google_errors.TooManyRequests,
+        httpx.TimeoutException,
+        httpx.NetworkError,
+    )
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, transient):
+            return True
+        if isinstance(current, httpx.HTTPStatusError):
+            return current.response.status_code in _TRANSIENT_HTTP_STATUSES
+        current = current.__cause__ or current.__context__
+    return False
 
 
 @contextmanager
@@ -172,6 +206,13 @@ class EnrichmentConsumer:
                 return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
             record_delivery('summary', 'failed')
             empty_blocked = True
+        except Exception as error:
+            if not _transient_dependency(error):
+                raise
+            logger.warning(
+                'event=enrichment_consumer outcome=retry reason=dependency exception_type=%s', type(error).__name__
+            )
+            return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
         finally:
             ADMITTED_OWNER.reset(tokens[4])
             summary_delivery.REPAIR_CONTEXT.reset(tokens[3])
