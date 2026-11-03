@@ -2327,7 +2327,7 @@ environments:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
           HOSTED_LID_API_URL:
-            value: http://172.16.160.20/lid
+            value: ''
             category: service_discovery
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
@@ -2574,7 +2574,7 @@ environments:
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
           HOSTED_LID_API_URL:
-            value: http://172.16.160.20/lid
+            value: ''
             category: service_discovery
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
@@ -3157,7 +3157,7 @@ environments:
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
-              value: http://172.16.160.20/lid
+              value: ''
               category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
@@ -3542,7 +3542,7 @@ environments:
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
-              value: http://172.16.160.20/lid
+              value: ''
               category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
@@ -3954,7 +3954,7 @@ environments:
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_LID_API_URL:
-              value: http://172.16.160.20/lid
+              value: ''
               category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
@@ -4315,7 +4315,7 @@ environments:
               value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_LID_API_URL:
-              value: http://172.16.160.20/lid
+              value: ''
               category: service_discovery
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
