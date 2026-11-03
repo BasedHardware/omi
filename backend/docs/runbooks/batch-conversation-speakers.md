@@ -57,8 +57,22 @@ the whole-recording refusal; set it on processing services. Refusals appear by r
 `conversation_speaker_audio_evidence` log line.
 
 Inside that cohort, a `sync:` segment refused only because `.batch.enc` overlaps it is proven and cut on
-`.opus.enc` alone. `final:batch:` segments stay refused: desktop record units are timed on `.batch.enc` and the
-conversation does not say which store timed a segment. `SPEAKER_SYNC_STORE_ENABLED=false` restores the refusal.
+`.opus.enc` alone. A `final:batch:{unit}` scope does not identify a clock: `batch_sync_v1` desktop WAL uploads
+also project that scope. CPU admission records `WorkItem.timing_store` from the actual audio source, and
+projection stamps it on the storage-only `provider_speaker` dict. Built-in WAL decoding stamps `sync`;
+retained live manifests stamp `batch` only when every reference is `.batch.enc` / `.batch.bin`. Alternate
+decoders, unknown or mixed custody references and historical jobs remain unstamped. Generic staged
+`audio_uri` values identify encrypted pipeline artifacts, not their timing store; no historical job reads
+or inferred backfill are added.
+
+An overlapping-store batch window is proven and cut only on its stamped store: `sync` uses `.opus` /
+`.opus.enc`; `batch` uses `is_batch` / `.batch.enc` / `.batch.bin`. No stamp means the refusal stays. After
+conversation resolution, the original unit scope and timing stamp in `provider_speaker` survive together;
+a `final:batch:conversation:` scope alone supplies no proof. A selected-store coverage hole abstains only
+its affected windows and never borrows the other store's audio. `SPEAKER_SYNC_STORE_ENABLED=false` restores
+the native `sync:` refusal; `SPEAKER_BATCH_STORE_ENABLED=false` independently restores the `final:batch:`
+refusal for either stamped store. Both default on inside the per-window cohort. The store-neutral
+`conversation_speaker_store` log reports `batch_proven`, `sync_proven` and the total proof count.
 
 Rollback: set `BATCH_CONVERSATION_SPEAKERS_ENABLED=false` on processing hosts.
 That stops automatic batch linking/naming, including when speaker-evidence mode

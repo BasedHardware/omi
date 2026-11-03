@@ -4,7 +4,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from config.batch_conversation_speakers import vendor_speaker_authority
 from config.policy import ProjectionPolicy
-from utils.batch_pipeline.projection_parts import bounded_projection_words, align_projection_words
+from utils.batch_pipeline.projection_parts import bounded_projection_words, align_projection_words, stamp_speaker
 from utils.stt.pre_recorded import postprocess_words
 
 
@@ -52,10 +52,7 @@ def projection_segments(item, binding, payload, *, batch_segment_id=None, policy
         segment.start += offset
         segment.end += offset
         segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
-        segment.speaker_id_scope = (
-            f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
-        )
-        segment.stt_provider = payload.get('words_provider')
+        stamp_speaker(segment, item, payload, authoritative, batch_segment_id)
         if authoritative:
             abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
             segment.is_user, segment.person_id = False, None

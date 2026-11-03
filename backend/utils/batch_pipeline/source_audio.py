@@ -22,6 +22,13 @@ MAX_SOURCE_BYTES = 256 * 1024 * 1024
 MAX_REFERENCES = 4096
 
 
+def batch_timing_store(references: list[dict]) -> str | None:
+    """Only homogeneous live PCM custody references prove the batch clock."""
+    if references and all(str(ref.get('path') or '').endswith(('.batch.enc', '.batch.bin')) for ref in references):
+        return 'batch'
+    return None
+
+
 class InvalidRetainedManifest(ValueError):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
 
