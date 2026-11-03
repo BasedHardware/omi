@@ -20,7 +20,7 @@ import {
   type RecoveryStatus
 } from './dbRecovery'
 import { captureError } from '../sentry'
-import { REWIND_IMAGE_PATHS_SQL, restoreRewindFramesOn, wipeUserDataOn } from './dbWipe'
+import { REWIND_IMAGE_PATHS_SQL, pruneParkedRewindFramesOn, restoreRewindFramesOn, wipeUserDataOn } from './dbWipe'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
 import {
@@ -546,8 +546,10 @@ function get(): Database.Database {
     -- signs in again (FTS rebuilds via the triggers above; the embedding backfill
     -- re-embeds rows whose vectors were wiped at park time). The JPEGs under
     -- rewind/ never move. Parked rows are NOT wiped on sign-out (deleting them
-    -- IS the silent-history-loss bug this table exists to prevent) and they age
-    -- out only through normal retention after restore.
+    -- IS the silent-history-loss bug this table exists to prevent), but they are
+    -- not immortal either: deleteParkedRewindFramesOlderThan retires them at the
+    -- same retention cutoff as the live table, parked or restored, so a parked
+    -- owner who never signs back in still stops consuming disk.
     CREATE TABLE IF NOT EXISTS rewind_frames_parked (
       owner_uid TEXT NOT NULL,
       ts INTEGER NOT NULL,
@@ -565,6 +567,11 @@ function get(): Database.Database {
       indexed INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_rewind_frames_parked_owner ON rewind_frames_parked(owner_uid, ts);
+    -- ts-leading twin of idx_rewind_frames_parked_owner: the keep-set query and
+    -- parked retention filter on ts ALONE (no owner), which cannot seek through
+    -- an owner_uid-leading index -- each day-dir pass of the orphan sweep and
+    -- the disk rebuild would full-scan the parked table without this.
+    CREATE INDEX IF NOT EXISTS idx_rewind_frames_parked_ts ON rewind_frames_parked(ts);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_rewind_frames_parked_owner_path
       ON rewind_frames_parked(owner_uid, image_path);
 
@@ -1637,6 +1644,22 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
     return doomed // caller deletes the image files
   })
   return pruneOlderThan(cutoffTs)
+}
+
+/** Retention for PARKED rewind rows: same cutoff and same contract as the live
+ *  prune above (rows retire first, caller unlinks the returned image files).
+ *  Parked history survives owner transitions, but it is not exempt from the
+ *  retention window -- without this, a parked owner who never signs back in
+ *  would keep their rows (and, via REWIND_IMAGE_PATHS_SQL, their JPEGs)
+ *  forever. No embedding cleanup needed here: the park itself wipes
+ *  rewind_embeddings, so nothing can reference a parked frame. SQL lives in
+ *  dbWipe.ts (pruneParkedRewindFramesOn) so dbWipe.test.ts can execute it on
+ *  node:sqlite. */
+export function deleteParkedRewindFramesOlderThan(cutoffTs: number): Array<{
+  ts: number
+  imagePath: string
+}> {
+  return pruneParkedRewindFramesOn(get(), cutoffTs)
 }
 
 // --- Track 4: Rewind semantic search ---

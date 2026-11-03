@@ -25,53 +25,36 @@ describe('parseFrameTs', () => {
 })
 
 describe('selectOrphanFiles', () => {
+  // retireBeforeMs is REQUIRED: every legacy case here passes the degenerate
+  // bound `NOW` (what retentionCutoff(now, 0) produces), which keeps everything
+  // currently on disk and so preserves the original grace-only semantics.
+  const args = (f: SweepFile) => ({
+    files: [f],
+    dbImagePaths: new Set<string>(),
+    nowMs: NOW,
+    graceMs: ORPHAN_GRACE_MS,
+    retireBeforeMs: NOW
+  })
+
   it('deletes an orphan older than the grace window', () => {
     const f = file(NOW - ORPHAN_GRACE_MS - 1_000) // orphan, well past grace
-    expect(
-      selectOrphanFiles({
-        files: [f],
-        dbImagePaths: new Set(),
-        nowMs: NOW,
-        graceMs: ORPHAN_GRACE_MS
-      })
-    ).toEqual([f.fullPath])
+    expect(selectOrphanFiles(args(f))).toEqual([f.fullPath])
   })
 
   it('keeps an orphan still within the grace window (possible in-flight insert)', () => {
     const f = file(NOW - 5_000) // orphan, 5s old, inside 60s grace
-    expect(
-      selectOrphanFiles({
-        files: [f],
-        dbImagePaths: new Set(),
-        nowMs: NOW,
-        graceMs: ORPHAN_GRACE_MS
-      })
-    ).toEqual([])
+    expect(selectOrphanFiles(args(f))).toEqual([])
   })
 
   it('keeps a file that has a matching DB row, even when old', () => {
     const f = file(NOW - ORPHAN_GRACE_MS - 10_000)
-    expect(
-      selectOrphanFiles({
-        files: [f],
-        dbImagePaths: new Set([f.fullPath]),
-        nowMs: NOW,
-        graceMs: ORPHAN_GRACE_MS
-      })
-    ).toEqual([])
+    expect(selectOrphanFiles({ ...args(f), dbImagePaths: new Set([f.fullPath]) })).toEqual([])
   })
 
   it('keeps an old-by-name file whose mtime is fresh (either signal young → keep)', () => {
     // filename ts is ancient but the file was just touched — mtime says young.
     const f = file(NOW - ORPHAN_GRACE_MS - 100_000, NOW - 1_000)
-    expect(
-      selectOrphanFiles({
-        files: [f],
-        dbImagePaths: new Set(),
-        nowMs: NOW,
-        graceMs: ORPHAN_GRACE_MS
-      })
-    ).toEqual([])
+    expect(selectOrphanFiles(args(f))).toEqual([])
   })
 
   it('sweeps only the orphans in a mixed dir', () => {
@@ -86,7 +69,8 @@ describe('selectOrphanFiles', () => {
       files: [rowed, oldOrphan, freshOrphan],
       dbImagePaths: new Set([rowed.fullPath]),
       nowMs: NOW,
-      graceMs: ORPHAN_GRACE_MS
+      graceMs: ORPHAN_GRACE_MS,
+      retireBeforeMs: NOW
     })
     expect(out).toEqual([oldOrphan.fullPath])
   })
@@ -134,7 +118,8 @@ describe('C1 regression — DST/TZ offset shift must not false-delete valid file
         files: [f],
         dbImagePaths: buggyKeep,
         nowMs: now,
-        graceMs: ORPHAN_GRACE_MS
+        graceMs: ORPHAN_GRACE_MS,
+        retireBeforeMs: now // degenerate bound: nothing younger than 'now' is kept
       })
     ).toEqual([f.fullPath]) // demonstrates the bug without the fix
 
@@ -148,7 +133,8 @@ describe('C1 regression — DST/TZ offset shift must not false-delete valid file
         files: [f],
         dbImagePaths: fixedKeep,
         nowMs: now,
-        graceMs: ORPHAN_GRACE_MS
+        graceMs: ORPHAN_GRACE_MS,
+        retireBeforeMs: now
       })
     ).toEqual([]) // fix: no false deletion
   })
@@ -168,7 +154,8 @@ describe('selectOrphanFiles at the grace boundary', () => {
     files: [f],
     dbImagePaths: new Set<string>(),
     nowMs: NOW,
-    graceMs: 60_000
+    graceMs: 60_000,
+    retireBeforeMs: NOW // degenerate bound: nothing younger than 'now' is kept
   })
 
   it('deletes an orphan aged exactly the grace window', () => {
@@ -229,26 +216,31 @@ describe('selectOrphanFiles retention bound (sign-out index-reset regression)', 
     expect(selectOrphanFiles(argsWithBound(f))).toEqual([f.fullPath])
   })
 
-  it('deletes at exactly the cutoff, keeps one millisecond younger', () => {
+  it('keeps a no-row file exactly AT the cutoff, sweeps one millisecond older', () => {
+    // Normal retention deletes only rows with ts < cutoff, so the file-side
+    // keep-condition is inclusive (>= cutoff): a frame whose newest signal sits
+    // exactly at the cutoff is still inside retention and must not be swept.
     const atCutoff = file(RETENTION_CUTOFF)
-    expect(selectOrphanFiles(argsWithBound(atCutoff))).toEqual([atCutoff.fullPath])
+    expect(selectOrphanFiles(argsWithBound(atCutoff))).toEqual([])
 
-    const insideCutoff = file(RETENTION_CUTOFF + 1)
-    expect(selectOrphanFiles(argsWithBound(insideCutoff))).toEqual([])
+    const pastCutoff = file(RETENTION_CUTOFF - 1)
+    expect(selectOrphanFiles(argsWithBound(pastCutoff))).toEqual([pastCutoff.fullPath])
   })
 
   it('bound uses the NEWER of filename and mtime like the grace check', () => {
-    // 20-day-old name but fresh mtime: the newest signal is inside retention.
-    const f = file(NOW - 20 * DAY, NOW - 1_000)
+    // 20-day-old name but a 5-day-old mtime: past the 60s grace (so the grace
+    // check cannot be what saves it) yet inside the 14-day retention, so the
+    // retention bound itself keeps the file. Had the bound read only the
+    // filename ts, the 20-day-old name would have been swept.
+    const f = file(NOW - 20 * DAY, NOW - 5 * DAY)
     expect(selectOrphanFiles(argsWithBound(f))).toEqual([])
   })
 
-  it('omitting the bound restores the legacy grace-only behavior', () => {
-    // Documents why the param is optional: tests pinning the pre-bound contract
-    // (all the cases above) still run unmodified, and the sweep always passes it.
+  it('the degenerate bound (retentionCutoff(now, 0) -> now) reproduces grace-only behavior', () => {
+    // The parameter is required, so the only sanctioned way to sweep without a
+    // retention bound is a cutoff of `now`, which keeps every current file and
+    // lets the grace window decide alone.
     const f = file(NOW - 5 * DAY)
-    expect(
-      selectOrphanFiles({ files: [f], dbImagePaths: new Set(), nowMs: NOW, graceMs: 60_000 })
-    ).toEqual([f.fullPath])
+    expect(selectOrphanFiles({ ...argsWithBound(f), retireBeforeMs: NOW })).toEqual([f.fullPath])
   })
 })

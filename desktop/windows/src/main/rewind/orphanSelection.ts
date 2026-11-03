@@ -52,17 +52,18 @@ export function deriveKeepSetWindow(
  * its row may have been lost to an index reset rather than to retention -- such a
  * file is recoverable via the disk rebuild (rebuildIndex.ts) and only the index
  * itself retires files through normal retention. Pass
- * `retentionCutoff(nowMs, retentionDays)`; a no-row file older than that is
- * beyond retention either way, so it is swept as before. Omitting the bound
- * restores the legacy grace-only behavior (used by tests pinning the old
- * contract; the sweep always passes it).
+ * `retentionCutoff(nowMs, retentionDays)`. The parameter is REQUIRED so no caller
+ * can silently drop the bound and get back the grace-only sweep that caused the
+ * sign-out deletions; the only sanctioned degenerate form is
+ * `retentionCutoff(nowMs, 0)` (retentionDays <= 0 clamps to nowMs), which keeps
+ * every current file and so behaves grace-only.
  */
 export function selectOrphanFiles(args: {
   files: SweepFile[]
   dbImagePaths: Set<string>
   nowMs: number
   graceMs: number
-  retireBeforeMs?: number
+  retireBeforeMs: number
 }): string[] {
   const { files, dbImagePaths, nowMs, graceMs, retireBeforeMs } = args
   const orphans: string[] = []
@@ -72,9 +73,12 @@ export function selectOrphanFiles(args: {
     // Treat the file as young if EITHER signal says so (conservative).
     const newestSignal = ts == null ? f.mtimeMs : Math.max(f.mtimeMs, ts)
     if (nowMs - newestSignal < graceMs) continue // possible in-flight insert, keep
-    if (retireBeforeMs != null && newestSignal > retireBeforeMs) {
+    if (newestSignal >= retireBeforeMs) {
       // Unindexed but younger than retention: possibly an index-reset victim,
-      // not garbage. Leave it for the disk rebuild to re-associate.
+      // not garbage. Leave it for the disk rebuild to re-associate. Inclusive
+      // (>=) on purpose: normal retention deletes only rows with ts < cutoff,
+      // so a file whose newest signal sits exactly AT the cutoff is still
+      // inside retention and the sweep must treat it the same way.
       continue
     }
     orphans.push(f.fullPath)

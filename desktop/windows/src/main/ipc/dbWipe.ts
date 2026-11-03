@@ -25,7 +25,10 @@
 // and restoreRewindFramesOn moves them back when that owner signs in again.
 // The physical JPEGs under rewind/ never move; rewindImagePathsBetween's
 // keep-set (REWIND_IMAGE_PATHS_SQL below) covers parked rows so the sweep
-// cannot touch them. Derived embeddings stay a plain wipe: they are
+// cannot touch them. Parking is not immortality: parked rows age out through
+// the same retention cutoff as live frames (pruneParkedRewindFramesOn below),
+// so an owner who never signs back in still stops consuming disk eventually.
+// Derived embeddings stay a plain wipe: they are
 // recomputable from the restored rows (OCR text lives in the row; the
 // embedding backfill re-embeds any frame whose vector is missing).
 
@@ -103,6 +106,9 @@ export interface WipeableDb {
   prepare(sql: string): {
     run(...params: SqlBindParam[]): unknown
     get(...params: SqlBindParam[]): unknown
+    // pruneParkedRewindFramesOn reads the doomed rows before deleting them;
+    // better-sqlite3 and node:sqlite statements both provide `all`.
+    all(...params: SqlBindParam[]): unknown
   }
 }
 
@@ -121,9 +127,11 @@ function tableExists(d: WipeableDb, table: string): boolean {
  * Parked rows MUST be covered: after a sign-out parks the prior owner's index,
  * their JPEGs sit on disk with no live row, and a keep-set that ignored the
  * parked table would let the sweep delete the very files the park exists to
- * preserve. Lives here (not db.ts) so the statement is importable (and
- * executable against node:sqlite) by dbWipe.test.ts, the same one-statement
- * source-of-truth pattern as rewindEmbeddingSql.ts.
+ * preserve. Parked coverage is bounded by retention in the row domain, not
+ * here: pruneParkedRewindFramesOn retires aged parked rows (and their files)
+ * at the same cutoff as live frames. Lives here (not db.ts) so the statement
+ * is importable (and executable against node:sqlite) by dbWipe.test.ts, the
+ * same one-statement source-of-truth pattern as rewindEmbeddingSql.ts.
  */
 export const REWIND_IMAGE_PATHS_SQL = `SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?
     UNION
@@ -186,6 +194,42 @@ export function restoreRewindFramesOn(d: WipeableDb, ownerUid: string): number {
     d.exec('COMMIT')
     const changes = r?.changes
     return typeof changes === 'bigint' ? Number(changes) : (changes ?? 0)
+  } catch (e) {
+    d.exec('ROLLBACK')
+    throw e
+  }
+}
+
+/**
+ * Retention for PARKED rewind rows, sharing the live table's cutoff: parking
+ * preserves history across owner transitions, but it is not exempt from the
+ * user's retention window. Without this prune, a parked owner who never signs
+ * back in would keep their rows forever -- and, via REWIND_IMAGE_PATHS_SQL,
+ * their JPEGs with them. Runs regardless of which owner the rows belong to:
+ * retention is per-frame age, not per-owner presence. One transaction, and it
+ * returns the doomed rows BEFORE deleting them so the caller can unlink the
+ * image files after the rows are gone (same ordering as
+ * db.ts deleteRewindFramesOlderThan: rows retire first, then files -- an
+ * unlink that fails leaves a no-row file past the cutoff, which the orphan
+ * sweep already treats as deletable-on-sight). No embedding cleanup needed:
+ * the park itself wipes rewind_embeddings in the same transaction, so nothing
+ * can reference a parked frame. Lives here (not db.ts) so it is executable
+ * against node:sqlite in dbWipe.test.ts. Strict `<`: a row exactly AT the
+ * cutoff is still inside retention, mirroring the live table.
+ */
+export function pruneParkedRewindFramesOn(
+  d: WipeableDb,
+  cutoffTs: number
+): Array<{ ts: number; imagePath: string }> {
+  if (!tableExists(d, 'rewind_frames_parked')) return []
+  d.exec('BEGIN')
+  try {
+    const doomed = d
+      .prepare('SELECT ts, image_path AS imagePath FROM rewind_frames_parked WHERE ts < ?')
+      .all(cutoffTs) as Array<{ ts: number; imagePath: string }>
+    d.prepare('DELETE FROM rewind_frames_parked WHERE ts < ?').run(cutoffTs)
+    d.exec('COMMIT')
+    return doomed
   } catch (e) {
     d.exec('ROLLBACK')
     throw e

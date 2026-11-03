@@ -1,6 +1,6 @@
 {
   "changes": [
-    "Signing out no longer erases your local Rewind history: your timeline stays kept for your account, hidden from other accounts, and returns when you sign back in.",
-    "The background cleaner no longer deletes frame images that only lost their index entry, so it can never silently empty your Rewind after a sign-out."
+    "Signing out keeps your recent Rewind history (within your retention window) parked for your account, restored when you sign back in.",
+    "The cleaner now spares in-retention frame images whose index entry vanished, so an index glitch can't silently empty your Rewind."
   ]
 }

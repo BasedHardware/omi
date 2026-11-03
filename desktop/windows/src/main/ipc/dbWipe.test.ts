@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   REWIND_IMAGE_PATHS_SQL,
   USER_DATA_TABLES,
+  pruneParkedRewindFramesOn,
   restoreRewindFramesOn,
   wipeUserDataOn
 } from './dbWipe'
@@ -202,6 +203,13 @@ function makeRewindDb(): DatabaseSync {
   db.prepare('INSERT INTO rewind_embeddings (frame_id, hash) VALUES (1, ?)').run('seed')
   db.exec(`CREATE TABLE rewind_frames ${REWIND_FRAME_COLUMNS}`)
   db.exec(`CREATE TABLE rewind_frames_parked ${PARKED_FRAME_COLUMNS}`)
+  // Production's unique (owner_uid, image_path) index (db.ts), so the park's
+  // INSERT OR IGNORE is exercised against the same schema that ships -- without
+  // it a duplicate-path park would insert a second row here and the prod
+  // behavior (silently keep the first) would go untested.
+  db.exec(
+    'CREATE UNIQUE INDEX idx_rewind_frames_parked_owner_path ON rewind_frames_parked (owner_uid, image_path)'
+  )
   return db
 }
 
@@ -256,6 +264,29 @@ describe('sign-out parks the rewind index for its owner (INV-AUTH-1 regression)'
     // Derived embeddings stay a plain wipe (recomputable from restored rows).
     expect(countRewind(db, 'rewind_embeddings')).toBe(0)
     expect(countRewind(db, 'rewind_embedding_vectors')).toBe(0)
+  })
+
+  it('INSERT OR IGNORE keeps the existing parked row when the same image path is parked twice', () => {
+    const db = makeRewindDb()
+    insertFrame(db, 1_000, '/rewind/2026-10-01/1000.jpg', 're-captured')
+    // The parked slot already holds (uidA, same image_path) -- e.g. an earlier
+    // park whose restore was interrupted. Production's UNIQUE (owner_uid,
+    // image_path) index makes the park's INSERT OR IGNORE skip the duplicate
+    // instead of throwing mid-wipe; this fixture carries that index, so this
+    // test fails if the park ever stops being OR IGNORE.
+    db.prepare(
+      `INSERT INTO rewind_frames_parked (owner_uid, ts, image_path) VALUES ('uidA', 500, '/rewind/2026-10-01/1000.jpg')`
+    ).run()
+
+    expect(() => wipeUserDataOn(db, { rewindOwnerUid: 'uidA' })).not.toThrow()
+
+    expect(countRewind(db, 'rewind_frames')).toBe(0)
+    expect(countRewind(db, 'rewind_frames_parked')).toBe(1)
+    const parked = db.prepare('SELECT ts, image_path FROM rewind_frames_parked').get() as {
+      ts: number
+      image_path: string
+    }
+    expect(parked).toEqual({ ts: 500, image_path: '/rewind/2026-10-01/1000.jpg' })
   })
 
   it("restores a returning owner's parked rows into the live index", () => {
@@ -367,5 +398,54 @@ describe('sign-out parks the rewind index for its owner (INV-AUTH-1 regression)'
 
     expect(paths).toContain('/rewind/2026-10-01/1000.jpg')
     expect(paths).toContain('/rewind/2026-10-01/2000.jpg')
+  })
+})
+
+// --- Parked rows age out through the same retention cutoff as live frames ---
+// Regression for the review gap: the keep-set above makes every parked JPEG
+// look referenced, so if parked rows were never pruned, a parked owner who
+// never signs back in would keep their rows (and their files) forever. The
+// prune runs per-frame age, regardless of owner presence, and retires rows
+// BEFORE their files so a failed unlink leaves a no-row file past the cutoff,
+// which the orphan sweep already treats as deletable-on-sight.
+describe('parked rewind retention (pruneParkedRewindFramesOn)', () => {
+  const insertParked = (db: DatabaseSync, uid: string, ts: number, imagePath: string): void => {
+    db.prepare('INSERT INTO rewind_frames_parked (owner_uid, ts, image_path) VALUES (?, ?, ?)').run(
+      uid,
+      ts,
+      imagePath
+    )
+  }
+
+  it('prunes parked rows past the cutoff and returns them for file unlink, including owners who never sign back in', () => {
+    const db = makeRewindDb()
+    insertParked(db, 'uidGone', 1_000, '/rewind/2026-10-01/1000.jpg') // ancient; owner never returns
+    insertParked(db, 'uidA', 6_000, '/rewind/2026-10-01/6000.jpg') // still inside retention
+
+    const doomed = pruneParkedRewindFramesOn(db, 5_000)
+
+    expect(doomed).toEqual([{ ts: 1_000, imagePath: '/rewind/2026-10-01/1000.jpg' }])
+    expect(doomed).not.toContainEqual({ ts: 6_000, imagePath: '/rewind/2026-10-01/6000.jpg' })
+    expect(countRewind(db, 'rewind_frames_parked')).toBe(1)
+    const kept = db.prepare('SELECT owner_uid FROM rewind_frames_parked').get() as {
+      owner_uid: string
+    }
+    expect(kept.owner_uid).toBe('uidA')
+  })
+
+  it('keeps a parked row exactly AT the cutoff (strict <, same boundary as live retention)', () => {
+    const db = makeRewindDb()
+    insertParked(db, 'uidA', 5_000, '/rewind/2026-10-01/5000.jpg')
+
+    expect(pruneParkedRewindFramesOn(db, 5_000)).toEqual([])
+
+    expect(countRewind(db, 'rewind_frames_parked')).toBe(1)
+  })
+
+  it('is a no-op on a schema that predates the parked table', () => {
+    const db = makeRewindDb()
+    db.exec('DROP TABLE rewind_frames_parked')
+
+    expect(pruneParkedRewindFramesOn(db, 5_000)).toEqual([])
   })
 })

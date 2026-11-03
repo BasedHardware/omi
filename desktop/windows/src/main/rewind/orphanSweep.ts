@@ -31,6 +31,16 @@ import {
  * retention cutoff are garbage no matter why their row is gone. Sign-out no
  * longer resets the index at all (dbWipe.ts parks it), so this bound is the
  * second line of defense for any future index-destroying bug.
+ *
+ * Accepted trade-off: a crash- or insert-failure orphan is indistinguishable
+ * from an index-reset victim at sweep time -- both are just a no-row file
+ * younger than the cutoff -- so it ALSO survives for up to the full retention
+ * window (14 days by default) instead of only the 60s grace, and nothing
+ * re-indexes it automatically (rebuildRewindIndexFromDisk runs only from the
+ * manual IPC). That bounds the wasted disk at ~retention-worth of orphans;
+ * shortening their grace back to 60s would re-arm the sweep against
+ * index-reset victims, which is the mass-deletion incident this sweep exists
+ * to prevent.
  */
 
 /** How often the runner sweeps after the startup pass. */

@@ -739,10 +739,11 @@ export type OmiBridgeApi = {
   /** Record a failed delivery attempt: bumps attempts, stores the last error. */
   recordVoiceTurnFailure: (idempotencyKey: string, error: string) => Promise<void>
   /** Sign-out teardown: delete every user-scoped local table (conversations,
-   *  captions, local KG, rewind frames, app usage, insights, indexed files) so a
-   *  different account on this machine starts clean. The signing-out owner's uid
-   *  PARKS their rewind frame index instead of deleting it (INV-AUTH-1 owner
-   *  transition, kept for them and invisible to other accounts); null deletes it. */
+   *  captions, local KG, app usage, insights, indexed files) so a different
+   *  account on this machine starts clean. Rewind frames are the exception:
+   *  with the signing-out owner's uid their index is PARKED instead of deleted
+   *  (INV-AUTH-1 owner transition, kept for them and invisible to other
+   *  accounts); null deletes it (fail-closed privacy). */
   wipeUserData: (ownerUid?: string | null) => Promise<void>
   /** Move a returning owner's parked rewind frames back into the live index
    *  (see wipeUserData). Idempotent: nothing parked for the uid restores
