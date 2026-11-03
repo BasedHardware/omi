@@ -4862,14 +4862,28 @@ Inference updates may change identity fields, but the current manual receipt win
 The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
 only committed IDs drive live updates and `SegmentsDeletedEvent`.
 
+Recording renames join only the exact `(speaker_id_scope, canonical stream_speaker)`
+voice accepted by the existing carry collector. `PATCH /v1/episodes/{episode_id}/assign-speaker`
+fans out to episode members in either direction; `PATCH /v1/conversations/{id}/recording-speakers`
+is available outside episode admission and discovers same-scope conversations within the UID
+when there is no episode. Each member commits its own receipt after whole-request
+prevalidation and a transactional voice fence. `manual_speaker_assignments.voices` stores
+scoped voice defaults with `decided_at`; selected-line decisions remain segment receipts.
+Unscoped rows retain conversation-local behavior, including deterministic legacy segment IDs.
+An encrypted UID-owned scope decision map supplies the latest voice decision at rollover,
+including when that voice is absent from the preceding member. An unavailable or malformed
+map emits fallback telemetry and uses the preceding member's incumbent carry receipt.
+
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
 The processor also reads and applies that receipt to its in-memory transcript
 before building the summary prompt, including when audio-based speaker resolution
-is unavailable. The mobile detail page regenerates an existing summary after
-four seconds without a newly acknowledged speaker edit, or when the detail page
-closes. Saves still in flight keep their conversation ID and regenerate once
+is unavailable. During a mobile labeling pass, Done or detail-page exit schedules
+one summary regeneration after pending saves. The four-second debounce remains
+for callers outside an explicit pass. A new edit supersedes an in-flight summary
+response and leaves one trailing regeneration. The transcript remains visible and
+editable behind a quiet progress indicator. Saves still in flight keep their conversation ID and regenerate once
 after the final successful acknowledgement, even if the detail page was disposed.
 The reprocess response carries `X-Omi-Speaker-Receipt-Summary: 1` only after
 the processor successfully reads and applies the manual receipt (including a
