@@ -110,7 +110,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "5m",
@@ -131,10 +131,10 @@
       "alert_identity": "omi-batch-unit-unpublished-2h",
       "component": "batch-pipeline",
       "impact": "product",
-      "severity": "warning",
+      "severity": "critical",
       "instatus_component": "speech-processing",
-      "tier": "agent",
-      "audience": "agent",
+      "tier": "page",
+      "audience": "human",
       "owner": "two-lane-lead"
     },
     "isPaused": false,
@@ -143,12 +143,10 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h",
-      "mute_time_intervals": [
-        "omi-tier-silent"
-      ]
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
     },
     "record": null
   },
@@ -243,7 +241,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "Alerting",
     "execErrState": "KeepLast",
     "for": "5m",
@@ -376,7 +374,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "30m",

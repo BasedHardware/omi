@@ -12,6 +12,9 @@ and recovery obligations. A completed terminal-disposition marker does **not**
 exempt `result_ready`: its ordered commit is still owed. Unknown states remain
 measured. The broader timeliness alarm separately covers quarantine, assignment
 holds and projection; this queue proxy does not prove delivery to the user.
+That delivery rule is promoted into the existing Grafana import gate with a human
+page tier; its diagnostic companions remain agent tier. The lead must dispatch
+the production import and verify live definitions after deploying this fix.
 
 A bounded scan reads at most 501 documents. If the first 500 are all exempt and
 a sentinel remains, it exports NaN, meaning unknown age. It must neither invent

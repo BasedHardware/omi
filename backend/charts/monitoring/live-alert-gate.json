@@ -44,6 +44,11 @@
     "omi-stt-no-full-stage-target",
     "omi-stt-pressure-sampler-stuck",
     "omi-redis-cache-conn-warn",
-    "omi-redis-cache-conn-page"
+    "omi-redis-cache-conn-page",
+    "omi-batch-unit-unpublished-2h",
+    "omi-batch-timeliness-sample-stale",
+    "omi-batch-timeliness-scan-blind",
+    "omi-batch-queue-uncommitted-2h",
+    "omi-batch-queue-safety-blind"
   ]
 }

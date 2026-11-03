@@ -11,7 +11,7 @@ from database.batch_pipeline_store import TIMELINESS_HOLD_SCAN_LIMIT, timeliness
 from utils.batch_pipeline.metrics import QueueMetrics
 
 BACKEND = Path(__file__).resolve().parents[2]
-PENDING = BACKEND / 'charts/monitoring/pending/batch-timeliness.json'
+PENDING = BACKEND / 'charts/monitoring/alerts/batch-timeliness.json'
 EPOCH = 100_000.0
 NOW = EPOCH + 5 * 3600
 SLA = 7200
@@ -346,7 +346,7 @@ def test_kill_switch_skips_firestore_and_counts_disabled(monkeypatch):
     assert not registry.get_sample_value('omi_batch_timeliness_observed_at_seconds')
 
 
-def test_rules_alarm_on_new_legs_flag_blindness_and_stay_agent_tier():
+def test_rules_page_on_new_delivery_breach_and_keep_diagnostics_agent_tier():
     rules = {rule['uid']: rule for rule in json.loads(PENDING.read_text(encoding='utf-8'))}
     alarm = rules['omi-batch-unit-unpublished-2h']
     exprs = [q['model'].get('expr') or q['model'].get('expression') for q in alarm['data']]
@@ -357,6 +357,13 @@ def test_rules_alarm_on_new_legs_flag_blindness_and_stay_agent_tier():
     blind = rules['omi-batch-timeliness-scan-blind']
     assert 'omi_batch_timeliness_scan_truncated' in blind['data'][0]['model']['expr']
     assert blind['for'] == '30m'
-    for rule in rules.values():
-        assert rule['labels']['tier'] == 'agent'
-        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+    gate = json.loads((BACKEND / 'charts/monitoring/live-alert-gate.json').read_text())
+    for uid, rule in rules.items():
+        assert uid in gate['uids']
+        if uid == 'omi-batch-unit-unpublished-2h':
+            assert rule['labels']['tier'] == 'page'
+            assert rule['labels']['audience'] == 'human'
+            assert not rule['notification_settings']['mute_time_intervals']
+        else:
+            assert rule['labels']['tier'] == 'agent'
+            assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
