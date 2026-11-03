@@ -155,8 +155,10 @@ class Probe:
         return response.json()
 
     def claim(self, fixture: dict) -> dict:
-        lease = self.rpc('claim').get('lease')
-        if not lease or lease['payload']['job_id'] != fixture['job_id']:
+        # The route's candidate cursor wraps on an empty page, so one poll can miss a head
+        # whose random uid sorts before the cursor. Real workers poll; so does this.
+        lease = wait_until(lambda: self.rpc('claim').get('lease'), 20, deadline=self.deadline)
+        if lease['payload']['job_id'] != fixture['job_id']:
             raise ProbeRefused('claim mismatch; staging window must exclude other pullers and fixtures')
         return {'uid': fixture['uid'], 'job_id': fixture['job_id'], 'epoch': fixture['epoch'], 'token': lease['token']}
 
