@@ -152,7 +152,11 @@ def test_dwell_and_decay_metrics_on_read(state_store):
 def test_status_endpoint_returns_persisted_decayed_stage(state_store, monkeypatch, stage, expected, message):
     state_store[PATH] = {'stage': stage, f'{stage}_until': datetime.now(timezone.utc) - PERIOD}
     monkeypatch.setattr(admin, 'get_rolling_speech_ms', lambda uid: {})
-    monkeypatch.setattr(admin, 'get_dg_budget_status', lambda uid: {})
+    monkeypatch.setattr(
+        admin,
+        'get_dg_budget_status',
+        lambda uid: {'daily_limit_ms': 0, 'used_ms': 0, 'remaining_ms': 0, 'exhausted': False},
+    )
     app = FastAPI()
     app.include_router(admin.router)
     app.dependency_overrides[admin.get_current_user_uid] = lambda: 'decay-user'
