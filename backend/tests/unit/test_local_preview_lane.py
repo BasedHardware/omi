@@ -126,6 +126,58 @@ def make_receiver(host):
     return fake
 
 
+@pytest.mark.parametrize('language', ['multi', 'en'])
+@pytest.mark.parametrize(
+    ('declared', 'enabled', 'reason'),
+    [(True, True, 'admitted'), (True, False, 'kill_switch'), (False, True, 'not_requested')],
+)
+@pytest.mark.asyncio
+async def test_server_batch_only_publishes_local_preview_admission(monkeypatch, language, declared, enabled, reason):
+    monkeypatch.setenv(KILL, str(enabled).lower())
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'false')
+    monkeypatch.setattr(receiver_module, 'server_batch_suppresses_live', lambda host: True)
+    monkeypatch.setattr(receiver_module, 'attach_visible_restore', Mock())
+    monkeypatch.setattr(receiver_module, 'capture_batch_preview', Mock(side_effect=AssertionError('provider selected')))
+    monkeypatch.setattr(receiver_module, 'attach_live_demand', Mock(side_effect=AssertionError('demand attached')))
+    monkeypatch.setattr(receiver_module, 'resolve_ondemand_config', lambda: SimpleNamespace(gate_enabled=False))
+    host = make_host(local_preview=declared)
+    host.request.language = language
+    host.persistence = SimpleNamespace(call=AsyncMock(side_effect=AssertionError('inventory read')))
+    host.asend_event = AsyncMock()
+    host.refresh_mobile_batch_admission = lambda: ListenSessionRuntime.refresh_mobile_batch_admission(host)
+    fake = make_receiver(host)
+    host.receiver = fake
+    host.state.realtime_demand.observe = lambda payload: True
+    before = counter(OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL, outcome=reason, client_platform='ios')
+
+    assert await ListenReceiver._initialize_stt(fake)
+    assert host.server_batch_only is True
+    assert fake.cloud_live_suppressed is True
+    assert host.local_preview_batch is (reason == 'admitted')
+    assert counter(OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL, outcome=reason, client_platform='ios') == before + 1
+    await host.refresh_mobile_batch_admission()
+    ready = ListenSessionRuntime._ready_event(host).to_json()
+    assert ready.get('local_preview') is (True if reason == 'admitted' else None)
+    assert 'provider' not in ready
+
+    # Exercise the actual lease-renewal event, including mid-session revocation.
+    renewal = '{"type":"client_state","mobile_batch_capability_v1":true}'
+    await ListenReceiver._handle_text(fake, renewal)
+    payload = host.asend_event.call_args.args[0].to_json()
+    assert payload['status'] == 'mobile_batch_admission'
+    assert payload.get('local_preview') is ready.get('local_preview')
+    if reason == 'admitted':
+        assert payload['mobile_standard_batch'] is True
+        monkeypatch.setenv(KILL, 'false')
+        await ListenReceiver._handle_text(fake, renewal)
+        revoked = host.asend_event.call_args.args[0].to_json()
+        assert 'local_preview' not in revoked
+        assert host.local_preview_batch is False
+    assert host.server_batch_only is True
+    assert fake.cloud_live_suppressed is True
+    host.persistence.call.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_local_preview_session_defers_then_opens_on_socket_audio(monkeypatch):
     monkeypatch.setattr(receiver_module, 'capture_batch_preview', Mock())
