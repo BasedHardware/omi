@@ -854,6 +854,7 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
 
     service = SimpleNamespace(store=object(), reconcile_async=reconcile_async)
     monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
     monkeypatch.setattr(serving, 'drain_recordings', admission)
     monkeypatch.setattr(serving.asyncio, 'wait_for', wait_for)
