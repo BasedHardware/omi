@@ -150,7 +150,8 @@ config OMI_FAULT_INJECT_HARD_FAULT_DELAY_MS
     depends on OMI_FAULT_INJECT_HARD_FAULT
     default 0
     help
-      Sleep this long before the fatal error, still before BLE. A bench
-      observer polling over SWD can then sample every failing boot.
+      Sleep this long between the fault witness line and the fatal error,
+      still before BLE, so a bench observer polling over SWD can sample the
+      witness on every failing boot.
 
 endmenu
