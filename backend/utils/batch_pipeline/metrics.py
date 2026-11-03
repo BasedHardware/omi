@@ -1,6 +1,7 @@
 """Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
 
 import logging
+import threading
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
@@ -34,6 +35,7 @@ class QueueMetrics:
         # Serving instances share one global queue; workers keep 0 for the HPA.
         self.min_refresh_seconds = min_refresh_seconds
         self._refresh_due = 0.0
+        self._refresh_lock = threading.Lock()
         self.capacity_sampling = capacity_sampling
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
@@ -183,11 +185,29 @@ class QueueMetrics:
             raise ValueError('static head scheduling event required')
 
     def refresh(self, store: Store, now: float) -> None:
+        if self.min_refresh_seconds <= 0:
+            self._refresh(store, now)
+            return
+        # The serving loop and the /metrics handler share this object across
+        # executors: reserve the interval before reading so concurrent callers
+        # skip. A skipped call reads nothing and changes nothing; a failed
+        # refresh releases its reservation so the next call reads again.
+        due = now + self.min_refresh_seconds
+        with self._refresh_lock:
+            if now < self._refresh_due:
+                return
+            previous, self._refresh_due = self._refresh_due, due
+        try:
+            self._refresh(store, now)
+        except BaseException:
+            with self._refresh_lock:
+                if self._refresh_due == due:
+                    self._refresh_due = previous
+            raise
+
+    def _refresh(self, store: Store, now: float) -> None:
         # Collect every query before changing gauges. Failed refresh retains last
         # values and does not advance freshness; adapters must reject stale data.
-        # A skipped call inside the interval reads nothing and changes nothing.
-        if now < self._refresh_due:
-            return
         samples = []
         for priority in Priority:
             pending = store.oldest(int(priority), ready_only=False)
@@ -219,7 +239,6 @@ class QueueMetrics:
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
             self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
         self.refreshed_at.labels(*self.scope).set(now)
-        self._refresh_due = now + self.min_refresh_seconds
         if capacity:
             for priority, count in capacity:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)

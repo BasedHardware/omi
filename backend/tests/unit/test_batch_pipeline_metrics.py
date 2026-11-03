@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
@@ -147,6 +148,23 @@ def test_min_refresh_interval_skips_reads_and_a_failure_retries_next_call(monkey
     metrics.refresh(store, 131)
     assert len(calls) > reads
     assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 131
+
+
+def test_a_refresh_started_during_another_skips_its_reads(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+
+    def overlapping(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            metrics.refresh(store, 100)  # a second caller arriving mid-read
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', overlapping)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * len(list(Priority))
 
 
 def test_zero_min_refresh_interval_reads_on_every_call(monkeypatch):
