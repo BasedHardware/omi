@@ -133,6 +133,9 @@ async def test_drain_emits_one_identifier_free_pass_on_query_failure(monkeypatch
 @pytest.fixture(autouse=True)
 def protocol_ready(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    # Paging/privacy fixtures share an owner; drain those rows serially.
+    # Parallel-admission tests explicitly choose their own worker count.
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
 
 
 def recording(**changes):
