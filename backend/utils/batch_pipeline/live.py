@@ -398,21 +398,26 @@ async def drain_recordings(store) -> bool:
     batch_size = record_drain_batch()
     concurrency = record_drain_concurrency()
     segments, partial_count = [], 0
+    privacy_blocked = False
 
     async def drain_one(segment):
-        nonlocal partial_count
+        nonlocal partial_count, privacy_blocked
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
             return
         partial_count += bool(pending.get('partial_coordinator'))
+        failed = False
         try:
             await admit_recording(store, pending)
         except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
+            # These rows remain due, so a full page must keep the idle wait.
+            privacy_blocked = True
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, privacy=True, run=pending.get('partial_run'))
             return
         except Exception as error:
+            failed = True
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
@@ -424,7 +429,9 @@ async def drain_recordings(store) -> bool:
             # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
             if latest.get('state') == 'record_pending':
-                delay = INVENTORY_POLL_SECONDS if (latest.get('partial_run') or {}).get('complete') else 60
+                delay = 60
+                if not failed and (latest.get('partial_run') or {}).get('complete'):
+                    delay = INVENTORY_POLL_SECONDS
                 latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
                 tx.put('jobs', segment, latest)
 
@@ -447,7 +454,7 @@ async def drain_recordings(store) -> bool:
         for result in results:
             if isinstance(result, BaseException):
                 raise result
-        return len(segments) == batch_size
+        return len(segments) == batch_size and not privacy_blocked
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',

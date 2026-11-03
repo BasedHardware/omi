@@ -186,11 +186,17 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('outcome', ['value_error', 'no_admission', 'admitted', 'already_deferred'])
-async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome):
+@pytest.mark.parametrize('partial_complete', [False, True])
+async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome, partial_complete):
     from utils.batch_pipeline import live
 
     store = MemoryStore()
-    store.rows['jobs', 'synthetic'] = {'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'synthetic'] = {
+        'state': 'record_pending',
+        'available_at': 0,
+        'partial_coordinator': partial_complete,
+        'partial_run': {'complete': partial_complete},
+    }
     monkeypatch.setattr(live.time, 'time', lambda: 1000)
 
     async def admission(store, pending):
@@ -206,7 +212,37 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome)
     await live.drain_recordings(store)
     row = store.rows['jobs', 'synthetic']
     assert row['state'] == ('ready' if outcome == 'admitted' else 'record_pending')
-    assert row['available_at'] == (0 if outcome == 'admitted' else 2000 if outcome == 'already_deferred' else 1060)
+    delay = live.INVENTORY_POLL_SECONDS if partial_complete and outcome != 'value_error' else 60
+    expected = 0 if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
+    assert row['available_at'] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked_rows', [1, 2])
+async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_rows(monkeypatch, blocked_rows):
+    from utils.batch_pipeline import live
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    store = MemoryStore()
+    for i in range(2):
+        store.rows['jobs', str(i)] = {
+            'segment_id': str(i),
+            'state': 'record_pending',
+            'available_at': 0,
+            'fenced': i < blocked_rows,
+        }
+
+    async def admission(store, pending):
+        if pending['fenced']:
+            raise BatchPrivacyBlocked('synthetic privacy fence')
+        store.rows['jobs', pending['segment_id']]['state'] = 'ready'
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    assert await live.drain_recordings(store) is False
+    for row in store.rows.values():
+        assert row['available_at'] == 0
+        assert row['state'] == ('record_pending' if row['fenced'] else 'ready')
 
 
 @pytest.fixture(autouse=True)
