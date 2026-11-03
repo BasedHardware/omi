@@ -31,6 +31,13 @@ rollback target or evidence that six workers have the same cost or capacity.
 Recheck Ready on-demand capacity before any later roll; do not scale down to
 the earlier baseline as part of an observability rollback.
 
+These audited bounds are not full-volume capacity qualification. The historical
+3.7x replay's 4/16 hot-minute and catch-up witnesses retain their original
+bounds. With 6/12, the synthetic 12 chain-second/second step does not catch up
+within the model's 90-minute window (12 workers at its 0.93 per-worker ceiling
+provide 11.16 chain-seconds/second). Assess actual demand, scheduling and
+throughput before expansion; do not change the live bounds to clear a replay.
+
 Current operator checklist:
 
 1. Before a worker roll, confirm HPA min 6 / max 12 and at least 6 Ready on-demand
