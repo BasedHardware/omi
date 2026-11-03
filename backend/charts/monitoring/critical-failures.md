@@ -90,6 +90,8 @@ This lane makes no live alert, Grafana, GKE or Cloud Monitoring changes.
    SHA. Its independent import job installs all gate UIDs and verifies active,
    definition-equal rules and their Telegram routing. A main push alone targets
    development and does not prove a production import.
+   The importer omits the two native production-project rules (enrichment and
+   guard counter) from development, which has no verified equivalent datasource.
 4. Check the new counter is queryable after a naturally unsafe verdict, and
    verify a notification through the receiver's approved delivery test. An
    import gate proves definitions/routes, not phone delivery or a working log

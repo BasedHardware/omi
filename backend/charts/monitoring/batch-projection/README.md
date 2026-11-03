@@ -53,20 +53,22 @@ The metric is alert-only. No scheduler, ramp, hard-3 rollback trigger or gate re
 
 ### Apply (lead)
 
-The rules live in `../pending/batch-timeliness.json` until the series exist in prod, because the monitoring
-contracts reject rules that read metrics missing from `metric-inventory.prod.json`.
+The active rules live in `../alerts/batch-timeliness.json`, are included in the
+combined export, and are admitted by `../live-alert-gate.json`. Their metric
+families are declared in the inventory; the older captured snapshot is unchanged.
 
-1. Deploy a batch worker image that contains this change.
+1. Deploy a batch worker image that contains the sampler.
 2. Confirm in Prometheus that `max(omi_batch_timeliness_observed_at_seconds) > 0` and that
    `omi_batch_timeliness_samples_total{outcome="ok"}` increases.
-3. Move the three rule objects from `../pending/batch-timeliness.json` into `../alerts/batch-timeliness.json` and append
-   them to `../alert-rules.json`. Refresh `metric-inventory.prod.json` with its documented generator, then run the
-   monitoring contract tests.
-4. Import with the documented Grafana rule provisioning path (`--apply --backup-file <new-file>`).
+3. Dispatch the existing metrics-egress workflow explicitly for production at
+   the merged SHA. The gated importer installs and verifies all three rules.
+   A main push targets development by default.
+4. Complete the delivery qualification in [critical-failures.md](../critical-failures.md).
 
-All three rules are agent tier: Grafana keeps their state, and Telegram stays muted (`omi-tier-silent`). Change `tier`
-to `page` only if David wants the alarm on his phone.
+The two-hour unpublished-unit alarm is page tier and routes to the existing
+human Telegram receiver. The stale and blind companions remain muted agent tier.
 
-Rollback: set `BATCH_TIMELINESS_ALARM_ENABLED=false` on the worker (gauges freeze and the stale rule fires), or pause
-the three Grafana rules. The index step: merge triggers the Firestore index reconcile; approve its prod job and wait
-for READY before shipping the worker (merge_pr.sh waits out these gates).
+Rollback an incorrect definition with a forward revert and the same import;
+keep real timeliness breaches tracked while reverting. The index step: merge
+triggers the Firestore index reconcile; approve its prod job and wait for READY
+before shipping the worker (merge_pr.sh waits out these gates).
