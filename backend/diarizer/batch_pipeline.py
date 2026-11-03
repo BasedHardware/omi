@@ -731,9 +731,8 @@ class PipelineWorker:
                             worker_vad_receipt=receipt,
                         )
                     )
-                elif staged_audio_invalid or (
-                    isinstance(exc, BatchValidationError)
-                    and (reason == 'unsupported_language' or worker_validation_disposition_enabled())
+                elif (staged_audio_invalid or isinstance(exc, BatchValidationError)) and (
+                    reason == 'unsupported_language' or worker_validation_disposition_enabled()
                 ):
                     # Repeating terminal validation cannot repair staged bytes
                     # or establish silence. End this chain now and retain
