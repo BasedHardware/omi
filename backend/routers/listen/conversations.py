@@ -13,7 +13,7 @@ from config.batch_live_preview import capture_snapshot
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import capture_compatible as server_batch_capture_compatible
 from config.server_batch import has_audio as server_batch_has_audio
-from database.server_batch_audio import close_server_batch_audio
+from routers.listen.batch_close import close_batch_archive
 from config.server_batch import request_eligible as server_batch_request_eligible
 from config.server_batch import capture_language as server_batch_capture_language
 from config.server_batch import continuation_language as server_batch_continuation_language
@@ -398,22 +398,9 @@ class LiveConversationController:
                 return False
         if server_batch_owned(data):
             # Commit the silence/partial-window tail before creating a batch obligation.
-            receiver = getattr(self.host, 'receiver', None)
-            raw_archive = getattr(receiver, 'raw_archive', None)
-            if conversation_id == self.host.state.current_conversation_id and raw_archive is not None:
-                await raw_archive.close()
-                if getattr(self.host.state, 'active', False) is not True and not await self.host.persistence.call(
-                    close_server_batch_audio, self.host.request.uid, conversation_id
-                ):
-                    return False
-                data = await self.host.persistence.call(
-                    conversations_db.get_conversation,
-                    self.host.request.uid,
-                    conversation_id,
-                    read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
-                )
-                if not data:
-                    return False
+            data = await close_batch_archive(self.host, conversation_id, data)
+            if not data:
+                return False
             if server_batch_has_audio(data):
                 return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):

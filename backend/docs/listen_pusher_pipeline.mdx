@@ -296,7 +296,11 @@ Pusher opcode 101 still commits PCM through
 The lifecycle loop uses accepted local audio activity while capture continues,
 then flushes original custody before finalization. The raw-only finalizer writes
 an idempotent `record_pending` job before completing the capture and its no-effects
-fanout receipt. Batch waits for `record_audio_closed`, verifies source generations,
+fanout receipt. At the archive-close barrier, eligible batch captures attach to
+their episode by committed audio bounds before finalization is queued. This uses
+the shared fenced recorded-time transaction, without a client-seen or paid-call
+gate; an observed attachment failure leaves finalization as the repair path.
+Batch waits for `record_audio_closed`, verifies source generations,
 and derives work-unit bounds from persisted sample spans. It inherits the named
 language and retains ordinary privacy, compute/funding and language guardrails.
 Live transcription usage and live-transcript success metrics exclude intentional

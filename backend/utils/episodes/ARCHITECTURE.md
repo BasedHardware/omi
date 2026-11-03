@@ -476,3 +476,11 @@ When atomic sync intake appends meaningful speech, its new content revision
 invalidates an older automatic model/Jev/deterministic discard. Transport replays
 and content still needing fragment review retain the assessment; user decisions remain authoritative.
 The final-discard predicate continues to ignore the intake hint itself.
+
+Batch audio close attaches membership before queued transcription/finalization.
+`routers.listen.batch_close` preserves the archive barrier and reuses its existing
+conversation reread. `utils.episodes.batch_close` checks ownership, privacy,
+retention and episode/recorded-time admission, then calls `service.attach_recorded`
+with committed audio bounds. Live and sync attachment use that same primitive;
+neither the current pointer nor processing time selects a batch capture's owner.
+This metadata write does not require client-seen or schedule model work.
