@@ -311,9 +311,11 @@ class UsageProvider with ChangeNotifier {
         } catch (e) {
           Logger.debug('Failed to release paywall STT pin: $e');
         }
-        _isSubscriptionLoading = false;
-        _scheduleBacklogRefresh();
-        notifyListeners();
+        if (generation == _sessionGeneration) {
+          _isSubscriptionLoading = false;
+          _scheduleBacklogRefresh();
+          notifyListeners();
+        }
       }
     }
   }
