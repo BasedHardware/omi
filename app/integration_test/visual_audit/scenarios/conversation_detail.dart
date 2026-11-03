@@ -14,7 +14,6 @@ import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -435,21 +434,28 @@ final conversationDetailScenarios = <AuditScenario>[
   AuditScenario(
     id: 'conversation-iphone-summary',
     title: 'Summary line: transcribed and summarized on this iPhone',
-    page: 'lib/pages/on_device/on_device_provenance_section.dart (OnDeviceProvenanceSection)',
-    state: 'A phone-made summary saved to keep live hours; the line names this iPhone',
+    page: _page,
+    state: 'The design conversation, summarized on this iPhone to save live hours. The line sits above the summary '
+        'and stays collapsed; a tap opens the why.',
     run: (a) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final previous = OnDeviceTranscriptionController.instance;
+      final controller = OnDeviceTranscriptionController(manageNativeCustody: false, canSummarizeOnPhone: true)
+        ..debugActivate();
+      controller.recordProvenance(
+        'audit-design',
+        const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.savingLiveHours),
+      );
+      OnDeviceTranscriptionController.instance = controller;
       try {
-        final controller = OnDeviceTranscriptionController(manageNativeCustody: false, canSummarizeOnPhone: true)
-          ..debugActivate();
-        controller.recordProvenance(
-          'demo-summary',
-          const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.savingLiveHours),
-        );
-        await a.pump(OnDeviceProvenanceSection(conversationId: 'demo-summary', controller: controller));
+        await _pumpDesignConversation(a);
         expect(find.text('Transcribed and summarized on this iPhone'), findsOneWidget);
-        await a.shot('The iPhone summary line');
+        expect(find.text('Ship the widgets without waiting for chat'), findsWidgets);
+        expect(find.textContaining('Ship them on their own'), findsOneWidget);
+        expect(find.text('Why this was done on your phone'), findsNothing);
+        await a.shot('The conversation summary, with the iPhone line above it');
       } finally {
+        OnDeviceTranscriptionController.instance = previous;
         debugDefaultTargetPlatformOverride = null;
       }
     },

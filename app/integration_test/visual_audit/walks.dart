@@ -19,17 +19,23 @@ class DemoWalk {
 }
 
 /// [scenarioId] is an id from the visual-audit registry. [tap] presses that visible label after
-/// the page has settled. [revealPlans] waits for the plans sheet and checks it rendered the demo
-/// catalog instead of the load-failure state. [pops] then closes that many routes (the sheet is
-/// one; a sheet on top of Plan & Usage is two).
+/// the page has settled. [afterTap] is text that tap must reveal; the walk then holds
+/// [_afterTapHold] so the revealed panel can be read. [revealPlans] waits for the plans sheet and
+/// checks it rendered the demo catalog instead of the load-failure state. [pops] then closes that
+/// many routes (the sheet is one; a sheet on top of Plan & Usage is two).
 class DemoWalkStep {
-  const DemoWalkStep(this.scenarioId, {this.tap, this.revealPlans = false, this.pops = 0});
+  const DemoWalkStep(this.scenarioId, {this.tap, this.afterTap, this.revealPlans = false, this.pops = 0});
 
   final String scenarioId;
   final String? tap;
+  final String? afterTap;
   final bool revealPlans;
   final int pops;
 }
+
+/// Long enough to read the expanded on-device why. Independent of the per-frame hold, which is
+/// too short for that paragraph.
+const _afterTapHold = Duration(seconds: 4);
 
 /// The UI-cleanup surfaces: home, locked rows, the plans mock, search, activity, memories,
 /// Plan & Usage, live, On the Way, Offline Sync, the iPhone summary line, Device, onboarding,
@@ -47,7 +53,11 @@ const uiCleanupWalk = DemoWalk(
     DemoWalkStep('conversation-live-phone-paused'),
     DemoWalkStep('on-the-way'),
     DemoWalkStep('conversations-offline-sync-history'),
-    DemoWalkStep('conversation-iphone-summary', tap: 'Transcribed and summarized on this iPhone'),
+    DemoWalkStep(
+      'conversation-iphone-summary',
+      tap: 'Transcribed and summarized on this iPhone',
+      afterTap: 'Why this was done on your phone',
+    ),
     DemoWalkStep('device-catching-up-large'),
     DemoWalkStep('onboarding-find-devices-none'),
     DemoWalkStep('review-dream-report'),
@@ -79,6 +89,15 @@ Future<void> playDemoWalk({required WidgetTester tester, required AuditSuite sui
       await tester.tap(finder.hitTestable().first, warnIfMissed: false);
       await _until(tester, step.revealPlans ? find.text('Upgrade Your Plan') : finder);
       expect(tester.takeException(), isNull, reason: '${step.scenarioId} tap ${step.tap}');
+      if (step.afterTap != null) {
+        final revealed = find.text(step.afterTap!);
+        await _until(tester, revealed);
+        expect(revealed, findsWidgets, reason: '${step.scenarioId} tap did not reveal "${step.afterTap}"');
+        expect(tester.takeException(), isNull, reason: '${step.scenarioId} ${step.afterTap}');
+        await Future<void>.delayed(_afterTapHold);
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: '${step.scenarioId} hold ${step.afterTap}');
+      }
       if (step.revealPlans) {
         expect(find.text('Unable to load plans'), findsNothing, reason: '${step.scenarioId} plans failed to load');
         expect(find.byType(OmiErrorState), findsNothing, reason: '${step.scenarioId} showed an error state');

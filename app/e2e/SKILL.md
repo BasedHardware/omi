@@ -548,7 +548,8 @@ app/scripts/demo_walk.sh --walk ui-cleanup --device <UDID> --out /tmp/omi-demo-w
 
 **Add a page:** register an `AuditScenario` as in Visual audit, then add a `DemoWalkStep` with
 that id in `app/integration_test/visual_audit/walks.dart`. A step can `tap` a visible label.
-`revealPlans: true` waits for the plans sheet and fails if it shows the load-failure state.
+`afterTap` is text that tap must reveal; the walk holds it for four seconds. `revealPlans: true`
+waits for the plans sheet and fails if it shows the load-failure state.
 
 The plans sheet in this walk (and in the `settings-plans-ready` scenario) uses `DemoBillingUsage`
 from `app/integration_test/visual_audit/demo_billing.dart`. That catalog is local: no StoreKit
