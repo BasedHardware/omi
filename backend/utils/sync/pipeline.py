@@ -978,6 +978,7 @@ def retrieve_vad_segments(
     segment_source_maps: dict | None = None,
     segment_source_lock: threading.Lock | None = None,
     keep_short: bool = False,
+    early_segment_paths: set[str] | None = None,
 ):
     try:
         start_timestamp = get_timestamp_from_path(path)
@@ -1019,6 +1020,8 @@ def retrieve_vad_segments(
                     dup += 1
                     segment_path = f'{path_dir}/dup{dup}_{clock_prefix}{segment_timestamp}.wav'
                 segmented_paths.add(segment_path)
+                if early_segment_paths is not None:
+                    early_segment_paths.add(segment_path)
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             try:
                 segment_aseg.export(segment_path, format='wav')
@@ -2528,30 +2531,31 @@ async def _run_sync_vad_phase(
         local_errors: list[str] = []
         try:
             source_early = early_segment_paths is not None and is_early_capture_time(get_timestamp_from_path(path))
-        except ValueError:
+        except (IndexError, ValueError):
             source_early = False  # Internal invalid names retain their existing later validation.
-        local_segments: set[str] = set() if source_early else segmented_paths
+        retrieve = (
+            partial(retrieve_vad_segments, early_segment_paths=early_segment_paths)
+            if source_early
+            else retrieve_vad_segments
+        )
         try:
             if segment_source_maps is not None:
-                retrieve_vad_segments(
+                retrieve(
                     path,
-                    local_segments,
+                    segmented_paths,
                     local_errors,
                     source_frame_map=(source_frame_maps or {}).get(path),
                     segment_source_maps=segment_source_maps,
                     segment_source_lock=segment_source_lock,
                 )
+            elif source_early:
+                retrieve(path, segmented_paths, local_errors, segment_source_lock=segment_source_lock)
             else:
-                retrieve_vad_segments(path, local_segments, local_errors)
+                retrieve(path, segmented_paths, local_errors)
         except Exception as error:
             if not local_errors:
                 local_errors.append(_bounded_exception_type(error))
         finally:
-            if source_early:
-                with segment_source_lock:
-                    segmented_paths.update(local_segments)
-                    if early_segment_paths is not None:
-                        early_segment_paths.update(local_segments)
             vad_errors.extend(local_errors)
 
     # Executor futures cannot stop their underlying threads when cancelled.
@@ -2998,13 +3002,14 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                 },
             )
             early_segment_paths: set[str] = set()
+            admitted_early_paths = early_segment_paths if capture_received_at is not None else None
             if source_frame_maps:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, early_segment_paths
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, admitted_early_paths
                 )
             else:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths, segmented_paths, early_segment_paths=early_segment_paths
+                    wav_paths, segmented_paths, early_segment_paths=admitted_early_paths
                 )
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []

@@ -292,18 +292,16 @@ def test_early_request_offset_preserves_capture_order_and_duration():
 
 
 @pytest.mark.asyncio
-async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor(monkeypatch):
-    source = 'audio_omi_opus_16000_1_fs160_1704067199.wav'
-    derived = '1704067201.wav'
+async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor(monkeypatch, tmp_path):
+    source = str(tmp_path / 'audio_omi_opus_16000_1_fs160_1704067199.wav')
+    derived = str(tmp_path / '1704067201.0.wav')
+    pipeline.AudioSegment.silent(duration=4000, frame_rate=16000).export(source, format='wav')
 
     async def inline(_executor, function, *args, **kwargs):
         return function(*args, **kwargs)
 
-    def vad(_path, segments, _errors):
-        segments.add(derived)
-
     monkeypatch.setattr(pipeline, 'run_blocking', inline)
-    monkeypatch.setattr(pipeline, 'retrieve_vad_segments', vad)
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 2.0, 'end': 4.0}])
     segments, early = set(), set()
     errors, _elapsed = await pipeline._run_sync_vad_phase([source], segments, early_segment_paths=early)
     assert not errors and segments == early == {derived}
