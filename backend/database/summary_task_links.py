@@ -56,7 +56,15 @@ class SummaryTaskRow:
                     description=self.item.description,
                     owner=TaskOwner(self.item.capture_owner or 'unknown'),
                     due_at=self.item.due_at,
-                    due=TaskDue.model_validate(self.item.due.model_dump(mode='python')) if self.item.due else None,
+                    due=(
+                        parse_payload_strict(
+                            TaskDue,
+                            self.item.due.model_dump(mode='python'),
+                            document_path=f'conversations/{self.conversation_id}/structured/action_items/{self.index}/due',
+                        )
+                        if self.item.due
+                        else None
+                    ),
                     due_confidence=1.0 if self.item.due_at else None,
                 ),
                 'capture_confidence': self.item.capture_confidence if self.item.capture_confidence is not None else 0.5,
