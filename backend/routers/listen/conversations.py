@@ -30,7 +30,6 @@ from routers.listen.contracts import ConversationCaptureOrigin, persisted_starte
 from utils.byok import get_byok_keys
 from utils.executors import start_background_task
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
-from utils.live_speaker_carry import carried_receipt
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service

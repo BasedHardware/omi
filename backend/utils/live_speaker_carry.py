@@ -7,7 +7,7 @@ onto the new row: only voices the caller actually labeled on the still-active
 provider scope carry, never an automatic match or a mapped suggestion.
 """
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from utils.manual_speaker_assignments import (
     _receipt_section,  # pyright: ignore[reportPrivateUsage]  # intentional shared receipt accessor
