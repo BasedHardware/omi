@@ -2,10 +2,10 @@
 
 [Admission contract](../../listen_pusher_pipeline.mdx#server-batch-only-capture-by-platform).
 
-David approved this experiment on 2026-11-03, excluding Japanese. The listen
-starter set is `ca,gl,eu,cy,af,sq,bs,sw`; all eight are listed by Modulate and
-unsupported by deployed Parakeet. Empty `SERVER_BATCH_UNSUPPORTED_LANGUAGES`
-restores previous new-session admission. Profile agreement and all privacy,
+David approved this experiment on 2026-11-03, excluding Japanese. Dev/prod
+listen ships with `SERVER_BATCH_UNSUPPORTED_LANGUAGES` empty, preserving previous
+new-session admission. The lead owns the initial language rollout after
+`backend-sync-backfill` serves this commit. Profile agreement and all privacy,
 funding, speaker and custody checks still apply. Bosnian retains its recorded
 `bs` route while matching the existing `sr` spoken-language profile equivalence.
 
@@ -33,9 +33,9 @@ against production in this change. Newly admitted named unsupported native units
 bypass that worker entirely and emit `surface=intake,route=multilingual`.
 
 The rollout lead must serve the new native-record drainer/provider routing on
-CPU batch hosts before enabling the listen allowlist. If release ordering sends
-listen first, keep the env empty until those drainers serve this change; an older
-drainer would still enqueue these units at the GPU language barrier.
+`backend-sync-backfill` before enabling the listen allowlist. Checked-in chart
+values and the composed runtime manifest keep it empty through a listen-first
+release; an older drainer would still enqueue these units at the GPU language barrier.
 
 Planscost reads the bounded per-language suppression counter and Modulate batch
 results after 48 h clean batch timeliness, `failed_held`, and T2 `terminal_speech`;
