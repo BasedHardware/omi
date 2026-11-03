@@ -73,6 +73,7 @@ from database import users as users_db
 from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes import output_language as episode_language
+from utils.llm.output_language import dominant_segment_language, languages_match
 from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
 from utils.episodes import capture_groups as episode_groups
 from utils.episodes.capture_groups import calendar_identity as _calendar_identity
@@ -198,7 +199,7 @@ def _episode_language_inputs(
         authority = stored if stored is not None and stored.strip() else (moment.language or '')
         conversation_language = episode_language.normalize_language(authority)
         if not conversation_language:
-            conversation_language = episode_language.dominant_segment_language(moment.segments)
+            conversation_language = dominant_segment_language(moment.segments)
         _language_cache_set(conversation_key, conversation_language)
 
     preference_key = ('preference', uid, session_id, '', client_key)
@@ -947,7 +948,7 @@ def _record_moment_once(
             uid, conversation_language, preference=preference, segments=moment.segments
         )
         prior = episode_language.state_language(base, hint_language=conversation_language)
-        if prior and not episode_language.languages_match(prior, output_language):
+        if prior and not languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
     try:
         result = (composer.notes_free if compose_owns else incremental.run_incremental_update)(
@@ -1079,9 +1080,7 @@ def _record_moment_once(
         # A prompt instruction does not prove the model followed it. Only stamp
         # observed state text; otherwise the next update detects and repairs it.
         updates['output_language'] = (
-            output_language
-            if compose_owns or episode_language.languages_match(detected_output_language, output_language)
-            else None
+            output_language if compose_owns or languages_match(detected_output_language, output_language) else None
         )
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}

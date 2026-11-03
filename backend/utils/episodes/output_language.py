@@ -22,8 +22,6 @@ from utils.llm.output_language import (
     language_preference as read_language_preference,
     normalize_language,
     capture_output_language,
-    dominant_segment_language,
-    languages_match,
 )
 from utils.translation_language import detect_language
 
