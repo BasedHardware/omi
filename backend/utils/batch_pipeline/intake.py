@@ -43,7 +43,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline import gpu_overflow
-from utils.batch_pipeline.provider_stt import provider_enqueue
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
