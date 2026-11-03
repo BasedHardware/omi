@@ -1,8 +1,9 @@
-"""Always-encrypted, bounded grouping sidecars inside the existing transcript write.
+"""Always-encrypted grouping sidecars inside the existing transcript write.
 
 Provenance lasts with its transcript for safe reprocessing. Experimental identity
 predictions expire after 30 days, independently of the account protection level.
 No audio, vectors, extra storage calls or encryption-key network calls.
+Compact batch timing provenance is bounded per segment, not per conversation.
 """
 
 # LIFECYCLE: permanent
@@ -20,6 +21,8 @@ FIELD = 'speaker_grouping_internal'
 MAX_SEGMENTS = 256
 MAX_BYTES = 64 * 1024
 MAX_ENCODED_BYTES = 96 * 1024
+MAX_TIMING_BYTES = 1024
+MAX_TIMING_ENCODED_BYTES = 2048
 PREDICTION_TTL_SECONDS = 30 * 24 * 60 * 60
 
 
@@ -36,6 +39,51 @@ def _unavailable(outcome: str) -> None:
     except Exception:
         pass  # Optional telemetry cannot withdraw a transcript write/read.
     logger.warning('event=speaker_grouping_storage outcome=%s', outcome)
+
+
+def _timing_record(record: dict[str, Any]) -> dict[str, Any] | None:
+    """Only the admission stamp and its provider partition may bypass capacity."""
+    values = record.get('values')
+    provider = values.get('provider_speaker') if isinstance(values, dict) else None
+    if not isinstance(provider, dict):
+        return None
+    scope = provider.get('scope')
+    if (
+        provider.get('timing_store') not in ('batch', 'sync')
+        or not isinstance(scope, str)
+        or not scope.startswith('final:batch:')
+        or scope == 'final:batch:'
+        or scope.startswith('final:batch:conversation:')
+        or type(provider.get('id')) is not int
+        or not isinstance(provider.get('provider'), (str, type(None)))
+    ):
+        return None
+    compact = {key: provider.get(key) for key in ('id', 'scope', 'provider', 'timing_store')}
+    result = {'id': record.get('id'), 'values': {'provider_speaker': compact}}
+    return result if len(json.dumps(result).encode()) <= MAX_TIMING_BYTES else None
+
+
+def _protect_timing_markers(pending, uid: str) -> None:
+    for segment, record, existing in pending:
+        try:
+            if record is None:
+                if not isinstance(existing, str) or len(existing) > MAX_ENCODED_BYTES:
+                    continue
+                plaintext = encryption.decrypt(existing, uid)
+                if plaintext == existing:
+                    continue
+                record = json.loads(plaintext)
+            if record.get('id') != segment.get('id'):
+                continue
+            compact = _timing_record(record)
+            if compact is None:
+                continue
+            payload = json.dumps(compact)
+            encrypted: Any = encryption.encrypt(payload, uid)
+            if isinstance(encrypted, str) and encrypted != payload and len(encrypted) <= MAX_TIMING_ENCODED_BYTES:
+                segment[FIELD] = encrypted
+        except Exception:
+            continue  # Transcript survives; unauthenticated provenance cannot choose a store.
 
 
 def protect_segments(segments: list[Any], uid: str) -> None:
@@ -84,6 +132,7 @@ def protect_segments(segments: list[Any], uid: str) -> None:
             segment[FIELD] = value
     except Exception:
         _unavailable('evidence_dropped')
+        _protect_timing_markers(pending, uid)
 
 
 def reveal_segments(segments: list[Any], uid: str) -> None:
@@ -99,16 +148,21 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
         if encrypted is None:
             continue
         try:
-            total += len(encrypted)
-            if index >= MAX_SEGMENTS or total > MAX_ENCODED_BYTES or not isinstance(encrypted, str):
+            if not isinstance(encrypted, str) or len(encrypted) > MAX_ENCODED_BYTES:
                 raise ValueError('capacity')
             plaintext = encryption.decrypt(encrypted, uid)
-            decoded_bytes += len(plaintext.encode())
-            if plaintext == encrypted or decoded_bytes > MAX_BYTES:
+            if plaintext == encrypted:
                 raise ValueError('authentication')
             record = json.loads(plaintext)
             if record['id'] != segment.get('id') or not isinstance(record['values'], dict):
                 raise ValueError('binding')
+            if len(encrypted) <= MAX_TIMING_ENCODED_BYTES and record == _timing_record(record):
+                segment.update(record['values'])
+                continue
+            total += len(encrypted)
+            decoded_bytes += len(plaintext.encode())
+            if index >= MAX_SEGMENTS or total > MAX_ENCODED_BYTES or decoded_bytes > MAX_BYTES:
+                raise ValueError('capacity')
             values = record['values']
             expires = values.get('speaker_grouping_shadow_expires_at', 0)
             if not isinstance(expires, (int, float)) or not now < expires <= now + PREDICTION_TTL_SECONDS:

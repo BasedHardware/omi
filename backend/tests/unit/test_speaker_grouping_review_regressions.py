@@ -161,6 +161,34 @@ def test_storage_never_falls_back_to_plaintext_or_blocks_transcript(monkeypatch,
     assert not set(GROUPING_INTERNAL_FIELDS) & set(restored)
 
 
+@pytest.mark.parametrize('fault', ['wrong_owner', 'binding', 'plaintext', 'encryption', 'unknown_store', 'oversized'])
+def test_timing_capacity_exception_still_fails_closed(monkeypatch, fault):
+    rows = [
+        {
+            'id': str(i),
+            'provider_speaker': {'id': 0, 'scope': 'final:batch:unit', 'provider': 'parakeet', 'timing_store': 'batch'},
+        }
+        for i in range(storage.MAX_SEGMENTS + 1)
+    ]
+    if fault == 'encryption':
+        monkeypatch.setattr(encryption, 'encrypt', lambda payload, uid: payload)
+    elif fault == 'unknown_store':
+        for row in rows:
+            row['provider_speaker']['timing_store'] = 'unknown'
+    elif fault == 'oversized':
+        for row in rows:
+            row['provider_speaker']['scope'] += 'x' * storage.MAX_TIMING_BYTES
+    storage.protect_segments(rows, 'owner')
+    if fault == 'binding':
+        for row in rows:
+            row['id'] = 'different-' + row['id']
+    elif fault == 'plaintext':
+        for row in rows:
+            row[storage.FIELD] = encryption.decrypt(row[storage.FIELD], 'owner')
+    storage.reveal_segments(rows, 'different-owner' if fault == 'wrong_owner' else 'owner')
+    assert all(not set(GROUPING_INTERNAL_FIELDS) & set(row) for row in rows)
+
+
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_public_raw_dictionary_projections_remove_all_internal_fields(level):
     c = internal_conversation(level)

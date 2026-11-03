@@ -406,6 +406,66 @@ def test_resolved_batch_scopes_use_the_retained_provider_unit(env, batch_stores)
     _assert_batch_voices(conversation, reads)
 
 
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('resolved_scopes', [False, True])
+def test_long_batch_timing_stamps_survive_persistence_and_prove_only_their_store(monkeypatch, level, resolved_scopes):
+    from database import conversations as db
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.projection_parts import stamp_speaker
+    from utils.conversations import speaker_grouping_storage as grouping
+
+    # Seven units and 2,100 segments exceed both the sidecar entry and byte limits.
+    count = 2100
+    conversation = _conversation([0] * count, seconds=1)
+    for i, segment in enumerate(conversation.transcript_segments):
+        unit = i // 300
+        item = WorkItem(
+            f'unit{unit}',
+            'u1',
+            ORIGIN + unit * 300,
+            'gs://synthetic/staged',
+            300,
+            Priority.FRESH,
+            timing_store='batch' if unit % 2 == 0 else 'sync',
+        )
+        stamp_speaker(segment, item, {'words_provider': 'parakeet'}, True, item.segment_id)
+        segment.speaker_grouping_shadow = {'owner_link': 'user'}
+        if resolved_scopes:
+            segment.assign_resolved_speaker(7, 'final:batch:conversation:c1')
+    expected = {s.id: dict(s.provider_speaker) for s in conversation.transcript_segments}
+
+    stored = db.encode_conversation_for_write('u1', conversation.model_dump(), level)
+    # Rewriting opaque encrypted sidecars must also survive the original capacity limit.
+    opaque = db._reveal_json_value(stored['transcript_segments'], 'u1', True)
+    assert all(grouping.FIELD in row and 'provider_speaker' not in row for row in opaque)
+    assert all('timing_store' not in str(row) for row in opaque)
+    stored = db.encode_conversation_for_write('u1', {**conversation.model_dump(), 'transcript_segments': opaque}, level)
+    stored['data_protection_level'] = level
+    restored = Conversation(**db.prepare_conversation_for_read(stored, 'u1'))
+    # Also cover a decoded read/write, as in reprocessing or protection migration.
+    stored = db.encode_conversation_for_write('u1', restored.model_dump(), level)
+    stored['data_protection_level'] = level
+    restored = Conversation(**db.prepare_conversation_for_read(stored, 'u1'))
+    assert {s.id: s.provider_speaker for s in restored.transcript_segments} == expected
+    assert all(s.speaker_grouping_shadow is None for s in restored.transcript_segments)
+    assert all('provider_speaker' not in s for s in restored.model_dump(mode='json')['transcript_segments'])
+
+    chunks = [_chunk('a.opus.enc', 100, count), _chunk('b.batch.enc', 100, count, is_batch=True)]
+    refused = {s.id: AudioPlacement(None, 'untrusted_clock') for s in restored.transcript_segments}
+    proven = _run(monkeypatch, chunks, restored.transcript_segments, refused)
+    assert len(proven) == count
+    for segment in restored.transcript_segments:
+        selected = expected[segment.id]['timing_store']
+        assert proven[segment.id] == AudioPlacement((100 + segment.start, 100 + segment.end), selected, store=selected)
+    # Full coverage in the other store must never rescue a missing selected store.
+    sync_only = _run(monkeypatch, chunks[:1], restored.transcript_segments, refused)
+    assert not sync_only  # Without overlapping clocks this helper cannot override refusal.
+    chunks[1] = _chunk('b.batch.enc', 100, 1, is_batch=True)
+    partial = _run(monkeypatch, chunks, restored.transcript_segments, refused)
+    assert all(p.store == 'sync' or p.window[1] <= 101 for p in partial.values())
+    assert restored.transcript_segments[-1].id not in partial  # Last unit is stamped batch.
+
+
 def test_manual_receipt_wins_after_batch_store_resolution(env, batch_stores, monkeypatch):  # noqa: F811
     files, reads, _ = batch_stores
     monkeypatch.setattr(

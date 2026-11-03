@@ -8,6 +8,13 @@ Unknown/mixed references and alternate decoders remain unstamped. Projection cop
 storage-only `provider_speaker` dict with the original scope/id/provider; all survive conversation
 re-scoping. Public JSON still omits that dict.
 
+Timing provenance also survives conversations above the grouping sidecar's 256-entry or aggregate
+byte limit. On overflow, storage retains only a compact, encrypted provider partition and timing
+stamp per segment, with a 1 KiB plaintext / 2 KiB encrypted per-marker limit. Reads authenticate
+and bind each marker to its segment before exempting it from the conversation limits. Other
+grouping metadata keeps its existing bounds; malformed, missing or unauthenticated stamps fail closed.
+The regression persists 2,100 segments across seven units and proves each window on its stamped store.
+
 Only stamped `final:batch:` windows refused for overlapping stores can be proven on the named store.
 Sync stamps select `.opus` / `.opus.enc`; batch stamps select `is_batch` / `.batch.enc` / `.batch.bin`.
 Proof, decoded coverage and clip assembly use the same store without fallback. Unstamped history stays
