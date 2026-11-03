@@ -68,7 +68,8 @@ def test_accepted_repair_reaches_exact_owner_check_after_new_upload_lookback(
     monkeypatch.setattr(sync, 'has_transcription_credits', lambda *args: True)
     monkeypatch.setattr(sync, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(sync, 'has_byok_keys', lambda: False)
-    monkeypatch.setattr(sync, '_retrieve_file_paths_v2', lambda *args: ['synthetic-original'])
+    # A staged name with a parseable capture time: admission reads it since #24501.
+    monkeypatch.setattr(sync, '_retrieve_file_paths_v2', lambda *args: ['omi_1792152000.bin'])
     monkeypatch.setattr(sync, 'compute_sync_content_id', lambda *args: 'original-content')
     checks = []
 
