@@ -49,7 +49,7 @@ from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_c
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
-from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
+from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words, stamp_speaker
 from config.batch_conversation_speakers import vendor_speaker_authority
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
@@ -325,10 +325,7 @@ def build_incoming(
         segment.start += offset
         segment.end += offset
         segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
-        segment.speaker_id_scope = (
-            f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
-        )
-        segment.stt_provider = payload.get('words_provider')
+        stamp_speaker(segment, item, payload, authoritative, batch_segment_id)
         if authoritative:
             abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
             segment.is_user, segment.person_id = False, None

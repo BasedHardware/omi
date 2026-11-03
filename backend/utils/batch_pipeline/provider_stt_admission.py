@@ -92,7 +92,8 @@ def enqueue_in_transaction(
     owner = tx.get('owners', key)
     watermark = owner.get('watermark')
     job = {
-        **immutable,
+        # Unstamped work keeps the legacy document shape; readers default to None.
+        **{key: value for key, value in immutable.items() if key != 'timing_store' or value is not None},
         'policy': policy.to_dict(),
         'policy_source': 'admission',
         'protocol_version': 1,

@@ -542,6 +542,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     assert bool(proofs) is server_only
     assert manifests[0]['context']['stt_language'] == ('en' if server_only and language != 'ca' else language)
     assert store.rows['jobs', segment]['projection_binding']['native_record']
+    assert store.rows['jobs', segment]['timing_store'] == 'batch'
     assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.
     assert listings == [{'max_count': 4096, 'require_archive': True}]
