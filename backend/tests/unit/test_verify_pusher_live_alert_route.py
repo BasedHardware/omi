@@ -23,6 +23,25 @@ def verifier() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
 
 
+def test_batch_delivery_and_queue_safety_rules_use_the_existing_import_and_live_gate(verifier):
+    expected = {
+        'omi-batch-unit-unpublished-2h',
+        'omi-batch-timeliness-sample-stale',
+        'omi-batch-timeliness-scan-blind',
+        'omi-batch-queue-uncommitted-2h',
+        'omi-batch-queue-safety-blind',
+    }
+    imported = verifier.load_live_stt_import_rules(production=True)
+    gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
+    assert expected <= imported.keys()
+    assert expected <= gated
+    for uid in expected - {'omi-batch-timeliness-sample-stale', 'omi-batch-timeliness-scan-blind'}:
+        rule = imported[uid]
+        assert rule['labels']['tier'] == 'page'
+        assert rule['labels']['audience'] == 'human'
+        assert not rule['notification_settings'].get('mute_time_intervals')
+
+
 def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dict]]:
     rules = copy.deepcopy(verifier._committed_rules())
     datasource = {"status": "OK", "message": "Data source is working"}
