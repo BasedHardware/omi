@@ -33,6 +33,10 @@ class _FakeDocumentReference:
         self.id = document_id
 
     def get(self, transaction=None) -> _FakeSnapshot:
+        # Every reference reads through the shared doc_ref, so tests that patch
+        # store.doc_ref.get still control reads made via document(<id>).
+        if self is not self._client.doc_ref:
+            return self._client.doc_ref.get(transaction=transaction)
         return _FakeSnapshot(self._client.document)
 
     def collection(self, _collection_id: str) -> '_FakeCollectionReference':
@@ -86,6 +90,7 @@ class _FakeFirestoreClient:
         self.commit_errors = list(commit_errors or [])
         self.commits: List[Dict[str, Any] | None] = []
         self.transactions: List[_FakeTransaction] = []
+        self.doc_ref = _FakeDocumentReference(self, 'doc')
 
     def collection(self, _collection_id: str) -> _FakeCollectionReference:
         return _FakeCollectionReference(self)
