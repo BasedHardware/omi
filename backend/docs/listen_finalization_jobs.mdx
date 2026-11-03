@@ -138,8 +138,11 @@ content remain separate admissions.
 
 ## Reconciliation and runbook
 
-`reconcile_listen_finalization_jobs()` runs at backend startup and every five
-minutes. It only enqueues work when Cloud Tasks dispatch is enabled. The
+`reconcile_listen_finalization_jobs()` runs at backend startup and defaults to a
+60-second periodic cadence when quiet finalization is enabled, as it is in the
+production values. With quiet finalization disabled, the default is 300 seconds.
+`LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS` overrides either default. It
+only enqueues work when Cloud Tasks dispatch is enabled. The
 reconciler reads a server-side bounded page of due jobs using
 `reconcile_after_at`; terminal jobs do not retain that field. It transactionally
 increments `dispatch_generation` for platform-key jobs, then enqueues a new named task.
@@ -155,7 +158,8 @@ crash between conversion commit and counter increment, and counts each currently
 matching job document once. A replay out of dead_letter removes that job from the
 count; this is a rolling inventory, not a permanent event ledger.
 
-Both aggregations run only on the existing startup/five-minute summary publisher,
+Both aggregations run only on the existing summary publisher at startup and on
+the reconciliation cadence above (60 seconds by default with production values),
 never on a request path. They download aggregate results, not job documents;
 Firestore COUNT reads scale with matching index entries (about one billed read
 per 1,000). Oldest ages read at most one indexed row per status. Dead-letter age
