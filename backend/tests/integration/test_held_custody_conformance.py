@@ -1,8 +1,9 @@
 """PL-396/105/363: retained audio never becomes a false ACK or a repeated paid attempt.
 
 Same admission, status and recovery code on old Firestore, new Postgres and the
-simulator. Require OMI_REQUIRE_STORE_BACKENDS=all for qualification. Audio/VAD
-and providers are synthetic; this does not qualify serving A4's customer bridge.
+simulator. The CI proof runner requires sim/emulator; complete old/new
+qualification requires OMI_REQUIRE_STORE_BACKENDS=all with no missing Postgres
+leg. Audio/VAD/providers are synthetic, not serving A4 customer-bridge proof.
 """
 
 from copy import deepcopy
@@ -28,6 +29,13 @@ pytestmark = pytest.mark.integration
 T0 = 1_800_000_000.0
 AUDIO = 'gs://synthetic/retained-audio#7'
 PARTIAL = json.loads((Path(__file__).parents[1] / 'fixtures/held_partial_status.json').read_text())
+
+
+@pytest.fixture(autouse=True)
+def offline_stage(monkeypatch):
+    # Collection routing requires an explicit stage even on a loopback client.
+    # The CI proof runner deliberately supplies no ambient serving stage.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
 
 
 def seed(h, *, duration=61.0):
@@ -114,7 +122,18 @@ def assert_unspent(h, before, reason):
     assert held['worker_vad_receipt'] == before['worker_vad_receipt']
     assert held['measured_held_vad_speech_seconds'] == 2.0
     assert held['recovery']['refusal']['reason'] == reason
-    assert not set(held['recovery']) & {'provider', 'started_at', 'recognizers'}
+    assert not set(held['recovery']) & {
+        'provider',
+        'started_at',
+        'recognizers',
+        'attempts',
+        'paid_state',
+        'attempt_count',
+        'paid_provider',
+        'attempt_history',
+        'max_attempts',
+    }
+    assert held.get('attempt', 0) == before.get('attempt', 0)
     assert not held.get('result') and read(h, 'results') == {}
     return held
 
