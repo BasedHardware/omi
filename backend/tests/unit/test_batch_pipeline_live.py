@@ -25,13 +25,9 @@ from utils.sync.assignment_errors import SyncAssignmentConflict
 async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, caplog):
     from utils.batch_pipeline import live
 
-    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '4')
     store = MemoryStore()
-    # This fixture deliberately starts the blocking partial in the first group.
-    monkeypatch.setattr('random.shuffle', lambda segments: None)
     for i in range(10):
         store.rows['jobs', str(i)] = {
-            'owner_id': f'synthetic-{i}',
             'state': 'record_pending',
             'available_at': 0,
             'partial_coordinator': i == 0,
@@ -83,16 +79,15 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
 async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch):
     from utils.batch_pipeline import live
 
-    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '2')
     store = MemoryStore()
-    store.rows['jobs', 'bad'] = {'owner_id': 'synthetic-bad', 'state': 'record_pending', 'available_at': 0}
-    store.rows['jobs', 'slow'] = {'owner_id': 'synthetic-slow', 'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
     original_run = store.run
     slow, release = asyncio.Event(), asyncio.Event()
 
     def run(body):
         result = original_run(body)
-        if isinstance(result, dict) and result.get('broken'):
+        if result.get('broken'):
             raise RuntimeError('synthetic store failure')
         return result
 
