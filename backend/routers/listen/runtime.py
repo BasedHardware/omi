@@ -1129,8 +1129,7 @@ class ListenSessionRuntime:
         terminal-failure path, which is why this reads `_serving_provider()` here rather
         than reusing a value from bootstrap.
 
-        Both fields are optional and dropped by `exclude_none=True`, so a client that does
-        not read them sees exactly the payload it sees today.
+        Optional fields use `exclude_none=True`, preserving the legacy payload when absent.
         """
         if self.use_custom_stt:
             # Custom-STT clients produce their own transcripts; no backend provider serves.
@@ -1141,6 +1140,7 @@ class ListenSessionRuntime:
                 status='ready',
                 mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
                 local_preview=True if getattr(self, 'local_preview_batch', False) else None,
+                server_batch_only=True if getattr(self, 'server_batch_only', False) else None,
             )
         serving = self.receiver._serving_provider()
         selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)

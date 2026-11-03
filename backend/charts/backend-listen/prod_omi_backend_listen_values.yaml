@@ -133,6 +133,9 @@ env:
     value: "0"
   - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
     value: "100"
+  # Expand only after the new web bundle is live; cached bundles lack batch UI.
+  - name: SERVER_BATCH_ONLY_WEB_PERCENT
+    value: "0"
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
   - name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT
     value: "0"

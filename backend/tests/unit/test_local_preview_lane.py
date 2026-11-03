@@ -382,3 +382,18 @@ def test_ready_event_for_deferred_session_names_no_provider():
 def test_local_preview_field_is_absent_for_older_clients():
     payload = MessageServiceStatusEvent(status='mobile_batch_admission', mobile_standard_batch=False).to_json()
     assert 'local_preview' not in payload
+
+
+def test_ready_event_identifies_server_batch_without_confusing_deferred_stream():
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.use_custom_stt = False
+    runtime.receiver = SimpleNamespace(cloud_live_suppressed=True)
+    assert 'server_batch_only' not in runtime._ready_event().to_json()
+    runtime.server_batch_only = True
+    payload = runtime._ready_event().to_json()
+    assert payload['server_batch_only'] is True
+    assert payload['status'] == 'ready'
+    assert 'provider' not in payload
+    runtime.use_custom_stt = True
+    assert 'server_batch_only' not in runtime._ready_event().to_json()
+    assert 'server_batch_only' not in MessageServiceStatusEvent(status='initiating').to_json()

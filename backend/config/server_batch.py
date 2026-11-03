@@ -13,6 +13,7 @@ MARKER = 'server_batch_only'
 AUTO_LANGUAGES = frozenset({'', 'auto', 'multi'})
 SUPPORTED = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
 AUTO_COHORT_SALT = 'server_batch_auto_language_v1'
+WEB_COHORT_SALT = 'server_batch_web_v1'
 
 
 def undeclared(host) -> bool:
@@ -42,7 +43,7 @@ def continuation_language(host, capture: Mapping | None = None):
 def auto_selected(owner_id: str, platform: str | None) -> bool:
     percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT', '0'))
     return bool(
-        platform in {'ios', 'android'}
+        platform in {'ios', 'android', 'web'}
         and owner_id
         and percent > 0
         and cohort_bucket(owner_id, AUTO_COHORT_SALT) < percent
@@ -60,6 +61,9 @@ def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
     if platform in {'ios', 'android'}:
         percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0'))
         return bool(owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent)
+    if platform == 'web':
+        percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_WEB_PERCENT', '0'))
+        return bool(owner_id and percent > 0 and cohort_bucket(owner_id, WEB_COHORT_SALT) < percent)
     platforms = {
         value.strip().lower() for value in os.getenv('SERVER_BATCH_ONLY_PLATFORMS', 'macos,windows').split(',')
     }
@@ -67,7 +71,7 @@ def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
 
 
 def eligible(capture: Mapping, owner_id: str, *, batch_admitted: bool = False) -> bool:
-    """Desktop bypasses mobile cohorts; mobile admission stays nested in batch."""
+    """Desktop and web use their own admission; mobile stays nested in batch."""
     external = capture.get('external_data') or {}
     return bool(
         enabled()
