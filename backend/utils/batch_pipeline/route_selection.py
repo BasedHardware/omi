@@ -1,6 +1,6 @@
 """Admission-time STT route selection across GPU and vendors (all-vendor routing, slice B).
 
-``select_route`` replaces intake's direct ``provider_stt.resolve_route`` call. Outside the
+``select_route`` replaces intake's direct ``provider_stt_admission.resolve_route`` call. Outside the
 vendor-routing cohort, with the kill switch off, or for an owner whose legacy sync is still
 on, it returns ``resolve_route`` itself, so today's routing is unchanged byte for byte. Inside
 the cohort it reads the route table (configured -> last valid -> builtin), keeps only the
@@ -33,7 +33,7 @@ from config.batch_pipeline_vendor_routing import (
 from config.policy.batch import cohort_bucket
 from utils.batch_pipeline import vendor_route_contracts as contracts
 from utils.batch_pipeline import vendor_route_metrics as metrics
-from utils.batch_pipeline.provider_stt import SttRoute, resolve_route
+from utils.batch_pipeline.provider_stt_admission import SttRoute, resolve_route
 from utils.observability.reasons import VendorHealthReason, VendorRouteReason, VendorRouteTableOutcome
 
 logger = logging.getLogger(__name__)

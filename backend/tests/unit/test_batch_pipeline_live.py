@@ -19,6 +19,8 @@ from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
 from utils.sync.assignment_errors import SyncAssignmentConflict
+from tests.unit.test_batch_provider_stt import Outbox, Artifacts, Vendor, stage as provider_stage
+from utils.batch_pipeline import record_provider
 
 
 @pytest.mark.asyncio
@@ -389,7 +391,7 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 @pytest.mark.parametrize('server_only', [False, True])
 @pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
-@pytest.mark.parametrize('language', ['en', 'multi'])
+@pytest.mark.parametrize('language', ['en', 'multi', 'ca'])
 async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch, server_only, barrier_change, language
 ):
@@ -402,9 +404,19 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
     current['language'] = language
     proofs = []
+    from unittest.mock import Mock
+
+    outbox = Outbox()
+    outbox.wake = Mock(side_effect=OSError('synthetic wake unavailable'))
+    # Durable captures drain even after the experimental allowlist is cleared.
+    monkeypatch.setenv('SERVER_BATCH_UNSUPPORTED_LANGUAGES', '')
 
     async def prove(store, artifacts, item, manifest):
         proofs.append(manifest)
+        if language == 'ca':
+            from utils.batch_pipeline.record_language import prove_manifest
+
+            return await prove_manifest(store, artifacts, item, manifest)
         return {
             **manifest,
             'context': {
@@ -496,16 +508,39 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
     if barrier_change:
         with pytest.raises(ValueError, match='barrier'):
-            await live.admit_recording(store, pending, now=1)
+            await live.admit_recording(store, pending, now=1, provider_outbox_factory=lambda: outbox)
         assert store.rows['jobs', segment]['state'] == 'record_pending'
         assert ('content', 'synthetic/' + content) not in store.rows
         return
-    result = await live.admit_recording(store, pending, now=1)
+    result = await live.admit_recording(store, pending, now=1, provider_outbox_factory=lambda: outbox)
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
-    assert store.rows['jobs', segment]['state'] == 'ready'
+    job = store.rows['jobs', segment]
+    assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')
+    if language == 'ca':
+        assert job['stt_route']['provider_service'] == 'modulate'
+        assert job['policy']['stt_route'] == 'provider'
+        assert job['policy']['provider_reason'] == 'unsupported_language'
+        assert not job['requires_compute_admission']
+        assert len(outbox.enqueued) == 1
+        outbox.wake.assert_called_once()
+        assert not any(key[0] in {'queues', 'control'} for key in store.rows)
+        vendor = Vendor()
+        provider = provider_stage(
+            store,
+            Artifacts(),
+            vendor,
+            now=2,
+            inspect=lambda *_: (b'\0\0' * 16000, 1.0, [{'start': 0.5, 'end': 1.0}]),
+        )
+        outcome = provider.run(segment)
+        assert outcome.outcome == 'done' and vendor.calls == 1
+        assert store.rows['jobs', segment]['state'] == 'result_ready'
+        assert store.rows['jobs', segment]['provider_intent']['service'] == 'modulate'
+        assert provider.run(segment).outcome == 'done'
+        assert vendor.calls == 1
     assert manifests[0]['references'][0]['generation'] == 1
     assert bool(proofs) is server_only
-    assert manifests[0]['context']['stt_language'] == ('en' if server_only else language)
+    assert manifests[0]['context']['stt_language'] == ('en' if server_only and language != 'ca' else language)
     assert store.rows['jobs', segment]['projection_binding']['native_record']
     assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.

@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
 )
+from database.outbox import OutboxKind, outbox_for
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -329,7 +330,9 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await drain_recordings(service.store)
+                await drain_recordings(
+                    service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+                )
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving action=record_drain outcome=retry exception_type=%s', type(error).__name__

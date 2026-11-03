@@ -19,6 +19,7 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'ca,gl,eu,cy,af,sq,bs,sw', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}

@@ -4,6 +4,8 @@ Runs the real admission, ProviderSttStore transactions and fences on SimStore. V
 no vendor is called and nothing leaves the process.
 """
 
+from utils.batch_pipeline import provider_stt_admission
+
 import asyncio
 
 import pytest
@@ -14,14 +16,8 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline import admission  # noqa: F401  # warm its fair-use/backfill imports
 from utils.batch_pipeline import provider_stt
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import (
-    ABANDON_SECONDS,
-    PENDING,
-    RUNNING,
-    ProviderSttStage,
-    SttRoute,
-    VendorCallFailure,
-)
+from utils.batch_pipeline.provider_stt import ABANDON_SECONDS, RUNNING, ProviderSttStage, VendorCallFailure
+from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.vendor_route_contracts import (
     HOLD_FIELD,
@@ -130,7 +126,7 @@ def store(monkeypatch):
         'p1', OWNER, 10, 'gs://synthetic/audio/p1', 5.0, Priority.FRESH, conversation_id='conv-1', privacy_generation=0
     )
     binding = ProjectionBinding(OWNER, 'bp_content-p', 'content-p', ('p1',), language='ja')
-    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
     assert (
         batch_pipeline_intake.admit(sim, [item], binding, 100.0, namespace=sim.namespace, enqueue=enqueue)['outcome']
         == 'batch'

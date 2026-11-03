@@ -121,6 +121,8 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: "ca,gl,eu,cy,af,sq,bs,sw"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED

@@ -719,7 +719,7 @@ async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monke
 
     service = SimpleNamespace(store=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
 
-    async def drain_recordings(store):
+    async def drain_recordings(store, **kwargs):
         return None
 
     monkeypatch.setattr(serving, 'current_stage', lambda: 'prod')
@@ -781,7 +781,8 @@ async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, bl
     async def reconcile_async(**kwargs):
         await tick('reconcile')
 
-    async def drain_recordings(store):
+    async def drain_recordings(store, **kwargs):
+        assert callable(kwargs['provider_outbox_factory'])
         assert store is service.store
         await tick('drain')
 
