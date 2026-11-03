@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import action_items as items
+from database import action_item_dedup as dedup
 from testing.import_isolation import load_module_fresh, stub_modules
 
 NOW = datetime(2026, 11, 3, tzinfo=timezone.utc)
@@ -44,7 +45,7 @@ class Query:
 
     def stream(self, *, timeout, retry):
         assert timeout == 2
-        assert retry is items.FIRESTORE_NO_RETRY
+        assert retry is dedup.FIRESTORE_NO_RETRY
         assert self.cap == 8
         assert set(self.fields) == {'completed', 'status', 'conversation_id', 'updated_at', 'created_at'}
         matches = [
@@ -62,7 +63,7 @@ class Query:
 
 def probe(rows, excluded=None):
     reads = []
-    result = items.may_have_recent_dedup_candidates(
+    result = dedup.may_have_recent_dedup_candidates(
         'owner', CUTOFF, excluded or set(), firestore_client=Query(rows, reads)
     )
     return result, reads
@@ -137,7 +138,7 @@ def flow(context, monkeypatch):
 
 def test_empty_pool_skips_pinecone_and_hydration(flow, monkeypatch):
     context, pinecone, hydrate = flow
-    monkeypatch.setattr(items, 'may_have_recent_dedup_candidates', lambda *a: False)
+    monkeypatch.setattr(context, 'may_have_recent_dedup_candidates', lambda *a: False)
     assert context.fetch_dedup_candidates_for_query('owner', 'query') == []
     pinecone.assert_not_called()
     hydrate.assert_not_called()
@@ -145,7 +146,7 @@ def test_empty_pool_skips_pinecone_and_hydration(flow, monkeypatch):
 
 def test_nonempty_pool_keeps_existing_query_and_order(flow, monkeypatch):
     context, pinecone, hydrate = flow
-    monkeypatch.setattr(items, 'may_have_recent_dedup_candidates', lambda *a: True)
+    monkeypatch.setattr(context, 'may_have_recent_dedup_candidates', lambda *a: True)
     result = context.fetch_dedup_candidates_for_query('owner', 'query')
     assert result == hydrate.return_value
     pinecone.assert_called_once_with('owner', 'query', threshold=0.6, limit=10)
@@ -153,7 +154,7 @@ def test_nonempty_pool_keeps_existing_query_and_order(flow, monkeypatch):
 
 def test_probe_error_retains_pinecone(flow, monkeypatch):
     context, pinecone, hydrate = flow
-    monkeypatch.setattr(items, 'may_have_recent_dedup_candidates', Mock(side_effect=RuntimeError('unavailable')))
+    monkeypatch.setattr(context, 'may_have_recent_dedup_candidates', Mock(side_effect=RuntimeError('unavailable')))
     fallback = Mock()
     monkeypatch.setattr(context, 'record_fallback', fallback)
     assert context.fetch_dedup_candidates_for_query('owner', 'query') == hydrate.return_value
@@ -164,7 +165,7 @@ def test_probe_error_retains_pinecone(flow, monkeypatch):
 def test_exclusions_reach_probe_and_hydrated_filter(flow, monkeypatch):
     context, _, hydrate = flow
     check = Mock(return_value=True)
-    monkeypatch.setattr(items, 'may_have_recent_dedup_candidates', check)
+    monkeypatch.setattr(context, 'may_have_recent_dedup_candidates', check)
     conversation = SimpleNamespace(
         id='current', external_data={'merge_metadata': {'source_conversation_ids': ['source']}}
     )
@@ -177,7 +178,7 @@ def test_exclusions_reach_probe_and_hydrated_filter(flow, monkeypatch):
 def test_blank_query_reads_nothing(flow, monkeypatch):
     context, pinecone, _ = flow
     check = Mock()
-    monkeypatch.setattr(items, 'may_have_recent_dedup_candidates', check)
+    monkeypatch.setattr(context, 'may_have_recent_dedup_candidates', check)
     assert context.fetch_dedup_candidates_for_query('owner', '  ') == []
     check.assert_not_called()
     pinecone.assert_not_called()

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 import database.action_items as action_items_db
+from database.action_item_dedup import may_have_recent_dedup_candidates
 from database.vector_db import find_similar_action_items
 from utils.observability.fallback import record_fallback
 
@@ -33,7 +34,7 @@ def fetch_dedup_candidates_for_query(uid: str, query: str, conversation: Any = N
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
         try:
-            if not action_items_db.may_have_recent_dedup_candidates(uid, cutoff, excluded_conversation_ids):
+            if not may_have_recent_dedup_candidates(uid, cutoff, excluded_conversation_ids):
                 return []
         except Exception:
             # An optional cost optimization must never remove dedup context

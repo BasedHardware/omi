@@ -361,7 +361,7 @@ _add(
 _add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}, neutrals={'budget': _BUDGET}))
 _add(
     DriverEntry(
-        'database.action_items.may_have_recent_dedup_candidates',
+        'database.action_item_dedup.may_have_recent_dedup_candidates',
         base={'uid': UID, 'cutoff': T0},
         neutrals={'excluded_conversation_ids': (set(), 'Python-only exclusion after bounded timestamp queries')},
     )
