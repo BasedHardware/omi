@@ -456,7 +456,18 @@ class BtDevice {
       Logger.error('Error getting Omi device info: $e');
     }
 
+    String? resolvedName;
+    try {
+      final onboardName = await conn.getDeviceName();
+      if (onboardName != null && onboardName.trim().isNotEmpty) {
+        resolvedName = onboardName.trim();
+      }
+    } catch (e) {
+      Logger.debug('Error reading onboard device name: $e');
+    }
+
     return copyWith(
+      name: resolvedName ?? name,
       modelNumber: modelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
