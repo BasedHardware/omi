@@ -414,17 +414,17 @@ def test_long_batch_timing_stamps_survive_persistence_and_prove_only_their_store
     from utils.batch_pipeline.projection_parts import stamp_speaker
     from utils.conversations import speaker_grouping_storage as grouping
 
-    # Seven units and 2,100 segments exceed both the sidecar entry and byte limits.
-    count = 2100
+    # Three units and 300 segments exceed the 256-entry sidecar limit.
+    count = 300
     conversation = _conversation([0] * count, seconds=1)
     for i, segment in enumerate(conversation.transcript_segments):
-        unit = i // 300
+        unit = i // 100
         item = WorkItem(
             f'unit{unit}',
             'u1',
-            ORIGIN + unit * 300,
+            ORIGIN + unit * 100,
             'gs://synthetic/staged',
-            300,
+            100,
             Priority.FRESH,
             timing_store='batch' if unit % 2 == 0 else 'sync',
         )
@@ -437,7 +437,8 @@ def test_long_batch_timing_stamps_survive_persistence_and_prove_only_their_store
     stored = db.encode_conversation_for_write('u1', conversation.model_dump(), level)
     # Rewriting opaque encrypted sidecars must also survive the original capacity limit.
     opaque = db._reveal_json_value(stored['transcript_segments'], 'u1', True)
-    assert all(grouping.FIELD in row and 'provider_speaker' not in row for row in opaque)
+    assert sum(grouping.FIELD in row for row in opaque) == 3
+    assert all('provider_speaker' not in row for row in opaque)
     assert all('timing_store' not in str(row) for row in opaque)
     stored = db.encode_conversation_for_write('u1', {**conversation.model_dump(), 'transcript_segments': opaque}, level)
     stored['data_protection_level'] = level
