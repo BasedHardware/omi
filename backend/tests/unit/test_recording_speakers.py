@@ -213,3 +213,31 @@ def test_sync_merge_redirect_keeps_recording_rename_available(recording):
     )
     body = request(selections=[RecordingSelection(conversation_id='donor', segment_ids=['c1-s'], speaker_id=4)])
     assert edit('u', 'donor', body, None)['applied_count'] == 3
+
+
+def test_episode_http_route_uses_episode_admission_and_fans_out(recording, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import episodes as routes
+
+    episode = service.episodes_db.get_episode('u', 'e')
+    admitted = []
+    monkeypatch.setattr(routes, '_admitted', lambda uid, channel: admitted.append((uid, channel)) or True)
+    monkeypatch.setattr(routes.service, 'episode_by_id', lambda *args: episode)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'u'
+    with TestClient(app) as client:
+        response = client.patch(
+            '/v1/episodes/e/assign-speaker', json=request().model_dump(), headers={routes.APP_CHANNEL_HEADER: 'beta'}
+        )
+        assert response.status_code == 200
+        assert response.json()['applied_count'] == 3
+        assert admitted == [('u', 'beta')]
+        assert decode(recording, 'c0')['transcript_segments'][0]['person_id'] == 'new'
+        assert decode(recording, 'c2')['transcript_segments'][0]['person_id'] == 'new'
+        before = deepcopy(recording.rows)
+        monkeypatch.setattr(routes, '_admitted', lambda *args: False)
+        denied = client.patch('/v1/episodes/e/assign-speaker', json=request().model_dump())
+        assert denied.status_code == 404
+        assert recording.rows == before
