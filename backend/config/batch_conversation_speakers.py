@@ -1,6 +1,10 @@
 """Default-on repair within the already admitted authoritative batch cohort."""
 
+import math
+import os
+
 from config.refactor_modes import default_on
+from config.policy.batch import COHORT_SALTS, cohort_bucket
 
 BATCH_CONVERSATION_SPEAKERS_ENV = 'BATCH_CONVERSATION_SPEAKERS_ENABLED'
 BATCH_CONVERSATION_SCOPE = 'final:batch:conversation:'
@@ -60,3 +64,16 @@ def has_batch_authority(segments) -> bool:
 
 def enabled(segments) -> bool:
     return has_batch_authority(segments) and default_on(BATCH_CONVERSATION_SPEAKERS_ENV)
+
+
+def final_pass_enabled_for(uid: str, segments) -> bool:
+    """Reuse the transcription-final-pass hash assignment; no new batch admission."""
+    if not uid or not enabled(segments) or not default_on('BATCH_FINAL_PASS_ENABLED'):
+        return False
+    try:
+        percent = float(os.getenv('BATCH_FINAL_PASS_PERCENT', '100'))
+        return math.isfinite(percent) and cohort_bucket(uid, COHORT_SALTS['transcription-final-pass']) < max(
+            0, min(100, percent)
+        )
+    except ValueError:
+        return False
