@@ -81,7 +81,6 @@ Future<ApiResult<int>> assignRecordingSpeakers(String conversationId, List<Map<S
   );
   if (result is ApiFailure<Map<String, dynamic>>) {
     if (result.problem.statusCode == 404 || result.problem.detail == 'recording_speaker_rename_disabled') {
-      recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
       return _assignLegacy(conversationId, selections, personId, send);
     }
     return ApiFailure(result.problem);
@@ -108,6 +107,7 @@ Future<ApiResult<int>> assignRecordingSpeakers(String conversationId, List<Map<S
 
 Future<ApiResult<int>> _assignLegacy(
     String conversationId, List<Map<String, dynamic>> selections, String personId, ApiSend? send) async {
+  recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
   final ids = selections
       .where((row) => row['conversation_id'] == conversationId)
       .expand((row) => (row['segment_ids'] as List).cast<String>())
