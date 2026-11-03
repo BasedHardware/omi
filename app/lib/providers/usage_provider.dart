@@ -153,12 +153,12 @@ class UsageProvider with ChangeNotifier {
   double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
   bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
 
-  // Phone-call admission is the server quota's answer on every plan.
+  // Older servers omit the quota; preserve their paid-plan admission rule.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
   bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
-  bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? false;
+  bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? _isPaidPlan;
 
   bool get shouldShowPhoneCallsEntry {
     if (_isPaidPlan) return true;
@@ -178,7 +178,13 @@ class UsageProvider with ChangeNotifier {
 
   bool get isOutOfCredits {
     final allowance = _subscription?.transcriptionAllowance;
-    if (allowance == null) return false;
+    if (allowance == null) {
+      // Older servers only send plan limits and usage counters.
+      final subscription = _subscription;
+      if (subscription == null || subscription.subscription.plan.hasUnlimitedTranscription) return false;
+      return subscription.transcriptionSecondsLimit > 0 &&
+          subscription.transcriptionSecondsUsed >= subscription.transcriptionSecondsLimit;
+    }
     if (allowance.isBlocked) return true;
     if (!allowance.isOnDevice) return false;
     // These reasons refuse a billed socket temporarily; they do not mean the
@@ -323,11 +329,13 @@ class UsageProvider with ChangeNotifier {
   /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
   /// Custom STT outranks the allowance. Once the server grants managed STT, release the pin so capture returns to Omi
   /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
+  /// Older servers omit the allowance, so retain their paid-plan release rule.
   Future<void> _releasePaywallOnDevicePin() async {
     final prefs = SharedPreferencesUtil();
     final pinned = prefs.paywallOnDeviceSttConfigId;
     final allowance = _subscription?.transcriptionAllowance ?? TranscriptionAllowanceCache.current;
-    if (allowance?.isManaged != true || pinned.isEmpty) return;
+    final canUseManaged = allowance?.isManaged ?? _isPaidPlan;
+    if (!canUseManaged || pinned.isEmpty) return;
     if (prefs.customSttConfig.sttConfigId == pinned) {
       await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
     }

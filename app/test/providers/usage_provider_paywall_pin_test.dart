@@ -13,7 +13,7 @@ import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 
-UserSubscriptionResponse _subscription(PlanType plan, {String mode = 'managed'}) => UserSubscriptionResponse(
+UserSubscriptionResponse _subscription(PlanType plan, {String? mode = 'managed'}) => UserSubscriptionResponse(
       subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
@@ -21,7 +21,8 @@ UserSubscriptionResponse _subscription(PlanType plan, {String mode = 'managed'})
       wordsTranscribedLimit: 0,
       insightsGainedUsed: 0,
       insightsGainedLimit: 0,
-      transcriptionAllowance: TranscriptionAllowanceSnapshot(mode: mode, reason: 'plan_within_allowance'),
+      transcriptionAllowance:
+          mode == null ? null : TranscriptionAllowanceSnapshot(mode: mode, reason: 'plan_within_allowance'),
     );
 
 /// What the paywall's "switch to free" does (plans_sheet.dart).
@@ -47,6 +48,55 @@ void main() {
     await SharedPreferencesUtil.init();
     TranscriptionAllowanceCache.clear();
   });
+
+  for (final plan in [PlanType.plus, PlanType.unlimited, PlanType.unlimitedV2]) {
+    test('older server paid ${plan.name} releases the pin without an allowance', () async {
+      await _switchToFreeFromPaywall();
+      final provider = UsageProvider(subscriptionRequest: () async => _subscription(plan, mode: null));
+      addTearDown(provider.dispose);
+      await provider.fetchSubscription();
+      expect(provider.subscription!.transcriptionAllowance, isNull);
+      expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
+      expect(SharedPreferencesUtil().customSttConfig.sendRawAudioToOmi, isTrue);
+      expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+    });
+  }
+
+  test('older server Basic without an allowance keeps the pin', () async {
+    final pinned = await _switchToFreeFromPaywall();
+    final provider = UsageProvider(subscriptionRequest: () async => _subscription(PlanType.basic, mode: null));
+    addTearDown(provider.dispose);
+    await provider.fetchSubscription();
+    expect(SharedPreferencesUtil().customSttConfig.sttConfigId, pinned.sttConfigId);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, pinned.sttConfigId);
+  });
+
+  test('explicit on-device allowance keeps a paid plan pinned', () async {
+    final pinned = await _switchToFreeFromPaywall();
+    final provider = UsageProvider(subscriptionRequest: () async => _subscription(PlanType.plus, mode: 'on_device'));
+    addTearDown(provider.dispose);
+    await provider.fetchSubscription();
+    expect(SharedPreferencesUtil().customSttConfig.sttConfigId, pinned.sttConfigId);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, pinned.sttConfigId);
+  });
+
+  for (final throws in [false, true]) {
+    test('failed older-server refresh releases the last paid plan pin (throws=$throws)', () async {
+      await _switchToFreeFromPaywall();
+      final provider = UsageProvider(subscriptionRequest: () async {
+        if (throws) throw StateError('offline');
+        return null;
+      });
+      addTearDown(provider.dispose);
+      provider.debugSetSubscription(_subscription(PlanType.plus, mode: null));
+      await provider.fetchSubscription();
+      expect(provider.error, isNotNull);
+      expect(provider.isLoading, isFalse);
+      expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
+      expect(SharedPreferencesUtil().customSttConfig.sendRawAudioToOmi, isTrue);
+      expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+    });
+  }
 
   test('a paid plan releases the paywall on-device pin back to Omi', () async {
     final pinned = await _switchToFreeFromPaywall();

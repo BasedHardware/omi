@@ -20,9 +20,9 @@ UserSubscriptionResponse _proSubscription() {
 UserSubscriptionResponse _subscriptionOn(PlanType plan,
     {required int used,
     required int limit,
-    String mode = 'managed',
+    String? mode = 'managed',
     String reason = 'plan_within_allowance',
-    bool phoneAccess = false}) {
+    bool? phoneAccess = false}) {
   return UserSubscriptionResponse(
     subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
     transcriptionSecondsUsed: used,
@@ -31,12 +31,45 @@ UserSubscriptionResponse _subscriptionOn(PlanType plan,
     wordsTranscribedLimit: 0,
     insightsGainedUsed: 0,
     insightsGainedLimit: 0,
-    phoneCallQuota: PhoneCallQuota(hasAccess: phoneAccess, isPaid: false),
-    transcriptionAllowance: TranscriptionAllowanceSnapshot(mode: mode, reason: reason),
+    phoneCallQuota: phoneAccess == null ? null : PhoneCallQuota(hasAccess: phoneAccess, isPaid: false),
+    transcriptionAllowance: mode == null ? null : TranscriptionAllowanceSnapshot(mode: mode, reason: reason),
   );
 }
 
 void main() {
+  test('older servers without an allowance retain counter-based credit gating', () {
+    final provider = UsageProvider();
+    addTearDown(provider.dispose);
+    for (final plan in [PlanType.basic, PlanType.plus]) {
+      for (final used in [299, 300, 301]) {
+        provider.debugSetSubscription(_subscriptionOn(plan, used: used, limit: 300, mode: null));
+        expect(provider.subscription!.transcriptionAllowance, isNull);
+        expect(provider.isOutOfCredits, used >= 300, reason: '${plan.name}: $used/300');
+      }
+      provider.debugSetSubscription(_subscriptionOn(plan, used: 300, limit: 0, mode: null));
+      expect(provider.isOutOfCredits, isFalse, reason: 'zero is an unlimited limit');
+    }
+    for (final plan in [PlanType.unlimited, PlanType.unlimitedV2, PlanType.operator]) {
+      provider.debugSetSubscription(_subscriptionOn(plan, used: 301, limit: 300, mode: null));
+      expect(provider.isOutOfCredits, isFalse, reason: '${plan.name} has unlimited transcription');
+    }
+  });
+
+  test('older servers without phone quota retain paid-plan access', () {
+    final provider = UsageProvider();
+    addTearDown(provider.dispose);
+    for (final entry in {
+      PlanType.basic: false,
+      PlanType.plus: true,
+      PlanType.unlimitedV2: true,
+      PlanType.unknown('future_plan'): false,
+    }.entries) {
+      provider.debugSetSubscription(_subscriptionOn(entry.key, used: 0, limit: 0, phoneAccess: null));
+      expect(provider.phoneCallQuota, isNull);
+      expect(provider.canAccessPhoneCalls, entry.value, reason: entry.key.name);
+    }
+  });
+
   test('exhausted ladder budget overrides the Pro unlimited-transcription shortcut', () {
     final provider = UsageProvider();
     provider.debugSetSubscription(UserSubscriptionResponse(
