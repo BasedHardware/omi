@@ -401,9 +401,7 @@ def _get_structured(
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = resolve_output_language(
-            uid, language_code, [segment.dict() for segment in conversation.transcript_segments or []]
-        )
+        user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = quiet_minimum(
             uid,
@@ -795,7 +793,7 @@ def trigger_conversation_apps(
         language_code = resolve_output_language(
             uid,
             normalize_language(conversation.language) or language_code,
-            [segment.dict() for segment in conversation.transcript_segments or []],
+            getattr(conversation, 'transcript_segments', None),
         )
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.

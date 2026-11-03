@@ -107,13 +107,12 @@ def dominant_segment_language(segments: Any) -> str:
     weights: Counter[str] = Counter()
     first_seen: dict[str, int] = {}
     for segment in segments or ():
-        if not isinstance(segment, Mapping):
-            continue
-        text = str(segment.get('text') or '')
+        field = segment.get if isinstance(segment, Mapping) else lambda key: getattr(segment, key, None)
+        text = str(field('text') or '')
         letters = sum(char.isalpha() for char in text)
         language = ''
         for key in _SEGMENT_LANGUAGE_FIELDS:
-            language = normalize_language(segment.get(key))
+            language = normalize_language(field(key))
             if language:
                 break
         if not language and letters >= _MIN_STATE_DETECT_CHARS:

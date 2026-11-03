@@ -86,7 +86,8 @@ def test_curated_title_survives_minimum_projection():
     assert conversations.prepare_conversation_for_read(raw, 'u')['structured']['title'] == 'My breakfast'
 
 
-def test_wrong_capture_tag_cannot_choose_output_language(monkeypatch):
+@pytest.mark.parametrize('as_objects', [False, True])
+def test_wrong_capture_tag_cannot_choose_output_language(monkeypatch, as_objects):
     from database import users
     from utils.episodes.output_language import resolve_episode_language
 
@@ -95,6 +96,10 @@ def test_wrong_capture_tag_cannot_choose_output_language(monkeypatch):
         {'text': 'We should meet tomorrow to discuss the entire project and budget.', 'language': 'en'},
         {'text': 'いいね', 'language': 'ja'},
     ]
+    if as_objects:
+        from types import SimpleNamespace
+
+        segments = [SimpleNamespace(**segment) for segment in segments]
     assert resolve_output_language('u', 'ja', segments) == 'en'
     assert resolve_episode_language('u', 'ja', preference='', segments=segments) == 'en'
     assert resolve_output_language('u', 'ja', [{'text': '日本語の長い会話です', 'language': 'ja'}]) == 'ja'
