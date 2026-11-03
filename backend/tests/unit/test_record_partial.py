@@ -39,6 +39,17 @@ NOW = 4000
 
 @pytest.fixture
 def source(monkeypatch):
+    from utils.executors import sync_executor
+
+    original_run_blocking = record_partial.run_blocking
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        # Partial source collection also downloads retained objects; it must
+        # not borrow the coordinator pool when admission concurrency grows.
+        assert executor is not sync_executor
+        return await original_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(record_partial, 'run_blocking', run_blocking)
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch-bucket')

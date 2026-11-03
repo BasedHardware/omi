@@ -9,7 +9,7 @@ from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_provenance_timestamps
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
@@ -384,6 +384,7 @@ def memories_page_core(
             position={"uml": resume_uml},
             filters=filters,
         )
+    result["memories"] = [{**memory, **memory_provenance_timestamps(memory)} for memory in result["memories"]]
     result["effective_limit"] = limit
     return result
 
