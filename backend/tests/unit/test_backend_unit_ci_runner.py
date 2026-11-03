@@ -218,7 +218,7 @@ def _run_shard(tmp_path: Path, backend: Path, runner: Path, arguments: list[str]
 
 
 @pytest.mark.parametrize('mode', ['--all', '--changed-files'])
-@pytest.mark.parametrize('total', [2, 4, 6])
+@pytest.mark.parametrize('total', [2, 4, 6, 8])
 def test_shards_partition_the_sorted_selection_exactly(tmp_path, mode, total):
     backend, runner = _sharded_fixture(tmp_path)
     changed_files = tmp_path / 'changed-files.txt'
