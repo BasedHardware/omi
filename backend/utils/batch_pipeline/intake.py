@@ -384,6 +384,8 @@ async def accept_upload(
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     sample_directory = None
+    phase = 'receipt_read'
+    started = time.monotonic()
     try:
         # A2 seam: the sync upload admission (intakes, jobs, owners, queues, control) is mirrored in shadow mode.
         store = await run_blocking(
@@ -428,6 +430,7 @@ async def accept_upload(
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:
                     return start_response(status)
+        phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
         adopt = None
         if previous:
@@ -467,6 +470,7 @@ async def accept_upload(
             requires_compute_admission=True,
             conversation_id=conversation_id,
         )
+        phase = 'authorization'
         snapshots = {}
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
         user = snapshots['user']
@@ -475,7 +479,9 @@ async def accept_upload(
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
         if target.get('record_lane_owner') == 'batch_live_v1':
+            phase = 'record_routing'
             if record_router is None:
+                logger.info('event=sync_record_upload outcome=pending reason=record_router_missing')
                 return JSONResponse(status_code=503, content={'code': 'record_capture_pending'})
             return await record_router(
                 uid=uid,
@@ -489,6 +495,7 @@ async def accept_upload(
                 policy=policy,
                 evidence=evidence,
             )
+        phase = 'route_selection'
         admission_language = None
         sampled = False
         if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
@@ -652,6 +659,7 @@ async def accept_upload(
             # conversation language must replace, not append beside provisional text.
             and language in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
         )
+        phase = 'artifact_setup'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
@@ -699,6 +707,7 @@ async def accept_upload(
         # no unit inherits another's language.
         queue, decisions, first = [], {}, None
         if sampled:
+            phase = 'sample_decode'
             speeches = []
             while unit := await run_blocking(sync_executor, _next_unit, iterator):
                 if len(queue) >= 128 or sum(u.duration_seconds for u in queue) + unit.duration_seconds > (
@@ -714,6 +723,7 @@ async def accept_upload(
                 # No strict-VAD speech to sample: nothing was probed or staged; the upload keeps legacy.
                 return _sampled_refusal(target, user, evidence)
             for index, (unit, speech) in enumerate(zip(queue, speeches)):
+                phase = 'language_probe'
                 # Every probe of the upload runs here, so any refusal happens before anything is staged.
                 # Authorize each as the exact unit it will replay as (index, derived conversation).
                 probe_guard = ServingLanguageProbeGuard(
@@ -748,6 +758,7 @@ async def accept_upload(
                 first = first or decision
             if first is not None:  # always set here: at least one speech unit passed above
                 record_route('intake', first.language, 'parakeet')
+        phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
         ):
@@ -758,6 +769,7 @@ async def accept_upload(
                 # This unit was classified above under fresh authority (silent units on their own audio).
                 language_decision = decisions[len(items)]
             else:
+                phase = 'language_probe'
                 probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
                 # Every self/vendor classification gets fresh dispatch authority on CPU.
                 language_decision = await run_blocking(
@@ -777,6 +789,7 @@ async def accept_upload(
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
                 else 'und' if language_guard_enabled() else input_language
             )
+            phase = 'freeze_audio'
             frozen = await run_blocking(
                 sync_executor,
                 with_context,
@@ -800,9 +813,11 @@ async def accept_upload(
                     'stt_language_probe_seconds': language_decision.probe_seconds,
                 },
             )
+            phase = 'stage_audio'
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
             # Provider units are funded by the provider stage, not GPU compute admission.
             items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+            phase = 'decode'
         if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
             return covered_response()
         binding = ProjectionBinding(
@@ -822,6 +837,7 @@ async def accept_upload(
             record_origin=record_origin,
         )
         wakes: dict[str, str] = {}
+        phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
         outcome = await run_blocking(
             db_executor,
@@ -852,6 +868,7 @@ async def accept_upload(
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
         )
+        phase = 'wake'
         for row_id, wake_token in wakes.items():
             try:
                 await run_blocking(db_executor, outbox.wake, row_id, wake_token)  # type: ignore[union-attr]
@@ -868,6 +885,7 @@ async def accept_upload(
             # job (Luna r2), which is a re-ACK, not a new admission.
             if evidence is not None and outcome.get('job_id') == public_job_id:
                 evidence.batch_accepted = True
+            phase = 'status_read'
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
@@ -876,7 +894,12 @@ async def accept_upload(
     except Exception as error:
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
-        logger.error('event=batch_intake outcome=retry exception_type=%s', type(error).__name__)
+        logger.error(
+            'event=batch_intake outcome=retry exception_type=%s phase=%s elapsed_ms=%d',
+            type(error).__name__,
+            phase,
+            round((time.monotonic() - started) * 1000),
+        )
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '30'},
