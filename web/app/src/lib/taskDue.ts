@@ -140,7 +140,7 @@ export function editAllDayDue(
   date: Date,
 ): NonNullable<ActionItem['due']> {
   const value = formatDateInputValue(date);
-  return { ...due, date: value, expression: value, year_basis: 'spoken' };
+  return { ...due, date: value, expression: value, year_basis: null };
 }
 
 export function snoozeAllDayDue(
@@ -153,5 +153,5 @@ export function snoozeAllDayDue(
   const value = new Date(Date.UTC(year, month - 1, day + days - Math.min(0, remaining)))
     .toISOString()
     .slice(0, 10);
-  return { ...due, date: value, expression: value, year_basis: 'spoken' };
+  return { ...due, date: value, expression: value, year_basis: null };
 }

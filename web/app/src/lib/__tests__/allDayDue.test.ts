@@ -44,7 +44,9 @@ it('keeps date-only precision through snooze and a date-picker edit', async () =
   expect(snoozed.date).toBe('2027-01-17');
   expect(snoozed.kind).toBe('date');
   expect(snoozed.instant).toBeUndefined();
+  expect(snoozed.year_basis).toBeNull();
   const edited = editAllDayDue(due, new Date(2027, 1, 2));
   expect(edited.date).toBe('2027-02-02');
   expect(edited.kind).toBe('date');
+  expect(edited.year_basis).toBeNull();
 });
