@@ -46,12 +46,12 @@ Future<ApiResult<RecordingTranscript>> getRecordingTranscript(String conversatio
 
 Future<ApiResult<int>> assignRecordingSpeakers(String conversationId, List<Map<String, dynamic>> selections,
     {required String personId, required bool wholeRecording, String? episodeId, ApiSend? send}) async {
-  final route = episodeId == null
-      ? 'conversations/${Uri.encodeComponent(conversationId)}/recording-speakers'
-      : 'episodes/${Uri.encodeComponent(episodeId)}/assign-speaker';
+  final url = episodeId == null
+      ? '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/recording-speakers'
+      : '${Env.apiBaseUrl}v1/episodes/${Uri.encodeComponent(episodeId)}/assign-speaker';
   final result = await executeApi<Map<String, dynamic>>(
     request: ApiRequest(
-      url: '${Env.apiBaseUrl}v1/$route',
+      url: url,
       method: 'PATCH',
       body: jsonEncode({
         'selections': selections,
@@ -118,9 +118,9 @@ Future<ApiResult<int>> _assignLegacy(
   final speakerId = local.length == 1 ? local.single['speaker_id'] as int? : null;
   final assignType = personId == 'user' ? 'is_user' : 'person_id';
   final value = personId == 'user' ? 'true' : (personId.isEmpty ? null : personId);
-  final suffix = speakerId == null
-      ? 'segments/assign-bulk'
-      : 'assign-speaker/$speakerId?${Uri(queryParameters: {
+  final url = speakerId == null
+      ? '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/segments/assign-bulk'
+      : '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/assign-speaker/$speakerId?${Uri(queryParameters: {
               'assign_type': assignType,
               'value': value ?? 'null'
             }).query}';
@@ -128,7 +128,7 @@ Future<ApiResult<int>> _assignLegacy(
   // preserves its numeric stale-speaker fence when a voice was selected.
   final result = await executeApi<int>(
     request: ApiRequest(
-      url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/$suffix',
+      url: url,
       method: 'PATCH',
       body: jsonEncode({
         'segment_ids': ids,

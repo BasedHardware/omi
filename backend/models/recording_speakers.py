@@ -4,6 +4,24 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from models.transcript_segment import TranscriptSegment
+
+
+class RecordingTranscriptSegment(TranscriptSegment):
+    stream_speaker: str
+
+
+class RecordingTranscriptMember(BaseModel):
+    id: str
+    recording_offset_seconds: float
+    transcript_segments: list[RecordingTranscriptSegment]
+
+
+class RecordingTranscriptResponse(BaseModel):
+    enabled: bool
+    episode_id: Optional[str] = None
+    conversations: list[RecordingTranscriptMember]
+
 
 class RecordingVoice(BaseModel):
     speaker_id_scope: str = Field(min_length=1, max_length=256)

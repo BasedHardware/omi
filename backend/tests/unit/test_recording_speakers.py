@@ -177,6 +177,24 @@ def test_real_http_route_renames_and_reports_member_counts(recording):
     assert len(response.json()['conversations']) == 3
 
 
+def test_recording_transcript_response_models_and_preserves_voice_proof(recording):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import recording_speakers as routes
+
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'u'
+    path = '/v1/conversations/{conversation_id}/recording-speakers'
+    schema = app.openapi()['paths'][path]['get']['responses']['200']['content']['application/json']['schema']
+    assert schema == {'$ref': '#/components/schemas/RecordingTranscriptResponse'}
+    with TestClient(app) as client:
+        response = client.get('/v1/conversations/c1/recording-speakers')
+    assert response.status_code == 200
+    line = response.json()['conversations'][0]['transcript_segments'][0]
+    assert (line['speaker_id_scope'], line['stream_speaker']) == ('stream:1', 'SPEAKER_0')
+
+
 def test_voice_request_and_latest_decision_win_on_next_rollover(recording):
     from models.recording_speakers import RecordingVoice
 

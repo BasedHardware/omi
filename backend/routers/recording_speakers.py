@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
 from config.recording_speakers import enabled, RecordingLimitExceeded
 from config.episodes import APP_CHANNEL_HEADER, client_channel_admitted, episodes_enabled_for
-from models.recording_speakers import RecordingSpeakerRequest, RecordingSpeakerResponse
+from models.recording_speakers import RecordingSpeakerRequest, RecordingSpeakerResponse, RecordingTranscriptResponse
 from utils import recording_speakers
 from utils.other import endpoints as auth
 
@@ -28,7 +28,7 @@ def edit(uid, conversation_id, body, background_tasks, *, episode_id=None):
         ) from error
 
 
-@router.get('/v1/conversations/{conversation_id}/recording-speakers')
+@router.get('/v1/conversations/{conversation_id}/recording-speakers', response_model=RecordingTranscriptResponse)
 def get_recording_speakers(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
