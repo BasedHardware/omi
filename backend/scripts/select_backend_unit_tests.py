@@ -188,6 +188,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/config/live_stt_',
     'backend/config/transcription_final_pass.py',
     'backend/config/flag_budget.json',
+    'backend/parakeet/language_gate.py',
 )
 
 

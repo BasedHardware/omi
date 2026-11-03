@@ -66,6 +66,7 @@ SCOPE = (
     'config/batch_pipeline*.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
+    'parakeet/language_gate.py',
     'config/policy/**/*.py',
     'config/prerecorded_*.py',
     'config/live_stt_*.py',
