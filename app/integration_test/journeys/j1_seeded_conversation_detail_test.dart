@@ -9,6 +9,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
 import 'package:omi/services/dev_controls/semantic_controls.dart';
 
+import 'support/fixture_backend.dart';
 import 'support/hermetic_boot.dart';
 import 'support/journey_evidence.dart';
 
@@ -33,11 +34,13 @@ void main() {
 
   const seededId = 'seeded-conv-j1-0001';
   const seededTitle = 'Journey one seeded conversation';
+  // Same stable instant as the fixture backend — never DateTime.now()/"today".
+  final seededAt = JourneyFixtureBackend.seededConversationAt;
 
   ServerConversation seedConversation() {
     return ServerConversation(
       id: seededId,
-      createdAt: DateTime.utc(2026, 9, 16, 9, 0, 0),
+      createdAt: seededAt,
       structured: Structured(
         seededTitle,
         'Deterministic overview for the seeded conversation-detail journey.',
@@ -57,40 +60,54 @@ void main() {
     final conversationProvider = ConversationProvider(isSignedIn: () => true);
     await conversationProvider.forceRefreshConversations();
     final fetched = conversationProvider.conversations;
-    evidence.record('server-returned-seeded-record',
-        ok: fetched.any((c) => c.id == seededId),
-        invariant: 'the seeded conversation is served through the real API path',
-        detail: fetched.map((c) => c.id).toList());
-    expect(fetched.any((c) => c.id == seededId), isTrue,
-        reason: 'fixture must serve the seeded record via GET /v1/conversations');
+    evidence.record(
+      'server-returned-seeded-record',
+      ok: fetched.any((c) => c.id == seededId),
+      invariant: 'the seeded conversation is served through the real API path',
+      detail: fetched.map((c) => c.id).toList(),
+    );
+    expect(
+      fetched.any((c) => c.id == seededId),
+      isTrue,
+      reason: 'fixture must serve the seeded record via GET /v1/conversations',
+    );
 
     final seeded = fetched.firstWhere((c) => c.id == seededId);
-    final identityExact = seeded.structured.title == seededTitle &&
-        seeded.createdAt.isAtSameMomentAs(DateTime.utc(2026, 9, 16, 9, 0, 0)) &&
-        seeded.id == seededId;
-    evidence.record('exact-synthetic-identity',
-        ok: identityExact, invariant: 'the fetched record carries the exact synthetic identity (id, title, timestamp)');
+    final identityExact =
+        seeded.structured.title == seededTitle && seeded.createdAt.isAtSameMomentAs(seededAt) && seeded.id == seededId;
+    evidence.record(
+      'exact-synthetic-identity',
+      ok: identityExact,
+      invariant: 'the fetched record carries the exact synthetic identity (id, title, timestamp)',
+    );
     expect(identityExact, isTrue, reason: 'record identity must be the seeded identity, not a local echo');
+
+    // Pin selectedDate to the fixture day-key. The provider defaults it to
+    // DateTime.now(); conversationOrNull then rejects the cached seed when
+    // the runner's calendar day is not 2026-09-16 ("No valid conversation
+    // found"). Widget tests use this same pin.
+    final detailProvider = ConversationDetailProvider();
+    addTearDown(detailProvider.dispose);
+    detailProvider.conversationProvider = conversationProvider;
+    detailProvider.selectedDate = conversationLocalDayKey(seededAt);
+    detailProvider.setCachedConversation(seeded);
 
     await JourneyHermeticBoot.pumpPage(
       tester,
       page: ConversationDetailPage(conversation: seeded),
       providers: [
-        // The detail provider resolves through groupedConversations[selectedDate]
-        // and validates the same local day key, with selectedDate defaulting to
-        // DateTime.now() — pin it to the seed's local day so the journey is
-        // independent of the calendar day and timezone it runs in.
-        ChangeNotifierProvider<ConversationDetailProvider>.value(
-          value: ConversationDetailProvider()..selectedDate = conversationLocalDayKey(seeded.createdAt),
-        ),
+        ChangeNotifierProvider<ConversationDetailProvider>.value(value: detailProvider),
         ChangeNotifierProvider<ConversationProvider>.value(value: conversationProvider),
       ],
     );
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
     final titleRendered = find.textContaining(seededTitle).evaluate().isNotEmpty;
-    evidence.record('detail-renders-seeded-title',
-        ok: titleRendered, invariant: 'the conversation detail screen renders the seeded record');
+    evidence.record(
+      'detail-renders-seeded-title',
+      ok: titleRendered,
+      invariant: 'the conversation detail screen renders the seeded record',
+    );
     expect(titleRendered, isTrue, reason: 'detail page must render the seeded conversation title');
 
     evidence.stateAfter = SemanticControls.instance.state().toJson();
@@ -99,8 +116,10 @@ void main() {
   });
 
   testWidgets('negative: wrong-owner session cannot read the seeded record', (tester) async {
-    final evidence =
-        JourneyEvidence.begin(journeyId: 'j1_seeded_conversation_detail.wrong-owner-session', lane: journeyLane);
+    final evidence = JourneyEvidence.begin(
+      journeyId: 'j1_seeded_conversation_detail.wrong-owner-session',
+      lane: journeyLane,
+    );
     final server = await JourneyHermeticBoot.start();
     addTearDown(JourneyHermeticBoot.stop);
     server.conversations.add(seedConversation().toJson());
@@ -113,10 +132,12 @@ void main() {
     await conversationProvider.forceRefreshConversations();
     final fetched = conversationProvider.conversations;
     final leaked = fetched.any((c) => c.id == seededId);
-    evidence.record('ownership-rejected',
-        ok: !leaked,
-        invariant: JourneyFault.wrongOwnerSession.invariant,
-        detail: 'fetched ${fetched.length} records under wrong owner');
+    evidence.record(
+      'ownership-rejected',
+      ok: !leaked,
+      invariant: JourneyFault.wrongOwnerSession.invariant,
+      detail: 'fetched ${fetched.length} records under wrong owner',
+    );
     if (leaked) {
       await evidence.write();
       fail('seeded record readable under wrong-owner session');
