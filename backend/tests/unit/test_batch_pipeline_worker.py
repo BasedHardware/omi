@@ -174,16 +174,13 @@ def test_failure_is_not_silence_and_siblings_survive():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('safety_net', [False, True])
-@pytest.mark.parametrize('validation_disposition', [False, True])
 @pytest.mark.parametrize(
     'message',
     ['staging requires 16kHz mono PCM16 WAV', 'invalid staged audio length', 'truncated staged WAV'],
 )
-async def test_invalid_staged_audio_disposition_respects_flag(
-    monkeypatch, caplog, message, safety_net, validation_disposition
-):
+async def test_invalid_staged_audio_quarantines_first_attempt(monkeypatch, caplog, message, safety_net):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', str(safety_net))
-    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', str(validation_disposition))
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'false')
     # Exercise the unchanged decoder with bytes for each terminal condition.
     body = io.BytesIO()
     with wave.open(body, 'wb') as handle:
@@ -196,10 +193,7 @@ async def test_invalid_staged_audio_disposition_respects_flag(
         decode_pcm16_wav(staged)
     worker, words, saved, _, diarized, _ = setup_worker(decode=lambda _: decode_pcm16_wav(staged))
     results = worker.process_batch([item()])
-    if validation_disposition:
-        assert results == [ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')]
-    else:
-        assert results == ([FailedWork('a')] if safety_net else [])
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')]
     assert 'reason=staged_audio_invalid samples=-1' in caplog.text
     assert message not in caplog.text
     store = MemoryStore()
@@ -208,21 +202,14 @@ async def test_invalid_staged_audio_disposition_respects_flag(
     lease = queue.pull(time.time())[0]
     fail = Mock(wraps=queue.fail)
     monkeypatch.setattr(queue, 'fail', fail)
-    assert await Pump(queue, worker)._publish(lease, {result.segment_id: result for result in results}, set())
+    assert await Pump(queue, worker)._publish(lease, {'a': results[0]}, set())
+    assert fail.call_args.kwargs['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
     assert 'quarantine' not in fail.call_args.kwargs
     job = store.rows['jobs', 'a']
-    assert job['attempt'] == 1
-    if validation_disposition:
-        assert fail.call_args.kwargs['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
-        assert job['state'] == 'quarantined'
-        assert job['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
-        assert job['recovery_state'] == 'held' and not job['merge_pending']
-        assert queue.pull(time.time() + 600) == []
-    else:
-        assert 'worker_failure' not in fail.call_args.kwargs
-        assert job['state'] == 'retry' and 'worker_failure' not in job
-        queue.recover(job['available_at'])
-        assert queue.pull(job['available_at'])[0].item.segment_id == 'a'
+    assert job['state'] == 'quarantined' and job['attempt'] == 1
+    assert job['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
+    assert job['recovery_state'] == 'held' and not job['merge_pending']
+    assert queue.pull(time.time() + 600) == []
     assert not words.calls and not saved and not diarized
 
 
