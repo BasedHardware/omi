@@ -71,6 +71,8 @@ def _index(owner):
 
 
 def read_profiles(transaction, user, owner):
+    if not pools.retained(owner):
+        return {}
     profiles = {}
     for vid, token in _index(owner).items():
         row = user.collection(COLLECTION).document(vid).get(transaction=transaction).to_dict() or {}
@@ -198,6 +200,8 @@ def learn(uid, conversation, centroids, prints, expected, *, owner_reserved=Fals
 
 def prepare_retraction(transaction, user, owner, *, conversations=None, person_id=None, clear=False):
     """Read phase for existing deletion/consent transactions; never defer cleanup."""
+    if clear or not pools.retained(owner):
+        return {}
     profiles = read_profiles(transaction, user, owner)
     following = {}
     for vid, profile in profiles.items():

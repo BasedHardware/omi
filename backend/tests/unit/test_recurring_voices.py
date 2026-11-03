@@ -116,6 +116,9 @@ def test_additive_field_is_persisted_without_changing_openapi():
 @pytest.fixture
 def store(monkeypatch):
     from contextlib import nullcontext
+    from database import recurring_voice_privacy
+
+    monkeypatch.setattr(recurring_voice_privacy, 'scrub_transcripts', lambda *a, **kw: None)
 
     monkeypatch.setattr(db, 'external_write_fence', lambda *a, **kw: nullcontext())
     monkeypatch.setattr(db.encryption, 'derive_key', lambda uid: bytes(32))

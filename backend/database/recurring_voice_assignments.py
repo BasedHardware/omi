@@ -26,6 +26,8 @@ def prepare(
     rejection=None,
     train=True,
 ):
+    if not pools.retained(owner):
+        return None, []
     selected = set(resolved)
     voices = {s.get('recurring_voice_id') for s in before if s.get('id') in selected and s.get('recurring_voice_id')}
     if not voices:
@@ -41,9 +43,6 @@ def prepare(
     for vid in voices:
         profile = profiles.get(vid)
         if profile is None:
-            continue
-        if not pools.retained(owner):
-            profiles.pop(vid)
             continue
         # A rejection is a negative identity receipt, not another training sample.
         if rejection or is_user:

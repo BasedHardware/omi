@@ -131,7 +131,7 @@ def get_conversation_ids(uid: str) -> List[str]:
 # *********************************
 
 
-def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str, *, firestore_client=None) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
     _reveal_match_scores_for_read(data, uid)
 
@@ -147,6 +147,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             require_decryption=True,
         )
         _reveal_manual_speaker_assignments_for_read(data, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, data['transcript_segments'], firestore_client=firestore_client)
         return data
 
     if isinstance(data['transcript_segments'], str):
@@ -177,6 +180,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
         from utils.conversations.speaker_grouping_storage import reveal_segments
 
         reveal_segments(segments, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, segments, firestore_client=firestore_client)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
@@ -681,7 +687,9 @@ def prepare_conversation_for_read(
 
         return project(
             uid,
-            conversation_recorded_time.hydrate(_decrypt_conversation_data(data, uid)),
+            conversation_recorded_time.hydrate(
+                _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
+            ),
             firestore_client=firestore_client,
             read_budget=read_budget,
         )
@@ -700,6 +708,9 @@ def prepare_conversation_for_read(
         from utils.conversations.speaker_grouping_storage import reveal_segments
 
         reveal_segments(segments, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, segments, firestore_client=firestore_client)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
@@ -3484,7 +3495,7 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_assignment_transaction(client, assign)
+    result = run_assignment_transaction(client, assign, uid=uid)
     invalidate_people_stats_cache(uid)
     current, resolved, _, before = result
     if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
@@ -3514,6 +3525,9 @@ def assign_conversation_speaker(
         _reveal_match_scores_for_read(current, uid)
     except Exception:
         _drop_match_scores(current, 'malformed_doc')
+    from database.recurring_voice_privacy import filter_segments
+
+    filter_segments(uid, current.get('transcript_segments') or [], firestore_client=client)
     return result
 
 

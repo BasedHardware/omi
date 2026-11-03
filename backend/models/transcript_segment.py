@@ -133,9 +133,10 @@ class TranscriptSegment(BaseModel):
     audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
-    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
-    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    # Revocable profile pointer; readers require current profile and retention consent.
     recurring_voice_id: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # Pinned-speaker priors and recurring-match near-misses: [{person_id, level, suggest?}].
+    # Suggestion-card evidence only; never a person label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # Transported only in Python-mode internal dumps; the DB folds this into
     # the bounded conversation blob and removes it from stored segments.

@@ -13,6 +13,7 @@ from typing import Any, Mapping, Optional, Sequence
 from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 
+from database.legal_holds import external_write_fence
 from database.people_generation import bump_people_generation
 from database import speaker_learning_jobs as learning_jobs, recurring_voice_assignments, recurring_voices
 from utils.observability.recurring_voices import profile_event
@@ -29,14 +30,15 @@ class AssignmentBookkeeping:
     recurring_events: tuple = ()
 
 
-def run_assignment_transaction(client: Any, assign: Any) -> Any:
+def run_assignment_transaction(client: Any, assign: Any, *, uid: str) -> Any:
     bookkeeping = AssignmentBookkeeping()
 
     @firestore.transactional
     def apply(transaction):
         bookkeeping.involved = False
         bookkeeping.recurring_events = ()
-        return assign(transaction, bookkeeping)
+        with external_write_fence(uid, transaction=transaction, firestore_client=client):
+            return assign(transaction, bookkeeping)
 
     try:
         from database._client import run_transactional

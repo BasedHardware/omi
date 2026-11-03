@@ -200,40 +200,45 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
 
     @firestore.transactional
     def commit(transaction):
-        owner = user.get(transaction=transaction).to_dict() or {}
-        following = {**owner, **updates}
-        people = []
-        if not policy.retained(following):
-            for pid in owner.get(OWNER_INDEX) or []:
-                ref = user.collection('people').document(pid)
-                if ref.get(transaction=transaction).exists:
-                    people.append(ref)
-        recurring = (
-            recurring_voices.prepare_retraction(transaction, user, owner, clear=True)
-            if not policy.retained(following)
-            else None
-        )
-        if recurring is not None and owner:
-            recurring_voices.write_profiles(transaction, user, owner, recurring)
-        for ref in people:
-            transaction.update(
-                ref, {policy.POOL_FIELD: firestore.DELETE_FIELD, 'updated_at': datetime.now(timezone.utc)}
+        with external_write_fence(uid, transaction=transaction, firestore_client=client):
+            owner = user.get(transaction=transaction).to_dict() or {}
+            following = {**owner, **updates}
+            people = []
+            if not policy.retained(following):
+                for pid in owner.get(OWNER_INDEX) or []:
+                    ref = user.collection('people').document(pid)
+                    if ref.get(transaction=transaction).exists:
+                        people.append(ref)
+            recurring = (
+                recurring_voices.prepare_retraction(transaction, user, owner, clear=True)
+                if not policy.retained(following)
+                else None
             )
-            bump_people_generation(transaction, ref)
-        version = owner.get(PRIVACY_VERSION, 0)
-        if type(version) is not int:
-            raise ValueError('Invalid speaker enrollment privacy version')
-        patch = {
-            **updates,
-            PRIVACY_VERSION: version + 1,
-            **({OWNER_INDEX: [], policy.AUTHORITY_FIELD: {}} if not policy.retained(following) else {}),
-        }
-        if owner:
-            transaction.update(user, patch)
-        else:
-            transaction.set(user, patch)
+            if recurring is not None and owner:
+                recurring_voices.write_profiles(transaction, user, owner, recurring)
+            for ref in people:
+                transaction.update(
+                    ref, {policy.POOL_FIELD: firestore.DELETE_FIELD, 'updated_at': datetime.now(timezone.utc)}
+                )
+                bump_people_generation(transaction, ref)
+            version = owner.get(PRIVACY_VERSION, 0)
+            if type(version) is not int:
+                raise ValueError('Invalid speaker enrollment privacy version')
+            patch = {
+                **updates,
+                PRIVACY_VERSION: version + 1,
+                **({OWNER_INDEX: [], policy.AUTHORITY_FIELD: {}} if not policy.retained(following) else {}),
+            }
+            if owner:
+                transaction.update(user, patch)
+            else:
+                transaction.set(user, patch)
+            return not policy.retained(following) and recurring_voices.INDEX in owner
 
-    _client.run_transactional(client, commit)
+    if _client.run_transactional(client, commit):
+        from database.recurring_voice_privacy import scrub_transcripts
+
+        scrub_transcripts(uid, firestore_client=client)
 
 
 def retract_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
@@ -244,36 +249,37 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
 
     @firestore.transactional
     def commit(transaction):
-        row = source.get(transaction=transaction).to_dict()
-        if not row:
-            return
-        owner_snapshot = user.get(transaction=transaction)
-        owner = owner_snapshot.to_dict() or {}
-        source_ids = {conversation_id, *(row.get('sync_merged_from') or [])}
-        people = set(row.get(OWNER_INDEX) or [])
-        if len(source_ids) > 1:
-            # Donor cleanup is best-effort upstream. Revoke every immutable
-            # source even if a donor row/index was already removed by an old writer.
-            people.update(owner.get(OWNER_INDEX) or [])
-        changes = []
-        for pid in sorted(people):
-            ref = user.collection('people').document(pid)
-            person = ref.get(transaction=transaction).to_dict() or {}
-            change = policy.retract(uid, pid, person.get(policy.POOL_FIELD), source_ids)
-            if change:
-                changes.append((ref, change))
-        recurring = recurring_voices.prepare_retraction(transaction, user, owner, conversations=source_ids)
-        if owner_snapshot.exists:
-            recurring_voices.write_profiles(transaction, user, owner, recurring)
-        for ref, change in changes:
-            transaction.update(ref, change)
-            bump_people_generation(transaction, ref)
-        if changes and owner_snapshot.exists:
-            transaction.update(
-                user, policy.authority_after(owner, {ref.id: change[policy.POOL_FIELD] for ref, change in changes})
-            )
-        # Even a source without published contributions must fence in-flight work.
-        transaction.update(source, {'deleted': True, OWNER_INDEX: []})
+        with external_write_fence(uid, transaction=transaction, firestore_client=client):
+            row = source.get(transaction=transaction).to_dict()
+            if not row:
+                return
+            owner_snapshot = user.get(transaction=transaction)
+            owner = owner_snapshot.to_dict() or {}
+            source_ids = {conversation_id, *(row.get('sync_merged_from') or [])}
+            people = set(row.get(OWNER_INDEX) or [])
+            if len(source_ids) > 1:
+                # Donor cleanup is best-effort upstream. Revoke every immutable
+                # source even if a donor row/index was already removed by an old writer.
+                people.update(owner.get(OWNER_INDEX) or [])
+            changes = []
+            for pid in sorted(people):
+                ref = user.collection('people').document(pid)
+                person = ref.get(transaction=transaction).to_dict() or {}
+                change = policy.retract(uid, pid, person.get(policy.POOL_FIELD), source_ids)
+                if change:
+                    changes.append((ref, change))
+            recurring = recurring_voices.prepare_retraction(transaction, user, owner, conversations=source_ids)
+            if owner_snapshot.exists:
+                recurring_voices.write_profiles(transaction, user, owner, recurring)
+            for ref, change in changes:
+                transaction.update(ref, change)
+                bump_people_generation(transaction, ref)
+            if changes and owner_snapshot.exists:
+                transaction.update(
+                    user, policy.authority_after(owner, {ref.id: change[policy.POOL_FIELD] for ref, change in changes})
+                )
+            # Even a source without published contributions must fence in-flight work.
+            transaction.update(source, {'deleted': True, OWNER_INDEX: []})
 
     _client.run_transactional(client, commit)
 
@@ -286,27 +292,31 @@ def revoke_person(uid: str, person_id: str, *, firestore_client: Any = None) -> 
 
     @firestore.transactional
     def commit(transaction):
-        owner_snapshot = user.get(transaction=transaction)
-        owner = owner_snapshot.to_dict() or {}
-        snapshot = person.get(transaction=transaction)
-        authority_update = policy.authority_after(owner, {person_id: None})
-        recurring = recurring_voices.prepare_retraction(transaction, user, owner, person_id=person_id)
-        if owner_snapshot.exists:
-            recurring_voices.write_profiles(transaction, user, owner, recurring)
-        if snapshot.exists:
-            transaction.update(
-                person,
-                {
-                    policy.POOL_FIELD: firestore.DELETE_FIELD,
-                    policy.REVOKED_FIELD: True,
-                    'updated_at': datetime.now(timezone.utc),
-                },
-            )
-            bump_people_generation(transaction, person)
-        if owner_snapshot.exists:
-            transaction.update(
-                user,
-                {**authority_update, OWNER_INDEX: [pid for pid in owner.get(OWNER_INDEX) or [] if pid != person_id]},
-            )
+        with external_write_fence(uid, transaction=transaction, firestore_client=client):
+            owner_snapshot = user.get(transaction=transaction)
+            owner = owner_snapshot.to_dict() or {}
+            snapshot = person.get(transaction=transaction)
+            authority_update = policy.authority_after(owner, {person_id: None})
+            recurring = recurring_voices.prepare_retraction(transaction, user, owner, person_id=person_id)
+            if owner_snapshot.exists:
+                recurring_voices.write_profiles(transaction, user, owner, recurring)
+            if snapshot.exists:
+                transaction.update(
+                    person,
+                    {
+                        policy.POOL_FIELD: firestore.DELETE_FIELD,
+                        policy.REVOKED_FIELD: True,
+                        'updated_at': datetime.now(timezone.utc),
+                    },
+                )
+                bump_people_generation(transaction, person)
+            if owner_snapshot.exists:
+                transaction.update(
+                    user,
+                    {
+                        **authority_update,
+                        OWNER_INDEX: [pid for pid in owner.get(OWNER_INDEX) or [] if pid != person_id],
+                    },
+                )
 
     _client.run_transactional(client, commit)

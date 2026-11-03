@@ -153,7 +153,14 @@ After successful whole-pass revalidation, retained Omi-v2 clusters may publish
 private sealed profiles. Unconfirmed profiles identify recurring speech only
 with `recurring_voice_id`; they do not name anyone. Two distinct conversations
 are required. Manual assignment binds to a confirmed person only after current
-print consistency passes .35. No past conversations are rewritten.
+print consistency passes .35. No past conversations are rewritten for binding.
+Follow-up: bounded identity-only retro-refresh of contributor conversations after confirmation.
+
+Recurring IDs are revocable pointers: readers drop them when consent or an active
+profile is missing, or after rejection. Opt-out additionally scrubs stored IDs
+in pages of 100, with one transcript per transaction. If cleanup fails, repeat
+the opt-out to retry the idempotent sweep; read-time revocation remains active.
+Expiry and eviction leave only inert stored pointers until transcript deletion.
 
 Controls: `SPEAKER_RECURRING_VOICES_ENABLED=false` stops new learning, matching
 and recurring suggestions. `SPEAKER_RECURRING_PERCENT` defaults to 100 and uses

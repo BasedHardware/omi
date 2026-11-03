@@ -12,6 +12,7 @@ unconfirmed profile never receives a name or creates a person. Only a manual
 assignment may bind it to an existing person. The learning lane is batch
 finalization; live and sync print loading never reads this roster, and there is
 no streaming GPU work or retroactive refresh of past conversations.
+Follow-up: bounded identity-only retro-refresh of contributor conversations after confirmation.
 
 Existing retention consent (`private_cloud_sync_enabled` and
 `save_other_voice_profiles`) gates reads and writes. Profiles are AES-GCM sealed
@@ -45,7 +46,20 @@ TTL runner before release. Firestore TTL deletion is asynchronous. Deletion of
 a conversation retracts its contributions, including merged donors; person
 deletion clears bound profiles; privacy opt-out clears all profiles atomically
 with consent and increments the existing privacy generation. Account wipe
-removes the user subtree. Cleanup never depends on the feature switch.
+removes the user subtree. Every recurring-profile mutation reuses the account
+deletion fence within its transaction. Cleanup never depends on the feature switch.
+
+A transcript's `recurring_voice_id` is a revocable pointer. Conversation readers
+and suggestion readers honor it only while consent holds and the authoritative
+profile exists, is active and is not rejected. Expiry, TTL deletion, cap eviction,
+person deletion and rejection therefore immediately stop cross-conversation
+linking on reads. Expiry/eviction do not sweep historical transcripts in this PR:
+the inert stored pointer lasts with its transcript but is never returned or used.
+Privacy opt-out also scrubs stored pointers: the cleanup pages 100 conversation
+IDs at a time and re-reads/rewrites one transcript per transaction, preserving
+its protection level and concurrent edits. A failed sweep propagates for retry;
+repeating the opt-out retries the idempotent sweep from the start. Readers deny
+links throughout cleanup, including on a sweep failure.
 
 Ship on by default, nested under batch-final-pass admission, with
 `SPEAKER_RECURRING_VOICES_ENABLED` as the kill switch and

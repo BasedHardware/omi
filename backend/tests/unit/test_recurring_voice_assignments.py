@@ -129,7 +129,7 @@ def test_binding_fails_closed(db, monkeypatch, case):
     if case == 'consent':
         db.rows[('users', 'u')]['save_other_voice_profiles'] = False
     profiles, _ = assign(db, train=case != 'no_training')
-    assert all(not p.get('bound_person_id') for p in profiles.values())
+    assert profiles is None if case == 'consent' else all(not p.get('bound_person_id') for p in profiles.values())
 
 
 @pytest.mark.parametrize('kind', ['not_me', 'not_person', 'not_a_person'])
@@ -269,3 +269,89 @@ def test_confirmed_profile_refreshes_on_later_person_match_without_extending_ret
     assert {e['conversation_id'] for e in following['v']['entries']} == {'c1', 'c2', 'c3'}
     retry, *_ = policy.evaluate(clusters, {'user': OWNER, 'p': VOICE}, following, 'c3', NOW + 10)
     assert next(e['at'] for e in retry['v']['entries'] if e['conversation_id'] == 'c3') == NOW + 1
+
+
+@pytest.mark.parametrize('setting', ['private_cloud_sync_enabled', 'save_other_voice_profiles'])
+def test_consent_checked_before_any_profile_read_or_write(db, monkeypatch, setting):
+    db.rows[('users', 'u')][setting] = False
+    original = deepcopy(db.rows)
+    monkeypatch.setattr(store, 'read_profiles', lambda *a: pytest.fail('must not decrypt after opt-out'))
+    assert assign(db) == (None, [])
+    assert db.rows == original and not db.transactions[-1].has_written
+
+
+@pytest.mark.parametrize('writer', ['bind', 'privacy', 'conversation', 'person'])
+def test_all_profile_writers_use_account_deletion_fence(db, writer):
+    from database import conversations
+    from database.legal_holds import DestructiveOperationInProgress
+
+    db.rows[('users', 'u', 'conversations', 'c1')]['transcript_segments'] = segments()
+    db.rows[('account_deletions', 'u')] = {'wipe_status': 'running'}
+    original = deepcopy(db.rows)
+    with pytest.raises(DestructiveOperationInProgress):
+        if writer == 'bind':
+            conversations.assign_conversation_speaker('u', 'c1', person_id='p', segment_ids=['s1'], firestore_client=db)
+        elif writer == 'privacy':
+            speaker_auto_enroll.update_privacy('u', {'save_other_voice_profiles': False}, firestore_client=db)
+        elif writer == 'conversation':
+            speaker_auto_enroll.retract_conversation('u', 'c1', firestore_client=db)
+        else:
+            speaker_auto_enroll.revoke_person('u', 'p', firestore_client=db)
+    assert db.rows == original and not db.transactions[-1].has_written
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize(
+    'revocation', ['consent', 'sync', 'candidate_expiry', 'evidence_expiry', 'eviction', 'ttl', 'person', 'rejection']
+)
+def test_conversation_read_drops_revoked_recurring_links(db, level, revocation):
+    from database import conversations
+
+    assign(db)
+    raw = conversations.encode_conversation_for_write('u', {'transcript_segments': segments()}, level)
+    raw['data_protection_level'] = level
+    assert (
+        conversations.prepare_conversation_for_read(raw, 'u', firestore_client=db)['transcript_segments'][0][
+            'recurring_voice_id'
+        ]
+        == 'v'
+    )
+    if revocation in {'consent', 'sync'}:
+        db.rows[('users', 'u')][
+            'save_other_voice_profiles' if revocation == 'consent' else 'private_cloud_sync_enabled'
+        ] = False
+    elif revocation == 'eviction':
+        db.rows[('users', 'u')][store.INDEX] = {}
+    elif revocation == 'ttl':
+        db.rows.pop(('users', 'u', store.COLLECTION, 'v'))
+    elif revocation == 'person':
+        speaker_auto_enroll.revoke_person('u', 'p', firestore_client=db)
+    elif revocation == 'rejection':
+        assign(db, rejection={'kind': 'not_a_person'})
+    else:
+        profile = store.open_profile('u', 'v', db.rows[('users', 'u', store.COLLECTION, 'v')]['sealed'])
+        age = policy.CANDIDATE_AGE if revocation == 'candidate_expiry' else store.pools.MAX_AGE_SECONDS
+        for entry in profile['entries']:
+            entry['at'] = NOW - age - 1
+        if revocation == 'candidate_expiry':
+            profile['state'] = 'candidate'
+        blob = store.seal('u', 'v', profile)
+        db.rows[('users', 'u', store.COLLECTION, 'v')]['sealed'] = blob
+        db.rows[('users', 'u')][store.INDEX]['v'] = store.pools.pool_token(blob)
+    result = conversations.prepare_conversation_for_read(raw, 'u', firestore_client=db)
+    assert 'recurring_voice_id' not in result['transcript_segments'][0]
+    assert result['transcript_segments'][0]['text'] == 'hello'
+
+
+@pytest.mark.parametrize('revocation', ['consent', 'rejection', 'eviction'])
+def test_assignment_http_response_cannot_return_a_revoked_pointer(db, assignment_http, revocation):
+    params = {'assign_type': 'person_id', 'value': 'p'}
+    if revocation == 'consent':
+        db.rows[('users', 'u')]['save_other_voice_profiles'] = False
+    elif revocation == 'eviction':
+        db.rows[('users', 'u')][store.INDEX] = {}
+    else:
+        params = {'assign_type': 'is_user', 'value': 'false'}
+    response = assignment_http.patch('/v1/conversations/c1/assign-speaker/1', params=params)
+    assert response.status_code == 200, response.text
+    assert 'recurring_voice_id' not in response.json()['transcript_segments'][0]
