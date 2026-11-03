@@ -17,6 +17,7 @@ from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE, final_p
 from database.batch_final_pass import load_reference
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
+from utils.speakers.recurring_voices import near_misses
 from database.batch_pipeline_store import FirestoreStore
 from database.redis_db import create_bounded_redis_client
 from models.conversation import ConversationSpeakers
@@ -363,6 +364,10 @@ def _run(uid, conversation, receipt, load_prints, apply):
             segment.is_user = pid == 'user'
             segment.person_id = pid if pid != 'user' else None
             segment.recurring_voice_id = label.get('recurring_voice_id')
+            if segment.recurring_voice_id:
+                segment.voice_candidates = near_misses(
+                    outcome['centroids'][voice]['embedding'], {k: v['embedding'] for k, v in cache.items()}
+                )
             segment.speaker_identity_status = 'user' if segment.is_user else 'not_user' if pid else 'no_match'
     projected = {s.id: s for s in candidate.transcript_segments}
     for word in outcome['assignments']:

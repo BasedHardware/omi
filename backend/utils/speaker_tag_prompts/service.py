@@ -86,6 +86,7 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
 from utils.speaker_tag_prompts import embedding_cache as owner_embedding_cache
+from utils.speaker_tag_prompts.recurring import metric_origin
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +451,8 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
         named_allowed=named_allowed,
         answered=voice_profiles_db.answered_prompt_ids(state, now),
         people=people,
+        recurring_uid=uid,
+        stored_people=stored_people,
         pinned=pinned,
         ignored=voice_profiles_db.ignored_voice_keys(state),
         prior_enabled=pinned_speaker_prior_enabled(),
@@ -483,7 +486,15 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
         )
     SPEAKER_TAG_PROMPT_REQUESTS.labels(status='ok').inc()
     for prompt in prompts:
-        SPEAKER_TAG_PROMPTS_SERVED.labels(kind=prompt.kind.value).inc()
+        SPEAKER_TAG_PROMPTS_SERVED.labels(
+            kind=prompt.kind.value,
+            origin=metric_origin(
+                uid,
+                next(c for c in conversations if c['id'] == prompt.conversation_id),
+                prompt.segment_ids,
+                prompt.origin.value,
+            ),
+        ).inc()
     return SpeakerTagPromptsResponse(prompts=prompts, first_time=first_time, save_other_voice_profiles=save_others)
 
 
@@ -697,7 +708,9 @@ def _apply_owner_answer(
         )
         quality_label = outcome.value
     voice_profiles_db.record_tag_prompt_answered(uid, request.prompt_id, now)
-    SPEAKER_TAG_PROMPT_ANSWERS.labels(kind='owner_check', answer=request.answer.value).inc()
+    SPEAKER_TAG_PROMPT_ANSWERS.labels(
+        kind='owner_check', answer=request.answer.value, origin=request.origin.value
+    ).inc()
     SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=quality_label).inc()
     return SpeakerTagPromptAnswerResponse(
         quality_outcome=outcome, conversation_id=request.conversation_id, segment_identities=identities
@@ -729,6 +742,11 @@ def apply_answer(
     # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
     # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
+    conversation = (
+        (conversations_db.get_conversation(uid, request.conversation_id) or {})
+        if answer == SpeakerTagPromptAnswer.skip
+        else {}
+    )
     person_id: Optional[str] = None
     person_enrolled = False
     voice_sample_queued = False
@@ -809,7 +827,11 @@ def apply_answer(
         person_enrolled=person_enrolled,
     )
     voice_profiles_db.record_tag_prompt_answered(uid, request.prompt_id, now)
-    SPEAKER_TAG_PROMPT_ANSWERS.labels(kind=request.kind.value, answer=answer.value).inc()
+    SPEAKER_TAG_PROMPT_ANSWERS.labels(
+        kind=request.kind.value,
+        answer=answer.value,
+        origin=metric_origin(uid, conversation, request.segment_ids, request.origin.value),
+    ).inc()
     SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=outcome.value).inc()
     emit_product_event(
         uid=uid,

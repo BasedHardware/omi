@@ -134,3 +134,15 @@ def evaluate(centroids, prints, profiles, conversation_id, now, *, owner_reserve
             events.append('created')
             outcomes.append('new_candidate')
     return profiles, labels, events, outcomes
+
+
+def near_misses(embedding, prints):
+    v = pools.unit(embedding)
+    if v is None:
+        return []
+    candidates = []
+    for pid, raw in prints.items():
+        reference = pools.unit(raw)
+        if pid != 'user' and reference is not None and 0.50 <= 1 - v @ reference <= 0.60:
+            candidates.append({'person_id': pid, 'level': 1, 'suggest': False})
+    return candidates[:5]
