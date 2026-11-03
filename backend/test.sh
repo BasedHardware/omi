@@ -53,6 +53,20 @@ export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
 export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 
+# Apple Silicon Homebrew installs native libraries under /opt/homebrew/lib, which
+# the dynamic loader's default fallback path does not cover on macOS. Callers
+# cannot be relied on to export DYLD_FALLBACK_LIBRARY_PATH themselves: system
+# integrity protection strips DYLD_* variables from launchd contexts and from
+# bash-to-bash launches, so an inherited value often never reaches pytest.
+# Re-exporting here works because the last hop into every pytest process is the
+# Python interpreter itself, which does receive the variable. Without it,
+# ctypes.util.find_library('opus') returns None on arm64 macOS even with
+# Homebrew libopus installed, opuslib raises at import, and every opus
+# encode/decode unit test fails (2026-11-03: the 7 opus-backed
+# test_empty_capture_recovery tests). On Linux and on GitHub runners the path
+# simply does not exist, so the loader ignores it and behavior is unchanged.
+export DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}"
+
 # LangSmith's pytest integration is for live evaluation/upload, which this
 # hermetic suite does not use. Local startup measurements saved ~0.17s per
 # process before collection; file isolation pays this cost hundreds of times.

@@ -257,6 +257,22 @@ def contention_retry_enabled() -> bool:
     )
 
 
+def shadow_slot_cas_enabled() -> bool:
+    """Arbitrate the shadow slot ring with conditional writes by default.
+
+    The shared batch contention kill switch is opt-out for the whole
+    contention family: false restores the transactional four-slot ring that
+    reads every slot in one transaction. Point-read-plus-fenced-write
+    arbitration shares no transaction read set, so concurrent
+    offer/take/reserve cycles cannot abort one another into
+    ``firestore_transaction_contention ... outcome=exhausted``.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTENTION_RETRY_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def speech_empty_multilingual_enabled() -> bool:
     from config.policy import resolve_stage_policy
 

@@ -80,7 +80,9 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
     packs = []
     for index, blob in enumerate(
         bucket.list_blobs(
-            prefix=f'raw-live/{uid}/{conversation_id}/', timeout=io_timeout(deadline, timeout), retry=None
+            prefix=f'raw-live/{uid}/{conversation_id}/',
+            timeout=io_timeout(deadline, timeout),
+            retry=_PACK_LIST_RETRY,
         )
     ):
         if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
@@ -145,8 +147,16 @@ def raw_chunks_for_listing(
     max_count=None,
     require_archive=False,
     list_raw=list_packs,
+    on_error=None,
 ):
-    """Playback may fall back; independent replay proof requires a fresh complete inventory."""
+    """Playback may fall back; independent replay proof requires a fresh complete inventory.
+
+    ``on_error(error)`` lets the caller classify a listing failure after the
+    listing's own bounded availability retry has drained: a blip the SDK
+    already replayed degrades quietly, a permanent refusal stays loud. The
+    default (no hook) keeps the closed-bucket warning-only behavior for
+    callers without a boundary classifier.
+    """
     if not enabled:
         return []
     try:
@@ -167,10 +177,13 @@ def raw_chunks_for_listing(
         if max_count is not None and len(chunks) + len(raw_chunks) > max_count:
             raise TimeoutError('speaker audio listing budget exhausted')
         return raw_chunks
-    except Exception:
+    except Exception as error:
         if require_archive or include_raw:
             raise
-        log_failure('other')
+        if on_error is not None:
+            on_error(error)
+        else:
+            log_failure('other')
         return []
 
 

@@ -269,16 +269,16 @@
     {
       "path": "utils/other/storage.py",
       "function": "get_or_create_merged_audio",
-      "kind": "executor.submit",
+      "kind": "submit_with_context",
       "count": 1,
-      "why": "reviewed safe: best-effort cache upload of merged audio; source of truth is unaffected"
+      "why": "reviewed safe: best-effort post-commit work; context-carrying submit keeps the request identity (branch fix carried across the merge)"
     },
     {
       "path": "utils/other/storage.py",
       "function": "precache_conversation_audio",
-      "kind": "executor.submit",
+      "kind": "submit_with_context",
       "count": 1,
-      "why": "reviewed safe: best-effort playback cache warming"
+      "why": "reviewed safe: best-effort post-commit work; context-carrying submit keeps the request identity (branch fix carried across the merge)"
     },
     {
       "path": "utils/retrieval/agentic.py",

@@ -194,6 +194,7 @@ def _ack_peer_departed(exc: Exception, websocket: Any) -> bool:
         or str(exc) == 'Cannot call "send" once a close message has been sent.'
     )
 
+
 # Pod-teardown classification window. Uvicorn's graceful-shutdown budget
 # (--timeout-graceful-shutdown 60, inside the chart's
 # terminationGracePeriodSeconds 120) hard-cancels every still-draining
@@ -1111,37 +1112,6 @@ async def _run_websocket_util_trigger(
                             outcome='exhausted',
                             log=logger,
                         )
-                        if applied:
-                            schedule_person_voice_learning_retry(uid, conv_id)
-                            if len(identity_refreshed) < 128:
-                                identity_refreshed.add(conv_id)
-                            # Rebuild the conversation playback artifact if a stamped one
-                            # went stale. No stamp (the live-conversation common case) → no-op.
-                            if is_audio_merge_dispatch_enabled():
-                                stamp = await run_blocking(
-                                    storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
-                                )
-                                if stamp:
-                                    await run_blocking(
-                                        storage_executor,
-                                        maybe_invalidate_conversation_playback,
-                                        uid,
-                                        conv_id,
-                                        {'conversation_audio': stamp},
-                                        files_payload,
-                                        'pusher_flush',
-                                    )
-                        else:
-                            deleted_conversations.add(conv_id)
-                            logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
-                            record_fallback(
-                                component='pusher',
-                                from_mode='private_cloud_sync',
-                                to_mode='drop',
-                                reason='policy',
-                                outcome='exhausted',
-                                log=logger,
-                            )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))
@@ -1420,6 +1390,7 @@ async def _run_websocket_util_trigger(
         await asyncio.sleep(PUSHER_DRAIN_WIND_DOWN_SECONDS)
         drain_winddown_triggered = True
         websocket_close_code = 1001
+
     # The conversation this session last streamed, for the episode moment flush at teardown.
     episode_session: Dict[str, Optional[str]] = {'conversation_id': None}
 

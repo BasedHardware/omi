@@ -44,6 +44,13 @@ def repository(monkeypatch):
         return original_get(reference, *args, **kwargs)
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', bounded_get)
+    # This suite certifies the transactional four-slot ring (its labels,
+    # read-before-write discipline and whole-row slot replacement); pin the
+    # legacy lane so the default-on conditional-write rendezvous cannot
+    # reinterpret the fixture's expectations. The CAS lane is certified in
+    # tests/unit/test_batch_shadow_slot_cas.py on its own lane-specific
+    # fence-racing double.
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'false')
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
     return ShadowStore(store, clock=lambda: 7200, busy=lambda: False)
 

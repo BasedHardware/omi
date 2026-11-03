@@ -10,7 +10,11 @@ import hashlib
 import logging
 import time
 
+from google.api_core.exceptions import Aborted, AlreadyExists, FailedPrecondition
+from google.cloud import firestore
+
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
+from config.batch_pipeline import shadow_slot_cas_enabled
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import is_allowance_policy_hold
@@ -101,6 +105,331 @@ class ShadowStore:
         with shadow_operation(operation):
             return self.store.run(body)
 
+    def _slot_ref(self, index):
+        collection = self.store.client.collection(f'{self.store.namespace}_shadow_slots')
+        return collection.document(str(index))
+
+    def _read_slot(self, index):
+        """One plain point read; this lane shares no transaction read set."""
+        snapshot = self._slot_ref(index).get()
+        return ((snapshot.to_dict() or {}), getattr(snapshot, 'update_time', None))
+
+    def _write_slot(self, index, value, update_time):
+        """One conditional write; the update-time fence makes it the arbiter.
+
+        The write commits only if no other writer touched the slot document
+        since this read, so two workers racing for the same ring index share
+        no transaction, cannot abort one another, and exactly one wins.
+        """
+        try:
+            if update_time is None:
+                # A create cannot delete fields: on a fresh namespace there is
+                # nothing to clear, so the sentinel must not ride along.
+                self._slot_ref(index).create(
+                    {key: value for key, value in value.items() if value is not firestore.DELETE_FIELD}
+                )
+            else:
+                self._slot_ref(index).update(value, option=firestore.LastUpdateOption(update_time), retry=None)
+            return True
+        except (AlreadyExists, FailedPrecondition, Aborted):
+            logger.info('event=batch_shadow_slot outcome=busy slot=%s', index)
+            return False
+
+    def _finish_one(self, segment, outcome, **fields):
+        """Settle one job in its own transaction, keyed only by that job.
+
+        The read set is the single job document — never the slot ring — so a
+        settlement cannot abort or be aborted by concurrent rendezvous
+        traffic. At-most-once settlement is the transaction's job.
+        """
+        row = self._run('finish', lambda tx: self._finish(tx, segment, outcome, **fields))
+        if row:
+            record(row)
+        return row
+
+    def _claim_slot(self, worker, *, closed, now):
+        """Occupy one ring index with one conditional write, no ring transaction.
+
+        Plain reads mirror the transactional ring's exact index choice; the
+        update-time fence makes the write itself the arbiter, so concurrent
+        claimers share no transaction read set and cannot abort one another.
+        A loser's write fails its precondition and the worker simply skips
+        this offer cycle — the next cycle re-reads and re-chooses.
+        """
+        choices = []
+        own = None
+        for index in range(MAX_OFFERS):
+            slot, update_time = self._read_slot(index)
+            if slot.get('worker') == worker:
+                own = index
+            choices.append((index, slot, update_time))
+        if closed and own is None:
+            return None
+        index = own if own is not None else next((i for i, slot, _ in choices if slot.get('until', 0) <= now), None)
+        if index is None:
+            return None
+        chosen_slot, update_time = choices[index][1:]
+        if (
+            not closed
+            and own is not None
+            and chosen_slot.get('state') in {'staging', 'ready'}
+            and chosen_slot['until'] > now
+        ):
+            # A live staging/ready offer keeps its slot, exactly like the
+            # transactional ring's early return.
+            return None
+        segment = chosen_slot.get('segment')
+        value = {
+            'worker': worker,
+            'state': 'closed' if closed else 'idle',
+            'until': now if closed else now + OFFER_SECONDS,
+            # The transactional ring replaced the whole slot document; a
+            # conditional update merges, so a displaced pointer is deleted
+            # explicitly and can never leak onto a new owner.
+            'segment': firestore.DELETE_FIELD,
+        }
+        if not self._write_slot(index, value, update_time):
+            return None
+        return index, segment, chosen_slot
+
+    def _displaced_job_held(self, segment) -> bool:
+        """True when a displaced slot pointer names work an owner still runs.
+
+        ``take`` closes its slot the moment it hands the job over, and
+        ``recovery_transport_failed`` already documents that an active
+        backend request owns settlement for a recovering job, so a
+        ``running``/``recovering`` job is never the ring's to drop: its
+        owner, the bounded reap sweep or the recovery settlement path
+        settles it. One plain job read decides; the fence analysis above
+        makes the racy window unreachable in production.
+        """
+        if not segment:
+            return False
+        snapshot = self.store.client.collection(f'{self.store.namespace}_shadow_jobs').document(segment).get()
+        return (snapshot.to_dict() or {}).get('state') in {'running', 'recovering'}
+
+    def _settle_displaced_job(self, segment):
+        """Drop a displaced offer-cycle job unless an owner still holds it.
+
+        The slot is already safe under its fence when this runs; the drop is
+        its own single-job transaction, so it cannot abort against or be
+        aborted by ring traffic, and losing the race to a newer offer cycle
+        costs nothing (the next cycle re-reads).
+        """
+        if self._displaced_job_held(segment):
+            return
+        self._finish_one(segment, 'dropped')
+
+    def _consume_slot(self, worker, index, *, now):
+        """Consume a ready offer with one generation-fenced write.
+
+        The fence is the at-most-one-consumer arbiter: a slot the ring
+        re-primed or another consumer took cannot be consumed twice. The
+        displaced pointer is deleted explicitly — a conditional update
+        merges, unlike the transactional ring's whole-row replace.
+        """
+        slot, update_time = self._read_slot(index)
+        if slot.get('state') != 'ready' or slot.get('until', 0) <= now:
+            return False
+        return self._write_slot(
+            index,
+            {'worker': worker, 'state': 'closed', 'until': now, 'segment': firestore.DELETE_FIELD},
+            update_time,
+        )
+
+    def _verify_ready(self, tx, segment):
+        """Re-read one job inside its own transaction: state, identity, privacy.
+
+        Nothing is written, so a refusal consumes nothing — the conditional
+        slot write happens only after this transaction commits.
+        """
+        job = tx.get('shadow_jobs', segment)
+        if job.get('state') != 'ready' or job.get('shadow') is not True:
+            return None
+        item = WorkItem(**job['item'])
+        if not item.shadow or item.segment_id != segment:
+            raise ValueError('shadow identity required')
+        tx.check_privacy(
+            item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
+        )
+        return job
+
+    def _pin_running(self, tx, segment, item, now):
+        job = tx.get('shadow_jobs', segment)
+        if job.get('state') != 'ready' or job.get('shadow') is not True:
+            return None  # A newer offer dropped it; the consumed slot expired.
+        if not item.shadow or item.segment_id != segment:
+            raise ValueError('shadow identity required')
+        tx.check_privacy(
+            item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
+        )
+        tx.put('shadow_jobs', segment, {**job, 'state': 'running', 'started_at': now})
+        return item
+
+    def _take_cas(self, worker, now):
+        """Consume a ready offer without a ring-wide transaction read set.
+
+        Plain slot reads choose this worker's offer; the generation-fenced
+        slot write is the at-most-one-consumer arbiter; the single-job
+        transaction then re-verifies the job at commit (identity, state,
+        privacy) before pinning it running. A privacy refusal or lost race
+        leaves the job for the bounded reap sweep — shadow metadata only,
+        never audio custody.
+        """
+        own = None
+        for index in range(MAX_OFFERS):
+            slot, _ = self._read_slot(index)
+            if slot.get('worker') == worker:
+                own = (index, slot)
+                break
+        if own is None:
+            return None
+        index, slot = own
+        segment = slot.get('segment')
+        if slot.get('state') != 'ready' or slot.get('until', 0) <= now or not segment:
+            return None
+        # Verify identity and privacy before consuming anything, exactly like
+        # the transactional ring: a refused consumer leaves the offer intact.
+        job = self._run(
+            'take',
+            lambda tx: self._verify_ready(tx, segment),
+        )
+        if job is None:
+            return None
+        item = WorkItem(**job['item'])
+        if not item.shadow or item.segment_id != segment:
+            raise ValueError('shadow identity required')
+        if not self._consume_slot(worker, index, now=now):
+            return None
+        return self._run('take', lambda tx: self._pin_running(tx, segment, item, now))
+
+    def _admit_job_row(self, uid, class_name, segment, now, *, projected):
+        row = {
+            'shadow': True,
+            'owner_key': hashlib.sha256(uid.encode()).hexdigest(),
+            'class': class_name,
+            'state': 'staging',
+            'created_at': now,
+            'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=2),
+        }
+        if projected:
+            row['projection_reserved_at'] = now
+        return row
+
+    def _bind_spend(self, tx, hour, expires_at):
+        """Bind the hour counter after the slot fence, never before it.
+
+        A double bind across concurrent reserve winners is a harmless
+        over-admission counted against the same hourly budget — shadow spend
+        is best effort, unlike the job create which refuses duplicates.
+        """
+        budget = tx.get('shadow_spend', hour)
+        current = budget.get('units', 0)
+        if type(current) is not int or current < 0:
+            return None  # Uncertain cost authority; admission already committed.
+        tx.put('shadow_spend', hour, {'units': current + 1, 'expires_at': expires_at})
+        return current
+
+    def _reserve_cas(self, uid, class_name, segment, busy, hour, now):
+        """Admit a shadow unit without reading the slot ring in a transaction.
+
+        The duplicate check and hourly spend read are plain single-document
+        transactions; atomicity lives in conditional writes — the job create
+        refuses a duplicate segment, and the generation-fenced slot write
+        refuses a ring a concurrent offer has already re-primed since the
+        read. Winning the slot fence commits admission order.
+        """
+        prior = self._run('reserve', lambda tx: dict(tx.get('shadow_jobs', segment)) or None)
+        if prior:
+            return None, None
+        budget = self._run('reserve', lambda tx: dict(tx.get('shadow_spend', hour)) or None)
+        used = (budget or {}).get('units', 0)
+        if type(used) is not int or used < 0:
+            return None, None  # Uncertain cost authority never admits work.
+        index = None
+        if not busy and used < 200:
+            for candidate in range(MAX_OFFERS):
+                slot, update_time = self._read_slot(candidate)
+                if slot.get('state') == 'idle' and slot['until'] > now:
+                    job_row = self._admit_job_row(uid, class_name, segment, now, projected=True)
+                    try:
+                        self.store.client.collection(f'{self.store.namespace}_shadow_jobs').document(segment).create(
+                            job_row, retry=None
+                        )
+                    except AlreadyExists:
+                        return None, None
+                    staged = {**slot, 'state': 'staging', 'segment': segment, 'until': now + STAGING_SECONDS}
+                    if not self._write_slot(candidate, staged, update_time):
+                        logger.info('event=batch_shadow_slot outcome=busy slot=%s', candidate)
+                        self._finish_one(segment, 'dropped')
+                        return None, None
+                    index = candidate
+                    break
+        job_row = self._admit_job_row(uid, class_name, segment, now, projected=index is not None)
+        if index is None:
+            try:
+                self.store.client.collection(f'{self.store.namespace}_shadow_jobs').document(segment).create(
+                    job_row, retry=None
+                )
+            except AlreadyExists:
+                return None, None
+            return None, self._finish_one(segment, 'dropped')
+        bound = self._run(
+            'reserve',
+            lambda tx: self._bind_spend(tx, hour, datetime.fromtimestamp(now, timezone.utc) + timedelta(days=2)),
+        )
+        return (segment, str(index)), bound
+
+    def _finish_cas(self, segment, outcome, **fields):
+        """Settle one shadow job without touching the slot ring's read set."""
+        return self._finish_one(segment, outcome, **fields)
+
+    def slot_cas_enabled(self) -> bool:
+        """The CAS rendezvous is on by default; the kill switch restores the ring.
+
+        ``BATCH_PIPELINE_CONTENTION_RETRY_ENABLED=false`` restores the
+        transactional ring that reads all four slot documents in one
+        transaction in one step.
+        """
+        return shadow_slot_cas_enabled()
+
+    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
+        if outcome not in OUTCOMES:
+            raise ValueError('closed shadow outcome required')
+        if projection_status is not None and projection_status not in {
+            'planned',
+            'empty',
+            'not_eligible',
+            'budget_skipped',
+            'busy',
+            'error',
+        }:
+            raise ValueError('closed shadow projection status required')
+        if self.slot_cas_enabled():
+            row = self._finish_cas(
+                segment,
+                outcome,
+                speech=speech,
+                vad=vad,
+                recognizers=recognizers,
+                projection_status=projection_status,
+            )
+        else:
+            row = self._run(
+                'finish',
+                lambda tx: self._finish(
+                    tx,
+                    segment,
+                    outcome,
+                    speech=speech,
+                    vad=vad,
+                    recognizers=recognizers,
+                    projection_status=projection_status,
+                ),
+            )
+        if row:
+            record(row)
+
     def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         job = tx.get('shadow_jobs', segment)
         if job.get('shadow') is not True or job.get('state') == 'settled':
@@ -150,37 +479,23 @@ class ShadowStore:
         tx.put('shadow_jobs', segment, row)
         return row
 
-    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
-        if outcome not in OUTCOMES:
-            raise ValueError('closed shadow outcome required')
-        if projection_status is not None and projection_status not in {
-            'planned',
-            'empty',
-            'not_eligible',
-            'budget_skipped',
-            'busy',
-            'error',
-        }:
-            raise ValueError('closed shadow projection status required')
-        row = self._run(
-            'finish',
-            lambda tx: self._finish(
-                tx,
-                segment,
-                outcome,
-                speech=speech,
-                vad=vad,
-                recognizers=recognizers,
-                projection_status=projection_status,
-            ),
-        )
-        if row:
-            record(row)
-
     def offer(self, worker, *, close=False):
         """Refresh one idle offer, or revoke it immediately for ordinary work."""
         now = self.clock()
         closed = close or not shadow_percent() or self.busy()
+        if self.slot_cas_enabled():
+            claimed = self._claim_slot(worker, closed=closed, now=now)
+            if claimed is None:
+                return
+            _index, segment, _chosen = claimed
+            if segment:
+                # The displaced pointer was cleared under the same fence that
+                # reset the slot; the drop is its own single-job transaction
+                # and skips jobs an owner still runs (a take closes its slot
+                # the moment it hands the job over — the consumer, not the
+                # next offer cycle, owns that settlement).
+                self._settle_displaced_job(segment)
+            return
 
         def update(tx):
             slots = [tx.get('shadow_slots', str(i)) for i in range(MAX_OFFERS)]
@@ -220,6 +535,8 @@ class ShadowStore:
         now, segment = self.clock(), identity(uid, content_id)
         busy = not shadow_percent() or self.busy()
         hour = 'projection-' + str(int(now // 3600))
+        if self.slot_cas_enabled():
+            return self._reserve_cas(uid, class_name, segment, busy, hour, now)[0]
 
         def claim(tx):
             prior = tx.get('shadow_jobs', segment)
@@ -342,6 +659,8 @@ class ShadowStore:
             self.offer(worker, close=True)
             return None
         now = self.clock()
+        if self.slot_cas_enabled():
+            return self._take_cas(worker, now)
 
         def claim(tx):
             slots = [tx.get('shadow_slots', str(i)) for i in range(MAX_OFFERS)]

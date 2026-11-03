@@ -52,6 +52,7 @@ import pytest
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+import utils.pusher_audio_projection as pusher_audio_projection
 import utils.pusher_protocol as pusher_protocol
 from utils.readiness import ReadinessGate
 
@@ -555,7 +556,9 @@ class TestWindDownDataPreservation:
         # reads and storage seams all fixture-backed, nothing real touched.
         monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
         monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
-        monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: [])
+        monkeypatch.setattr(
+            pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: []
+        )
         # Flush every queued chunk on the next worker tick instead of after 60s
         # of audio (same technique as the deleted-conversation sync harness).
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0.0)
@@ -630,7 +633,9 @@ class TestWindDownDataPreservation:
         monkeypatch.setattr(pusher, 'run_blocking', self._passthrough_blocking())
         monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
         monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
-        monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: [])
+        monkeypatch.setattr(
+            pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: []
+        )
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0.0)
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_BATCH_MAX_AGE', 0.0)
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.01)
@@ -638,7 +643,9 @@ class TestWindDownDataPreservation:
         monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
         upload = MagicMock(side_effect=[RuntimeError('transient'), None, None])
         monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
-        monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[]))
+        monkeypatch.setattr(
+            pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
+        )
         ws = FakeWebSocket(
             frames=[
                 struct.pack('<I', 103) + b'conv-1',
@@ -735,7 +742,9 @@ class TestWindDownDataPreservation:
         monkeypatch.setattr(pusher, 'run_blocking', self._passthrough_blocking())
         monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
         monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
-        monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: [])
+        monkeypatch.setattr(
+            pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: []
+        )
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 60.0)  # real threshold: chunk holds
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_BATCH_MAX_AGE', 60.0)
         monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.01)

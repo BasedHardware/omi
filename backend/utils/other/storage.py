@@ -198,6 +198,7 @@ def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:
 
 _OWNER_PURGE_SETTLE_ATTEMPTS = 2
 
+
 def maybe_invalidate_conversation_playback(
     uid: str,
     conversation_id: str,
@@ -215,6 +216,7 @@ def maybe_invalidate_conversation_playback(
     fingerprint = compute_audio_files_fingerprint(audio_files)
     if fingerprint != stamped:
         enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
+
 
 def _blob_purge_identity(blob: Any) -> Tuple[str, Optional[int]]:
     """The ``(name, generation)`` pair one object version answers as.
@@ -1361,6 +1363,45 @@ def list_audio_chunks(
 
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
+
+    def listing_failed(error: BaseException) -> None:
+        # The pack listing rides the storage SDK's own availability retry
+        # (raw_audio_read._PACK_LIST_RETRY), so reaching this arm means a
+        # budget of replays already drained. The listing is a read preference
+        # over the legacy chunks this call already carries: losing it
+        # degrades the merge to today's PCM-only coverage, and the next
+        # session lists again. A blip the SDK itself replays is therefore a
+        # quiet degrade — warning, shared fallback event, no traceback (the
+        # prod sensor counts every traceback as a true error, and this family
+        # burned x36/30m as "raw archive listing failed"); permanent refusals
+        # and unknown faults keep the loud classification.
+        if _is_pack_listing_blip(error):
+            logger.warning(
+                'Raw archive pack listing degraded behind a storage blip; retaining legacy chunks uid=%s conversation_id=%s',
+                uid,
+                conversation_id,
+            )
+            record_fallback(
+                component='other',
+                from_mode='raw_archive',
+                to_mode='legacy_chunks',
+                reason=_listing_blip_reason(error),
+                outcome='degraded',
+            )
+        else:
+            logger.exception(
+                'Raw archive pack listing failed; retaining legacy chunks uid=%s conversation_id=%s',
+                uid,
+                conversation_id,
+            )
+            record_fallback(
+                component='other',
+                from_mode='raw_archive',
+                to_mode='legacy_chunks',
+                reason='other',
+                outcome='exhausted',
+            )
+
     raw_chunks = raw_chunks_for_listing(
         bucket,
         uid,
@@ -1374,6 +1415,7 @@ def list_audio_chunks(
         max_count=max_count,
         require_archive=require_archive,
         list_raw=list_packs,
+        on_error=listing_failed,
     )
     return finish_audio_listing(chunks, raw_chunks, source_identity)
 

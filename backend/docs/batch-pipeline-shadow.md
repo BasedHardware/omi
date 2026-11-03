@@ -271,3 +271,19 @@ and Deepgram usage with their vendor feeds. Lead may lower the cap before 10%.
 Roll back by setting the percent to zero on upload, API recovery and worker
 hosts; no new GPU or paid work starts, CUDA already in progress drains, and
 existing cleanup/privacy erasure remains active.
+
+## Slot arbitration (2026-11-03)
+
+The rendezvous ring's `offer`/`reserve`/`take` cycles used to read all four
+`_shadow_slots` documents inside one Firestore transaction, so concurrent
+cycles aborted one another into `firestore_transaction_contention ...
+outcome=exhausted` (the top prod signatures, ~1,800 events/30m on 2026-11-03).
+Each state change is now arbitrated by per-slot point reads plus an
+update-time-fenced conditional write (`LastUpdateOption`, SDK retries off);
+`offer` opens no transaction at all, settlements are single-job transactions,
+and spend is bound after the slot fence. Duplicate suppression, the hourly
+200-unit cap, privacy-before-consume, hashed owner keys and the four-slot
+bound are preserved. The shared batch contention kill switch
+(`BATCH_PIPELINE_CONTENTION_RETRY_ENABLED=false`) restores the transactional
+ring in one step; details: `listen_pusher_pipeline/changes/2026-11-03-shadow-slot-conditional-arbitration.md`,
+certified by `tests/unit/test_batch_shadow_slot_cas.py`.
