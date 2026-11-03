@@ -14,10 +14,11 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
     action_item_data = dict(action_item_data)
     if partial and 'due_at' in action_item_data and 'due' not in action_item_data:
         action_item_data['due'] = None
-    if action_item_data.get('due') is not None:
+    due_payload = action_item_data.get('due')
+    if due_payload is not None:
         from models.task_due import TaskDue
 
-        due: TaskDue = parse_payload_strict(TaskDue, action_item_data['due'], document_path='action_items/<write>/due')
+        due: TaskDue = parse_payload_strict(TaskDue, due_payload, document_path='action_items/<write>/due')
         action_item_data['due'] = due.model_dump(mode='python')
         action_item_data['due_at'] = due.instant if due.kind == 'instant' else None
     if not partial or 'status' in action_item_data or 'completed' in action_item_data:
