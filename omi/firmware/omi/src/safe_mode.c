@@ -162,6 +162,7 @@ static enum mgmt_cb_return dfu_finished(uint32_t event,
         /* Persist TRIAL even for same-version DFU; a cold reset must not reload SAFE. */
         if (!save_state(STATE_TRIAL, 0)) {
             new_trial();
+            trial_ready = false; /* Only the next boot may certify this upload. */
             printk("Safe mode DFU finished: fresh trial on next boot\n");
         }
     }

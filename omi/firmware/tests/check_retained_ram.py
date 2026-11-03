@@ -41,8 +41,14 @@ def main():
     args = parser.parse_args()
     # Decoder address 0x20002010 is the up-buffer pointer, not control block.
     def rtt_symbols(path):
-        return {name: int(address, 16) for address, name in re.findall(
-            r"(0x[0-9a-fA-F]+)\s+(_SEGGER_RTT|_acUpBuffer)\b", path.read_text())}
+        text = path.read_text()
+        symbols = {name: int(address, 16) for address, name in re.findall(
+            r"(0x[0-9a-fA-F]+)\s+(_SEGGER_RTT|_acUpBuffer)\b", text)}
+        # Local RTT buffers may appear only as input section names in a map.
+        match = re.search(r"\.(?:bss|data|noinit)\._acUpBuffer\s+(0x[0-9a-fA-F]+)", text)
+        if match:
+            symbols["_acUpBuffer"] = int(match[1], 16)
+        return symbols
     baseline_rtt = rtt_symbols(args.baseline_app_map)
     assert rtt_symbols(args.app_map) == baseline_rtt, "baseline RTT symbol addresses changed"
     print(json.dumps({"baseline_rtt_symbols": baseline_rtt, "reserved": [hex(START), hex(END)],

@@ -154,6 +154,17 @@ int main(void)
     assert(active);
     clean();
     boot(0, true);
+    safe_mode_main_loop_ready(true);
+    dfu(MGMT_CB_OK); /* Upload during normal trial must not certify the old boot. */
+    now = CONFIG_OMI_SAFE_MODE_GOOD_UPTIME_S * 1000;
+    safe_mode_poll();
+    assert(disk.state == STATE_TRIAL && retained.count == 0);
+    boot(NRF_RESET_RESETREAS_SREQ_MASK, true);
+    good();
+    assert(disk.state == STATE_GOOD);
+
+    clean();
+    boot(0, true);
     strcpy(disk.fw, "old-version");
     disk.state = STATE_SAFE;
     disk.reason = 1;

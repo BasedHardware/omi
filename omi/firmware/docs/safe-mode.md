@@ -12,8 +12,10 @@ The default limit is three failed boots: the fourth attempt enters recovery.
 Watchdog/lockup resets and software resets marked by the fatal handler count;
 pin reset, ordinary software reboot, OFF wake and POR start a fresh trial.
 The fatal handler uses only retained RAM, a barrier and `NVIC_SystemReset()`.
-Pre-hook `PRE_KERNEL_1` hangs remain outside coverage. Recovery also depends on
-vendor kernel/device initialization and the network core remaining functional.
+Pre-hook `PRE_KERNEL_1` hangs remain outside coverage. The latch cannot bypass
+an actual kernel/device init that hangs on every boot before main; the driver
+fault-injection hook deliberately skips its hang when latched. Recovery depends
+on vendor kernel/device initialization and the network core remaining functional.
 
 Main loads app settings before other app startup, then samples P0.26 for a
 continuous three-second hold. A held button latches recovery. The recovery
@@ -161,10 +163,11 @@ factory hex is only for an independently authorized baseline restore; follow
    of `CONFIG_OMI_FAULT_INJECT_HARD_FAULT=y`,
    `CONFIG_OMI_FAULT_INJECT_DRIVER_HANG=y`,
    `CONFIG_OMI_FAULT_INJECT_WDT_STARVE=y`. Pass
-   `-DEXTRA_CONF_FILE=/absolute/fault.conf -DOMI_DEVELOPMENT_BUILD=ON` to the
+   `-DEXTRA_CONF_FILE=/absolute/fault.conf -DOMI_DEVELOPMENT_BUILD=ON
+   -DCMAKE_BUILD_TYPE=Debug` to the
    app CMake invocation (with sysbuild, use the app image's `omi_` cache
    variable prefix, e.g. `-Domi_EXTRA_CONF_FILE=...` and
-   `-Domi_OMI_DEVELOPMENT_BUILD=ON`). Use the production `omi.conf` as the base.
+   `-Domi_OMI_DEVELOPMENT_BUILD=ON -Domi_CMAKE_BUILD_TYPE=Debug`). Use the production `omi.conf` as the base.
    Do not publish these artifacts. Omission of the development opt-in must
    fail CMake with `OMI_FAULT_INJECT is forbidden in release builds`;
    the default Kconfig value is n. Inspect the final app `.config` before use.
