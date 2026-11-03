@@ -140,6 +140,18 @@ def test_committed_offline_admission_gate():
     assert not b.lint(b.rules(), json.loads(b.INVENTORY.read_text()))['failures']
 
 
+def test_observed_metric_from_another_datasource_cannot_admit_a_local_prometheus_rule():
+    r = rule()
+    inventory = {
+        'metrics': [],
+        'datasource_metrics': {'gmp-cloud-run': {'captured_at': 123, 'metrics': ['fixture_total']}},
+    }
+    assert b.lint({'fixture': r}, inventory)['failures']
+    r['data'][0]['datasourceUid'] = 'gmp-cloud-run'
+    assert not b.lint({'fixture': r}, inventory)['failures']
+    assert inventory['metrics'] == []
+
+
 def test_replay_range_frames_honor_offsets_and_resolution():
     r = rule(duration='0s')
     r['data'][0]['model'].update(instant=False, intervalMs=30000, maxDataPoints=100)
