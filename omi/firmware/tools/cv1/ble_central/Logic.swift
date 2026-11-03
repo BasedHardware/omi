@@ -99,8 +99,8 @@ struct FirstConnectionReads {
     let absentOptional: [String]
     init(discovered: Set<String>) throws {
         guard discovered.contains(UUIDs.firmware) else { throw InputError.invalid("Required firmware revision characteristic absent") }
-        ordered = [UUIDs.firmware, UUIDs.serial, UUIDs.features, UUIDs.diagnostics].filter { discovered.contains($0) }
-        absentOptional = [UUIDs.serial, UUIDs.features, UUIDs.diagnostics].filter { !discovered.contains($0) }
+        ordered = [UUIDs.firmware, UUIDs.serial, UUIDs.features, UUIDs.diagnostics, UUIDs.recovery].filter { discovered.contains($0) }
+        absentOptional = [UUIDs.serial, UUIDs.features, UUIDs.diagnostics, UUIDs.recovery].filter { !discovered.contains($0) }
     }
 }
 
@@ -109,6 +109,8 @@ enum UUIDs {
     static let audioService = "19B10000" + suffix, audioData = "19B10001" + suffix
     static let featuresService = "19B10020" + suffix, features = "19B10021" + suffix
     static let diagnosticsService = "19B10040" + suffix, diagnostics = "19B10041" + suffix
+    /// Safe-mode recovery state (16 bytes) from 3.0.23; SAFE exposes only this.
+    static let recovery = "19B10042" + suffix
     static let information = "180A", firmware = "2A26", serial = "2A25"
 }
 
@@ -136,6 +138,9 @@ func decodeDiagnostics(_ data: Data) -> DecodedValue {
         "mic_overrun_count": littleEndian(b, 13, 4), "ble_tx_drop_count": littleEndian(b, 17, 4),
         "storage_error_count": littleEndian(b, 21, 4),
     ])
+}
+func decodeRecovery(_ data: Data) -> DecodedValue {
+    DecodedValue(rawHex: hex(data), layout: data.count == 16 ? "recovery_v1; raw bytes" : "unknown; raw bytes only")
 }
 func decodeFeatures(_ data: Data) -> DecodedValue {
     guard data.count == 4 else { return DecodedValue(rawHex: hex(data), layout: "unknown; raw bytes only") }
