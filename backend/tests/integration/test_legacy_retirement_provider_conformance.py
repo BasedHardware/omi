@@ -10,7 +10,8 @@ from database.outbox import EnqueueResult
 from testing.store_fixtures import store_backend  # noqa: F401
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.provider_stt import ProviderSttStage, provider_enqueue, resolve_route
+from utils.batch_pipeline.provider_stt import ProviderSttStage
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue, resolve_route
 from utils.batch_pipeline.scheduler import Scheduler
 
 pytestmark = pytest.mark.integration

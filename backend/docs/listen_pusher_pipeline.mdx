@@ -243,11 +243,35 @@ can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
 Admission requires cloud-storage consent, durable outbox and pusher availability,
-a named Parakeet-supported language matching the request, server STT, and
+a named Parakeet-supported language (or an admitted unsupported language below) matching the request, server STT, and
 single-channel capture outside onboarding/phone calls. Storage-disabled,
-multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
-sessions retain their live behavior. The session's language profile must agree with that named primary and contain
-only supported expected languages; missing or mixed unsupported profiles stay live.
+unselected multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
+sessions retain their live behavior. The session's language profile must agree
+with that named primary; missing profiles or a primary mismatch stay live. For
+supported declarations, expected languages must all be Parakeet-supported.
+`SERVER_BATCH_UNSUPPORTED_LANGUAGES` defaults empty (the previous admission policy).
+It accepts comma-separated codes normalized by the STT language normalizer, limited
+to Modulate-listed languages outside Parakeet support; unknown/supported codes and
+Japanese (`ja`, including regional forms) are ignored. Dev/prod listen ships with
+an empty allowlist; the lead enables it only after `backend-sync-backfill` serves
+the native-record provider routing. For an admitted unsupported declaration, the profile primary
+must still agree with that declaration under the existing spoken-language profile
+equivalence (for example `bs` profiles as `sr`); expected codes must be supported
+or allowlisted, including those profile equivalents. Supported declarations and auto/multi retain their existing
+profile gates. Clearing the env restores live STT for new unsupported-language
+sessions. Previously reserved audio still finishes through batch custody.
+
+Complete and partial native-record units with a named unsupported language take
+C8 Modulate batch via the transactional provider outbox, outside the GPU ring;
+recorded payer policy, privacy fences, source references, speaker diarization,
+and projection bindings remain unchanged. Auto/multi still require whole-unit
+independent audio proof and retain the existing recovery route.
+`omi_listen_server_batch_suppression_total{decision,reason,client_platform,language}`
+counts decisions at STT initialization/reinitialization (not distinct sessions).
+`language` is one of the 36 fixed Modulate-listed unsupported codes, including `ja`
+for refusals, or `other` for supported/unknown/auto inputs; it never takes raw env
+or request values. Compare `decision=suppressed` against `decision=live` by language.
+
 A fresh admitted conversation reserves
 `record_lane_owner=batch_live_v1` and the server-owned
 `external_data.server_batch_only` marker before STT initialization. Reconnects
@@ -7341,8 +7365,13 @@ cannot bypass independent recovery through the legacy no-provider tools.
 The 32 ms boundary is a conservative Silero frame-resolution
 proposal supported by synthetic tests, not labeled evidence about held audio.
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults off in code;
-`false` stops new Soniox calls without substituting another Modulate attempt.
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults on in code;
+explicit deployment overrides still apply. Unsupported-language provider attempts
+that exhaust candidates with `empty_validated` enter quarantine `held` for bounded
+recovery. Either `worker_failure.reason` or `stt_route.provider_reason` equal to
+`unsupported_language` identifies a guarded job. `false` restores immediate
+worker `failed_held` and stops new Soniox calls without substituting another
+Modulate attempt.
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to 60 and can only
 lower that hard per-unit cap. Company-funded allowance, privacy, original
 ledger and single paid-intent fences apply. No paid POST is retried. The result

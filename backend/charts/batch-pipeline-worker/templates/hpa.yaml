@@ -56,10 +56,9 @@ spec:
             matchLabels:
               namespace: {{ .Release.Namespace }}
         target:
-          # Fleet worker_flight wall seconds per second, including executor
-          # wait and host work after the pump acquires its exclusive GPU slot.
-          # Defaults and measured/synthetic replay limits live in values.yaml
-          # and docs/batch-pipeline-worker.md; this is not GPU kernel duty.
+          # Fleet worker_flight wall seconds/second, including host-side chain
+          # work; this is not GPU utilization. The target must preserve the
+          # zero-starvation replay at the measured 0.56 per-worker ceiling.
           type: AverageValue
           averageValue: {{ .instance.chainTarget | quote }}
 {{- end }}

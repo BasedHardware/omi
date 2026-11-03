@@ -4,7 +4,10 @@ Runs the real admission, ProviderSttStore transactions and fences on SimStore. V
 no vendor is called and nothing leaves the process.
 """
 
+from utils.batch_pipeline import provider_stt_admission
+
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -12,16 +15,10 @@ from database import batch_pipeline_intake
 from database import sync_ledger  # noqa: F401  # warm legacy_dark's lazy ledger import outside the call budget
 from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline import admission  # noqa: F401  # warm its fair-use/backfill imports
-from utils.batch_pipeline import provider_stt
+from utils.batch_pipeline import provider_stt, route_selection, vendor_route_contracts
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import (
-    ABANDON_SECONDS,
-    PENDING,
-    RUNNING,
-    ProviderSttStage,
-    SttRoute,
-    VendorCallFailure,
-)
+from utils.batch_pipeline.provider_stt import ABANDON_SECONDS, RUNNING, ProviderSttStage, VendorCallFailure
+from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute, resolve_route
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.vendor_route_contracts import (
     HOLD_FIELD,
@@ -130,7 +127,7 @@ def store(monkeypatch):
         'p1', OWNER, 10, 'gs://synthetic/audio/p1', 5.0, Priority.FRESH, conversation_id='conv-1', privacy_generation=0
     )
     binding = ProjectionBinding(OWNER, 'bp_content-p', 'content-p', ('p1',), language='ja')
-    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
     assert (
         batch_pipeline_intake.admit(sim, [item], binding, 100.0, namespace=sim.namespace, enqueue=enqueue)['outcome']
         == 'batch'
@@ -161,6 +158,19 @@ def attempts(store):
 
 
 # --- failover, paid once per vendor --------------------------------------------------------------
+
+
+@pytest.mark.parametrize('language', ['ca', 'gl', 'eu', 'cy', 'af', 'sq', 'bs', 'sw'])
+def test_allowlisted_route_tries_modulate_first_with_configured_soniox_failover(store, monkeypatch, language):
+    table_path = Path(__file__).resolve().parents[2] / 'deploy/batch-pipeline/vendor_route_table.prod.json'
+    monkeypatch.setenv('BATCH_VENDOR_ROUTE_TABLE', table_path.read_text())
+    monkeypatch.setattr(route_selection, '_tables', route_selection._TableCache())
+    enabled = vendor_route_contracts.provider_is_enabled
+    monkeypatch.setattr(vendor_route_contracts, 'provider_is_enabled', lambda p, s: p == 'soniox' or enabled(p, s))
+    route = resolve_route(language)
+    provider = stage(store, Artifacts(), Vendors(), routes=provider_stt._default_failover_routes)
+    assert route.provider_service == 'modulate'
+    assert provider._candidates(route) == ['modulate', 'soniox']
 
 
 def test_a_vendor_error_fails_over_once_and_each_vendor_is_paid_at_most_once(store):
@@ -251,6 +261,49 @@ def test_validated_empty_fails_over_like_the_held_recovery_second_chance(store):
     stage(store, artifacts, vendors).run('p1')
     stage(store, artifacts, vendors, now=201.0).run('p1')
     assert attempts(store) == [('modulate', 'empty_validated', 5.0), ('soniox', 'ok', 5.0)]
+
+
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_guarded_validated_empty_exhaustion_and_kill_switch(store, monkeypatch, terminal, enabled):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', str(enabled).lower())
+    artifacts, vendors = Artifacts(), Vendors(modulate=[RecoveryFailure('response_validation', 'empty_asr')])
+    if terminal:
+        # A previously open candidate disappears before the failover delivery.
+        stage(store, artifacts, vendors).run('p1')
+        assert job(store)['state'] == PENDING
+        stage(store, artifacts, vendors, routes=lambda _: ('modulate',), now=201).run('p1')
+    else:
+        stage(store, artifacts, vendors, routes=lambda _: ('modulate',)).run('p1')
+    assert job(store)['state'] == 'quarantined'
+    assert job(store)['recovery_state'] == ('held' if enabled else 'failed_held')
+    assert job(store)['measured_held_vad_speech_seconds'] == 0.5
+    assert job(store)['attempt'] == 0
+    assert vendors.calls == ['modulate']
+
+
+def test_non_guarded_empty_exhaustion_stays_failed_held(store):
+    # GPU-route metadata must never acquire the language-only recovery handoff.
+    store.rows[('jobs', 'p1')]['stt_route'] = {
+        'stt_route': 'parakeet',
+        'provider_reason': 'none',
+        'provider_service': 'none',
+        'language': 'en',
+    }
+    protocol = provider_stt.ProviderSttStore(store)
+    assert protocol.start('p1', 'synthetic-token', 200, 'modulate')
+    assert (
+        protocol.settle(
+            'p1',
+            'synthetic-token',
+            201,
+            failure={'stage': 'response_validation', 'reason': 'empty_asr'},
+            attempt_outcome=VendorAttemptOutcome.EMPTY_VALIDATED,
+            audio_seconds=5,
+        )
+        == 'settled'
+    )
+    assert job(store)['recovery_state'] == 'failed_held'
 
 
 def test_unhealthy_admitted_vendor_is_skipped_before_any_spend(store):

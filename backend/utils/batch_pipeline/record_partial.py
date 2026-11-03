@@ -8,7 +8,7 @@ from prometheus_client import Counter
 
 from config import record_partial as config
 from config.record_audio import require_record_audio_barrier
-from database.batch_pipeline_intake import admit
+from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_policy import load_job_policy
 from database.record_partial import update_run, continuation_refusal
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -178,7 +178,7 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
     return run if changed else None
 
 
-async def drain_partial(store, pending, current, client, artifacts, units_reader, *, now):
+async def drain_partial(store, pending, current, client, artifacts, units_reader, *, now, provider_outbox_factory=None):
     if not config.enabled() or not pending.get('partial_coordinator'):
         raise ValueError('partial record barrier disabled')
     run = pending.get('partial_run')
@@ -245,11 +245,25 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
         )
         event('completed' if changed else 'state_changed', late=run['generation'] > 1)
         return {'outcome': 'partial'}
-    await admit_page(store, pending, current, barrier, artifacts, plan, run, units, content, now)
+    await admit_page(
+        store,
+        pending,
+        current,
+        barrier,
+        artifacts,
+        plan,
+        run,
+        units,
+        content,
+        now,
+        provider_outbox_factory=provider_outbox_factory,
+    )
     return {'outcome': 'partial'}
 
 
-async def admit_page(store, pending, current, barrier, artifacts, plan, run, units, content, now):
+async def admit_page(
+    store, pending, current, barrier, artifacts, plan, run, units, content, now, *, provider_outbox_factory=None
+):
     uid, cid = pending['owner_id'], pending['conversation_id']
     _, policy = await run_blocking(db_executor, load_job_policy, store, pending['segment_id'])
     if policy is None or policy.provider_reason == 'byok':
@@ -343,13 +357,14 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
     }
     await run_blocking(
         db_executor,
-        admit,
+        admit_record_units,
         store,
         staged,
         binding,
         now,
         namespace=store.namespace,
         policy=policy,
+        provider_outbox_factory=provider_outbox_factory,
         require_artifacts=True,
         record_barrier=barrier,
         intake=intake,
