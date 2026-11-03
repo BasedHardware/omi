@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any, Optional, Protocol
 
+from config.explicit_reminders import enabled as reminders_enabled
 import database.action_items as action_items_db
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
@@ -381,8 +382,6 @@ def _sync_task_reminder(uid: str, task_id: str) -> None:
     if task is None:
         return
     if task.get('reminder_origin'):
-        from utils.task_intelligence.reminder_policy import enabled as reminders_enabled
-
         if not reminders_enabled():
             return
     due = task.get('due') or {}

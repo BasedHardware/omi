@@ -219,3 +219,16 @@ def test_owner_ambiguity_elsewhere_in_source_keeps_review_pending():
 
 def test_new_reminder_path_never_mutates_an_existing_task():
     assert prepare(extraction(candidate_action='complete', target_task_id='synthetic-existing-task')) is None
+
+
+def test_ingress_revalidation_preserves_extraction_time_until_evidence_changes():
+    item = prepare()
+    later = datetime(2027, 5, 1, tzinfo=timezone.utc)
+    replay = policy.prepare_reminder(item, conversation=conversation(), extracted_at=later)
+    assert replay.reminder_origin == item.reminder_origin
+    assert replay.due == item.due
+    changed = conversation()
+    changed.transcript_segments[0].end += 1
+    revised = policy.prepare_reminder(item, conversation=changed, extracted_at=later)
+    assert revised.reminder_origin.input_revision != item.reminder_origin.input_revision
+    assert revised.reminder_origin.extracted_at == later

@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 import asyncio
 import json
 import logging
@@ -606,8 +607,6 @@ def _finish_shaped_notes(
         user_tz = timezone.utc
     source = (inputs or {}).get('reminder_source')
     if source is not None:
-        from types import SimpleNamespace
-
         clock = SimpleNamespace(**source)
         clock.transcript_segments = [SimpleNamespace(**row) for row in source.get('transcript_segments', ())]
         structured.action_items = [

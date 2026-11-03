@@ -53,19 +53,20 @@ def clean_action_item(item: Dict[str, Any]) -> Dict[str, Any]:
     description = item.get("description", "") or ""
     if item.get("is_locked", False) and len(description) > 70:
         description = description[:70] + "..."
-    return {
+    result = {
         "id": item.get("id", ""),
         "description": description,
         "completed": bool(item.get("completed", False)),
         "created_at": item.get("created_at"),
         "due_at": item.get("due_at"),
-        "due": item.get("due"),
-        "reminder_origin": item.get("reminder_origin"),
-        "creation_receipt": item.get("creation_receipt"),
         "completed_at": item.get("completed_at"),
         "conversation_id": item.get("conversation_id"),
         "source": action_item_source(item),
     }
+    for field in ("due", "reminder_origin", "creation_receipt"):
+        if item.get(field) is not None:
+            result[field] = item[field]
+    return result
 
 
 def clean_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:

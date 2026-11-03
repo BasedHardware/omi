@@ -7,6 +7,7 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.explicit_reminders import POLICY_REVISION, enabled as reminders_enabled
 from database import dream_dirty
 from database._client import db, get_firestore_client
 from database.action_items_cache import bump_action_items_list_version
@@ -234,8 +235,6 @@ def claim_candidate_integration_dispatch(
             return _ClaimApply()
         if terminal or live_lease:
             return _ClaimApply()
-        from utils.task_intelligence.reminder_policy import enabled as reminders_enabled, POLICY_REVISION
-
         if (
             payload.get('policy_revision') == POLICY_REVISION
             and not reminders_enabled()
@@ -389,8 +388,6 @@ def note_candidate_integration_provider_attempt(
         payload = _snapshot_dict(snapshot)
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
-        from utils.task_intelligence.reminder_policy import enabled as reminders_enabled, POLICY_REVISION
-
         if (
             payload.get('policy_revision') == POLICY_REVISION
             and not reminders_enabled()

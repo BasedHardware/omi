@@ -50,6 +50,7 @@ from utils.llm.shaped_agent import (
     validate_output,
 )
 from utils.model_text import ContextWindow
+from utils.task_intelligence.reminder_policy import instructions as reminder_instructions
 from utils.observability.reasons import NotesAgentForceReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
@@ -224,8 +225,6 @@ async def run_notes_agent(
 
     mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
     if task_intelligence_capture:
-        from utils.task_intelligence.reminder_policy import instructions as reminder_instructions
-
         mount = replace(mount, instructions=reminder_instructions(mount.instructions))
     if contract_v2:
         mount = replace(

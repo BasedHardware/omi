@@ -9,16 +9,14 @@ from datetime import date, datetime, timedelta, timezone
 import calendar
 import hashlib
 import json
-import os
 import re
 from typing import Any, Callable, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from config.explicit_reminders import FLAG as FLAG, POLICY_REVISION as POLICY_REVISION, enabled as enabled
 from models.task_due import ReminderOrigin, TaskDue
 from utils.conversations.owner_attribution import speaker_role_map
 
-FLAG = 'ACTION_ITEM_REMINDER_REDESIGN_ENABLED'
-POLICY_REVISION = 'explicit-reminders-v1'
 REMINDER_RULES = '''EXPLICIT REMINDER CLAIMS (explicit-reminders-v1)
 - Use this schema in the SAME notes extraction; never add an extraction call.
 - For a direct future "remind me" or "don't let me forget" request, including errands,
@@ -37,11 +35,6 @@ REMINDER_RULES = '''EXPLICIT REMINDER CLAIMS (explicit-reminders-v1)
 - Other people's promises stay waiting-on follow-ups, never the owner's commitments.
   Broad call/waiting-on inference is deferred; do not admit it via this reminder path.
 '''
-
-
-def enabled() -> bool:
-    value = os.getenv(FLAG)
-    return value is None or value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 def source_input(conversation: Any) -> dict[str, Any]:
@@ -270,6 +263,16 @@ def prepare_reminder(
             ensure_ascii=False,
         ).encode()
     ).hexdigest()
+    previous_origin = getattr(item, 'reminder_origin', None)
+    if (
+        previous_origin is not None
+        and previous_origin.policy_revision == POLICY_REVISION
+        and previous_origin.input_revision == revision
+        and previous_origin.speaker_evidence_revision == speaker.revision
+        and previous_origin.source_at == source_at
+    ):
+        # Revalidating already-extracted/cached notes is not another extraction.
+        extracted_at = previous_origin.extracted_at
     origin = ReminderOrigin(
         input_revision=revision,
         speaker_evidence_revision=speaker.revision,

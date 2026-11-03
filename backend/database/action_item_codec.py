@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict
 
 from database.read_boundary import parse_payload_strict
+from models.task_due import TaskDue
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +17,6 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
         action_item_data['due'] = None
     due_payload = action_item_data.get('due')
     if due_payload is not None:
-        from models.task_due import TaskDue
-
         due: TaskDue = parse_payload_strict(TaskDue, due_payload, document_path='action_items/<write>/due')
         action_item_data['due'] = due.model_dump(mode='python')
         action_item_data['due_at'] = due.instant if due.kind == 'instant' else None
