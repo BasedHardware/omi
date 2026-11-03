@@ -15042,4 +15042,22 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sor átnevezve csak ebben a beszélgetésben.',
+      one: '1 sor átnevezve csak ebben a beszélgetésben.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'A hang további sorai (a felvétel lefedettsége nem igazolt)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

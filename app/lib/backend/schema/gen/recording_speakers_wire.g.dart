@@ -4,11 +4,13 @@
 
 class GeneratedRecordingTranscriptResponse {
   final List<GeneratedRecordingTranscriptMember> conversations;
+  final String coverage;
   final bool enabled;
   final String? episodeId;
 
   const GeneratedRecordingTranscriptResponse({
     required this.conversations,
+    this.coverage = "partial",
     required this.enabled,
     this.episodeId,
   });
@@ -16,6 +18,7 @@ class GeneratedRecordingTranscriptResponse {
   factory GeneratedRecordingTranscriptResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedRecordingTranscriptResponse(
       conversations: _required(_readFieldValue<List<GeneratedRecordingTranscriptMember>>(_readField(json, const ["conversations"]), "conversations", (value) => _readObjectList(value, GeneratedRecordingTranscriptMember.fromJson), requiredField: true, nullable: false), "conversations"),
+      coverage: _required(_readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString, requiredField: false, nullable: false, defaultValue: "partial"), "coverage"),
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
       episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
     );
@@ -24,6 +27,7 @@ class GeneratedRecordingTranscriptResponse {
   Map<String, dynamic> toJson() {
     return {
       'conversations': conversations.map((value) => value.toJson()).toList(),
+      'coverage': coverage,
       'enabled': enabled,
       'episode_id': episodeId,
     };
@@ -137,11 +141,13 @@ class GeneratedRecordingTranscriptSegment {
 class GeneratedRecordingSpeakerResponse {
   final int appliedCount;
   final List<GeneratedRecordingMemberCount> conversations;
+  final String coverage;
   final String? episodeId;
 
   const GeneratedRecordingSpeakerResponse({
     required this.appliedCount,
     required this.conversations,
+    this.coverage = "partial",
     this.episodeId,
   });
 
@@ -149,6 +155,7 @@ class GeneratedRecordingSpeakerResponse {
     return GeneratedRecordingSpeakerResponse(
       appliedCount: _required(_readFieldValue<int>(_readField(json, const ["applied_count"]), "applied_count", _readInt, requiredField: true, nullable: false), "applied_count"),
       conversations: _required(_readFieldValue<List<GeneratedRecordingMemberCount>>(_readField(json, const ["conversations"]), "conversations", (value) => _readObjectList(value, GeneratedRecordingMemberCount.fromJson), requiredField: true, nullable: false), "conversations"),
+      coverage: _required(_readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString, requiredField: false, nullable: false, defaultValue: "partial"), "coverage"),
       episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
     );
   }
@@ -157,6 +164,7 @@ class GeneratedRecordingSpeakerResponse {
     return {
       'applied_count': appliedCount,
       'conversations': conversations.map((value) => value.toJson()).toList(),
+      'coverage': coverage,
       'episode_id': episodeId,
     };
   }

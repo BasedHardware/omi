@@ -26342,6 +26342,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}'**
   String speakerRenameIssue(String reason);
+
+  /// Scope explanation or saved confirmation when full recording coverage is unconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in this conversation only.} other{Renamed {count} lines in this conversation only.}}}}'**
+  String speakerRecordingCoverage(String state, int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

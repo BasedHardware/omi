@@ -484,7 +484,11 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
             if (result.limited || result.partial) {
               OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
             } else if (result.saved) {
-              OmiFeedback.confirm(context, context.l10n.speakerLabelLinesLabeled(result.lines));
+              OmiFeedback.confirm(
+                  context,
+                  result.coverageComplete
+                      ? context.l10n.speakerLabelLinesLabeled(result.lines)
+                      : context.l10n.speakerRecordingCoverage('saved', result.lines));
             } else {
               OmiFeedback.error(context,
                   result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);

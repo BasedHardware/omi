@@ -1,6 +1,6 @@
 """Recording speaker edits, shared by episode and conversation entry points."""
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -18,6 +18,7 @@ class RecordingTranscriptMember(BaseModel):
 
 
 class RecordingTranscriptResponse(BaseModel):
+    coverage: Literal['complete', 'partial'] = 'partial'
     enabled: bool
     episode_id: Optional[str] = None
     conversations: list[RecordingTranscriptMember]
@@ -59,6 +60,20 @@ class RecordingMemberCount(BaseModel):
 
 
 class RecordingSpeakerResponse(BaseModel):
+    coverage: Literal['complete', 'partial'] = 'partial'
     episode_id: Optional[str] = None
     conversations: list[RecordingMemberCount]
     applied_count: int
+
+
+class RecordingStaleDetail(BaseModel):
+    code: Literal['stale_speaker']
+    message: str
+
+
+class RecordingSpeakerConflict(BaseModel):
+    detail: Literal['recording_speaker_rename_disabled'] | RecordingStaleDetail
+
+
+class RecordingSpeakerLimit(BaseModel):
+    detail: Literal['recording_speaker_limit_exceeded']

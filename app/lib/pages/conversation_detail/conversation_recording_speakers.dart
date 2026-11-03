@@ -42,7 +42,8 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
   bool loadingRecordingTranscript = false;
   bool recordingLoadFailed = false;
   bool recordingLoadLimited = false;
-  bool get wholeRecordingEnabled => _recording?.enabled ?? true;
+  bool get recordingCoverageComplete => _recording?.coverageComplete ?? false;
+  bool speakerCoverageComplete = false;
   bool speakerAssignmentLimited = false;
   bool speakerAssignmentPartial = false;
   Future<void>? _recordingLoad;
@@ -95,7 +96,7 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
             scope: line.scope,
             label: line.label,
             offset: line.offset),
-    ], episodeId: result.episodeId, enabled: result.enabled);
+    ], episodeId: result.episodeId, enabled: result.enabled, coverage: result.coverage);
     final receivedIds = _recording!.lines.map((line) => line.segment.id).toSet();
     final pendingLines = current.values.where((line) => !receivedIds.contains(line.id)).toList();
     if (pendingLines.isNotEmpty) {
@@ -161,23 +162,27 @@ mixin ConversationRecordingSpeakers on ChangeNotifier {
   }
 
   Future<ApiResult<int>> persistRecordingLabel(RecordingAssignmentCall assign, String conversationId,
-          List<String> segmentIds, String personId, int? speakerId) =>
-      assign(
-          conversationId,
-          [
-            for (final group in recordingGroups(segmentIds).entries)
-              {
-                'conversation_id': group.key,
-                'segment_ids': group.value,
-                if (speakerId != null) 'speaker_id': sourceSpeakerId(group.value.first, speakerId),
-                if (speakerId != null && recordingVoiceFor(group.value.first) != null)
-                  'voice': {
-                    'speaker_id_scope': recordingVoiceFor(group.value.first)!.$1,
-                    'stream_speaker': recordingVoiceFor(group.value.first)!.$2,
-                  }
-              },
-          ],
-          personId: personId,
-          wholeRecording: speakerId != null,
-          episodeId: recordingEpisodeId);
+      List<String> segmentIds, String personId, int? speakerId) async {
+    speakerCoverageComplete = false;
+    final result = await assign(
+        conversationId,
+        [
+          for (final group in recordingGroups(segmentIds).entries)
+            {
+              'conversation_id': group.key,
+              'segment_ids': group.value,
+              if (speakerId != null) 'speaker_id': sourceSpeakerId(group.value.first, speakerId),
+              if (speakerId != null && recordingVoiceFor(group.value.first) != null)
+                'voice': {
+                  'speaker_id_scope': recordingVoiceFor(group.value.first)!.$1,
+                  'stream_speaker': recordingVoiceFor(group.value.first)!.$2,
+                }
+            },
+        ],
+        personId: personId,
+        wholeRecording: speakerId != null,
+        episodeId: recordingEpisodeId);
+    speakerCoverageComplete = result is ApiSuccess<int> && !result.truncated;
+    return result;
+  }
 }

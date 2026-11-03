@@ -14987,4 +14987,22 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimetty $count riviä vain tässä keskustelussa.',
+      one: 'Nimetty 1 riviä vain tässä keskustelussa.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Tämän äänen muut rivit (tallenteen kattavuus vahvistamatta)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

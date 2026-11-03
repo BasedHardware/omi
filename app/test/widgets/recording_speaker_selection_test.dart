@@ -41,8 +41,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
-  for (final stale in [false, true]) {
-    testWidgets('cross-recording selection makes one episode call, stale=$stale', (tester) async {
+  for (final scenario in [(false, false), (true, false), (false, true)]) {
+    final stale = scenario.$1;
+    final partial = scenario.$2;
+    testWidgets('cross-recording selection makes one episode call, stale=$stale, partial=$partial', (tester) async {
       tester.view.physicalSize = const Size(393, 852);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -60,8 +62,8 @@ void main() {
         fetchConversation: (_) async => conversation,
         fetchRecording: (_) async => RecordingTranscript([
           RecordingLine('c1', line('a'), scope: 'scope', label: 'SPEAKER_1'),
-          RecordingLine('c2', line('b'), scope: 'scope', label: 'SPEAKER_1'),
-        ], episodeId: 'episode'),
+          if (!partial) RecordingLine('c2', line('b'), scope: 'scope', label: 'SPEAKER_1'),
+        ], episodeId: partial ? null : 'episode', coverage: partial ? 'partial' : 'complete'),
         assignRecording: (id, selections, {required personId, required wholeRecording, episodeId}) =>
             assignRecordingSpeakers(id, selections,
                 personId: personId, wholeRecording: wholeRecording, episodeId: episodeId, send: (request) async {
@@ -70,10 +72,11 @@ void main() {
               stale
                   ? '{"detail":{"code":"stale_speaker"}}'
                   : jsonEncode({
-                      'applied_count': 2,
+                      'coverage': partial ? 'partial' : 'complete',
+                      'applied_count': partial ? 1 : 2,
                       'conversations': [
                         {'conversation_id': 'c1', 'applied_count': 1},
-                        {'conversation_id': 'c2', 'applied_count': 1}
+                        if (!partial) {'conversation_id': 'c2', 'applied_count': 1}
                       ]
                     }),
               stale ? 409 : 200);
@@ -108,7 +111,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('transcript_select_a')));
-      await tester.tap(find.byKey(const ValueKey('transcript_select_b')));
+      if (!partial) await tester.tap(find.byKey(const ValueKey('transcript_select_b')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
@@ -121,12 +124,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
       expect(requests, hasLength(1));
-      expect(Uri.parse(requests.single.url).path, endsWith('v1/episodes/episode/assign-speaker'));
+      expect(Uri.parse(requests.single.url).path,
+          endsWith(partial ? 'v1/conversations/c1/recording-speakers' : 'v1/episodes/episode/assign-speaker'));
       expect(requests.single.method, 'PATCH');
       final body = jsonDecode(requests.single.body);
-      expect((body['selections'] as List).map((s) => s['conversation_id']), ['c1', 'c2']);
+      expect((body['selections'] as List).map((s) => s['conversation_id']), partial ? ['c1'] : ['c1', 'c2']);
       expect(body['whole_recording'], isFalse);
       expect(detail.recordingSegments.every((s) => s.personId == (stale ? null : 'maya')), isTrue);
+      if (partial) expect(find.text('Renamed 1 line in this conversation only.'), findsOneWidget);
       if (stale) expect(find.text('The speaker changed. Select the lines again.'), findsOneWidget);
       ongoing.complete(null);
       await tester.pump();

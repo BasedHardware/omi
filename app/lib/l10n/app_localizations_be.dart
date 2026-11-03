@@ -15017,4 +15017,22 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Перайменавана $count радкоў толькі ў гэтай размове.',
+      one: 'Перайменавана 1 радкоў толькі ў гэтай размове.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Іншыя радкі гэтага голасу (ахоп запісу не пацверджаны)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

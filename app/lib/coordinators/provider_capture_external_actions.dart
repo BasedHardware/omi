@@ -112,6 +112,9 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   int lastSpeakerAppliedCount = 0;
 
   @override
+  bool lastSpeakerCoverageComplete = false;
+
+  @override
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId,
       {int? speakerId, (String, String)? voice}) async {
     final result = await assignRecordingSpeakers(
@@ -128,6 +131,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
         wholeRecording: speakerId != null);
     if (result is ApiFailure<int> && result.problem.statusCode == 413) throw const RecordingSpeakerLimitException();
     if (result is ApiFailure<int> && result.problem.statusCode == 409) throw const StaleSpeakerException();
+    lastSpeakerCoverageComplete = result is ApiSuccess<int> && !result.truncated;
     lastSpeakerAppliedCount = result is ApiSuccess<int> ? result.data : 0;
     return result is ApiSuccess<int>;
   }

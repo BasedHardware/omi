@@ -27888,6 +27888,41 @@
         "title": "RecordingSelection",
         "type": "object"
       },
+      "RecordingSpeakerConflict": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "const": "recording_speaker_rename_disabled",
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/RecordingStaleDetail"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "RecordingSpeakerConflict",
+        "type": "object"
+      },
+      "RecordingSpeakerLimit": {
+        "properties": {
+          "detail": {
+            "const": "recording_speaker_limit_exceeded",
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "RecordingSpeakerLimit",
+        "type": "object"
+      },
       "RecordingSpeakerRequest": {
         "properties": {
           "is_user": {
@@ -27951,6 +27986,15 @@
             "title": "Conversations",
             "type": "array"
           },
+          "coverage": {
+            "default": "partial",
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
           "episode_id": {
             "anyOf": [
               {
@@ -27968,6 +28012,25 @@
           "applied_count"
         ],
         "title": "RecordingSpeakerResponse",
+        "type": "object"
+      },
+      "RecordingStaleDetail": {
+        "properties": {
+          "code": {
+            "const": "stale_speaker",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "RecordingStaleDetail",
         "type": "object"
       },
       "RecordingTranscriptMember": {
@@ -28004,6 +28067,15 @@
             },
             "title": "Conversations",
             "type": "array"
+          },
+          "coverage": {
+            "default": "partial",
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "Coverage",
+            "type": "string"
           },
           "enabled": {
             "title": "Enabled",
@@ -52545,6 +52617,16 @@
           "404": {
             "$ref": "#/components/responses/Error404"
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerLimit"
+                }
+              }
+            },
+            "description": "Recording exceeds the member or segment limit"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -52641,6 +52723,26 @@
           },
           "404": {
             "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerConflict"
+                }
+              }
+            },
+            "description": "Recording rename disabled or speaker selection stale"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerLimit"
+                }
+              }
+            },
+            "description": "Recording exceeds the member or segment limit"
           },
           "422": {
             "content": {
@@ -57953,6 +58055,26 @@
           },
           "404": {
             "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerConflict"
+                }
+              }
+            },
+            "description": "Recording rename disabled or speaker selection stale"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingSpeakerLimit"
+                }
+              }
+            },
+            "description": "Recording exceeds the member or segment limit"
           },
           "422": {
             "content": {

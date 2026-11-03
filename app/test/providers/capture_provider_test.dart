@@ -564,7 +564,7 @@ void main() {
       }));
       provider.onSegmentReceived([_segment('a', 'one')]);
       await Future<void>.delayed(Duration.zero);
-      final outcomes = <({bool saved, int lines, bool stale, bool limited, bool partial})>[];
+      final outcomes = <({bool saved, int lines, bool stale, bool limited, bool partial, bool coverageComplete})>[];
       final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a'], onSettled: outcomes.add);
       await Future<void>.delayed(Duration.zero);
       final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a'], onSettled: outcomes.add);

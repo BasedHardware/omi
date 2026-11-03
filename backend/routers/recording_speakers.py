@@ -4,7 +4,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
 from config.recording_speakers import enabled, RecordingLimitExceeded
 from config.episodes import APP_CHANNEL_HEADER, client_channel_admitted, episodes_enabled_for
-from models.recording_speakers import RecordingSpeakerRequest, RecordingSpeakerResponse, RecordingTranscriptResponse
+from models.recording_speakers import (
+    RecordingSpeakerRequest,
+    RecordingSpeakerResponse,
+    RecordingTranscriptResponse,
+    RecordingSpeakerConflict,
+    RecordingSpeakerLimit,
+)
 from utils import recording_speakers
 from utils.other import endpoints as auth
 
@@ -28,7 +34,11 @@ def edit(uid, conversation_id, body, background_tasks, *, episode_id=None):
         ) from error
 
 
-@router.get('/v1/conversations/{conversation_id}/recording-speakers', response_model=RecordingTranscriptResponse)
+@router.get(
+    '/v1/conversations/{conversation_id}/recording-speakers',
+    response_model=RecordingTranscriptResponse,
+    responses={413: {'model': RecordingSpeakerLimit, 'description': 'Recording exceeds the member or segment limit'}},
+)
 def get_recording_speakers(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -47,7 +57,14 @@ def get_recording_speakers(
         raise HTTPException(402, detail='A paid plan is required to access this conversation.') from error
 
 
-@router.patch('/v1/conversations/{conversation_id}/recording-speakers', response_model=RecordingSpeakerResponse)
+@router.patch(
+    '/v1/conversations/{conversation_id}/recording-speakers',
+    response_model=RecordingSpeakerResponse,
+    responses={
+        409: {'model': RecordingSpeakerConflict, 'description': 'Recording rename disabled or speaker selection stale'},
+        413: {'model': RecordingSpeakerLimit, 'description': 'Recording exceeds the member or segment limit'},
+    },
+)
 def assign_recording_speakers(
     conversation_id: str,
     body: RecordingSpeakerRequest,

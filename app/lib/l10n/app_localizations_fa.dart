@@ -14978,4 +14978,22 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'نام $count خط فقط در این گفتگو تغییر کرد.',
+      one: 'نام 1 خط فقط در این گفتگو تغییر کرد.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'خطوط دیگر این صدا (پوشش ضبط تأیید نشده)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

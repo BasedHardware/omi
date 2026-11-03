@@ -14981,4 +14981,22 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Přejmenováno $count řádků pouze v této konverzaci.',
+      one: 'Přejmenováno 1 řádků pouze v této konverzaci.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Další řádky tohoto hlasu (rozsah nahrávky není potvrzen)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

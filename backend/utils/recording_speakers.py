@@ -1,8 +1,8 @@
 """Explicit naming across a recording; never joins embeddings or different scopes.
 
-Episode membership is authoritative when present. The non-episode compatibility
-path uses a bounded indexed scope lookup. Historical rows without that index
-remain local until their next transcript write. No timestamps or conversation-local speaker ids join rows.
+Episode membership is authoritative. Outside episodes, indexed scopes are
+augmented by bounded legacy origin/session queries. Unprovable coverage stays
+local and is explicitly reported; no production migration is needed.
 """
 
 from datetime import datetime, timezone
@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from config.recording_speakers import MAX_SCOPES, MAX_MEMBERS, check_budget, enabled
 
 from database import conversations as conversations_db, episodes as episodes_db
-from database.recording_speakers import scope_conversation_ids
+from database.recording_speakers import scope_conversation_ids, legacy_recording_conversation_ids
 from models.transcript_segment import TranscriptSegment
 from models.recording_speakers import RecordingSpeakerRequest
 from utils.stt.speaker_identity import canonical_speaker_label
@@ -42,7 +42,7 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
     anchor = _current_conversation(uid, conversation_id)
     conversation_id = anchor['id']
     if not enabled():
-        return None, [dict(anchor, transcript_segments=assignment_segments(anchor))]
+        return None, [dict(anchor, transcript_segments=assignment_segments(anchor))], 'partial'
     episode = (
         episodes_db.get_episode(uid, episode_id)
         if episode_id
@@ -56,6 +56,7 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         None,
         '',
     }
+    coverage = 'complete' if episode else 'partial'
     if episode:
         ids = list(dict.fromkeys(episode.get('conversation_ids') or []))
         check_budget(len(ids))
@@ -67,16 +68,31 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
             if (row := (anchor if cid == conversation_id else conversations_db.get_conversation(uid, cid)))
         ]
     elif scopes:
-        rows = [
-            dict(row, id=cid)
-            for cid in dict.fromkeys([conversation_id, *scope_conversation_ids(uid, scopes)])
-            if (row := conversations_db.get_conversation(uid, cid))
-        ]
+        indexed = scope_conversation_ids(uid, scopes)
+        external = anchor.get('external_data') or {}
+        origin = external.get('recording_origin_id') or external.get('recording_session_id')
+        legacy, proven = legacy_recording_conversation_ids(uid, origin) if origin else ([], False)
+        ids = list(dict.fromkeys([conversation_id, *indexed, *legacy]))
+        check_budget(len(ids))
+        if proven:
+            coverage = 'complete'
+            rows = [dict(row, id=cid) for cid in ids if (row := conversations_db.get_conversation(uid, cid))]
+        else:
+            # An index hit cannot prove that older unindexed siblings do not exist.
+            # A generation's session id also rotates; never present it as an origin.
+            rows = [anchor]
+            record_fallback(
+                component='other', from_mode='other', to_mode='incumbent', reason='other', outcome='degraded'
+            )
     else:
         rows = [anchor]
-    rows = [row for row in rows if row and not row.get('deleted') and not is_relevance_discarded(row)]
+    rows = [
+        row
+        for row in rows
+        if row and not row.get('deleted') and not row.get('is_locked') and not is_relevance_discarded(row)
+    ]
     check_budget(len(rows), sum(len(row.get('transcript_segments') or []) for row in rows))
-    return episode, [dict(row, transcript_segments=assignment_segments(row)) for row in rows]
+    return episode, [dict(row, transcript_segments=assignment_segments(row)) for row in rows], coverage
 
 
 def _recorded_start(row):
@@ -87,7 +103,7 @@ def _recorded_start(row):
 
 
 def transcript(uid, conversation_id):
-    episode, rows = members(uid, conversation_id)
+    episode, rows, coverage = members(uid, conversation_id)
     if any(row.get('is_locked') for row in rows):
         raise PermissionError('Conversation is locked')
     rows.sort(key=lambda row: (_recorded_start(row) or 0, row['id']))
@@ -97,6 +113,7 @@ def transcript(uid, conversation_id):
     return {
         'enabled': enabled(),
         'episode_id': episode['id'] if episode else None,
+        'coverage': coverage,
         'conversations': [
             {
                 'id': row['id'],
@@ -116,7 +133,7 @@ def transcript(uid, conversation_id):
 
 def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks, *, episode_id=None):
     check_budget(len({s.conversation_id for s in body.selections}), sum(len(s.segment_ids) for s in body.selections))
-    episode, rows = members(uid, conversation_id, episode_id=episode_id)
+    episode, rows, coverage = members(uid, conversation_id, episode_id=episode_id)
     by_id = {row['id']: row for row in rows}
     selections = [
         (
@@ -154,7 +171,7 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
             or []
         }
         if selected_scopes - anchor_scopes:
-            _, rows = members(uid, conversation_id, extra_scopes=selected_scopes)
+            _, rows, coverage = members(uid, conversation_id, extra_scopes=selected_scopes)
             by_id = {row['id']: row for row in rows}
     targets = {}
     voice_cache, segment_voice_cache, expanded = {}, {}, set()
@@ -261,6 +278,7 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
             applied.append({'conversation_id': cid, 'applied_count': 0, 'error': 'save_failed'})
     return {
         'episode_id': episode['id'] if episode else None,
+        'coverage': coverage,
         'conversations': applied,
         'applied_count': sum(row['applied_count'] for row in applied),
     }

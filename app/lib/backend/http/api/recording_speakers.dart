@@ -75,7 +75,8 @@ Future<ApiResult<int>> assignRecordingSpeakers(String conversationId, List<Map<S
       stale: failures.any((row) => row['error'] == 'stale_speaker'),
     );
   }
-  return ApiSuccess(count);
+  // A truncated success explicitly means the recording coverage is incomplete.
+  return ApiSuccess(count, truncated: body['coverage'] != 'complete');
 }
 
 Future<ApiResult<int>> _assignLegacy(
@@ -119,5 +120,5 @@ Future<ApiResult<int>> _assignLegacy(
   if (result is ApiSuccess<int> && other.isNotEmpty) {
     throw PartialSpeakerAssignmentException({conversationId}, other, result.data);
   }
-  return result;
+  return result is ApiSuccess<int> ? ApiSuccess(result.data, truncated: true) : result;
 }

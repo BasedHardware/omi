@@ -21,6 +21,7 @@ import 'package:omi/ui/ui.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 
 const output = String.fromEnvironment('SPEAKER_RENDER_OUTPUT');
+const capturePartial = bool.fromEnvironment('SPEAKER_RENDER_PARTIAL');
 const frame = String.fromEnvironment('SPEAKER_RENDER_FRAME', defaultValue: '002-mobile-ios-recording-rename-after');
 Future<void> loadFonts() async {
   final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
@@ -51,70 +52,77 @@ Future<void> loadFonts() async {
 
 void main() {
   setUpAll(() => Env.init(RecordingSpeakerFixtureEnv()));
-  testWidgets('recording rename renders fixture lines and default scope', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await SharedPreferencesUtil.init();
-    tester.view.physicalSize = const Size(393, 852);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    OmiColors.active = OmiPalette.dark;
-    final boundary = GlobalKey();
-    if (output.isNotEmpty) await tester.runAsync(loadFonts);
-    final people = PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))
-      ..people = [
-        Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026)),
-        Person(id: 'sam', name: 'Sam', createdAt: DateTime(2026), updatedAt: DateTime(2026)),
-      ];
-    await tester.pumpWidget(RepaintBoundary(
-        key: boundary,
-        child: ChangeNotifierProvider.value(
-            value: people,
-            child: MaterialApp(
-              debugShowCheckedModeBanner: false,
-              theme: buildOmiTheme(brightness: Brightness.dark),
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: Scaffold(
-                  body: NameSpeakerBottomSheet(
-                speakerId: 1,
-                segmentId: 'one',
-                defaultApplyToSpeaker: true,
-                wholeRecording: true,
-                segments: [
-                  for (final (id, text, start) in [
-                    ('one', 'Let’s review the plan together.', 0.0),
-                    ('two', 'We can finish this tomorrow.', 6.0),
-                    ('three', 'I will send the notes after lunch.', 12.0)
-                  ])
-                    TranscriptSegment(
-                        id: id,
-                        text: text,
-                        speaker: 'SPEAKER_1',
-                        speakerId: 1,
-                        isUser: false,
-                        personId: null,
-                        start: start,
-                        end: start + 4,
-                        translations: [])
-                ],
-                onSpeakerAssigned: (_, __, ___, ____, _____) async => true,
-              )),
-            ))));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    if (output.isNotEmpty) {
-      await tester.runAsync(() async {
-        final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-        final image = await render.toImage(pixelRatio: 3);
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        await Directory(output).create(recursive: true);
-        await File('$output/$frame.png').writeAsBytes(bytes!.buffer.asUint8List());
-      });
-    }
-    await tester.pumpWidget(const SizedBox.shrink());
-    people.dispose();
-    debugDefaultTargetPlatformOverride = null;
-  });
+  for (final partialCoverage in [false, true]) {
+    testWidgets('recording rename renders honest scope, partial=$partialCoverage', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      OmiColors.active = OmiPalette.dark;
+      final boundary = GlobalKey();
+      if (output.isNotEmpty) await tester.runAsync(loadFonts);
+      final people = PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))
+        ..people = [
+          Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026)),
+          Person(id: 'sam', name: 'Sam', createdAt: DateTime(2026), updatedAt: DateTime(2026)),
+        ];
+      await tester.pumpWidget(RepaintBoundary(
+          key: boundary,
+          child: ChangeNotifierProvider.value(
+              value: people,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: buildOmiTheme(brightness: Brightness.dark),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Scaffold(
+                    body: NameSpeakerBottomSheet(
+                  speakerId: 1,
+                  segmentId: 'one',
+                  defaultApplyToSpeaker: true,
+                  wholeRecording: true,
+                  recordingCoverageComplete: () => !partialCoverage,
+                  segments: [
+                    for (final (id, text, start) in [
+                      ('one', 'Let’s review the plan together.', 0.0),
+                      ('two', 'We can finish this tomorrow.', 6.0),
+                      ('three', 'I will send the notes after lunch.', 12.0)
+                    ])
+                      TranscriptSegment(
+                          id: id,
+                          text: text,
+                          speaker: 'SPEAKER_1',
+                          speakerId: 1,
+                          isUser: false,
+                          personId: null,
+                          start: start,
+                          end: start + 4,
+                          translations: [])
+                  ],
+                  onSpeakerAssigned: (_, __, ___, ____, _____) async => true,
+                )),
+              ))));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      if (partialCoverage) {
+        expect(find.text('Other lines from this voice (recording coverage unconfirmed)'), findsOneWidget);
+        expect(find.text('Apply to the whole recording'), findsNothing);
+      }
+      if (output.isNotEmpty && capturePartial == partialCoverage) {
+        await tester.runAsync(() async {
+          final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+          final image = await render.toImage(pixelRatio: 3);
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          await Directory(output).create(recursive: true);
+          await File('$output/$frame.png').writeAsBytes(bytes!.buffer.asUint8List());
+        });
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      people.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 }

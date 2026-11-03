@@ -5,7 +5,14 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 
-typedef CaptureSpeakerSaveOutcome = ({bool saved, int lines, bool stale, bool limited, bool partial});
+typedef CaptureSpeakerSaveOutcome = ({
+  bool saved,
+  int lines,
+  bool stale,
+  bool limited,
+  bool partial,
+  bool coverageComplete
+});
 
 /// Serial persistence with immediate labels; capture owns the stream publication.
 mixin CaptureSpeakerAssignment on ChangeNotifier {
@@ -148,6 +155,7 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
           lines: appliedCount,
           stale: staleFailure,
           limited: limitedFailure,
+          coverageComplete: !partialFailure && actions.lastSpeakerCoverageComplete,
           partial: partialFailure
         ));
       }

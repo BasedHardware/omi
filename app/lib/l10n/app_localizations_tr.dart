@@ -14996,4 +14996,22 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Yalnızca bu konuşmadaki $count satır yeniden adlandırıldı.',
+      one: 'Yalnızca bu konuşmadaki 1 satır yeniden adlandırıldı.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Bu sesin diğer satırları (kayıt kapsamı doğrulanmadı)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

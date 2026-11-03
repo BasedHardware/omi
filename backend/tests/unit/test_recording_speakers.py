@@ -159,7 +159,10 @@ def test_non_episode_scope_fallback_includes_same_scope_only(recording, monkeypa
         'scope_conversation_ids',
         lambda uid, scopes: decisions_db.scope_conversation_ids(uid, scopes, firestore_client=client),
     )
-    assert edit('u', 'c1', request(), None)['applied_count'] == 3
+    # An index alone cannot prove historical coverage.
+    result = edit('u', 'c1', request(), None)
+    assert result['applied_count'] == 1
+    assert result['coverage'] == 'partial'
 
 
 def test_real_http_route_renames_and_reports_member_counts(recording):
@@ -488,3 +491,178 @@ def test_scope_budget_is_checked_before_voice_expansion(recording, monkeypatch):
         edit('u', 'c1', body, None)
     assert error.value.status_code == 413
     assert recording.rows == before
+
+
+@pytest.fixture
+def legacy_recording(recording, monkeypatch):
+    """Real equality builders over unindexed metadata; never a collection scan."""
+    monkeypatch.setattr(service.episodes_db, 'get_episode_for_conversation', lambda *a: None)
+    calls = []
+
+    class Query:
+        def __init__(self, field=None, value=None):
+            self.field, self.value = field, value
+            self.bound = None
+
+        def where(self, *, filter):
+            calls.append((filter.field_path, filter.op_string, filter.value))
+            return Query(filter.field_path, filter.value)
+
+        def select(self, fields):
+            return self
+
+        def limit(self, bound):
+            self.bound = bound
+            return self
+
+        def stream(self):
+            from config.recording_speakers import MAX_MEMBERS
+
+            assert self.field and self.bound == MAX_MEMBERS + 1
+            found = []
+            for path, row in recording.rows.items():
+                if len(path) != 4 or path[:3] != ('users', 'u', 'conversations'):
+                    continue
+                if self.field == 'recording_speaker_scopes':
+                    matches = bool(set(row.get(self.field) or []) & set(self.value))
+                else:
+                    matches = (row.get('external_data') or {}).get(self.field.split('.')[-1]) == self.value
+                if matches:
+                    found.append(SimpleNamespace(id=path[-1], to_dict=lambda row=row: deepcopy(row)))
+            return iter(found[: self.bound])
+
+    client = SimpleNamespace(
+        collection=lambda _: SimpleNamespace(document=lambda _: SimpleNamespace(collection=lambda _: Query()))
+    )
+    monkeypatch.setattr(
+        service,
+        'scope_conversation_ids',
+        lambda uid, scopes: decisions_db.scope_conversation_ids(uid, scopes, firestore_client=client),
+    )
+    monkeypatch.setattr(
+        service,
+        'legacy_recording_conversation_ids',
+        lambda uid, origin: decisions_db.legacy_recording_conversation_ids(uid, origin, firestore_client=client),
+    )
+    for n in range(3):
+        row = recording.rows[('users', 'u', 'conversations', f'c{n}')]
+        row['external_data'] = (
+            {'recording_session_id': 'origin'}
+            if n == 0
+            else {'recording_origin_id': 'origin', 'recording_session_id': f'generation-{n}'}
+        )
+    return recording, calls
+
+
+@pytest.mark.parametrize('anchor', ['c0', 'c1', 'c2'])
+def test_legacy_unindexed_siblings_use_origin_and_first_generation_session(legacy_recording, anchor):
+    store, calls = legacy_recording
+    transcript = service.transcript('u', anchor)
+    assert {row['id'] for row in transcript['conversations']} == {'c0', 'c1', 'c2'}
+    assert transcript['coverage'] == 'complete'
+    assert not any(
+        'recording_speaker_scopes' in store.rows[('users', 'u', 'conversations', cid)] for cid in ['c0', 'c1', 'c2']
+    )
+    body = request(
+        selections=[
+            RecordingSelection(
+                conversation_id=anchor,
+                segment_ids=[f'{anchor}-s'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stream:1', stream_speaker='SPEAKER_0'),
+            )
+        ]
+    )
+    result = edit('u', anchor, body, None)
+    assert result['coverage'] == 'complete'
+    assert result['applied_count'] == 3
+    for cid in ['c0', 'c1', 'c2']:
+        assert decode(store, cid)['transcript_segments'][0]['person_id'] == 'new'
+        assert store.rows[('users', 'u', 'conversations', cid)]['recording_speaker_scopes'] == ['stream:1', 'stream:2']
+    assert ('external_data.recording_origin_id', '==', 'origin') in calls
+    assert ('external_data.recording_session_id', '==', 'origin') in calls
+
+
+@pytest.mark.parametrize('hidden', ['deleted', 'discarded', 'is_locked'])
+def test_legacy_discovery_excludes_hidden_members(legacy_recording, hidden):
+    store, _ = legacy_recording
+    store.rows[('users', 'u', 'conversations', 'c2')][hidden] = True
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'c2')])
+    assert {row['id'] for row in service.transcript('u', 'c1')['conversations']} == {'c0', 'c1'}
+    assert edit('u', 'c1', request(), None)['applied_count'] == 2
+    assert store.rows[('users', 'u', 'conversations', 'c2')] == before
+
+
+@pytest.mark.parametrize('identity', [None, 'generation-only'])
+def test_unproven_legacy_coverage_reports_partial_and_stays_local(legacy_recording, identity):
+    store, _ = legacy_recording
+    for cid in ['c0', 'c1', 'c2']:
+        row = store.rows[('users', 'u', 'conversations', cid)]
+        row['external_data'] = {'recording_session_id': identity} if identity else {}
+        row['recording_speaker_scopes'] = ['stream:1', 'stream:2']
+    assert service.transcript('u', 'c1')['coverage'] == 'partial'
+    assert [row['id'] for row in service.transcript('u', 'c1')['conversations']] == ['c1']
+    result = edit('u', 'c1', request(), None)
+    assert result['coverage'] == 'partial'
+    assert result['applied_count'] == 1
+    assert decode(store, 'c0')['transcript_segments'][0]['person_id'] == 'old'
+    assert decode(store, 'c2')['transcript_segments'][0]['person_id'] == 'old'
+
+
+@pytest.mark.parametrize('budget', ['members', 'segments'])
+def test_legacy_fallback_enforces_caps_before_any_write(legacy_recording, monkeypatch, budget):
+    from config import recording_speakers as limits
+
+    store, _ = legacy_recording
+    monkeypatch.setattr(limits, 'MAX_MEMBERS' if budget == 'members' else 'MAX_SEGMENTS', 2)
+    before = deepcopy(store.rows)
+    with pytest.raises(Exception) as error:
+        edit('u', 'c1', request(), None)
+    assert error.value.status_code == 413
+    assert store.rows == before
+
+
+def test_retry_repairs_only_missing_scope_index_without_new_receipt_or_learning(recording):
+    edit('u', 'c1', request(), None)
+    row = recording.rows[('users', 'u', 'conversations', 'c1')]
+    row.pop('recording_speaker_scopes')
+    before = deepcopy(recording.rows)
+    assert edit('u', 'c1', request(), None)['applied_count'] == 0
+    before[('users', 'u', 'conversations', 'c1')]['recording_speaker_scopes'] = ['stream:1', 'stream:2']
+    assert recording.rows == before
+
+
+def test_recording_openapi_documents_limit_and_both_conflicts():
+    from fastapi import FastAPI
+    from routers.recording_speakers import router
+
+    app = FastAPI()
+    app.include_router(router)
+    spec = app.openapi()
+    path = spec['paths']['/v1/conversations/{conversation_id}/recording-speakers']
+    assert '413' in path['get']['responses']
+    assert '413' in path['patch']['responses']
+    assert '409' in path['patch']['responses']
+    conflict = spec['components']['schemas']['RecordingSpeakerConflict']['properties']['detail']['anyOf']
+    assert {'type': 'string', 'const': 'recording_speaker_rename_disabled'} in conflict
+    assert {'$ref': '#/components/schemas/RecordingStaleDetail'} in conflict
+
+
+def test_partial_coverage_survives_http_response_models(legacy_recording):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import recording_speakers as routes
+
+    store, _ = legacy_recording
+    store.rows[('users', 'u', 'conversations', 'c1')]['external_data'] = {}
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'u'
+    with TestClient(app) as client:
+        read = client.get('/v1/conversations/c1/recording-speakers')
+        assert read.status_code == 200
+        assert read.json()['coverage'] == 'partial'
+        saved = client.patch('/v1/conversations/c1/recording-speakers', json=request().model_dump())
+        assert saved.status_code == 200
+        assert saved.json()['coverage'] == 'partial'
+        assert saved.json()['applied_count'] == 1

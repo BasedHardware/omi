@@ -1,4 +1,4 @@
-"""Encrypted latest decisions per stream scope, used only for rollover inheritance."""
+"""Bounded recording discovery, scoped assignments, and encrypted rollover decisions."""
 
 import hashlib
 import json
@@ -120,9 +120,37 @@ def scope_conversation_ids(uid, scopes, *, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection('conversations')
     query = collection.where(filter=FieldFilter(SCOPE_INDEX_FIELD, 'array_contains_any', sorted(scopes)))
-    snapshots = list(query.select(['deleted', 'discarded']).limit(MAX_MEMBERS + 1).stream())
+    snapshots = list(query.select(['deleted', 'discarded', 'is_locked']).limit(MAX_MEMBERS + 1).stream())
     check_budget(len(snapshots))
-    return [s.id for s in snapshots if not any((s.to_dict() or {}).get(k) for k in ('deleted', 'discarded'))]
+    return [
+        s.id for s in snapshots if not any((s.to_dict() or {}).get(k) for k in ('deleted', 'discarded', 'is_locked'))
+    ]
+
+
+def legacy_recording_conversation_ids(uid, origin_id, *, firestore_client=None):
+    """Bounded origin lookup plus the first generation's pre-origin session stamp.
+
+    Session ids rotate on rollover, so session equality alone cannot establish
+    complete recording coverage. A matching origin stamp is the proof.
+    """
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    from config.recording_speakers import MAX_MEMBERS, check_budget
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection('conversations')
+    candidates = {}
+    origin_found = False
+    for field in ('recording_origin_id', 'recording_session_id'):
+        query = collection.where(filter=FieldFilter(f'external_data.{field}', '==', origin_id))
+        snapshots = list(query.select(['deleted', 'discarded', 'is_locked']).limit(MAX_MEMBERS + 1).stream())
+        check_budget(len(snapshots))
+        origin_found |= field == 'recording_origin_id' and bool(snapshots)
+        for snapshot in snapshots:
+            candidates[snapshot.id] = snapshot.to_dict() or {}
+        check_budget(len(candidates))
+    return [
+        cid for cid, row in candidates.items() if not any(row.get(k) for k in ('deleted', 'discarded', 'is_locked'))
+    ], origin_found
 
 
 def same_assignment(transaction, client, uid, current, expected_voices, intent):
@@ -167,4 +195,13 @@ def same_assignment(transaction, client, uid, current, expected_voices, intent):
         decisions = json.loads(decrypt(row['content'], uid)) if row.get('content') else {}
         if any(not same(decisions.get(label)) for label in labels):
             return False
+    # Repair only this successfully validated row, including no-op retries.
+    # This metadata write creates no receipt generation or learning job.
+    from config.recording_speakers import SCOPE_INDEX_FIELD, stamp_scope_index
+
+    indexed = {'transcript_segments': current.get('transcript_segments') or []}
+    stamp_scope_index(indexed)
+    if current.get(SCOPE_INDEX_FIELD) != indexed[SCOPE_INDEX_FIELD]:
+        ref = client.collection('users').document(uid).collection('conversations').document(current['id'])
+        transaction.update(ref, {SCOPE_INDEX_FIELD: indexed[SCOPE_INDEX_FIELD]})
     return True

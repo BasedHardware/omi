@@ -15034,4 +15034,22 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Преименувани са $count реда само в този разговор.',
+      one: 'Преименувани са 1 реда само в този разговор.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Други редове с този глас (обхватът на записа не е потвърден)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

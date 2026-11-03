@@ -38,6 +38,23 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
+  for (final complete in [true, false]) {
+    test('detail retains recording coverage for sheet and saved feedback: $complete', () async {
+      final p = ConversationDetailProvider(
+        fetchRecording: (_) async =>
+            RecordingTranscript([RecordingLine('c1', line('a'))], coverage: complete ? 'complete' : 'partial'),
+        assignRecording: (_, __, {required personId, required wholeRecording, episodeId}) async =>
+            ApiSuccess(1, truncated: !complete),
+      );
+      select(p);
+      await p.loadRecordingTranscript();
+      expect(p.recordingCoverageComplete, complete);
+      p.beginSpeakerLabelingSession();
+      expect(await p.startSpeakerAssignment(['a'], 'maya')!, isTrue);
+      expect(p.speakerCoverageComplete, complete);
+      p.dispose();
+    });
+  }
   testWidgets('rename supersedes running reprocess and leaves exactly one trailing regeneration', (tester) async {
     final running = Completer<ServerConversation?>();
     var regenerations = 0;

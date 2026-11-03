@@ -241,7 +241,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       speakerId: speakerId,
       segmentId: segmentId,
       segments: provider.voiceSegmentsFor(segmentId, speakerId),
-      wholeRecording: provider.wholeRecordingEnabled,
+      wholeRecording: true,
+      recordingCoverageComplete: () =>
+          provider.recordingCoverageComplete && provider.recordingVoiceFor(segmentId) != null,
       loadRecordingLines: () async {
         await provider.loadRecordingTranscript();
         return provider.voiceSegmentsFor(segmentId, speakerId);
@@ -386,8 +388,15 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       pending.then((saved) {
         if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
         if (saved) {
-          if (mounted && (!provider.speakerLabelingSessionActive || provider.lastSpeakerAppliedCount != linesLabeled)) {
-            OmiFeedback.confirm(context, context.l10n.speakerLabelLinesLabeled(provider.lastSpeakerAppliedCount));
+          if (mounted &&
+              (!provider.speakerCoverageComplete ||
+                  !provider.speakerLabelingSessionActive ||
+                  provider.lastSpeakerAppliedCount != linesLabeled)) {
+            OmiFeedback.confirm(
+                context,
+                provider.speakerCoverageComplete
+                    ? context.l10n.speakerLabelLinesLabeled(provider.lastSpeakerAppliedCount)
+                    : context.l10n.speakerRecordingCoverage('saved', provider.lastSpeakerAppliedCount));
           }
           PlatformManager.instance.analytics.taggedSegment(resolvedId == 'user' ? 'User' : 'User Person');
           if (mounted && resolvedId != 'user' && provider.conversationOrNull?.id == conversationId) {

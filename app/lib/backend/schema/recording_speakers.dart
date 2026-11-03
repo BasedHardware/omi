@@ -19,7 +19,7 @@ class RecordingLine {
 }
 
 class RecordingTranscript {
-  RecordingTranscript(this.lines, {this.episodeId, this.enabled = true});
+  RecordingTranscript(this.lines, {this.episodeId, this.enabled = true, this.coverage = 'partial'});
   factory RecordingTranscript.fromResponse(String raw) {
     final body = wire.GeneratedRecordingTranscriptResponse.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     return RecordingTranscript([
@@ -27,9 +27,11 @@ class RecordingTranscript {
         for (final line in conversation.transcriptSegments)
           RecordingLine(conversation.id, TranscriptSegment.fromJson(line.toJson()),
               scope: line.speakerIdScope, label: line.streamSpeaker, offset: conversation.recordingOffsetSeconds),
-    ], episodeId: body.episodeId, enabled: body.enabled);
+    ], episodeId: body.episodeId, enabled: body.enabled, coverage: body.coverage);
   }
   final bool enabled;
+  final String coverage;
+  bool get coverageComplete => enabled && coverage == 'complete';
   final List<RecordingLine> lines;
   final String? episodeId;
 }

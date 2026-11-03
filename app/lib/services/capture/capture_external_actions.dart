@@ -48,6 +48,8 @@ abstract interface class CaptureExternalActions {
 
   int get lastSpeakerAppliedCount;
 
+  bool get lastSpeakerCoverageComplete;
+
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId,
       {int? speakerId, (String, String)? voice});
 
@@ -108,6 +110,9 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   int get lastSpeakerAppliedCount => 0;
+
+  @override
+  bool get lastSpeakerCoverageComplete => false;
 
   @override
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId,

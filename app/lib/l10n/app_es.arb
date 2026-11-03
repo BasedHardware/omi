@@ -4525,5 +4525,6 @@
     "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba.",
     "speakerWholeRecording": "Aplicar a toda la grabación",
     "speakerSelectionChanged": "El hablante cambió. Selecciona las líneas de nuevo.",
-    "speakerRenameIssue": "{reason, select, limit{La grabación es demasiado grande. Selecciona menos líneas de una conversación.} partial{Se guardaron algunas líneas. Selecciona las restantes e inténtalo de nuevo.} other{Se guardaron algunas líneas. Selecciona las restantes e inténtalo de nuevo.}}"
+    "speakerRenameIssue": "{reason, select, limit{La grabación es demasiado grande. Selecciona menos líneas de una conversación.} partial{Se guardaron algunas líneas. Selecciona las restantes e inténtalo de nuevo.} other{Se guardaron algunas líneas. Selecciona las restantes e inténtalo de nuevo.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Otras líneas de esta voz (cobertura de la grabación sin confirmar)} other{{count, plural, =1{Se renombraron 1 líneas solo en esta conversación.} other{Se renombraron {count} líneas solo en esta conversación.}}}}"
 }

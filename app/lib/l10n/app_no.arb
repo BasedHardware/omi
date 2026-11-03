@@ -4525,5 +4525,6 @@
     "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting.",
     "speakerWholeRecording": "Bruk på hele opptaket",
     "speakerSelectionChanged": "Taleren er endret. Velg linjene på nytt.",
-    "speakerRenameIssue": "{reason, select, limit{Opptaket er for stort. Velg færre linjer i én samtale.} partial{Noen linjer ble lagret. Velg de resterende og prøv igjen.} other{Noen linjer ble lagret. Velg de resterende og prøv igjen.}}"
+    "speakerRenameIssue": "{reason, select, limit{Opptaket er for stort. Velg færre linjer i én samtale.} partial{Noen linjer ble lagret. Velg de resterende og prøv igjen.} other{Noen linjer ble lagret. Velg de resterende og prøv igjen.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Andre linjer med denne stemmen (opptakets omfang er ubekreftet)} other{{count, plural, =1{Endret navn på 1 linjer bare i denne samtalen.} other{Endret navn på {count} linjer bare i denne samtalen.}}}}"
 }

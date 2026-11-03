@@ -19,7 +19,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from models.recording_speakers import RecordingSpeakerRequest, RecordingSpeakerResponse
+from models.recording_speakers import (
+    RecordingSpeakerRequest,
+    RecordingSpeakerResponse,
+    RecordingSpeakerConflict,
+    RecordingSpeakerLimit,
+)
 
 from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
 
@@ -159,7 +164,14 @@ def dismiss_episode_item(
     return home_read.wire_episode(episode)
 
 
-@router.patch('/v1/episodes/{episode_id}/assign-speaker', response_model=RecordingSpeakerResponse)
+@router.patch(
+    '/v1/episodes/{episode_id}/assign-speaker',
+    response_model=RecordingSpeakerResponse,
+    responses={
+        409: {'model': RecordingSpeakerConflict, 'description': 'Recording rename disabled or speaker selection stale'},
+        413: {'model': RecordingSpeakerLimit, 'description': 'Recording exceeds the member or segment limit'},
+    },
+)
 def assign_episode_speaker(
     episode_id: str,
     body: RecordingSpeakerRequest,

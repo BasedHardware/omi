@@ -14751,4 +14751,22 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '仅重命名了此对话中的 $count 行。',
+      one: '仅重命名了此对话中的 1 行。',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': '此声音的其他行（录音覆盖范围未确认）',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

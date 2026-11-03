@@ -4621,5 +4621,6 @@
     "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg.",
     "speakerWholeRecording": "Alkalmazás a teljes felvételre",
     "speakerSelectionChanged": "A beszélő megváltozott. Válaszd ki újra a sorokat.",
-    "speakerRenameIssue": "{reason, select, limit{A felvétel túl nagy. Válasszon kevesebb sort egy beszélgetésből.} partial{Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.} other{Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.}}"
+    "speakerRenameIssue": "{reason, select, limit{A felvétel túl nagy. Válasszon kevesebb sort egy beszélgetésből.} partial{Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.} other{Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.}}",
+    "speakerRecordingCoverage": "{state, select, scope{A hang további sorai (a felvétel lefedettsége nem igazolt)} other{{count, plural, =1{1 sor átnevezve csak ebben a beszélgetésben.} other{{count} sor átnevezve csak ebben a beszélgetésben.}}}}"
 }

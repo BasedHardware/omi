@@ -4506,6 +4506,14 @@ export interface RecordingSelection {
   voice?: RecordingVoice | null;
 }
 
+export interface RecordingSpeakerConflict {
+  detail: "recording_speaker_rename_disabled" | RecordingStaleDetail;
+}
+
+export interface RecordingSpeakerLimit {
+  detail: "recording_speaker_limit_exceeded";
+}
+
 export interface RecordingSpeakerRequest {
   is_user?: boolean;
   person_id?: string | null;
@@ -4518,7 +4526,13 @@ export interface RecordingSpeakerRequest {
 export interface RecordingSpeakerResponse {
   applied_count: number;
   conversations: Array<RecordingMemberCount>;
+  coverage?: "complete" | "partial";
   episode_id?: string | null;
+}
+
+export interface RecordingStaleDetail {
+  code: "stale_speaker";
+  message: string;
 }
 
 export interface RecordingTranscriptMember {
@@ -4529,6 +4543,7 @@ export interface RecordingTranscriptMember {
 
 export interface RecordingTranscriptResponse {
   conversations: Array<RecordingTranscriptMember>;
+  coverage?: "complete" | "partial";
   enabled: boolean;
   episode_id?: string | null;
 }
@@ -7098,8 +7113,11 @@ export interface OmiApiSchemas {
   "RecordedClock": RecordedClock;
   "RecordingMemberCount": RecordingMemberCount;
   "RecordingSelection": RecordingSelection;
+  "RecordingSpeakerConflict": RecordingSpeakerConflict;
+  "RecordingSpeakerLimit": RecordingSpeakerLimit;
   "RecordingSpeakerRequest": RecordingSpeakerRequest;
   "RecordingSpeakerResponse": RecordingSpeakerResponse;
+  "RecordingStaleDetail": RecordingStaleDetail;
   "RecordingTranscriptMember": RecordingTranscriptMember;
   "RecordingTranscriptResponse": RecordingTranscriptResponse;
   "RecordingTranscriptSegment": RecordingTranscriptSegment;
@@ -8707,6 +8725,7 @@ export interface OmiApiPaths {
         "200": RecordingTranscriptResponse;
         "401": void;
         "404": void;
+        "413": RecordingSpeakerLimit;
         "422": HTTPValidationError;
       };
     };
@@ -8716,6 +8735,8 @@ export interface OmiApiPaths {
         "200": RecordingSpeakerResponse;
         "401": void;
         "404": void;
+        "409": RecordingSpeakerConflict;
+        "413": RecordingSpeakerLimit;
         "422": HTTPValidationError;
       };
     };
@@ -9394,6 +9415,8 @@ export interface OmiApiPaths {
         "200": RecordingSpeakerResponse;
         "401": void;
         "404": void;
+        "409": RecordingSpeakerConflict;
+        "413": RecordingSpeakerLimit;
         "422": HTTPValidationError;
       };
     };

@@ -4525,5 +4525,6 @@
     "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。",
     "speakerWholeRecording": "应用到整段录音",
     "speakerSelectionChanged": "说话人已更改。请重新选择这些行。",
-    "speakerRenameIssue": "{reason, select, limit{录音太大。请在一个对话中选择更少的行。} partial{部分行已保存。请选择其余行并重试。} other{部分行已保存。请选择其余行并重试。}}"
+    "speakerRenameIssue": "{reason, select, limit{录音太大。请在一个对话中选择更少的行。} partial{部分行已保存。请选择其余行并重试。} other{部分行已保存。请选择其余行并重试。}}",
+    "speakerRecordingCoverage": "{state, select, scope{此声音的其他行（录音覆盖范围未确认）} other{{count, plural, =1{仅重命名了此对话中的 1 行。} other{仅重命名了此对话中的 {count} 行。}}}}"
 }

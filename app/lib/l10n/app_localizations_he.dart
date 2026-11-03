@@ -14873,4 +14873,22 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'שונו שמות של $count שורות בשיחה הזו בלבד.',
+      one: 'שונו שמות של 1 שורות בשיחה הזו בלבד.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'שורות נוספות של הקול הזה (כיסוי ההקלטה לא אושר)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

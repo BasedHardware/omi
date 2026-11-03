@@ -4525,5 +4525,6 @@
     "liveAudioSavedDetail": "Rečníci a konečný prepis sa tu objavia počas nahrávania.",
     "speakerWholeRecording": "Použiť na celú nahrávku",
     "speakerSelectionChanged": "Hovoriaci sa zmenil. Vyberte riadky znova.",
-    "speakerRenameIssue": "{reason, select, limit{Nahrávka je príliš veľká. Vyberte menej riadkov v jednej konverzácii.} partial{Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.} other{Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.}}"
+    "speakerRenameIssue": "{reason, select, limit{Nahrávka je príliš veľká. Vyberte menej riadkov v jednej konverzácii.} partial{Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.} other{Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Ďalšie riadky tohto hlasu (rozsah nahrávky nie je potvrdený)} other{{count, plural, =1{Premenovaných 1 riadkov iba v tejto konverzácii.} other{Premenovaných {count} riadkov iba v tejto konverzácii.}}}}"
 }

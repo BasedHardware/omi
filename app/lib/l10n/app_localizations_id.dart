@@ -14998,4 +14998,22 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mengganti nama $count baris hanya di percakapan ini.',
+      one: 'Mengganti nama 1 baris hanya di percakapan ini.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Baris lain dari suara ini (cakupan rekaman belum dipastikan)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

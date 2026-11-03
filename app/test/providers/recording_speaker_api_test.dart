@@ -46,6 +46,36 @@ void main() {
     expect(recording.enabled, isFalse);
     expect(recording.lines, isEmpty);
   });
+  for (final coverage in ['complete', 'partial', null]) {
+    test('recording coverage survives transcript and assignment decoding: $coverage', () async {
+      final recording = RecordingTranscript.fromResponse(jsonEncode({
+        'enabled': true,
+        'conversations': [],
+        if (coverage != null) 'coverage': coverage,
+      }));
+      expect(recording.coverageComplete, coverage == 'complete');
+      final result = await assignRecordingSpeakers(
+          'c1',
+          [
+            {
+              'conversation_id': 'c1',
+              'segment_ids': ['a']
+            }
+          ],
+          personId: 'maya',
+          wholeRecording: true,
+          send: (_) async => http.Response(
+              jsonEncode({
+                'applied_count': 1,
+                'conversations': [
+                  {'conversation_id': 'c1', 'applied_count': 1}
+                ],
+                if (coverage != null) 'coverage': coverage,
+              }),
+              200));
+      expect((result as ApiSuccess<int>).truncated, coverage != 'complete');
+    });
+  }
   for (final status in [404, 409, 200]) {
     test('disabled or old recording server falls back to explicit per-conversation ids: $status', () async {
       final requests = <ApiRequest>[];
@@ -69,6 +99,7 @@ void main() {
         return http.Response('{}', 200);
       });
       expect(result, isA<ApiSuccess<int>>());
+      expect((result as ApiSuccess<int>).truncated, isTrue);
       expect(requests, hasLength(2));
       expect(requests.last.url, contains('/conversations/c1/assign-speaker/4?'));
       expect(Uri.parse(requests.last.url).queryParameters['assign_type'], 'person_id');

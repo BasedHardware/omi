@@ -18307,5 +18307,17 @@
                 "type": "String"
             }
         }
+    },
+    "speakerRecordingCoverage": "{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in this conversation only.} other{Renamed {count} lines in this conversation only.}}}}",
+    "@speakerRecordingCoverage": {
+        "description": "Scope explanation or saved confirmation when full recording coverage is unconfirmed.",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            },
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

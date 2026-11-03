@@ -4525,5 +4525,6 @@
     "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.",
     "speakerWholeRecording": "Rakenda kogu salvestisele",
     "speakerSelectionChanged": "Kõneleja muutus. Vali read uuesti.",
-    "speakerRenameIssue": "{reason, select, limit{Salvestis on liiga suur. Vali ühes vestluses vähem ridu.} partial{Mõned read salvestati. Vali ülejäänud ja proovi uuesti.} other{Mõned read salvestati. Vali ülejäänud ja proovi uuesti.}}"
+    "speakerRenameIssue": "{reason, select, limit{Salvestis on liiga suur. Vali ühes vestluses vähem ridu.} partial{Mõned read salvestati. Vali ülejäänud ja proovi uuesti.} other{Mõned read salvestati. Vali ülejäänud ja proovi uuesti.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Selle hääle muud read (salvestise ulatus kinnitamata)} other{{count, plural, =1{Nimetati ümber 1 rida ainult selles vestluses.} other{Nimetati ümber {count} rida ainult selles vestluses.}}}}"
 }

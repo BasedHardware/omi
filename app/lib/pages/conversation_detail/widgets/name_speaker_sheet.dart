@@ -143,6 +143,7 @@ Future<void> showNameSpeakerSheet(
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
   bool wholeRecording = false,
+  bool Function()? recordingCoverageComplete,
   Future<List<TranscriptSegment>> Function()? loadRecordingLines,
   Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected,
   bool unresolvedSpeakers = false,
@@ -159,6 +160,7 @@ Future<void> showNameSpeakerSheet(
       suggestion: suggestion,
       defaultApplyToSpeaker: defaultApplyToSpeaker,
       wholeRecording: wholeRecording,
+      recordingCoverageComplete: recordingCoverageComplete,
       loadRecordingLines: loadRecordingLines,
       onSpeakerAssigned: onSpeakerAssigned,
       onSpeakerRejected: onSpeakerRejected,
@@ -169,6 +171,7 @@ Future<void> showNameSpeakerSheet(
 
 class NameSpeakerBottomSheet extends StatefulWidget {
   final bool wholeRecording;
+  final bool Function()? recordingCoverageComplete;
   final Future<List<TranscriptSegment>> Function()? loadRecordingLines;
   final int speakerId;
   final String segmentId;
@@ -200,6 +203,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     this.suggestion,
     this.defaultApplyToSpeaker = false,
     this.wholeRecording = false,
+    this.recordingCoverageComplete,
     this.loadRecordingLines,
     this.feedbackContext,
     this.onSpeakerRejected,
@@ -735,7 +739,9 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         CheckboxListTile(
           title: Text(
             widget.wholeRecording
-                ? context.l10n.speakerWholeRecording
+                ? (widget.recordingCoverageComplete?.call() == true
+                    ? context.l10n.speakerWholeRecording
+                    : context.l10n.speakerRecordingCoverage('scope', 0))
                 : _isSegmentsExpanded && untaggedSegments.isNotEmpty
                     ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
                     : context.l10n.tagSpeakerIncludingLaterSpeech,

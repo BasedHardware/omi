@@ -14776,4 +14776,22 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '이 대화에서만 $count줄의 이름을 변경했습니다.',
+      one: '이 대화에서만 1줄의 이름을 변경했습니다.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': '이 목소리의 다른 줄 (녹음 범위 미확인)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }

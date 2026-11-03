@@ -15047,4 +15047,22 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Преименувани се $count редови само во овој разговор.',
+      one: 'Преименувани се 1 редови само во овој разговор.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Други редови со овој глас (опфатот на снимката не е потврден)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 }
