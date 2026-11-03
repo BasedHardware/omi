@@ -1809,6 +1809,7 @@
     "omi_sync_job_poll_requests_total",
     "omi_sync_job_poll_throttled_total",
     "omi_sync_published_rows_total",
+    "omi_sync_queue_wait_seconds_bucket",
     "omi_sync_speaker_decisions_total",
     "omi_sync_transcription_job_total",
     "omi_sync_upload_total",
