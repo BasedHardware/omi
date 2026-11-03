@@ -531,11 +531,24 @@ def escalate_enforcement(
         fair_use_db.update_fair_use_state(uid, update)
         invalidate_enforcement_cache(uid)
     elif FAIR_USE_THROTTLE_DECAY_ENABLED and current_stage == 'warning' and passes_score_gate:
-        # A qualifying violation renews the quiet period even if it does not yet
-        # meet the unchanged threshold for escalation to throttle.
-        fair_use_db.update_fair_use_state(
-            uid, {'last_violation_at': now, 'warning_until': now + FAIR_USE_STAGE_QUIET_PERIOD}
+        # Re-read and renew atomically with decay. If decay committed after our
+        # initial read, this violation must re-enter warning instead of only
+        # writing a deadline onto a row that is now at none.
+        previous, renewed = fair_use_db.renew_fair_use_warning(
+            uid,
+            {'last_violation_at': now, 'warning_until': now + FAIR_USE_STAGE_QUIET_PERIOD},
+            entry_updates={
+                'stage_entered_at': now,
+                'last_classifier_score': misuse_score,
+                'last_classifier_type': usage_type,
+                'violation_count_7d': counts['violation_count_7d'],
+                'violation_count_30d': counts['violation_count_30d'],
+            },
         )
+        current_stage = previous.get('stage', 'none')
+        new_stage = renewed.get('stage', 'none')
+        action = 'warning' if current_stage == 'none' and new_stage == 'warning' else 'none'
+        invalidate_enforcement_cache(uid)
 
     # Record the event (create_fair_use_event auto-generates a case_ref)
     speech = get_rolling_speech_ms(uid)

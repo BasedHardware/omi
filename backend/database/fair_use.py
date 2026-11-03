@@ -90,6 +90,41 @@ def update_fair_use_state_if_unchanged(
     return run_transactional(client, apply)
 
 
+def renew_fair_use_warning(
+    uid: str,
+    updates: Dict[str, Any],
+    *,
+    entry_updates: Dict[str, Any],
+    firestore_client: Any = None,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Renew a warning or re-enter it after concurrent decay, preserving higher stages.
+
+    Return the transaction's before/after rows so escalation records the action
+    it actually committed, rather than the stage it read before the transaction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('fair_use_state').document('current')
+
+    @firestore.transactional
+    def apply(transaction: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        snapshot = ref.get(transaction=transaction)
+        current = snapshot.to_dict() if snapshot.exists else {}
+        stage = current.get('stage', 'none')
+        if stage not in ('none', 'warning'):
+            return current, current
+        written = {**updates, 'updated_at': datetime.now(timezone.utc)}
+        if stage == 'none':
+            written.update(entry_updates)
+            written['stage'] = 'warning'
+        if snapshot.exists:
+            transaction.update(ref, written)
+        else:
+            transaction.create(ref, written)
+        return current, {**current, **written}
+
+    return run_transactional(client, apply)
+
+
 # ---------------------------------------------------------------------------
 # Fair-use events (users/{uid}/fair_use_events/{event_id})
 # ---------------------------------------------------------------------------

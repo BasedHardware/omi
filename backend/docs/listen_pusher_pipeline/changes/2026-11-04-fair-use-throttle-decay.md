@@ -10,6 +10,9 @@ renew a warning's quiet period without changing upward escalation thresholds.
 Legacy warnings use their last violation plus seven days; unknown ages receive
 one seven-day period on first read. New decay writes compare the authoritative
 row in a Firestore transaction, preserving concurrent escalations and renewals.
+Warning renewal also reads the current stage transactionally: it re-enters
+warning if decay committed first, or preserves a concurrently higher stage.
+The violation event records that transaction's actual previous stage and action.
 
 `FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on; `false`, `off`, or `0` restores the
 previous restrict-only behavior, including its original writes. Stage-cache

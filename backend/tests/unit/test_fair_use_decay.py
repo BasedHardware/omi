@@ -189,6 +189,41 @@ def test_warning_entry_or_qualifying_violation_stamps_quiet_deadline(state_store
     assert before + PERIOD <= row['warning_until'] <= datetime.now(timezone.utc) + PERIOD
 
 
+@pytest.mark.parametrize('decay_first', [True, False], ids=['decay-then-escalation', 'escalation-then-decay'])
+def test_qualifying_violation_survives_both_warning_decay_commit_orders(state_store, monkeypatch, decay_first):
+    now = datetime.now(timezone.utc)
+    expired_warning = {'stage': 'warning', 'warning_until': now - PERIOD}
+    state_store[PATH] = dict(expired_warning)
+    events = []
+
+    def violation_counts(uid):
+        # Escalation has already read the warning when it asks for counts. Let
+        # the real decay transaction commit before escalation's write.
+        if decay_first:
+            decayed = engine.normalize_expired_restriction_state(uid, expired_warning, now=now)
+            assert decayed['stage'] == 'none'
+        return {'violation_count_7d': 1, 'violation_count_30d': 1}
+
+    monkeypatch.setattr(store, 'get_violation_counts', violation_counts)
+    monkeypatch.setattr(store, 'create_fair_use_event', lambda uid, data: events.append(data) or 'event')
+    monkeypatch.setattr(store, 'get_fair_use_events', lambda uid, limit: [])
+    monkeypatch.setattr(engine, 'get_rolling_speech_ms', lambda uid: {})
+
+    result = engine.escalate_enforcement('decay-user', [], {'misuse_score': 0.9, 'usage_type': 'audiobook'})
+    if not decay_first:
+        # The status reader captured its row before renewal, but commits after it.
+        observed = engine.normalize_expired_restriction_state('decay-user', expired_warning, now=now)
+        assert observed['stage'] == 'warning'
+
+    assert state_store[PATH]['stage'] == result['new_stage'] == 'warning'
+    assert state_store[PATH]['last_violation_at'] >= now
+    assert state_store[PATH]['warning_until'] >= now + PERIOD
+    expected_previous_stage = 'none' if decay_first else 'warning'
+    expected_action = 'warning' if decay_first else 'none'
+    assert result['previous_stage'] == events[0]['previous_stage'] == expected_previous_stage
+    assert result['action'] == events[0]['enforcement_action'] == expected_action
+
+
 @pytest.mark.parametrize('stage', ['warning', 'throttle'])
 @pytest.mark.parametrize('enabled', [True, False])
 def test_admin_entry_writes_deadline_unless_switch_off(state_store, monkeypatch, stage, enabled):

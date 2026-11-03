@@ -395,6 +395,7 @@ class TestEscalateEnforcement:
     def test_warning_stays_warning_with_insufficient_violations(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
+        _fair_use_db.renew_fair_use_warning.return_value = ({'stage': 'warning'}, {'stage': 'warning'})
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
         classifier = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
