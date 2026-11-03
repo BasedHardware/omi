@@ -16,7 +16,7 @@ from utils.batch_pipeline.record_partial_audio import digest, inventory_digest, 
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC
 from utils.batch_pipeline.record_language import prove_manifest
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.storage import list_audio_chunks
 from utils.observability.reasons import ReasonFamily, reason_label
 
@@ -147,7 +147,7 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
         finally:
             iterator.close()
 
-    units, _ = await run_blocking(sync_executor, collect)
+    units, _ = await run_blocking(storage_executor, collect)
     plan = {'version': 1, 'fingerprint': fingerprint, 'units': units, 'prior_coverage': coverage}
     uri = await run_blocking(storage_executor, artifacts.stage_record_plan, seed, plan)
     generation = int((previous or {}).get('generation', 0)) + 1
