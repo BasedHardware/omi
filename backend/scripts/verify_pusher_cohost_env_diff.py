@@ -254,6 +254,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            # Japanese live-window ramp (config/parakeet_ja.py); pusher opens no window.
+            "HOSTED_PARAKEET_JA_API_URL",
+            "PARAKEET_JA_WINDOW_PERCENT",
             # Listen-only Soniox idle-close treatment cohort; pusher opens no Soniox stream.
             "SONIOX_IDLE_COHORT_PERCENT",
             "SONIOX_IDLE_COHORT_CLOSE_SECONDS",

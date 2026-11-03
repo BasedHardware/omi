@@ -47,7 +47,18 @@ def render_resources(chart, environment='prod', git_ref=None):
 
 
 def render(chart, environment='prod'):
-    return {obj['kind']: obj for obj in render_resources(chart, environment)}
+    # One object per kind; the release's own object wins over siblings such as parakeet-ja.
+    primary = f'{environment}-omi-{chart}'
+    objects = {}
+    for obj in render_resources(chart, environment):
+        if obj['kind'] not in objects or obj['metadata']['name'] == primary:
+            objects[obj['kind']] = obj
+    return objects
+
+
+def is_ja_pool(obj):
+    # templates/ja-deployment.yaml; pinned by test_parakeet_helm_contract, not by this main-pool gate.
+    return obj['metadata'].get('labels', {}).get('app.kubernetes.io/name') == 'parakeet-ja'
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -75,7 +86,9 @@ def test_parakeet_helm_apply_changes_only_hpa_against_origin_main(environment):
         ingress['spec']['rules'][0]['http']['paths'] = [entry for entry in paths if entry['path'] != '/v2/language']
     # All remaining pod-template fields and non-HPA objects must match main exactly.
     stable = lambda objects: {
-        (obj['kind'], obj['metadata']['name']): obj for obj in objects if obj['kind'] != 'HorizontalPodAutoscaler'
+        (obj['kind'], obj['metadata']['name']): obj
+        for obj in objects
+        if obj['kind'] != 'HorizontalPodAutoscaler' and not is_ja_pool(obj)
     }
     assert stable(current) == stable(baseline)
 

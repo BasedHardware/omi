@@ -39,9 +39,14 @@ spec:
         - name: {{ .Chart.Name }}-ja
           image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- /* ja.extraEnv overrides an inherited entry rather than duplicating its name. */}}
+          {{- $owned := list "PARAKEET_MODEL" "PARAKEET_LID_MODEL" }}
+          {{- range .Values.ja.extraEnv }}
+          {{- $owned = append $owned .name }}
+          {{- end }}
           {{- $env := list }}
           {{- range .Values.env }}
-          {{- if not (has .name (list "PARAKEET_MODEL" "PARAKEET_LID_MODEL")) }}
+          {{- if not (has .name $owned) }}
           {{- $env = append $env . }}
           {{- end }}
           {{- end }}
