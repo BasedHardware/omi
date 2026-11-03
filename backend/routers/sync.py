@@ -27,6 +27,7 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
@@ -181,8 +182,8 @@ from utils.sync.files import (
 from utils.sync.pipeline import (
     _OrderedTurnstile,
     _cleanup_files,
-    _delete_staged_blobs_async,
-    _download_staged_files,
+    delete_staged_blobs_async,
+    download_staged_files,
     _finalize_sync_job_failure,
     finalize_sync_job_failure_now,
     finalize_sync_job_superseded,
@@ -192,7 +193,7 @@ from utils.sync.pipeline import (
     _reprocess_merged_conversations,
     _RESPONSE_FENCED_CONVERSATION_IDS,
     _retrieve_file_paths_v2,
-    _run_full_pipeline_background_async,
+    run_full_pipeline_background_async,
     _stage_files_to_gcs,
     build_person_embeddings_cache,
     process_segment,
@@ -1166,7 +1167,7 @@ async def sync_local_files_v2(
                 # Staging failed before any task was submitted, so it is safe
                 # to remove partial blobs, terminalize, and free the claim for
                 # a client WAL retry.
-                await _delete_staged_blobs_async(owned_paths)
+                await delete_staged_blobs_async(owned_paths)
                 await run_blocking(sync_executor, _cleanup_files, owned_paths)
                 await _finalize_sync_job_failure(
                     job_id=job_id,
@@ -1259,7 +1260,7 @@ async def sync_local_files_v2(
                         registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
                     if not registered:
                         sequencer_registration_started = False
-                        await _delete_staged_blobs_async(owned_paths)
+                        await delete_staged_blobs_async(owned_paths)
                         await run_blocking(sync_executor, _cleanup_files, owned_paths)
                         await _finalize_sync_job_failure(
                             job_id=job_id,
@@ -1448,7 +1449,7 @@ async def sync_local_files_v2(
                     # Async coordinator: runs on event loop, offloads blocking work to pools.
                     # No thread pool slot held for the full pipeline duration (fixes #7361).
                     start_background_task(
-                        _run_full_pipeline_background_async(
+                        run_full_pipeline_background_async(
                             job_id,
                             uid,
                             owned_paths,
@@ -2764,6 +2765,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
 
 
 @sync_attempt
+@with_batch_privacy_attempt
 async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt_state: dict):
     """Cloud Tasks handler: runs one sync job inside the request.
 
@@ -2897,7 +2899,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             # Job TTL (24h) expired before dispatch — staged blobs are gone or
             # about to be (1-day lifecycle); the app re-uploads on 404.
             logger.warning(f'sync job {job_id}: job expired before dispatch, dropping task')
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id and ledger_fence_active:
@@ -2929,7 +2931,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     failure_code=job.get('reason_code') or 'unknown',
                 )
             else:
-                await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+                await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
             if job.get('lane') == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id and job['status'] in ('failed', 'partial_failure'):
@@ -2963,7 +2965,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 run_lock_token=lock_token,
             )
         if converged is not None:
-            await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+            await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
@@ -2992,7 +2994,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 lane=sync_lane,
                 run_lock_token=lock_token if ledger_fence_active else None,
             )
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id:
@@ -3017,9 +3019,9 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 name='sync:owner-prefetch',
             )
         if sync_lane == SyncLane.BACKFILL.value:
-            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
+            staged = await run_blocking(storage_executor, download_staged_files, blob_paths, bounded_backfill=True)
         else:
-            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths)
+            staged = await run_blocking(storage_executor, download_staged_files, blob_paths)
         if not staged:
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
@@ -3033,7 +3035,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 lane=sync_lane,
                 run_lock_token=lock_token if ledger_fence_active else None,
             )
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'staged_audio_expired'})
@@ -3047,7 +3049,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             # attempt; on expiry the coordinator is cancelled like a lease loss
             # and the wrapper preserves the run lock for the redelivery.
             with historical_scan_memo_scope(uid), people_scan_attempt():
-                await _run_full_pipeline_background_async(
+                await run_full_pipeline_background_async(
                     job_id,
                     uid,
                     blob_paths,
@@ -3089,7 +3091,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
                 await run_blocking(db_executor, release_claim, uid, content_id, job_id)
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             logger.info('event=sync_transcription_job outcome=superseded lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'superseded'})
         except SyncJobRunLeaseLost as error:
@@ -3146,7 +3148,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     return JSONResponse(status_code=409, content={'status': 'locked'})
                 if converged is not None:
                     logger.info('event=sync_transcription_job outcome=reconciled_after_pipeline_exception')
-                    await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+                    await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
                     if sync_lane == SyncLane.BACKFILL.value:
                         await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
@@ -3173,7 +3175,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     run_lock_token=lock_token if ledger_fence_active else None,
                     **stamped_failure_kwargs(e),  # internal cause, not upstream_error
                 )
-                await _delete_staged_blobs_async(blob_paths)
+                await delete_staged_blobs_async(blob_paths)
                 if sync_lane == SyncLane.BACKFILL.value:
                     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                 return JSONResponse(status_code=200, content={'status': 'failed_final'})
@@ -3226,7 +3228,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 
         # A terminal failure is not proof that staging has a surviving copy.
         # Cleanup verifies the completed ledger's byte-bound archive receipt.
-        await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+        await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
         if sync_lane == SyncLane.BACKFILL.value:
             await run_blocking(db_executor, release_backfill_slot, uid, job_id)
         return JSONResponse(status_code=200, content={'status': 'done'})

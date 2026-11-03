@@ -64,7 +64,7 @@ from utils import screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
-from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled, recovery_cohort_admits
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.generated_compute import require_generated_compute, generated_compute_configured
 from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
@@ -101,6 +101,7 @@ from models.users import (
     LocationContextConsentUpdate,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
+from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_by_id
 from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
@@ -1062,7 +1063,11 @@ def set_preferred_app_for_user(
 
     app_id_to_set = app_id
 
-    selected_app = get_available_app_by_id(app_id_to_set, uid)
+    selected_app = (
+        default_summary_app()
+        if app_id_to_set == DEFAULT_SUMMARY_APP_ID
+        else get_available_app_by_id(app_id_to_set, uid)
+    )
     if not selected_app:
         raise HTTPException(status_code=410, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
 
@@ -1312,10 +1317,10 @@ def process_waiting_recordings(
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
 ):
-    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
-        raise HTTPException(status_code=404, detail='Not found')
     from utils import processing_backlog
 
+    if not processing_backlog.manual_choice_in_scope(uid):
+        raise HTTPException(status_code=404, detail='Not found')
     processing_backlog.choose(uid, request_key=idempotency_key)
     snapshot = processing_backlog.snapshot(uid)
     if snapshot is not None and snapshot.state == 'capped':

@@ -187,7 +187,11 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
-    outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    started = time.monotonic()
+    try:
+        outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    finally:
+        logger.info('event=batch_recovery_stage stage=recognition duration_seconds=%.3f', time.monotonic() - started)
     if outcome == 'held':
         try:
             await run_blocking(
@@ -202,7 +206,13 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if outcome == 'disabled':
         return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:
-        await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id)
+        started = time.monotonic()
+        try:
+            await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id, owner_only=True)
+        finally:
+            logger.info(
+                'event=batch_recovery_stage stage=post_recovery duration_seconds=%.3f', time.monotonic() - started
+            )
     return {'status': outcome}
 
 

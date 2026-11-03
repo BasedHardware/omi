@@ -391,7 +391,7 @@ def test_redrive_refusal_keeps_measured_vad_without_spending_intent(setup, monke
         store, artifacts, 'bad', binding.owner_id, 'plan', old, server_flags=SERVING_ENV, independent_language=True
     )
     assert outcome in {'independent_budget_held', 'allowance_held'}
-    assert row(client)['speech_redrive']['state'] == 'prepared'
+    assert not row(client).get('speech_redrive')
     assert row(client)['measured_held_vad_speech_seconds'] == 1
     modulate.assert_not_called()
     soniox.assert_not_called()
@@ -480,6 +480,8 @@ def test_guarded_zero_vad_requires_both_empty_recognizers_before_silence(setup, 
     modulate.assert_called_once()
     soniox.assert_called_once()
     assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'empty'
+    assert row(client)['recovery']['recognizers']['modulate']['outcome'] == 'empty'
+    assert 'no_vendor_call' not in row(client)['recovery']
 
 
 @pytest.mark.parametrize(
@@ -1130,5 +1132,5 @@ def test_words_repair_bounds_decoded_audio_and_fails_closed_on_malformed_jobs(
         store, artifacts, 'bad', binding.owner_id, 'repair-plan', old, server_flags=SERVING_ENV, repair=True
     )
     assert outcome == 'repair_budget_held'
-    assert row(client)['speech_redrive']['state'] == 'prepared'
+    assert not row(client).get('speech_redrive')
     assert modulate.call_count == 1

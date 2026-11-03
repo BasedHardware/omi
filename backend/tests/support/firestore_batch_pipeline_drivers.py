@@ -263,6 +263,15 @@ def entries():
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
         ),
         DriverEntry(
+            'database.batch_pipeline_store.timeliness_sample',
+            domains={'namespace': namespaces, 'terminal_empty_processed': [False, True]},
+            neutrals={
+                'epoch': (1.0, 'cohort boundary operand only'),
+                'now': (10000.0, 'SLA cutoff operand only; due > epoch drives the new-breach counts'),
+                'sla': (7200.0, 'SLA width operand only'),
+            },
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.first_pending',
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
@@ -338,5 +347,12 @@ def entries():
             reason='bounded release scan delegates its only query to held_page_ids; resets are document transactions',
             expect_observed=False,
             body_digest='51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_scan_pass',
+            covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
+            reason='durable-cursor wrapper over release_page; the cursor is one document get and set',
+            expect_observed=False,
+            body_digest='1b9c67910b80e2628cf61514e1b24875242fc623069e6a2f64764cb90f2fa27e',
         ),
     )

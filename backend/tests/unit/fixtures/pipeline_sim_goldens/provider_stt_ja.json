@@ -18,6 +18,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 117.77,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -91,6 +92,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 217.61,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -164,6 +166,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 329.81,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -237,6 +240,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 559.77,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -310,6 +314,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 552.98,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -383,6 +388,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 447.66,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -456,6 +462,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 525.29,
      "privacy_generation": 0,
      "service": "modulate"
     },

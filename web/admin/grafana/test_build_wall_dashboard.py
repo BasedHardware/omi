@@ -24,6 +24,14 @@ def is_text_line(panel):
 
 
 class WallV2Contract(unittest.TestCase):
+    def test_funnel_row_sits_below_the_tv_wall(self):
+        from build_wall_dashboard import WALL_H
+        row = [p for p in load("omi-tv-v2")["panels"] if p["gridPos"]["y"] >= WALL_H]
+        self.assertEqual({p["gridPos"]["y"] for p in row}, {WALL_H})
+        self.assertEqual(sum(p["gridPos"]["w"] for p in row), 24)
+        self.assertEqual({p["targets"][0]["root_selector"] for p in row},
+                         {"frames.funnel", "frames.funnelWeekly", "frames.funnelPlatforms"})
+
     def test_checked_in_wall_matches_builder(self):
         from build_wall_dashboard import build_wall_board
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
@@ -51,7 +59,8 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         for name in COLUMNS:
             x, w = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             self.assertEqual(column[0]["type"], "stat")
             self.assertTrue(column[0]["title"].startswith(name), column[0]["title"])
             self.assertEqual(column[0]["gridPos"]["y"], 0)
@@ -90,7 +99,7 @@ class WallV2Contract(unittest.TestCase):
 
     def test_each_stat_has_an_api_delta_strip_in_field_order(self):
         import re
-        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H
+        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H, WALL_H
         board = load("omi-tv-v2")
         source = (HERE.parent / "lib/wall-series.ts").read_text()
         block = re.search(r"DELTA_STRIPS[^=]*= \{(.*?)\};", source, re.S).group(1)
@@ -99,7 +108,8 @@ class WallV2Contract(unittest.TestCase):
         self.assertIn('BAD_MARK = "\\u2060"', source)
         for name in COLUMNS:
             x, _ = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             head, strip = column[0], column[1]
             self.assertTrue(is_strip(strip))
             self.assertFalse(head["options"]["showPercentChange"])  # native change is relative only
@@ -259,12 +269,30 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(status["gridPos"], {**panel["gridPos"], "y": panel["gridPos"]["y"] + panel["gridPos"]["h"],
                                              "h": 1})
 
+    def test_all_in_tiles_name_their_scope_and_status_carries_settled_variance(self):
+        board = load("omi-tv-v2")
+        # Relabelled so the names say what they include (David 2026-11-02): the
+        # stat names stay short (no wrap at 1440), the description carries scope.
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        blob = json.dumps(health, ensure_ascii=False)
+        self.assertIn("All-in/day", blob)
+        self.assertIn("All-in/user", blob)
+        self.assertNotIn('"Cost / day"', blob)
+        self.assertNotIn('"Cost / user"', blob)
+        status = next(p for p in board["panels"]
+                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
+        # The live headline's settled D−2 figure and variance fold into this
+        # line, so the board keeps its layout.
+        self.assertIn("settled D−2", status["description"])
+        self.assertIn("variance", status["description"])
+
     def test_variable_margin_tile_big_number_sparkline_and_target(self):
         from build_wall_dashboard import STATUS_GOOD
         board = load("omi-tv-v2")
-        tile = next(p for p in board["panels"] if p["title"] == "Variable margin")
-        # The big number is the latest margin %, with the 60-day daily series
-        # as the stat's own sparkline; 50% is the threshold (green at/above).
+        tile = next(p for p in board["panels"] if p["title"] == "Variable margin (live est.)")
+        # The big number is the latest margin % (today's live estimate), with
+        # the 60-day daily series as the stat's own sparkline; the goal is the
+        # threshold (green at/above).
         self.assertEqual(tile["type"], "stat")
         self.assertEqual(tile["targets"][0]["url"].rsplit("/", 1)[1], "health")
         self.assertEqual(tile["targets"][0]["root_selector"], "frames.variableMargin")
@@ -274,13 +302,14 @@ class WallV2Contract(unittest.TestCase):
         # explicit no-value marker, not an older non-null margin (Luna r3 P2).
         self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
         self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
-        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no MRR book")
+        # No live estimate (or no MRR book) shows no value, never a settled number as live.
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no live est.")
         self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
         steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
         self.assertEqual([s["value"] for s in steps], [None, 50])
         self.assertEqual(steps[1]["color"], STATUS_GOOD)
         # The definition is on the wall, not in a separate doc.
-        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate and Stripe fees",
+        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone",
                        "Goal 50%", "60 days", "non-USD paying subscriptions", "no MRR book"):
             self.assertIn(phrase, tile["description"])
         # The secondary chart: cost run rate vs MRR with the 50% target marked.

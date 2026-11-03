@@ -14,6 +14,7 @@ import time
 from typing import Any, Mapping, Sequence, cast
 
 from database import pinecone_partition_state as state
+from database import pinecone_query_metrics
 from database.legal_holds import external_write_fence
 from database.pinecone_provider_errors import barrier_record, is_missing_namespace
 
@@ -76,9 +77,24 @@ class OwnerIndex:
         if not _owner_filter(value, self.uid):
             raise ValueError('Pinecone filter must constrain the authenticated owner')
 
-    def query(self, *, namespace: str, **kwargs: Any) -> Any:
+    def query(self, *, namespace: str, caller: str = 'other', **kwargs: Any) -> Any:
         self._check_filter(kwargs.get('filter'))
-        return self.index.query(namespace=self._route(namespace), **kwargs)
+        routed_namespace = self._route(namespace)
+        response: Any = None
+        succeeded = False
+        try:
+            response = self.index.query(namespace=routed_namespace, **kwargs)
+            succeeded = True
+            return response
+        finally:
+            self._meter_query(namespace, routed_namespace, caller, response, succeeded=succeeded)
+
+    @staticmethod
+    def _meter_query(family: str, routed_namespace: str, caller: str, response: Any, *, succeeded: bool) -> None:
+        try:
+            pinecone_query_metrics.record_query(family, routed_namespace, caller, response, succeeded=succeeded)
+        except Exception:
+            pinecone_query_metrics.record_metering_error()
 
     def fetch(self, *, ids: list[str], namespace: str, **kwargs: Any) -> Any:
         result = self.index.fetch(ids=ids, namespace=self._route(namespace), **kwargs)
@@ -126,7 +142,7 @@ class OwnerIndex:
                 for target in targets:
                     existing = self.index.fetch(ids=ids, namespace=target)
                     self._check_records(_field(existing, 'vectors').values())
-        except Exception:
+        except BaseException:
             # Only reads/validation have occurred, so this is a known no-op.
             state.finish_mutation(key, ticket, firestore_client=self.firestore_client)
             raise
@@ -135,7 +151,7 @@ class OwnerIndex:
             if method == 'delete':
                 # Privacy deletion also covers the unserved rollback copy.
                 _provider_mutation(self.index, method, args, other, kwargs)
-        except Exception:
+        except BaseException:
             self._uncertain(key, ticket)
             raise
         state.finish_mutation(key, ticket, write_lsn=lsn, firestore_client=self.firestore_client)
@@ -144,9 +160,9 @@ class OwnerIndex:
     def _uncertain(self, key: state.PartitionKey, ticket: state.MutationTicket) -> None:
         try:
             state.mark_mutation_uncertain(key, ticket, firestore_client=self.firestore_client)
-        except Exception:
+        except BaseException:
             # A failed state write leaves the original durable pending marker.
-            logger.error('Could not persist uncertain Pinecone operation key=%s', key.document_id)
+            logger.error('event=pinecone_mutation outcome=uncertain_settlement_failed')
 
     def upsert(self, *, vectors: Sequence[Mapping[str, Any]], namespace: str, **kwargs: Any) -> Any:
         self._check_records(vectors)
@@ -198,7 +214,7 @@ class OwnerIndex:
                     raise state.PartitionStateError('Pinecone delete did not provide a freshness receipt')
                 if target == ticket.primary_namespace:
                     primary_lsn = lsn
-        except Exception:
+        except BaseException:
             self._uncertain(key, ticket)
             raise
         finished = state.finish_mutation(key, ticket, write_lsn=primary_lsn, firestore_client=self.firestore_client)
@@ -225,13 +241,26 @@ class OwnerIndex:
         dimension = _field(self.index.describe_index_stats(), 'dimension')
         for target in (key.family, key.partition_namespace):
             for attempt in range(6):
-                result, _, headers = self.index._query(
-                    namespace=target,
-                    vector=[1.0] + [0.0] * (dimension - 1),
-                    filter=filter,
-                    top_k=1,
-                    _return_http_data_only=False,
-                )
+                response: Any = None
+                succeeded = False
+                try:
+                    response = self.index._query(
+                        namespace=target,
+                        vector=[1.0] + [0.0] * (dimension - 1),
+                        filter=filter,
+                        top_k=1,
+                        _return_http_data_only=False,
+                    )
+                    succeeded = True
+                finally:
+                    self._meter_query(
+                        namespace,
+                        target,
+                        'account_purge_verify',
+                        response[0] if succeeded else None,
+                        succeeded=succeeded,
+                    )
+                result, _, headers = response
                 indexed = int(headers.get('x-pinecone-max-indexed-lsn', 0 if lsns[target] == 0 else -1))
                 if indexed >= lsns[target] and not _field(result, 'matches'):
                     break

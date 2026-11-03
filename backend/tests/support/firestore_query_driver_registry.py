@@ -145,6 +145,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
     'database.batch_pipeline_projection_release.release_page': '51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
+    'database.batch_pipeline_projection_release.release_scan_pass': '1b9c67910b80e2628cf61514e1b24875242fc623069e6a2f64764cb90f2fa27e',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
@@ -358,6 +359,13 @@ _add(
     )
 )
 _add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}, neutrals={'budget': _BUDGET}))
+_add(
+    DriverEntry(
+        'database.action_item_dedup.may_have_recent_dedup_candidates',
+        base={'uid': UID, 'cutoff': T0},
+        neutrals={'excluded_conversation_ids': (set(), 'Python-only exclusion after bounded timestamp queries')},
+    )
+)
 _add(
     DriverEntry(
         'database.action_items.get_action_items',
@@ -2514,6 +2522,14 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.sync_backfill_sequencer.worker_candidates',
+        domains={'after_uid': [None, UID]},
+        neutrals={'limit': _LIMIT},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_backfill_sequencer.due_pending',
         domains={'now': [None, T0]},
         neutrals={'limit': _LIMIT},
@@ -2546,6 +2562,7 @@ _add(
         'database.sync_backfill_sequencer.finish_job',
         base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
         domains={'now': [None, T0]},
+        neutrals={'worker_token': (None, 'execution fencing does not change the pending-presence query')},
         setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
         patchers=_SYNC_PROD,
     )
@@ -2928,6 +2945,7 @@ _add(
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
             'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
+            'memo_site': ('other', 'closed telemetry site; does not alter the Firestore query shape'),
         },
     )
 )

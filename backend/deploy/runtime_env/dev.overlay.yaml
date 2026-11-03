@@ -67,6 +67,7 @@ overlay:
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: gateway
         HOSTED_TRANSLATION_API_URL:
+          category: service_discovery
           value: http://172.16.48.49/nllb
         REFERRAL_PUBLIC_BASE_URL:
           value: https://api.omiapi.com

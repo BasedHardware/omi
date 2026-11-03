@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from tests.unit.test_pusher_audio_timeline import env, FakeWebSocket, _conversation, _audio, _run, RATE
 from routers import pusher
+from utils import pusher_audio_projection
 from utils import executors
 from utils.conversations import speaker_resolution as stage
 from utils.conversations import speaker_identity_retry as retry
@@ -15,9 +16,12 @@ from utils.conversations import speaker_identity_retry as retry
 
 @pytest.fixture(autouse=True)
 def manifest_committed(env, monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
     monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', ())
     monkeypatch.setattr(
-        pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [SimpleNamespace(model_dump=lambda: {})]
+        pusher_audio_projection.conversations_db,
+        'create_audio_files_from_chunks',
+        lambda *a: [SimpleNamespace(model_dump=lambda: {})],
     )
 
     def update_unowned_conversation(*_args, record_owner_out=None):
@@ -27,7 +31,7 @@ def manifest_committed(env, monkeypatch):
             assert record_owner_out == {}
         return True
 
-    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update_unowned_conversation)
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update_unowned_conversation)
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *a: None)
 
 

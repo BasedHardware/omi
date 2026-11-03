@@ -7,7 +7,7 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 import wave
 
 import pytest
@@ -763,6 +763,48 @@ async def test_real_staging_admission_worker_late_audio_and_serial_receipts(sour
     assert new_jobs[0]['capture_at'] == 101 and new_jobs[0]['duration_seconds'] == 1
     assert new_jobs[0]['projection_binding']['partial_record']
     assert not source[1].rows[ROW]['record_audio_closed']
+
+
+@pytest.mark.parametrize('language', ['en', 'und'])
+async def test_auto_partial_freezes_audio_proof_without_changing_custody(source, audio, monkeypatch, language):
+    from diarizer.batch_pipeline_models import stt_language
+    from utils.batch_pipeline import record_language
+    from utils.batch_pipeline.audio import read_context
+
+    row = source[1].rows[ROW]
+    row.update(
+        language='multi',
+        external_data={'server_batch_only': True},
+        has_content=True,
+        server_batch_audio_start=100,
+        server_batch_audio_end=110,
+    )
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    proof = {
+        'stt_language': language,
+        'stt_language_evidence': 'audio_lid' if language == 'en' else 'unavailable',
+        'stt_language_confidence': 0.99 if language == 'en' else 0.0,
+    }
+    classify = AsyncMock(return_value=proof)
+    monkeypatch.setattr(record_language, 'classify_wav', classify)
+    monkeypatch.setattr(
+        record_language, 'ServingLanguageProbeGuard', lambda *a, **k: SimpleNamespace(raise_if_denied=lambda: None)
+    )
+    await audio.drain()
+    await audio.drain()
+    jobs = [
+        job
+        for path, job in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
+    ]
+    assert len(jobs) == 1 and classify.call_count == 1
+    work = live.WorkItem(**{key: jobs[0][key] for key in live.WorkItem.__dataclass_fields__ if key in jobs[0]})
+    context = read_context(audio.artifacts.fetch_audio(work))
+    assert stt_language(context, duration_seconds=1) == language
+    assert context['conversation_id'] == 'record'
+    assert len(audio.chunks) == 1 and audio.pcm[audio.chunks[0]['path']]
+    assert pending(source)['state'] == 'record_pending'
 
 
 async def test_over_cap_rows_use_real_worker_bounds_and_two_pages(source, audio):
