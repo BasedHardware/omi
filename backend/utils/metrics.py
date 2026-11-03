@@ -69,6 +69,20 @@ OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL = Counter(
     ['event', 'threshold'],
 )
 
+# Peak settled Home row count per user per UTC day. uid is never a label.
+# sum / count is the average of those daily peaks. A user split across pods
+# can be counted twice. Empty homes are 0 and still count.
+OMI_HOME_ROWS_USER_DAY_SUM = Counter(
+    'omi_home_rows_user_day_sum',
+    'Sum of per-user daily peak visible Home row counts. Never labeled by uid.',
+)
+OMI_HOME_ROWS_USER_DAY_COUNT = Counter(
+    'omi_home_rows_user_day_count',
+    'User-days that reported a Home row count. Never labeled by uid.',
+)
+OMI_HOME_ROWS_USER_DAY_SUM.inc(0)
+OMI_HOME_ROWS_USER_DAY_COUNT.inc(0)
+
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
     'Number of currently active WebSocket connections in backend-listen',

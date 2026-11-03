@@ -17,6 +17,7 @@ import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
 import 'home_rows.dart';
+import 'home_rows_health.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -657,6 +658,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ],
                 DateTime.now())
             : withLive;
+
+        if (showRecordings &&
+            !convoProvider.isSelectionModeActive &&
+            !convoProvider.showDiscardedConversations &&
+            !isShowingConversationSkeleton) {
+          final visible = conversationRows
+              .where((row) =>
+                  row.kind == _ConversationListRowKind.conversation ||
+                  row.kind == _ConversationListRowKind.liveEpisode ||
+                  row.kind == _ConversationListRowKind.processing ||
+                  row.kind == _ConversationListRowKind.recording)
+              .length;
+          HomeRowsHealth.note(visible);
+        }
 
         return RefreshIndicator(
           onRefresh: () async {
