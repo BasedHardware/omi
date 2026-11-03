@@ -20,6 +20,9 @@ from google.cloud.firestore_v1 import transactional
 
 from database.account_deletion_marker import account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.fsr_read_cache import cache_writer
+from database import privacy_check_metrics as metrics
+from database.privacy_negative_cache import decide
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +181,7 @@ def _place_legal_hold_transaction(
     )
 
 
+@cache_writer('legal_hold_fence_cache')
 def place_legal_hold(
     uid: str,
     *,
@@ -245,6 +249,7 @@ def _acquire_destructive_operation_transaction(
     )
 
 
+@cache_writer('legal_hold_fence_cache')
 def acquire_destructive_operation(
     uid: str,
     *,
@@ -289,6 +294,7 @@ def _finish_destructive_operation_transaction(
     transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})
 
 
+@cache_writer('legal_hold_fence_cache')
 def finish_destructive_operation(
     uid: str,
     *,
@@ -478,6 +484,7 @@ def external_write_fence(
     closed otherwise.
     """
 
+    metrics.called('external')
     if not uid:
         raise LegalHoldAuthorityUnavailable("external write fence requires a uid")
     active = _EXTERNAL_TRANSACTION.get()
@@ -488,22 +495,59 @@ def external_write_fence(
             or (firestore_client is not None and active[2] is not firestore_client)
         ):
             raise DestructiveOperationInProgress("nested external write changed transaction identity")
+        metrics.decision('external')
         yield None
         return
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     kwargs = {'transaction': transaction} if transaction is not None else {}
-    account_payload = _snapshot_payload(
-        _document(client, f"account_deletions/{uid}").get(**kwargs), label="account deletion authority"
-    )
-    account_status = normalize_account_deletion_status(
-        marker_exists=account_payload is not None,
-        raw_status=account_payload.get("wipe_status") if account_payload is not None else None,
-    )
-    if account_deletion_blocks_access(account_status):
-        raise DestructiveOperationInProgress("external data write blocked by account deletion")
-    gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get(**kwargs))
-    if _gate_blocks(gate, datetime.now(timezone.utc)):
-        raise DestructiveOperationInProgress("external data write blocked by destructive operation")
+    reusable = False
+
+    def live():
+        nonlocal reusable
+        account_payload = _snapshot_payload(
+            metrics.read_snapshot('external', _document(client, f"account_deletions/{uid}"), **kwargs),
+            label="account deletion authority",
+        )
+        account_status = normalize_account_deletion_status(
+            marker_exists=account_payload is not None,
+            raw_status=account_payload.get("wipe_status") if account_payload is not None else None,
+        )
+        if account_deletion_blocks_access(account_status):
+            raise DestructiveOperationInProgress("external data write blocked by account deletion")
+        gate = _validated_gate(
+            metrics.read_snapshot(
+                'external', _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}"), **kwargs
+            )
+        )
+        if _gate_blocks(gate, datetime.now(timezone.utc)):
+            raise DestructiveOperationInProgress("external data write blocked by destructive operation")
+        # A backwards clock adjustment can change a stale-running verdict
+        # without changing the writer token. Only timeless clears are reusable.
+        reusable = gate is None or gate['state'] != 'running'
+        return True
+
+    if transaction is not None:
+        # Always enroll both authority reads in the caller's conflict set.
+        try:
+            live()
+        except DestructiveOperationInProgress:
+            metrics.decision('external', 'destructive_operation')
+            raise
+        except Exception:
+            metrics.decision('external', 'authority_unavailable')
+            raise
+        metrics.decision('external')
+    else:
+        decide(
+            'external',
+            uid,
+            client,
+            'external',
+            live,
+            'legal_hold_fence_cache',
+            blocked=(DestructiveOperationInProgress,),
+            reuse_allowed=lambda: reusable,
+        )
     # Transactional reads hold the authorities through provider upload and
     # manifest commit. Nested storage gates reuse this exact synchronous scope;
     # ordinary nontransactional fences retain their fresh-read behavior.

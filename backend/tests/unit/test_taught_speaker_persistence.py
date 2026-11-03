@@ -61,7 +61,7 @@ def world(monkeypatch):
     monkeypatch.setattr(
         users,
         'get_people',
-        lambda uid: [deepcopy(v) for k, v in store.rows.items() if k[:3] == ('users', uid, 'people')],
+        lambda uid, **kwargs: [deepcopy(v) for k, v in store.rows.items() if k[:3] == ('users', uid, 'people')],
     )
     monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
     voice_settings = {'speaker_tag_prompts_enabled': True, 'save_other_voice_profiles': True}

@@ -49,6 +49,20 @@ unknown or larger prior value into zero. Contradictory saved results stay held.
 Legacy no-provider/terminal tools refuse language-guarded units; use the explicit
 independent epoch-3 plan. Completed historical receipts remain unchanged.
 
+Ordinary automatic recovery can resolve strict-VAD silence locally before STT.
+For that branch, the start transaction records
+`recovery.no_vendor_call={version: 1, reason: strict_vad_silence, vad_speech_seconds: 0}`
+under the running recovery token and privacy/ownership fences. It proves this
+recovery intent selected the local zero-VAD branch and bypassed vendor dispatch;
+it is not a vendor receipt or a claim about earlier intake/worker calls. The
+existing `recovery.provider` still names the selected route, including Modulate,
+and alone never proves a call. The record survives a lost result-storage reply
+and reconciliation; a running record alone does not prove completed settlement.
+Guarded zero-VAD silence instead retains its actual Modulate and Soniox empty
+receipts and receives no `no_vendor_call` record. Existing historical jobs are
+not backfilled. Observer proof rules and rollout thresholds are unchanged;
+accepting this new record as route proof requires a separate ruling.
+
 Threshold evidence: local Silero evaluates 512 samples at 16 kHz, one 32 ms frame
 (`utils/stt/local_vad.py`). Only the clipped final frame can be shorter. Synthetic
 tests cover 0/16/32/64/320/4384 ms, the 511/512-sample boundary, and floating-point
