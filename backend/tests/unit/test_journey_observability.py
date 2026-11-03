@@ -100,6 +100,7 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
         'dead_letter': 1,
         'oldest_nonterminal_age_seconds': 12.5,
         'oldest_blocked_byok_age_seconds': 42.0,
+        'oldest_dead_letter_age_seconds': 604801.0,
     }
     get_summary = MagicMock(side_effect=[RuntimeError('Firestore unavailable'), summary])
     monkeypatch.setattr(conversation_finalization.jobs_db, 'get_finalization_job_summary', get_summary)
@@ -121,6 +122,9 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
     exported = generate_registry_latest(registry).decode()
     assert 'listen_finalization_oldest_nonterminal_age_seconds 12.5' in exported
     assert 'listen_finalization_oldest_blocked_byok_age_seconds 42.0' in exported
+    assert 'listen_finalization_oldest_dead_letter_age_seconds 604801.0' in exported
+    backlog.labels.assert_any_call(status='dead_letter')
+    backlog.labels.return_value.set.assert_any_call(1.0)
     assert 'listen_finalization_summary_last_success_timestamp_seconds ' in exported
 
 

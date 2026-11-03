@@ -1982,3 +1982,62 @@ def test_backfill_queue_wait_warning_uses_dispatched_histogram_and_sustained_p95
             'repeat_interval': '24h',
             'mute_time_intervals': ['omi-tier-silent'],
         }
+
+
+def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
+    specs = {
+        'omi-finalization-byok-dwell-info': (
+            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
+            259200,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-byok-dwell-page': (
+            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
+            604800,
+            'page',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-stock': (
+            'max(listen_finalization_jobs{status="dead_letter"})',
+            1000,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-age': (
+            'max(listen_finalization_oldest_dead_letter_age_seconds)',
+            604800,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-byok-abandoned': (
+            'sum(increase(listen_finalization_byok_session_abandoned_total[1d]))',
+            0,
+            'agent',
+            '0s',
+        ),
+    }
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (expr, threshold, tier, pending) in specs.items():
+            rule = rules[uid]
+            assert rule['data'][0]['model']['expr'] == expr, (export_name, uid)
+            assert rule['data'][0]['datasourceUid'] == 'prometheus'
+            assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+            assert rule['for'] == pending
+            assert rule['noDataState'] == 'NoData'
+            assert rule['execErrState'] == 'KeepLast'
+            assert not rule['isPaused']
+            assert rule['labels'] == {
+                'severity': 'critical' if tier == 'page' else 'warning',
+                'instatus_component': 'speech-processing',
+                'alert_identity': uid,
+                'component': 'speech-processing',
+                'impact': 'user-experience',
+                'tier': tier,
+                'audience': 'human' if tier == 'page' else 'agent',
+                'owner': 'two-lane-lead',
+            }
+            assert rule['annotations']['runbook'] == 'backend/docs/listen_finalization_jobs.mdx'
+            assert rule['annotations']['safe_next_action']
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert ('mute_time_intervals' in rule['notification_settings']) == (tier != 'page')

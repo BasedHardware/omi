@@ -3055,7 +3055,7 @@ def advance_byok_abandonment_sweep_cursor(
 
 
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
-    """Read one generation's fixed shard fan-in plus the oldest unfinished job.
+    """Read fixed projection shards plus one indexed oldest row per watched status.
 
     This deliberately never aggregates ``conversation_finalization_jobs``. A
     backend-listen replica performs exactly ``FINALIZATION_PROJECTION_SHARD_COUNT``
@@ -3103,7 +3103,8 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
     # One indexed oldest-row read per status, independent of terminal history.
     oldest_age_seconds = 0.0
     oldest_blocked_byok_age_seconds = 0.0
-    for status in sorted(NONTERMINAL_JOB_STATUSES):
+    oldest_dead_letter_age_seconds = 0.0
+    for status in sorted(NONTERMINAL_JOB_STATUSES | {'dead_letter'}):
         oldest_query = (
             FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
                 jobs_collection, {'status': status}, field_filter_factory=FieldFilter
@@ -3117,6 +3118,8 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
                 age = max(0.0, (now - created_at).total_seconds())
                 if status == 'blocked_byok':
                     oldest_blocked_byok_age_seconds = max(oldest_blocked_byok_age_seconds, age)
+                elif status == 'dead_letter':
+                    oldest_dead_letter_age_seconds = max(oldest_dead_letter_age_seconds, age)
                 else:
                     oldest_age_seconds = max(oldest_age_seconds, age)
     return {
@@ -3135,4 +3138,5 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': oldest_age_seconds,
         'oldest_blocked_byok_age_seconds': oldest_blocked_byok_age_seconds,
+        'oldest_dead_letter_age_seconds': oldest_dead_letter_age_seconds,
     }

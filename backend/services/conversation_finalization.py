@@ -37,11 +37,13 @@ from utils.cloud_tasks import (
 from utils.metrics import (
     CONVERSATION_ORPHANED_UNFINALIZED,
     LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+    LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
     LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
@@ -615,6 +617,7 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
             result['skipped'] += 1
             LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
             continue
+        LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL.inc()
         result['abandoned'] += 1
         if disposition['conversation_outcome'] == 'closed':
             result['conversations_closed'] += 1
@@ -693,6 +696,7 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS.set(float(summary['oldest_blocked_byok_age_seconds']))
+    LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS.set(float(summary['oldest_dead_letter_age_seconds']))
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):
