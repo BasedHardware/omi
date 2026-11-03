@@ -264,7 +264,7 @@ def account_circuit_cooldown() -> float:
 
 def service_models(default: list[str], *, surface: STTServingSurface = STTServingSurface.STREAMING) -> list[str]:
     if gpu_fleet_off():
-        return ['soniox']  # Also build the vendor callback when an old secret/policy omitted it.
+        return ['modulate-velma-2', 'soniox']  # Vendor-only chain; also builds callbacks an old policy omitted.
     policy = current_listen_policy.get()
     models = list(policy.service_models) if policy is not None else list(default)
     if surface != STTServingSurface.STREAMING:
