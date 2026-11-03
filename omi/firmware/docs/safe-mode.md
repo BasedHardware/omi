@@ -247,14 +247,13 @@ factory hex is only for an independently authorized baseline restore; follow
    of `CONFIG_OMI_FAULT_INJECT_HARD_FAULT=y`,
    `CONFIG_OMI_FAULT_INJECT_DRIVER_HANG=y`,
    `CONFIG_OMI_FAULT_INJECT_SETTINGS_HANG=y`, or
-   `CONFIG_OMI_FAULT_INJECT_WDT_STARVE=y`. Pass
-   `-DEXTRA_CONF_FILE=/absolute/fault.conf -DOMI_DEVELOPMENT_BUILD=ON
-   -DCMAKE_BUILD_TYPE=Debug` to the
-   app CMake invocation (with sysbuild, use the app image's `omi_` cache
-   variable prefix, e.g. `-Domi_EXTRA_CONF_FILE=...` and
-   `-Domi_CMAKE_BUILD_TYPE=Debug`, and set `OMI_DEVELOPMENT_BUILD=1` in the
-   environment, because sysbuild does not forward an image-prefixed
-   `OMI_DEVELOPMENT_BUILD` to the app). Use the production `omi.conf` as the base.
+   `CONFIG_OMI_FAULT_INJECT_WDT_STARVE=y`. For a plain app build pass
+   `-DEXTRA_CONF_FILE=/absolute/fault.conf -DOMI_DEVELOPMENT_BUILD=ON`. With
+   sysbuild, pass `-Domi_EXTRA_CONF_FILE=...` and set `OMI_DEVELOPMENT_BUILD=1`
+   in the environment, because sysbuild does not forward an image-prefixed
+   `OMI_DEVELOPMENT_BUILD` to the app. Do not set `CMAKE_BUILD_TYPE` on a CV1
+   build: NCS then looks for a build-type `pm_static` file and silently drops
+   the pinned partition map. Use the production `omi.conf` as the base.
    Do not publish these artifacts. Omission of the development opt-in must
    fail CMake with `OMI_FAULT_INJECT is forbidden in release builds`;
    the default Kconfig value is n. Inspect the final app `.config` before use.
