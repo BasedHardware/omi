@@ -23,7 +23,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 233,
+  "count": 234,
   "names": {
     "BATCH_CONTROL_CANDIDATE_FANOUT": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_ADMISSION_PARALLEL_CALLS": {"owner": "planscost", "review_by": "2026-11-30"},
@@ -31,6 +31,7 @@
     "BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
+    "SERVER_BATCH_UNSUPPORTED_LANGUAGES": {"owner": "planscost", "review_by": "2026-11-30", "registry": "config/feature-flags.yaml"},
     "PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
     "SYNC_BACKFILL_WORKER_API_URL": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},

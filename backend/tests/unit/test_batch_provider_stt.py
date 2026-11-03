@@ -1,5 +1,7 @@
 """C8 provider-STT stage on the real admission, intent and merge transactions (synthetic only)."""
 
+from utils.batch_pipeline import provider_stt_admission
+
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -19,14 +21,8 @@ from config.batch_pipeline import allowance_hold_retry_seconds
 from config.policy import BatchUnitPolicy
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS
 from utils.batch_pipeline import admission  # warm its fair-use/backfill imports outside the call budget
-from utils.batch_pipeline.provider_stt import (
-    ABANDON_SECONDS,
-    PENDING,
-    RUNNING,
-    ProviderSttStage,
-    SttRoute,
-    resolve_route,
-)
+from utils.batch_pipeline.provider_stt import ABANDON_SECONDS, RUNNING, ProviderSttStage
+from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute, resolve_route
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
@@ -173,7 +169,7 @@ def admit(monkeypatch, store, items, content_id, route=None):
     binding = ProjectionBinding(
         OWNER, 'bp_' + content_id, content_id, tuple(i.segment_id for i in items), language='ja'
     )
-    enqueue = provider_stt.provider_enqueue(route, Outbox(), {}) if route is not None else None
+    enqueue = provider_stt_admission.provider_enqueue(route, Outbox(), {}) if route is not None else None
     outcome = batch_pipeline_intake.admit(store, items, binding, 100.0, namespace=store.namespace, enqueue=enqueue)
     assert outcome['outcome'] == 'batch'
     return binding
@@ -212,23 +208,25 @@ def test_provider_unit_is_admitted_outside_the_gpu_ring(world, monkeypatch):
 def test_provider_enqueue_is_idempotent_and_immutable(world):
     _, store = world
     work = item('p1', 10)
-    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
     assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY)) is True
     assert store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY)) is False
-    other = provider_stt.provider_enqueue(SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {})
+    other = provider_stt_admission.provider_enqueue(
+        SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {}
+    )
     with pytest.raises(ValueError):
         store.run(lambda tx: other(tx, work, 102.0, policy=POLICY))
     with pytest.raises(ValueError):
         store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0, policy=POLICY))
     with pytest.raises(ValueError):
-        provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
+        provider_stt_admission.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
 
 
 @pytest.mark.parametrize('timing_store', [None, 'batch', 'sync'])
 def test_provider_job_timing_store_is_optional_durable_and_immutable(world, timing_store):
     _, store = world
     work = replace(item('p1', 10), timing_store=timing_store)
-    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
     assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY))
     row = job(store, work.segment_id)
     if timing_store is None:
@@ -657,7 +655,7 @@ def test_provider_enqueue_writes_the_outbox_row_in_the_admission_transaction(wor
     _, store = world
     outbox, wakes = Outbox(), {}
     binding = ProjectionBinding(OWNER, 'bp_content-p', 'content-p', ('p1',))
-    enqueue = provider_stt.provider_enqueue(JA, outbox, wakes)
+    enqueue = provider_stt_admission.provider_enqueue(JA, outbox, wakes)
     batch_pipeline_intake.admit(store, [item('p1', 10)], binding, 100.0, namespace=store.namespace, enqueue=enqueue)
     assert outbox.enqueued == [('p1', OWNER, {'segment_id': 'p1'}, 100.0)]
     assert 'adopted_legacy_job_id' not in store.get('content', f'{OWNER}/content-p')
@@ -1221,3 +1219,29 @@ def test_allowance_exhausted_during_inspection_leaves_vendor_intent_unspent(worl
     assert result.outcome == 'deferred' and vendor.calls == 0
     assert job(store, 'p1')['state'] == PENDING
     assert 'provider_intent' not in job(store, 'p1')
+
+
+@pytest.mark.parametrize('changed', [None, 'owner_id', 'conversation_id', 'privacy_generation'])
+def test_native_provider_placeholder_conversion_preserves_owner_fence(world, changed):
+    _, store = world
+    work = item('p1', 10)
+    pending = {
+        'state': 'record_pending',
+        'owner_id': work.owner_id,
+        'conversation_id': work.conversation_id,
+        'privacy_generation': work.privacy_generation,
+    }
+    if changed:
+        pending[changed] = 1 if changed == 'privacy_generation' else 'other'
+    store.rows['jobs', work.segment_id] = pending
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {}, native_record=True)
+    if changed:
+        with pytest.raises(ValueError, match='pending recording owner cannot change'):
+            store.run(lambda tx: enqueue(tx, work, 100, policy=POLICY))
+        assert job(store, work.segment_id) == pending
+    else:
+        with pytest.raises(ValueError, match='pending recording cannot take'):
+            store.run(lambda tx: provider_stt_admission.enqueue_in_transaction(tx, work, 100, route=JA, policy=POLICY))
+        assert store.run(lambda tx: enqueue(tx, work, 100, policy=POLICY))
+        assert job(store, work.segment_id)['state'] == PENDING
+        assert not [key for key in store.rows if key[0] in {'queues', 'control'}]

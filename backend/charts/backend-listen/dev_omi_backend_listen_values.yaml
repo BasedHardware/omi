@@ -130,6 +130,8 @@ env:
     value: "true"
   - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
     value: "10"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: ""
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST

@@ -54,12 +54,8 @@ from utils.batch_pipeline import pump as pump_module
 from utils.batch_pipeline import quarantine_recovery as recovery_module
 from utils.batch_pipeline import serving as serving_module
 from utils.batch_pipeline.contracts import PoolCapacity, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import (
-    ProviderSttStage,
-    VendorCallFailure,
-    provider_enqueue,
-    resolve_route,
-)
+from utils.batch_pipeline.provider_stt import ProviderSttStage, VendorCallFailure
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue, resolve_route
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty, RecoveryFailure
 from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery

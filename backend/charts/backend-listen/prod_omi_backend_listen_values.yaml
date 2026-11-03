@@ -127,6 +127,8 @@ env:
     value: "true"
   - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
     value: "10"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: ""
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
