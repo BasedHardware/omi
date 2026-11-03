@@ -1,6 +1,7 @@
 /* Compile the production state machine; only OS, reset peripheral, NVS and
  * mcumgr registration are doubled. Static state represents RAM per process. */
 #include <assert.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,11 +16,18 @@ static struct mgmt_callback *registered;
 static unsigned loads;
 static int init_error;
 static unsigned init_calls;
+static int load_error;
+static bool init_hang;
+static bool load_hang;
+static jmp_buf watchdog_reset;
 static bool reset_after_trial;
 static struct retained_boot before_ram_clear;
 int settings_subsys_init(void)
 {
     init_calls++;
+    if (init_hang) {
+        longjmp(watchdog_reset, 1);
+    }
     return init_error;
 }
 
@@ -68,6 +76,12 @@ int settings_load_subtree_direct(const char *key, settings_load_direct_cb cb, vo
 {
     assert(!strcmp(key, "omi/bootstate"));
     loads++;
+    if (load_hang) {
+        longjmp(watchdog_reset, 1);
+    }
+    if (load_error) {
+        return load_error;
+    }
     return disk.state ? cb(NULL, sizeof(disk), read_disk, NULL, param) : 0;
 }
 static void boot(uint32_t reason, bool load_settings)
@@ -106,6 +120,9 @@ static void clean(void)
     init_error = 0;
     loads = 0;
     init_calls = 0;
+    load_error = 0;
+    init_hang = false;
+    load_hang = false;
     reset_after_trial = false;
 }
 static void good(void)
@@ -142,8 +159,115 @@ static void dfu(enum mgmt_cb_return status)
     assert(chunk(0, FIXED_PARTITION_ID(slot1_partition)) == MGMT_CB_OK);
     pending(status);
 }
+
+static void interrupted_dfu(void)
+{
+    clean();
+    for (int i = 0; i <= CONFIG_OMI_SAFE_MODE_BOOT_LIMIT; ++i) {
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    }
+    assert(active && disk.state == STATE_SAFE);
+    reset_after_trial = true;
+    dfu(MGMT_CB_OK);
+    reset_after_trial = false;
+    memcpy((void *) &retained, &before_ram_clear, sizeof(retained));
+    assert(retained_valid() && retained.latch_reason && retained.dfu_pending == DFU_PENDING);
+    assert(disk.state == STATE_TRIAL);
+    loads = 0;
+    init_calls = 0;
+}
+
+static void test_resolve_retries(void)
+{
+    /* One failed read, a guaranteed reachable SAFE boot, then a fresh trial. */
+    interrupted_dfu();
+    retained.persist_attempted = 0; /* Even a late SAFE write must preserve TRIAL. */
+    retained_seal();
+    unsigned prior_writes = writes;
+    load_error = -EIO;
+    boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    assert(active && loads == 1 && retained.dfu_pending == DFU_WAIT_TWO && retained_valid());
+    load_error = 0;
+    boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    assert(active && loads == 1 && init_calls == 1 && retained.dfu_pending == DFU_RETRY_TWO);
+    assert(disk.state == STATE_TRIAL && writes == prior_writes);
+    boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    assert(!active && retained.count == 1 && loads == 2 && retained.dfu_pending == DFU_IDLE);
+    assert(retained_valid());
+
+    /* The final retry can still recover the committed same-version TRIAL. */
+    interrupted_dfu();
+    load_error = -EIO;
+    for (unsigned i = 0; i < 4; ++i) {
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+        assert(active);
+    }
+    assert(loads == 2 && retained.dfu_pending == DFU_RETRY_ONE);
+    load_error = 0;
+    boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+    assert(!active && retained.count == 1 && loads == 3 && retained.dfu_pending == DFU_IDLE);
+
+    /* Backend init failures spend the same bounded budget as read failures. */
+    for (unsigned fail_init = 0; fail_init < 2; ++fail_init) {
+        interrupted_dfu();
+        load_error = fail_init ? 0 : -EIO;
+        init_error = fail_init ? -EIO : 0;
+        for (unsigned i = 0; i < 20; ++i) {
+            boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+            assert(active && retained_valid());
+        }
+        assert(init_calls == 3 && loads == (fail_init ? 0 : 3));
+        assert(retained.dfu_pending == DFU_IDLE);
+    }
+
+    /* A successful nonmatching read cancels every remaining retry. */
+    for (unsigned state = 0; state <= STATE_TRIAL; ++state) {
+        interrupted_dfu();
+        load_error = -EIO;
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+        load_error = 0;
+        disk.state = state;
+        if (state == STATE_TRIAL) {
+            strcpy(disk.fw, "old-version");
+        }
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true); /* bypass boot */
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true); /* successful read */
+        assert(active && loads == 2 && retained.dfu_pending == DFU_IDLE);
+        boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+        assert(active && loads == 2);
+    }
+}
+
+static void test_resolve_hangs(void)
+{
+    for (unsigned hang_init = 0; hang_init < 2; ++hang_init) {
+        interrupted_dfu();
+        init_hang = hang_init;
+        load_hang = !hang_init;
+        /* longjmp models a watchdog reset without running post-read cleanup.
+         * Keep the fault enabled, including on every intervening SAFE boot.
+         */
+        volatile unsigned hangs = 0;
+        for (volatile unsigned i = 0; i < 10; ++i) {
+            if (setjmp(watchdog_reset)) {
+                hangs++;
+                assert(!active && retained_valid());
+                assert(i == 0 || i == 2 || i == 4);
+            } else {
+                boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
+                assert(active);
+                assert(i == 1 || i == 3 || i >= 5);
+            }
+        }
+        assert(hangs == 3 && init_calls == 3 && loads == (hang_init ? 0 : 3));
+        assert(retained.dfu_pending == DFU_IDLE && retained_valid());
+    }
+}
+
 int main(void)
 {
+    test_resolve_retries();
+    test_resolve_hangs();
     clean();
     /* Even 100 failures before settings/main cause ZERO NVS writes. */
     for (int i = 0; i < 100; i++) {
@@ -252,7 +376,7 @@ int main(void)
     boot(NRF_RESET_RESETREAS_SREQ_MASK, true);
     assert(!active);
     /* Range validation is independent of CRC. */
-    for (unsigned field = 0; field < 3; ++field) {
+    for (unsigned field = 0; field < 5; ++field) {
         new_trial();
         if (field == 0)
             retained.count = BOOT_COUNT_MAX + 1;
@@ -260,10 +384,29 @@ int main(void)
             retained.latch_reason = 4;
         if (field == 2)
             retained.fatal = 2;
+        if (field == 3)
+            retained.dfu_pending = DFU_RETRY_ONE + 1;
+        if (field == 4)
+            retained.persist_attempted = 2;
         retained_seal();
         assert(!retained_valid());
         boot(0, true);
         assert(!active);
+    }
+    /* Reject every unused low-bit encoding and high-bit corruption even with
+     * a matching CRC. Every defined retry state remains CRC covered.
+     */
+    for (uint32_t state = 0; state < 32; ++state) {
+        new_trial();
+        retained.dfu_pending = state;
+        retained_seal();
+        assert(retained_valid() == (state <= DFU_RETRY_ONE));
+        retained.crc ^= 1;
+        assert(!retained_valid());
+        retained_seal();
+        retained.dfu_pending ^= 0x80000000u;
+        retained_seal();
+        assert(!retained_valid());
     }
 
     clean();
@@ -340,5 +483,5 @@ int main(void)
     pending(MGMT_CB_OK);
     assert(retained.count == 1 && writes == 0 && !retained.dfu_pending);
 
-    puts("safe-mode: reset/uptime, persistence, CRC/ranges, image targeting and interrupted DFU tests passed");
+    puts("safe-mode: reset/uptime, persistence, CRC/ranges, image targeting and bounded DFU retry/hang tests passed");
 }
