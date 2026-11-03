@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/env/env.dart';
 
 Uri _latestUri({String? serial}) => latestFirmwareVersionUri(
       deviceModelNumber: 'Omi CV 1',
@@ -11,6 +12,9 @@ Uri _latestUri({String? serial}) => latestFirmwareVersionUri(
     );
 
 void main() {
+  setUp(() => Env.overrideApiBaseUrl('https://firmware.test.invalid/'));
+  tearDown(Env.clearApiBaseUrlOverrideForTesting);
+
   test('latest firmware query sends the serial SHA-256 hex digest, never the raw serial', () {
     const serial = '1A2B3C4D5E6F7081';
     final uri = _latestUri(serial: serial);
