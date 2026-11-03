@@ -15064,4 +15064,10 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get liveAudioSavedDetail =>
       'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
+
+  @override
+  String get speakerWholeRecording => 'Εφαρμογή σε όλη την εγγραφή';
+
+  @override
+  String get speakerSelectionChanged => 'Ο ομιλητής άλλαξε. Επιλέξτε ξανά τις γραμμές.';
 }

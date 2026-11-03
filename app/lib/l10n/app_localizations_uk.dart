@@ -14995,4 +14995,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Учасники й остаточна транскрипція з\'являться тут під час завантаження.';
+
+  @override
+  String get speakerWholeRecording => 'Застосувати до всього запису';
+
+  @override
+  String get speakerSelectionChanged => 'Мовець змінився. Виберіть рядки знову.';
 }

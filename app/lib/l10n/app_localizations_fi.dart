@@ -14968,4 +14968,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
+
+  @override
+  String get speakerWholeRecording => 'Käytä koko tallenteessa';
+
+  @override
+  String get speakerSelectionChanged => 'Puhuja muuttui. Valitse rivit uudelleen.';
 }

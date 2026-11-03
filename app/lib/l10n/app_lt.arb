@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Iki {time} · pilnos pastabos pabaigoje",
     "liveTranscribedUpTo": "Transkribuota iki {time}",
     "liveAudioSaved": "Išsaugota {duration}",
-    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant."
+    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.",
+    "speakerWholeRecording": "Taikyti visam įrašui",
+    "speakerSelectionChanged": "Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą."
 }

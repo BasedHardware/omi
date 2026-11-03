@@ -14976,4 +14976,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔';
+
+  @override
+  String get speakerWholeRecording => 'پوری ریکارڈنگ پر لاگو کریں';
+
+  @override
+  String get speakerSelectionChanged => 'بولنے والا بدل گیا ہے۔ سطریں دوبارہ منتخب کریں۔';
 }

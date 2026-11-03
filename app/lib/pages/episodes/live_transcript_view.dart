@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -468,24 +469,30 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       segments: provider.segments,
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
+      wholeRecording: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        final saved = await provider.assignSpeakerToConversation(
+        unawaited(provider
+            .assignSpeakerToConversation(
           speakerId,
           personId,
           personName,
           segmentIds,
           applyToSpeaker: applyToSpeaker,
-        );
-        if (saved) {
-          // The user's own answer now: no longer a label Omi carried over.
-          for (final segment in provider.segments) {
-            if (segmentIds.contains(segment.id) || (applyToSpeaker && segment.speakerId == speakerId)) {
-              segment.speakerLabelSource = SpeakerLabelSource.manual;
-            }
+        )
+            .then((saved) {
+          if (!mounted) return;
+          if (saved) {
+            OmiFeedback.confirm(context, context.l10n.speakerLabelLinesLabeled(provider.lastSpeakerAppliedCount));
+          } else {
+            OmiFeedback.error(
+                context,
+                provider.speakerAssignmentStale
+                    ? context.l10n.speakerSelectionChanged
+                    : context.l10n.failedToSaveCheckConnection);
           }
-          if (mounted) setState(() {});
-        }
-        return saved;
+          setState(() {});
+        }));
+        return true;
       },
     );
   }

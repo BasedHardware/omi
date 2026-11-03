@@ -18296,5 +18296,7 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
-    }
+    },
+    "speakerWholeRecording": "Apply to the whole recording",
+    "speakerSelectionChanged": "The speaker changed. Select the lines again."
 }

@@ -15027,4 +15027,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get speakerWholeRecording => 'మొత్తం రికార్డింగ్‌కు వర్తింపజేయండి';
+
+  @override
+  String get speakerSelectionChanged => 'వక్త మారారు. పంక్తులను మళ్లీ ఎంచుకోండి.';
 }

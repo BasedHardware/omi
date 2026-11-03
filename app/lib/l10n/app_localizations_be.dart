@@ -14998,4 +14998,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
+
+  @override
+  String get speakerWholeRecording => 'Ужыць да ўсяго запісу';
+
+  @override
+  String get speakerSelectionChanged => 'Дакладчык змяніўся. Выберыце радкі зноў.';
 }

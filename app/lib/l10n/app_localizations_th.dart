@@ -14891,4 +14891,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
+
+  @override
+  String get speakerWholeRecording => 'ใช้กับทั้งการบันทึก';
+
+  @override
+  String get speakerSelectionChanged => 'ผู้พูดเปลี่ยนไปแล้ว โปรดเลือกบรรทัดอีกครั้ง';
 }

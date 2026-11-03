@@ -15028,4 +15028,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорниците и конечната транскрипција ќе се појават тука при прикачувањето.';
+
+  @override
+  String get speakerWholeRecording => 'Примени на целата снимка';
+
+  @override
+  String get speakerSelectionChanged => 'Говорникот се промени. Изберете ги редовите повторно.';
 }

@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
     "liveAudioSaved": "{duration} na-save",
-    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload."
+    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.",
+    "speakerWholeRecording": "Ilapat sa buong recording",
+    "speakerSelectionChanged": "Nagbago ang tagapagsalita. Piliin muli ang mga linya."
 }

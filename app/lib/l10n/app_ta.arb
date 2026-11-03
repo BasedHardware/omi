@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "{time} வரை · முடிந்ததும் முழு குறிப்புகள்",
     "liveTranscribedUpTo": "{time} வரை படியெடுக்கப்பட்டது",
     "liveAudioSaved": "{duration} சேமிக்கப்பட்டது",
-    "liveAudioSavedDetail": "பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்."
+    "liveAudioSavedDetail": "பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.",
+    "speakerWholeRecording": "முழுப் பதிவுக்கும் பயன்படுத்து",
+    "speakerSelectionChanged": "பேச்சாளர் மாறிவிட்டார். வரிகளை மீண்டும் தேர்ந்தெடுக்கவும்."
 }

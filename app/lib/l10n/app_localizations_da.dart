@@ -14956,4 +14956,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
+
+  @override
+  String get speakerWholeRecording => 'Anvend på hele optagelsen';
+
+  @override
+  String get speakerSelectionChanged => 'Taleren er ændret. Vælg linjerne igen.';
 }

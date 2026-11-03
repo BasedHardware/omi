@@ -15023,4 +15023,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
+
+  @override
+  String get speakerWholeRecording => 'Alkalmazás a teljes felvételre';
+
+  @override
+  String get speakerSelectionChanged => 'A beszélő megváltozott. Válaszd ki újra a sorokat.';
 }

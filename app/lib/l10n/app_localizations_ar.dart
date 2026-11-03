@@ -14876,4 +14876,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.';
+
+  @override
+  String get speakerWholeRecording => 'تطبيق على التسجيل بأكمله';
+
+  @override
+  String get speakerSelectionChanged => 'تغيّر المتحدث. حدد الأسطر مرة أخرى.';
 }

@@ -15012,4 +15012,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
+
+  @override
+  String get speakerWholeRecording => 'Применить ко всей записи';
+
+  @override
+  String get speakerSelectionChanged => 'Говорящий изменился. Выберите строки заново.';
 }

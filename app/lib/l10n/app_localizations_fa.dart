@@ -14959,4 +14959,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get speakerWholeRecording => 'اعمال به کل ضبط';
+
+  @override
+  String get speakerSelectionChanged => 'گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.';
 }

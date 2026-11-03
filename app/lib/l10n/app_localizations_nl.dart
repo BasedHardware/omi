@@ -15003,4 +15003,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.';
+
+  @override
+  String get speakerWholeRecording => 'Toepassen op de hele opname';
+
+  @override
+  String get speakerSelectionChanged => 'De spreker is gewijzigd. Selecteer de regels opnieuw.';
 }

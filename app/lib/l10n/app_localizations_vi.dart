@@ -14966,4 +14966,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
+
+  @override
+  String get speakerWholeRecording => 'Áp dụng cho toàn bộ bản ghi';
+
+  @override
+  String get speakerSelectionChanged => 'Người nói đã thay đổi. Hãy chọn lại các dòng.';
 }

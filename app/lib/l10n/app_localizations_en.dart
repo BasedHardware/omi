@@ -14949,4 +14949,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
+
+  @override
+  String get speakerWholeRecording => 'Apply to the whole recording';
+
+  @override
+  String get speakerSelectionChanged => 'The speaker changed. Select the lines again.';
 }

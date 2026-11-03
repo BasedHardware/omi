@@ -14962,4 +14962,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
+
+  @override
+  String get speakerWholeRecording => 'Použít na celou nahrávku';
+
+  @override
+  String get speakerSelectionChanged => 'Mluvčí se změnil. Vyberte řádky znovu.';
 }

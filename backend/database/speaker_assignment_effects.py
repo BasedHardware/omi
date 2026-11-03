@@ -160,3 +160,53 @@ def persist_assignment_effects(
         transaction.update(people[pid][0], update)
         bump_people_generation(transaction, people[pid][0])
     return removed, relabeled
+
+
+def owner_confirmation_updates(
+    current, owner_confirmation, segment_only, selected_speaker_id, owner_segment_ids, selected_segment_ids, is_user
+):
+    owner_updates = {}
+    if owner_confirmation is not None:
+        # Read-only conversation consumers do not depend on prompt models.
+        # Load the authorization contract only for the explicit excerpt path.
+        from utils.speaker_tag_prompts.owner_confirmation import (
+            FIELD as OWNER_CONFIRMATION_FIELD,
+            StaleOwnerConfirmation,
+            validate_binding as validate_owner_confirmation,
+        )
+
+        binding = validate_owner_confirmation(
+            current,
+            owner_confirmation['prompt_id'],
+            owner_confirmation['evidence_id'],
+            selected_segment_ids,
+            require_played=True,
+        )
+        if not segment_only or selected_speaker_id != binding['speaker_id'] or owner_segment_ids:
+            raise StaleOwnerConfirmation('Owner excerpt cannot authorize whole-voice assignment or learning')
+        owner_updates[OWNER_CONFIRMATION_FIELD] = dict(binding, answered='yes' if is_user else 'no')
+    return owner_updates
+
+
+def record_shadow_correction(current, resolved, logger):
+    if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
+        try:
+            from utils.conversations.speaker_grouping_shadow import record_correction
+
+            record_correction(current, resolved)
+        except Exception as error:
+            # A committed user correction cannot fail because optional telemetry
+            # is unavailable (including its lazy import).
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='speaker_grouping',
+                to_mode='incumbent',
+                reason='other',
+                outcome='recovered',
+                log=logger,
+            )
+            logger.warning(
+                'event=speaker_grouping_correction outcome=unavailable exception_type=%s', type(error).__name__
+            )

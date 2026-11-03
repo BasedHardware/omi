@@ -14977,4 +14977,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
+
+  @override
+  String get speakerWholeRecording => 'Kaydın tamamına uygula';
+
+  @override
+  String get speakerSelectionChanged => 'Konuşmacı değişti. Satırları yeniden seçin.';
 }

@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Обхваща до {time} · пълните бележки при приключване",
     "liveTranscribedUpTo": "Транскрибирано до {time}",
     "liveAudioSaved": "Запазени {duration}",
-    "liveAudioSavedDetail": "Говорителите и окончателната транскрипция ще се появят тук при качването."
+    "liveAudioSavedDetail": "Говорителите и окончателната транскрипция ще се появят тук при качването.",
+    "speakerWholeRecording": "Прилагане към целия запис",
+    "speakerSelectionChanged": "Говорителят се промени. Изберете редовете отново."
 }

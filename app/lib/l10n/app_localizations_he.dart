@@ -14854,4 +14854,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
+
+  @override
+  String get speakerWholeRecording => 'החל על כל ההקלטה';
+
+  @override
+  String get speakerSelectionChanged => 'הדובר השתנה. יש לבחור שוב את השורות.';
 }

@@ -14973,4 +14973,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talare och den slutliga transkriptionen visas här under uppladdningen.';
+
+  @override
+  String get speakerWholeRecording => 'Använd för hela inspelningen';
+
+  @override
+  String get speakerSelectionChanged => 'Talaren har ändrats. Välj raderna igen.';
 }

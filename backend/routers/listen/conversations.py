@@ -689,7 +689,9 @@ class LiveConversationController:
                 and not previous.get('is_locked')
                 and self._active_speaker_scope() == carry_from[1]
             ):
-                carry = carried_receipt(previous, carry_from[1])
+                from utils.recording_speakers import recording_carry
+
+                carry = await self.host.persistence.call(recording_carry, request.uid, previous, carry_from[1])
                 automatic_donor = previous
         # The modeled field's None default is omitted, never stamped:
         # persist is merge=True, so a dumped None would become an

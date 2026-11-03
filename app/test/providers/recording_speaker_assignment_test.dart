@@ -1,0 +1,124 @@
+import 'dart:async';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/recording_speakers.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import '../helpers/reprocess_fakes.dart';
+
+TranscriptSegment line(String id) => TranscriptSegment(
+    id: id,
+    text: 'Fixture $id',
+    speaker: 'SPEAKER_1',
+    speakerId: 1,
+    isUser: false,
+    personId: null,
+    start: 0,
+    end: 2,
+    translations: []);
+ServerConversation conversation() => ServerConversation(
+    id: 'c1',
+    createdAt: DateTime(2026),
+    status: ConversationStatus.completed,
+    structured: Structured('Title', 'Summary'),
+    transcriptSegments: [line('a')]);
+void select(ConversationDetailProvider p) {
+  final c = conversation();
+  p.selectedDate = c.createdAt;
+  p.setCachedConversation(c);
+}
+
+void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
+  testWidgets('rename supersedes running reprocess and leaves exactly one trailing regeneration', (tester) async {
+    final running = Completer<ServerConversation?>();
+    var regenerations = 0;
+    final p = ConversationDetailProvider(
+      assignSpeaker: (_, __, {isUser, personId, speakerId}) async => true,
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) {
+        regenerations++;
+        final updated = conversation()..transcriptSegments.single.personId = 'maya';
+        return regenerations == 1 ? running.future : Future.value(updated);
+      }),
+    );
+    select(p);
+    final stale = p.reprocessConversation();
+    await tester.pump();
+    expect(p.loadingReprocessConversation, isTrue);
+    p.beginSpeakerLabelingSession();
+    final saved = p.startSpeakerAssignment(['a'], 'maya');
+    expect(saved, isNotNull);
+    expect(p.conversation.transcriptSegments.single.personId, 'maya');
+    await tester.pump();
+    expect(await saved!, isTrue);
+    p.confirmSpeakerLabelingSession();
+    running.complete(conversation());
+    await tester.pump();
+    expect(await stale, isFalse);
+    expect(p.conversation.transcriptSegments.single.personId, 'maya');
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(regenerations, 2);
+    p.dispose();
+  });
+  test('one recording request spans two members with optimistic rollback on stale 409', () async {
+    final response = Completer<ApiResult<int>>();
+    final calls = <List<Map<String, dynamic>>>[];
+    final p = ConversationDetailProvider(
+      fetchRecording: (_) async => RecordingTranscript([
+        RecordingLine('c1', line('a'), scope: 'stream', label: 'SPEAKER_1'),
+        RecordingLine('c2', line('b'), scope: 'stream', label: 'SPEAKER_1'),
+      ], episodeId: 'episode'),
+      assignRecording: (id, selections, {required personId, required wholeRecording, episodeId}) {
+        calls.add(selections);
+        expect(episodeId, 'episode');
+        expect(wholeRecording, isFalse);
+        return response.future;
+      },
+    );
+    select(p);
+    await p.loadRecordingTranscript();
+    p.beginSpeakerLabelingSession();
+    var failed = false;
+    final saved = p.startSpeakerAssignment(['a', 'b'], 'maya', onFailed: () => failed = true)!;
+    expect(p.recordingSegments.every((s) => s.personId == 'maya'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, hasLength(1));
+    expect(calls.single.map((e) => e['conversation_id']), ['c1', 'c2']);
+    response.complete(const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)));
+    expect(await saved, isFalse);
+    expect(p.recordingSegments.every((s) => s.personId == null), isTrue);
+    expect(p.speakerAssignmentStale, isTrue);
+    expect(failed, isTrue);
+    p.dispose();
+  });
+  test('independent queued edits both persist', () async {
+    final first = Completer<bool>();
+    final calls = <List<String>>[];
+    final p = ConversationDetailProvider(assignSpeaker: (_, ids, {isUser, personId, speakerId}) {
+      calls.add(ids);
+      return calls.length == 1 ? first.future : Future.value(true);
+    });
+    select(p);
+    p.conversation.transcriptSegments.add(line('b'));
+    p.beginSpeakerLabelingSession();
+    final a = p.assignSpeaker(['a'], 'maya');
+    final b = p.assignSpeaker(['b'], 'sam');
+    await Future<void>.delayed(Duration.zero);
+    first.complete(true);
+    expect(await a, isTrue);
+    expect(await b, isTrue);
+    expect(calls, [
+      ['a'],
+      ['b']
+    ]);
+    p.dispose();
+  });
+}

@@ -15001,4 +15001,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
+
+  @override
+  String get speakerWholeRecording => 'Gunakan pada seluruh rakaman';
+
+  @override
+  String get speakerSelectionChanged => 'Penutur telah berubah. Pilih baris sekali lagi.';
 }

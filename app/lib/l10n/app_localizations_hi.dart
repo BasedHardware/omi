@@ -14947,4 +14947,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।';
+
+  @override
+  String get speakerWholeRecording => 'पूरी रिकॉर्डिंग पर लागू करें';
+
+  @override
+  String get speakerSelectionChanged => 'वक्ता बदल गया है। पंक्तियाँ फिर से चुनें।';
 }

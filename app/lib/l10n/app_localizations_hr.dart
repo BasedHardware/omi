@@ -15000,4 +15000,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.';
+
+  @override
+  String get speakerWholeRecording => 'Primijeni na cijelu snimku';
+
+  @override
+  String get speakerSelectionChanged => 'Govornik se promijenio. Ponovno odaberite retke.';
 }

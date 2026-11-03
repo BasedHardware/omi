@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
     "liveAudioSaved": "{duration} محفوظ",
-    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔"
+    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔",
+    "speakerWholeRecording": "پوری ریکارڈنگ پر لاگو کریں",
+    "speakerSelectionChanged": "بولنے والا بدل گیا ہے۔ سطریں دوبارہ منتخب کریں۔"
 }

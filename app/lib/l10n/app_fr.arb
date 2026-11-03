@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "Jusqu'à {time} · notes complètes à la fin",
     "liveTranscribedUpTo": "Transcrit jusqu'à {time}",
     "liveAudioSaved": "{duration} enregistrés",
-    "liveAudioSavedDetail": "Les intervenants et la transcription finale apparaîtront ici au fil de l'envoi."
+    "liveAudioSavedDetail": "Les intervenants et la transcription finale apparaîtront ici au fil de l'envoi.",
+    "speakerWholeRecording": "Appliquer à tout l’enregistrement",
+    "speakerSelectionChanged": "Le locuteur a changé. Sélectionnez à nouveau les lignes."
 }

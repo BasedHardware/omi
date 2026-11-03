@@ -14972,4 +14972,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.';
+
+  @override
+  String get speakerWholeRecording => 'संपूर्ण रेकॉर्डिंगवर लागू करा';
+
+  @override
+  String get speakerSelectionChanged => 'वक्ता बदलला आहे. ओळी पुन्हा निवडा.';
 }

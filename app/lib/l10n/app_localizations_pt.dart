@@ -14992,4 +14992,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Os falantes e a transcrição final aparecerão aqui durante o envio.';
+
+  @override
+  String get speakerWholeRecording => 'Aplicar a toda a gravação';
+
+  @override
+  String get speakerSelectionChanged => 'O falante mudou. Selecione as linhas novamente.';
 }

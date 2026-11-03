@@ -14751,4 +14751,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
+
+  @override
+  String get speakerWholeRecording => '録音全体に適用';
+
+  @override
+  String get speakerSelectionChanged => '話者が変わりました。行を選び直してください。';
 }

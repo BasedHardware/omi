@@ -1,6 +1,7 @@
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/models/voice_question_result.dart';
 import 'package:flutter/foundation.dart';
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/recording_speakers.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -108,9 +109,25 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
-  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
-      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
-          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
+  int lastSpeakerAppliedCount = 0;
+
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) async {
+    final result = await assignRecordingSpeakers(
+        conversationId,
+        [
+          {
+            'conversation_id': conversationId,
+            'segment_ids': segmentIds,
+            if (speakerId != null) 'speaker_id': speakerId
+          },
+        ],
+        personId: personId,
+        wholeRecording: speakerId != null);
+    if (result is ApiFailure<int> && result.problem.statusCode == 409) throw const StaleSpeakerException();
+    lastSpeakerAppliedCount = result is ApiSuccess<int> ? result.data : 0;
+    return result is ApiSuccess<int>;
+  }
 
   @override
   Future<void> refreshPeople() {

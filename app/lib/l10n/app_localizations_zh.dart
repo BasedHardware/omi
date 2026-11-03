@@ -14732,4 +14732,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
+
+  @override
+  String get speakerWholeRecording => '应用到整段录音';
+
+  @override
+  String get speakerSelectionChanged => '说话人已更改。请重新选择这些行。';
 }

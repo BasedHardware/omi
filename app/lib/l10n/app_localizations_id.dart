@@ -14979,4 +14979,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
+
+  @override
+  String get speakerWholeRecording => 'Terapkan ke seluruh rekaman';
+
+  @override
+  String get speakerSelectionChanged => 'Pembicara berubah. Pilih baris lagi.';
 }

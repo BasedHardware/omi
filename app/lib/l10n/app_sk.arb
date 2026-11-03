@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Pokrýva do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Prepísané do {time}",
     "liveAudioSaved": "Uložené {duration}",
-    "liveAudioSavedDetail": "Rečníci a konečný prepis sa tu objavia počas nahrávania."
+    "liveAudioSavedDetail": "Rečníci a konečný prepis sa tu objavia počas nahrávania.",
+    "speakerWholeRecording": "Použiť na celú nahrávku",
+    "speakerSelectionChanged": "Hovoriaci sa zmenil. Vyberte riadky znova."
 }

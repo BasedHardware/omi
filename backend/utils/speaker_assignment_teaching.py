@@ -28,6 +28,9 @@ def commit_manual_assignment(
     rejection: Optional[dict] = None,
     time_range: Optional[tuple[float, float]] = None,
     background_tasks: Any = None,
+    expected_voices: Optional[dict] = None,
+    decided_at: Optional[str] = None,
+    recording_voice_defaults: bool = False,
 ):
     """The assignment transaction plus the background work it earned, one call."""
     raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
@@ -41,6 +44,15 @@ def commit_manual_assignment(
         use_for_speech_training=use_for_speech_training,
         rejection=rejection,
         time_range=time_range,
+        **(
+            {
+                "expected_voices": expected_voices,
+                "decided_at": decided_at,
+                "recording_voice_defaults": recording_voice_defaults,
+            }
+            if expected_voices is not None
+            else {}
+        ),
     )
     if background_tasks is not None:
         schedule_assignment_teaching(

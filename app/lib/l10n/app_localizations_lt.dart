@@ -14986,4 +14986,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
+
+  @override
+  String get speakerWholeRecording => 'Taikyti visam įrašui';
+
+  @override
+  String get speakerSelectionChanged => 'Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą.';
 }

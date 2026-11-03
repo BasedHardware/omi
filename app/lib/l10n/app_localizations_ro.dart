@@ -15027,4 +15027,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
+
+  @override
+  String get speakerWholeRecording => 'Aplică întregii înregistrări';
+
+  @override
+  String get speakerSelectionChanged => 'Vorbitorul s-a schimbat. Selectează din nou rândurile.';
 }

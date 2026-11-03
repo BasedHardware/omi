@@ -14957,4 +14957,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
+
+  @override
+  String get speakerWholeRecording => 'Rakenda kogu salvestisele';
+
+  @override
+  String get speakerSelectionChanged => 'Kõneleja muutus. Vali read uuesti.';
 }

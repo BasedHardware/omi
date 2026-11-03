@@ -15077,4 +15077,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.';
+
+  @override
+  String get speakerWholeRecording => 'Auf die gesamte Aufnahme anwenden';
+
+  @override
+  String get speakerSelectionChanged => 'Die Sprecherzuordnung hat sich geändert. Wähle die Zeilen erneut aus.';
 }

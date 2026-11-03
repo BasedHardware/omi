@@ -14757,4 +14757,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
+
+  @override
+  String get speakerWholeRecording => '녹음 전체에 적용';
+
+  @override
+  String get speakerSelectionChanged => '화자가 변경되었습니다. 줄을 다시 선택해 주세요.';
 }

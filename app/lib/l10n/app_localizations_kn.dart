@@ -15013,4 +15013,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
+
+  @override
+  String get speakerWholeRecording => 'ಸಂಪೂರ್ಣ ರೆಕಾರ್ಡಿಂಗ್‌ಗೆ ಅನ್ವಯಿಸಿ';
+
+  @override
+  String get speakerSelectionChanged => 'ಮಾತನಾಡುವವರು ಬದಲಾಗಿದ್ದಾರೆ. ಸಾಲುಗಳನ್ನು ಮತ್ತೆ ಆಯ್ಕೆಮಾಡಿ.';
 }

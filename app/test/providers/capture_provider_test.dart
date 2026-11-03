@@ -440,6 +440,36 @@ void main() {
     provider.dispose();
   });
 
+  test('live renames queue while the first is in flight and both persist', () async {
+    final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'queued',
+      'started_at': null,
+      'finished_at': null,
+      'created_at': '2026-09-21T00:00:00Z',
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['b']);
+    expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
+    await Future<void>.delayed(Duration.zero);
+    expect(actions.assignmentCalls, 1);
+    actions.assignmentCompleter!.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(actions.assignmentCalls, 2);
+    expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
+    provider.dispose();
+  });
+
   test('manual save requires acknowledgment and respects selected scope', () async {
     final actions = MockCaptureExternalActions();
     final conversation = ServerConversation.fromJson({

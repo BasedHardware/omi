@@ -26324,6 +26324,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
+
+  /// No description provided for @speakerWholeRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to the whole recording'**
+  String get speakerWholeRecording;
+
+  /// No description provided for @speakerSelectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The speaker changed. Select the lines again.'**
+  String get speakerSelectionChanged;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
