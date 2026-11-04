@@ -1002,6 +1002,8 @@ def schedule_for_conversation(
                     else conversations_db.get_conversation(uid, conversation_id, firestore_client=client)
                 )
                 baseline = episode.get('compose_pending_evidence') or episode.get('composed_evidence')
+                # A legacy full hash cannot distinguish new speech from regenerated labels.
+                # _compose backfills a matching hash for free; otherwise it settles one safe compose.
                 if isinstance(baseline, Mapping):
                     evidence = dict(baseline)
                     if (

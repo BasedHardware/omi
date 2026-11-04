@@ -13,9 +13,19 @@ infrastructure. Pending metadata survives restarts; a later finalize or read
 reconstructs the process-local queue. The cap bounds debounce on a running
 process; it is not a durable execution SLA during instance shutdown.
 
-Tests: `tests/unit/test_episode_composer.py` exercises narrow triggers, genuine
+Tests: `backend/tests/unit/test_episode_composer.py` exercises narrow triggers, genuine
 late speech/name/membership/discard changes, settle/cap/restart behavior, read
 promotion, stale/superseded retries, rollback and bounded metric labels.
+
+## Legacy rollout
+
+An existing episode with no `composed_evidence` is seeded for free when its full
+fingerprint still matches. If that fingerprint changed, it gets one conservative
+compose behind the background quiet window: the old hash cannot distinguish
+new speech from label-only drift. Skipping that first uncertain change could
+silently lose real late speech. After success the narrow gate applies normally;
+there is no eager recompose wave or historical-data migration. Migration and
+unchanged-fingerprint backfill are covered by the composer tests.
 
 ## Verify after deploy (operator follow-up; no deploy in this change)
 

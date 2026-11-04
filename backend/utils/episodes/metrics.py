@@ -235,7 +235,7 @@ def _prime() -> None:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
         for reason in COMPOSE_SKIP_REASONS:
-            EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=reason)
+            EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
         for outcome in HOME_MEMBER_OUTCOMES:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label(outcome, HOME_MEMBER_OUTCOMES))
         for channel in CLIENT_CHANNELS:

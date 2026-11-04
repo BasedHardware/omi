@@ -1053,3 +1053,26 @@ def test_read_arriving_as_background_worker_exits_is_not_lost(store, monkeypatch
     monkeypatch.setattr(composer, '_inflight_lock', ExitRace())
     assert composer.schedule(UID, 'ep1', collaborators=c)
     assert len(calls) == 1 and not composer._deferred and not composer._inflight
+
+
+@pytest.mark.parametrize('change', ['speech', 'summary'])
+def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, change):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    del store.episode['composed_evidence']
+    del store.episode['composed_membership']
+    if change == 'speech':
+        store.rows['c1']['transcript_segments'][0]['text'] += ' Real late speech.'
+    else:
+        store.rows['c1']['structured']['overview'] = 'Label-only legacy drift'
+    # The legacy full hash cannot distinguish these two cases: never drop real late speech.
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    assert len(calls) == 1
+    store.episode['compose_pending_since'] -= timedelta(minutes=11)
+    store.episode['compose_activity_at'] -= timedelta(minutes=11)
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'composed'
+    assert len(calls) == 2 and store.episode['composed_evidence']
+    store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
+    assert len(calls) == 2

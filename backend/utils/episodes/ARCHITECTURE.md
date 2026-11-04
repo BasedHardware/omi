@@ -274,11 +274,18 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   A tracked async task requeues process-local due work without occupying composer
   workers; shutdown cancels it. Finalizes and reads recover pending work after
   restart using the persisted window (no new durable queue or sweeper). A paid
-  `stale`/`superseded` result starts a fresh quiet window before its retry, including
-  when the previous window reached its cap. Read-side schedules (`throttle=True`)
-  promote pending work immediately; direct `compose` and `force=True` bypass
-  settling. Turning the switch off restores the full-fingerprint scheduling and
-  immediate-retry behavior. No composer version bump or eager recompose wave.
+  background `stale`/`superseded` result starts a fresh quiet window before retry,
+  including when the previous window reached its cap. Read-side schedules
+  (`throttle=True`) promote pending work immediately. Foreground retries, direct
+  `compose` and `force=True` bypass settling. Turning the switch off restores the
+  full-fingerprint scheduling and immediate-retry behavior. No composer version
+  bump or eager recompose wave.
+  Legacy episodes have no narrow trigger stamp: an unchanged full fingerprint
+  backfills it without a paid call. A changed full fingerprint conservatively
+  composes once behind the background settle window, because the old hash cannot
+  distinguish label drift from new speech. That successful compose seeds the
+  narrow stamp, so subsequent label-only finalizes skip. No historical backfill
+  or production-data migration is required.
 - `omi_episode_compose_total{outcome="settling"}` counts deferred runs;
   `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
   avoided triggers. Both have bounded labels and no user identifiers.
