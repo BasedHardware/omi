@@ -14951,5 +14951,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
 
   @override
+  String get speakerWholeRecording => 'Apply to the whole recording';
+
+  @override
+  String get speakerSelectionChanged => 'The speaker changed. Select the lines again.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Recording too large. Select fewer lines in one conversation.',
+        'partial': 'Some lines were saved. Select the remaining lines and try again.',
+        'other': 'Some lines were saved. Select the remaining lines and try again.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Renamed $count lines in the available conversations only.',
+      one: 'Renamed 1 line in the available conversations only.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Other lines from this voice (recording coverage unconfirmed)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Finishing up…';
 }

@@ -463,6 +463,32 @@ def write_memberships(transaction, client, uid, episode_id, members, arrival_at)
         write_membership(transaction, client, uid, cid, episode_id, ids, exists, previous, arrival_at)
 
 
+def duplicate_memberships_match(uid, owner, conversation_ids, *, firestore_client=None):
+    """Only current owner/link/reverse proof may suppress a duplicate repair CAS."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+
+    @firestore.transactional
+    def check(transaction):
+        current = _episodes(client, uid).document(owner['id']).get(transaction=transaction).to_dict() or {}
+        if (
+            not current
+            or current.get('state_version') != owner.get('state_version')
+            or not set(conversation_ids) <= set(current.get('conversation_ids') or [])
+            or not set(conversation_ids) <= set(current.get('duplicate_conversation_ids') or [])
+        ):
+            return False
+        members = read_memberships(transaction, client, uid, conversation_ids)
+        return all(
+            exists
+            and link.get('episode_id') == owner['id']
+            and owner['id'] in (link.get('episode_ids') or [])
+            and link.conversation_episode_id == owner['id']
+            for exists, link in members.values()
+        )
+
+    return run_transactional(client, check, transient=True)
+
+
 def write_membership(transaction, client, uid, cid, episode_id, ids, exists, previous, arrival_at):
     dedupe = membership_dedupe_enabled()
     if not dedupe or previous.get('episode_id') != episode_id or previous.get('episode_ids') != ids:

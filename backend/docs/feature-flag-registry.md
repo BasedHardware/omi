@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-02 -->
+<!-- feature-flag-registry as-of: 2026-11-03 -->
 
 # Feature-flag authority registry
 
@@ -525,6 +525,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_COMPOSE_SETTLE_ENABLED` | Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_LIVE_TIMER_START_ENABLED` | Default on; send the authoritative live episode timer start to current apps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -605,6 +606,7 @@ and an explicit empty literal renders as `''`.
 | `PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED` | Default on; refresh the live pusher audio_files projection from exact uploaded-object metadata between full prefix rebuilds; 0 restores per-flush listing | backend | env | open | — | — | — | — | keep | keep | — | planscost |
 | `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED` | Default on; bound only committed pusher projection queue capacity waits to the existing 300-second receive-liveness budget | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
+| `RECORDING_SPEAKER_RENAME_ENABLED` | Default on; bounded scoped recording speaker naming. Off reports disabled and clients use explicit single-conversation assignments. | backend, mobile | env | open | — | — | — | — | keep | keep | — | speakerrename |
 | `RECORD_AUDIO_PARTIAL_ENABLED` | Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_BARRIER_INLINE_FINISH` | Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_OVERLAP_TRIM_ENABLED` | Default on; earlier retained objects own divergent overlap frames in seal proof and admission manifests | backend | env | open | {value: 'true', category: ops_kill} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | keep | — | two-lane lead |
@@ -1124,6 +1126,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
 - `EPISODE_COMPOSER` — Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) (fail: open)
+- `EPISODE_COMPOSE_SETTLE_ENABLED` — Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling (fail: open)
 - `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` — Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor (fail: open)
 - `EPISODE_LIVE_TIMER_START_ENABLED` — Default on; send the authoritative live episode timer start to current apps (fail: open)
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
@@ -1240,6 +1243,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED` — Default on; bound only committed pusher projection queue capacity waits to the existing 300-second receive-liveness budget (fail: open)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
+- `RECORDING_SPEAKER_RENAME_ENABLED` — Default on; bounded scoped recording speaker naming. Off reports disabled and clients use explicit single-conversation assignments. (fail: open)
 - `RECORD_AUDIO_PARTIAL_ENABLED` — Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills (fail: open)
 - `RECORD_BARRIER_INLINE_FINISH` — Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds (fail: open)
 - `RECORD_SEAL_REPAIR_ENABLED` — Default on; CPU seal workers and retained repair cron use canonical privacy and tail proof with isolated row budgets (fail: open)

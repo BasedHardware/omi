@@ -1159,7 +1159,11 @@ def on_conversation_finalized(
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
         outcome = composer.after_finalized(
-            uid, conversation_id, _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c), c
+            uid,
+            conversation_id,
+            _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c),
+            c,
+            row=row if not absorbed_from else None,
         )
         if trigger == SYNC_UPDATE and not absorbed_from and outcome not in {'error', 'conflict', 'skipped_discarded'}:
             episode_attach_memo.complete(
