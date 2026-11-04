@@ -406,13 +406,16 @@ def test_language_metrics_survive_the_actual_sync_export_allowlist():
     import re
     from pathlib import Path
     import yaml
-    from utils.batch_pipeline.language_metrics import ROUTES
+    from utils.batch_pipeline.language_metrics import ROUTES, SAMPLE_WINDOWS
 
     source = Path(__file__).parents[3] / 'backend/deploy/cloud_run_gmp_sync.yaml'
     relabeling = yaml.safe_load(source.read_text())['spec']['endpoints'][0]['metricRelabeling']
     keep = next(rule['regex'] for rule in relabeling if rule['action'] == 'keep')
-    for collector in (ROUTES, lid.DETECTIONS, lid.PROBE_SECONDS):
+    for collector in (ROUTES, SAMPLE_WINDOWS, lid.DETECTIONS, lid.PROBE_SECONDS):
         assert re.fullmatch(keep, collector._name + '_total')
+    # An idle sample window must export 0 per class, not an absent series.
+    exported = {s.labels['language_class'] for s in SAMPLE_WINDOWS.collect()[0].samples if s.name.endswith('_total')}
+    assert exported >= {'supported', 'unsupported', 'unknown', 'unavailable'}
 
 
 def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlist():
@@ -427,6 +430,7 @@ def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlis
         language_gate.SELF_REQUESTS,
         language_gate.SHADOW,
         language_gate.ENFORCED,
+        language_gate.CONFIDENT_SKIPS,
         vendor_guard.VENDOR_AUDIO_SECONDS,
     ):
         assert re.fullmatch(keep, counter._name + '_total')
@@ -578,7 +582,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     """Lead cfcaba: with legacy sync draining or dark, main's language guard does not
     send uploads to legacy; unsupported/unknown speech keeps #23038's bounded probe."""
     from types import SimpleNamespace
-    from utils.batch_pipeline import intake
+    from utils.batch_pipeline import intake, route_selection
     from utils.batch_pipeline.audio import audio_unit, read_context
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.sync.legacy_dark import LegacySyncMode
@@ -586,7 +590,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
 
     client = detector(monkeypatch, code, confidence)
     captured, routes = [], []
-    real_resolve_route = intake.resolve_route
+    real_resolve_route = route_selection.resolve_route
 
     def spy_route(language, **kwargs):
         routes.append(real_resolve_route(language, **kwargs))
@@ -603,8 +607,8 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     def units(*args, **kwargs):
         yield audio_unit(100, b'\x01\x00' * 16000)
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
-    monkeypatch.setattr(intake, 'resolve_route', spy_route)
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
+    monkeypatch.setattr(route_selection, 'resolve_route', spy_route)
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
@@ -717,3 +721,45 @@ def test_batch_enforced_gate_failure_falls_back_to_the_vendor_probe(monkeypatch)
     decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
     assert decision.evidence == 'audio_lid' and decision.parakeet_safe
     client.post.assert_called_once()
+
+
+def test_shadow_authorization_denial_blocks_both_self_and_vendor_probes(monkeypatch):
+    client = detector(monkeypatch)
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    model = Mock(return_value=None)
+    monkeypatch.setattr(lid.language_gate, 'self_detect', model)
+    refused = Mock(return_value=False)
+    decision = lid.resolve_language(
+        'multi',
+        wav(),
+        surface='batch',
+        cohort_key='synthetic-owner',
+        before_self_probe=refused,
+        before_probe=refused,
+    )
+    assert not decision.parakeet_safe
+    assert refused.call_count == 2
+    model.assert_not_called()
+    client.post.assert_not_called()
+
+
+def test_shadow_rechecks_authorization_between_model_and_vendor(monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    client = detector(monkeypatch)
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    model = Mock(return_value=None)
+    monkeypatch.setattr(lid.language_gate, 'self_detect', model)
+    check = Mock(side_effect=[True, BatchPrivacyBlocked('synthetic revocation')])
+    decision = lid.resolve_language(
+        'multi',
+        wav(),
+        surface='batch',
+        cohort_key='synthetic-owner',
+        before_self_probe=check,
+        before_probe=check,
+    )
+    assert not decision.parakeet_safe
+    assert check.call_count == 2
+    model.assert_called_once()
+    client.post.assert_not_called()

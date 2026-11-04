@@ -463,6 +463,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       final phone = _walService.getSyncs().phone;
       await _waitForWalReady(phone);
       if (!_isCurrent(generation)) return;
+      // A cold start is as good a moment as a connectivity restore to re-arm
+      // recordings that spent their transient retry budget: without this they
+      // strand on disk until the next network flap. Refused (4xx) WALs keep
+      // their persisted refusal clock and are untouched by the reset.
+      await phone.resetExhaustedAutoRetries();
       RecordingTransferCoordinator.instance.configure(
         reconcile: _reconcileAdmittedWals,
         discover: _discoverPendingWals,

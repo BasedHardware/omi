@@ -58,7 +58,7 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(integration_outbox_db, 'db', database)
     monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: None)
+    monkeypatch.setattr(candidate_service, 'account_deletion_blocks_user_work', lambda uid: False)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')

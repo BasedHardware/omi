@@ -389,3 +389,18 @@ def test_mobile_byok_keeps_request_scoped_processing(conv, monkeypatch):
     monkeypatch.setattr(conv.lifecycle_service, 'request_finalization', lambda *a, **k: pytest.fail('queued BYOK'))
     timeline = _drive_sync_route(conv, monkeypatch)
     assert [step for step, *_ in timeline] == ['close', 'process', 'after']
+
+
+def test_group_join_schedules_one_group_recovery(monkeypatch):
+    from database import conversations
+
+    calls = []
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: True)
+    monkeypatch.setattr(
+        conversations, 'get_conversation_raw_snapshot', lambda *a, **kw: {'capture_group': {'primary_id': 'pendant'}}
+    )
+    monkeypatch.setattr(
+        episode_finalize, 'schedule_after_finalization', lambda uid, cid, trigger: calls.append((uid, cid, trigger))
+    )
+    episode_finalize.schedule_group_attachments(_UID, ['desktop', 'pendant', 'desktop'])
+    assert calls == [(_UID, 'pendant', ProcessingTrigger.CAPTURE_GROUP)]

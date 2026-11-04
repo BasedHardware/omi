@@ -1,10 +1,10 @@
 ---
 title: "Electronics"
 icon: "bolt"
-description: "PCB design files for the Omi mainboard, charger board, and flexible PCB — KiCad source, Gerber files, and schematics."
+description: "PCB design files for the Omi mainboard, charger board, and flexible PCB: KiCad source, Gerber files, and schematics."
 ---
 
-## Board Overview
+## Board overview
 
 The Omi uses three interconnected PCBs:
 
@@ -13,8 +13,6 @@ The Omi uses three interconnected PCBs:
 | **Mainboard** | nRF5340 SoC, nRF7002 Wi-Fi, microphones, IMU, flash, battery management | v1.2 |
 | **Charger Board** | Magnetic dock with pogo pins, 5V input (test points TP1–TP4), ESD protection | v1.0 |
 | **FPC** | Flexible cable connecting mainboard to charging contacts | v1.0 |
-
----
 
 <Tabs>
   <Tab title="Mainboard" icon="microchip">
@@ -45,7 +43,7 @@ The Omi uses three interconnected PCBs:
     </Warning>
   </Tab>
   <Tab title="Charger Board" icon="plug">
-    Magnetic charging dock. Note: the released charger schematic (v1.0) has no USB-C receptacle — its 5V input arrives on test points TP1/TP3 (+) and TP2/TP4 (GND).
+    Magnetic charging dock. Note: the released charger schematic (v1.0) has no USB-C receptacle. Its 5V input arrives on test points TP1/TP3 (+) and TP2/TP4 (GND).
 
     **Key ICs:**
 
@@ -62,7 +60,7 @@ The Omi uses three interconnected PCBs:
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers) | Gerber files |
     | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium) | KiCad 9 source |
 
-    <Tip>The charger board is the simplest of the 3 — a good starting point if you're new to PCB assembly.</Tip>
+    <Tip>The charger board is the simplest of the three. It is a good starting point if you're new to PCB assembly.</Tip>
   </Tab>
   <Tab title="FPC" icon="link">
     Connects the mainboard to the charging contact ring via a board-to-board connector.
@@ -82,13 +80,11 @@ The Omi uses three interconnected PCBs:
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers) | Gerber files |
     | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium) | KiCad 9 source |
 
-    <Warning>FPC is delicate — handle with care during assembly. The board-to-board connector has a limited insertion cycle count.</Warning>
+    <Warning>FPC is delicate. Handle it with care during assembly. The board-to-board connector has a limited insertion cycle count.</Warning>
   </Tab>
 </Tabs>
 
----
-
-## How to Order PCBs
+## How to order PCBs
 
 Upload the Gerber ZIP to any PCB manufacturer. Use the exact specs below per board:
 
@@ -104,31 +100,29 @@ Upload the Gerber ZIP to any PCB manufacturer. Use the exact specs below per boa
 | Copper Weight | 1 oz outer, 1/3 oz inner | 1 oz | 1 oz |
 
 <Warning>
-The mainboard has blind vias (L1-L2, L3-L4) and buried vias (L2-L3) — confirm your fab supports these before ordering. Total 414 drill hits including 159 blind + 55 buried vias.
+The mainboard has blind vias (L1-L2, L3-L4) and buried vias (L2-L3). Confirm your fab supports these before ordering. Total 414 drill hits including 159 blind + 55 buried vias.
 </Warning>
 
 <Tip>
 Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 and nRF7002 fine-pitch pads (0.4mm).
 </Tip>
 
-<Card title="View Full BOM" icon="list" href="/doc/hardware/consumer/assembly">
+<Card title="View full BOM" icon="list" href="/doc/hardware/consumer/assembly">
   See the complete Bill of Materials with all 88 components
 </Card>
 
----
-
-## First Power-On Checklist
+## First power-on checklist
 
 <Steps>
-  <Step title="Visual Inspection">
+  <Step title="Visual inspection">
     Check for solder bridges on QFN pads with a microscope or loupe. Verify all passives are placed correctly (check orientation of polarized capacitors).
   </Step>
-  <Step title="Power Rails">
+  <Step title="Power rails">
     Connect bench supply (set to 3.7V, current limit 100mA). Measure VBAT (3.7V at battery input), VDD_nRF (1.0V for nRF5340 core), and VDDH (3.3V for nRF5340 I/O).
 
-    <Warning>If current draw exceeds 50mA before firmware flash, disconnect immediately — likely a short.</Warning>
+    <Warning>If current draw exceeds 50mA before firmware flash, disconnect immediately. This is likely a short.</Warning>
   </Step>
-  <Step title="Flash Firmware">
+  <Step title="Flash firmware">
     Connect SWD debugger (J-Link or nRF DK). Flash using nRF Connect SDK. See [firmware guide](/doc/developer/firmware/Compile_firmware).
   </Step>
   <Step title="Verify BLE">
@@ -136,13 +130,11 @@ Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 
   </Step>
 </Steps>
 
----
-
 ## Troubleshooting
 
 <AccordionGroup>
   <Accordion title="Board doesn't power on" icon="bolt">
-    Check BQ25101 output (3.7-4.2V). Verify TPS628438 buck converter has correct input. Look for solder bridges on QFN pads with microscope. Measure resistance between VCC and GND — should be more than 1k ohm before power.
+    Check BQ25101 output (3.7-4.2V). Verify TPS628438 buck converter has correct input. Look for solder bridges on QFN pads with microscope. Measure resistance between VCC and GND. It should be more than 1k ohm before power.
   </Accordion>
   <Accordion title="No BLE advertising" icon="bluetooth">
     Verify 32MHz crystal is soldered (not just tacked). Check 32.768kHz crystal for RTC. Measure nRF5340 VDDH (should be 3.3V) and VDD (1.0V). Check antenna trace and matching network.
@@ -151,7 +143,7 @@ Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 
     nRF7002 requires its own 40MHz crystal. Check BUCKA/BUCKB rails. Verify SPI connection between nRF5340 and nRF7002. Wi-Fi requires firmware support enabled.
   </Accordion>
   <Accordion title="Poor or no audio" icon="microphone">
-    T5838 microphones are top-port — verify sound inlet faces the enclosure acoustic holes. Check PDM clock (1-3.25MHz) and data lines. Both mics must be in the correct PDM channel (L/R).
+    T5838 microphones are top-port. Verify sound inlet faces the enclosure acoustic holes. Check PDM clock (1-3.25MHz) and data lines. Both mics must be in the correct PDM channel (L/R).
   </Accordion>
   <Accordion title="Charging doesn't work" icon="battery-half">
     Check pogo pin contact resistance (less than 0.5 ohm). Verify FPC connection. Measure charger board 5V input at TP1 (5V) / TP2 (GND). Check TPS25200 eFuse output. Verify magnet polarity alignment.

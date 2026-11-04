@@ -11,7 +11,7 @@ own write-invalidated negative cache. Hosted MCP JSON-RPC tools are outside this
 
 ## Behavior and rollback
 
-All env levers default **on**. Only a case-insensitive, whitespace-trimmed
+The original env levers default **on**. The polling controls below default **off** (false / zero). Only a case-insensitive, whitespace-trimmed
 `false` disables a lever; unset, `0`, and other values leave it on.
 
 | Lever | Disable with `false` |
@@ -55,7 +55,7 @@ or submission failure skips population; errors, truncation, oversized or expired
 Future completion, failure or cancellation releases the slot. Workers recheck the query-start expiry
 after queue delay; queueing never extends freshness or delays the completed origin response.
 
-**For unversioned memories, conversations and MCP entries, up to 10 seconds of stale list data after a user write is accepted**, including deletes, edits,
+**For ordinary unversioned memories, conversations and MCP entries, up to 10 seconds of stale list data after a user write is accepted**, including deletes, edits,
 locked-state changes and writes from other clients. These unversioned entries have no write invalidation. Task entries use the SDK commit fences documented in round 2. The expiry is fixed
 before the origin query and stored in the encrypted envelope. Redis `SET PX` receives only the remaining
 milliseconds after query/serialization time; the envelope rejects expired content even if socket delay
@@ -66,6 +66,54 @@ This assumes synchronized service/Redis wall clocks, as other absolute-expiry ru
 Only successful nontruncated pages are stored. Errors, `X-Omi-List-Truncated: true` and
 `X-Scan-Truncated: true` responses bypass storage. Cache I/O, encryption or decode faults fail open
 through the shared fallback telemetry without logging payloads or exceptions.
+
+## Adaptive developer pollers (default off)
+
+`OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED=true` together with
+`OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT=5` admits a deterministic 5% of API keys.
+Both default closed. `false`, percent `0`, or the existing global
+`OMI_EXTERNAL_LIST_CACHE_ENABLED=false` restores the original behavior.
+
+Only repeated identical Developer conversation/memory list queries qualify.
+Two distinct intervals between one and sixty seconds establish a fast poller:
+two intervals admit 60s, five admit 120s, ten admit 300s. Subsecond fan-out does
+not advance the streak. A gap of sixty seconds resets it immediately; Redis
+faults use 10s. Cadence is atomic across replicas and stores only hashed identity
+and numeric timing. Query/filter/page histories are isolated. Cursor requests
+and MCP remain on their original freshness path. The versioned action-item
+cache retains its existing 900s TTL and write invalidation.
+
+Every extended response discloses `X-Omi-List-Cache: fast-poller; max-age=N` on
+the origin response and cache hits. Only this class can receive unversioned list
+data older than 10s after a write; the maximum is the disclosed 60/120/300s.
+Separate cache namespaces make extended entries unreachable by normal callers
+or after the polling switch is off. Existing grants, account access, scope,
+validation and rate limits still run before every cache lookup.
+
+Authenticated conversation, daily-summary and goal item GETs can reuse a 404
+for at most 10s. The cache stores only a hashed key and absolute expiry, anchored
+before the origin read; slow fills and even retained expired Redis bytes cannot
+extend absence. Corrupt, locked, deleted or failed results are not admitted.
+Newly created items may remain absent for this bounded interval. There is no
+action-item GET-by-ID route: those router 404s already cost no content reads.
+
+Within the enabled cohort, goal detail GETs use the existing owner-scoped point
+reader instead of scanning all goals. Only its trusted absent-document result
+can fill the negative cache. Goal normalization failures keep the uncached 404,
+so a repaired goal is visible on the next request. Off-cohort goal GETs keep
+their original list projection. Grade both `goals:get_all_goals` and
+`goals:get_goal_by_id` together: moving reads between caller labels is not a
+saving by itself.
+401/403 gates already precede list readers; route tests pin that ordering rather
+than claiming a new saving from sampled error proportions.
+
+Infracost owns 5%, two consecutive `verify.py` ticks PASS, then 100%, with the
+first decision within three days of deployment (Nov 5 target; renew if needed).
+Re-pin a dedicated pre-ramp baseline first. Pair guard PASS with an absolute
+Developer-origin reads/day readout; generic guard PASS alone is not proof of
+this item's economics. Keep 5xx and latency guards clean. The reviewed
+$13–16/day saving is estimated until that readout; no saving is booked here.
+Rollback is enabled=false or percent=0, without a rate-limit/global-TTL change.
 
 ## Read bounds and client compatibility
 

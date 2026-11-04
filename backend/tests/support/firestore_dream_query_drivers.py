@@ -64,6 +64,13 @@ def entries():
             base={'uid': UID},
             neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
+        DriverEntry('utils.dream_prescan.scan_people', base={'uid': UID}),
+        DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
+        DriverEntry('utils.dream_state_pass.tasks_page', base={'uid': UID}),
+        DriverEntry(
+            'utils.dream_state_pass.conversation_index',
+            base={'uid': UID, 'now': datetime(2026, 10, 12, tzinfo=timezone.utc)},
+        ),
         DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},
@@ -178,8 +185,9 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='3d93d04de0f8e275f39ec72d8546af67ff2d583fb061d7faa25db084460ae492',
-        )
+            # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
+            body_digest='e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
+        ),
     },
     SKIPS={},
 )

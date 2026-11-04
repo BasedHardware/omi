@@ -16,12 +16,19 @@ Startup requires exactly one visible CUDA GPU with BF16 support. ASR uses
 Parakeet v3 revision `541d1f99c6b0c3cd0b11a95167540bb8edefd82b` in BF16;
 community-1 revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee` stays FP32.
 VAD reuses that pipeline's FP32 segmentation model. There is no FP8 or Nemotron
-routing. The model factory sets `compute_timestamps=true` and
-`greedy.use_cuda_graph_decoder=false` **before** constructing decoding; it also
-disables the runtime graph and asserts actual eager state before and after
-transcription. This closes the timestamp-initialization graph reset found by
-the GPU quality lane. A graph-policy violation quarantines and restarts the
-process. The prior ASR-only benchmark is not joint-image qualification.
+routing. The model factory sets `strategy=greedy_batch` (label-looping TDT),
+`compute_timestamps=true` and `greedy.use_cuda_graph_decoder` to the chosen
+mode **before** constructing decoding, then asserts the actual decoding state
+before and after every transcription. This closes the timestamp-initialization
+graph reset found by the GPU quality lane. CUDA graph decoding
+(`BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED`, Helm `worker.asrCudaGraphsEnabled`,
+**default on**; `false` is the kill switch) replays the same greedy algorithm
+with identical words. On the dev L4 full chain (2026-11-02, paired eager/graphs
+runs) it cut the ASR stage 26% with word edit rate 0 and +0.15 GiB CUDA peak; on
+the T4, where emulated-BF16 encoding dominates ASR, it is within noise. Off
+keeps runtime graphs disabled. NeMo recaptures only when a call exceeds the captured
+batch or frame count. A graph-policy violation, in either direction, quarantines
+and restarts the process.
 
 SIGTERM stops new pulls; the bounded current chain drains with A's 20-second
 lease renewals. Lost leases cannot complete. CUDA synchronizes before any result
@@ -38,9 +45,26 @@ legacy provider clients into the GPU image is unnecessary.
 `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` (Helm `worker.pipelineDepth`, default
 `2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
 admission, completion and ordered merge of one lane overlap another lane's GPU
-chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
-quiescence) stays exclusive behind one asyncio lock, so device and host memory
-remain one flight. Each lane renews its own leases while it waits for the GPU.
+chain; the model chain (VAD, ASR, diarization and CUDA quiescence) stays
+exclusive behind one asyncio lock. Each waiting lane prepares the leading
+units of its flight that fit one shared 1800-audio-second decode budget, using
+the same artifact IO pool (default five), so the GPU section does not wait on
+fetches (`BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED`, Helm
+`worker.prepareFlightEnabled`, default on; `false` prepares only the first
+decode). If any prepared lease is lost, or the lane stops while waiting, the
+whole prepared prefix is cancelled and those units are refunded without an
+attempt charge. The chain returns the reservations (and drops the decoded
+buffers) of finished prepared decodes as soon as its GPU section returns, not
+after settlement and publication, so the next waiting lane can prepare its
+whole flight; the lane's final close still drains any fetch left running.
+Final persist settlement runs after releasing the GPU lock, before publication, with renewal still active. A pull admits at most 32 units,
+so each lane retains at most 32 persist payloads/receipts; the IO pool bounds
+simultaneous uploads rather than waiting for a free upload slot under the GPU
+lock. Even a slow first upload cannot stall the sixth short unit's GPU work.
+Active decoded groups remain
+bounded to 7200 audio seconds; at most the configured pump depth of result
+tails can remain resident. Model precision, batching and CUDA concurrency stay
+unchanged. Each lane renews its own leases while it waits for the GPU.
 On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
 an attempt charge instead of starting another chain. Periodic recovery,
 result-ready drains and queue metrics run in their own task on the same 5s/15s
@@ -49,6 +73,38 @@ ordered merge remains the per-owner ordering authority across lanes, exactly as
 it already is across replicas and the serving reconciler. `1` restores the serial
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh
 arrivals, so fresh work can wait up to one extra chain.
+
+### Worker processes per GPU
+
+`BATCH_PIPELINE_WORKER_PROCESSES` (Helm `worker.processes`, default `1`, range
+1-3) runs that many independent pump processes on the pod's one GPU. Much of a
+chain's GPU-lock time is CPU, Python and IO work; a sibling's kernels fill those
+gaps (3-CPU T4 bench, chain before the shared embedding trunk: 33.8
+audio-h/GPU-h with one process, 45.4 with two, identical words and speakers).
+With the shared trunk on, two processes added nothing on that 3-CPU bench (45.1
+vs 48.3 for one), so the default stays `1` (no supervisor, the process above runs
+exactly as before) until an 8-vCPU L4 canary shows a gain. Malformed or
+out-of-range values run one.
+
+The container's process becomes a supervisor that loads no models and touches
+no cloud client. Each child re-executes this module as the unchanged
+single-process runtime with its own models, leases, fences, pump depth and
+7200-audio-second decoded bound, exactly like another replica; its scheduler
+and leader identities are per process. Children serve probes and metrics on
+loopback ports 8081+. The supervisor's pod port answers `/ready` only once every
+child is ready, `/health` only while every running child's event loop ticks,
+and `/metrics` with every child's series labelled `worker_process`. Only child
+0 samples queue gauges, so Firestore sampling and the HPA's per-pod series stay
+as with one process; the adapter's chain-occupancy rule already takes the max
+per pod, so occupancy never adds across siblings. SIGTERM reaches every child
+and the supervisor waits for each drain. Any child that exits unrequested,
+including a fatal-CUDA quarantine, drains its siblings and the supervisor exits
+non-zero so Kubernetes replaces the pod and its GPU state.
+
+Host memory scales with the count: the chart takes pod resources from
+`processResources.<count>` and refuses a count without an entry. Two processes
+double the one-process sizing (24Gi request / 26Gi limit, 6 / 8 CPU; the limit stays under node allocatable minus daemons) inside
+`g2-standard-8` allocatable; three do not fit that machine shape.
 
 ## Encrypted staging and results
 

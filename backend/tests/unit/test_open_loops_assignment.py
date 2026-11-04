@@ -32,7 +32,7 @@ def path(key):
 def seed(store, key, start, level, **extra):
     logical = dict(
         chunk(key, start),
-        structured={'title': 'Synthetic'},
+        structured={'title': 'Synthetic', 'title_provenance': 'server_minimum'},
         data_protection_level=level,
         sync_content_revision=1,
         **extra

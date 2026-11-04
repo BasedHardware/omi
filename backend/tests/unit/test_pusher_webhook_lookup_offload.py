@@ -16,7 +16,7 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 PUSHER_ROUTER = BACKEND_DIR / "routers" / "pusher.py"
 
-_HANDLER = "_websocket_util_trigger"
+_HANDLER = "_run_websocket_util_trigger"
 _BLOCKING = "get_audio_bytes_webhook_seconds"
 
 

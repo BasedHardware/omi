@@ -15,6 +15,8 @@ END = START + timedelta(days=1, microseconds=-1)
 @pytest.fixture
 def producer(monkeypatch):
     monkeypatch.setenv(recap.FLAG, 'serve')
+    monkeypatch.setattr(recap, 'account_deletion_blocks_user_work', lambda _uid: False)
+    monkeypatch.setattr(notif, 'account_deletion_blocks_user_work', lambda _uid: False)
     monkeypatch.setattr(notif, 'generated_compute_allowed', lambda *_: True)
     monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_: True)
     release = Mock()
@@ -63,6 +65,18 @@ def test_generated_status_and_late_input_refresh_keep_same_id(producer):
     assert producer.release.call_count == 3
 
 
+def test_pending_deletion_owner_is_skipped_before_daily_recap_reads(producer, monkeypatch):
+    monkeypatch.setattr(recap, 'account_deletion_blocks_user_work', lambda _uid: True)
+
+    record, created, declined = generate()
+
+    assert record is None
+    assert created is False
+    assert declined == 'account_pending_deletion'
+    producer.model.assert_not_called()
+    assert producer.writes == []
+
+
 def test_empty_day_has_durable_no_recordings_and_late_capture_retries(producer):
     producer.rows.clear()
     assert generate()[0] is None
@@ -100,6 +114,7 @@ def test_day_not_over_is_pending_without_model(producer):
 
 def test_shadow_preserves_legacy_and_does_not_add_model_call(monkeypatch):
     legacy = Mock(return_value=('legacy', False, None))
+    monkeypatch.setattr(recap, 'account_deletion_blocks_user_work', lambda _uid: False)
     assert recap.generate('synthetic-owner', '2026-01-01', START, END, legacy=legacy) == ('legacy', False, None)
     legacy.assert_called_once()
 
@@ -215,21 +230,23 @@ def test_spend_denial_does_not_erase_an_already_generated_day(producer, monkeypa
 def test_media_dependency_delegates_to_v2_and_preserves_rollback(monkeypatch):
     from utils.conversations import media_consumers
 
-    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'shadow')
     calls = []
 
     def policy(uid, row, **kwargs):
         calls.append(kwargs['consumer'])
-        return row.get('content_kind') == 'media'
+        return row.get('content_kind') == 'media' and refactor_modes.serving_for('MEDIA_NOISE_MODE', uid)
 
     monkeypatch.setattr(media_consumers, '_policy', lambda: policy)
-    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')  # Explicit rollback; shadow delegates for aggregate observation.
     rows = [{'content_kind': 'media'}, {'content_kind': 'conversation'}]
     assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows
-    assert calls == []
+    assert calls == ['daily_summary', 'daily_summary']
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')  # Explicit rollback preserves legacy output without shadow calls.
+    assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows
+    assert calls == ['daily_summary', 'daily_summary']
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
     assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows[1:]
-    assert calls == ['daily_summary', 'daily_summary']
+    assert calls == ['daily_summary'] * 4
 
 
 def test_mode_rollback_resumes_pending_stub_in_place(producer, monkeypatch):

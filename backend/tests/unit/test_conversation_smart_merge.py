@@ -179,7 +179,7 @@ class World:
         if not self.process_persisted:
             persistence_observer(False)
             return conversation
-        assert trigger is ProcessingTrigger.SMART_MERGE
+        assert trigger in {ProcessingTrigger.SMART_MERGE, ProcessingTrigger.SYNC_UPDATE}
         assert smart_merge_refresh[0] == self.raw(conversation.id)['smart_merge']['revision']
         self.processed.append((conversation.id, len(conversation.transcript_segments)))
         raw = self.raw(conversation.id)
@@ -734,6 +734,7 @@ class _Jobs:
 
 @pytest.mark.asyncio
 async def test_failed_refresh_is_finished_by_the_finalization_retry_exactly_once(world, monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10, private_cloud_sync_enabled=True, finalization_job_id=JOB, finalization_revision=1)
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
@@ -864,7 +865,7 @@ def test_expired_delivery_cannot_release_a_new_delivery_of_the_same_job(world, m
         old = kwargs['smart_merge_refresh'][1]
         world.raw('p')['smart_merge']['refresh_lease']['until'] = T0
 
-        def paused(uid, cid, revision, *, owner):
+        def paused(uid, cid, revision, *, owner, skip_processing=False):
             newer.update(world.raw('p')['smart_merge']['refresh_lease'])
             assert owner != old
 
@@ -910,6 +911,7 @@ async def test_stale_or_terminal_donor_delivery_is_read_only(world, monkeypatch,
 
 @pytest.mark.asyncio
 async def test_permanently_failed_donor_dead_letters_without_mutating_conversations(world, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10, finalization_job_id=JOB, finalization_revision=1)
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
@@ -920,6 +922,7 @@ async def test_permanently_failed_donor_dead_letters_without_mutating_conversati
             await jobs.attempt()
     claim = jobs_db.claim_finalization_job(JOB, 1)
     donor, survivor = world.get(UID, 'n'), world.get(UID, 'p')
+    assert donor['smart_merge']['role'] == 'donor' and donor['discarded']
     assert jobs_db.mark_finalization_dead_letter(JOB, 1, claim['lease_epoch'], 3)
     assert jobs.job['status'] == 'dead_letter'
     assert world.get(UID, 'n') == donor and world.get(UID, 'p') == survivor
@@ -939,6 +942,7 @@ def test_seven_fragment_evening_becomes_one_survivor_with_six_redirects(world):
         assert world.finish(cid, owner=f'job-{index}') is True
 
     survivor = world.get(UID, 'f0')
+    assert survivor['recorded_end'] == T0 + timedelta(minutes=104)
     assert not survivor.get('deleted')
     for cid in ids[1:]:
         assert world.raw(cid)['sync_merged_into'] == 'f0' and world.raw(cid)['deleted'] is True

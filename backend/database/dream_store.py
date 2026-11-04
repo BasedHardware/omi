@@ -18,8 +18,8 @@ from config.dream_agent import (
     Caps,
     canary_eligible,
     canary_uid,
+    backed_off_hunt_interval,
     eligible,
-    hunt_interval,
     may_be_eligible,
     mode,
     DRAIN_TIMEOUT_SECONDS,
@@ -248,8 +248,15 @@ def acquire(
         if trigger == 'manual' and manual_runs >= caps.manual_runs:
             raise AdmissionDenied('dream_manual_limit')
         last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
-        interval = hunt_interval(data.get('size_bucket'))
+        from database.dream_scheduler import owner_hunt_interval
+
+        interval = owner_hunt_interval(uid, data)
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
+        # Hunt-backoff shadow: this hunt would have waited for the backed-off interval.
+        backed_off = backed_off_hunt_interval(data.get('size_bucket'), data.get('dry_hunts'))
+        backoff_would_defer = bool(
+            hunt_due and isinstance(last_pass, datetime) and now - last_pass < backed_off and interval < backed_off
+        )
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         if trigger != 'manual' and passes >= caps.passes:
@@ -291,7 +298,7 @@ def acquire(
             )
             from database.dream_scheduler import due_time
 
-            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now))}
+            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now, uid))}
         lease = {
             'run_id': run_id,
             'day': day,
@@ -306,6 +313,10 @@ def acquire(
             'daily_cap': caps.daily_usd,
             'passes_per_day': caps.passes,
             'hunt': not has_dirty,
+            'dry_hunts': _dry_hunts(data),
+            'backoff_would_defer': backoff_would_defer and not has_dirty,
+            # Weekly whole-corpus state pass cadence; derived from the state doc already read.
+            'state_pass_due': _state_pass_due(data, now),
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'size_bucket': data.get('size_bucket', 'light'),
@@ -454,6 +465,23 @@ def assert_lease(uid, run_id, *, firestore_client=None):
     data = state_ref(client(firestore_client), uid).get().to_dict() or {}
     if (data.get('lease') or {}).get('run_id') != run_id:
         raise RuntimeError('dream_lease_lost')
+
+
+def _state_pass_due(data, now):
+    # Kept here (not utils.dream_state_pass) so acquire stays import-light.
+    try:
+        days = max(1, int(os.getenv('DREAM_STATE_PASS_WEEK_DAYS', '7') or 7))
+    except ValueError:
+        days = 7
+    last = data.get('last_state_pass_at')
+    return not isinstance(last, datetime) or now - last >= timedelta(days=days)
+
+
+def _dry_hunts(data):
+    try:
+        return max(0, int(data.get('dry_hunts', 0) or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def finish(
@@ -686,6 +714,11 @@ def finish(
             patch['last_yield'] = sum(
                 1 for row in report.get('outcomes') or [] if isinstance(row, dict) and row.get('status') == 'applied'
             )
+            # Hunt backoff: consecutive hunts that applied nothing; any yield resets the streak.
+            if patch['last_yield']:
+                patch['dry_hunts'] = 0
+            elif lease.get('hunt') and not lease.get('canary') and lease.get('trigger') == 'schedule':
+                patch['dry_hunts'] = min(16, _dry_hunts(data) + 1)
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
@@ -697,6 +730,8 @@ def finish(
                 patch['cleanup_cursor'] = cleanup_cursor
             if not zero_refund:
                 patch['last_pass_at'] = lease['started_at']
+                if report.get('state_pass_done'):
+                    patch['last_state_pass_at'] = lease['started_at']
                 for ref in sorted(set(reviewed) - deferred)[:8]:
                     tx.set(
                         state.collection('reviews').document(review_id(ref)),
@@ -706,7 +741,7 @@ def finish(
         tx.update(state, patch)
         from database.dream_scheduler import due_time
 
-        next_due = due_time({**data, **patch}, now)
+        next_due = due_time({**data, **patch}, now, uid)
         if data.get('day') == now.date().isoformat() and data.get('passes', 0) >= current_lease.get(
             'passes_per_day', 2
         ):
@@ -753,6 +788,8 @@ def vocabulary(uid, *, firestore_client=None):
 
 
 def demoted_types(uid, caps, *, firestore_client=None):
+    from utils import dream_telemetry
+
     since = datetime.now(timezone.utc) - timedelta(days=30)
     query = client(firestore_client).collection('users').document(uid).collection('review_changes')
     rows = (
@@ -761,18 +798,27 @@ def demoted_types(uid, caps, *, firestore_client=None):
         .limit(500)
         .stream()
     )
+    recent_since = datetime.now(timezone.utc) - timedelta(days=caps.undo_recent_days)
     counts = {}
+    recent = {}
     for snapshot in rows:
         data = _review_store().decode_doc(uid, snapshot.to_dict()) or {}
         if not data.get('edit_key', '').startswith(('dream:', 'agent:')) or data.get('phase', 'applied') != 'applied':
             continue
-        kind = data['edit_key'].split(':')[1]
+        # The policy kind auto-apply checks; key segments differ (memory-target
+        # spelling keys 'memory', accepted proposals 'user').
+        kind = dream_telemetry.change_kind(data) or data['edit_key'].split(':')[1]
+        undone_now = int(bool(data['change']['undone']))
         total, undone = counts.get(kind, (0, 0))
-        counts[kind] = (total + 1, undone + int(data['change']['undone']))
+        counts[kind] = (total + 1, undone + undone_now)
+        created = data.get('created_at')
+        if undone_now and isinstance(created, datetime) and created >= recent_since:
+            recent[kind] = recent.get(kind, 0) + 1
     return {
         kind
         for kind, (total, undone) in counts.items()
-        if total >= caps.undo_min_samples and undone / total > caps.undo_rate
+        if (total >= caps.undo_min_samples and undone / total > caps.undo_rate)
+        or recent.get(kind, 0) >= caps.undo_recent_count
     }
 
 

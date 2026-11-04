@@ -182,6 +182,25 @@ def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
         split_result(item, payload)
 
 
+def test_assignment_held_without_recovery_matrix():
+    """Which quarantined-receipt rows the held-partial scan may treat as held."""
+    from database.batch_pipeline_projection import assignment_held_without_recovery
+
+    quarantined = {'projection': {'state': 'quarantined'}}
+    assert assignment_held_without_recovery({'recovery_state': 'held'}, quarantined)
+    # Not recovery-held, or the receipt can still change: not a partial yet.
+    assert not assignment_held_without_recovery({}, quarantined)
+    assert not assignment_held_without_recovery({'recovery_state': 'held'}, {'projection': {'state': 'persisted'}})
+    assert not assignment_held_without_recovery({'recovery_state': 'held'}, {})
+    # An open operator intent means a reviewed change is already in flight.
+    assert not assignment_held_without_recovery(
+        {'recovery_state': 'held', 'speech_redrive': {'state': 'pending'}}, quarantined
+    )
+    assert assignment_held_without_recovery(
+        {'recovery_state': 'held', 'speech_redrive': {'state': 'completed'}}, quarantined
+    )
+
+
 @pytest.mark.parametrize('bound', [False, True])
 def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(binding, monkeypatch, bound):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore

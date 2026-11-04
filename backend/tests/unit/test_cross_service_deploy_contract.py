@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -176,18 +176,21 @@ def _worker_without_independent_recovery_chart() -> dict[str, str]:
 
 
 def _worker_without_independent_recovery() -> dict[str, str]:
-    # Prod recovery is declared on; dev stays off. Simulate a future source-default
-    # change as well: the explicit worker setting must still prevent a reader split
-    # in dev, where the recovery host remains pinned off.
-    overrides = _worker_without_independent_recovery_chart()
+    # The ship-on source default must not create a reader split in dev,
+    # where the recovery host remains pinned off.
+    return _worker_without_independent_recovery_chart()
+
+
+def _worker_without_independent_recovery_default_off() -> dict[str, str]:
+    # Retain coverage of the source rollback as well as today's ship-on default.
     config_path = 'backend/config/batch_language_recovery.py'
     source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
     changed = source.replace(
-        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
         "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
     )
     assert changed != source
-    return {**overrides, config_path: changed}
+    return {**_worker_without_independent_recovery_chart(), config_path: changed}
 
 
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
@@ -206,10 +209,14 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
     'worker_without_independent_recovery': _worker_without_independent_recovery,
-    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_chart,
+    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_default_off,
 }
 HELM_MUTATIONS = {
     'worker_without_head_priority',
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
+SOURCE_DEFAULT_MUTATIONS = {
     'worker_without_independent_recovery',
     'worker_without_independent_recovery_default_off',
 }
@@ -234,7 +241,7 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
         # Source-default mutations need a fresh reader inventory; manifest/chart
         # mutations can reuse the baseline AST scan.
-        readers = None if name == 'worker_without_independent_recovery' else baseline.readers
+        readers = None if name in SOURCE_DEFAULT_MUTATIONS else baseline.readers
         context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
@@ -362,6 +369,13 @@ def test_append_route_edge_with_path_fails(results: Results) -> None:
     ), results.mutations['recovery_audience_with_path']
 
 
+def test_provider_stt_edge_models_create_wake_route_join() -> None:
+    # utils/provider_stt_tasks.create_wake posts to PROVIDER_STT_TASKS_HANDLER_URL + ROUTE (test_wake_task_shape),
+    # so the configured URL is a bare origin; without append_route the contract demanded the doubled path.
+    edge = next(e for e in contract.TASK_EDGES if e.id == 'provider-stt')
+    assert edge.append_route is True
+
+
 def test_audience_pair_mismatch_fails(results: Results) -> None:
     # Dispatcher mints one audience, target verifies another: every task rejected 403.
     assert any(
@@ -397,6 +411,44 @@ def test_prod_service_url_in_dev_fails(results: Results) -> None:
 def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
     assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+
+
+def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
+    rel = 'backend/config/synthetic_wrapped_switch.py'
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                "SWITCH_ENV = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'\n"
+                "UNREAD_ENV = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'\n"
+                "def _default_on(name):\n"
+                "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                "def enabled():\n"
+                "    return _default_on(SWITCH_ENV)\n"
+                "def unrelated():\n"
+                "    return lookup(UNREAD_ENV)\n"
+            )
+        },
+    )
+    reads = contract.scan_env_reads(source, [rel])
+    assert set(reads) == {'SYNTHETIC_WRAPPED_SWITCH_ENABLED'}
+    assert reads['SYNTHETIC_WRAPPED_SWITCH_ENABLED'].modules == {rel}
+
+
+def test_ops_kill_without_reader_still_fails(results: Results) -> None:
+    key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
+    # This check reads manifest entries and the reader inventory only; reuse
+    # the rendered fixture instead of rebuilding every deployment in the call.
+    manifest = {
+        'environments': {
+            'prod': {'gke': {'backend-listen': {'env': {key: {'value': 'false', 'category': 'ops_kill'}}}}}
+        }
+    }
+    model = replace(results.baseline.models['prod'], manifest=manifest)
+    context = replace(results.baseline, models={'prod': model})
+    violations = contract.check_kill_switches(context)
+    assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
 
 
 # Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:

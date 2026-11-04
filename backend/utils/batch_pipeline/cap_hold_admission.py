@@ -4,7 +4,9 @@
 ``admit_held`` under its row claim once legacy sync is draining or dark. The held source is decoded
 to one WAV and admitted like an upload under a content id derived from the hold, so a retried sweep
 finds its own batch ledger and never creates a second unit. Batch projection then owns the
-conversation and usage; the hold row is handed off, never settled as legacy-transcribed.
+conversation and usage; the hold row is handed off, never settled as legacy-transcribed. The hold
+keeps its audio until ``handoff_projected`` reads the batch content as completed; only then is it
+erased (``cap_hold_recovery.finish_handoff``, driven by the same sweep).
 
 Paid exactly once: a hold that legacy recovery already started spending on (any piece receipt or
 processed path) is not eligible; it finishes on the legacy path during ``draining``.
@@ -42,6 +44,29 @@ def held_content_id(uid: str, hold_id: str) -> str:
     return hashlib.sha256(f'cap_hold_v1\0{uid}\0{hold_id}'.encode()).hexdigest()
 
 
+def handoff_projected(uid: str, batch_job_id: str, *, store: Any = None) -> bool:
+    """True once the hand-off's batch content is durably completed (every unit projected).
+
+    Until then the hold keeps its audio: before projection the staged batch object is the only
+    other copy, and the batch bucket may expire objects by age. A partial ledger (held units)
+    is not completion. Read-only: never redrives, unlike ``intake.durable_status``.
+    """
+    from database.batch_pipeline_store import FirestoreStore
+    from database.sync_ledger import is_valid_completed_sync_content_result
+    from utils.sync.stage import current_stage
+
+    store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
+
+    def read(tx) -> bool:
+        intake = tx.get('intakes', batch_job_id)
+        if not intake or intake.get('owner_id') != uid:
+            return False
+        ledger = tx.get('content', f"{uid}/{intake['content_id']}") or {}
+        return ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(ledger.get('result'))
+
+    return bool(store.run(read))
+
+
 def eligible(row: Mapping[str, Any]) -> bool:
     """No legacy spend has started on this hold and its source is sealed."""
     return (
@@ -52,12 +77,12 @@ def eligible(row: Mapping[str, Any]) -> bool:
     )
 
 
-def enabled_for(row: Mapping[str, Any], mode: LegacySyncMode | None = None) -> bool:
+def enabled_for(row: Mapping[str, Any], mode: LegacySyncMode | None = None, *, uid: str | None = None) -> bool:
     """cap_hold_mode == 'batch_hold' (contract (c)) while legacy is draining or dark."""
     if mode is None:
         from utils.sync import legacy_dark
 
-        mode = legacy_dark.current_mode()
+        mode = legacy_dark.current_mode(uid)
     return mode is not LegacySyncMode.ON and eligible(row)
 
 
@@ -79,7 +104,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
     from utils.batch_pipeline import intake
     from utils.executors import run_blocking, storage_executor
     from utils.sync import cap_hold
-    from utils import funded_processing
+    from utils import backlog_release, funded_processing
     from utils.batch_pipeline.held_coverage import HeldDecoder
 
     if not eligible(row):
@@ -99,7 +124,11 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
             content_id=content_id,
             paths=[path],
             lane='backfill',
-            recording_age_seconds=None,
+            # Age 0 is the normal backfill class (RECENT); unknown age is DEEP.
+            recording_age_seconds=0 if backlog_release.normal_priority.get() else None,
+            # Held audio never takes a cheaper-vendor route; a language GPUs cannot serve still may.
+            vendor_table=False,
+            release=backlog_release.source.get(),
             source=meta['source'],
             # The owner's processing choice funded this audio; it is not re-locked.
             should_lock=False,

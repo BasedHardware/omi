@@ -254,13 +254,15 @@ def test_the_capability_read_is_cached_briefly(fake_redis, monkeypatch):
 
 
 def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypatch):
+    # Exercise rollback fan-out; recorded-time input is covered by the replay suite.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     client_gate.note_client_seen('u', now=0)
     tracker = MomentTracker()
     monkeypatch.setattr(live, 'tracker', tracker)
     scheduled = {}
     monkeypatch.setattr(live.executors, 'start_background_task', lambda coro, *, name: scheduled.setdefault(name, coro))
     live.sessions.clear()
-    tracker.observe('u', [{'text': 'word ' * 30}], 'c1', 'omi', now=0)
+    tracker.observe('u', [{'text': 'word ' * 30}], 'c1', 'omi', arrival_at=0, recorded_at=0)
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', [{'text': 'more'}], 'c2', 'omi'))
     assert sorted(scheduled) == ['episode_attach', 'episode_moment']

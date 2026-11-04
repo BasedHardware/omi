@@ -111,6 +111,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -784,9 +785,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 child: KeyedSubtree(key: ValueKey(brightness), child: child!),
               );
               final guidedContent = BluetoothGuidanceListener(child: content);
-              return PlatformService.isIOS && Env.posthogApiKey != null
-                  ? RageClickContextTracker(child: guidedContent)
-                  : guidedContent;
+              return SessionReplayScope(
+                child: PlatformService.isIOS && Env.posthogApiKey != null
+                    ? RageClickContextTracker(child: guidedContent)
+                    : guidedContent,
+              );
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

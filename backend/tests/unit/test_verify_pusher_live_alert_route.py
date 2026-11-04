@@ -23,6 +23,24 @@ def verifier() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
 
 
+def test_batch_delivery_and_queue_safety_rules_use_the_existing_import_and_live_gate(verifier):
+    expected = {
+        'omi-batch-unit-unpublished-2h',
+        'omi-batch-timeliness-sample-stale',
+        'omi-batch-timeliness-scan-blind',
+        'omi-batch-queue-safety-blind',
+    }
+    imported = verifier.load_live_stt_import_rules(production=True)
+    gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
+    assert expected <= imported.keys()
+    assert expected <= gated
+    for uid in expected - {'omi-batch-timeliness-sample-stale', 'omi-batch-timeliness-scan-blind'}:
+        rule = imported[uid]
+        assert rule['labels']['tier'] == 'page'
+        assert rule['labels']['audience'] == 'human'
+        assert not rule['notification_settings'].get('mute_time_intervals')
+
+
 def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dict]]:
     rules = copy.deepcopy(verifier._committed_rules())
     datasource = {"status": "OK", "message": "Data source is working"}
@@ -37,6 +55,10 @@ def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dic
                 {"metric": {"__name__": name, "job": job}, "value": [1, "1"]}
                 for name in verifier.REQUIRED_METRICS
                 for job in verifier.REQUIRED_JOBS
+            ]
+            + [
+                {"metric": {"__name__": name, "job": "pusher-metrics"}, "value": [1, "1"]}
+                for name in verifier.PUSHER_RECEIVE_METRICS
             ]
         },
     }
@@ -200,6 +222,33 @@ def test_prepublish_does_not_deadlock_on_a_not_yet_deployed_metric_family(verifi
         )
         == []
     )
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'omi_pusher_record_close_abandoned_outstanding',
+        'omi_pusher_record_close_outstanding_refusals_total',
+        'pusher_socket_frames_total',
+        'pusher_receive_work_stalls_total',
+        'pusher_receive_work_stalled_handlers',
+        'pusher_receive_work_duration_seconds_count',
+        'pusher_socket_closed_total',
+    ],
+)
+def test_postrollout_requires_every_receive_metric_from_pusher_not_listen(verifier, missing):
+    rules, datasource, up, telemetry, points = _inputs(verifier)
+    telemetry['data']['result'] = [
+        item for item in telemetry['data']['result'] if item['metric']['__name__'] != missing
+    ]
+    telemetry['data']['result'].append(
+        {'metric': {'__name__': missing, 'job': 'backend-listen-metrics'}, 'value': [1, '1']}
+    )
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='postrollout') == [
+        'live Prometheus pusher receive-work telemetry sources are missing or incomplete'
+    ]
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='prepublish') == []
+    assert missing in verifier.METRIC_COVERAGE_QUERY
 
 
 def test_serving_check_keeps_min_over_non_deleting_targets_and_does_not_use_max() -> None:

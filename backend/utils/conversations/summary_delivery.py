@@ -11,10 +11,14 @@ import os
 from copy import deepcopy
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any, Mapping, cast
+from typing import Any, Callable, Mapping, cast
+from utils.conversations import phase_shadow
+
+from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds, enabled
+from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
 
@@ -97,6 +101,9 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
         data['summary_title_provenance'] = 'server_minimum'
+        if intentional_short_clip_minimum(data):
+            data['summary_due_at'] = None
+            return
         if data.get('discarded'):
             # Intake discards owe no summary. Keep them out of the indexed debt
             # prefix, while allowing a later keep to start a fresh obligation.
@@ -116,11 +123,14 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
+@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
 def refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
         return 'local_only'
+    if intentional_short_clip_minimum(row):
+        return 'content_below_floor'
     if row.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
         return 'privacy'
     if row.get('terminal_no_derived_effects') or row.get('client_processing'):
@@ -151,13 +161,14 @@ def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
 
 
 def creation_result(write: Row, uid: str) -> Row | None:
-    # A deliberate minimum is durable debt, not a terminal summary receipt.
+    # Intake minima owe summaries; audited short-clip floors intentionally waive that debt.
     if (
         write.get('summary_title_provenance') == 'server_minimum'
         and not write.get('summary_output_present')
         and not write.get('terminal_no_derived_effects')
         and write.get('processing_state') != 'local_pending'
         and not write.get('deferred')
+        and not intentional_short_clip_minimum(write)
     ):
         return None
     return merge_result({}, write, uid)
@@ -172,6 +183,13 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         if name in existing:
             write[name] = existing[name]
     if write.get('status') != 'completed':
+        return None
+    if (
+        intentional_short_clip_minimum(write)
+        and not write.get('summary_output_present')
+        and not existing.get('summary_completed_at')
+    ):
+        waive_short_clip_summary_debt(write, PROCESS_CONTEXT.get())
         return None
     if (
         write.get('terminal_no_derived_effects')
@@ -283,3 +301,20 @@ def emit(receipt: Row | None) -> None:
         LATENCY.labels(receipt['lane']).observe(receipt['latency'])
     if receipt['present'] and receipt.get('closed_latency') is not None:
         CLOSED_LATENCY.labels(receipt['lane']).observe(receipt['closed_latency'])
+
+
+def emit_result(
+    uid: str,
+    changed: bool,
+    receipt: Row | None,
+    outcome: str | None,
+    invalidate: Callable[[str], None],
+    persisted: bool = True,
+) -> None:
+    """Preserve post-commit housekeeping and count only committed terminals."""
+    if changed:
+        invalidate(uid)
+    if persisted:
+        emit(receipt)
+        if outcome is not None:
+            record_delivery('summary', outcome)

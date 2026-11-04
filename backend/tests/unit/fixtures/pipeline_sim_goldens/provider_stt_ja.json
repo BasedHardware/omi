@@ -18,6 +18,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 117.77,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -91,6 +92,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 217.61,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -164,6 +166,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 329.81,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -204,7 +207,7 @@
     "<30s provider_running",
     "<30s result_ready",
     "<30s committed",
-    "<30s committed client:completed"
+    "<1m committed client:completed"
    ],
    "owner": "owner-2",
    "paid_calls": 1,
@@ -219,7 +222,7 @@
    },
    "result_transitions": [
     "<30s pending outcome:success",
-    "<30s completed outcome:success"
+    "<1m completed outcome:success"
    ]
   },
   "seg-4": {
@@ -237,6 +240,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 559.77,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -274,10 +278,10 @@
    },
    "job_transitions": [
     "<1s provider_pending",
-    "<30s provider_running",
-    "<30s result_ready",
-    "<30s committed",
-    "<30s committed client:completed"
+    "<1m provider_running",
+    "<1m result_ready",
+    "<1m committed",
+    "<1m committed client:completed"
    ],
    "owner": "owner-2",
    "paid_calls": 1,
@@ -291,8 +295,8 @@
     "words_provider": "modulate"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
-    "<30s completed outcome:success"
+    "<1m pending outcome:success",
+    "<1m completed outcome:success"
    ]
   },
   "seg-5": {
@@ -310,6 +314,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 552.98,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -347,9 +352,9 @@
    },
    "job_transitions": [
     "<1s provider_pending",
-    "<30s provider_running",
-    "<30s result_ready",
-    "<30s committed",
+    "<1m provider_running",
+    "<1m result_ready",
+    "<1m committed",
     "<1m committed client:completed"
    ],
    "owner": "owner-3",
@@ -364,7 +369,7 @@
     "words_provider": "modulate"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
+    "<1m pending outcome:success",
     "<1m completed outcome:success"
    ]
   },
@@ -383,6 +388,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 447.66,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -422,7 +428,7 @@
     "<1s provider_pending",
     "<30s provider_running",
     "<30s result_ready",
-    "<30s committed",
+    "<1m committed",
     "<1m committed client:completed"
    ],
    "owner": "owner-3",
@@ -437,7 +443,7 @@
     "words_provider": "modulate"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
+    "<1m pending outcome:success",
     "<1m completed outcome:success"
    ]
   },
@@ -456,6 +462,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 525.29,
      "privacy_generation": 0,
      "service": "modulate"
     },

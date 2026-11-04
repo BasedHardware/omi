@@ -219,6 +219,8 @@ class ProjectionSession:
             or not (
                 self.entry.get('protocol_version') == 1
                 or self.entry.get('protocol_version') == 2
+                and self.entry.get('projection_release_version') == 1
+                or self.entry.get('protocol_version') == 2
                 and checkpoint(self.entry)
                 or self.entry.get('protocol_version') == 2
                 and self.entry.get('lineage_quarantine_version') == 1
@@ -281,6 +283,13 @@ class ProjectionSession:
             if self.part_index and str(self.part_index - 1) not in (self.entry.get('projection_parts') or {}):
                 raise ProjectionBlocked('earlier projection part must persist first')
         if self._privacy_replay_transaction is transaction:
+            return
+        if self.entry.get('projection_redriven_at'):
+            # A released held unit re-enters projection behind the watermark:
+            # its hold already advanced the chain past it, so the erased-
+            # predecessor fence must not block the one sanctioned out-of-order
+            # re-assignment.
+            self.erased_predecessors = []
             return
         from database.batch_pipeline_privacy import erased_predecessors
 
@@ -380,11 +389,11 @@ class ProjectionSession:
                     self.store.ref('jobs', self.segment_id),
                     {'conversation_ids': firestore.ArrayUnion(output_ids)},
                 )
-            if self.part_index != self.part_count - 1:
+            if len(parts) != self.part_count:
                 transaction.update(self.result_ref, changes)
                 return receipt
             summary = {
-                **receipt,
+                **parts[str(self.part_count - 1)],
                 'state': 'ready' if all(part['state'] == 'ready' for part in parts.values()) else 'persisted',
                 'speech_seconds': max(
                     0.0,
@@ -417,6 +426,8 @@ class ProjectionSession:
                 ),
             )
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
+            if not held and self.entry.get('projection_redriven_at'):
+                changes['projection_release_attempts'] = 0
             transaction.update(self.result_ref, changes)
         else:
             transaction.update(
@@ -426,10 +437,23 @@ class ProjectionSession:
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
+                    **(
+                        {'projection_release_attempts': 0}
+                        if not held and self.entry.get('projection_redriven_at')
+                        else {}
+                    ),
                 },
             )
-        if not privacy_replay:
+        # A released held unit re-enters projection behind the watermark;
+        # re-advancing the chain onto it would stall on replaying terminal rows.
+        if not privacy_replay and not self.entry.get('projection_redriven_at'):
             transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+        if held and not privacy_replay:
+            # A quarantined receipt is replay-fenced: nothing automatic will
+            # change this unit again. Hold the job in the same transaction so
+            # the held-partial scan and a reviewed redrive (for example after a
+            # discarded record is restored) own it; audio and result stay.
+            transaction.update(self.store.ref('jobs', self.segment_id), {'recovery_state': 'held'})
         for reference in self.erased_predecessors:
             transaction.update(
                 reference,

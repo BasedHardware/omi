@@ -239,3 +239,62 @@ describe('useChat session ownership', () => {
     ]);
   });
 });
+
+describe('useChat sendMessage acceptance', () => {
+  it('resolves true when the stream completes without an error chunk', async () => {
+    vi.mocked(getMessages).mockResolvedValue([] as never);
+    vi.mocked(sendMessageStream).mockImplementation((async (
+      _text: string,
+      onChunk: (chunk: { type: string; text: string; message?: unknown }) => void,
+    ) => {
+      onChunk({ type: 'done', text: '', message: aiMessage('ok-1', 'Answer') });
+    }) as never);
+
+    const { result } = renderHook(() => useChat());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('hello');
+    });
+
+    expect(accepted).toBe(true);
+  });
+
+  it('resolves false on an error chunk and on a transport failure', async () => {
+    vi.mocked(getMessages).mockResolvedValue([] as never);
+    vi.mocked(sendMessageStream).mockImplementation((async (
+      _text: string,
+      onChunk: (chunk: { type: string; text: string }) => void,
+    ) => {
+      onChunk({ type: 'error', text: 'quota' });
+    }) as never);
+
+    const { result } = renderHook(() => useChat());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('hello');
+    });
+    expect(accepted).toBe(false);
+
+    vi.mocked(sendMessageStream).mockImplementation((async () => {
+      throw new Error('offline');
+    }) as never);
+
+    await act(async () => {
+      accepted = await result.current.sendMessage('again');
+    });
+    expect(accepted).toBe(false);
+  });
+
+  it('resolves false when nothing could be sent', async () => {
+    vi.mocked(getMessages).mockResolvedValue([] as never);
+    const { result } = renderHook(() => useChat());
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('   ');
+    });
+    expect(accepted).toBe(false);
+  });
+});

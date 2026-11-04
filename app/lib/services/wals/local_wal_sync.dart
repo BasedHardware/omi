@@ -457,6 +457,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _pendantTimer = _periodic(const Duration(seconds: 10), (t) async {
       final generation = _sessionGeneration;
       await _drainPendantTail(generation);
+      await _drainPhoneTail(generation);
     });
     try {
       WidgetsBinding.instance.addObserver(this);
@@ -477,6 +478,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       unawaited(
         _drainPendantTail(generation).catchError((e) {
           Logger.debug('LocalWalSync: lifecycle pendant drain failed: $e');
+        }),
+      );
+      // Seal the live phone-mic tail the same way: suspension may follow, and
+      // the ordinary timers may never run again.
+      unawaited(
+        _drainPhoneTail(generation).catchError((e) {
+          Logger.debug('LocalWalSync: lifecycle phone-mic seal failed: $e');
         }),
       );
     }
@@ -705,8 +713,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     } else {
       final live = _liveEvidenceFor(evidenceFrames);
 
-      bool shouldStored =
-          _bufferDeviceType == DeviceType.appleWatch || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+      bool shouldStored = _keepsLiveSafetyCopy || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
       if (!shouldStored) {
         shouldStored = _frameSynced.sublist(low, high).any((synced) => !synced);
       }
@@ -818,7 +825,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     for (final run in walEvidenceRunRanges(selection)) {
       final runFrames = selection.sublist(run.start, run.end);
       final runSynced = selectionSynced.sublist(run.start, run.end);
-      final shouldStored = _bufferDeviceType == DeviceType.appleWatch ||
+      final shouldStored = _keepsLiveSafetyCopy ||
           SharedPreferencesUtil().unlimitedLocalStorageEnabled ||
           runSynced.any((synced) => !synced);
       if (!shouldStored) continue;
@@ -917,6 +924,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<void> _drainPendantTail(int generation) => _enqueueBuffer(() async {
         if (_sealPendantTail(generation)) await _flush(generation);
+      });
+
+  /// The phone-mic twin of the pendant 10-second drain: a process death must
+  /// never leave more than one drain interval of live frames un-stored, so the
+  /// whole buffer is finalized and flushed on the same cadence the pendant
+  /// ring uses (and that [checkpointWatchAudio] uses on demand).
+  Future<void> _drainPhoneTail(int generation) => _enqueueBuffer(() async {
+        if (!_isCurrent(generation) || _deviceId != 'phone-mic' || _frames.isEmpty) return;
+        await _finalizeCurrentSession(generation);
+        await _flush(generation);
       });
 
   /// Move the complete pendant tail into WAL custody before any I/O yields.
@@ -1610,8 +1627,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     // Same shouldStored check as _chunk(): one unconfirmed frame is enough to
     // retain the session. A transport send is not transcript confirmation.
-    bool shouldStored =
-        _bufferDeviceType == DeviceType.appleWatch || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    bool shouldStored = _keepsLiveSafetyCopy || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     if (!shouldStored) {
       shouldStored = _frameSynced.sublist(0, high).any((synced) => !synced);
     }
@@ -1685,9 +1701,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
     for (final wal in _wals) {
-      final unboundWatch =
-          wal.deviceType == DeviceType.appleWatch && wal.status == WalStatus.synced && wal.syncedAt == 0;
-      if ((wal.status != WalStatus.miss && !unboundWatch) || wal.conversationId != null) continue;
+      // Transport-only synced copies (socket sends, never server-confirmed)
+      // must bind to the conversation so confirmSessionTranscription can judge
+      // them: covered → synced retention, uncovered → repair upload.
+      final transportSynced = wal.status == WalStatus.synced && wal.syncedAt == 0;
+      if ((wal.status != WalStatus.miss && !transportSynced) || wal.conversationId != null) continue;
       final walRecording = wal.recordingSessionId;
       final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
       if (foreignRecording) continue;
@@ -1905,6 +1923,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _lastFrameAccepted = true;
     return positioned;
   }
+
+  /// Live safety-copy buffers (phone mic, Apple Watch) always keep a durable
+  /// chunk. A transport send is not server confirmation, so the copy stays
+  /// recoverable until the session transcript or an upload confirms it.
+  bool get _keepsLiveSafetyCopy => _bufferDeviceType == DeviceType.appleWatch || _deviceId == 'phone-mic';
 
   bool _isPendantFrame(WalFrame frame) =>
       frame.syncKey.bytes.length == 3 && _deviceId != null && _deviceId!.isNotEmpty && _deviceId != 'phone';
