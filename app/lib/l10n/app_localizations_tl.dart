@@ -15085,5 +15085,42 @@ class AppLocalizationsTl extends AppLocalizations {
   String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
 
   @override
+  String get speakerWholeRecording => 'Ilapat sa buong recording';
+
+  @override
+  String get speakerSelectionChanged => 'Nagbago ang tagapagsalita. Piliin muli ang mga linya.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Masyadong malaki ang recording. Pumili ng mas kaunting linya sa isang usapan.',
+        'partial': 'Na-save ang ilang linya. Piliin ang natitira at subukang muli.',
+        'other': 'Na-save ang ilang linya. Piliin ang natitira at subukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinalitan ang pangalan ng $count linya sa mga available na usapan lang.',
+      one: 'Pinalitan ang pangalan ng 1 linya sa mga available na usapan lang.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Ibang linya ng boses na ito (hindi kumpirmado ang saklaw ng recording)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Tinatapos…';
 }

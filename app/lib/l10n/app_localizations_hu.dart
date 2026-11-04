@@ -15025,5 +15025,42 @@ class AppLocalizationsHu extends AppLocalizations {
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
 
   @override
+  String get speakerWholeRecording => 'Alkalmazás a teljes felvételre';
+
+  @override
+  String get speakerSelectionChanged => 'A beszélő megváltozott. Válaszd ki újra a sorokat.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'A felvétel túl nagy. Válasszon kevesebb sort egy beszélgetésből.',
+        'partial': 'Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.',
+        'other': 'Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sor átnevezve csak az elérhető beszélgetésekben.',
+      one: '1 sor átnevezve csak az elérhető beszélgetésekben.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'A hang további sorai (a felvétel lefedettsége nem igazolt)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Befejezés…';
 }

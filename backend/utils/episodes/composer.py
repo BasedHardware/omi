@@ -8,12 +8,14 @@ episode's title, notes and moments with a whole-episode summary and a handful of
 
 It runs again when the episode's evidence changes (a late member finishes, sync upgrades a
 transcript, a member is discarded): the ``composed_fingerprint`` over retained members and
-their transcripts decides. Kill switch: ``EPISODE_COMPOSER`` (on unless set off). Never
+their transcripts remains the composed-state stamp. A narrower speech/name/membership trigger
+and a bounded background quiet window avoid paying for label-only updates. Kill switch: ``EPISODE_COMPOSER`` (on unless set off). Never
 raises to callers.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -22,6 +24,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -30,6 +33,9 @@ from utils.conversations import phase_shadow
 
 from config.episodes import (
     COMPOSER_FEATURE,
+    COMPOSER_SETTLE_SECONDS,
+    COMPOSER_MAX_SETTLE_SECONDS,
+    episode_compose_settle_enabled,
     COMPOSER_LEASE_SECONDS,
     COMPOSER_MAX_FAILURES,
     COMPOSER_MAX_DETAILS,
@@ -49,12 +55,13 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
-from utils.episodes import policy
+from utils.episodes import metrics, policy
 from utils.episodes.state import is_placeholder_heading, trim_text
 from utils.episodes.visibility import hidden_member
 from utils.speakers.display import sanitize_speaker_text
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +137,30 @@ def fingerprint(members: Sequence[Mapping[str, Any]]) -> str:
         parts.append([str(row.get('id')), hashlib.sha256(evidence.encode()).hexdigest()[:24]])
     raw = json.dumps([COMPOSER_VERSION, parts], separators=(',', ':'))
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def evidence_trigger(row: Mapping[str, Any]) -> str:
+    """Only speech and resolved names buy a new compose; labels and summaries remain prompt inputs."""
+    raw = json.dumps(
+        [(str(s.get('text')).strip(), str(s.get('person_name') or '').strip()) for s in _segments(row)],
+        ensure_ascii=False,
+        separators=(',', ':'),
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _evidence(members: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    return {str(row['id']): evidence_trigger(row) for row in members}
+
+
+def _trigger_unchanged(episode: Mapping[str, Any], evidence: Mapping[str, str]) -> bool:
+    return (
+        episode.get('composed_evidence') == evidence
+        and episode.get('composed_membership') == sorted(_retained_ids(episode))
+        and episode.get('composer_version') == COMPOSER_VERSION
+        and episode.get('composed_notes') == notes_hash(episode)
+        and not episode.get('summary_needs_regeneration')
+    )
 
 
 def notes_hash(state: Mapping[str, Any]) -> str:
@@ -445,7 +476,9 @@ def _usage(reply: Any) -> tuple[int, int]:
     return int(meta.get('input_tokens') or 0), int(meta.get('output_tokens') or 0)
 
 
-def compose(uid: str, episode_id: str, *, collaborators: Any = None, force: bool = False) -> str:
+def compose(
+    uid: str, episode_id: str, *, collaborators: Any = None, force: bool = False, background: bool = False
+) -> str:
     """Compose a closed episode once its members are done. Returns an outcome label; never raises."""
     if not episode_composer_enabled():
         return 'disabled'
@@ -455,7 +488,7 @@ def compose(uid: str, episode_id: str, *, collaborators: Any = None, force: bool
     c = collaborators or service.Collaborators()
     started = time.monotonic()
     try:
-        outcome = _compose(uid, episode_id, c, force=force, service=service)
+        outcome = _compose(uid, episode_id, c, force=force, background=background, service=service)
     except Exception as error:  # Never break finalization or reads.
         logger.warning('event=episode_compose outcome=error exception_type=%s', type(error).__name__)
         outcome = 'error'
@@ -564,7 +597,7 @@ def _backed_off(episode: Mapping[str, Any], print_: Optional[str] = None) -> boo
     return bool(failed_at and datetime.now(timezone.utc) - failed_at < backoff)
 
 
-def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) -> str:
+def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any) -> str:
     episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
     if not episode:
         return 'no_episode'
@@ -590,6 +623,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
             **cleared,
             'composed_fingerprint': fingerprint(members),
             'composed_member_ids': member_ids,
+            **_trigger_stamp(episode, members),
             'composed_notes': notes_hash(cleared),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
@@ -597,15 +631,42 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
         _write(uid, episode_id, c, stamp)
         return 'empty'
     print_ = fingerprint(members)
+    if episode_compose_settle_enabled() and not force and _trigger_unchanged(episode, _evidence(members)):
+        metrics.record_compose_trigger_skipped('evidence_unchanged')
+        if episode.get('compose_pending_since'):
+            _write(uid, episode_id, c, _trigger_stamp(episode, members))
+        return 'unchanged'
     if (
         not force
         and episode.get('composed_fingerprint') == print_
         and episode.get('composed_notes') == notes_hash(episode)
         and not episode.get('summary_needs_regeneration')
     ):
+        if episode.get('compose_pending_since') or (
+            episode_compose_settle_enabled() and episode.get('composed_evidence') is None
+        ):
+            _write(uid, episode_id, c, _trigger_stamp(episode, members))
         return 'unchanged'
     if not force and _backed_off(episode, print_):
         return 'backoff'
+    if episode_compose_settle_enabled() and background and not force:
+        observed = _observe_evidence(uid, episode, c, _evidence(members))
+        if observed is not None:
+            episode = observed
+            delay = settle_delay(episode)
+            if delay > 0:
+                if _defer(uid, episode_id, c, delay):
+                    return 'settling'
+                # Pending evidence is already persisted. Preserve progress when the queue is full
+                # by using the normal immediate compose path, including its paid-once lease.
+                record_fallback(
+                    component='conversation_notes',
+                    from_mode='episode_compose_settling',
+                    to_mode='episode_compose_immediate',
+                    reason='capacity_full',
+                    outcome='degraded',
+                    log=logger,
+                )
     invoke = (c.extras or {}).get('compose_invoke')
     if invoke is None and getattr(c, 'invoke', None) is not None:
         # Collaborators that fake the incremental model never reach the real composer model.
@@ -678,6 +739,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
             'usage': usage,
             'composed_fingerprint': print_,
             'composed_member_ids': member_ids,
+            **_trigger_stamp(episode, members),
             'composed_notes': notes_hash(composed),
             'composed_at': datetime.now(timezone.utc),
             'composer_version': COMPOSER_VERSION,
@@ -716,6 +778,75 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
     return 'composed'
 
 
+def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    # Keep collecting stamps during rollback so re-enabling never requires a paid migration wave.
+    return {
+        'composed_evidence': _evidence(members),
+        'composed_membership': sorted(_retained_ids(episode)),
+        'compose_pending_since': None,
+        'compose_activity_at': None,
+        'compose_pending_evidence': None,
+        'compose_pending_membership': None,
+    }
+
+
+def _observe_evidence(
+    uid: str, episode: Mapping[str, Any], c: Any, evidence: Mapping[str, str]
+) -> Optional[dict[str, Any]]:
+    """Persist arrival activity; failure bypasses settling, never the compose or its lease."""
+    now = datetime.now(timezone.utc)
+    membership = sorted(_retained_ids(episode))
+    if (
+        episode.get('compose_pending_since')
+        and episode.get('compose_pending_evidence') == evidence
+        and episode.get('compose_pending_membership') == membership
+    ):
+        return dict(episode)
+
+    def observe(current: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            'compose_pending_since': current.get('compose_pending_since') or now,
+            'compose_activity_at': now,
+            'compose_pending_evidence': dict(evidence),
+            'compose_pending_membership': membership,
+        }
+
+    try:
+        outcome = _write(uid, str(episode['id']), c, observe)
+        if outcome != 'written':
+            raise ComposeFailed('settle_state_conflict')
+        return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or dict(episode)
+    except Exception as error:
+        logger.warning('event=episode_compose_settle outcome=bypassed exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversation_notes',
+            from_mode='episode_compose_settling',
+            to_mode='episode_compose_immediate',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
+
+
+def settle_delay(episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> float:
+    """A ten-minute quiet window, bounded by 25 minutes from the first uncomposed arrival."""
+    now = now or datetime.now(timezone.utc)
+    first = _utc(episode.get('compose_pending_since')) or now
+    activity = max(
+        at
+        for at in (
+            _utc(episode.get('compose_activity_at')) or first,
+            _utc(episode.get('closed_at')) or first,
+            _utc(episode.get('last_activity_at')) or first,
+        )
+    )
+    due = min(
+        activity + timedelta(seconds=COMPOSER_SETTLE_SECONDS), first + timedelta(seconds=COMPOSER_MAX_SETTLE_SECONDS)
+    )
+    return max(0.0, (due - now).total_seconds())
+
+
 @phase_shadow.compare('episode_composer')
 def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: Optional[Sequence[str]] = None) -> bool:
     """Cheap read-side check; the fingerprint decides for real inside ``compose``.
@@ -727,6 +858,13 @@ def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: O
     """
     if not episode or policy.is_live(episode) or not episode_composer_enabled():
         return False
+    # A restart loses the local queue. Rollback must still drain persisted pending evidence.
+    if episode.get('compose_pending_since'):
+        return True
+    if episode_compose_settle_enabled():
+        membership = episode.get('composed_membership')
+        if membership is not None and membership != sorted(_retained_ids(episode)):
+            return True
     composed = episode.get('composed_member_ids')
     if visible_member_ids is not None and composed is not None and sorted(composed) != sorted(visible_member_ids):
         return True
@@ -744,6 +882,43 @@ _inflight: set[tuple[str, str]] = set()
 _recent: dict[tuple[str, str], float] = {}
 _rerun: set[tuple[str, str]] = set()
 _inflight_lock = threading.Lock()
+# Due work holds no executor slot. The tracked backend task drains it and is cancelled at shutdown.
+_deferred: dict[tuple[str, str], tuple[float, Any]] = {}
+_foreground: set[tuple[str, str]] = set()
+
+
+def _defer(uid: str, episode_id: str, c: Any, delay: float) -> bool:
+    """Return whether work was retained; a full queue must leave the caller free to compose now."""
+    key = (uid, str(episode_id))
+    with _inflight_lock:
+        due = time.monotonic() + delay
+        previous = _deferred.get(key)
+        if previous:
+            due = min(due, previous[0])
+        if key not in _deferred and len(_deferred) >= 10_000:
+            return False
+        _deferred[key] = (due, c)
+        return True
+
+
+def _schedule_due() -> None:
+    now = time.monotonic()
+    with _inflight_lock:
+        due = [key for key, (at, _) in _deferred.items() if at <= now and key not in _inflight]
+        work = [(key, _deferred.pop(key)[1]) for key in due]
+    for (uid, episode_id), c in work:
+        schedule(uid, episode_id, collaborators=c)
+
+
+async def retry_settled_composes() -> None:
+    """Process-local deferral, like the existing executor; reads/finalizes recover work after restart."""
+    try:
+        while True:
+            _schedule_due()
+            await asyncio.sleep(1)
+    finally:
+        with _inflight_lock:
+            _deferred.clear()
 
 
 def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: bool = False) -> bool:
@@ -757,11 +932,21 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
     key = (uid, str(episode_id))
     now = time.monotonic()
     with _inflight_lock:
+        enabled = episode_compose_settle_enabled()
+        deferred = key in _deferred
+        if enabled and throttle:
+            _deferred.pop(key, None)
+            if key in _inflight:
+                _foreground.add(key)
+                _rerun.add(key)
+                return False
         if key in _inflight:
             if not throttle:
                 _rerun.add(key)  # Evidence may have changed under the running compose.
             return False
-        if throttle and now - _recent.get(key, -1e9) < COMPOSER_READ_THROTTLE_SECONDS:
+        if deferred and enabled and not throttle:
+            return False
+        if throttle and not (enabled and deferred) and now - _recent.get(key, -1e9) < COMPOSER_READ_THROTTLE_SECONDS:
             return False
         if len(_recent) > 10_000:
             _recent.clear()
@@ -769,18 +954,50 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
         _inflight.add(key)
 
     def run() -> None:
+        foreground = throttle
         try:
             for _attempt in range(3):
-                outcome = compose(uid, str(episode_id), collaborators=collaborators)
+                if episode_compose_settle_enabled():
+                    outcome = compose(uid, str(episode_id), collaborators=collaborators, background=not foreground)
+                else:
+                    outcome = compose(uid, str(episode_id), collaborators=collaborators)
+                if outcome in {'stale', 'superseded'} and not foreground and episode_compose_settle_enabled():
+                    # The cap allows one attempt during a long upload, not three paid retries in a burst.
+                    now_at = datetime.now(timezone.utc)
+                    _write(
+                        uid,
+                        str(episode_id),
+                        collaborators or SimpleNamespace(firestore_client=None),
+                        {
+                            'compose_pending_since': now_at,
+                            'compose_activity_at': now_at,
+                        },
+                    )
                 with _inflight_lock:
                     again = key in _rerun or outcome in {'stale', 'superseded'}
                     _rerun.discard(key)
+                    foreground = foreground or key in _foreground
+                    _foreground.discard(key)
+                    if outcome != 'settling':
+                        _deferred.pop(key, None)
+                if outcome == 'settling' and not foreground:
+                    break
                 if not again:
                     break
         finally:
             with _inflight_lock:
+                # A read/finalize can arrive after the loop decides to stop but before it releases
+                # inflight ownership. Hand it off instead of dropping its promotion until the timer.
+                enabled = episode_compose_settle_enabled()
+                promote = enabled and (key in _foreground or (foreground and key in _deferred))
+                reschedule = enabled and (key in _rerun or promote)
+                if promote:
+                    _deferred[key] = (time.monotonic(), collaborators)
                 _inflight.discard(key)
                 _rerun.discard(key)
+                _foreground.discard(key)
+            if reschedule:
+                schedule(uid, str(episode_id), collaborators=collaborators, throttle=promote)
 
     try:
         _executor.submit(run)
@@ -791,13 +1008,17 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
         return False
 
 
-def after_finalized(uid: str, conversation_id: str, outcome: str, collaborators: Any = None) -> str:
+def after_finalized(
+    uid: str, conversation_id: str, outcome: str, collaborators: Any = None, *, row: Optional[Mapping[str, Any]] = None
+) -> str:
     """A member finished: once its episode is closed and every member is done, compose it."""
-    schedule_for_conversation(uid, conversation_id, collaborators=collaborators)
+    schedule_for_conversation(uid, conversation_id, collaborators=collaborators, row=row)
     return outcome
 
 
-def schedule_for_conversation(uid: str, conversation_id: str, *, collaborators: Any = None) -> None:
+def schedule_for_conversation(
+    uid: str, conversation_id: str, *, collaborators: Any = None, row: Optional[Mapping[str, Any]] = None
+) -> None:
     if not episode_composer_enabled():
         return
     try:
@@ -805,6 +1026,39 @@ def schedule_for_conversation(uid: str, conversation_id: str, *, collaborators: 
         client = getattr(c, 'firestore_client', None)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
+            if episode_compose_settle_enabled():
+                c = c or SimpleNamespace(firestore_client=None, people_names=None)
+                member = (
+                    dict(row)
+                    if row is not None
+                    else conversations_db.get_conversation(uid, conversation_id, firestore_client=client)
+                )
+                baseline = episode.get('compose_pending_evidence') or episode.get('composed_evidence')
+                # A legacy full hash cannot distinguish new speech from regenerated labels.
+                # _compose backfills a matching hash for free; otherwise it settles one safe compose.
+                if isinstance(baseline, Mapping):
+                    evidence = dict(baseline)
+                    if (
+                        member
+                        and not hidden_member(member)
+                        and conversations_db.is_visible_conversation(member)
+                        and conversation_id in _retained_ids(episode)
+                    ):
+                        evidence[conversation_id] = evidence_trigger({'transcript_segments': _named(uid, member, c)})
+                    else:
+                        evidence.pop(conversation_id, None)
+                    evidence = {cid: stamp for cid, stamp in evidence.items() if cid in _retained_ids(episode)}
+                    membership = (
+                        episode.get('compose_pending_membership')
+                        if episode.get('compose_pending_since')
+                        else episode.get('composed_membership')
+                    )
+                    changed = evidence != baseline or membership != sorted(_retained_ids(episode))
+                    if not changed and not needs_compose(episode):
+                        metrics.record_compose_trigger_skipped('evidence_unchanged')
+                        return
+                    if changed:
+                        _observe_evidence(uid, episode, c, evidence)
             schedule(uid, str(episode['id']), collaborators=collaborators)
     except Exception as error:
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)

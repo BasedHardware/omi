@@ -7,12 +7,18 @@ stays in the underlying functions; this module only decides what a
 successful assignment may schedule.
 """
 
-from typing import Any, List, Mapping, Optional, Sequence
+from typing import Any, List, Mapping, Optional, Sequence, TypedDict
 
 from database import conversations as conversations_db
 from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_learning_jobs import run_authorized_owner_learning, run_authorized_person_learning
+
+
+class _RecordingAssignmentOptions(TypedDict, total=False):
+    expected_voices: Optional[dict]
+    decided_at: Optional[str]
+    recording_voice_defaults: bool
 
 
 def commit_manual_assignment(
@@ -28,8 +34,18 @@ def commit_manual_assignment(
     rejection: Optional[dict] = None,
     time_range: Optional[tuple[float, float]] = None,
     background_tasks: Any = None,
+    expected_voices: Optional[dict] = None,
+    decided_at: Optional[str] = None,
+    recording_voice_defaults: bool = False,
 ):
     """The assignment transaction plus the background work it earned, one call."""
+    recording_options: _RecordingAssignmentOptions = {}
+    if expected_voices is not None:
+        recording_options = {
+            'expected_voices': expected_voices,
+            'decided_at': decided_at,
+            'recording_voice_defaults': recording_voice_defaults,
+        }
     raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
         uid,
         conversation_id,
@@ -41,8 +57,9 @@ def commit_manual_assignment(
         use_for_speech_training=use_for_speech_training,
         rejection=rejection,
         time_range=time_range,
+        **recording_options,
     )
-    if background_tasks is not None:
+    if background_tasks is not None and resolved:
         schedule_assignment_teaching(
             background_tasks,
             uid,

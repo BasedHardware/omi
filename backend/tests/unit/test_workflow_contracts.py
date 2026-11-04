@@ -2056,6 +2056,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
         'messaging_queries.py',
         'sync_pipeline_indexes.py',
         'batch_pipeline_indexes.py',
+        'lifecycle_metrics_indexes.py',
     ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')

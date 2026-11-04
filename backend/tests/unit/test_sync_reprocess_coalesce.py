@@ -1268,7 +1268,7 @@ def test_later_summary_keeps_legacy_callback_validation_and_completion(state, mo
 
 
 @pytest.mark.parametrize(
-    'change', ['none', 'timestamps', 'text', 'span', 'visibility', 'missing_owner', 'off', 'finalize_owed']
+    'change', ['none', 'timestamps', 'text', 'span', 'visibility', 'missing_owner', 'off', 'finalize_owed', 'disabled']
 )
 def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, monkeypatch, change):
     from datetime import datetime, timedelta, timezone
@@ -1299,14 +1299,18 @@ def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, mon
     monkeypatch.setattr(pipeline.bridge_pending, 'live_finalization_owns', lambda *_: False)
     monkeypatch.setattr(pipeline, 'occasion_relevance_enabled', lambda: True)
     monkeypatch.setattr(pipeline, 'is_silent_redrive', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'record_feature', lambda *a: None)
+    features = Mock()
+    monkeypatch.setattr(pipeline, 'record_feature', features)
     monkeypatch.setenv('EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED', 'false' if change == 'off' else 'true')
     from utils.episodes import finalize
 
-    monkeypatch.setattr(finalize, 'episodes_enabled_for', lambda _: True)
+    monkeypatch.setattr(finalize, 'episodes_enabled_for', lambda _: change != 'disabled')
+    monkeypatch.setattr(pipeline, 'episodes_enabled_for', lambda _: change != 'disabled')
+    if change in {'off', 'disabled'}:
+        monkeypatch.setattr(pipeline, 'process_snapshot', Mock(side_effect=AssertionError('comparison is disabled')))
     monkeypatch.setattr(finalize, 'lifecycle_executor', lambda *a, **kw: object())
     # An equal processing pass may skip only with completed current finalize proof.
-    proof = Mock(return_value=change in {'none', 'timestamps'})
+    proof = Mock(return_value=change in {'none', 'timestamps', 'off'})
     monkeypatch.setattr(finalize, 'skip_unchanged_schedule', proof)
     schedule = Mock()
     monkeypatch.setattr(finalize, 'submit_with_context', schedule)
@@ -1330,4 +1334,6 @@ def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, mon
         pipeline._reprocess_conversation_after_update('u', 'c', 'en')
     finally:
         pipeline.PROCESS_CONTEXT.reset(token)
-    assert schedule.call_count == (0 if change in {'none', 'timestamps'} else 1)
+    assert schedule.call_count == (0 if change in {'none', 'timestamps', 'disabled'} else 1)
+
+    assert features.call_count == (0 if change == 'disabled' else 1)

@@ -30,7 +30,6 @@ from routers.listen.contracts import ConversationCaptureOrigin, persisted_starte
 from utils.byok import get_byok_keys
 from utils.executors import start_background_task
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
-from utils.live_speaker_carry import carried_receipt
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
@@ -689,7 +688,9 @@ class LiveConversationController:
                 and not previous.get('is_locked')
                 and self._active_speaker_scope() == carry_from[1]
             ):
-                carry = carried_receipt(previous, carry_from[1])
+                from utils.recording_speakers import recording_carry
+
+                carry = await self.host.persistence.call(recording_carry, request.uid, previous, carry_from[1])
                 automatic_donor = previous
         # The modeled field's None default is omitted, never stamped:
         # persist is merge=True, so a dumped None would become an

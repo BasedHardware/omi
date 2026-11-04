@@ -1366,12 +1366,9 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # Only prod backend-sync restores monthly reads for compute admission (admitscope 2026-11-01).
         # All other services/jobs (including listen/pusher) retain the guard literal.
         wanted = {**expected}
-        if environment == 'prod' and (name.startswith('cloud_run/') or name.startswith('gke/')):
-            wanted.update(memory_list_index_window=100)
         if environment == 'prod' and name == 'cloud_run/backend-sync':
-            before_monthly = dict(wanted)
             wanted.update(usage_month_cache=100, usage_month_total=100)
-            assert {key for key in wanted if wanted[key] != before_monthly[key]} == {
+            assert {key for key in wanted if wanted[key] != expected[key]} == {
                 'usage_month_cache',
                 'usage_month_total',
             }
@@ -1391,8 +1388,5 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         values_path = _SCRIPT.parents[1] / 'charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
         values = yaml.safe_load(values_path.read_text())
         chart_env = {entry['name']: entry.get('value') for entry in values['env']}
-        chart_expected = dict(expected)
-        if environment == 'prod':
-            chart_expected.update(memory_list_index_window=100)
-        assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == chart_expected
+        assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
         assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
