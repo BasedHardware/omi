@@ -335,19 +335,35 @@ class _ConversationsPageState extends State<ConversationsPage>
   final Set<String> _paintedStandaloneIds = {};
   bool _homeTabActive = true;
   bool _wasBackgrounded = false;
+  HomeProvider? _watchedHome;
 
   void _releaseHomeLayout() {
     _fallbackHomeLayout = null;
     _paintedStandaloneIds.clear();
   }
 
+  void _onHomeProviderChanged() {
+    final home = _watchedHome;
+    if (home == null) return;
+    final active = home.selectedIndex == HomeProvider.homeTab;
+    if (active == _homeTabActive) return;
+    _homeTabActive = active;
+    // Re-entering Home releases an outage-era grouping. With nothing held,
+    // a tab switch must not rebuild this page (tab_switch perf budget).
+    if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
+      setState(_releaseHomeLayout);
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final home = context.watch<HomeProvider?>();
-    final active = home == null || home.selectedIndex == HomeProvider.homeTab;
-    if (active && !_homeTabActive) _releaseHomeLayout();
-    _homeTabActive = active;
+    final home = context.read<HomeProvider?>();
+    if (identical(home, _watchedHome)) return;
+    _watchedHome?.removeListener(_onHomeProviderChanged);
+    _watchedHome = home;
+    _homeTabActive = home == null || home.selectedIndex == HomeProvider.homeTab;
+    home?.addListener(_onHomeProviderChanged);
   }
 
   @override
@@ -567,6 +583,8 @@ class _ConversationsPageState extends State<ConversationsPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _watchedHome?.removeListener(_onHomeProviderChanged);
+    _watchedHome = null;
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
     if (_initialOverlayReady != null && !_initialOverlayReady!.isCompleted) {
