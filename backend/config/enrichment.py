@@ -26,6 +26,14 @@ def route() -> EnrichmentRoute:
     return 'enrichment_queue' if value == 'enrichment_queue' else 'sync_handler'
 
 
+def primary_queue() -> str:
+    return os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
+
+
+def fresh_queue() -> str:
+    return os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
+
+
 def fresh_max_age_seconds() -> float:
     try:
         minutes = float(os.getenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30'))
@@ -53,11 +61,11 @@ def recently_finished(value: object, *, now: float) -> bool:
 def dispatch_binding(*, backfill: bool = False, effects_only: bool = False, recent: bool = False) -> dict[str, str]:
     # Share the worker/auth binding; the outbox owns fenced promotion of
     # existing unleased user-facing obligations.
-    queue = os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
+    queue = primary_queue()
     if backfill and os.getenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', 'true').strip().lower() != 'false':
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip() or queue
     if recent and not backfill and not effects_only:
-        queue = os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip() or queue
+        queue = fresh_queue() or queue
     handler = os.getenv('ENRICHMENT_TASKS_HANDLER_URL', '').strip()
     return {
         'queue': queue,

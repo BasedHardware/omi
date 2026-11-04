@@ -230,7 +230,7 @@ def _conversation_finished_at(uid: str, conversation_id: str) -> object:
 def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
     if (
         enrichment_config.route() != 'enrichment_queue'
-        or not os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
+        or not enrichment_config.fresh_queue()
         or enrichment_config.fresh_max_age_seconds() == 0
     ):
         return False
@@ -918,7 +918,7 @@ def sweep(
             # Promote only idle user-facing work, retaining the handler/auth
             # identity. Rotate the token in this CAS so old deliveries are stale.
             # Effects and backfill keep their original binding and custody.
-            fresh_queue = os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
+            fresh_queue = enrichment_config.fresh_queue()
             if (
                 not injected
                 and fresh_queue
@@ -926,7 +926,7 @@ def sweep(
                 and not row.get('effects_only')
                 and (row.get('summary_lane') != 'backfill' or first_summary_pending(row))
                 and valid_dispatch_binding(row.get('dispatch'))
-                and row['dispatch']['queue'] == os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
+                and row['dispatch']['queue'] == enrichment_config.primary_queue()
             ):
                 if recent is None:
                     recent = _recent_conversation(row['uid'], row['conversation_id'], current)
@@ -934,7 +934,7 @@ def sweep(
                 previous = row['dispatch']
                 if (
                     desired is not None
-                    and previous['queue'] == os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
+                    and previous['queue'] == enrichment_config.primary_queue()
                     and desired['queue'] != previous['queue']
                     and all(desired[field] == previous[field] for field in ('handler', 'audience', 'invoker_sa'))
                 ):
