@@ -2353,7 +2353,8 @@ final class ConversationUntitledRendered extends RegisteredEvent {
 
 enum ChatAppConnectStartedChannel {
   telegram("telegram"),
-  imessage("imessage");
+  imessage("imessage"),
+  whatsapp("whatsapp");
   const ChatAppConnectStartedChannel(this.wireName);
   final String wireName;
 }
@@ -2369,7 +2370,8 @@ final class ChatAppConnectStarted extends RegisteredEvent {
 
 enum ChatAppConnectedChannel {
   telegram("telegram"),
-  imessage("imessage");
+  imessage("imessage"),
+  whatsapp("whatsapp");
   const ChatAppConnectedChannel(this.wireName);
   final String wireName;
 }
@@ -2385,7 +2387,8 @@ final class ChatAppConnected extends RegisteredEvent {
 
 enum ChatAppDisconnectedChannel {
   telegram("telegram"),
-  imessage("imessage");
+  imessage("imessage"),
+  whatsapp("whatsapp");
   const ChatAppDisconnectedChannel(this.wireName);
   final String wireName;
 }

@@ -8683,6 +8683,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -8753,6 +8765,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -9598,6 +9622,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
               },
               {
                 "type": "null"
@@ -10994,6 +11028,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
               },
               {
                 "type": "null"
@@ -15942,6 +15986,13 @@
             "title": "Emoji",
             "type": "string"
           },
+          "follow_ups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Follow Ups",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15949,6 +16000,11 @@
           "last_activity_at": {
             "format": "date-time",
             "title": "Last Activity At",
+            "type": "string"
+          },
+          "lede": {
+            "default": "",
+            "title": "Lede",
             "type": "string"
           },
           "members": {
@@ -16198,6 +16254,13 @@
             "title": "Id",
             "type": "string"
           },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodePoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
           "start_offset": {
             "default": 0.0,
             "title": "Start Offset",
@@ -16216,6 +16279,27 @@
           "ended_at"
         ],
         "title": "EpisodeMoment",
+        "type": "object"
+      },
+      "EpisodePoint": {
+        "description": "One point of a composed moment, with optional supporting specifics under it.",
+        "properties": {
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "EpisodePoint",
         "type": "object"
       },
       "EpisodeProvisionalItem": {
@@ -27652,6 +27736,41 @@
         "title": "RecommendationSubjectKind",
         "type": "string"
       },
+      "RecordAudioPartial": {
+        "description": "Available transcript is incomplete; this never certifies a complete seal.",
+        "properties": {
+          "applied_generation": {
+            "default": 0,
+            "title": "Applied Generation",
+            "type": "integer"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "tail_lagging",
+              "budget_limit",
+              "tail_lost_or_unproven"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RecordAudioPartial",
+        "type": "object"
+      },
       "RecordLlmUsageBucketRequest": {
         "properties": {
           "account": {
@@ -29293,6 +29412,13 @@
             "title": "Capture Completeness",
             "type": "string"
           },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenDeviceCoverage"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
           "first_observed_at": {
             "anyOf": [
               {
@@ -29542,6 +29668,40 @@
           "last_id"
         ],
         "title": "ScreenActivitySyncResponse",
+        "type": "object"
+      },
+      "ScreenDeviceCoverage": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "title": "First Observed At",
+            "type": "string"
+          },
+          "last_observed_at": {
+            "title": "Last Observed At",
+            "type": "string"
+          },
+          "synced_through": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Through"
+          }
+        },
+        "required": [
+          "device_id",
+          "first_observed_at",
+          "last_observed_at"
+        ],
+        "title": "ScreenDeviceCoverage",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {
@@ -30091,6 +30251,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -30165,6 +30337,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -34122,6 +34306,11 @@
             "title": "Successful Segments",
             "type": "integer"
           },
+          "total_files": {
+            "default": 0,
+            "title": "Total Files",
+            "type": "integer"
+          },
           "total_segments": {
             "default": 0,
             "title": "Total Segments",
@@ -36303,7 +36492,7 @@
         "type": "object"
       },
       "TranscriptionAllowanceSnapshot": {
-        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(no transcription access). ``remaining_seconds`` is null when unlimited.",
         "properties": {
           "mode": {
             "title": "Mode",
@@ -76761,7 +76950,7 @@
     },
     "/v1/users/me/paywall": {
       "get": {
-        "description": "Trial-paywall status for the calling user on the given platform.\n\nUsed by the Rust desktop-backend middleware to decide whether to proxy\npaid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of\n`is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth\naccount >3d old + platform in {macos, desktop}. Mobile platforms always\nreturn `paywalled=false`.\n\nPlatform comes from `X-App-Platform` header (preferred) or `platform`\nquery param (fallback). Unknown / missing platforms are never paywalled.",
+        "description": "Released desktop middleware still reads this permanently disabled gate.",
         "operationId": "get_user_paywall_status_v1_users_me_paywall_get",
         "parameters": [
           {
@@ -77112,7 +77301,7 @@
     },
     "/v1/users/me/trial": {
       "get": {
-        "description": "Structured trial metadata for the calling user.\n\nReturns trial timing info (start, end, remaining seconds, expired flag)\nplus the list of features available during trial and the plan the user\nfalls to after trial expiry. Used by desktop clients to render countdown\nbanners and pre-expiry upgrade nudges.\n\nPaid-plan and BYOK users get `trial_expired=False` with zeroed timing\n(trial is irrelevant to them — they have full access).",
+        "description": "Retain the disabled trial's constant metadata for released desktop decoders.",
         "operationId": "get_user_trial_status_v1_users_me_trial_get",
         "parameters": [
           {
@@ -85182,6 +85371,24 @@
             }
           },
           {
+            "description": "Original batch job for an exact custody repair bundle",
+            "in": "query",
+            "name": "repair_job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Original batch job for an exact custody repair bundle",
+              "title": "Repair Job Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-App-Platform",
             "required": false,
@@ -85397,6 +85604,22 @@
               "default": false,
               "title": "Surface Open",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Custody-Repair-Protocol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Custody-Repair-Protocol"
             }
           },
           {

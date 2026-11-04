@@ -495,8 +495,10 @@ async def test_pipelined_fatal_gpu_refunds_every_lane_and_raises(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_pipelined_maintenance_runs_off_lane_and_recovers_persisted_results():
+@pytest.mark.parametrize('flights', [1, 2])
+async def test_maintenance_runs_off_lane_and_recovers_persisted_results(flights):
     store, queue, pump = pipelined(ExclusiveWorker())
+    pump.flights = flights
     lease = queue.pull(time.time())[0]
     queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, time.time())
     lanes = []
@@ -690,3 +692,36 @@ async def test_partial_claim_failure_computes_and_commits_the_claimed_leases(mon
     states = sorted(store.rows['jobs', v]['state'] for v in ('first', 'other'))
     # The claimed lease ran at once; the unclaimed job never left the queue.
     assert states == ['committed', 'ready']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('maximum, expected', [('10', [2, 4, 8, 10, 10, 2, 4]), ('2', [2] * 7)])
+async def test_idle_backoff_ladder_and_productive_reset(monkeypatch, maximum, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', maximum)
+    _, _, pump = setup()
+    stop = asyncio.Event()
+    counts = iter([0, 0, 0, 0, 0, 1, 0, 0])
+    sleeps = []
+
+    async def run_once(**kwargs):
+        return next(counts)
+
+    async def wait_for(awaitable, *, timeout):
+        awaitable.close()
+        sleeps.append(timeout)
+        if len(sleeps) == len(expected):
+            stop.set()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(pump, 'run_once', run_once)
+    monkeypatch.setattr(module.asyncio, 'wait_for', wait_for)
+    await pump._lane(stop)
+    assert sleeps == expected
+
+
+@pytest.mark.parametrize('raw, expected', [('bad', 10), ('nan', 10), ('inf', 10), ('0', 2), ('100', 30)])
+def test_idle_backoff_configuration_is_bounded(monkeypatch, raw, expected):
+    from config.batch_pipeline import idle_poll_max_seconds
+
+    monkeypatch.setenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', raw)
+    assert idle_poll_max_seconds() == expected

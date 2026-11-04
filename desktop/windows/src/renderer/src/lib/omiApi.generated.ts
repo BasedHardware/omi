@@ -1378,6 +1378,7 @@ export interface CleanerMemory {
   category: MemoryCategory;
   category_source?: string | null;
   content: string;
+  extracted_at?: string | null;
   id: string;
   manually_added?: boolean | null;
   manually_added_source?: string | null;
@@ -1385,6 +1386,7 @@ export interface CleanerMemory {
   policy?: Record<string, unknown> | null;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+  source_at?: string | null;
 }
 
 export interface ClickUpListsResponse {
@@ -1512,6 +1514,7 @@ export interface Conversation {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  record_audio_partial?: RecordAudioPartial | null;
   recorded_end?: string | null;
   recorded_start?: string | null;
   screenshot_sharing_enabled?: boolean;
@@ -1724,6 +1727,7 @@ export interface ConversationSearchItem {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  record_audio_partial?: RecordAudioPartial | null;
   recorded_end?: string | null;
   recorded_start?: string | null;
   screenshot_sharing_enabled?: boolean;
@@ -2528,8 +2532,10 @@ export interface Episode {
   closed_at?: string | null;
   conversation_ids?: Array<string>;
   emoji?: string;
+  follow_ups?: Array<string>;
   id: string;
   last_activity_at: string;
+  lede?: string;
   members?: Array<EpisodeMember>;
   moments?: Array<EpisodeMoment>;
   people?: Array<string>;
@@ -2574,8 +2580,14 @@ export interface EpisodeMoment {
   ended_at: string;
   heading?: string;
   id: string;
+  points?: Array<EpisodePoint>;
   start_offset?: number;
   started_at: string;
+}
+
+export interface EpisodePoint {
+  details?: Array<string>;
+  text: string;
 }
 
 export interface EpisodeProvisionalItem {
@@ -4464,6 +4476,13 @@ export interface Recommendation {
 
 export type RecommendationSubjectKind = "candidate" | "task" | "workstream" | "artifact" | "decision" | "agent_open_loop";
 
+export interface RecordAudioPartial {
+  applied_generation?: number;
+  generation?: number;
+  reason: "tail_lagging" | "budget_limit" | "tail_lost_or_unproven";
+  version?: 1;
+}
+
 export interface RecordLlmUsageBucketRequest {
   account?: string;
   cache_read_tokens?: number;
@@ -4724,6 +4743,7 @@ export interface ScreenActivityAppSummary {
 
 export interface ScreenActivityCoverage {
   capture_completeness?: "unknown";
+  devices?: Array<ScreenDeviceCoverage>;
   first_observed_at?: string | null;
   last_observed_at?: string | null;
   row_limit: number;
@@ -4765,6 +4785,13 @@ export interface ScreenActivitySyncResponse {
   frame_requests?: Array<FrameRequestDelivery> | null;
   last_id: number;
   synced: number;
+}
+
+export interface ScreenDeviceCoverage {
+  device_id: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  synced_through?: string | null;
 }
 
 export interface ScreenFrameAdjudicationRequest {
@@ -4870,6 +4897,7 @@ export interface SearchedMemory {
   category: MemoryCategory;
   category_source?: string | null;
   content: string;
+  extracted_at?: string | null;
   id: string;
   manually_added?: boolean | null;
   manually_added_source?: string | null;
@@ -4878,6 +4906,7 @@ export interface SearchedMemory {
   relevance_score: number;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+  source_at?: string | null;
 }
 
 export interface Section {
@@ -5562,6 +5591,7 @@ export interface SyncJobStatusResponse {
   retry_after?: number | null;
   status: string;
   successful_segments?: number;
+  total_files?: number;
   total_segments?: number;
 }
 
@@ -6759,6 +6789,7 @@ export interface OmiApiSchemas {
   "EpisodeLookupResponse": EpisodeLookupResponse;
   "EpisodeMember": EpisodeMember;
   "EpisodeMoment": EpisodeMoment;
+  "EpisodePoint": EpisodePoint;
   "EpisodeProvisionalItem": EpisodeProvisionalItem;
   "EpisodeWrapUpRequest": EpisodeWrapUpRequest;
   "ErrorResponse": ErrorResponse;
@@ -7011,6 +7042,7 @@ export interface OmiApiSchemas {
   "RebuildResponse": RebuildResponse;
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
+  "RecordAudioPartial": RecordAudioPartial;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
   "RecordedClock": RecordedClock;
   "RedeemCodeRequest": RedeemCodeRequest;
@@ -7051,6 +7083,7 @@ export interface OmiApiSchemas {
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
   "ScreenActivitySyncResponse": ScreenActivitySyncResponse;
+  "ScreenDeviceCoverage": ScreenDeviceCoverage;
   "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
   "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
   "ScreenFrameCandidateIn": ScreenFrameCandidateIn;
@@ -22783,7 +22816,7 @@ export async function create_sync_capture_manifest_v2_sync_capture_manifest_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, recording_session_id?: string | null, audio_start_seconds?: number | null, audio_end_seconds?: number | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Firmware_Version?: string | null, X_Omi_Device_Model?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, recording_session_id?: string | null, audio_start_seconds?: number | null, audio_end_seconds?: number | null, repair_job_id?: string | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Firmware_Version?: string | null, X_Omi_Device_Model?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)
@@ -22812,7 +22845,7 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
   return;
 }
 
-export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, query: { surface_open?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
+export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, query: { surface_open?: boolean }, header: { X_Omi_Custody_Repair_Protocol?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files/${path.job_id}`;
   const _params = query ? Object.entries(query)
@@ -22824,6 +22857,7 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_Custody_Repair_Protocol !== undefined ? { "X-Omi-Custody-Repair-Protocol": String(header.X_Omi_Custody_Repair_Protocol) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),

@@ -187,7 +187,11 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
-    outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    started = time.monotonic()
+    try:
+        outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    finally:
+        logger.info('event=batch_recovery_stage stage=recognition duration_seconds=%.3f', time.monotonic() - started)
     if outcome == 'held':
         try:
             await run_blocking(
@@ -202,7 +206,13 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if outcome == 'disabled':
         return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:
-        await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id)
+        started = time.monotonic()
+        try:
+            await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id, owner_only=True)
+        finally:
+            logger.info(
+                'event=batch_recovery_stage stage=post_recovery duration_seconds=%.3f', time.monotonic() - started
+            )
     return {'status': outcome}
 
 
@@ -262,9 +272,12 @@ async def metrics():
 
 
 @router.post('/authorize-compute', include_in_schema=False)
-async def authorize_compute(body: HeartbeatRequest):
-    return await run_blocking(
-        db_executor, authorize, body.service().store, [lease.model_dump() for lease in body.leases]
+async def authorize_compute(body: HeartbeatRequest, request: Request):
+    # Workers advertise their client budget in a header so either side may roll first.
+    return await authorize(
+        body.service().store,
+        [lease.model_dump() for lease in body.leases],
+        budget=request.headers.get('x-omi-admission-seconds'),
     )
 
 
@@ -288,7 +301,9 @@ async def enrichment_response(payload: dict):
             from routers.enrichment import consume
             from utils.workers.consumer import http_response
 
-            return http_response(await run_blocking(postprocess_executor, consume, document_id, token))
+            return http_response(
+                await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
+            )
         # Summaries must not queue behind long transcription jobs. Reuse the
         # conversation-processing bulkhead; the master flag restores the old pool.
         executor = postprocess_executor if summary_deadline_enabled() else sync_executor

@@ -149,7 +149,7 @@ class LLMUsageCallback(BaseCallbackHandler):
                 if ctx.feature == 'chat_agent':
                     from utils.messaging.metrics import CHAT_TOKENS
 
-                    surface = ctx.surface if ctx.surface in {'app', 'telegram', 'imessage'} else 'other'
+                    surface = ctx.surface if ctx.surface in {'app', 'telegram', 'imessage', 'whatsapp'} else 'other'
                     for kind, value in [
                         ('input', input_tokens),
                         ('cache_read', cache_read),

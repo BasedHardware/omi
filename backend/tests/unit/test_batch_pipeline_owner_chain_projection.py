@@ -17,6 +17,13 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+# build_incoming imports these lazily. Load at collection so the first
+# assignment does not pay unrelated provider/model imports in its CPU budget.
+import models.conversation  # noqa: F401
+import utils.conversations.deterministic_minimum  # noqa: F401
+import utils.stt.pre_recorded  # noqa: F401
+import utils.sync.capture  # noqa: F401
+
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from google.api_core import exceptions as api_exceptions
 
@@ -396,16 +403,16 @@ def test_discarded_record_silence_head_quarantines_and_advances(monkeypatch):
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]
 
 
-def test_fresh_discarded_record_target_keeps_waiting(monkeypatch):
+def test_fresh_finalize_pending_record_target_keeps_waiting(monkeypatch):
     """Awaiting-writer conflicts on fresh rows keep waiting: the record may be
-    restored from discard, so the head stays pending and nothing quarantines."""
+    finalized by its writer, so the head stays pending and nothing quarantines."""
     from utils.sync.assignment_errors import SyncAssignmentConflictReason
 
     log = ResultLog()
     ids = [f'f-{n}' for n in range(2)]
     for sid in ids:
         log.commit(BURST, 'f', sid, ids, record=True, fresh_capture=True, outcome='success')
-    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=10)
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_FINALIZE_PENDING, fail_first_n=10)
     projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
     assert projector.project_owner(BURST) == []
     assert log.persist_order == []
@@ -535,7 +542,7 @@ def test_fresh_awaiting_writer_conflict_is_bounded_not_forever(monkeypatch):
     ids = [f'fw-{n}' for n in range(2)]
     for sid in ids:
         log.commit(BURST, 'fw', sid, ids, record=True, fresh_capture=True, outcome='success')
-    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=10**6)
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_FINALIZE_PENDING, fail_first_n=10**6)
     projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
     assert projector.project_owner(BURST) == []
     assert log.results[ids[0]]['projection_state'] == 'pending'

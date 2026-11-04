@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from copy import deepcopy
 import json
 
 import pytest
@@ -116,6 +117,129 @@ def test_live_member_stays_owned_after_cap_and_after_new_episode_opens(lane):
     assert episodes.get_episode_for_conversation('u', 'long', firestore_client=store)['id'] == owner['id']
     assert_timeline(store)
     assert not calls
+
+
+def _old_overlap(store):
+    """Two closed episodes from before the fence: overlapping windows and one shared member."""
+    end = T0 + timedelta(minutes=30)
+    for eid in ('x', 'y'):
+        store.rows[('users', 'u', 'episodes', eid)] = episodes.seal(
+            'u',
+            dict(
+                id=eid,
+                status='closed',
+                close_reason='gap',
+                conversation_ids=['same', eid],
+                started_at=T0,
+                last_activity_at=end,
+                state_version=1,
+            ),
+        )
+    store.rows[('users', 'u', 'episode_links', 'same')] = {'episode_id': 'x'}
+    store.rows[('users', 'u', 'episode_links', 'y')] = {'episode_id': 'y'}
+
+
+def test_notes_write_on_closed_episode_ignores_older_overlap(lane):
+    store, _, _ = lane
+    _old_overlap(store)
+    stored = episodes.update_episode('u', 'y', expected_version=1, updates={'title': 'Notes'}, firestore_client=store)
+    assert stored['title'] == 'Notes' and stored['state_version'] == 2
+    assert store.rows[('users', 'u', 'episode_links', 'same')] == {'episode_id': 'x'}
+
+
+@pytest.mark.parametrize(
+    'updates',
+    [{'last_activity_at': T0 + timedelta(minutes=40)}, {'conversation_ids': ['same', 'y', 'new']}],
+)
+def test_closed_episode_write_that_moves_it_is_still_checked(lane, updates):
+    store, _, _ = lane
+    _old_overlap(store)
+    with pytest.raises(episodes.EpisodeConflict, match='conversation_already_owned'):
+        episodes.update_episode('u', 'y', expected_version=1, updates=updates, firestore_client=store)
+
+
+def test_closed_episode_window_move_is_still_refused_on_overlap(lane):
+    store, _, _ = lane
+    _old_overlap(store)
+    store.rows[('users', 'u', 'episode_links', 'same')] = {'episode_id': 'y'}
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_window_overlap'):
+        episodes.update_episode(
+            'u',
+            'y',
+            expected_version=1,
+            updates={'last_activity_at': T0 + timedelta(minutes=40)},
+            firestore_client=store,
+        )
+
+
+@pytest.mark.parametrize('overlap', ['same_start', 'predecessor', 'successor'])
+def test_live_poll_defers_conflicted_idle_close_without_rewriting_episodes(lane, monkeypatch, overlap, caplog):
+    from routers import episodes as router
+    from utils.other import endpoints as auth
+
+    store, c, _ = lane
+    monkeypatch.setattr(service, '_close_conflicts', {})
+    _old_overlap(store)
+    current = store.rows[('users', 'u', 'episodes', 'y')]
+    current['status'] = 'live'
+    current['conversation_ids'] = ['y']
+    other = store.rows[('users', 'u', 'episodes', 'x')]
+    other['conversation_ids'] = ['x']
+    if overlap == 'predecessor':
+        other['started_at'] = T0 - timedelta(minutes=1)
+    elif overlap == 'successor':
+        other['started_at'] = T0 + timedelta(minutes=10)
+    # The late member's recording extends past the next episode, while its
+    # processing arrival is hours later. The close must not guess ownership.
+    store.rows[('users', 'u', 'conversations', 'y')] = row('y', seconds=40 * 60)
+    store.rows[('users', 'u', 'episode_links', 'current')] = {'episode_id': 'y'}
+    c.now = lambda: NOW
+    before = deepcopy(store.rows)
+    close_calls = []
+    close = episodes.close_episode
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_window_overlap'):
+        close('u', 'y', 'idle', firestore_client=store, expected_activity_at=current['last_activity_at'])
+
+    def tracked_close(*args, **kwargs):
+        close_calls.append(args)
+        return close(*args, **kwargs)
+
+    monkeypatch.setattr(episodes, 'close_episode', tracked_close)
+    live = service.live_episode
+    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
+    monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
+    counter = service.metrics.EPISODE_CLOSE_CONFLICT_TOTAL.labels(reason='recorded_window_overlap')
+    count_before = counter._value.get()
+    client = TestClient(app)
+    for _ in range(3):
+        response = client.get('/v1/episodes/live')
+        assert response.status_code == 200
+        assert response.json()['episode']['id'] == 'y'
+    assert len(close_calls) == 1
+    assert counter._value.get() == count_before + 1
+    assert 'event=episode_close_conflict reason=recorded_window_overlap' in caplog.text
+    assert store.rows == before
+    assert not store.transactions[-1].has_written
+
+    # New episode state bypasses the cooldown, rather than hiding new activity.
+    current['state_version'] += 1
+    assert client.get('/v1/episodes/live').status_code == 200
+    assert len(close_calls) == 2
+    # The same state is retried after the bounded cooldown, allowing a repaired
+    # timeline to close without a process restart or a write to this episode.
+    fingerprint, _ = service._close_conflicts['u']
+    service._close_conflicts['u'] = (fingerprint, 0)
+    other['started_at'] = T0 + timedelta(minutes=50)
+    other['last_activity_at'] = T0 + timedelta(minutes=60)
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: None)
+    response = client.get('/v1/episodes/live')
+    assert response.status_code == 200 and response.json()['episode'] is None
+    assert len(close_calls) == 3
+    assert episodes.get_episode('u', 'y', firestore_client=store)['status'] == 'closed'
 
 
 @pytest.mark.parametrize('writer', ['commit', 'update', 'reopen'])

@@ -111,7 +111,6 @@ def install_canonical_write_runtime_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
     subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
@@ -276,7 +275,6 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
     subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
@@ -464,7 +462,6 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
     vector_db_mod.upsert_memory_vector = MagicMock()
     vector_db_mod.delete_memory_vector = MagicMock()
     vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     vector_db_mod.delete_memory_vectors_batch = MagicMock()
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
@@ -547,7 +544,6 @@ def install_ws_m_heavy_import_stubs() -> list[str]:
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
     vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
 

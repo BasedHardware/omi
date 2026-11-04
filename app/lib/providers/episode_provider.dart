@@ -39,6 +39,7 @@ class EpisodeProvider extends ChangeNotifier {
   List<Episode> get homeEpisodes => enabled && _ownerUid == SharedPreferencesUtil().uid ? _homeEpisodes : const [];
   String? _homeKey;
   DateTime? _homeReadAt;
+  Timer? _homeHold;
   int _homeGeneration = 0;
 
   ConversationProvider? _homeConversations;
@@ -125,11 +126,23 @@ class EpisodeProvider extends ChangeNotifier {
         cursor = data.nextCursor;
         if (cursor != null && !cursors.add(cursor)) return;
       } else {
+        _holdHome(from, to, key);
         return;
       }
     } while (cursor != null);
     _homeEpisodes = collected.values.toList();
     notifyListeners();
+    _holdHome(from, to, key);
+  }
+
+  /// Nothing else rebuilds Home while a finished episode waits, so re-read until it settles.
+  /// A single member shows as its own conversation and never waits.
+  void _holdHome(DateTime from, DateTime to, String key) {
+    _homeHold?.cancel();
+    if (!_homeEpisodes.any((e) => e.members.length != 1 && e.awaitingSummary(_clock()))) return;
+    _homeHold = Timer(pollInterval, () {
+      if (key == _homeKey) unawaited(refreshHome(from, to, force: true));
+    });
   }
 
   @visibleForTesting
@@ -198,6 +211,7 @@ class EpisodeProvider extends ChangeNotifier {
     _captureId = null;
     _previousBeforeCapture = null;
     _homeEpisodes = const [];
+    _homeHold?.cancel();
     _hiddenHomeMembers = {};
     _homeVisibilityRows = null;
     _homeKey = null;
@@ -526,6 +540,7 @@ class EpisodeProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _homeHold?.cancel();
     _disposed = true;
     _homeConversations?.removeListener(_syncHomeVisibility);
     _poll?.cancel();

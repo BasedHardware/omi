@@ -160,7 +160,7 @@ def _scrap_conversation():
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='Two people are discussing the scaling plan.',
+                text='Two people are discussing the scaling plan and the firmware testing schedule together.',
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,

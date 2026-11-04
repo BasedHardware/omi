@@ -69,9 +69,9 @@ mixed identity cannot be established. No actual resource is configured here.
 ## Firestore read train (#23797, 2026-10-27)
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
-surfaces explicitly declare all 19 current keys. The three train changes are
-`memory_list_index_window:0`, `batch_privacy_memoize:0`, and
-`people_scan_dedupe:100`; `finjob_candidate_queries` stays at 5.
+surfaces explicitly declare all 20 current keys. The guard flag-offs leave
+`memory_list_index_window:0`, `batch_privacy_memoize:0`,
+`people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
 
@@ -107,3 +107,12 @@ with `usage_month_total:0` while leaving maintenance on; after any old writer,
 keep readers off until all writers qualify and a new common epoch is selected.
 Count net reads plus writes and seed scans in D+1 billing; this config alone
 establishes no realized savings.
+
+Batch worker control-loop settings are declared in the worker chart (including
+explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
+and `firestoreReadLevers: '{"batch_privacy_memoize":100}' `. The three control knobs
+also have matching base declarations on serving batch hosts; pusher does not run
+the batch scheduler/pump and the co-host contract classifies them listen-only.
+The worker-only privacy lever does not change the complete serving-role literals
+above. Worker rollback: 64 / false / 2 / `{}` respectively. See
+[the worker runbook](../../docs/batch-pipeline-worker.md) for the lead's soak gates.

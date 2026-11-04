@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from git_test_env import clean_git_env
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -353,7 +354,7 @@ def json_loads(text: str) -> object:
 
 def git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     command = ["git", *GIT_ISOLATION, *args]
-    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment = clean_git_env()
     result = subprocess.run(command, cwd=root, check=False, text=True, capture_output=True, env=environment)
     if check and result.returncode:
         raise AssertionError(f"{command} failed: {result.stderr}")
@@ -361,7 +362,7 @@ def git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProce
 
 
 def run_cli(root: Path, path: str) -> subprocess.CompletedProcess[str]:
-    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment = clean_git_env()
     return subprocess.run(
         [sys.executable, str(CLI), "--root", str(root), path],
         cwd=root,

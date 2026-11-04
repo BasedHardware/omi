@@ -76,6 +76,7 @@ class GeneratedEpisodeMoment {
   final DateTime endedAt;
   final String heading;
   final String id;
+  final List<GeneratedEpisodePoint>? points;
   final double startOffset;
   final DateTime startedAt;
 
@@ -85,6 +86,7 @@ class GeneratedEpisodeMoment {
     required this.endedAt,
     this.heading = "",
     required this.id,
+    this.points,
     this.startOffset = 0.0,
     required this.startedAt,
   });
@@ -96,6 +98,7 @@ class GeneratedEpisodeMoment {
       endedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["ended_at"]), "ended_at", _readDateTime, requiredField: true, nullable: false), "ended_at"),
       heading: _required(_readFieldValue<String>(_readField(json, const ["heading"]), "heading", _readString, requiredField: false, nullable: false, defaultValue: ""), "heading"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      points: _readFieldValue<List<GeneratedEpisodePoint>>(_readField(json, const ["points"]), "points", (value) => _readObjectList(value, GeneratedEpisodePoint.fromJson), requiredField: false, nullable: true),
       startOffset: _required(_readFieldValue<double>(_readField(json, const ["start_offset"]), "start_offset", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "start_offset"),
       startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
     );
@@ -108,8 +111,33 @@ class GeneratedEpisodeMoment {
       'ended_at': endedAt.toUtc().toIso8601String(),
       'heading': heading,
       'id': id,
+      'points': points?.map((value) => value.toJson()).toList(),
       'start_offset': startOffset,
       'started_at': startedAt.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedEpisodePoint {
+  final List<String>? details;
+  final String text;
+
+  const GeneratedEpisodePoint({
+    this.details,
+    required this.text,
+  });
+
+  factory GeneratedEpisodePoint.fromJson(Map<String, dynamic> json) {
+    return GeneratedEpisodePoint(
+      details: _readFieldValue<List<String>>(_readField(json, const ["details"]), "details", _readStringList, requiredField: false, nullable: true),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'details': details,
+      'text': text,
     };
   }
 }
@@ -176,8 +204,10 @@ class GeneratedEpisode {
   final DateTime? closedAt;
   final List<String>? conversationIds;
   final String emoji;
+  final List<String>? followUps;
   final String id;
   final DateTime lastActivityAt;
+  final String lede;
   final List<GeneratedEpisodeMember>? members;
   final List<GeneratedEpisodeMoment>? moments;
   final List<String>? people;
@@ -195,8 +225,10 @@ class GeneratedEpisode {
     this.closedAt,
     this.conversationIds,
     this.emoji = "",
+    this.followUps,
     required this.id,
     required this.lastActivityAt,
+    this.lede = "",
     this.members,
     this.moments,
     this.people,
@@ -216,8 +248,10 @@ class GeneratedEpisode {
       closedAt: _readFieldValue<DateTime>(_readField(json, const ["closed_at"]), "closed_at", _readDateTime, requiredField: false, nullable: true),
       conversationIds: _readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: false, nullable: true),
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
+      followUps: _readFieldValue<List<String>>(_readField(json, const ["follow_ups"]), "follow_ups", _readStringList, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       lastActivityAt: _required(_readFieldValue<DateTime>(_readField(json, const ["last_activity_at"]), "last_activity_at", _readDateTime, requiredField: true, nullable: false), "last_activity_at"),
+      lede: _required(_readFieldValue<String>(_readField(json, const ["lede"]), "lede", _readString, requiredField: false, nullable: false, defaultValue: ""), "lede"),
       members: _readFieldValue<List<GeneratedEpisodeMember>>(_readField(json, const ["members"]), "members", (value) => _readObjectList(value, GeneratedEpisodeMember.fromJson), requiredField: false, nullable: true),
       moments: _readFieldValue<List<GeneratedEpisodeMoment>>(_readField(json, const ["moments"]), "moments", (value) => _readObjectList(value, GeneratedEpisodeMoment.fromJson), requiredField: false, nullable: true),
       people: _readFieldValue<List<String>>(_readField(json, const ["people"]), "people", _readStringList, requiredField: false, nullable: true),
@@ -238,8 +272,10 @@ class GeneratedEpisode {
       'closed_at': closedAt?.toUtc().toIso8601String(),
       'conversation_ids': conversationIds,
       'emoji': emoji,
+      'follow_ups': followUps,
       'id': id,
       'last_activity_at': lastActivityAt.toUtc().toIso8601String(),
+      'lede': lede,
       'members': members?.map((value) => value.toJson()).toList(),
       'moments': moments?.map((value) => value.toJson()).toList(),
       'people': people,

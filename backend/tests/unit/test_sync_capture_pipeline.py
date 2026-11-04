@@ -1,6 +1,7 @@
 """Real VAD export and process_segment preserve speech extents; silence creates nothing."""
 
 import logging
+import asyncio
 from copy import deepcopy
 from google.api_core.exceptions import InvalidArgument, ServiceUnavailable, TooManyRequests
 from pathlib import Path
@@ -71,6 +72,32 @@ def pipeline():
         # user whose app never called the episodes API. The wiring test spies on it.
         module.schedule_synced_intake_attach = lambda uid, cid, row: None
         yield module, store
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('task_mode', [False, True])
+async def test_coordinator_scopes_privacy_before_first_await_and_closes_on_cancellation(
+    pipeline, monkeypatch, tmp_path, task_mode
+):
+    from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
+
+    module, _ = pipeline
+    observed = []
+
+    async def cancel_at_first_await(uid):
+        observed.append(current_attempt())
+        assert observed[-1] is not None
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(module, 'warm_rollout_cohorts', cancel_at_first_await)
+    with batch_privacy_attempt() as parent:
+        with pytest.raises(asyncio.CancelledError):
+            await module.run_full_pipeline_background_async(
+                'privacy-test-job', 'privacy-test-owner', [], None, False, str(tmp_path), task_mode=task_mode
+            )
+        assert current_attempt() is parent
+        assert len(observed) == 1 and observed[0] is not parent and observed[0]._closed
+    assert current_attempt() is None
 
 
 @pytest.mark.parametrize('quiet', [False, True])

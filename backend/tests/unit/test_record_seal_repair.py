@@ -46,7 +46,9 @@ def source(monkeypatch):
     artifacts = SimpleNamespace(authorize=Mock(), key_for_owner=lambda _: b'x' * 32)
     monkeypatch.setattr(repair, 'list_audio_chunks', lambda *a, **kw: ['retained'])
     monkeypatch.setattr(
-        repair, 'retained_record_units', lambda *a: (u for u in [(100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])])
+        repair,
+        'retained_record_units',
+        lambda *a, **kw: (u for u in [(100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])]),
     )
 
     def allowed(client, tx, uid, **kwargs):
@@ -103,7 +105,7 @@ def test_refuses_unsafe_conversation_states(source, change, disposition):
 
 @pytest.mark.parametrize('units', [[], [(100, 1, [])], [(100, float('nan'), [])]])
 def test_missing_short_or_nonfinite_tail_refused(source, monkeypatch, units):
-    monkeypatch.setattr(repair, 'retained_record_units', lambda *a: (u for u in units))
+    monkeypatch.setattr(repair, 'retained_record_units', lambda *a, **kw: (u for u in units))
     assert plan(source)['entries'][0]['disposition'] == 'proof_refused'
 
 
@@ -132,7 +134,9 @@ def test_plan_digest_binds_source_generations_and_refuses_stale_approval(source,
     store, client, _ = source
     old = plan(source)
     monkeypatch.setattr(
-        repair, 'retained_record_units', lambda *a: (u for u in [(100, 2, [{'generation': 2, 'pcm_sha256': 'proof'}])])
+        repair,
+        'retained_record_units',
+        lambda *a, **kw: (u for u in [(100, 2, [{'generation': 2, 'pcm_sha256': 'proof'}])]),
     )
     new = plan(source)
     assert old['plan_sha256'] != new['plan_sha256']

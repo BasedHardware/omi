@@ -452,6 +452,15 @@ class CaptureEvidenceMetadata(BaseModel):
     lifetime: Optional[Dict[str, Any]] = None
 
 
+class RecordAudioPartial(BaseModel):
+    """Available transcript is incomplete; this never certifies a complete seal."""
+
+    version: Literal[1] = 1
+    reason: Literal['tail_lagging', 'budget_limit', 'tail_lost_or_unproven']
+    generation: int = 0
+    applied_generation: int = 0
+
+
 class Conversation(BaseModel):
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
@@ -482,6 +491,7 @@ class Conversation(BaseModel):
     uses_custom_stt: bool = False
     # Server route arbitration; canonical writers preserve the durable value.
     record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
+    record_audio_partial: Optional[RecordAudioPartial] = None
 
     structured: Structured
 
@@ -616,10 +626,10 @@ class Conversation(BaseModel):
 
     user_corrections: List[Dict] = Field(default_factory=list)
     user_overview: Optional[str] = None
+    user_title: SkipJsonSchema[Any] = Field(default=None, exclude=True)  # Read authority only.
 
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
-    # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
     # Ephemeral server-side context; persistence writes its separate raw field
     # explicitly and it never becomes a Conversation API/model field.

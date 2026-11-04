@@ -72,17 +72,24 @@ def conversation_participants(conversation: Dict[str, Any], *, include_display: 
     }
 
 
-def conversation_card(conversation: Dict[str, Any], *, include_display: bool = True) -> Dict[str, Any]:
+def conversation_card(
+    conversation: Dict[str, Any], *, include_display: bool = True, include_participants: bool = True
+) -> Dict[str, Any]:
     redact_conversation_for_list(conversation)
     structured_raw = conversation.get("structured")
     structured = structured_raw if isinstance(structured_raw, dict) else {}
     return {
-        **conversation_participants(conversation, include_display=include_display),
+        **(
+            conversation_participants(conversation, include_display=include_display)
+            if include_participants
+            else {'participants_included': False}
+        ),
         "id": conversation.get("id"),
         "created_at": conversation.get("created_at"),
         "started_at": conversation.get("started_at"),
         "finished_at": conversation.get("finished_at"),
         "language": conversation.get("language"),
+        "discarded": bool(conversation.get("discarded", False)),
         **conversation_call_fields(conversation),
         "structured": {
             key: structured.get(key) for key in ("title", "overview", "category", "emoji") if key in structured
@@ -233,7 +240,13 @@ def select_card_fields(card: Dict[str, Any], fields: Any) -> Dict[str, Any]:
         fields = [field.strip() for field in fields.split(',') if field.strip()]
     if not isinstance(fields, list) or not all(isinstance(field, str) for field in fields):
         raise ToolExecutionError('fields must be an array of card field names or a comma-separated string', code=-32602)
-    unknown = set(fields) - set(card)
+    aliases = {'title', 'overview', 'category', 'emoji'}
+    requested = {'structured.' + key if key in aliases else key for key in fields}
+    nested = {key.split('.', 1)[1] for key in requested if key.startswith('structured.')}
+    unknown = {key for key in requested if key not in card and key not in {'structured.' + name for name in aliases}}
     if unknown:
         raise ToolExecutionError('Unknown card fields: ' + ', '.join(sorted(unknown)), code=-32602)
-    return {key: value for key, value in card.items() if key == 'id' or key in fields}
+    result = {key: value for key, value in card.items() if key == 'id' or key in requested}
+    if nested and 'structured' not in requested:
+        result['structured'] = {key: value for key, value in (card.get('structured') or {}).items() if key in nested}
+    return result

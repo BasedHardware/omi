@@ -88,6 +88,8 @@ from utils.observability.external_lists import (
 )
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
+from utils import external_polling_cache as polling_cache
+from utils.developer_item_reads import read_conversation_item
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
@@ -1284,7 +1286,15 @@ def get_developer_daily_summary(
     status = 500
     returned_count = 0
     try:
+        negative_key = polling_cache.negative_key(request, auth.uid, auth, summary_id)
+        if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+            status = 404
+            raise HTTPException(
+                404, detail='Daily summary not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'}
+            )
         summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if summary is None and negative_key:
+            polling_cache.remember_missing(external_lists._redis(), negative_key)
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -1722,56 +1732,18 @@ def get_conversation_endpoint(
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
     ignore_unknown_query(request, {"include_transcript"}, response)
-    auth = uid
-    uid = auth.uid
-    status = 500
-    returned_count = None
-    try:
-        if include_transcript:
-            check_conversation_transcript_read_limit(auth, request=request)
-
-        conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation or conversation.get('deleted', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
-
-        # Filter out locked conversations
-        if conversation.get('is_locked', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
-
-        from utils.mcp_server.helpers import conversation_participants
-
-        conversation.update(conversation_participants(conversation, include_display=False))
-        conversation['transcript_included'] = include_transcript
-
-        # Remove transcript_segments if not requested
-        if not include_transcript:
-            conversation.pop('transcript_segments', None)
-        else:
-            populate_speaker_names(uid, [conversation], preserve_api_values=True)
-
-        populate_folder_names(uid, [conversation])
-
-        status = 200
-        returned_count = 1
-        return conversation
-    except HTTPException as e:
-        status = e.status_code
-        returned_count = 0 if returned_count is None else returned_count
-        raise
-    finally:
-        _audit_developer_read(
-            request=request,
-            auth=auth,
-            operation='get_conversation',
-            status=status,
-            include_transcript=include_transcript,
-            returned_count=returned_count,
-            resource_id=conversation_id,
-        )
+    return read_conversation_item(
+        conversation_id,
+        include_transcript,
+        uid,
+        request,
+        conversations_db=conversations_db,
+        cache_client=external_lists._redis,
+        check_transcript=check_conversation_transcript_read_limit,
+        populate_speaker_names=populate_speaker_names,
+        populate_folder_names=populate_folder_names,
+        audit=_audit_developer_read,
+    )
 
 
 def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
@@ -2708,14 +2680,28 @@ def get_goals(
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
 ):
     """
     Get a single goal by ID.
 
     - **goal_id**: The ID of the goal to retrieve
     """
-    goals = goals_db.get_all_goals(uid, include_inactive=True)
-    goal = next((g for g in goals if g.get('id') == goal_id), None)
+    negative_key = polling_cache.negative_key(request, uid, auth, goal_id)
+    if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+        raise HTTPException(404, detail='Goal not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'})
+    if negative_key:
+        try:
+            goal = goals_db.get_goal_by_id(uid, goal_id)
+        except (AttributeError, TypeError, ValueError):
+            goal = None  # List projection also hides corrupt rows; never cache them as absent.
+        else:
+            if goal is None:
+                polling_cache.remember_missing(external_lists._redis(), negative_key)
+    else:
+        goals = goals_db.get_all_goals(uid, include_inactive=True)
+        goal = next((g for g in goals if g.get('id') == goal_id), None)
 
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")

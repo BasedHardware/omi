@@ -1,8 +1,8 @@
-{{- if and .Values.enabled .Values.recordSealSweeper.enabled (eq .Values.stage "prod") }}
+{{- if and .Values.enabled (or .Values.recordSealSweeper.enabled .Values.recordSealRepair.enabled .Values.recordSealWorker.enabled) (eq .Values.stage "prod") }}
 {{- if ne .Release.Namespace "prod-omi-backend" }}
 {{- fail "record seal sweeper requires prod-omi-backend; dev verification uses hermetic fixtures" }}
 {{- end }}
-{{- if not (has .Values.recordSealSweeper.mode (list "plan" "apply")) }}
+{{- if and .Values.recordSealSweeper.enabled (not (has .Values.recordSealSweeper.mode (list "plan" "apply"))) }}
 {{- fail "recordSealSweeper.mode must be plan or apply" }}
 {{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
@@ -27,12 +27,13 @@ roleRef:
   kind: Role
   name: record-seal-sweeper
 ---
+{{- if .Values.recordSealSweeper.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: record-seal-sweeper
 spec:
-  schedule: "*/5 * * * *"
+  schedule: "0 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
   successfulJobsHistoryLimit: 1
@@ -73,6 +74,7 @@ spec:
               command: [python, scripts/record_seal_sweep.py]
               env:
                 - {name: RECORD_SEAL_SWEEPER_ENABLED, value: {{ .Values.recordSealSweeper.runtimeEnabled | quote }}}
+                - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
                 - {name: RECORD_SEAL_SWEEPER_MODE, value: {{ .Values.recordSealSweeper.mode | quote }}}
                 - {name: RECORD_SEAL_SWEEPER_BUDGET_SECONDS, value: "150"}
                 - {name: RECORD_SEAL_SWEEPER_DISCOVERY_LIMIT, value: "32"}
@@ -102,4 +104,5 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {sizeLimit: 64Mi}
+{{- end }}
 {{- end }}

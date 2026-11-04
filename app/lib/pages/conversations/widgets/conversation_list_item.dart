@@ -528,10 +528,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
           Text(_metaSeparator, style: _metaStyle),
           Text(duration, style: _metaStyle, maxLines: 1)
         ],
-        if (widget.homeEpisode case final episode? when episode.members.length >= 2) ...[
-          Text(_metaSeparator, style: _metaStyle),
-          Text(context.l10n.episodePartsCount(episode.members.length), style: _metaStyle, maxLines: 1),
-        ],
         if (widget.fillingSeconds case final seconds?) ...[
           // The ring is the separator here: "34m  ◌ adding 12m from your Omi".
           const SizedBox(width: 6),

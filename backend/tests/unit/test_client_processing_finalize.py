@@ -217,7 +217,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
@@ -460,7 +459,6 @@ def _spy_managed_effects(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, 
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
-    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
     return spies
 
 

@@ -65,7 +65,8 @@ def state():
             doc.reference.delete()
     user.delete()
     client.collection('account_deletions').document(uid).delete()
-    client.collection('batch_pipeline_privacy').document(privacy_owner_key(uid)).delete()
+    # Durable privacy authority must survive erasure; the disposable emulator
+    # removes these synthetic hashed heads when its process exits.
     client.close()
 
 

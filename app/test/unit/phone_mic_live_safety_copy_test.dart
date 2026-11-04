@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -16,11 +17,12 @@ import 'package:omi/utils/wal_file_manager.dart';
 import '../support/capture/virtual_capture_time.dart';
 
 class _Listener implements IWalSyncListener {
+  void Function()? updated;
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
 
   @override
-  void onWalUpdated() {}
+  void onWalUpdated() => updated?.call();
 }
 
 /// A phone-mic live session streams frames over the socket, which marks them
@@ -33,6 +35,9 @@ void main() {
   late Directory tempDir;
   late ManualScheduler scheduler;
   late LocalWalSyncImpl sync;
+  late _Listener listener;
+  Completer<int>? diskSpace;
+  Completer<void>? diskCheckStarted;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -47,10 +52,19 @@ void main() {
     );
     await WalFileManager.init();
     scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026, 10, 29)));
+    listener = _Listener();
+    diskSpace = null;
+    diskCheckStarted = null;
     sync = LocalWalSyncImpl(
-      _Listener(),
+      listener,
       periodic: scheduler.periodic,
-      freeDiskBytes: () async => 1 << 40,
+      freeDiskBytes: () async {
+        if (diskSpace != null) {
+          if (!diskCheckStarted!.isCompleted) diskCheckStarted!.complete();
+          return diskSpace!.future;
+        }
+        return 1 << 40;
+      },
       persistWals: WalFileManager.saveWals,
     );
     sync.setDeviceInfo('phone-mic', 'Phone Microphone');
@@ -59,6 +73,9 @@ void main() {
   });
 
   tearDown(() async {
+    listener.updated = null;
+    if (diskSpace != null && !diskSpace!.isCompleted) diskSpace!.complete(1 << 40);
+    await scheduler.waitForCallbackIo();
     await sync.stop();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
@@ -69,7 +86,7 @@ void main() {
 
   FrameSyncKey key(int counter) => FrameSyncKey([counter & 0xFF, (counter >> 8) & 0xFF]);
 
-  Future<void> captureTransportSynced(int frames) async {
+  void captureTransportSynced(int frames) {
     for (var i = 0; i < frames; i++) {
       final frame = WalFrame(payload: [0xAA, i & 0xFF], syncKey: key(i));
       sync.onFrameCaptured(frame);
@@ -81,14 +98,22 @@ void main() {
   test('fully transport-synced phone-mic chunks are stored as safety copies, not dropped', () async {
     // 60s of audio at the default 100 fps. The 10-second live-tail drain
     // stores a safety copy long before the 75s chunk timer would.
-    await captureTransportSynced(6000);
+    captureTransportSynced(6000);
     expect(sync.testWals, isEmpty, reason: 'nothing stored before a drain runs');
 
-    scheduler.elapse(const Duration(seconds: 10));
+    // A slow filesystem must keep this assertion waiting for the actual
+    // timer callback, not a wall-clock guess about when fsync will finish.
     // Await the Future the drain callback returned (finalize, audio write,
     // then WAL index save) instead of a fixed sleep: under CI load a 150 ms
     // sleep ended before the flush landed and the copy still read as mem.
-    await scheduler.waitForCallbackIo();
+    diskSpace = Completer<int>();
+    diskCheckStarted = Completer<void>();
+    scheduler.elapse(const Duration(seconds: 10));
+    final drained = scheduler.waitForCallbackIo();
+    await diskCheckStarted!.future;
+    expect(sync.testWals.single.storage, WalStorage.mem);
+    diskSpace!.complete(1 << 40);
+    await drained;
 
     expect(sync.testWals, isNotEmpty);
     final wal = sync.testWals.first;
@@ -101,14 +126,20 @@ void main() {
 
   test('lifecycle pause seals the phone-mic tail before the app can be killed', () async {
     // 5s of audio: below every batch boundary, so only a pause seal can reach it.
-    await captureTransportSynced(500);
+    captureTransportSynced(500);
     expect(sync.testWals, isEmpty);
 
+    final durable = Completer<void>();
+    listener.updated = () {
+      if (sync.testWals.any((wal) => wal.storage == WalStorage.disk) && !durable.isCompleted) durable.complete();
+    };
     sync.didChangeAppLifecycleState(AppLifecycleState.paused);
     // The pause seal is fire-and-forget, so no timer Future tracks it; await
-    // the buffer queue it was enqueued on instead of a fixed sleep. This only
-    // observes the seal — it must not drain anything itself, which is exactly
-    // the production contract under test.
+    // the buffer queue it was enqueued on and the durability callback instead
+    // of a fixed sleep. This only observes the seal — it must not drain
+    // anything itself, which is exactly the production contract under test.
+    await durable.future;
+    listener.updated = null;
     await sync.testWalIoQuiescent;
 
     expect(sync.testWals, hasLength(1));
@@ -120,7 +151,7 @@ void main() {
   });
 
   test('transport-only synced safety copies bind to the conversation and confirm or repair', () async {
-    await captureTransportSynced(6000);
+    captureTransportSynced(6000);
     // One 10-second drain produces exactly one durable safety copy.
     scheduler.elapse(const Duration(seconds: 10));
     // Same deterministic drain await as the first test — no wall-clock sleeps.

@@ -58,7 +58,7 @@ def test_deadline_inside_tail_iterator_is_not_a_proof_refusal(source, proof, mon
     eligible(source)
     closed = Mock()
 
-    def stalled(*_):
+    def stalled(*_, **kwargs):
         try:
             signal.raise_signal(signal.SIGALRM)
             yield None
@@ -213,7 +213,7 @@ def test_phase_timings_identify_serial_tail_cost(source, proof, monkeypatch):
         clock[0] += 1
         return original(body)
 
-    def tail(*_):
+    def tail(*_, **kwargs):
         clock[0] += 20
         yield (100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])
 
@@ -228,7 +228,8 @@ def test_phase_timings_identify_serial_tail_cost(source, proof, monkeypatch):
     )
     elapsed = {e['phase']: e['elapsed_ms'] for e in events}
     assert elapsed['classification'] == 2000
-    assert elapsed['plan'] - elapsed['classification'] == 22000
+    # One final-chunk precheck plus the unchanged full retained proof.
+    assert elapsed['plan'] - elapsed['classification'] == 42000
 
 
 @pytest.mark.parametrize('value', ['nan', 'inf', '0', '181', 'private-invalid'])
@@ -249,7 +250,11 @@ def test_runtime_defaults_and_hard_limits(monkeypatch):
 def test_rendered_job_budget_keeps_deadline_and_concurrency_guards():
     rendered = render()
     assert rendered.returncode == 0
-    cron = next(doc for doc in yaml.safe_load_all(rendered.stdout) if doc and doc['kind'] == 'CronJob')
+    cron = next(
+        doc
+        for doc in yaml.safe_load_all(rendered.stdout)
+        if doc and doc['kind'] == 'CronJob' and doc['metadata']['name'] == 'record-seal-sweeper'
+    )
     spec = cron['spec']['jobTemplate']['spec']
     env = {item['name']: item.get('value') for item in spec['template']['spec']['containers'][0]['env']}
     assert float(env['RECORD_SEAL_SWEEPER_BUDGET_SECONDS']) == 150 < spec['activeDeadlineSeconds'] == 240 < 300

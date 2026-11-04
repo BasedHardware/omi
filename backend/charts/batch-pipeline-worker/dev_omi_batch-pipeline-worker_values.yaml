@@ -31,3 +31,7 @@ worker:
 recordSealSweeper:
   # Producer identity proof is scoped to prod; dev validation is hermetic, no ambient writes.
   enabled: false
+recordSealRepair:
+  enabled: false
+recordSealWorker:
+  enabled: false

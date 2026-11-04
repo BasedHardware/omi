@@ -3643,7 +3643,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3665,7 +3666,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3687,7 +3689,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },

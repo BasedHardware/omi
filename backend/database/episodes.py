@@ -29,7 +29,11 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
-from config.episodes import MAX_EPISODE_SECONDS, episode_hard_cap_across_conversations_enabled
+from config.episodes import (
+    MAX_EPISODE_SECONDS,
+    episode_hard_cap_across_conversations_enabled,
+    HOME_MEMBERSHIP_EPISODE_READ_LIMIT,
+)
 from utils.conversations.recorded_time import conversation_span, sync_recorded_end
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
@@ -40,7 +44,7 @@ from utils.encryption import decrypt, encrypt
 
 CURRENT = 'current'
 LAST_CLOSED = 'last_closed'
-CONTENT_FIELDS = ('title', 'bullets', 'people', 'open_questions', 'provisional_items', 'moments')
+CONTENT_FIELDS = ('title', 'bullets', 'lede', 'follow_ups', 'people', 'open_questions', 'provisional_items', 'moments')
 MEMBERSHIP_BATCH_LIMIT = 50
 
 
@@ -87,7 +91,7 @@ def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any
     if isinstance(blob, str) and blob:
         content = json.loads(decrypt(blob, uid))
     for key in CONTENT_FIELDS:
-        episode[key] = content.get(key) if content.get(key) is not None else ('' if key == 'title' else [])
+        episode[key] = content.get(key) if content.get(key) is not None else ('' if key in ('title', 'lede') else [])
     return episode
 
 
@@ -105,6 +109,25 @@ def get_episode(uid: str, episode_id: str, *, firestore_client: Any = None) -> O
             return unseal(uid, raw)
         episode_id = str(redirect)
     raise EpisodeConflict('recorded_redirect_cycle')
+
+
+def get_home_episode_snapshots(
+    uid: str, ids: Sequence[str], *, firestore_client: Any = None
+) -> dict[str, dict[str, Any]]:
+    """One fixed-budget batch of exact snapshots; never follow merge redirects."""
+    keys = list(dict.fromkeys(ids))[:HOME_MEMBERSHIP_EPISODE_READ_LIMIT]
+    if not keys:
+        return {}
+    client = _client(firestore_client)
+    refs = [_episodes(client, uid).document(eid) for eid in keys]
+    result = {}
+    for snapshot in client.get_all(refs) if refs else ():
+        raw = snapshot.to_dict() if snapshot.exists else None
+        if raw and not raw.get('recorded_merged_into'):
+            row = unseal(uid, dict(raw, id=snapshot.id))
+            if row is not None:
+                result[snapshot.id] = row
+    return result
 
 
 def _link_target(client: Any, uid: str, key: str, transaction: Any = None) -> Optional[str]:
@@ -141,6 +164,17 @@ def _closed_fields(reason: str, closed_at: datetime) -> dict[str, Any]:
     return {'status': 'closed', 'close_reason': reason, 'closed_at': closed_at}
 
 
+def _cleared_notes() -> dict[str, Any]:
+    """Every note field a newly hidden member may have shaped, cleared until the next compose."""
+    return {key: '' if key in ('title', 'lede') else [] for key in CONTENT_FIELDS if key not in _KEPT_ON_DISCARD} | {
+        'summary_needs_regeneration': True
+    }
+
+
+# Already filtered per member by conversation id above, so they survive a discard.
+_KEPT_ON_DISCARD = ('moments', 'provisional_items')
+
+
 def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
     """A notes CAS must not overwrite speech retained while its model call ran."""
     merged = {**raw, **updates}
@@ -170,7 +204,7 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
     for field in ('moments', 'provisional_items'):
         merged[field] = [item for item in merged.get(field) or [] if item.get('conversation_id') not in excluded]
     if hidden - set(raw.get('discarded_conversation_ids') or []):
-        merged.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
+        merged.update(_cleared_notes())
     return merged
 
 
@@ -256,7 +290,7 @@ def retained_bounds(transaction, client, uid, raw, merged):
             item for item in merged.get(field) or [] if item.get('conversation_id') not in hidden | duplicates
         ]
     if hidden - set(raw.get('discarded_conversation_ids') or []):
-        merged.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
+        merged.update(_cleared_notes())
     return merged
 
 
@@ -707,6 +741,16 @@ def close_episode(
     )
 
 
+def _moves_closed_episode(raw, merged):
+    """A notes write on a closed episode moves nothing, so older overlaps must not refuse it."""
+    return not (
+        raw.get('status') == merged.get('status') == 'closed'
+        and set(raw.get('conversation_ids') or []) == set(merged.get('conversation_ids') or [])
+        and raw.get('started_at') == merged.get('started_at')
+        and episode_timeline.recorded_end(raw) == episode_timeline.recorded_end(merged)
+    )
+
+
 @firestore.transactional
 def _update(
     transaction: Any,
@@ -732,9 +776,11 @@ def _update(
     _drop_legacy_receipts(merged, segment_receipts)
     merged['state_version'] = expected_version + 1
     links = _member_links(raw, merged, link_conversation_ids)
-    _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
+    moves = bool(links) or _moves_closed_episode(raw, merged)
+    if moves:
+        _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if recorded_episodes_enabled():
+    if moves and recorded_episodes_enabled():
         fence = episode_timeline.check_window(transaction, client, uid, merged)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})

@@ -363,7 +363,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as six parallel shard jobs whose weighted partitions cover
+    selection as eight parallel shard jobs whose weighted partitions cover
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -374,9 +374,9 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
-    assert "--shard 6/${{ matrix.shard }}" in workflow
-    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
+    assert "shard: [1, 2, 3, 4, 5, 6, 7, 8]" in workflow
+    assert "--shard 8/${{ matrix.shard }}" in workflow
+    assert "name: Backend unit shard ${{ matrix.shard }}/8" in workflow
     assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
@@ -1147,7 +1147,8 @@ _SYNTHETIC_GATE = """      - uses: actions/checkout@v7
         with:
           source_sha: ${{ github.sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 """
 
 
@@ -2089,7 +2090,6 @@ def _run_composite(
     live_indexes,
     source_sha='e' * 40,
     head_sha=None,
-    credentials='{}',
     verify_credential_project='false',
     run_validate_step=False,
 ):
@@ -2119,7 +2119,7 @@ def _run_composite(
     runner_temp.mkdir(exist_ok=True)
     _stub_bin(tmp_path)
     credentials_path = tmp_path / 'credentials.json'
-    credentials_path.write_text(credentials or '', encoding='utf-8')
+    credentials_path.write_text('{}', encoding='utf-8')
     indexes_file = tmp_path / 'live-indexes.json'
     indexes_file.write_text(json.dumps(live_indexes), encoding='utf-8')
 
@@ -2127,7 +2127,6 @@ def _run_composite(
         'inputs.source_sha': source_sha,
         'inputs.project_id': 'dev-project',
         'inputs.database': '(default)',
-        'inputs.credentials_json': credentials,
         'inputs.verify_credential_project': verify_credential_project,
         'inputs.artifact_suffix': '',
         'runner.temp': str(runner_temp),
@@ -2206,10 +2205,6 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     check, _ = _run_composite(tmp_path / 'bad-sha', live_indexes=ready_live, source_sha='not-a-sha')
     assert check.returncode == 1
     assert 'Invalid Firestore source SHA' in check.stdout
-
-    check, _ = _run_composite(tmp_path / 'no-creds', live_indexes=ready_live, credentials='')
-    assert check.returncode == 1
-    assert 'Missing Firestore read-only credentials' in check.stdout
 
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1

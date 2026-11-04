@@ -75,6 +75,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
     monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, 'has_structural_wake_word_marker', lambda text: False)
     monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *args: False)
@@ -106,6 +107,7 @@ def _seed(pipeline, *, level='enhanced', transcript=None, **overrides):
         'id': CID,
         'status': 'processing',
         'source': 'omi',
+        'language': 'en',
         'created_at': NOW - timedelta(days=30),
         'started_at': NOW - timedelta(days=30),
         'finished_at': NOW - timedelta(days=30),
@@ -156,7 +158,9 @@ async def _run_and_verify(pipeline):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
 @pytest.mark.parametrize('text', ['', 'hmm'])
-async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blob(pipeline, level, text):
+async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blob(pipeline, monkeypatch, level, text):
+    # Rollback must retain the existing explicit-discard and encrypted-blob contract.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     transcript = [{'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}] if text else []
     blob = _seed(pipeline, level=level, transcript=transcript)
     response, counters = await _run_and_verify(pipeline)
@@ -410,6 +414,8 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
     transcript must also keep the speaker metadata describing it."""
     from models.conversation import ConversationSpeakers
 
+    # Exercise the discard arm under rollback; default-on minimums are kept instead.
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     stored = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
     transcript = [{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_07', 'speaker_id': 7, 'is_user': False}]
 

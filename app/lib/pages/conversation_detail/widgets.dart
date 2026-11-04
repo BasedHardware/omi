@@ -510,7 +510,10 @@ class GetAppsWidgets extends StatelessWidget {
         child: _SummaryCallToAction(
           message: context.l10n.noSummaryForConversation,
           actionLabel: context.l10n.generateSummary,
-          onPressed: () => showSummarizedAppsSheet(context),
+          onPressed: () {
+            final provider = context.read<ConversationDetailProvider>();
+            return startSummary(provider, resolvedDefaultSummaryTemplateId(provider));
+          },
         ),
       ),
     );

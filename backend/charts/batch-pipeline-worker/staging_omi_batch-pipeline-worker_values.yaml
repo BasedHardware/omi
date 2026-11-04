@@ -48,3 +48,8 @@ worker:
   correctnessMetricsEnabled: true
 recordSealSweeper:
   enabled: false
+recordSealRepair:
+  enabled: false
+recordSealWorker:
+  # Producer proof and the repair child require the production namespace.
+  enabled: false

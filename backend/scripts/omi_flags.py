@@ -50,7 +50,14 @@ class FlagCliError(RuntimeError):
 
 
 def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict[str, Any]]:
-    data = yaml.safe_load(path.read_text())
+    source = path.read_text()
+    # Both implementations use safe constructors; LibYAML avoids repeatedly
+    # spending a full CPU second parsing the growing repository registry.
+    data = (
+        yaml.load(source, Loader=yaml.CSafeLoader)
+        if getattr(yaml, '__with_libyaml__', False)
+        else yaml.safe_load(source)
+    )
     return {row['key']: row for row in data.get('flags', []) if row.get('kind') == 'posthog'}
 
 

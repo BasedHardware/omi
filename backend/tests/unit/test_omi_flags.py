@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from posthog.feature_flags import _hash as posthog_hash
@@ -253,10 +254,40 @@ def test_merge_rule_validates_and_copies_registry_surfaces():
         cli.merge_rule(None, ENTRY, {'payload': 'not json'})
 
 
-def test_registry_refuses_unknown_keys_and_experiments():
-    registry = cli.load_registry()
+@pytest.fixture(scope='module')
+def registry_rows():
+    # Real manifest loading is setup; the call-phase guard measures refusal logic.
+    return cli.load_registry()
+
+
+def test_registry_refuses_unknown_keys_and_experiments(registry_rows):
+    registry = registry_rows
     assert registry['proactivity_v2']['surfaces'] == ['backend', 'llm-gateway']
     with pytest.raises(cli.FlagCliError):
         cli.registry_entry(registry, 'paywall-variant')
     with pytest.raises(cli.FlagCliError):
         cli.registry_entry(registry, 'not-a-flag')
+
+
+@pytest.mark.parametrize('force_python', [False, True])
+def test_registry_safe_parsers_preserve_posthog_filtering(tmp_path, monkeypatch, force_python):
+    if force_python:
+        monkeypatch.setattr(yaml, '__with_libyaml__', False)
+    path = tmp_path / 'flags.yaml'
+    path.write_text(
+        "flags:\n  - {key: visible, kind: posthog, surfaces: [backend, llm-gateway]}\n"
+        "  - {key: compute_floor, kind: env, surfaces: [backend]}\n"
+    )
+    assert cli.load_registry(path) == {
+        'visible': {'key': 'visible', 'kind': 'posthog', 'surfaces': ['backend', 'llm-gateway']}
+    }
+
+
+@pytest.mark.parametrize('force_python', [False, True])
+def test_registry_safe_parsers_reject_python_constructor_tags(tmp_path, monkeypatch, force_python):
+    if force_python:
+        monkeypatch.setattr(yaml, '__with_libyaml__', False)
+    path = tmp_path / 'flags.yaml'
+    path.write_text("!!python/object/apply:builtins.str ['unsafe']")
+    with pytest.raises(yaml.constructor.ConstructorError):
+        cli.load_registry(path)

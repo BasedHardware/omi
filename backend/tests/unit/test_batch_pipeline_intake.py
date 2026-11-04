@@ -153,6 +153,21 @@ def test_expired_route_receipt_cannot_rebind_a_retained_segment(cohort):
     assert ('content', 'synthetic-owner/content') not in store.rows
 
 
+def test_ordinary_binding_stays_legacy_readable_and_partial_authority_is_immutable(cohort):
+    store = MemoryStore()
+    works, binding = proposal()
+    submit(store, works, binding)
+    saved = store.rows['jobs', 'segment']['projection_binding']
+    assert 'partial_record' not in saved
+    # Explicit false from a newer writer is equivalent to an absent default.
+    saved['partial_record'] = False
+    del store.rows['content', 'synthetic-owner/content']
+    assert submit(store, works, binding)['outcome'] == 'batch'
+    del store.rows['content', 'synthetic-owner/content']
+    with pytest.raises(ValueError, match='immutable intake binding'):
+        submit(store, works, replace(binding, partial_record=True))
+
+
 def test_completed_legacy_content_gets_durable_alias_without_gpu_or_redis(cohort):
     from database.batch_pipeline_intake import cache_completed
 
@@ -316,13 +331,13 @@ def held_upload(store, sibling_state='committed'):
     store.rows['jobs', 'sibling'].update(state=sibling_state, conversation_id='projected-sibling')
 
 
-def test_terminally_held_upload_completes_without_ids_or_writes(cohort):
+def test_terminally_held_upload_keeps_custody_without_ids_or_writes(cohort):
     store = MemoryStore()
     held_upload(store)
     before = dict(store.rows)
     status = durable_status(store, 'synthetic-owner', 'bp_first')
-    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
-    assert status['poll_after_ms'] == 0 and status['errors'] == []
+    assert status['status'] == 'processing' and status['reason_code'] == 'batch_unit_held'
+    assert status['poll_after_ms'] == 300000 and status['errors'] == []
     assert status['total_segments'] == 2 and status['failed_segments'] == 1
     assert status['processed_segments'] == status['successful_segments'] == 1
     assert status['result']['new_memories'] == status['result']['updated_memories'] == []
@@ -366,7 +381,7 @@ def test_operator_call_that_settled_failed_held_is_closed(cohort):
     held_upload(store)
     store.rows['jobs', 'segment']['speech_redrive'] = {'state': 'failed_held'}
     status = durable_status(store, 'synthetic-owner', 'bp_first')
-    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+    assert status['status'] == 'processing' and status['reason_code'] == 'batch_unit_held'
 
 
 def test_mixed_held_and_other_failure_keeps_failed(cohort):
@@ -539,7 +554,7 @@ async def test_reupload_of_deleted_legacy_receipt_acks_synchronously(cohort, mon
 
 
 @pytest.mark.asyncio
-async def test_reupload_of_held_batch_upload_reads_completed(cohort, monkeypatch):
+async def test_reupload_of_held_batch_upload_keeps_original_owner_and_custody(cohort, monkeypatch):
     import json
     from utils.batch_pipeline import intake
 
@@ -550,4 +565,4 @@ async def test_reupload_of_held_batch_upload_reads_completed(cohort, monkeypatch
     response = await intake.accept_upload(**upload_arguments())
     assert response is not None and response.status_code == 202
     body = json.loads(response.body)
-    assert body['status'] == 'completed' and body['job_id'] == 'bp_first' and body['poll_after_ms'] == 0
+    assert body['status'] == 'processing' and body['job_id'] == 'bp_first' and body['poll_after_ms'] == 300000

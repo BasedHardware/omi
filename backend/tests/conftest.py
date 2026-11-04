@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import os
+import subprocess
 import sys
 from pathlib import Path
 import time
@@ -19,6 +20,9 @@ os.environ.setdefault(
 # Product tests exercise the normal universal write-enabled deployment. Tests
 # for the global incident fence override this explicitly to ``off``.
 os.environ.setdefault('MEMORY_ENABLED', 'on')
+# The episode composer schedules background threads on close/finalize; tests that exercise it
+# enable it explicitly (tests/unit/test_episode_composer.py), so other episode tests stay hermetic.
+os.environ.setdefault('EPISODE_COMPOSER', 'off')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
@@ -380,3 +384,11 @@ def _parse_fast_unit_limit(raw_value, name, terminalreporter):
 def _duration_allowlisted(test_id, allowlist):
     test_file = test_id.split('::', 1)[0]
     return test_id in allowlist or test_file in allowlist
+
+
+@pytest.fixture
+def isolated_git_env(monkeypatch):
+    """Keep disposable Git repositories independent of a hook's caller."""
+    local_vars = subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).split()
+    for name in [*local_vars, 'GIT_NAMESPACE']:
+        monkeypatch.delenv(name, raising=False)

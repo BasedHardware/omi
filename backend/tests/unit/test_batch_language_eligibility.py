@@ -59,6 +59,11 @@ async def upload(
     seconds=1,
     stop_after_staging=True,
     store=None,
+    decision=None,
+    evidence=None,
+    unit_count=1,
+    paths=(),
+    record_origin=False,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -67,6 +72,8 @@ async def upload(
             language='en', parakeet_safe=True, evidence='audio_lid', confidence=0.99, probe_seconds=6.0
         )
     )
+    if decision is not None:
+        probe = Mock(side_effect=decision) if callable(decision) else Mock(return_value=decision)
     if real_language:
         probe = Mock(wraps=batch_language.resolve_language)
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
@@ -84,6 +91,7 @@ async def upload(
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
+        assert work.timing_store == 'sync'
         staged.append(work)
         probe.staged_context = read_context(body)
         if stop_after_staging:
@@ -91,9 +99,10 @@ async def upload(
         return 'synthetic://staged-audio'
 
     def units(*args, **kwargs):
-        yield audio_unit(100, b'\x01\x00' * int(seconds * 16000))
+        for index in range(unit_count):
+            yield audio_unit(100 + index * seconds, b'\x01\x00' * int(seconds * 16000))
 
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode(mode))
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store if store is not None else MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
@@ -104,15 +113,16 @@ async def upload(
         uid='synthetic-owner',
         job_id='new',
         content_id='new',
-        paths=[],
+        paths=list(paths),
         lane='fresh',
         recording_age_seconds=0,
-        source='omi',
+        source='desktop' if record_origin else 'omi',
         should_lock=False,
         conversation_id=conversation_id,
         client_device_id=None,
         client_platform='ios',
-        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=record_origin),
+        evidence=evidence,
     )
     return response, staged, probe
 
@@ -120,6 +130,15 @@ async def upload(
 def admitted(response, staged) -> bool:
     # Reaching staging is batch custody; the synthetic staging failure answers 503.
     return response is not None and response.status_code == 503 and len(staged) == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_sync_v1_record_origin_wal_admits_sync_timing(monkeypatch):
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', conversation_language='en', owner='batch_sync_v1', record_origin=True
+    )
+    assert admitted(response, staged)
+    assert staged[0].timing_store == 'sync'
 
 
 @pytest.mark.asyncio

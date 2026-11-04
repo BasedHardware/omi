@@ -16,7 +16,6 @@ import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
-import 'package:omi/pages/episodes/start_trimmed_text.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -41,7 +40,7 @@ enum LiveEpisodeTab { summary, transcript }
 /// capture deep link.
 ///
 /// With episodes on (the server's capability) it is the live episode: today's conversation page in a
-/// live state, Summary (running notes, the Live card, captured tasks, the moments) and the
+/// live state, Summary (running notes and captured tasks) and the
 /// live Transcript, with "Wrap up now" at the bottom and Pause in the ⋯ menu. With episodes off it
 /// is today's live capture page, unchanged: the transcript with Pause and Finish.
 class LiveEpisodePage extends StatefulWidget {
@@ -211,7 +210,6 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final l10n = context.l10n;
     final episode = episodes.live;
     final now = episodes.now();
-    final conversationId = widget.topConversationId ?? context.read<CaptureProvider>().topConversationId;
     return Scaffold(
       key: const Key('live_episode_page'),
       backgroundColor: OmiColors.surface0,
@@ -271,14 +269,11 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                       (c) => c.liveCaptureSource == 'phone' ? c.activeRecordingId : null,
                     ),
                   ),
-                  // The admitted preview session, when this capture has one: its text
-                  // (Live card) and its on-device notes (So far) hang off it.
+                  // The admitted preview session, when this capture has one: its on-device notes
+                  // (So far) hang off it.
                   preview: context.select<CaptureProvider, LivePreviewController?>(
                     (c) => c.localPreviewAdmitted && c.livePreview?.admitted == true ? c.livePreview : null,
                   ),
-                  conversationId: conversationId,
-                  listening: listening && hasCapture,
-                  onOpenTranscript: () => _tabs.animateTo(1),
                   onDismiss: (item) => _dismiss(context, episodes, item),
                 ),
                 LiveTranscriptView(
@@ -340,9 +335,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
         final namesOthers = participants.length > (provider.segments.any((s) => s.isUser) ? 1 : 0);
         final meta = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
         final names = namesOthers ? participants.join(', ') : '';
-        final rest = listening
-            ? [l10n.episodeLiveSince(dates.time(started)), if (names.isNotEmpty) names].join(' · ')
-            : (names.isEmpty ? '' : '· $names');
+        final rest = listening ? l10n.episodeLiveSince(dates.time(started)) : (names.isEmpty ? '' : '· $names');
         return Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.md, OmiSpacing.sm),
           child: Column(
@@ -350,38 +343,35 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
             children: [
               Text(title, style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4)),
               const SizedBox(height: OmiSpacing.xs),
-              // One calm line: the dot and the running length, then "· since 3:12 PM" and who
-              // is in it, ellipsized rather than wrapped. The moment count lives on the
-              // Moments section, where it has room.
+              // One calm line, "Listening · 1h 36m · since 9:21 AM", ellipsized rather than wrapped.
               CaptureStateAnnouncement(
                 message: listening
                     ? l10n.episodeListeningNow
                     : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
                 child: Row(
                   children: [
-                    OmiLiveDot(live: listening, size: 7),
-                    const SizedBox(width: 6),
-                    LiveEpisodeClock(
-                      clock: context.read<EpisodeProvider>().now,
-                      builder: (context, time) {
-                        final length = EpisodePresentation.runningLength(
-                          EpisodePresentation.elapsed(episode, provider, time, anchor: anchor),
-                          l10n,
-                        );
-                        return Text(
-                          listening ? length : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
-                          key: const Key('live_episode_status'),
-                          semanticsLabel: listening
-                              ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(length)
-                              : null,
-                          maxLines: 1,
-                          style: meta.copyWith(
-                            color: listening ? OmiColors.success : OmiColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        );
-                      },
+                    Flexible(
+                      child: LiveEpisodeClock(
+                        clock: context.read<EpisodeProvider>().now,
+                        builder: (context, time) {
+                          final length = EpisodePresentation.runningLength(
+                            EpisodePresentation.elapsed(episode, provider, time, anchor: anchor),
+                            l10n,
+                          );
+                          return Text(
+                            listening
+                                ? '${l10n.listening} · $length'
+                                : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
+                            key: const Key('live_episode_status'),
+                            semanticsLabel: listening
+                                ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(length)
+                                : null,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: meta.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+                          );
+                        },
+                      ),
                     ),
                     if (rest.isNotEmpty) ...[
                       const SizedBox(width: 4),
@@ -474,56 +464,36 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   }
 }
 
-/// Summary of a live episode: the running notes, the Live card of the newest words, the tasks
-/// captured so far and the moments, the current one marked Now.
+/// Summary of a live episode: the running notes and the tasks captured so far. The newest words
+/// are on the Transcript tab.
 class _LiveSummaryTab extends StatelessWidget {
   const _LiveSummaryTab({
     required this.episode,
     required this.now,
-    required this.conversationId,
     required this.unavailable,
     required this.preview,
-    required this.listening,
-    required this.onOpenTranscript,
     required this.onDismiss,
   });
 
   final Episode? episode;
   final DateTime now;
-  final String? conversationId;
   final bool unavailable;
   final LivePreviewController? preview;
-  final bool listening;
-  final VoidCallback onOpenTranscript;
   final ValueChanged<EpisodeItem> onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final items = episode?.visibleItems ?? const <EpisodeItem>[];
-    final moments = episode?.moments ?? const <EpisodeMoment>[];
     return ListView(
       key: const Key('live_episode_summary'),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
       children: [
         _SoFarCard(episode: episode, now: now, unavailable: unavailable, preview: preview),
-        _LiveCard(preview: preview, onOpenTranscript: onOpenTranscript),
         if (items.isNotEmpty) ...[
           EpisodeSectionTitle(l10n.tasks, count: items.length),
           EpisodeContentCard(
             children: [for (final item in items) EpisodeItemRow(item: item, now: now, onDismiss: onDismiss)],
-          ),
-        ],
-        if (moments.isNotEmpty) ...[
-          EpisodeSectionTitle(l10n.episodeMoments, count: moments.length > 1 ? moments.length : null),
-          EpisodeContentCard(
-            children: [
-              for (var i = 0; i < moments.length; i++)
-                EpisodeMomentRow(
-                  moment: moments[i],
-                  current: listening && i == moments.length - 1 && moments[i].conversationId == conversationId,
-                ),
-            ],
           ),
         ],
       ],
@@ -583,7 +553,8 @@ class _SoFarCard extends StatelessWidget {
           if (serverNotes) ...[
             const SizedBox(height: 2),
             Text(
-              EpisodePresentation.updatedLabel(episode!, now, l10n),
+              EpisodePresentation.coversLabel(episode!, now, l10n, OmiDateFormat.of(context)),
+              key: const Key('live_episode_so_far_covers'),
               style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
             ),
             const SizedBox(height: OmiSpacing.sm),
@@ -666,88 +637,6 @@ class _OnThisPhoneTag extends StatelessWidget {
       child: Text(
         context.l10n.episodeOnThisPhone,
         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-      ),
-    );
-  }
-}
-
-/// The Summary tab's Live card: the newest words in up to three lines, trimmed at the start so
-/// the latest stay visible, with no speaker label, and Open transcript for the full tab. A
-/// preview session reads its on-device lines (words the recognizer may still revise in lighter
-/// text); a cloud session reads its newest transcript lines.
-class _LiveCard extends StatelessWidget {
-  const _LiveCard({required this.preview, required this.onOpenTranscript});
-
-  final LivePreviewController? preview;
-  final VoidCallback onOpenTranscript;
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = this.preview;
-    if (preview != null) {
-      return ListenableBuilder(
-        listenable: preview,
-        builder: (context, _) {
-          final lines = preview.lines;
-          final tail = lines.length > 6 ? lines.sublist(lines.length - 6) : lines;
-          final secondary = TextStyle(color: OmiColors.textSecondary);
-          return _card(context, [
-            for (var i = 0; i < tail.length; i++)
-              (text: i == 0 ? tail[i].text : ' ${tail[i].text}', style: tail[i].isFinal ? null : secondary),
-          ]);
-        },
-      );
-    }
-    // The card follows the transcript itself: it selects the version so a metric or progress
-    // notify cannot rebuild it.
-    return Builder(
-      builder: (context) {
-        context.select<CaptureProvider, int>((c) => c.segmentsPhotosVersion);
-        final segments = context.read<CaptureProvider>().segments;
-        final tail = segments.length > 6 ? segments.sublist(segments.length - 6) : segments;
-        return _card(context, [
-          for (var i = 0; i < tail.length; i++) (text: i == 0 ? tail[i].text : ' ${tail[i].text}', style: null),
-        ]);
-      },
-    );
-  }
-
-  Widget _card(BuildContext context, List<TrimmedRun> runs) {
-    if (runs.every((run) => run.text.trim().isEmpty)) return const SizedBox.shrink();
-    final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.only(top: OmiSpacing.sm),
-      child: Container(
-        key: const Key('live_episode_preview_card'),
-        padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.xxs, OmiSpacing.md),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _CardHeader(
-              title: l10n.liveCardTitle,
-              // A quiet link, not a second heading: secondary ink, regular weight.
-              trailing: OmiButton(
-                key: const Key('live_episode_open_transcript'),
-                label: l10n.episodeOpenTranscript,
-                variant: OmiButtonVariant.tertiary,
-                size: OmiButtonSize.compact,
-                colors: OmiButtonColors(background: Colors.transparent, foreground: OmiColors.textSecondary),
-                labelStyle: OmiType.subhead,
-                onPressed: onOpenTranscript,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsetsDirectional.only(end: OmiSpacing.sm),
-              child: StartTrimmedText(
-                key: const Key('live_episode_preview_card_text'),
-                runs: runs,
-                style: OmiType.callout.copyWith(height: 1.45),
-                maxLines: 3,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -2,6 +2,7 @@
 
 import hashlib
 import inspect
+import json
 import logging
 import time
 from contextvars import ContextVar
@@ -46,6 +47,7 @@ LLM_FEATURES = frozenset(
         'conversation_processing',
         'daily_summary',
         'episode_boundary',
+        'episode_composer',
         'episode_incremental',
         'episode_moment',
         'followup',
@@ -79,12 +81,62 @@ FINALS = Counter(
 )
 PLAYBACK_WRITES = Counter('omi_playback_writes_total', 'Playback write decisions', ['outcome'])
 PLAYBACK_BUILDS = Counter('omi_playback_artifacts_total', 'Playback artifact work', ['representation', 'outcome'])
+PLAYBACK_LOCK_CONTENTION = Counter(
+    'omi_sync_playback_lock_contention_total', 'Conversation merge freshness checks while locked', ['outcome']
+)
 PLAYBACK_BUILD_SECONDS = Histogram(
     'omi_playback_build_seconds',
     'Cold playback build duration',
     ['representation'],
     buckets=(0.1, 1, 3, 5, 10, 20, 30, 60, 120, 300),
 )
+
+
+# Bounded outcome labels for on-demand playback work. Every terminal and retry
+# response of an on-demand task lands in one of these, so failed playback is
+# visible next to built/exists instead of only lowering queue and GCS volume.
+DEMAND_PLAYBACK_OUTCOMES = frozenset(
+    {
+        'built',
+        'exists',
+        'superseded',
+        'unavailable',
+        'failed_final',
+        'retry',
+        'locked',
+        'destructive_deferred',
+        'skipped',
+        'account_pending_deletion',
+        'chunks_missing',
+        'empty_audio',
+        'no_audio_files',
+        'deleted_conversation',
+        'invalid_payload',
+        'error',
+    }
+)
+
+_DEMAND_STATUS_OUTCOMES = {'done': 'built', 'deferred': 'destructive_deferred'}
+
+
+def record_demand_playback_outcome(payload: Any, response_body: bytes | None) -> None:
+    """Count one on-demand audio-merge response; ``None`` body means an unhandled exception."""
+    if not isinstance(payload, dict) or payload.get('on_demand') is not True:
+        return
+    representation = 'conversation' if payload.get('schema_version') == 2 else 'file'
+    outcome = 'error'
+    if response_body is not None:
+        try:
+            body: Any = json.loads(response_body)
+        except Exception:
+            body = None
+        fields: dict[str, Any] = body if isinstance(body, dict) else {}
+        status = str(fields.get('status') or '')
+        if status == 'dropped':
+            outcome = str(fields.get('reason') or '')
+        else:
+            outcome = _DEMAND_STATUS_OUTCOMES.get(status, status)
+    PLAYBACK_BUILDS.labels(representation, outcome if outcome in DEMAND_PLAYBACK_OUTCOMES else 'other').inc()
 
 
 def _join(uid: str, conversation: object, event: str, feature: str = 'none', outcome: str = 'success') -> None:
