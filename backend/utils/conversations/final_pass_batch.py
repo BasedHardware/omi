@@ -203,7 +203,8 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
             if isinstance(error, ReferenceUnavailable) and error.reason == 'no_job':
                 absent.append(error)
                 for segment in conversation.transcript_segments:
-                    if batch_unit_scope(segment) == f'final:batch:{unit}':
+                    scope = batch_unit_scope(segment)
+                    if scope and scope.removeprefix('final:batch:') == unit:
                         diagnostics[segment.id] = 'no_job'
                 continue
             errors.append(error)
@@ -285,7 +286,11 @@ def _units(uid, conversation, read_budget, *, diagnostics=None):
             # splitting and grouping fixes). ID equality alone is insufficient
             # evidence if it now names different text. Never use stored offsets
             # to repair this: merge/split operations rebase those clocks.
-            stored = {s.id: s for s in conversation.transcript_segments if batch_unit_scope(s) == f'final:batch:{unit}'}
+            stored = {
+                s.id: s
+                for s in conversation.transcript_segments
+                if (scope := batch_unit_scope(s)) and scope.removeprefix('final:batch:') == unit
+            }
             placed = {word['segment_id'] for word in words}
             for sid, segment in stored.items():
                 source = reconstructed.get(sid)
