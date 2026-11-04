@@ -35,6 +35,10 @@ def test_pl194_failed_pull_returns_every_committed_lease(store_backend, monkeypa
     monkeypatch.setattr(scheduler_module, 'monotonic', lambda: clock[0])
     monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
     monkeypatch.setenv('BATCH_SHARD_SPREAD_ENABLED', str(spread).lower())
+    # The lease-count arithmetic assumes one lease per transaction: a multi-lease
+    # abort rolls back every receipt in its transaction, so exact "failing_lease - 1
+    # committed" holds only under the documented kill switch.
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'false')
     monkeypatch.setattr(scheduler_module, 'cap_dispatch_enabled', lambda *_: False)
     # Explicit complete policy inputs avoid host cohorts, remote config and admission reads.
     monkeypatch.setattr(
@@ -72,18 +76,21 @@ def test_pl194_failed_pull_returns_every_committed_lease(store_backend, monkeypa
                     return tx.put(table, key, value)
 
             result = body(ObservedTransaction())
-            # Postgres acquires the shard claim in a separate transaction returning bool.
-            if isinstance(result, tuple) and result[0] is not None:
-                lease = result[0][0]
-                if len(committed) + 1 == failing_lease:
-                    assert writes <= before.keys()
-                    aborted.update(lease=lease, before={key: before[key] for key in writes if key[0] != 'pull_claims'})
-                    raise failure  # real body finished; buffered lease/queue/service writes must roll back
+            # The pull transaction returns (receipts-or-None, eligible, observations)
+            # on every backend; each receipt is (lease, enqueued_at, relet) and
+            # Scheduler.pull is what unwraps receipts into leases.
+            receipts = result[0] if isinstance(result, tuple) else None
+            if receipts and len(committed) + len(receipts) >= failing_lease:
+                lease = receipts[failing_lease - len(committed) - 1][0]
+                assert writes <= before.keys()
+                aborted.update(lease=lease, before={key: before[key] for key in writes if key[0] != 'pull_claims'})
+                raise failure  # real body finished; buffered lease/queue/service writes must roll back
             return result
 
         result = run(commit)
-        if isinstance(result, tuple) and result[0] is not None:
-            committed.append(result[0][0])
+        receipts = result[0] if isinstance(result, tuple) else None
+        if receipts:
+            committed.extend(receipt[0] for receipt in receipts)
         return result
 
     monkeypatch.setattr(h.store, 'run', failing_run)
@@ -156,29 +163,37 @@ def test_pl194_overlapping_pull_cannot_clear_newer_cooldown(store_backend, monke
     item = WorkItem('one', uid, 1, 'gs://synthetic/one', 30, Priority.FRESH)
     policy = resolve_batch_policy(uid, flags={}, now=1000)
     assert h.store.run(lambda tx: queue.enqueue_in_transaction(tx, item, 1000, policy=policy))
-    candidate, run = h.store.control_candidate, h.store.run
+    candidate, candidates_hook, run = h.store.control_candidate, h.store.control_candidates, h.store.run
     entered, resume = Event(), Event()
     aborted = []
 
-    def pause_hint(*args, **kwargs):
-        value = candidate(*args, **kwargs)
-        if current_thread().name.startswith('earlier-pull') and not entered.is_set():
-            assert value is not None
-            entered.set()
-            assert resume.wait(5), 'overlapping pull was never resumed'
-        return value
+    def pause_hook(original):
+        # Shard-spread selection goes through the plural fanout hook; legacy
+        # selection through the singular one (which itself delegates to the
+        # plural). Each hook wraps its own original so neither re-enters a
+        # patched sibling.
+        def hook(*args, **kwargs):
+            value = original(*args, **kwargs)
+            if current_thread().name.startswith('earlier-pull') and not entered.is_set():
+                assert value is not None
+                entered.set()
+                assert resume.wait(5), 'overlapping pull was never resumed'
+            return value
+
+        return hook
 
     def fail_newer_pull(body):
         def commit(tx):
             result = body(tx)
             if not current_thread().name.startswith('earlier-pull') and isinstance(result, tuple) and result[0]:
-                aborted.append(result[0][0])
+                aborted.append(result[0])
                 raise FirestoreContentionExhausted('synthetic exhaustion')
             return result
 
         return run(commit)
 
-    monkeypatch.setattr(h.store, 'control_candidate', pause_hint)
+    monkeypatch.setattr(h.store, 'control_candidate', pause_hook(candidate))
+    monkeypatch.setattr(h.store, 'control_candidates', pause_hook(candidates_hook))
     monkeypatch.setattr(h.store, 'run', fail_newer_pull)
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix='earlier-pull') as pool:
         earlier = pool.submit(queue.pull, 1001)
@@ -199,4 +214,5 @@ def test_pl194_overlapping_pull_cannot_clear_newer_cooldown(store_backend, monke
         pytest.fail('older overlapping pull erased the contention cooldown')
 
     monkeypatch.setattr(h.store, 'control_candidate', forbidden_candidate)
+    monkeypatch.setattr(h.store, 'control_candidates', forbidden_candidate)
     assert queue.pull(1001) == []
