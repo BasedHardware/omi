@@ -74,7 +74,7 @@ Do not test notification delivery by notifying users.
 
 Rollback: restore the prior worker image and guard chart and restore the Grafana
 rule backup through the documented importer. Preserve the audited worker HPA
-bounds from the prod values file (min 4 / max 8, baseline 4, two worker processes per pod since
+bounds from the prod values file (min 4 / max 12, baseline 4, two worker processes per pod since
 2026-11-04); do not restore the stale 4/16 single-process chart values.
 Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
