@@ -6,6 +6,12 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Prerecorded Modulate STT/LID and Parakeet v1/v2 POST boundaries count attempted
+audio payload bytes in `omi_prerecorded_vendor_payload_bytes_total` with fixed
+provider/endpoint labels. Retries count each attempt; breaker refusals count none.
+No audio, URL, user or job identity enters the metric. The two routine STT
+`*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
+outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
 ## Fair-use decay switch
 
 `FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
