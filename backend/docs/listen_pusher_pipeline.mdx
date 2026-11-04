@@ -4932,14 +4932,40 @@ Inference updates may change identity fields, but the current manual receipt win
 The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
 only committed IDs drive live updates and `SegmentsDeletedEvent`.
 
+Recording renames join only the exact `(speaker_id_scope, canonical stream_speaker)`
+voice accepted by the existing carry collector. `PATCH /v1/episodes/{episode_id}/assign-speaker`
+fans out to episode members in either direction; `PATCH /v1/conversations/{id}/recording-speakers`
+is available outside episode admission and discovers same-scope conversations within the UID
+when there is no episode, using a bounded `recording_speaker_scopes` array query rather
+than a UID-wide transcript scan; bounded origin/session queries supplement legacy discovery.
+Transcript writes stamp the index before encryption. Complete coverage also requires every
+member's `recording_speaker_scopes_at_creation: true` proof; only absent-document creation
+sets it. Later repairs cannot certify unseen generations. Excluded members or failed saves
+make coverage partial; mobile then names only the available conversations. Budgets of 64
+members, 10,000 lines and 30 scopes fail with 413 before writes; transactions recheck visibility.
+Each member commits its own receipt after whole-request prevalidation and a transactional
+voice fence. The response reports successes and failures per member, so mobile rolls back
+only failed members after a late conflict. Identical recording retries are read-only and
+create no receipt generation or learning job. The default-on
+`RECORDING_SPEAKER_RENAME_ENABLED` switch reports disabled when off; new mobile falls back
+to the old explicit-ID single-conversation assignment routes on disabled or 404. Off also restores
+previous-member rollover carry. `manual_speaker_assignments.voices` stores
+scoped voice defaults with `decided_at`; selected-line decisions remain segment receipts.
+Unscoped rows retain conversation-local behavior, including deterministic legacy segment IDs.
+An encrypted UID-owned scope decision map supplies the latest voice decision at rollover,
+including when that voice is absent from the preceding member. An unavailable or malformed
+map emits fallback telemetry and uses the preceding member's incumbent carry receipt.
+
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
 The processor also reads and applies that receipt to its in-memory transcript
 before building the summary prompt, including when audio-based speaker resolution
-is unavailable. The mobile detail page regenerates an existing summary after
-four seconds without a newly acknowledged speaker edit, or when the detail page
-closes. Saves still in flight keep their conversation ID and regenerate once
+is unavailable. During a mobile labeling pass, Done or detail-page exit schedules
+one summary regeneration after pending saves. The four-second debounce remains
+for callers outside an explicit pass. A new edit supersedes an in-flight summary
+response and leaves one trailing regeneration. The transcript remains visible and
+editable behind a quiet progress indicator. Saves still in flight keep their conversation ID and regenerate once
 after the final successful acknowledgement, even if the detail page was disposed.
 The reprocess response carries `X-Omi-Speaker-Receipt-Summary: 1` only after
 the processor successfully reads and applies the manual receipt (including a

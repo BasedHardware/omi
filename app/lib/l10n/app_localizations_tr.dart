@@ -14979,5 +14979,42 @@ class AppLocalizationsTr extends AppLocalizations {
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
 
   @override
+  String get speakerWholeRecording => 'Kaydın tamamına uygula';
+
+  @override
+  String get speakerSelectionChanged => 'Konuşmacı değişti. Satırları yeniden seçin.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Kayıt çok büyük. Bir konuşmada daha az satır seçin.',
+        'partial': 'Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.',
+        'other': 'Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Yalnızca mevcut konuşmalardaki $count satır yeniden adlandırıldı.',
+      one: 'Yalnızca mevcut konuşmalardaki 1 satır yeniden adlandırıldı.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Bu sesin diğer satırları (kayıt kapsamı doğrulanmadı)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Tamamlanıyor…';
 }

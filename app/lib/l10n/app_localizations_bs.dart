@@ -14994,5 +14994,42 @@ class AppLocalizationsBs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.';
 
   @override
+  String get speakerWholeRecording => 'Primijeni na cijeli snimak';
+
+  @override
+  String get speakerSelectionChanged => 'Govornik se promijenio. Ponovo odaberite redove.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Snimak je prevelik. Odaberite manje redova u jednom razgovoru.',
+        'partial': 'Neki redovi su sačuvani. Odaberite preostale i pokušajte ponovo.',
+        'other': 'Neki redovi su sačuvani. Odaberite preostale i pokušajte ponovo.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Preimenovano je $count redova samo u dostupnim razgovorima.',
+      one: 'Preimenovano je 1 redova samo u dostupnim razgovorima.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Drugi redovi ovog glasa (obuhvat snimka nije potvrđen)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Završavamo…';
 }
