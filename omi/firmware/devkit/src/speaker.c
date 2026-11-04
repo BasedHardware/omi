@@ -55,6 +55,11 @@ static bool stream_started;
 static bool speaker_ready;
 static int64_t last_packet_ms;
 
+// speak() stages on the BT RX thread while play_talk_cue() runs on the system
+// workqueue; both write tx_block and drive the same I2S queue, so an
+// interleaved pair garbles audio. One mutex serializes every staging path.
+K_MUTEX_DEFINE(speaker_tx_mutex);
+
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)),
                                        .pin = 11,
                                        .dt_flags = GPIO_INT_DISABLE};
@@ -235,6 +240,7 @@ uint16_t speak(uint16_t len, const void *buf) // direct from bt
     }
 
     int64_t now = k_uptime_get();
+    k_mutex_lock(&speaker_tx_mutex, K_FOREVER);
 
     // A 4-byte write arms a new stream while idle, or after the host has gone
     // quiet: mid-stream those four bytes are tail audio, not a header. This is
@@ -251,11 +257,13 @@ uint16_t speak(uint16_t len, const void *buf) // direct from bt
         // every other state, so a new transmission always clears the trap.
         (void) i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_PREPARE);
         LOG_INF("About to write %u bytes", stream_remaining);
+        k_mutex_unlock(&speaker_tx_mutex);
         return len;
     }
 
     if (!stream_active) {
         LOG_WRN("Speaker data before header, dropped %u bytes", len);
+        k_mutex_unlock(&speaker_tx_mutex);
         return 0;
     }
     last_packet_ms = now;
@@ -298,6 +306,7 @@ uint16_t speak(uint16_t len, const void *buf) // direct from bt
         LOG_INF("Speaker stream done");
     }
 
+    k_mutex_unlock(&speaker_tx_mutex);
     return len;
 }
 
@@ -322,6 +331,7 @@ void generate_gentle_chime(int16_t *buffer, int num_samples)
 
 int play_boot_sound(void)
 {
+    k_mutex_lock(&speaker_tx_mutex, K_FOREVER);
     int16_t *buffer = (int16_t *) tx_block;
     const int chime_frames = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
 
@@ -335,15 +345,18 @@ int play_boot_sound(void)
     int ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
     if (ret) {
         LOG_ERR("Chime start failed: %d", ret);
+        k_mutex_unlock(&speaker_tx_mutex);
         return ret;
     }
     ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
     if (ret) {
         LOG_ERR("Failed to drain I2S transmission: %d", ret);
+        k_mutex_unlock(&speaker_tx_mutex);
         return ret;
     }
     // DRAIN stops the peripheral once the queue empties (~0.3 s of chime).
     k_sleep(K_MSEC(500));
+    k_mutex_unlock(&speaker_tx_mutex);
 
     return 0;
 }
@@ -353,10 +366,15 @@ void play_talk_cue(void)
     if (!speaker_ready) {
         return;
     }
-    if (stream_active) {
-        // A BLE stream owns the queue right now; interleaved cue blocks would
-        // garble the audio mid-sentence. The BLE DOUBLE_TAP notify still fires.
+    k_mutex_lock(&speaker_tx_mutex, K_FOREVER);
+    if (stream_active && k_uptime_get() - last_packet_ms <= STREAM_IDLE_REARM_MS) {
+        // A live BLE stream owns the queue; interleaved cue blocks would garble
+        // the audio mid-sentence. The BLE DOUBLE_TAP notify still fires. Only a
+        // FRESH stream may silence the cue: speak() re-arms after this same
+        // window when a host abandons a stream mid-way, so an old flag must not
+        // mute the cue forever.
         LOG_INF("Talk cue skipped: speaker stream in progress");
+        k_mutex_unlock(&speaker_tx_mutex);
         return;
     }
 
@@ -393,12 +411,14 @@ void play_talk_cue(void)
     }
     if (ret) {
         LOG_WRN("Talk cue start failed: %d", ret);
+        k_mutex_unlock(&speaker_tx_mutex);
         return;
     }
     ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
     if (ret) {
         LOG_WRN("Talk cue drain failed: %d", ret);
     }
+    k_mutex_unlock(&speaker_tx_mutex);
 }
 
 int init_haptic_pin()
