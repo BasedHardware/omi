@@ -598,6 +598,7 @@ and an explicit empty literal renders as `''`.
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `RECORD_AUDIO_PARTIAL_ENABLED` | Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_BARRIER_INLINE_FINISH` | Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS` | Default 3600; seal repair stops waiting on a live pusher pod restart once a completed capture is older than this | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_OVERLAP_TRIM_ENABLED` | Default on; earlier retained objects own divergent overlap frames in seal proof and admission manifests | backend | env | open | {value: 'true', category: ops_kill} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_REPAIR_ENABLED` | Default on; CPU seal workers and retained repair cron use canonical privacy and tail proof with isolated row budgets | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_ENABLED` | Default on; bounded in-cluster proof and repair of dead record producers | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
@@ -1226,6 +1227,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
 - `RECORD_AUDIO_PARTIAL_ENABLED` — Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills (fail: open)
 - `RECORD_BARRIER_INLINE_FINISH` — Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds (fail: open)
+- `RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS` — Default 3600; seal repair stops waiting on a live pusher pod restart once a completed capture is older than this (fail: open)
 - `RECORD_SEAL_REPAIR_ENABLED` — Default on; CPU seal workers and retained repair cron use canonical privacy and tail proof with isolated row budgets (fail: open)
 - `RECORD_SEAL_REPAIR_MODE` — plan or apply; default apply, plan performs canonical proofs without writes (fail: closed)
 - `RECORD_SEAL_SWEEPER_ENABLED` — Default on; bounded in-cluster proof and repair of dead record producers (fail: open)
