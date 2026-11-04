@@ -838,3 +838,41 @@ def test_discard_invalidates_pre_restore_memo_in_the_same_transaction(store):
     # A delayed completion from before discard cannot reactivate the proof.
     episode_attach_memo.complete(uid, 'restore', visible, None, finalized=True, firestore_client=client)
     assert not episode_attach_memo.matches(uid, 'restore', visible, finalized=True, firestore_client=client)
+
+
+@pytest.mark.parametrize('mutation', ['discarded', 'deleted'])
+def test_stale_durable_finalize_retires_currently_hidden_member(store, monkeypatch, mutation):
+    from database import episode_attach_memo
+    from utils.episodes import finalize, service
+
+    client, uid = store
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'true')
+    monkeypatch.setattr(service, 'episodes_enabled_for', lambda _: True)
+    monkeypatch.setattr(service.client_gate, 'client_seen', lambda _: True)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c: outcome)
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: client)
+    root = client.collection('users').document(uid)
+    ref = root.collection('conversations').document('stale-finalize')
+    member = dict(
+        id='stale-finalize',
+        source='omi',
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+    )
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+    assert service._attach_synced(uid, 'stale-finalize', member, c) == 'recorded'
+    visible = ref.get().to_dict()
+    episode_attach_memo.complete(uid, 'stale-finalize', visible, None, finalized=True, firestore_client=client)
+    ref.update({mutation: True})
+    assert not finalize.skip_unchanged_schedule(uid, 'stale-finalize', visible, finalized=True)
+    assert (
+        service.on_conversation_finalized(uid, 'stale-finalize', visible, trigger='sync_update', collaborators=c)
+        == 'skipped_discarded'
+    )
+    owner = episodes.get_episode(uid, visible['episode_id'], firestore_client=client)
+    assert 'stale-finalize' in owner['discarded_conversation_ids']
+    assert not root.collection('episode_links').document('stale-finalize').get().to_dict().get('attach_completed')

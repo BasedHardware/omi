@@ -54,6 +54,12 @@ marker preserves the first finalization/compose signal after intake recovery;
 only later identical finalizations skip the whole hook, including compose.
 Missing proof, absorbed donors, ancestry or uncertain inputs retain the full
 path. The durable finalizer bounds its memo lookup and falls through on failure.
+A durable caller can still retain its old visible snapshot on a miss. The
+attachment transaction already reads current member visibility: its exact
+`conversation_hidden` admission rejection retires that member and stops stale
+reconciliation. Donor errors and hidden-or-repointed recovery conflicts keep
+their existing retry path. This reuses the admission read without another
+visibility lookup or any extra read on a completed memo hit.
 
 Reprocess scheduling compares snapshots before and after processing, with the
 same wire-model defaults and a deep copy before possible in-place mutation.

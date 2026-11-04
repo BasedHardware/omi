@@ -1575,7 +1575,7 @@ def _on_finalized(
             else row
         )
         outcome = _attach_synced(uid, conversation_id, sync_row, c, absorbed_from=absorbed_from)
-        if outcome == 'conflict' or (episode is None and not recorded_episodes_enabled()):
+        if outcome in {'conflict', 'skipped_discarded'} or (episode is None and not recorded_episodes_enabled()):
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if (

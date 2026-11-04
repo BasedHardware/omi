@@ -12,7 +12,7 @@ from database import episode_attach_memo, episode_timeline, episodes
 from tests.unit.test_episode_attach_cost import seed
 from tests.unit.test_episode_live_integrity import lane, row, T0, assert_timeline  # noqa: F401
 from utils.conversations.episode_attach_key import should_schedule
-from utils.episodes import finalize, service
+from utils.episodes import finalize, service, sync_attach
 
 
 @pytest.mark.parametrize('entry', ['intake', 'finalize'])
@@ -52,6 +52,47 @@ def test_hidden_after_snapshot_cannot_suppress_hook(lane, monkeypatch, entry, mu
         args[1](*args[2:])
         owner = episodes.get_episode('u', visible['episode_id'], firestore_client=store)
         assert 'same' in owner['discarded_conversation_ids']
+
+
+@pytest.mark.parametrize('mutation', ['discarded', 'deleted'])
+def test_durable_hook_retires_hidden_member_even_with_stale_supplied_row(lane, monkeypatch, mutation):
+    store, c, _ = lane
+    service._attach_synced('u', 'same', seed(store), c)
+    visible = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    episode_attach_memo.complete('u', 'same', visible, None, finalized=True, firestore_client=store)
+    store.rows[('users', 'u', 'conversations', 'same')][mutation] = True
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: store)
+    # The durable caller retains its processing snapshot after the memo rejects
+    # it. Exercise the full hook with that same stale row, without a fresh fetch.
+    assert not finalize.skip_unchanged_schedule('u', 'same', visible, finalized=True)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c: outcome)
+    assert (
+        service.on_conversation_finalized('u', 'same', visible, trigger='sync_update', collaborators=c)
+        == 'skipped_discarded'
+    )
+    owner = episodes.get_episode('u', visible['episode_id'], firestore_client=store)
+    assert 'same' in owner['discarded_conversation_ids']
+    assert not store.rows[('users', 'u', 'episode_links', 'same')].get('attach_completed')
+
+
+@pytest.mark.parametrize(
+    'stage,reason',
+    [('_attach_recorded', 'conversation_hidden_or_repointed'), ('_repoint_sync_donors', 'conversation_hidden')],
+)
+def test_only_current_member_admission_can_trigger_discard_cleanup(lane, monkeypatch, stage, reason):
+    store, c, _ = lane
+    member = seed(store)
+    monkeypatch.setattr(episode_attach_memo, 'matches', lambda *a, **kw: False)
+    failure = Mock(side_effect=episodes.EpisodeConflict(reason))
+    monkeypatch.setattr(service, stage, failure)
+    end = Mock()
+    monkeypatch.setattr(service, '_end_discarded', end)
+    clock = Mock(wraps=sync_attach.time)
+    clock.sleep = Mock()
+    monkeypatch.setattr(sync_attach, 'time', clock)
+    assert service._attach_synced('u', 'same', member, c) == 'conflict'
+    assert failure.call_count == 3
+    end.assert_not_called()
 
 
 @pytest.mark.parametrize('order', ['attach_first', 'composer_first'])

@@ -77,18 +77,27 @@ def attach(
                 if recorded_episodes_enabled()
                 else episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
             )
-            if recorded_episodes_enabled() and owner_reuse_enabled() and (span := conversation_span(row)):
-                owner = attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
-                outcome = 'recorded'
-            else:
-                outcome = (
-                    attach_once(uid, conversation_id, row, c)
-                    if recorded_episodes_enabled() or not owner
-                    else 'attached'
-                )
-                owner = episodes_db.get_episode_for_conversation(
-                    uid, conversation_id, firestore_client=c.firestore_client
-                )
+            try:
+                if recorded_episodes_enabled() and owner_reuse_enabled() and (span := conversation_span(row)):
+                    owner = attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
+                    outcome = 'recorded'
+                else:
+                    outcome = (
+                        attach_once(uid, conversation_id, row, c)
+                        if recorded_episodes_enabled() or not owner
+                        else 'attached'
+                    )
+                    owner = episodes_db.get_episode_for_conversation(
+                        uid, conversation_id, firestore_client=c.firestore_client
+                    )
+            except episodes_db.EpisodeConflict as error:
+                if str(error) != 'conversation_hidden':
+                    raise
+                # Member admission read current visibility inside the transaction.
+                # A stale visible caller still owes discard cleanup, not retries.
+                # Repointed recovery owners use a different conflict reason.
+                end_discarded(uid, conversation_id, row, SYNC_UPDATE, c)
+                return 'skipped_discarded'
             if owner is not None:
                 if conversation_id not in (owner.get('recovered_conversation_ids') or []):
                     recovered_ids = [*(owner.get('recovered_conversation_ids') or []), conversation_id]
