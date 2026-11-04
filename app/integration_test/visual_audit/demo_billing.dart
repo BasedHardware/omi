@@ -2,7 +2,6 @@
 // payment calls. Nothing here is referenced from lib/, and the walk opts in by passing
 // [demoAuditProviders] as the suite roster.
 import 'package:nested/nested.dart';
-import 'package:provider/provider.dart';
 
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';

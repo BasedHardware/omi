@@ -82,7 +82,7 @@ Future<void> playDemoWalk({required WidgetTester tester, required AuditSuite sui
     final scenario = byId[step.scenarioId];
     if (scenario == null) fail('Demo walk ${walk.id} names unknown scenario ${step.scenarioId}');
     walkLog('DEMO_WALK_BEAT ${step.scenarioId}');
-    await driveWalkScenario(tester, suite, scenario!);
+    await driveWalkScenario(tester, suite, scenario);
     if (step.tap != null) {
       final finder = find.text(step.tap!);
       expect(finder, findsWidgets, reason: '${step.scenarioId} should show "${step.tap}"');
