@@ -176,18 +176,21 @@ def _worker_without_independent_recovery_chart() -> dict[str, str]:
 
 
 def _worker_without_independent_recovery() -> dict[str, str]:
-    # Prod recovery is declared on; dev stays off. Simulate a future source-default
-    # change as well: the explicit worker setting must still prevent a reader split
-    # in dev, where the recovery host remains pinned off.
-    overrides = _worker_without_independent_recovery_chart()
+    # The ship-on source default must not create a reader split in dev,
+    # where the recovery host remains pinned off.
+    return _worker_without_independent_recovery_chart()
+
+
+def _worker_without_independent_recovery_default_off() -> dict[str, str]:
+    # Retain coverage of the source rollback as well as today's ship-on default.
     config_path = 'backend/config/batch_language_recovery.py'
     source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
     changed = source.replace(
-        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
         "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
     )
     assert changed != source
-    return {**overrides, config_path: changed}
+    return {**_worker_without_independent_recovery_chart(), config_path: changed}
 
 
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
@@ -206,10 +209,14 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
     'worker_without_independent_recovery': _worker_without_independent_recovery,
-    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_chart,
+    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_default_off,
 }
 HELM_MUTATIONS = {
     'worker_without_head_priority',
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
+SOURCE_DEFAULT_MUTATIONS = {
     'worker_without_independent_recovery',
     'worker_without_independent_recovery_default_off',
 }
@@ -234,7 +241,7 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
         # Source-default mutations need a fresh reader inventory; manifest/chart
         # mutations can reuse the baseline AST scan.
-        readers = None if name == 'worker_without_independent_recovery' else baseline.readers
+        readers = None if name in SOURCE_DEFAULT_MUTATIONS else baseline.readers
         context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)

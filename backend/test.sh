@@ -90,7 +90,9 @@ fi
 
 selected_tests=()
 while IFS= read -r test_path; do
-  if [[ -n "$test_path" && "$test_path" != testing/e2e/* ]]; then
+  # Automatic unit selections leave E2E to its own CI job. An explicit list
+  # must honor hermetic E2E paths too, rather than silently report no tests.
+  if [[ -n "$test_path" && ( "$test_path" != testing/e2e/* || -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ) ]]; then
     selected_tests+=("$test_path")
   fi
 done < "$test_list_file"

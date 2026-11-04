@@ -210,7 +210,9 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def start(self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False):
+    def start(
+        self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False, local_silence=False
+    ):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             result = tx.get('results', segment_id)
@@ -227,6 +229,17 @@ class RecoveryStore:
             job['recovery_state'] = 'running'
             if provider not in {'legacy_sync', 'modulate'}:
                 raise ValueError('closed recovery provider required')
+            if local_silence:
+                if language_guarded(job) or job['recovery'].get('recognizers') or operator_paid_attempt:
+                    raise ValueError('unattempted local silence required')
+                # provider names the selected route, not an observed call. This
+                # token-bound decision skips STT entirely, even if storage or
+                # settle must later reconcile the deterministic result object.
+                job['recovery']['no_vendor_call'] = {
+                    'version': 1,
+                    'reason': 'strict_vad_silence',
+                    'vad_speech_seconds': 0,
+                }
             job['recovery']['provider'] = provider
             job['recovery']['started_at'] = now
             if operator_paid_attempt:
@@ -291,6 +304,36 @@ class RecoveryStore:
                     'audio_seconds': audio_seconds,
                 },
             )
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def hold_invalid_manifest(self, segment_id, token, now, *, audio_uri):
+        """Retain a unit whose stored manifest can never materialize, without a paid intent.
+
+        failed_held leaves the recovery candidate set, so neither a task retry nor
+        the sweep re-reads it. The manifest and its sources stay in place."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+                or job.get('recovery', {}).get('started_at') is not None
+                or job.get('audio_uri') != audio_uri
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+            ):
+                return False
+            job['recovery_state'] = 'failed_held'
+            job['recovery'].update(settled_at=now, refusal={'reason': 'invalid_retained_manifest'})
             tx.put('jobs', segment_id, job)
             return True
 

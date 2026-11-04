@@ -1,6 +1,9 @@
 """C8 provider-STT stage on the real admission, intent and merge transactions (synthetic only)."""
 
+from utils.batch_pipeline import provider_stt_admission
+
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,14 +21,8 @@ from config.batch_pipeline import allowance_hold_retry_seconds
 from config.policy import BatchUnitPolicy
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS
 from utils.batch_pipeline import admission  # warm its fair-use/backfill imports outside the call budget
-from utils.batch_pipeline.provider_stt import (
-    ABANDON_SECONDS,
-    PENDING,
-    RUNNING,
-    ProviderSttStage,
-    SttRoute,
-    resolve_route,
-)
+from utils.batch_pipeline.provider_stt import ABANDON_SECONDS, RUNNING, ProviderSttStage
+from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute, resolve_route
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
@@ -172,7 +169,7 @@ def admit(monkeypatch, store, items, content_id, route=None):
     binding = ProjectionBinding(
         OWNER, 'bp_' + content_id, content_id, tuple(i.segment_id for i in items), language='ja'
     )
-    enqueue = provider_stt.provider_enqueue(route, Outbox(), {}) if route is not None else None
+    enqueue = provider_stt_admission.provider_enqueue(route, Outbox(), {}) if route is not None else None
     outcome = batch_pipeline_intake.admit(store, items, binding, 100.0, namespace=store.namespace, enqueue=enqueue)
     assert outcome['outcome'] == 'batch'
     return binding
@@ -211,16 +208,38 @@ def test_provider_unit_is_admitted_outside_the_gpu_ring(world, monkeypatch):
 def test_provider_enqueue_is_idempotent_and_immutable(world):
     _, store = world
     work = item('p1', 10)
-    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
     assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY)) is True
     assert store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY)) is False
-    other = provider_stt.provider_enqueue(SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {})
+    other = provider_stt_admission.provider_enqueue(
+        SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {}
+    )
     with pytest.raises(ValueError):
         store.run(lambda tx: other(tx, work, 102.0, policy=POLICY))
     with pytest.raises(ValueError):
         store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0, policy=POLICY))
     with pytest.raises(ValueError):
-        provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
+        provider_stt_admission.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
+
+
+@pytest.mark.parametrize('timing_store', [None, 'batch', 'sync'])
+def test_provider_job_timing_store_is_optional_durable_and_immutable(world, timing_store):
+    _, store = world
+    work = replace(item('p1', 10), timing_store=timing_store)
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
+    assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY))
+    row = job(store, work.segment_id)
+    if timing_store is None:
+        assert 'timing_store' not in row
+    else:
+        assert row['timing_store'] == timing_store
+    assert not store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY))
+    if timing_store is None:
+        store.run(lambda tx: tx.put('jobs', work.segment_id, {**row, 'timing_store': None}))
+        assert not store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY))
+    for other in {None, 'batch', 'sync'} - {timing_store}:
+        with pytest.raises(ValueError, match='different immutable work'):
+            store.run(lambda tx: enqueue(tx, replace(work, timing_store=other), 102.0, policy=POLICY))
 
 
 # --- the stage ----------------------------------------------------------------------------------
@@ -305,18 +324,112 @@ def test_crash_after_paid_call_reconciles_without_a_second_call(world, monkeypat
     assert vendor.calls == 1 and job(store, 'p1')['state'] == 'result_ready'
 
 
-def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch):
+@pytest.mark.parametrize('stored_speech', [None, 0.0, 0.5])
+def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch, stored_speech):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
     artifacts, vendor = Artifacts(), Vendor()
     artifacts.fail_persist = True
     stage(store, artifacts, vendor).run('p1')
-    outcome = stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 0.5
+
+    def legacy_or_silence(tx):
+        row = tx.get('jobs', 'p1')
+        if stored_speech is None:
+            row['provider_intent'].pop('measured_vad_speech_seconds')
+        else:
+            row['provider_intent']['measured_vad_speech_seconds'] = stored_speech
+        tx.put('jobs', 'p1', row)
+
+    store.run(legacy_or_silence)
+    inspect = Mock(side_effect=AssertionError('reconciliation must not inspect audio'))
+    replay = stage(store, artifacts, vendor, inspect=inspect, now=200.0 + ABANDON_SECONDS + 1)
+    outcome = replay.run('p1')
     assert (outcome.outcome, outcome.provider_reason) == ('done', 'provider_failed')
     row = job(store, 'p1')
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == {'stage': 'provider', 'reason': 'abandoned_running'}
-    assert vendor.calls == 1
+    if stored_speech is None:
+        assert 'measured_held_vad_speech_seconds' not in row
+    else:
+        assert row['measured_held_vad_speech_seconds'] == stored_speech
+    # The builtin route's terminal hold stays outside recovery; duplicate
+    # deliveries neither re-download audio nor reopen a paid intent.
+    assert replay.protocol.fence.prepare('p1', OWNER, 1200.0) is None
+    assert replay.run('p1').reason == 'superseded'
+    assert vendor.calls == 1 and artifacts.fetches == 1
+    inspect.assert_not_called()
+
+
+def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+
+    def vendor(work, language, inspected, *, service):
+        row = job(store, 'p1')
+        assert row['provider_intent']['measured_vad_speech_seconds'] == 0.5
+        # A concurrent delivery cannot overwrite the winning intent's evidence.
+        losing = provider_stt.ProviderSttStore(store).start(
+            'p1', 'loser', 201.0, service, measured_vad_speech_seconds=0.0
+        )
+        assert losing['provider_intent'] == row['provider_intent']
+        return Vendor()(work, language, inspected, service=service)
+
+    assert stage(store, Artifacts(), vendor).run('p1').reason == 'processed'
+    # The stage catches vendor exceptions, including assertions in this fake.
+    # Require success so a failed pre-call assertion cannot pass as failed_held.
+    assert job(store, 'p1')['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('incoming,expected', [(None, 0.5), (0.0, 0.5), (1.0, 1.0)])
+def test_every_terminal_hold_reuses_intent_vad(world, monkeypatch, terminal, incoming, expected):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    protocol = provider_stt.ProviderSttStore(store)
+    protocol.start('p1', 'paid-once', 200.0, 'modulate', measured_vad_speech_seconds=0.5)
+    failure = {'stage': 'provider', 'reason': 'provider_failed'}
+    if terminal:
+        # Exhausted failover returns to pending with the prior intent intact.
+        def pending(tx):
+            row = tx.get('jobs', 'p1')
+            row['state'] = PENDING
+            tx.put('jobs', 'p1', row)
+
+        store.run(pending)
+        assert protocol.terminal('p1', 202.0, failure, measured_held_vad_speech_seconds=incoming)
+    else:
+        assert (
+            protocol.settle('p1', 'paid-once', 202.0, failure=failure, measured_held_vad_speech_seconds=incoming)
+            == 'settled'
+        )
+    assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
+
+
+@pytest.mark.parametrize('next_measurement,expected', [(None, 0.5), (0.0, 0.5), (1.0, 1.0)])
+def test_failover_intent_keeps_prior_vad_if_next_inspection_is_missing_or_lower(
+    world, monkeypatch, next_measurement, expected
+):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    protocol = provider_stt.ProviderSttStore(store)
+    protocol.start('p1', 'first', 200.0, 'modulate', measured_vad_speech_seconds=0.5)
+    failure = {'stage': 'provider', 'reason': 'abandoned_running'}
+    assert (
+        protocol.settle(
+            'p1',
+            'first',
+            1101.0,
+            failure=failure,
+            attempt_outcome=provider_stt.VendorAttemptOutcome.ABANDONED,
+            failover_to=('soniox',),
+        )
+        == 'failover'
+    )
+    started = protocol.start('p1', 'alternate', 1102.0, 'soniox', measured_vad_speech_seconds=next_measurement)
+    assert started['provider_intent']['measured_vad_speech_seconds'] == expected
+    assert protocol.settle('p1', 'alternate', 2003.0, failure=failure) == 'settled'
+    assert job(store, 'p1')['measured_held_vad_speech_seconds'] == expected
 
 
 @pytest.mark.parametrize(
@@ -327,7 +440,8 @@ def test_abandoned_running_intent_settles_failed_held_without_spend(world, monke
         (RuntimeError('synthetic'), {'stage': 'provider', 'reason': 'operation_failed'}),
     ],
 )
-def test_vendor_failure_is_terminal_failed_held_and_never_re_enters_recovery(world, monkeypatch, error, expected):
+def test_kill_switch_off_keeps_vendor_failure_terminal(world, monkeypatch, error, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
     artifacts, vendor = Artifacts(), Vendor(error)
@@ -541,7 +655,7 @@ def test_provider_enqueue_writes_the_outbox_row_in_the_admission_transaction(wor
     _, store = world
     outbox, wakes = Outbox(), {}
     binding = ProjectionBinding(OWNER, 'bp_content-p', 'content-p', ('p1',))
-    enqueue = provider_stt.provider_enqueue(JA, outbox, wakes)
+    enqueue = provider_stt_admission.provider_enqueue(JA, outbox, wakes)
     batch_pipeline_intake.admit(store, [item('p1', 10)], binding, 100.0, namespace=store.namespace, enqueue=enqueue)
     assert outbox.enqueued == [('p1', OWNER, {'segment_id': 'p1'}, 100.0)]
     assert 'adopted_legacy_job_id' not in store.get('content', f'{OWNER}/content-p')
@@ -1105,3 +1219,29 @@ def test_allowance_exhausted_during_inspection_leaves_vendor_intent_unspent(worl
     assert result.outcome == 'deferred' and vendor.calls == 0
     assert job(store, 'p1')['state'] == PENDING
     assert 'provider_intent' not in job(store, 'p1')
+
+
+@pytest.mark.parametrize('changed', [None, 'owner_id', 'conversation_id', 'privacy_generation'])
+def test_native_provider_placeholder_conversion_preserves_owner_fence(world, changed):
+    _, store = world
+    work = item('p1', 10)
+    pending = {
+        'state': 'record_pending',
+        'owner_id': work.owner_id,
+        'conversation_id': work.conversation_id,
+        'privacy_generation': work.privacy_generation,
+    }
+    if changed:
+        pending[changed] = 1 if changed == 'privacy_generation' else 'other'
+    store.rows['jobs', work.segment_id] = pending
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {}, native_record=True)
+    if changed:
+        with pytest.raises(ValueError, match='pending recording owner cannot change'):
+            store.run(lambda tx: enqueue(tx, work, 100, policy=POLICY))
+        assert job(store, work.segment_id) == pending
+    else:
+        with pytest.raises(ValueError, match='pending recording cannot take'):
+            store.run(lambda tx: provider_stt_admission.enqueue_in_transaction(tx, work, 100, route=JA, policy=POLICY))
+        assert store.run(lambda tx: enqueue(tx, work, 100, policy=POLICY))
+        assert job(store, work.segment_id)['state'] == PENDING
+        assert not [key for key in store.rows if key[0] in {'queues', 'control'}]

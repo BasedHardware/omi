@@ -33,6 +33,9 @@ class Provider(migration.PartitionTransport):
         self.missing_query_lsn = False
         self.stale_fetch_records = {}
         self.page_size = 2
+        # namespace -> {id: score offset}; models the provider scoring one
+        # record slightly differently per namespace.
+        self.score_jitter = defaultdict(dict)
 
     @staticmethod
     def _predicate(where):
@@ -77,6 +80,8 @@ class Provider(migration.PartitionTransport):
         self.calls.append((path, deepcopy(payload)))
         namespace = payload['namespace']
         if path in {'vectors/upsert', 'vectors/delete'}:
+            if namespace == getattr(self, 'unsent_namespace', None):
+                raise migration.WriteNotSent('connection refused before the request was sent')
             if self.before_write:
                 self.before_write(path, payload)
             if path == 'vectors/upsert':
@@ -112,7 +117,12 @@ class Provider(migration.PartitionTransport):
                 next_token = '2'
             return {'vectors': {row['id']: row for row in page}, 'pagination': {'next': next_token}}, {}
         assert path == 'query'
-        rows.sort(key=lambda row: (-sum(a * b for a, b in zip(row['values'], payload['vector'])), row['id']))
+        jitter = self.score_jitter[namespace]
+
+        def score(row):
+            return sum(a * b for a, b in zip(row['values'], payload['vector'])) + jitter.get(row['id'], 0.0)
+
+        rows.sort(key=lambda row: (-score(row), row['id']))
         rows = rows[: payload['topK']]
         if namespace == self.reverse_namespace:
             rows.reverse()
@@ -120,7 +130,7 @@ class Provider(migration.PartitionTransport):
         headers = {} if self.missing_query_lsn else {'x-pinecone-max-indexed-lsn': str(indexed)}
         matches = []
         for row in rows:
-            match = {'id': row['id'], 'score': 0.9}
+            match = {'id': row['id'], 'score': score(row)}
             if payload.get('includeMetadata'):
                 match['metadata'] = deepcopy(row['metadata'])
             if payload.get('includeValues'):
@@ -139,6 +149,7 @@ def owned(provider, namespace, uid='test-owner'):
 
 @pytest.fixture
 def setup(monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
     monkeypatch.setenv('PINECONE_PARTITIONS_ENABLED', 'true')
     monkeypatch.setattr(migration, 'external_write_fence', lambda *a, **kw: nullcontext())
 
@@ -167,6 +178,20 @@ def setup(monkeypatch):
     }
     runner = migration.OwnerMigration(key, provider, firestore_client=db)
     return key, db, provider, runner
+
+
+@pytest.mark.parametrize('interruption', [KeyboardInterrupt, SystemExit])
+def test_interrupted_copy_retains_uncertain_scope(setup, interruption):
+    key, db, _, runner = setup
+    state.begin_migration(key, 'migration', firestore_client=db)
+    with pytest.raises(interruption):
+        with runner._copy_admission('migration', ['a'], key.partition_namespace, 'copy_upsert'):
+            raise interruption()
+    route = state.get_route(key, firestore_client=db)
+    assert route.pending_count == 0
+    assert route.uncertain_count == 1
+    with pytest.raises(state.PartitionBusy):
+        state.cutover(key, 'migration', route.revision, {}, firestore_client=db)
 
 
 def commit(key, db, receipt):
@@ -243,6 +268,158 @@ def test_parity_and_identity_failures_never_authorize_cutover(setup, failure):
     with pytest.raises(migration.MigrationNotReady):
         runner.qualify('run', dimension=2)
     assert state.get_route(key, firestore_client=db).primary_namespace == key.family
+
+
+def _target_upserted_ids(provider, namespace):
+    return [
+        row['id']
+        for path, payload in provider.calls
+        if path == 'vectors/upsert' and payload['namespace'] == namespace
+        for row in payload['vectors']
+        if row['id'] != BARRIER_ID
+    ]
+
+
+def test_retry_does_not_reupload_records_already_copied_identically(setup):
+    key, db, provider, runner = setup
+    # A previous, interrupted attempt already copied a and b exactly.
+    for vector_id in ('a', 'b'):
+        provider.records[key.partition_namespace][vector_id] = deepcopy(provider.records[key.family][vector_id])
+    receipt = runner.qualify('run', dimension=2)
+    assert receipt['records'] == 3
+    assert _target_upserted_ids(provider, key.partition_namespace) == ['c']
+    assert owned(provider, key.family) == owned(provider, key.partition_namespace)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def test_target_copy_with_a_different_payload_is_rewritten(setup):
+    key, db, provider, runner = setup
+    stale = deepcopy(provider.records[key.family]['a'])
+    stale['metadata']['revision'] = 0
+    provider.records[key.partition_namespace]['a'] = stale
+    receipt = runner.qualify('run', dimension=2)
+    assert sorted(_target_upserted_ids(provider, key.partition_namespace)) == ['a', 'b', 'c']
+    assert owned(provider, key.family) == owned(provider, key.partition_namespace)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def test_near_tied_neighbours_swapped_by_provider_scoring_still_qualify(setup):
+    key, db, provider, runner = setup
+    # c and d score 0.5 and 0.5004 against probe a; the bucket scores d 6e-4 lower,
+    # so the two swap, as measured on the dev index for identical copies.
+    provider.records[key.family]['d'] = record('d', values=[0.5004, 0.4996])
+    provider.score_jitter[key.partition_namespace]['d'] = -0.0006
+    receipt = runner.qualify('run', dimension=2)
+    assert receipt['records'] == 4
+    assert any(check['exact_order'] is False for check in receipt['query_checks'])
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def test_score_drift_beyond_tolerance_never_authorizes_cutover(setup):
+    key, db, provider, runner = setup
+    provider.score_jitter[key.partition_namespace]['c'] = -0.01
+    with pytest.raises(migration.MigrationNotReady, match='scores differ'):
+        runner.qualify('run', dimension=2)
+    assert state.get_route(key, firestore_client=db).primary_namespace == key.family
+
+
+def _matches(*pairs):
+    return [{'id': id, 'score': score} for id, score in pairs]
+
+
+def test_search_parity_accepts_only_tie_level_differences():
+    old = _matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('d', 0.7))
+    assert migration.search_parity(old, list(old)) is True
+    # Near-tied pair swapped.
+    assert migration.search_parity(old, _matches(('a', 0.9), ('b', 0.8), ('d', 0.7002), ('c', 0.7))) is False
+    # Cutoff exchange between items tied with the last kept score.
+    assert migration.search_parity(old, _matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('e', 0.7003))) is False
+    for new, reason in (
+        (_matches(('b', 0.8), ('a', 0.9), ('c', 0.70005), ('d', 0.7)), 'order'),
+        (_matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('e', 0.75)), 'membership'),
+        (_matches(('a', 0.9), ('b', 0.8), ('c', 0.70005)), 'membership'),
+        (_matches(('a', 0.9), ('b', 0.81), ('c', 0.70005), ('d', 0.7)), 'scores differ'),
+        ([{'id': 'a'}, *old[1:]], 'comparable scores'),
+    ):
+        with pytest.raises(migration.MigrationNotReady, match=reason):
+            migration.search_parity(old, new)
+
+
+def test_search_parity_reports_measured_score_drift_without_ids():
+    old = _matches(('a', 0.9), ('b', 0.8), ('c', 0.70005), ('d', 0.7))
+    new = _matches(('a', 0.9), ('b', 0.8025), ('c', 0.70005), ('d', 0.7))
+    with pytest.raises(migration.MigrationNotReady) as error:
+        migration.search_parity(old, new)
+    message = str(error.value)
+    assert 'max |diff| 2.50e-03 > tolerance 1e-03 for 1 of 4 shared ids' in message
+    assert message.endswith('preserve source route')
+    assert not any(f"'{i}'" in message for i in 'abcd')
+
+
+def _proof_queries(provider, namespace):
+    return [
+        p for path, p in provider.calls if path == 'query' and p.get('includeValues') and p['namespace'] == namespace
+    ]
+
+
+def test_payload_proof_packs_small_records_into_fewer_queries(setup):
+    key, db, provider, runner = setup
+    for i in range(70):
+        provider.records[key.family][f'm{i:02d}'] = record(f'm{i:02d}', values=[1.0, i / 100])
+    receipt = runner.qualify('run', dimension=2)
+    assert receipt['records'] == 73
+    # 73 small records fit one query per namespace; 30-record groups needed three.
+    assert len(_proof_queries(provider, key.family)) == 1
+    assert len(_proof_queries(provider, key.partition_namespace)) == 1
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+def _groups(provider, namespace, n):
+    for i in range(n):
+        provider.records[namespace][f'g{i}'] = record(f'g{i}')
+    provider.indexed[namespace] = provider.lsns[namespace] = 1
+    digests = {f'g{i}': migration.record_digest(record(f'g{i}')) for i in range(n)}
+    return {json.dumps({'memory_id': {'$eq': f'g{i}'}}, sort_keys=True): {f'g{i}': digests[f'g{i}']} for i in range(n)}
+
+
+def test_payload_proof_respects_the_response_byte_budget_and_old_default():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 70)
+    big = {f'g{i}': 1_200_000 for i in range(70)}
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, big)
+    assert len(_proof_queries(provider, 'ns2')) == 35  # two 1.2 MB records per 3.5 MB query
+    provider.calls.clear()
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups)
+    assert len(_proof_queries(provider, 'ns2')) == 3  # without sizes: the original 30-record groups
+
+
+def test_over_budget_identity_group_is_proven_alone():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 10)
+    big = {}
+    for i in range(30):
+        row = record(f'big{i}')
+        row['metadata']['memory_id'] = 'big-source'
+        provider.records['ns2'][f'big{i}'] = row
+        big[f'big{i}'] = migration.record_digest(row)
+    groups[json.dumps({'memory_id': {'$eq': 'big-source'}}, sort_keys=True)] = big
+    sizes = {**{f'g{i}': 100 for i in range(10)}, **{f'big{i}': 150_000 for i in range(30)}}
+    provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, sizes)
+    per_query = [
+        {selector['memory_id']['$eq'] for selector in proof['filter']['$and'][1]['$or']}
+        for proof in _proof_queries(provider, 'ns2')
+    ]
+    # 30 x 150 KB = 4.5 MB > budget: proven in its own query, nothing packed with it.
+    assert {'big-source'} in per_query
+    assert sum(len(query) for query in per_query) == 11
+
+
+def test_packed_payload_proof_still_detects_a_changed_record():
+    provider = Provider()
+    groups = _groups(provider, 'ns2', 70)
+    provider.records['ns2']['g42']['metadata']['revision'] = 2
+    with pytest.raises(migration.MigrationNotReady, match='differ from the copied snapshot'):
+        provider.verify_payloads('ns2', 'test-owner', [1.0, 0.0], 1, groups, {f'g{i}': 100 for i in range(70)})
 
 
 def test_indexing_lag_times_out_without_false_success(setup, monkeypatch):
@@ -429,7 +606,9 @@ def test_large_owner_qualifies_complete_inventory_and_every_payload_group(setup)
             for path, payload in provider.calls
             if path == 'query' and payload['namespace'] == namespace and payload.get('includeValues')
         ]
-        assert len(proofs) == 334
+        # 10,001 small records pack 100 per proof query (byte budget not reached).
+        assert len(proofs) == 101
+        assert all(payload['topK'] <= migration.PAYLOAD_PROOF_MAX_RECORDS + 1 for payload in proofs)
         identities = {
             selector['memory_id']['$eq'] for payload in proofs for selector in payload['filter']['$and'][1]['$or']
         }
@@ -593,8 +772,8 @@ def test_payload_queries_are_bounded_and_cover_every_record(setup):
     provider.records[key.family] = {str(i): record(str(i)) for i in range(65)}
     receipt = runner.qualify('run', dimension=2)
     payload_proofs = [payload for path, payload in provider.calls if path == 'query' and payload.get('includeValues')]
-    assert len(payload_proofs) == 6
-    assert all(payload['topK'] <= 31 for payload in payload_proofs)
+    assert len(payload_proofs) == 2  # 65 small records: one packed proof per namespace
+    assert all(payload['topK'] <= migration.PAYLOAD_PROOF_MAX_RECORDS + 1 for payload in payload_proofs)
     for namespace in (key.family, key.partition_namespace):
         selectors = [
             selector
@@ -685,7 +864,9 @@ def test_http_exact_missing_namespace_is_only_a_delete_or_initial_inventory_noop
         return httpx.Response(404, json={'code': 5, 'message': 'Namespace not found'})
 
     with httpx.Client(transport=httpx.MockTransport(missing)) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         assert transport.write('vectors/delete', 'missing', ids=['id']) == 0
         assert list(transport.owned_pages('missing', 'owner')) == [[]]
         with pytest.raises(httpx.HTTPStatusError):
@@ -699,7 +880,9 @@ def test_http_other_failures_never_become_successful_delete(status, message):
     with httpx.Client(
         transport=httpx.MockTransport(lambda request: httpx.Response(status, json={'code': 5, 'message': message}))
     ) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         with pytest.raises(httpx.HTTPStatusError):
             transport.write('vectors/delete', 'missing', ids=['id'])
 
@@ -712,7 +895,9 @@ def test_namespace_disappearing_after_first_inventory_page_is_not_complete_inven
         return httpx.Response(404, json={'code': 5, 'message': 'Namespace not found'})
 
     with httpx.Client(transport=httpx.MockTransport(disappearing)) as client:
-        transport = migration.PartitionTransport('test.pinecone.io', 'test-only-key', client=client)
+        transport = migration.PartitionTransport(
+            'test.pinecone.io', 'test-only-key', client=client, write_client=client
+        )
         with pytest.raises(httpx.HTTPStatusError):
             list(transport.owned_pages('namespace', 'test-owner'))
 
@@ -765,6 +950,78 @@ def test_copy_timeout_keeps_unknown_outcome_blocking_cutover(setup):
     route = state.get_route(key, firestore_client=db)
     assert route.primary_namespace == key.family
     assert route.pending_count + route.uncertain_count > 0
+
+
+def test_write_that_never_left_is_a_known_noop_not_an_unknown_outcome(setup):
+    key, db, provider, runner = setup
+    provider.unsent_namespace = key.partition_namespace
+    with pytest.raises(migration.WriteNotSent):
+        runner.qualify('run', dimension=2)
+    route = state.get_route(key, firestore_client=db)
+    assert route.primary_namespace == key.family
+    assert route.pending_count == 0 and route.uncertain_count == 0
+    provider.unsent_namespace = None
+    receipt = runner.qualify('run', dimension=2)
+    assert commit(key, db, receipt).primary_namespace == key.partition_namespace
+
+
+class _Post:
+    def __init__(self, error=None):
+        self.error, self.headers = error, []
+
+    def __call__(self, url, json, headers):
+        self.headers.append(headers)
+        if self.error:
+            raise self.error
+        request = httpx.Request('POST', url)
+        return httpx.Response(200, json={}, headers={'x-pinecone-request-lsn': '7'}, request=request)
+
+
+def test_an_injected_read_client_is_never_reused_for_writes():
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={}))) as client:
+        transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key', client=client)
+        try:
+            assert transport.client is client
+            assert transport.write_client is not client
+        finally:
+            transport.write_client.close()
+
+
+def test_writes_use_the_no_keepalive_client_and_carry_a_request_id(monkeypatch):
+    transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key')
+    try:
+        assert transport.write_client is not transport.client
+        reads, writes = _Post(), _Post()
+        monkeypatch.setattr(transport.client, 'post', reads)
+        monkeypatch.setattr(transport.write_client, 'post', writes)
+        transport.call('query', {'namespace': 'ns1'})
+        assert transport.write('vectors/upsert', 'ns1', vectors=[]) == 7
+        assert 'X-Request-Id' not in reads.headers[0]
+        assert writes.headers[0]['X-Request-Id'] == transport.last_write_request_id
+    finally:
+        transport.close()
+
+
+@pytest.mark.parametrize(
+    'error, unsent',
+    [
+        (httpx.ConnectError('refused'), True),
+        (httpx.ConnectTimeout('slow connect'), True),
+        (httpx.RemoteProtocolError('Server disconnected without sending a response.'), False),
+        (httpx.ReadTimeout('no response'), False),
+    ],
+)
+def test_only_connect_phase_failures_count_as_not_sent(monkeypatch, error, unsent):
+    transport = migration.PartitionTransport('unit.pinecone.io', 'unit-key')
+    try:
+        monkeypatch.setattr(transport.write_client, 'post', _Post(error))
+        monkeypatch.setattr(transport.client, 'post', _Post(error))
+        with pytest.raises(migration.WriteNotSent if unsent else type(error)):
+            transport.write('vectors/upsert', 'ns1', vectors=[])
+        with pytest.raises(type(error)):
+            transport.call('query', {'namespace': 'ns1'})
+    finally:
+        transport.close()
 
 
 def test_rollback_reconciles_from_current_primary_instead_of_restoring_stale_copy(setup):

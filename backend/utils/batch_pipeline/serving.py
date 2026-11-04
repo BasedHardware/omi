@@ -11,9 +11,12 @@ from config.batch_pipeline import (
     held_partial_enabled,
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
+    recovery_owner_only_enabled,
     recovery_dispatch_interval_seconds,
     projection_hold_recovery_enabled,
+    serving_metrics_min_refresh_seconds,
 )
+from database.outbox import OutboxKind, outbox_for
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -106,7 +109,10 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
 
-    async def reconcile_async(self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None):
+    async def reconcile_async(
+        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+    ):
+        owner_only = owner_only and recovery_owner_only_enabled()
         priority = await run_blocking(
             sync_executor,
             self.reconcile,
@@ -114,26 +120,53 @@ class Serving:
             periodic=periodic,
             owner_id=owner_id,
             recovered=recovered,
+            owner_only=owner_only,
         )
         # Walk-owed follow-ups keep the drain scheduled until they are queued.
         owes = getattr(self.projector, 'owes_followups', False) is True
-        if self.projector and (priority or self.projector.has_async_followups or owes):
-            await self.projector.start_followups(priority or ())
-        # Owners the sweep or a wake discovered drain continuously in this process.
-        if self.projector and getattr(self.projector, 'owes_drains', False) is True:
+        if self.projector:
+            if owner_only:
+                if priority:
+                    await self.projector.start_followups(priority, discover=False)
+            elif priority or self.projector.has_async_followups or owes:
+                await self.projector.start_followups(priority or ())
+        # A recovery wake may leave a durable owner continuation, but it must
+        # not consume the process-wide queue of owners discovered by a sweep.
+        # The periodic maintenance owner starts those drains on its next pass.
+        if self.projector and not owner_only and getattr(self.projector, 'owes_drains', False) is True:
             self.projector.start_drains()
         # Deferred search/people-stats work left by walks converges off the chain.
         if self.projector and getattr(self.projector, 'owes_index', False) is True:
-            self.projector.schedule_index_flush()
+            self.projector.schedule_index_flush(owner_id if owner_only else None)
 
     def _leads(self, periodic: bool) -> bool:
-        # Explicit RPC callers (POST /reconcile, post-recovery drain) always
+        # Explicit global RPC callers (POST /reconcile) always
         # run. Periodic ticks (supervisor, metrics scrape) run maintenance on
         # one serving instance per lease TTL; the lease fails open.
         return not periodic or self.leader is None or self.leader.acquire()
 
-    def reconcile(self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None) -> list[str]:
+    def _reconcile_owner(self, owner_id: str, recovered: str | None) -> list[str]:
+        # The settled job remains result_ready/merge_pending until the fenced
+        # commit; pending/persisted receipts then own projection/follow-up retry.
+        # A failed request needs no in-memory callback to be rediscovered.
+        try:
+            self.drain_owner(owner_id, recovered=recovered)
+            if self.projector and owner_chain_projection_enabled():
+                return self.projector.project_owner(owner_id, recovered=recovered)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_projection action=owner_chain outcome=retry exception_type=%s', error_type(error)
+            )
+        return []
+
+    def reconcile(
+        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+    ) -> list[str]:
         """Returns async follow-ups an owner-chain wake wants run first."""
+        if owner_only:
+            if owner_id is None or recovered is None:
+                raise ValueError('owner-only recovery requires an owner and recovered unit')
+            return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
             self._maintain(recover_quarantine=recover_quarantine)
         priority = []
@@ -141,13 +174,7 @@ class Serving:
             # A settled recovery commits at this owner's log tail. Walk the
             # owner's chain now instead of waiting for the global cursor. The
             # wake is only a hint: on failure the generic sweep still runs.
-            try:
-                self.drain_owner(owner_id, recovered=recovered)
-                priority = self.projector.project_owner(owner_id, recovered=recovered)
-            except Exception as error:
-                logging.getLogger(__name__).error(
-                    'event=batch_projection action=owner_chain outcome=retry exception_type=%s', error_type(error)
-                )
+            priority = self._reconcile_owner(owner_id, recovered)
         # Projection and the local gauges stay per instance: projection is
         # throughput (ordered and fenced in its own transactions) and every
         # instance exports its own queue sample.
@@ -275,7 +302,7 @@ def serving_for_stage(stage: str) -> Serving:
 
 @lru_cache(maxsize=1)
 def _metrics() -> QueueMetrics:
-    return QueueMetrics()
+    return QueueMetrics(min_refresh_seconds=serving_metrics_min_refresh_seconds())
 
 
 def start_serving_from_env():
@@ -303,7 +330,13 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await drain_recordings(service.store)
+                if await drain_recordings(
+                    service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+                ):
+                    # Keep draining a backlog without the idle poll delay, but
+                    # always yield so shutdown and sibling loops can progress.
+                    await asyncio.sleep(0)
+                    continue
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving action=record_drain outcome=retry exception_type=%s', type(error).__name__

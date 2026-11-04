@@ -6,6 +6,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 """
 
 from __future__ import annotations
+from utils.observability.delivery import record_delivery
 
 import hashlib
 import math
@@ -213,11 +214,11 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _dispatch_binding() -> dict[str, str] | None:
+def _dispatch_binding(*, backfill: bool = False) -> dict[str, str] | None:
     from config import enrichment as enrichment_config
 
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding()
+        binding = enrichment_config.dispatch_binding(backfill=backfill)
         if valid_dispatch_binding(binding):
             return binding
         from utils.observability.fallback import record_fallback
@@ -454,15 +455,16 @@ def mark_update(
             )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
+        backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex,
                 task_due_at=row['due_at'],
                 lease_until=0,
-                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(),
+                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(backfill=backfill),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding()
+            row['dispatch'] = _dispatch_binding(backfill=backfill)
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -666,6 +668,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 get_firestore_client(), COLLECTION, document_id, owner, task_token
             ):
                 raise
+            record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(admitted_token)
@@ -811,7 +814,7 @@ def sweep(
 
     ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite);
     an injected creator stands in for the queue binding and the named-task probe. ``cursor=False`` (the
-    contract (b) outbox, invariant 8) scans from the oldest due row instead of resuming the shared
+    optional oldest-first scan) scans from the oldest due row instead of resuming the shared
     ``sync_reprocess_scan`` checkpoint. An expired lease is fenced and re-woken under a new token, and
     ``wake_check_after`` throttles a row only once its wake was created.
     """
@@ -825,7 +828,6 @@ def sweep(
     if not owns_runtime():
         return counts
 
-    binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     bound = client
     client = bound or get_firestore_client()
@@ -888,6 +890,9 @@ def sweep(
             if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
+                binding = _dispatch_binding(
+                    backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row)
+                )
                 if binding is None:
                     return old, ('unbound', None)
                 # Claim and fence the repaired binding in the same CAS. Any old
@@ -1005,6 +1010,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         conversation_id=conversation_id,
         language=language,
         effects_only=True,
+        summary_lane=summary_delivery.lane({}),
         deferred_reason=None,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
@@ -1024,7 +1030,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding()
+    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill')
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and

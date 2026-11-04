@@ -10,11 +10,29 @@ from dataclasses import dataclass
 from hashlib import sha256
 from functools import wraps
 import json
+import logging
+from time import sleep
 from typing import Any, Mapping, Sequence, cast
 from uuid import uuid4
 
+from google.api_core.exceptions import Aborted, DeadlineExceeded, Unauthenticated, ServiceUnavailable
+
 from database import _client as firestore_clients
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.pinecone_mutation_lifecycle import MutationRegistry, UNCERTAIN
+
+logger = logging.getLogger(__name__)
+_mutations = MutationRegistry()
+
+
+def start_mutations() -> None:
+    _mutations.start()
+
+
+def drain_mutations() -> int:
+    """Shutdown-only: close admission, wait briefly, preserve stragglers as uncertain."""
+    return _mutations.drain()
+
 
 COLLECTION = 'pinecone_partition_routes'
 FAMILIES = frozenset({'ns1', 'ns2', 'ns3', 'ns4', 'ns_x', 'ns_tchunks', 'workstream-association-v1'})
@@ -255,17 +273,31 @@ def begin_mutation(
     if filter_digest is not None and not _is_digest(filter_digest):
         raise ValueError('filter_digest must be a SHA256 digest')
     client = _client(firestore_client)
-    return _begin_mutation(
-        client.transaction(),
-        _document(client, key),
-        key,
-        token,
-        ids,
-        full_owner,
-        operation_kind,
-        namespaces,
-        filter_digest,
-    )
+    identity = (id(client), key.document_id, token)
+    try:
+        _mutations.reserve(identity)
+    except RuntimeError as error:
+        raise PartitionBusy(str(error)) from error
+    try:
+        ticket = _begin_mutation(
+            client.transaction(),
+            _document(client, key),
+            key,
+            token,
+            ids,
+            full_owner,
+            operation_kind,
+            namespaces,
+            filter_digest,
+        )
+    except BaseException:
+        _mutations.discard(identity)
+        raise
+    draining = _mutations.activate(identity, lambda: mark_mutation_uncertain(key, ticket, firestore_client=client))
+    if draining:
+        mark_mutation_uncertain(key, ticket, firestore_client=client)
+        raise PartitionBusy('Pinecone mutation admitted during shutdown; provider was not called')
+    return ticket
 
 
 @_transactional
@@ -326,7 +358,30 @@ def finish_mutation(
     if write_lsn is not None and (type(write_lsn) is not int or write_lsn < 0):
         raise ValueError('write_lsn must be a nonnegative integer')
     client = _client(firestore_client)
-    return _finish_mutation(client.transaction(), _document(client, key), key, ticket, write_lsn)
+    try:
+        attempt = 0
+        while True:
+            try:
+                route = _finish_mutation(client.transaction(), _document(client, key), key, ticket, write_lsn)
+                break
+            except (Unauthenticated, ServiceUnavailable, DeadlineExceeded, Aborted):
+                attempt += 1
+                if attempt == 3:
+                    raise
+                # The transaction is idempotent, including a committed write
+                # whose response was lost. Never repeat the provider operation.
+                sleep(0.05 * attempt)
+    except BaseException:
+        # Preserve the original failure, including process interruption. A retry
+        # must not silently orphan the old admission under a fresh token.
+        logger.warning('event=pinecone_mutation_finish outcome=settlement_failed')
+        try:
+            mark_mutation_uncertain(key, ticket, firestore_client=client)
+        except BaseException:
+            logger.error('event=pinecone_mutation_finish outcome=uncertain_settlement_failed')
+        raise
+    _mutations.discard((id(client), key.document_id, ticket.token))
+    return route
 
 
 @_transactional
@@ -369,7 +424,10 @@ def mark_mutation_uncertain(key: PartitionKey, ticket: MutationTicket, *, firest
     if ticket.key_id != key.document_id:
         raise PartitionConflict('mutation ticket belongs to a different owner/family/index')
     client = _client(firestore_client)
-    return _mark_mutation_uncertain(client.transaction(), _document(client, key), key, ticket)
+    route = _mark_mutation_uncertain(client.transaction(), _document(client, key), key, ticket)
+    _mutations.discard((id(client), key.document_id, ticket.token))
+    UNCERTAIN.inc()
+    return route
 
 
 @_transactional

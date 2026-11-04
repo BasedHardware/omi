@@ -1403,6 +1403,8 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     # Direct GMP consumers: sentinel batch_metrics.py/completion_telemetry.py.
     # fleet_gate/david_gate use logs, durable state and native request_count.
     for name in (
+        'omi_listen_server_batch_suppression_total',
+        'omi_listen_preview_batch_custody_total',
         'omi_batch_pipeline_events_total',
         'omi_batch_pipeline_oldest_age_seconds',
         'omi_batch_ramp_heavy_owner_excluded_total',
@@ -1454,6 +1456,9 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_stt_cap_cohort_percent',
         'omi_held_recovery_pacing_intents_total',
         'omi_held_recovery_pacing_audio_seconds_total',
+        # Sync-hold recovery gate denominator: items skipped before any attempt.
+        'omi_held_content_recovery_total',
+        'omi_held_content_recovery_skipped_total',
         # #23388 cap enforcement: the watch readout for finite allowances
         # (stt-cap-dispatch.md) — decisions and metered provider audio.
         'omi_stt_cap_dispatch_decisions_total',
@@ -1480,7 +1485,12 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     # RunMonitoring name becomes native GMP job; direct shadow mappings pin it.
     assert config['metadata']['name'] == shared['metadata']['name']
     assert shared['spec']['endpoints'][0]['interval'] == '30s'
-    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*|conversation_llm_input_dedupe_.*'
+    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
+        'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
+    )
+    assert re.fullmatch(
+        shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], 'omi_listen_preview_batch_custody_total'
+    )
 
 
 def test_legacy_config_preparation_does_not_log_secret_metadata(monkeypatch, tmp_path, capsys):

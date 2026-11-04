@@ -5,14 +5,25 @@ from datetime import datetime, timezone
 from google.api_core.exceptions import AlreadyExists
 
 from database._client import db
+from database.fsr_read_cache import cache_writer
+from database import privacy_check_metrics as metrics
+from database.privacy_negative_cache import decide
 
 COLLECTION = 'deleted_conversations'
 
 
 def is_deleted(uid: str, conversation_id: str) -> bool:
-    return db.collection('users').document(uid).collection(COLLECTION).document(conversation_id).get().exists
+    metrics.called('tombstone')
+
+    def live():
+        return not metrics.read_snapshot(
+            'tombstone', db.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
+        ).exists
+
+    return not decide('tombstone', uid, db, conversation_id, live, 'tombstone_negative_cache')
 
 
+@cache_writer('tombstone_negative_cache')
 def record_deletion(uid: str, conversation_id: str) -> None:
     user = db.collection('users').document(uid)
     row = user.collection('conversations').document(conversation_id).get().to_dict() or {}

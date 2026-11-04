@@ -50,6 +50,8 @@ PROD_DATA_PLANE_HASHES: frozenset[str] = frozenset(
         hashlib.sha256(b'based-hardware-dev-batch-pipeline-staging').hexdigest(),
         # prod BUCKET_PRIVATE_CLOUD_SYNC (also its code default in utils/other/storage.py)
         hashlib.sha256(b'omi-private-cloud-sync').hexdigest(),
+        # prod BUCKET_AUDIO_DERIVED
+        hashlib.sha256(b'omi-audio-derived-uc1').hexdigest(),
         # prod PINECONE_INDEX_NAME
         'fa470fd0229b9b377540ff00056310ddd710614c17af769190a9700b3d08eb59',
         # prod/dev REDIS_DB_HOST: added once bootstrap_iam.sh prints its hash (the host

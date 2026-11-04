@@ -77,7 +77,14 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # ``redrive_mode`` rides only on operator-built redrive payloads and must survive
 # budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
 SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
-    {'capture_evidence_claims', 'budget_deferrals', 'redrive_mode', 'raw_capture_paths'}
+    {
+        'capture_evidence_claims',
+        'capture_received_at',
+        'budget_deferrals',
+        'redrive_mode',
+        'raw_capture_paths',
+        'worker_eligible',
+    }
 )
 
 
@@ -368,7 +375,7 @@ def named_task_exists(queue: str, task_id: str) -> bool:
         return False
 
 
-def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
+def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0, schedule_at: Optional[int] = None) -> None:
     """Enqueue one named HTTP task for a sync job.
 
     Sequenced redrives use a persisted dispatch attempt in the task name while
@@ -403,7 +410,7 @@ def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> N
         if sequencer_epoch is None or dispatch_attempt < 0:
             raise ValueError('sync job dispatch attempt requires a sequencer epoch and a positive value')
         task_id += f'-d{dispatch_attempt}'
-    _enqueue_sync_job_routed(payload, task_id, direct_schedule_at(payload))
+    _enqueue_sync_job_routed(payload, task_id, schedule_at if schedule_at is not None else direct_schedule_at(payload))
 
 
 def _enqueue_sync_job_routed(payload: Dict[str, Any], task_id: str, schedule_at: Optional[int]) -> None:

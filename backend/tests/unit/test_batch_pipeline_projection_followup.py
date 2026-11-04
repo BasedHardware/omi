@@ -500,6 +500,24 @@ async def test_recovery_wake_bypasses_same_page_ready_probe_hint(followup, wake)
 
 
 @pytest.mark.asyncio
+async def test_owner_only_recovery_clears_stale_page_marker_before_completion_probe(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'projection_followup_page_enabled', lambda: True)
+    f.receipts['later']['state'] = 'ready'
+    f.runner.pending.append('later')
+    f.runner.pages.update({'head': 1, 'later': 1})
+    f.runner.completion_attempts.add((1, f.binding))
+
+    await f.runner.schedule(priority=('later',), discover=False)
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+
+    assert 'later' not in f.runner.pages
+    assert (1, f.binding) in f.runner.completion_attempts
+    f.projector.complete_content.assert_called_once_with('later', f.binding)
+
+
+@pytest.mark.asyncio
 async def test_ready_completion_probes_do_not_coalesce_different_run_bindings(followup):
     from dataclasses import replace
 
