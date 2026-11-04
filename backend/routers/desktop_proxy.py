@@ -1,3 +1,12 @@
+"""Desktop Gemini proxy (/v1/proxy/gemini*): company-paid Vertex lanes with
+reservation-aware admission, BYOK passthrough, and sanitized request bodies.
+
+Reserved capacity is finite and shared with internal workloads, so requests are
+admitted against live reservation state and refused rather than queued when the
+lane is exhausted; body sanitization and size limits live in utils/llm so this
+router stays routing-only (backend/docs/llm/model_endpoint_inventory.yaml).
+"""
+
 import asyncio
 import json
 import os

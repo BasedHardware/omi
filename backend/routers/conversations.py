@@ -1,3 +1,11 @@
+"""HTTP surface for /v1/conversations: CRUD, merge, visibility, search, photos
+and per-conversation action items.
+
+Routes stay policy-only -- auth, request shaping, generated-compute admission --
+while encryption, visibility and revision fencing live in database/conversations;
+a second copy of those codecs here would bypass the at-rest protection.
+"""
+
 from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
