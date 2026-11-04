@@ -22,6 +22,16 @@ recovery excludes contained duplicate episodes while retaining fully hidden
 rows for stale-note cleanup. The integrated unit counts above precede this
 follow-up; these targeted reruns cover its affected boundaries. Current-head
 publication and complete CI remain owned by the PR.
+Cross-platform CI fixture follow-up: `0d5c3fdca6af93624401f559d784dc30bff5c1bb`,
+qualified at **2026-11-04 22:04:16 UTC**. The notification label renders before its async
+settings load; waiting for that text could click a disabled switch. Its test now
+waits for the loaded master value and explicitly controls a delayed settings load.
+Application code is unchanged; no sleeps, timeout increases or skip changes were
+added. With Node 22.23.2 and pinned pnpm 10.34.5: **six focused cases passed**,
+full Electron unit suite **5,548 passed / 33 existing conditional skips**, complete
+node/web typecheck and targeted ESLint/Prettier passed. Commands ran from
+`desktop/windows/` through `omi-heavy`: `npx --yes pnpm@10 test --maxWorkers=2`,
+`npx --yes pnpm@10 typecheck`, and single-file lint/format checks.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
