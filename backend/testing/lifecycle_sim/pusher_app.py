@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from testing.hermetic_network import block_outbound_network
 from testing.lifecycle_sim.preflight import preflight
+from testing.lifecycle_sim.producers import CaptureRefused, begin_capture
 
 preflight(Path(os.environ['OMI_STACK_STATE_DIR']))
 _network_guard = block_outbound_network()
@@ -31,11 +32,8 @@ class BeginCapture(BaseModel):
 
 @app.post('/__lifecycle/begin')
 async def begin(payload: BeginCapture):
-    if not payload.uid.startswith('synthetic-lifecycle-') or len(_live_barriers) >= 4:
-        raise HTTPException(400, 'bounded synthetic captures required')
-    barrier = PusherRecordBarrier(payload.uid)
-    await barrier.begin_recording(payload.conversation_id)
-    if payload.conversation_id not in barrier.upload_sessions:
-        raise HTTPException(500, 'custody token was not persisted')
-    _live_barriers[payload.conversation_id] = barrier
+    try:
+        await begin_capture(_live_barriers, payload.uid, payload.conversation_id, make_barrier=PusherRecordBarrier)
+    except CaptureRefused as error:
+        raise HTTPException(400, str(error)) from error
     return {'pending': True}

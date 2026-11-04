@@ -18,6 +18,7 @@ from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live
 from utils.batch_pipeline import record_producer_proof
 from utils.conversations.phase import ConversationPhase
+from utils.conversations import process_conversation as processing
 
 
 class LifecycleInvariantError(AssertionError):
@@ -78,6 +79,9 @@ async def test_happy_path_reaches_complete(lifecycle_sim):
         ConversationPhase.COMPLETE,
         ConversationPhase.SETTLED,
     }, 'happy control did not persist its summary'
+    persisted = processing.conversations_db.get_conversation(sim.uid, sim.cid)
+    assert persisted['structured']['title'] == 'Hermetic finalization'
+    assert persisted['structured']['overview'] == 'Provider leaf completed locally.'
 
 
 @pytest.mark.asyncio
@@ -261,10 +265,13 @@ async def test_server_batch_completion_ordering(lifecycle_sim, closed):
             row['finalization_job_id'] != completed_job_id
             or latest['dispatch_generation'] > finalization['dispatch_generation']
         )
-        invariant(
-            not prematurely_completed or rearmed,
-            'finalization completed with zero batch results and no re-armed generation',
-        )
+        if prematurely_completed:
+            invariant(rearmed, 'finalization completed with zero batch results and no re-armed generation')
+        else:
+            invariant(
+                latest['status'] == 'queued' or rearmed,
+                'batch results committed while finalization remained stranded',
+            )
     else:
         row = sim.row()
         invariant(

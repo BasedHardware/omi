@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from _thread import LockType
 from threading import Lock
 
+BOUNDARY_PHASES = frozenset({'seal', 'register', 'admit'})
+BOUNDARY_SELECTOR_KEYS = frozenset({'uid', 'conversation_id', 'phase'})
+
 
 class InjectedLifecycleFault(RuntimeError):
     """One selected seal, registration, or admission attempt was interrupted."""
@@ -18,7 +21,7 @@ class BoundaryFault:
     _lock: LockType = field(default_factory=Lock, repr=False)
 
     def __post_init__(self):
-        if self.boundary not in {'seal', 'register', 'admit'} or not self.uid or not self.conversation_id:
+        if self.boundary not in BOUNDARY_PHASES or not self.uid or not self.conversation_id:
             raise ValueError('exact seal/register/admit operation required')
 
     def check(self, boundary: str, uid: str, conversation_id: str) -> None:

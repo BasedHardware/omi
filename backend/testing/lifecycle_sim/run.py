@@ -19,9 +19,19 @@ def main():
     parser.add_argument('--runxfail', action='store_true', help='local red-reason proof; never used by CI')
     parser.add_argument('--state-dir', type=Path)
     args = parser.parse_args()
-    root = args.state_dir or Path(tempfile.mkdtemp(prefix='omi-lifecycle-sim-'))
+    root = (args.state_dir or Path(tempfile.mkdtemp(prefix='omi-lifecycle-sim-'))).resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     started = time.monotonic()
+    try:
+        return run_scenarios(root, args)
+    finally:
+        print(f'lifecycle_sim added_wall_seconds={time.monotonic() - started:.3f}', flush=True)
+        # Only a fresh automatic root is ours to delete, including on refusal.
+        if args.state_dir is None and not args.keep:
+            shutil.rmtree(root)
+
+
+def run_scenarios(root, args):
     # Firebase sets demo project variables, but some local CLI versions leave
     # GOOGLE_CLOUD_PROJECT unset. Set only the absent value; reject a real one.
     ambient = dict(os.environ)
@@ -61,11 +71,6 @@ def main():
         return result.returncode
     finally:
         stack.close()
-        print(f'lifecycle_sim added_wall_seconds={time.monotonic() - started:.3f}', flush=True)
-        # Only the fresh mkdtemp directory belongs to automatic cleanup. An
-        # explicit state directory may contain the caller's other artifacts.
-        if args.state_dir is None and not args.keep:
-            shutil.rmtree(root)
 
 
 if __name__ == '__main__':

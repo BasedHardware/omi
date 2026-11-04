@@ -15,6 +15,9 @@ Both use the same emulator-owning shell. No CI workflow or budget change is
 required. The runner prints `added_wall_seconds` including scenario and child setup.
 An explicit `--state-dir` is retained even without `--keep`; only a freshly
 created automatic temporary root is eligible for automatic cleanup.
+Relative roots are resolved before child launch. In the combined gauntlet,
+`--state-dir` retains lifecycle diagnostics under its `lifecycle-sim/` child;
+only the parent runner receives unrelated CLI options.
 
 For helper unit tests, `BACKEND_UNIT_TEST_FILE_LIST` must name a text file
 whose single line is `tests/unit/test_lifecycle_sim_unit.py` (relative to
@@ -54,7 +57,12 @@ vendor errors/empty results/zero capacity on the shared `VirtualClock`.
 job clock fields without changing source audio clocks. `BoundaryFault` fails
 one exact seal/register/admit operation once. The instrumented listener also
 accepts those boundary names in the existing
-`OMI_STACK_RECORDING_LIFECYCLE_FAULT` selector's `phase` field. Production
+`OMI_STACK_RECORDING_LIFECYCLE_FAULT` selector's `phase` field. Boundary
+selectors contain exactly `uid`, `conversation_id` and `phase`: these
+operations have conversation scope, so a `recording_session_id` is rejected
+rather than ignored. Recording-session lifecycle phases retain their existing
+four-field selector. A fired boundary writes one `write_failed` event with
+`scope=conversation` to `recording_lifecycle_fault.jsonl`. Production
 entrypoints never import the installer.
 
 Known leaks use `xfail(strict=True, raises=LifecycleInvariantError)`: only a

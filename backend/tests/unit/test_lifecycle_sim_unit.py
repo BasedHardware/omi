@@ -1,7 +1,13 @@
 """Credential refusal and deterministic single-use lifecycle fixture contracts."""
 
 from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from datetime import datetime, timezone
+import json
+import os
+from pathlib import Path
+import shlex
+import subprocess
 import sys
 import io
 from unittest.mock import AsyncMock, Mock
@@ -16,6 +22,7 @@ from testing.lifecycle_sim.preflight import HermeticRefusal, preflight
 from testing.lifecycle_sim import listener_faults
 from testing.lifecycle_sim import run as simulator_runner
 from testing.lifecycle_sim.storage import LifecycleBucket
+from testing.lifecycle_sim.producers import CaptureRefused, begin_capture
 
 
 @pytest.fixture
@@ -111,6 +118,75 @@ def test_runner_only_cleans_its_fresh_temporary_root(monkeypatch, tmp_path, expl
     stack.close.assert_called_once()
 
 
+@pytest.mark.parametrize('failure', ['preflight', 'constructor'])
+def test_runner_cleans_automatic_root_when_setup_refuses(monkeypatch, tmp_path, failure):
+    root = tmp_path / 'owned'
+    root.mkdir()
+    monkeypatch.setattr(simulator_runner.tempfile, 'mkdtemp', Mock(return_value=str(root)))
+    monkeypatch.setattr(sys, 'argv', ['simulator'])
+    monkeypatch.setattr(
+        simulator_runner, 'preflight', Mock(side_effect=HermeticRefusal('refused') if failure == 'preflight' else None)
+    )
+    construct = Mock(side_effect=RuntimeError('constructor failed'))
+    monkeypatch.setattr(simulator_runner, 'Stack', construct)
+    with pytest.raises((HermeticRefusal, RuntimeError)):
+        simulator_runner.main()
+    assert not root.exists()
+    if failure == 'preflight':
+        construct.assert_not_called()
+
+
+def test_relative_state_root_has_one_absolute_parent_child_identity(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    stack = Mock(env={})
+    construct = Mock(return_value=stack)
+    child = Mock(return_value=SimpleNamespace(returncode=0))
+    monkeypatch.setattr(simulator_runner, 'Stack', construct)
+    monkeypatch.setattr(simulator_runner, 'preflight', Mock())
+    monkeypatch.setattr(simulator_runner.subprocess, 'run', child)
+    monkeypatch.setattr(sys, 'argv', ['simulator', '--state-dir', 'relative-state'])
+    assert simulator_runner.main() == 0
+    root = tmp_path / 'relative-state'
+    construct.assert_called_once_with(root)
+    assert child.call_args.kwargs['env']['LIFECYCLE_SIM_STATE_DIR'] == str(root)
+    assert root.is_dir()
+
+
+@pytest.mark.parametrize('only', [False, True])
+def test_shell_routes_retained_diagnostics_to_its_own_subdirectory(tmp_path, only):
+    executables = tmp_path / 'bin'
+    executables.mkdir()
+    capture = tmp_path / 'firebase-args'
+    for name, body in {
+        'java': 'exit 0',
+        'node': 'if [ "$#" -eq 2 ]; then printf "%s\\n" 49999; fi',
+        'npx': 'printf "%s\\n" "$@" > "$CAPTURE"',
+    }.items():
+        path = executables / name
+        path.write_text('#!/bin/sh\n' + body + '\n')
+        path.chmod(0o700)
+    state = tmp_path / 'caller state'
+    script = Path(__file__).resolve().parents[2] / 'testing/listen_pusher_stack/run.sh'
+    command = ['bash', str(script)] + (['--lifecycle-only'] if only else [])
+    command += ['--keep', '--state-dir', str(state)]
+    subprocess.run(
+        command,
+        env=os.environ
+        | {
+            'PATH': str(executables) + os.pathsep + os.environ['PATH'],
+            'CAPTURE': str(capture),
+            'TMPDIR': str(tmp_path),
+        },
+        check=True,
+    )
+    final_command = capture.read_text().splitlines()[-1]
+    lifecycle_command = shlex.split(final_command.split('&&')[-1])
+    assert '--keep' in lifecycle_command
+    assert lifecycle_command[lifecycle_command.index('--state-dir') + 1] == str(
+        state if only else state / 'lifecycle-sim'
+    )
+
+
 def test_age_job_preserves_evidence_and_shifts_numeric_and_datetime_deadlines():
     stamp = datetime.fromtimestamp(1000, timezone.utc)
     row = {'enqueued_at': 1000.0, 'available_at': 1060.0, 'committed_at': stamp, 'state': 'record_pending'}
@@ -162,13 +238,14 @@ def test_fault_targets_one_operation_once_even_when_concurrent(boundary):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('boundary', ['seal', 'register', 'admit'])
-async def test_listener_installer_fails_the_real_callsite_once(monkeypatch, boundary):
+async def test_listener_installer_fails_the_real_callsite_once(monkeypatch, tmp_path, boundary):
     seal, register, admit = Mock(return_value=None), Mock(return_value=True), AsyncMock(return_value='admitted')
     monkeypatch.setattr(listener_faults.record_audio, 'seal_record_audio', seal)
     monkeypatch.setattr(listener_faults.live, 'register_recording', register)
     monkeypatch.setattr(listener_faults.finalizer, 'register_recording', register)
     monkeypatch.setattr(listener_faults.live, 'admit_recording', admit)
-    listener_faults.install_boundary_fault({'phase': boundary, 'uid': 'synthetic', 'conversation_id': 'capture'})
+    selector = {'phase': boundary, 'uid': 'synthetic', 'conversation_id': 'capture'}
+    listener_faults.install_boundary_fault(selector, state_dir=tmp_path)
     if boundary == 'seal':
         with pytest.raises(InjectedLifecycleFault):
             listener_faults.record_audio.seal_record_audio('synthetic', 'capture')
@@ -185,3 +262,60 @@ async def test_listener_installer_fails_the_real_callsite_once(monkeypatch, boun
             await listener_faults.live.admit_recording(None, pending)
         assert await listener_faults.live.admit_recording(None, pending) == 'admitted'
         admit.assert_awaited_once_with(None, pending)
+    events = [json.loads(line) for line in (tmp_path / 'recording_lifecycle_fault.jsonl').read_text().splitlines()]
+    assert events == [{'event': 'write_failed', 'scope': 'conversation', **selector}]
+
+
+def test_boundary_selector_refuses_to_silently_widen_a_session_scope():
+    with pytest.raises(ValueError, match='exactly'):
+        listener_faults.install_boundary_fault(
+            {'phase': 'seal', 'uid': 'synthetic', 'conversation_id': 'capture', 'recording_session_id': 'session'}
+        )
+
+
+@pytest.mark.asyncio
+async def test_producer_driver_reserves_inflight_capacity_and_duplicate_identity():
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class Barrier:
+        def __init__(self, _uid):
+            self.upload_sessions = {}
+
+        async def begin_recording(self, cid):
+            entered.set()
+            await release.wait()
+            self.upload_sessions[cid] = 'synthetic token'
+
+    barriers = {}
+    first = asyncio.create_task(begin_capture(barriers, 'synthetic-lifecycle-a', 'first', make_barrier=Barrier))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        with pytest.raises(CaptureRefused):
+            await begin_capture(barriers, 'synthetic-lifecycle-a', 'first', make_barrier=Barrier)
+        barriers.update({str(index): object() for index in range(3)})
+        with pytest.raises(CaptureRefused):
+            await begin_capture(barriers, 'synthetic-lifecycle-b', 'fifth', make_barrier=Barrier)
+    finally:
+        release.set()
+        await first
+    assert len(barriers) == 4
+
+
+@pytest.mark.asyncio
+async def test_cancelled_producer_driver_releases_its_inflight_reservation():
+    entered = asyncio.Event()
+
+    class Barrier:
+        async def begin_recording(self, _cid):
+            entered.set()
+            await asyncio.Event().wait()
+
+    barriers = {}
+    task = asyncio.create_task(
+        begin_capture(barriers, 'synthetic-lifecycle-a', 'capture', make_barrier=lambda uid: Barrier())
+    )
+    await asyncio.wait_for(entered.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not barriers

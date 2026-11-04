@@ -244,7 +244,8 @@ class LifecycleSim:
             results = self.worker.process_batch([lease.item])
             for result in results:
                 assert isinstance(result, WorkResult), 'synthetic worker did not produce a valid result'
-                assert self.serving.complete(result, lease.token), 'real scheduler rejected its owned lease'
+                completed = self.serving.complete(result, lease.token)
+                assert completed, 'real scheduler rejected its owned lease'
                 self.projector.project(result.segment_id)
 
     async def complete(self):
@@ -298,9 +299,10 @@ class LifecycleSim:
                 lease_epoch=epoch,
             )
         if disposition is finalizer.ConversationFinalizationDisposition.completed:
-            assert finalization_jobs.mark_finalization_completed(
+            completed = finalization_jobs.mark_finalization_completed(
                 intent['job_id'], generation, epoch, firestore_client=self.stack.firestore
-            ), 'fixture finalization completion fence failed'
+            )
+            assert completed, 'fixture finalization completion fence failed'
         return finalization_jobs.get_finalization_job(intent['job_id'], firestore_client=self.stack.firestore)
 
     def kill_pusher(self):

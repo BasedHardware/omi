@@ -36,6 +36,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
 from testing.listen_pusher_stack.recorded_clock import age_conversation
+from testing.lifecycle_sim.faults import BOUNDARY_PHASES, BOUNDARY_SELECTOR_KEYS
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -182,11 +183,16 @@ class Stack:
         if recording_session_mode not in {'shadow', 'dual_write', 'enforce'}:
             raise ValueError(f'unsupported recording session mode: {recording_session_mode}')
         if recording_lifecycle_fault is not None:
-            if set(recording_lifecycle_fault) != RECORDING_LIFECYCLE_FAULT_KEYS:
-                raise ValueError(
-                    f'recording lifecycle fault must contain exactly {sorted(RECORDING_LIFECYCLE_FAULT_KEYS)}'
-                )
-            if not all(recording_lifecycle_fault[key] for key in RECORDING_LIFECYCLE_FAULT_KEYS):
+            fault_keys = (
+                BOUNDARY_SELECTOR_KEYS
+                if recording_lifecycle_fault.get('phase') in BOUNDARY_PHASES
+                else RECORDING_LIFECYCLE_FAULT_KEYS
+            )
+            if set(recording_lifecycle_fault) != fault_keys:
+                raise ValueError(f'recording lifecycle fault must contain exactly {sorted(fault_keys)}')
+            if not all(
+                isinstance(recording_lifecycle_fault[key], str) and recording_lifecycle_fault[key] for key in fault_keys
+            ):
                 raise ValueError('recording lifecycle fault values must be non-empty')
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
