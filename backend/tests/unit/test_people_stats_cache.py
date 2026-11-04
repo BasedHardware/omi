@@ -793,7 +793,7 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
     monkeypatch.setattr(
         effects,
         'run_assignment_transaction',
-        lambda client, assign: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
+        lambda client, assign, **kwargs: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
     )
     monkeypatch.setattr(learning, 'extract_learning_receipt_markers', lambda *a, **k: None)
     monkeypatch.setattr(

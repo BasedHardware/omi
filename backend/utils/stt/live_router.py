@@ -80,7 +80,7 @@ def permission_reason(
     """Closed deny reason for one target, or None when dialing is permitted."""
     from config.live_stt_gpu_fleet import gpu_fleet_off
 
-    if gpu_fleet_off() and target.family in {'parakeet', 'modulate'}:
+    if gpu_fleet_off() and target.family == 'parakeet':
         return 'capability'
     if 'streaming' not in target.features:
         return 'capability'

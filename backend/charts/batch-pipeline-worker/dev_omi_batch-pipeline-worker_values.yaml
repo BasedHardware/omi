@@ -33,3 +33,5 @@ recordSealSweeper:
   enabled: false
 recordSealRepair:
   enabled: false
+recordSealWorker:
+  enabled: false

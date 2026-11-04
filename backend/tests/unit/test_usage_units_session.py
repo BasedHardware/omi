@@ -165,7 +165,6 @@ async def test_real_live_admission_read_counts_and_local_debit(clock, monkeypatc
     subscription = billing
 
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
 
     async def run(executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)

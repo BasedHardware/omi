@@ -214,6 +214,7 @@ def test_get_executor_metrics_returns_all_pools():
         'record_barrier',
         'llm',
         'stripe',
+        'admission',
         'sync',
         'record_language',
         'postprocess',

@@ -61,6 +61,10 @@ def provider_exhaustion_window(
             max_replicas=6,
             exhaustion=(ExhaustionWindow(start, start + minutes * 60.0, mode),),
         ),
+        # Hold one fixed input; latency comparisons must not depend on which
+        # random paid-provider failures a different polling order draws.
+        unrecoverable_near_silence=True,
+        modulate=ModulateProfile(speech_recover_rate=1.0, near_silence_recover_rate=1.0),
         horizon_seconds=4 * 3600.0,
     )
 
@@ -100,6 +104,8 @@ def stale_finalize_targets(seed: int = 1) -> SimConfig:
         ),
         recovery_duplicate_delivery_rate=0.5,
         worker_rpc_duplicate_rate=0.3,
+        unrecoverable_near_silence=True,
+        modulate=ModulateProfile(speech_recover_rate=1.0, near_silence_recover_rate=1.0),
         horizon_seconds=3 * 3600.0,
     )
 

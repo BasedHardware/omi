@@ -63,7 +63,7 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
             db_executor=db_executor,
             storage_executor=storage_executor,
             job_ref='cap_recovery',
-            protected_paths=source_maps,
+            protected_paths=set(paths) | set(source_maps) if meta.get('early_capture_offset') else source_maps,
             capture_partition={
                 'source': meta['source'],
                 'client_device_id': meta.get('client_device_id'),
@@ -92,7 +92,11 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
             db_executor,
             recording_lineage.plan_segment_targets,
             sorted(segments, key=get_timestamp_from_path),
-            get_timestamp_from_path,
+            (
+                (lambda path: get_timestamp_from_path(path) - meta['early_capture_offset'])
+                if meta.get('early_capture_offset')
+                else get_timestamp_from_path
+            ),
             get_wav_duration,
             uid,
             origin,

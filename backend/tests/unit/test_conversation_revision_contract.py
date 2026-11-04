@@ -48,6 +48,9 @@ class _ConversationRef:
 class _DocumentPath:
     def __init__(self, ref):
         self.ref = ref
+        # The recurring-voice privacy fence reads user.id off the users/{uid}
+        # reference during processing writes.
+        self.id = 'user-1'
 
     def collection(self, _name):
         return self
