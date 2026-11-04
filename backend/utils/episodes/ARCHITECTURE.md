@@ -248,9 +248,13 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `content` blob with the other notes.
 - `composer_version` changes recompose an episode once on read.
 - `composed_fingerprint` covers retained members, every member's transcript text
-  and timing, and its own summary and action items. Unchanged evidence never
-  spends a second call; a late member, a sync upgrade, a transcript edit or a
-  discard recomposes. `summary_needs_regeneration` forces it. An episode with no
+  and timing, and its own summary and action items. This full fingerprint remains
+  the paid-call lease and composed-state stamp. With the default-on
+  `EPISODE_COMPOSE_SETTLE_ENABLED` switch, `composed_evidence` separately hashes
+  each member's speech text and resolved `person_name`; `composed_membership`
+  stamps the retained member set. Label/summary/timing-only drift does not buy
+  another call. Real speech, a name change, late membership or a discard still
+  recomposes. `summary_needs_regeneration` forces it. An episode with no
   speech is stamped once instead of retried.
 - `composed_notes` hashes the composed title, notes and moment headings. A later
   per-moment write over them (a closing conversation's tail, a sync replay) still
@@ -264,7 +268,22 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   10/20/40 minutes and stops after four until the evidence changes.
 - Chapter clock times are mapped on the same clock as the transcript labels and
   must fall inside the episode's transcript span (two-minute slack).
-- Triggers: close, every member finalize (including `sync_update`), and a
+- Background close/finalize triggers wait for ten quiet minutes, capped at 25
+  minutes from the first pending arrival. `compose_pending_since` and
+  `compose_activity_at` track arrival time without changing recorded boundaries.
+  A tracked async task requeues process-local due work without occupying composer
+  workers; shutdown cancels it. Finalizes and reads recover pending work after
+  restart using the persisted window (no new durable queue or sweeper). A paid
+  `stale`/`superseded` result starts a fresh quiet window before its retry, including
+  when the previous window reached its cap. Read-side schedules (`throttle=True`)
+  promote pending work immediately; direct `compose` and `force=True` bypass
+  settling. Turning the switch off restores the full-fingerprint scheduling and
+  immediate-retry behavior. No composer version bump or eager recompose wave.
+- `omi_episode_compose_total{outcome="settling"}` counts deferred runs;
+  `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
+  avoided triggers. Both have bounded labels and no user identifiers.
+- Triggers: close, member finalize (including `sync_update`, gated on the changed
+  member already loaded by finalization), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).

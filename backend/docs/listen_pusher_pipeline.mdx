@@ -9008,3 +9008,16 @@ loss. [Details and verification](listen_pusher_pipeline/changes/2026-11-03-recov
 all read-side phase derivation and observation. This telemetry switch never selects
 reader behavior or performs storage IO. Existing verdicts remain authoritative,
 including when shadow computation fails. [Projection rules and measurement limits](listen_pusher_pipeline/changes/2026-11-03-phase-shadow.md).
+
+
+### Closed episode compose cost control
+
+`EPISODE_COMPOSE_SETTLE_ENABLED` defaults on (unset or blank). `off` restores
+full-fingerprint triggering and immediate retries. When enabled, background
+composes wait for 10 quiet minutes, with a 25-minute cap from the first pending
+arrival. Foreground read-side schedules and forced composes bypass this window.
+Only changed retained membership, speech text or resolved person names trigger a
+paid recompose; discard, visible notes drift and explicit regeneration remain
+repair triggers. Summaries and speaker labels remain prompt inputs, and the full
+fingerprint still owns leases and composed-state validation. See the
+[change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).

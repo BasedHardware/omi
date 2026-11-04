@@ -61,6 +61,7 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from utils.episodes.composer import retry_settled_composes
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
@@ -244,6 +245,7 @@ async def startup_event():
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
+    start_background_task(retry_settled_composes(), name='episode_compose_settle')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

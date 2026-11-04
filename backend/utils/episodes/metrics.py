@@ -145,6 +145,7 @@ EPISODE_LIVE_SESSIONS_TOTAL = reuse_or_create(
 )
 COMPOSE_OUTCOMES = frozenset(
     {
+        'settling',
         'composed',
         'unchanged',
         'leased',
@@ -172,6 +173,13 @@ EPISODE_COMPOSE_SECONDS = reuse_or_create(
     'Wall time of a composer run, including its model call.',
     ['outcome'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
+)
+COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
+EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_trigger_skipped_total',
+    'Composer triggers skipped before scheduling or paying, by bounded reason. Never labeled by uid.',
+    ['reason'],
 )
 HOME_MEMBER_OUTCOMES = frozenset({'shown', 'hidden_below_floor'})
 EPISODE_HOME_MEMBERS_TOTAL = reuse_or_create(
@@ -226,6 +234,8 @@ def _prime() -> None:
         for outcome in COMPOSE_OUTCOMES:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+        for reason in COMPOSE_SKIP_REASONS:
+            EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=reason)
         for outcome in HOME_MEMBER_OUTCOMES:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label(outcome, HOME_MEMBER_OUTCOMES))
         for channel in CLIENT_CHANNELS:
@@ -320,6 +330,13 @@ def record_client_request(channel: str, outcome: str) -> None:
             channel=channel if channel in CLIENT_CHANNELS else 'unknown',
             outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES),
         ).inc()
+    except Exception:
+        pass
+
+
+def record_compose_trigger_skipped(reason: str) -> None:
+    try:
+        EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS)).inc()
     except Exception:
         pass
 
