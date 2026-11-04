@@ -9,6 +9,7 @@ It proves ownership/field coverage, not execution or bounded liveness (WP-B2).
 """
 
 from dataclasses import dataclass
+import math
 
 from tests.support.lifecycle_ast import EntryPath, builders
 from tests.support.lifecycle_writer_inventory import FIELD_SITES
@@ -561,10 +562,10 @@ class OrderingRule:
 
 ORDERING_RULES = (
     OrderingRule(
-        'finalization_after_batch_result_or_durable_rearm',
-        ('record_lane_owner', 'finalization_status', 'batch_result_count', 'rearm_on_result_commit'),
-        (Writer(FINALIZATION_MODULE, '_mark_finalization_completed_txn'),),
-        'phase ordering follow-up, no fix PR yet; uicleanup intake; ruling f1e35a',
+        'late_result_commit_rearms_titling',
+        ('record_lane_owner', 'completed_before_results', 'batch_result_count', 'rearm_on_result_commit'),
+        (Writer('database/batch_pipeline_projection.py', 'ProjectionStore.mark_enrichment'),),
+        'covered by B2 durable late-result rearm control; e13891 corrects the initial f1e35a premise',
     ),
     OrderingRule(
         'completed_capture_has_closed_audio',
@@ -575,17 +576,37 @@ ORDERING_RULES = (
 )
 
 
-def ordering_holds(rule, row, *, batch_result_count=0, rearm_on_result_commit=False):
+def durable_titling_rearm(before, after):
+    """A pending outbox increment is durable evidence; an unchanged row is not."""
+    old_version = (before or {}).get('version', 0)
+    row = after or {}
+    version = row.get('version')
+    due = row.get('due_at')
+    return bool(
+        type(old_version) is int
+        and type(version) is int
+        and version > old_version
+        and not row.get('dormant')
+        and isinstance(row.get('task_token'), str)
+        and row['task_token']
+        and type(due) in (int, float)
+        and math.isfinite(due)
+    )
+
+
+def ordering_holds(rule, row, *, batch_result_count=0, rearm_on_result_commit=False, completed_before_results=False):
     """Pure cross-store contract; B2 supplies simulator-derived store evidence.
 
-    A rearm is a durable obligation bound to the future result-commit event,
-    rather than an earlier callback or a completed/title bit. No account
+    Early completion alone is allowed. If results later commit after that
+    completion, their commit must durably rearm titling (e13891). A caller
+    supplies the prior completion and current result/outbox store evidence.
+    A completed/title bit alone is insufficient evidence of rearm. No account
     identifiers, fetching, client construction or other IO belongs here.
     """
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'} or row.get('deleted'):
         return True
-    if rule.name == 'finalization_after_batch_result_or_durable_rearm':
-        return row.get('finalization_status') != 'completed' or batch_result_count > 0 or rearm_on_result_commit
+    if rule.name == 'late_result_commit_rearms_titling':
+        return not completed_before_results or batch_result_count == 0 or rearm_on_result_commit
     if rule.name == 'completed_capture_has_closed_audio':
         return row.get('status') != 'completed' or bool(
             row.get('record_audio_closed')

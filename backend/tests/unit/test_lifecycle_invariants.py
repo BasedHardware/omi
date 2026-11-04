@@ -780,7 +780,7 @@ def test_warning_reentry_callers_supply_the_deadline(path):
 
 
 ORDERING_COUNTEREXAMPLES = {
-    'finalization_after_batch_result_or_durable_rearm': {
+    'late_result_commit_rearms_titling': {
         'record_lane_owner': 'batch_live_v1',
         'status': 'completed',
         'finalization_status': 'completed',
@@ -809,6 +809,7 @@ ORDERING_COUNTEREXAMPLES = {
             ),
         )
         for rule in ORDERING_RULES
+        if rule.name != 'late_result_commit_rearms_titling'
     ],
 )
 def test_known_red_cross_store_ordering_clause(rule):
@@ -817,10 +818,29 @@ def test_known_red_cross_store_ordering_clause(rule):
     assert ordering_holds(rule, ORDERING_COUNTEREXAMPLES[rule.name])
 
 
-@pytest.mark.parametrize('results,rearm', [(1, False), (0, True), (1, True)])
-def test_finalization_ordering_accepts_committed_results_or_durable_rearm(results, rearm):
+@pytest.mark.parametrize('early,results,rearm', [(False, 1, False), (True, 0, False), (True, 1, True)])
+def test_ordering_accepts_normal_completion_and_rearmed_late_results(early, results, rearm):
     row = {'record_lane_owner': 'batch_live_v1', 'finalization_status': 'completed'}
-    assert ordering_holds(ORDERING_RULES[0], row, batch_result_count=results, rearm_on_result_commit=rearm)
+    assert ordering_holds(
+        ORDERING_RULES[0], row, batch_result_count=results, rearm_on_result_commit=rearm, completed_before_results=early
+    )
+
+
+@pytest.mark.parametrize('results,rearm,expected', [(0, False, True), (1, False, False), (1, True, True)])
+def test_early_completion_is_checked_at_late_result_commit(results, rearm, expected):
+    # A missing rearm after arrival is a negative predicate control, not a
+    # claimed runtime bug. B2 proves main actually persists the outbox rearm.
+    row = ORDERING_COUNTEREXAMPLES['late_result_commit_rearms_titling']
+    assert (
+        ordering_holds(
+            ORDERING_RULES[0],
+            row,
+            batch_result_count=results,
+            rearm_on_result_commit=rearm,
+            completed_before_results=True,
+        )
+        is expected
+    )
 
 
 def test_queued_finalization_can_wait_for_results():

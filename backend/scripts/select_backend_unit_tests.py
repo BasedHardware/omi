@@ -253,6 +253,8 @@ LIFECYCLE_INVARIANT_TESTS = (
 )
 LIFECYCLE_SOURCE_REGRESSION_TESTS = {
     'backend/utils/batch_pipeline/scheduler.py': ('tests/unit/test_batch_pipeline_scheduler.py',),
+    'backend/utils/fair_use.py': ('tests/unit/test_lifecycle_ladder_properties.py',),
+    'backend/database/fair_use.py': ('tests/unit/test_lifecycle_ladder_properties.py',),
 }
 
 AREA_TESTS = (
