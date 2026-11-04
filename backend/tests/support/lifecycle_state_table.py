@@ -141,6 +141,7 @@ DEADLINE_ENTRIES = {
         entry(FINALIZATION_MODULE, '_mark_finalization_retryable_txn', 'status', 'queued'),
         entry(FINALIZATION_MODULE, '_defer_sync_revision_fence_txn', 'status', 'queued'),
         entry(FINALIZATION_MODULE, '_claim_finalization_replay_txn', 'status', 'queued'),
+        entry(FINALIZATION_MODULE, '_grant_finalization_budget_requeue_txn', 'status', 'queued'),
     ),
     'finalization:leased': (entry(FINALIZATION_MODULE, '_claim_finalization_job_txn', 'status', 'leased'),),
     'batch:leased': (entry('utils/batch_pipeline/scheduler.py', 'Scheduler._pull_shard.commit', 'state', 'leased'),),

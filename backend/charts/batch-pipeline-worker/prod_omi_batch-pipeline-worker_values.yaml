@@ -56,6 +56,12 @@ borrowedNodePools:
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   servingMetricsMinRefreshSeconds: 60
+  # Matches the prod backend hosts (deploy contract reader-split invariant):
+  # window allocation 100, replica recovery explicitly off, and the
+  # independently-approved language recovery activation.
+  parakeetWindowAllocationPercent: '100'
+  parakeetWindowReplicaRecoveryEnabled: 'false'
+  independentLanguageRecoveryEnabled: true
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
   controlCandidateFanout: 16
   admissionParallelCalls: true
