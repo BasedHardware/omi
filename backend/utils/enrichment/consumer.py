@@ -15,7 +15,8 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
 A consumer-side write leaves nothing for ``run_push`` to settle, so it reports STALE: this delivery no
-longer owns a lease. Every lease heartbeats (120s lease, 30s beat), so a long summary never outlives it.
+longer owns a lease. Every lease heartbeats (120s lease, 30s beat), so a long summary never outlives it, up
+to a 1500s hold cap after which a hung callback's lease lapses for the sweep to re-wake.
 """
 
 from __future__ import annotations
@@ -86,11 +87,22 @@ def _callback_pending(cause: str, now: float) -> Result:
 def _beating(
     heartbeat: Callable[[], bool], seconds: float, context: dict[str, Any] | None
 ) -> Iterator[threading.Event]:
-    """Renew the lease until the block exits; ``lost`` is set when a renewal is refused."""
+    """Renew the lease until the block exits; ``lost`` is set when a renewal is refused.
+
+    Renewal stops after ``max_hold_seconds``: a callback hung on a dependency then lets its lease lapse, so the
+    maintenance sweep fences it and re-wakes the row, instead of heartbeating one obligation forever. A callback
+    that finishes before the lease lapses still settles normally.
+    """
     stopped, lost = threading.Event(), threading.Event()
+    hold_until = time.monotonic() + EnrichmentConsumer.max_hold_seconds
 
     def renew() -> None:
         while not stopped.wait(seconds):
+            if time.monotonic() >= hold_until:
+                logger.warning(
+                    'event=enrichment_heartbeat outcome=hold_cap max_hold_s=%.0f', EnrichmentConsumer.max_hold_seconds
+                )
+                return
             try:
                 if not heartbeat():
                     lost.set()
@@ -114,6 +126,8 @@ class EnrichmentConsumer:
     role: ClassVar[Role] = Role.WORKERS
     lease_seconds: ClassVar[float] = 120.0
     heartbeat_seconds: ClassVar[float] = 30.0
+    # The 1500s dispatch deadline is the longest any wake may run; past it the callback is treated as hung.
+    max_hold_seconds: ClassVar[float] = 1500.0
 
     def __init__(self, outbox: Any = None, process: Callable[[str, str, str], Any] | None = None):
         if outbox is None:
