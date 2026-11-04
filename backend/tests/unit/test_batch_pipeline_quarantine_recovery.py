@@ -329,6 +329,49 @@ def test_repeated_persist_failure_spends_only_one_replacement_call(setup):
     assert stt.call_count == artifacts.persist_recovery_result.call_count == 2
 
 
+@pytest.mark.parametrize('arrival', ['before_delivery', 'during_download'])
+def test_replacement_adopts_late_old_upload_without_recognizing_again(setup, arrival):
+    client, _, binding, artifacts, stt, recovery = setup
+    old = running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    replacement = row(client)['recovery']['token']
+    available = [arrival == 'before_delivery']
+    artifacts.find_recovery_result.side_effect = lambda item, token: (
+        'gs://synthetic/late-old-result' if token == old and available[0] else None
+    )
+    if arrival == 'during_download':
+
+        def download(item):
+            available[0] = True
+            return b'synthetic'
+
+        artifacts.fetch_audio.side_effect = download
+    assert recovery.recover('bad', binding.owner_id) == 'reconciled'
+    assert row(client)['recovery_state'] == 'recovered'
+    assert row(client)['recovery']['token'] == replacement
+    assert row(client)['result']['result_uri'] == 'gs://synthetic/late-old-result'
+    stt.assert_not_called()
+    artifacts.persist_recovery_result.assert_not_called()
+    if arrival == 'before_delivery':
+        artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['wrong_history', 'already_started'])
+def test_previous_result_adoption_is_fenced_against_replacement_start(setup, change):
+    client, _, binding, _, _, recovery = setup
+    old = running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    token = row(client)['recovery']['token']
+    if change == 'already_started':
+        assert recovery.protocol.start('bad', token, 902)
+    else:
+        old = 'foreign-history-token'
+    assert not recovery.protocol.settle('bad', token, 903, 'gs://synthetic/late', previous_token=old)
+    assert 'result' not in row(client)
+
+
 def test_requeued_words_rechecks_funding_before_replacement_call(setup, monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as module
 

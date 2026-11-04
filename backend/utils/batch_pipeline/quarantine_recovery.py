@@ -257,6 +257,31 @@ class QuarantineRecovery:
     async def recover_async(self, segment_id, owner_id):
         return await run_async(self._recover_steps(segment_id, owner_id))
 
+    def _previous_result(self, job, item, token):
+        """Adopt a predecessor upload that finished after its missing-object probe."""
+        for entry in job['recovery'].get('missing_result_history', []):
+            previous = entry['token']
+            uri = self.artifacts.find_recovery_result(item, previous)
+            if uri:
+                payload = self.artifacts.load_result(item, uri)
+                outcome = result_outcome(payload)
+                measured = result_vad_evidence(payload)
+                independent = payload.get('words_provider') == 'independent_empty_strict_vad'
+                if not held_result_allowed(job, outcome, measured, independent=independent):
+                    continue
+                changed = self.protocol.settle(
+                    item.segment_id,
+                    token,
+                    self.clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=measured,
+                    independent_silence=independent,
+                    previous_token=previous,
+                )
+                return 'reconciled' if changed else 'held'
+        return None
+
     def _recover_steps(self, segment_id, owner_id):
         try:
             job, policy = load_stage_policy(self.store, segment_id, 'recovery')
@@ -317,6 +342,9 @@ class QuarantineRecovery:
                     if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
                         log_failure(failure)
                 return 'held'
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
             byok = admitted_as_byok(job)
             if byok and not language_guarded(job):
                 record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
@@ -387,6 +415,11 @@ class QuarantineRecovery:
             # The worker's bound VAD receipt is the only evidence that may
             # locate recognized words when strict CPU VAD finds no speech.
             multilingual = safety_net_enabled() or policy.speech_empty_multilingual or language_guarded(job)
+            # Downloads/VAD/funding checks may have taken minutes. Recheck the
+            # old upload immediately before minting the replacement's call.
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
             if not self.protocol.start(
                 segment_id,
                 token,

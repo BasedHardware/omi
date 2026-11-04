@@ -506,14 +506,30 @@ class RecoveryStore:
         failure=None,
         measured_held_vad_speech_seconds=None,
         independent_silence=False,
+        previous_token=None,
     ):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             existing = tx.get('results', segment_id)
+            marker = job.get('recovery') or {}
+            # A replacement may adopt its predecessor's late encrypted result
+            # without starting another paid intent. CAS against prepared keeps
+            # adoption and the replacement's start mutually exclusive.
+            previous_result = (
+                previous_token is not None
+                and job.get('recovery_state') == 'prepared'
+                and result_uri is not None
+                and failure is None
+                and any(
+                    entry.get('token') == previous_token and has_words_receipt(entry)
+                    for entry in marker.get('missing_result_history', [])
+                )
+            )
             if (
                 job.get('state') != 'quarantined'
-                or job.get('recovery_state') != 'running'
-                or job.get('recovery', {}).get('token') != token
+                or (job.get('recovery_state') != 'running' and not previous_result)
+                or (previous_token is not None and not previous_result)
+                or marker.get('token') != token
                 or job.get('result')
                 or existing
             ):
