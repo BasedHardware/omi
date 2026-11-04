@@ -11,7 +11,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -19,9 +19,10 @@ from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
 from database._client import get_firestore_client
-from database import sync_redrive
+from database import sync_redrive, sync_jobs
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
+from config import sync_backfill_worker as worker_policy
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
@@ -193,6 +194,15 @@ def register_job(
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     pending = _pending_ref(client, uid, job_id)
+    # Registration is the durable admission boundary. Never trust a supplied
+    # marker, migrate old jobs, or change batch admission to fill this fleet.
+    payload = dict(payload)
+    payload.pop('worker_eligible', None)
+    if worker_policy.selected(uid) and worker_policy.eligible_payload(payload) and enabled():
+        from utils.sync.legacy_dark import sequencer_registration_allowed
+
+        if sequencer_registration_allowed(uid=uid):
+            payload['worker_eligible'] = True
     accepted_at = now or _now()
     try:
         sort_at = (
@@ -488,6 +498,12 @@ def claim_next(
             'active_epoch': epoch,
             'dispatch_attempt': 0,
             'active_state': 'dispatching',
+            'worker_available': job['payload'].get('worker_eligible') is True,
+            'worker_fallback_at': (
+                int(current.timestamp()) + DISPATCH_RETRY_SECONDS
+                if job['payload'].get('worker_eligible') is True
+                else None
+            ),
             'active_accepted_at': job['accepted_at'],
             'active_since': current,
             'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
@@ -503,6 +519,7 @@ def claim_next(
             'payload': job['payload'],
             'epoch': epoch,
             'accepted_at': job['accepted_at'],
+            'worker_fallback_at': active['worker_fallback_at'],
         }
 
     return commit(client.transaction())
@@ -510,8 +527,12 @@ def claim_next(
 
 def begin_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
-) -> bool:
-    """A stale Cloud Task epoch can never enter the transcription pipeline."""
+) -> Optional[dict[str, Any]]:
+    """Fence the delivery, then return its prior job state in the same DB leaf.
+
+    Stale epochs perform no job read. The snapshot only carries retry history;
+    the handler must still re-read under its run lock and before completion.
+    """
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
@@ -520,12 +541,17 @@ def begin_job(
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
-        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+        if (
+            owner.get('active_job_id') != job_id
+            or owner.get('active_epoch') != epoch
+            or owner.get('worker_token') is not None
+        ):
             return False
         transaction.update(
             root,
             {
                 'active_state': 'running',
+                'worker_available': False,
                 'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
                 'reconcile_at': current + timedelta(seconds=HEARTBEAT_SECONDS),
                 'updated_at': current,
@@ -534,13 +560,22 @@ def begin_job(
         return True
 
     try:
-        return commit(client.transaction())
+        began = commit(client.transaction())
     except NotFound:
-        return False
+        return None
+    if not began:
+        return None
+    return {'job': sync_jobs.get_sync_job(job_id)}
 
 
 def renew_job(
-    uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
+    uid: str,
+    job_id: str,
+    epoch: int,
+    *,
+    worker_token: Optional[str] = None,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
 ) -> bool:
     _require_production()
     client = firestore_client or get_firestore_client()
@@ -550,7 +585,7 @@ def renew_job(
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
-        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+        if not _execution_matches(owner, job_id, epoch, worker_token, current):
             return False
         transaction.update(
             root,
@@ -569,7 +604,14 @@ def renew_job(
 
 
 def finish_job(
-    uid: str, job_id: str, epoch: int, outcome: str, *, firestore_client: Any = None, now: Optional[datetime] = None
+    uid: str,
+    job_id: str,
+    epoch: int,
+    outcome: str,
+    *,
+    worker_token: Optional[str] = None,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
 ) -> bool:
     """Only the current epoch releases the UID; duplicate completion is inert."""
     _require_production()
@@ -580,7 +622,7 @@ def finish_job(
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
-        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+        if not _execution_matches(owner, job_id, epoch, worker_token, current):
             return False
         has_pending = _has_pending(client, uid, transaction=transaction)
         _release_owner(transaction, root, owner, current, has_pending=has_pending)
@@ -590,6 +632,128 @@ def finish_job(
     if released:
         logger.info('event=sync_uid_sequencer action=finished outcome=%s', outcome)
     return released
+
+
+def _execution_matches(owner: dict, job_id: str, epoch: int, token: Optional[str], current: datetime) -> bool:
+    if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch or owner.get('worker_token') != token:
+        return False
+    # An expired worker may not revive itself, even before the sweep advances
+    # the epoch. Preserve the legacy Cloud Tasks lease semantics unchanged.
+    return token is None or (
+        isinstance(owner.get('lease_expires_at'), datetime) and owner['lease_expires_at'] > current
+    )
+
+
+def worker_candidates(
+    *, limit: int = 100, after_uid: Optional[str] = None, firestore_client: Any = None
+) -> Iterator[dict[str, Any]]:
+    """Page available owners lazily, including past a filtered first page.
+
+    Cohort/legacy policy can change after admission, leaving available owners
+    that claim must skip. A fixed prefix would permanently hide later owners.
+    Stop fetching as soon as the caller claims one; never scan pending jobs.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    page_size = max(1, min(limit, 100))
+    query = (
+        client.collection(COLLECTION)
+        .where(filter=FieldFilter('worker_available', '==', True))
+        .order_by('__name__')
+        .limit(page_size)
+    )
+    if after_uid is not None:
+        query = query.start_after({'__name__': client.collection(COLLECTION).document(after_uid)})
+    while True:
+        docs = list(query.stream())
+        for doc in docs:
+            yield {'uid': doc.id, **_data(doc)}
+        if len(docs) < page_size:
+            return
+        query = query.start_after(docs[-1])
+
+
+def claim_worker(
+    uid: str, job_id: str, epoch: int, token: str, *, firestore_client: Any = None, now: Optional[datetime] = None
+) -> Optional[dict[str, Any]]:
+    """Only an unstarted dispatch reservation can choose the pull drive.
+
+    Cloud Tasks begin_job races this same document transaction. The winner
+    disables worker_available; the other drive cannot begin, renew or finish.
+    Redis's independent run token still gates every pipeline mutation.
+    """
+    _require_production()
+    if not token:
+        raise ValueError('worker token required')
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> Optional[dict[str, Any]]:
+        owner = _data(root.get(transaction=transaction))
+        payload = owner.get('active_payload') or {}
+        if (
+            not _execution_matches(owner, job_id, epoch, None, current)
+            or owner.get('active_state') != 'dispatching'
+            or owner.get('worker_available') is not True
+            or payload.get('worker_eligible') is not True
+            or payload.get('lane') != 'backfill'
+            or payload.get('ledger_fence_mode') != 'active'
+            or payload.get('uid') != uid
+            or payload.get('job_id') != job_id
+        ):
+            return None
+        transaction.update(
+            root,
+            {
+                'active_state': 'running',
+                'worker_available': False,
+                'worker_token': token,
+                'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
+                'reconcile_at': current + timedelta(seconds=HEARTBEAT_SECONDS),
+                'updated_at': current,
+            },
+        )
+        return {**payload, 'sequencer_epoch': epoch}
+
+    return commit(client.transaction())
+
+
+def fail_worker(
+    uid: str, job_id: str, epoch: int, token: str, *, firestore_client: Any = None, now: Optional[datetime] = None
+) -> bool:
+    """A drained worker hands back to the sweep; never marks audio failed.
+
+    The caller must first prove the Redis run lock absent. Unknown/quiescing
+    executor leaves keep that lock and recover through the normal TTL path.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if not token or not _execution_matches(owner, job_id, epoch, token, current):
+            return False
+        transaction.update(
+            root,
+            {
+                'epoch': epoch + 1,
+                'active_epoch': epoch + 1,
+                'active_state': 'dispatching',
+                'worker_token': firestore.DELETE_FIELD,
+                'worker_available': False,
+                'dispatch_retry_at': current,
+                'reconcile_at': current,
+                'updated_at': current,
+            },
+        )
+        return True
+
+    return commit(client.transaction())
 
 
 def get_owner(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
@@ -793,6 +957,8 @@ def redrive_job(
                 'active_epoch': next_epoch,
                 'dispatch_attempt': dispatch_attempt,
                 'active_state': 'dispatching',
+                'worker_token': firestore.DELETE_FIELD,
+                'worker_available': False,
                 'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
                 'dispatch_retry_at': current + timedelta(seconds=DISPATCH_RETRY_SECONDS),
                 'reconcile_at': current + timedelta(seconds=HEARTBEAT_SECONDS),

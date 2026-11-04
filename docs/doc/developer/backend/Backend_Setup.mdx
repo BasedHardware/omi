@@ -1,12 +1,14 @@
 ---
-title: "Backend Setup"
+title: "Backend setup"
 icon: "server"
 description: "Set up the Omi backend infrastructure for local development. This guide covers Google Cloud, Firebase, OAuth, and all required services."
 ---
 
 ## Overview
 
-The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This guide will help you set up a local development environment.
+The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This page is **contributor setup**: running the backend to develop and test the platform. It is not a guide to running your own production Omi (see [Open Source & Omi Cloud](/doc/get_started/open-source-and-omi-cloud)).
+
+The fastest local path is the repository dev harness: `make dev-init` once, then `make dev-up`, which starts the Firestore and Auth emulators, Redis, and Typesense, and runs the API. No external cloud accounts are needed. The manual steps below are for working against your own cloud services instead.
 
 For chat retrieval development, topic search uses the configured search providers.
 Explicit transcript recall can also read saved text directly through the existing
@@ -41,7 +43,7 @@ flowchart LR
 
     Flutter <-->|Ngrok| API
     API --> OAI
-    API --> DG
+    API --> STT
     API --> Pine
     API --> Redis
     API --> FB
@@ -53,9 +55,7 @@ flowchart LR
 If you just want to build apps or test features, you can use Omi's development backend instead. See the [App Setup Guide](/doc/developer/AppSetup) for the automatic setup option.
 </Info>
 
----
-
-## Video Walkthrough
+## Video walkthrough
 
 <iframe
   width="560"
@@ -67,24 +67,20 @@ If you just want to build apps or test features, you can use Omi's development b
   allowFullScreen
 ></iframe>
 
----
-
 ## Prerequisites
 
-Before starting, gather these API keys and credentials:
+With the dev harness (`make dev-up`), Firestore, Auth, Redis, and Typesense run locally and need no keys. If you are wiring up the manual stack below, gather what your work touches. Check `backend/.env.template` for the current authoritative list of variables:
 
-<Card title="Required Services" icon="key">
+<Card title="Services you may need (manual setup)" icon="key">
   | Service | Purpose | Get Key |
   |---------|---------|---------|
   | OpenAI | AI language models | [Get Key](https://platform.openai.com/settings/organization/api-keys) |
-  | Modulate | Speech-to-text fallback | Provision `MODULATE_API_KEY` |
-  | Parakeet | Self-hosted speech-to-text | Configure `HOSTED_PARAKEET_API_URL` |
+  | Speech-to-text providers | Transcription | `MODULATE_API_KEY`, `HOSTED_PARAKEET_API_URL` (see `.env.template`) |
   | Redis (Upstash) | Caching & sessions | [Get Key](https://console.upstash.com/) |
   | Pinecone | Vector database | [Get Key](https://app.pinecone.io/organizations/-/projects/-/api-keys) |
-  | Hugging Face | Voice detection | [Get Key](https://huggingface.co/settings/tokens) |
 </Card>
 
-<Card title="Optional Services" icon="puzzle-piece">
+<Card title="Optional services" icon="puzzle-piece">
   | Service | Purpose | Get Key |
   |---------|---------|---------|
   | Modal | Serverless deployment | [Get Key](https://modal.com/settings#tokens) |
@@ -95,12 +91,10 @@ Before starting, gather these API keys and credentials:
 </Card>
 
 <Tip>
-New to backend development? Install [Homebrew](https://docs.brew.sh/Installation) (macOS/Linux) or [Chocolatey](https://chocolatey.org/install) (Windows) first - they make installing tools much easier.
+New to backend development? Install [Homebrew](https://docs.brew.sh/Installation) (macOS/Linux) or [Chocolatey](https://chocolatey.org/install) (Windows) first. They make installing tools easier.
 </Tip>
 
----
-
-## 1. Google Cloud & Firebase Setup
+## 1. Google Cloud & Firebase setup
 
 <Steps>
   <Step title="Install Google Cloud SDK" icon="download">
@@ -120,7 +114,7 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
       </Tab>
     </Tabs>
   </Step>
-  <Step title="Enable Required APIs" icon="toggle-on">
+  <Step title="Enable required APIs" icon="toggle-on">
     Go to the [Google Cloud Console](https://console.cloud.google.com/) and enable these APIs:
 
     <CardGroup cols={2}>
@@ -142,13 +136,13 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
     ```
 
     This installs **Application Default Credentials** (ADC) for the Google client
-    libraries. Do **not** copy a service-account JSON key into the repo — long-lived
+    libraries. Do **not** copy a service-account JSON key into the repo. Long-lived
     keys are the #6800 anti-pattern. Prefer plain user ADC for local work.
 
     Impersonation is an advanced, time-limited option (ADC tokens from
     `--impersonate-service-account` expire in about an hour). Only use it when you
     already have an org-provisioned lower-privilege SA and hold
-    `roles/iam.serviceAccountTokenCreator` on that account — replace the
+    `roles/iam.serviceAccountTokenCreator` on that account. Replace the
     placeholder below with a real SA email from your team; there is no default
     `dev-readonly@…` account in this repo:
 
@@ -162,35 +156,33 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
   </Step>
 </Steps>
 
----
-
-## 2. OAuth Authentication Setup
+## 2. OAuth authentication setup
 
 OAuth is required for user authentication. You need to configure both Google and Apple sign-in.
 
 <Tabs>
   <Tab title="Google OAuth" icon="google">
     <Steps>
-      <Step title="Create OAuth 2.0 Client">
+      <Step title="Create OAuth 2.0 client">
         1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
         2. Click **Create Credentials** → **OAuth 2.0 Client ID**
         3. Select **Web application** as the application type
         4. Set a name (e.g., "Omi Backend Auth")
       </Step>
-      <Step title="Configure Authorized Origins">
+      <Step title="Configure authorized origins">
         Under **Authorized JavaScript origins**, add:
         - `https://your-domain.com` (production)
         - `https://your-ngrok-domain.ngrok-free.app` (local development)
       </Step>
-      <Step title="Configure Redirect URIs">
+      <Step title="Configure redirect URIs">
         Under **Authorized redirect URIs**, add:
         - `https://your-domain.com/v1/auth/callback/google`
         - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/google`
       </Step>
-      <Step title="Save Credentials">
+      <Step title="Save credentials">
         Click **Create** and save your **Client ID** and **Client Secret** for the `.env` file.
       </Step>
-      <Step title="Configure Consent Screen">
+      <Step title="Configure consent screen">
         Go to **APIs & Services → OAuth consent screen**:
         - Fill in required app information
         - Add your domain to **Authorized domains**
@@ -200,11 +192,11 @@ OAuth is required for user authentication. You need to configure both Google and
   </Tab>
   <Tab title="Apple OAuth" icon="apple">
     <Warning>
-    Apple OAuth requires a paid Apple Developer account ($99/year).
+    Apple OAuth requires a paid Apple Developer account.
     </Warning>
 
     <Steps>
-      <Step title="Create App ID">
+      <Step title="Create app ID">
         1. Go to [Apple Developer Console → Identifiers](https://developer.apple.com/account/resources/identifiers/list)
         2. Create a new App ID with **Sign In with Apple** capability enabled
         3. Note your Bundle ID
@@ -216,7 +208,7 @@ OAuth is required for user authentication. You need to configure both Google and
            - `https://your-domain.com/v1/auth/callback/apple`
            - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/apple`
       </Step>
-      <Step title="Create Private Key">
+      <Step title="Create private key">
         1. Go to **Keys** in Apple Developer Console
         2. Create a new key with **Sign In with Apple** enabled
         3. Download the `.p8` file and note the **Key ID**
@@ -242,18 +234,16 @@ OAuth is required for user authentication. You need to configure both Google and
   </Tab>
 </Tabs>
 
----
-
-## 3. Backend Installation
+## 3. Backend installation
 
 <Steps>
-  <Step title="Clone the Repository" icon="code-branch">
+  <Step title="Clone the repository" icon="code-branch">
     ```bash
     git clone https://github.com/BasedHardware/Omi.git
     cd Omi/backend
     ```
   </Step>
-  <Step title="Install System Dependencies" icon="box">
+  <Step title="Install system dependencies" icon="box">
     The backend Docker images run Python 3.11, so use Python 3.11 locally as well. If your package manager installs a newer default Python, install or select Python 3.11 before creating the virtual environment.
 
     <Tabs>
@@ -288,7 +278,7 @@ OAuth is required for user authentication. You need to configure both Google and
       </Tab>
     </Tabs>
   </Step>
-  <Step title="Set Up Python Virtual Environment" icon="python">
+  <Step title="Set up a Python virtual environment" icon="python">
     <Tip>
     The backend uses `uv`, `.python-version`, and `pylock.toml` for reproducible local and CI installs.
     </Tip>
@@ -312,7 +302,7 @@ OAuth is required for user authentication. You need to configure both Google and
 
     You should see `(.venv)` at the beginning of your command prompt.
   </Step>
-  <Step title="Update Python Dependencies" icon="download">
+  <Step title="Update Python dependencies" icon="download">
     When intentionally changing backend dependencies, edit the relevant `requirements*.txt` input, then refresh the locks:
 
     ```bash
@@ -321,40 +311,22 @@ OAuth is required for user authentication. You need to configure both Google and
 
     The refresh preserves already-locked package versions by default. Use `PYLOCK_UPGRADE=1 ./scripts/update-python-lock.sh` only when intentionally upgrading dependency versions.
   </Step>
-  <Step title="Create Environment File" icon="file">
+  <Step title="Create an environment file" icon="file">
     ```bash
     cp .env.template .env
     ```
 
     Edit `.env` and fill in your API keys (see [Environment Variables](#environment-variables) below).
 
-    For a self-hosted backend used by an existing Omi mobile build, set the
-    Firebase token audience separately from your data project:
-
-    ```dotenv
-    # Stock development/community Omi mobile builds mint tokens for this project.
-    FIREBASE_AUTH_PROJECT_ID=based-hardware-dev
-
-    # Your own Google Cloud/Firebase project for Firestore and other backend data.
-    FIREBASE_PROJECT_ID=your-self-hosted-project
-    ```
-
-    Firebase ID tokens are verified with the issuer's public signing keys, so
-    `FIREBASE_AUTH_PROJECT_ID` does not require Omi service-account credentials.
-    When it is unset, Firebase Admin uses its default project selection instead;
-    set the auth project explicitly when it differs from your data-project setup,
-    or stock mobile-build tokens will be rejected.
-    Do not enable `LOCAL_DEVELOPMENT` on an internet-accessible deployment: that
+    Never enable `LOCAL_DEVELOPMENT` on an internet-accessible machine: that
     mode intentionally bypasses authentication for local harnesses.
   </Step>
 </Steps>
 
----
-
-## 4. Optional Services
+## 4. Optional services
 
 <AccordionGroup>
-  <Accordion title="Pusher Service (for webhooks)" icon="bell">
+  <Accordion title="Pusher service (for webhooks)" icon="bell">
     Skip this if you don't need webhook functionality.
 
     ```bash
@@ -393,12 +365,10 @@ OAuth is required for user authentication. You need to configure both Google and
   </Accordion>
 </AccordionGroup>
 
----
-
-## 5. Running the Backend
+## 5. Running the backend
 
 <Steps>
-  <Step title="Set Up Ngrok Tunnel" icon="tunnel">
+  <Step title="Set up Ngrok tunnel" icon="tunnel">
     Ngrok exposes your local backend to the internet so the Omi app can connect.
 
     1. Sign up at [ngrok.com](https://ngrok.com/) and install Ngrok
@@ -411,7 +381,7 @@ OAuth is required for user authentication. You need to configure both Google and
 
     Note the public URL (e.g., `https://your-domain.ngrok-free.app`).
   </Step>
-  <Step title="Start the Backend Server" icon="play">
+  <Step title="Start the backend server" icon="play">
     ```bash
     uvicorn main:app --reload --env-file .env --port 8000
     ```
@@ -423,7 +393,7 @@ OAuth is required for user authentication. You need to configure both Google and
     | `--host 0.0.0.0` | Listen on all interfaces (optional) |
     | `--port 8000` | Port to listen on |
   </Step>
-  <Step title="Connect the Omi App" icon="link">
+  <Step title="Connect the Omi app" icon="link">
     In your Omi app's `.dev.env` file, set:
 
     ```
@@ -434,9 +404,9 @@ OAuth is required for user authentication. You need to configure both Google and
     Don't forget the trailing `/` in the URL!
     </Warning>
 
-    Make sure your OAuth redirect URIs in Google Cloud Console and Apple Developer Console include your Ngrok URL.
+    Your OAuth redirect URIs in Google Cloud Console and Apple Developer Console must include your Ngrok URL.
   </Step>
-  <Step title="When You're Done" icon="stop">
+  <Step title="When you're done" icon="stop">
     Deactivate the virtual environment:
 
     ```bash
@@ -446,8 +416,6 @@ OAuth is required for user authentication. You need to configure both Google and
     To resume later, just activate the virtual environment again.
   </Step>
 </Steps>
-
----
 
 ## Troubleshooting
 
@@ -479,13 +447,11 @@ OAuth is required for user authentication. You need to configure both Google and
   </Accordion>
   <Accordion title="Virtual environment not activating" icon="terminal">
     - On Windows, you may need to enable script execution: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-    - Make sure you're using Python 3.11
+    - Use Python 3.11
   </Accordion>
 </AccordionGroup>
 
----
-
-## Environment Variables
+## Environment variables
 
 Complete reference for all `.env` variables:
 
@@ -545,9 +511,7 @@ Complete reference for all `.env` variables:
 `.env.template` intentionally leaves `ENCRYPTION_SECRET` blank. Generate a unique securely managed value of at least 32 bytes for every real environment.
 </Warning>
 
----
-
-## Code Formatting
+## Code formatting
 
 We use `black` for code formatting with a line length of 120 characters.
 
@@ -562,28 +526,24 @@ To auto-format on commit, install the pre-commit hook from the repository root:
 ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="App Setup" icon="mobile" href="/doc/developer/AppSetup">
+  <Card title="App setup" icon="mobile" href="/doc/developer/AppSetup">
     Set up the Flutter app for development
   </Card>
-  <Card title="Backend Deep Dive" icon="magnifying-glass" href="/doc/developer/backend/backend_deepdive">
+  <Card title="Backend Deep Dive" icon="magnifying-glass" href="/doc/how-omi-works/architecture">
     Understand the backend architecture
   </Card>
-  <Card title="Chat System" icon="comments" href="/doc/developer/backend/chat_system">
+  <Card title="Chat System" icon="comments" href="/doc/how-omi-works/chat">
     Learn how the chat feature works
   </Card>
-  <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
+  <Card title="Storing Conversations" icon="database" href="/doc/how-omi-works/conversations-and-memories">
     How conversations and memories are stored
   </Card>
 </CardGroup>
 
----
-
-## Need Help?
+## Need help?
 
 <CardGroup cols={2}>
   <Card title="GitHub Issues" icon="github" href="https://github.com/BasedHardware/omi/issues">
@@ -593,18 +553,3 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     Get help from the community
   </Card>
 </CardGroup>
-
-
-### Testing subscription currency changes
-
-The first-party `GET /v1/payments/available-plans` response includes an optional
-formatted `billing_total` and a `currency` for each offer. Amounts remain in
-Stripe minor units; JPY uses whole yen. Currency-aware clients send
-`X-Omi-Billing-Currency: 1` and display the returned total before submitting the
-exact selected price to `POST /v1/payments/upgrade-subscription`. Refresh plans
-if a stale target returns HTTP 409. A payment decline returns HTTP 402.
-
-For provider integration testing, use a separate Stripe sandbox with synthetic
-customers and a test-mode key. The opt-in billing integration test documents its
-command and cleans up its disposable subscriptions and customers. Never run a
-plan-change test against a customer account or a live-mode key.

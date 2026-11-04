@@ -3,7 +3,8 @@
 A lexical repeat drop additionally requires full source-frame coverage proof:
 each incoming sync segment's own ``sync_vad`` receipt must uniquely identify a
 nonempty half-open frame span, and the canonical live row's ``origin=live`` S1
-snapshot must positively prove every touched frame for the same capture root,
+snapshot must carry validated committed transcript runs and lifetime evidence
+positively proving every touched frame for the same capture root,
 clock epoch, mono channel and rate. Missing, malformed, conflicting, partial or
 mismatched evidence yields no proof; the segment is simply a normal candidate.
 """
@@ -15,7 +16,7 @@ from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
-from utils.sync.audio_coverage import validated_live_ranges
+from utils.sync.committed_coverage import validated_committed_runs
 
 MAX_INCOMING_SEGMENTS = 64
 MAX_RECEIPTS = 64
@@ -173,9 +174,13 @@ def capture_covered_indices(
         if span is None:
             continue
         claim, start_frame, end_exclusive, end_offset = span
-        ranges = validated_live_ranges(claim, [live_evidence])
-        if ranges is None or not ranges:
+        # This consumer compares persisted source-frame coordinates, not a WAV
+        # being trimmed. The audio validator requires observed WAV context and
+        # otherwise returns no proof; committed transcript runs need no WAV.
+        runs = validated_committed_runs(claim, [live_evidence])
+        if not runs:
             continue
+        ranges = tuple(sorted((run['source_frame_start'], run['source_frame_end']) for run in runs))
         if not offsets_fit(receipt, live_evidence, claim, receipt['source_end_frame'], end_offset):
             continue
         if not _fully_covered(ranges, start_frame, end_exclusive):

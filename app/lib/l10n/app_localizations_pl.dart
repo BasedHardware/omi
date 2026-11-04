@@ -8741,6 +8741,29 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteReasonOther => 'Inne';
 
   @override
+  String get deletePauseInsteadTitle => 'Wstrzymać Omi zamiast usuwać?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Zatrzymaj nagrywanie i zachowaj wszystko. Wróć w dowolnym momencie.';
+
+  @override
+  String get deletePauseRecordingLine =>
+      'Nagrywanie zostanie zatrzymane. Podczas Twojej nieobecności nic nowego nie będzie nagrywane.';
+
+  @override
+  String get deletePauseKeepLine => 'Twoje wspomnienia, rozmowy i aplikacje pozostaną dokładnie takie, jakie są.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Pozostaniesz zalogowany. Wznów nagrywanie w dowolnym momencie. Twoja subskrypcja pozostanie bez zmian.';
+
+  @override
+  String get pauseOmiButton => 'Wstrzymaj Omi';
+
+  @override
+  String get continueDeletingButton => 'Kontynuuj usuwanie';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Powiedz nam więcej';
 
   @override
@@ -8760,6 +8783,28 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Twojego konta nie można przywrócić — nawet przez wsparcie.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagrania są nadal przetwarzane. Jeśli usuniesz je teraz, zostaną utracone.',
+      one: '1 nagranie jest nadal przetwarzane. Jeśli usuniesz je teraz, zostanie utracone.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Zaloguj się ponownie w ciągu $days dni, aby przywrócić konto.',
+      one: 'Zaloguj się ponownie w ciągu 1 dnia, aby przywrócić konto.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Wpisz DELETE, aby potwierdzić';
@@ -14446,6 +14491,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get episodeMoments => 'Momenty';
 
   @override
+  String get episodeFollowUps => 'Dalsze kroki';
+
+  @override
+  String get episodeOpenTranscript => 'Otwórz transkrypcję';
+
+  @override
   String get episodeSoFar => 'Na razie';
 
   @override
@@ -14666,12 +14717,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get episodeOnThisPhone => 'Na tym telefonie';
 
   @override
-  String get episodeOpenTranscript => 'Otwórz transkrypcję';
-
-  @override
-  String get liveCardTitle => 'Na żywo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Ostateczna transkrypcja z opóźnieniem około $duration';
   }
@@ -14686,7 +14731,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Bezpiecznie nagrywa';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Na żywo na tym telefonie';
+  String get livePreviewOnPhoneDivider => 'Przed chwilą, na tym telefonie';
 
   @override
   String get livePreviewTurnOnLiveText => 'Włącz tekst na żywo';
@@ -14752,4 +14797,217 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count nagrania nie zostały jeszcze przesłane. Jeśli usuniesz je teraz, zostaną utracone — pozostaw aplikację otwartą, aż przesyłanie się zakończy.',
+      one:
+          '1 nagranie nie zostało jeszcze przesłane. Jeśli usuniesz je teraz, zostanie utracone — pozostaw aplikację otwartą, aż przesyłanie się zakończy.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Zanim odejdziesz, sprawdź, co stanie się z Twoimi danymi.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi jest wstrzymane. Wznów nagrywanie w dowolnym momencie.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nadal trwa przetwarzanie $count nagrań. Pozostaną na Twoim koncie przez ',
+      one: '1 nagranie jest nadal przetwarzane. Pozostanie na Twoim koncie przez ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dni.',
+      one: '1 dzień.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Twoje wspomnienia i rozmowy zostaną usunięte po $days dniach.',
+      one: 'Twoje wspomnienia i rozmowy zostaną usunięte po 1 dniu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Twoje aplikacje i integracje zostaną natychmiast odłączone.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Twoja subskrypcja zostanie natychmiast anulowana.';
+
+  @override
+  String get deleteRestoreTitle => 'Twoje konto oczekuje na usunięcie';
+
+  @override
+  String get deleteRestoreSubtitle => 'Zmieniłeś zdanie? Przywróć konto, zanim zostanie wymazane.';
+
+  @override
+  String get deleteRestoreKeepData => 'Przywróć swoje wspomnienia i rozmowy.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Twoja subskrypcja pozostanie anulowana. Po przywróceniu konta ponownie połącz aplikacje i integracje.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Masz jeszcze $days dni na przywrócenie konta.',
+      one: 'Masz jeszcze 1 dzień na przywrócenie konta.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Przywróć moje konto';
+
+  @override
+  String get deleteFinishButton => 'Zakończ usuwanie';
+
+  @override
+  String get deleteFinishNowButton => 'Usuń moje konto teraz';
+
+  @override
+  String get deleteFinishNowWarning => 'To kończy okres przywracania. Twoje konto i nagrania zostaną trwale usunięte.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Masz mniej niż 1 dzień na przywrócenie konta.';
+
+  @override
+  String get deleteFinishNowTitle => 'Usunąć konto?';
+
+  @override
+  String get syncHealthAlerts => 'Alerty stanu synchronizacji';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ostrzeż, jeśli Omi nie synchronizuje nagrań dłużej niż dobę';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nie synchronizuje się';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Od ponad $hours godzin nie zsynchronizowano żadnego nagrania z Twojego Omi. Otwórz Omi, aby sprawdzić połączenie z urządzeniem.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nie synchronizuje się';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Od ponad $hours godzin nie zsynchronizowano żadnego nagrania';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Podsumowania dnia na Głównej';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Pokazuj najnowsze podsumowania na górze Głównej.';
+
+  @override
+  String get yearlySwitchTitle => 'Przejdź na roczny';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Oszczędź $amount rocznie';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Oszczędź $amount rocznie, płacąc za rok';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ten sam plan, płatność raz w roku';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price rocznie';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Do zapłaty dziś';
+
+  @override
+  String get yearlySwitchRenews => 'Odnowienie';
+
+  @override
+  String get yearlySwitchCreditNote => 'Zawiera kredyt za resztę tego miesiąca.';
+
+  @override
+  String get yearlySwitchDeclined => 'Płatność odrzucona. Nadal płacisz co miesiąc.';
+
+  @override
+  String get yearlySwitchFailed => 'Nie udało się zmienić. Nadal płacisz co miesiąc.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nie udało się wczytać ceny.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Płatność roczna nie jest teraz dostępna dla Twojego planu.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Płacisz teraz rocznie';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Dziś pobrano $amount. Odnowienie $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Wyślij wiadomość w aplikacji $app. Ten ekran odświeży się, gdy tylko Omi ją odbierze.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Pobierz nowy kod i wyślij go z aplikacji $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Piszemy notatki…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Najpierw kończymy transkrypcję. Możesz opuścić tę stronę.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Obejmuje do $time · pełne notatki na końcu';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkrypcja do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Zapisano $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.';
+
+  @override
+  String get episodeFinishingUp => 'Kończenie…';
 }

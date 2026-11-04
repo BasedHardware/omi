@@ -15,6 +15,8 @@ from pathlib import Path
 SCENARIOS = (
     "cold_start", "scroll_conversations", "open_conversation",
     "tab_switch", "wal_sync_bg_fg",
+    "home_live_preview", "live_episode_page", "device_settings_on_the_way",
+    "home_idle_sync_refresh",
 )
 METRICS = (
     "build_p50_us", "build_p90_us", "build_p99_us",
@@ -24,8 +26,12 @@ METRICS = (
     "worst_build_us", "worst_raster_us", "worst_total_us", "frame_count",
 )
 P90_METRICS = ("build_p90_us", "raster_p90_us", "total_p90_us")
+# Main-isolate stalls (HeavyStallProbe): reported for every window, never variance-gated; most
+# windows have none, and a 0-to-1 change is a finding, not noise.
+STALL_METRICS = ("stalls_over_50ms", "stalls_over_100ms", "stall_blocked_over_100ms_us", "worst_stall_us")
 HEAVY_DATASET = {'conversations': 2000, 'detail_segments': 120, 'wals': 6500,
-                 'wal_files': 6500, 'people': 40, 'task_items': 50}
+                 'wal_files': 6500, 'people': 40, 'task_items': 50,
+                 'live_final_segments': 1000, 'live_preview_interval_ms': 200}
 
 
 def validate(report):
@@ -57,6 +63,10 @@ def validate(report):
             value = metrics.get(name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
                 raise ValueError(f"{scenario}.{name}: missing/invalid metric")
+        for name in STALL_METRICS:
+            value = metrics.get(name)
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{scenario}.{name}: missing/invalid stall metric")
         if metrics["frame_count"] <= 0:
             raise ValueError(f"{scenario}: no engine frames")
         bounds = [metrics.get('start_vm_us'), metrics.get('end_vm_us')]
@@ -130,8 +140,8 @@ def summarize(directory, expected_runs):
     print(f"heavy-account: {len(paths)} runs, {first['build_mode']}, dataset={first.get('dataset')}")
     for scenario in SCENARIOS:
         print(scenario)
-        for metric in METRICS:
-            values = [r["scenarios"][scenario][metric] for r in reports]
+        for metric in METRICS + STALL_METRICS:
+            values = [r["scenarios"][scenario].get(metric) for r in reports]
             suffix = ""
             if metric in P90_METRICS:
                 relative = spread(values)
@@ -194,7 +204,7 @@ def summarize(directory, expected_runs):
         "dataset": first['dataset'], "frame_policy": first['frame_policy'],
         "pacing": first['pacing'], "timeline_enabled": first['timeline_enabled'],
         "scenarios": {scenario: {metric: [r['scenarios'][scenario][metric] for r in reports]
-                                for metric in METRICS} for scenario in SCENARIOS},
+                                for metric in METRICS + STALL_METRICS} for scenario in SCENARIOS},
         "variance_pass": not failures, "variance_failures": failures,
         "acceptance_eligible": eligible,
         "accepted_baseline": eligible and not failures,

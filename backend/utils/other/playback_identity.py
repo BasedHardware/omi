@@ -2,7 +2,19 @@
 
 import hashlib
 import json
+import os
 from typing import Any
+
+from database.audio_timeline import group_chunks_by_coverage
+
+
+def playback_manifest_recovery_enabled() -> bool:
+    """Kill switch for failed-merge retries; unset enables bounded recovery."""
+    return os.getenv('PLAYBACK_MANIFEST_RECOVERY_ENABLED', 'true').strip().lower() == 'true'
+
+
+class PlaybackSourceChanged(RuntimeError):
+    """No immutable source manifest can justify bytes under this artifact key."""
 
 
 def source_fingerprint(chunks: list[dict[str, Any]]) -> str | None:
@@ -34,6 +46,15 @@ def resolve_sources(audio_file: dict[str, Any], chunks: list[dict[str, Any]]) ->
     selected = [chunk for chunk in chunks if chunk['timestamp'] in timestamps]
     if not expected or source_fingerprint(selected) == expected:
         return selected
+    # Listings are chronological, but equal-timestamp siblings can be separate
+    # coverage groups. Resolve only the group whose complete hash was stamped,
+    # never all siblings sharing a lookup key. Sorting also tolerates list order
+    # changes without accepting a generation/checksum change.
+    ordered = sorted(selected, key=lambda chunk: (chunk['timestamp'], chunk['path']))
+    candidates = [ordered, *group_chunks_by_coverage(ordered, gap_threshold=90)]
+    for candidate in candidates:
+        if source_fingerprint(candidate) == expected:
+            return candidate
     aliases = {
         chunk['legacy_timestamp']
         for chunk in chunks
@@ -67,7 +88,7 @@ def resolve_sources(audio_file: dict[str, Any], chunks: list[dict[str, Any]]) ->
     legacy.sort(key=lambda pair: (pair[0]['timestamp'], pair[0]['path']))
     if source_fingerprint([view for view, _ in legacy]) == expected:
         return [current for _, current in legacy]
-    raise RuntimeError('playback source manifest changed')
+    raise PlaybackSourceChanged('playback source manifest changed')
 
 
 def validate_sources(audio_files: list[dict[str, Any]], chunks: list[dict[str, Any]]) -> None:

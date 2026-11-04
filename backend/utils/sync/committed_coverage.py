@@ -16,7 +16,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any, TypeGuard
 
 MAX_LIFETIME_HISTORY = 16
-MAX_CAPTURE_LIFETIME_SKEW_SECONDS = 2.0
+from config.recorded_time_tolerances import FRAME_LIFETIME_SKEW_SECONDS as MAX_CAPTURE_LIFETIME_SKEW_SECONDS
+
 MAX_COMMITTED_RUN_SECONDS = 30.0
 MAX_COMMITTED_RUNS = 32
 MAX_ENVELOPES = 13

@@ -175,7 +175,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -239,7 +239,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -298,7 +298,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed"
    ],
@@ -343,7 +343,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -372,7 +380,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -425,7 +433,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed"
    ],

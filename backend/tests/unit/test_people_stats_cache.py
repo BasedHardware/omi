@@ -791,7 +791,7 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
     monkeypatch.setattr(
         effects,
         'run_assignment_transaction',
-        lambda client, assign: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
+        lambda client, assign, **kwargs: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
     )
     monkeypatch.setattr(learning, 'extract_learning_receipt_markers', lambda *a, **k: None)
     monkeypatch.setattr(
@@ -878,11 +878,11 @@ def test_assign_sync_conversation_invalidates_once_after_size_limit_retry(writer
 
 
 def _allow_unlocked_data_plane(monkeypatch):
-    import database.account_deletion_marker as marker
+    from database import _client
 
     miss = SimpleNamespace(exists=False, to_dict=lambda: None)
     monkeypatch.setattr(
-        marker,
+        _client,
         'get_data_plane_firestore_client',
         lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
     )

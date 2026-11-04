@@ -11,6 +11,7 @@ import time
 
 from typing import Any, Awaitable, Callable
 
+from config.cap_recovery_pacing import BURST_SECONDS as PACING_BURST_SECONDS, limits as pacing_limits
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import recovery_admission_enabled as enabled, any_recovery_admission_enabled, hold_lane
 from database import users as users_db
@@ -24,6 +25,7 @@ from utils import funded_processing
 from utils.sync import cap_hold, cap_hold_reservations, cap_recovery_plan, cap_work_budget
 from utils.sync.cap_hold_erasure import erase as _erase
 from utils.observability.held_content import record_recovery, record_pacing
+from utils.observability.reasons import HeldRecoverySkipOutcome
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from utils.sync.held_coverage import piece_state, covered_receipt
@@ -74,7 +76,8 @@ async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
 
 
 def _new_dispatch_allowed(uid: str, lane: str) -> bool:
-    if not enabled(uid, lane) or not sync_allowed(uid, lane=lane):
+    """Rechecked before every new provider request, so a lapse between pieces stops spend."""
+    if not enabled(uid, lane) or not funded_processing.paid_owner(uid) or not sync_allowed(uid, lane=lane):
         return False
     restricted, _ = get_hard_restriction_status(uid)
     return not restricted and not is_daily_audio_ceiling_exceeded(uid)
@@ -294,6 +297,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                             else {}
                         ),
                         lineage_binding=context.get('lineage_binding'),
+                        early_capture_offset=context.get('early_capture_offset', 0.0),
                         sync_lane=meta.get('sync_lane', 'fresh'),
                         cap_recovery=True,
                         cap_dispatch_lane=lane,
@@ -419,19 +423,94 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
-async def _selected_lane(uid: str, row: dict) -> str | None:
-    """The hold's original dispatch lane when this owner and lane are in recovery scope, else None.
+async def _scope(uid: str, row: dict) -> tuple[str | None, HeldRecoverySkipOutcome | None]:
+    """(original dispatch lane, None) when in recovery scope, else (None, why it is not).
 
-    Recovery scope = execution admission plus main's optional recovery cohort (#22991)."""
+    Recovery scope = execution admission plus main's optional recovery cohort (#22991),
+    for an owner on an active paid plan. Free holds stay held on every lane."""
     if not any_recovery_admission_enabled(uid):
-        return None
+        return None, HeldRecoverySkipOutcome.OUT_OF_SCOPE
+    if not await run_blocking(db_executor, funded_processing.paid_owner, uid):
+        return None, HeldRecoverySkipOutcome.NOT_PAID
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
     lane = hold_lane(meta)
-    return lane if lane is not None and enabled(uid, lane) else None
+    if lane is None:
+        return None, HeldRecoverySkipOutcome.UNKNOWN_ORIGIN
+    return (lane, None) if enabled(uid, lane) else (None, HeldRecoverySkipOutcome.OUT_OF_SCOPE)
+
+
+async def _selected_lane(uid: str, row: dict) -> str | None:
+    """The hold's original dispatch lane when this owner and lane are in recovery scope, else None."""
+    return (await _scope(uid, row))[0]
+
+
+async def recovery_skip(uid: str, row: dict) -> HeldRecoverySkipOutcome | None:
+    """Why this hold is out of recovery scope, or None when it is selected."""
+    return (await _scope(uid, row))[1]
 
 
 async def selected_for_recovery(uid: str, row: dict) -> bool:
-    return await _selected_lane(uid, row) is not None
+    return await recovery_skip(uid, row) is None
+
+
+async def _handoff_paced(uid: str, snapshot: Any, row: dict) -> bool:
+    """The legacy recovery pacing budget, spent once per batch hand-off attempt.
+
+    Draining moves held recovery from ``_recover_row`` (paced per piece) to batch admission, which
+    had no pacing at all. A whole hold is charged at most one full bucket: a hold larger than the
+    burst would otherwise be refused as oversized on every sweep and never recover.
+    """
+    seconds = cap_hold.remaining_seconds(row)
+    if seconds <= 0:
+        return True  # nothing left to transcribe; reserve() would refuse a zero cost on every sweep
+    try:
+        cost = min(seconds, pacing_limits().audio_per_second * PACING_BURST_SECONDS)
+    except (ValueError, TypeError):
+        cost = seconds  # invalid capacity env: reserve() refuses it and the hold stays held
+    pacing = await run_blocking(db_executor, cap_recovery_pacing.reserve, cost)
+    now = time.time()
+    if pacing.outcome != 'granted':
+        since = row.get('pacing_deferred_since') or now
+        if await _save(
+            uid,
+            snapshot,
+            row,
+            {
+                'next_attempt_at': now + pacing.retry_after,
+                'pacing_deferred_since': since,
+                'pacing_reason': pacing.reason,
+            },
+        ):
+            record_pacing(pacing.outcome, cost, now - since)
+        return False
+    record_pacing('granted', cost)
+    if row.get('pacing_deferred_since'):
+        return await _save(uid, snapshot, row, {'pacing_deferred_since': 0, 'pacing_reason': '', 'next_attempt_at': 0})
+    return True
+
+
+async def finish_handoff(uid: str, snapshot: Any, row: dict[str, Any] | None = None) -> bool:
+    """Erase a handed-off hold's audio once its batch content is durably completed.
+
+    Until then this hold is the only copy outside the staged batch object, which the batch
+    bucket may expire by age. Unprojected or unreadable: keep the audio and let a later sweep
+    retry. Erasing twice is harmless (missing objects are skipped; the row is deleted or purged).
+    """
+    from utils.batch_pipeline import cap_hold_admission
+
+    current: dict[str, Any] = row if row is not None else (snapshot.to_dict() or {})
+    job_id = current.get('batch_job_id')
+    if current.get('state') != 'batch_admitted' or not job_id:
+        return False
+    try:
+        projected = await run_blocking(db_executor, cap_hold_admission.handoff_projected, uid, job_id)
+    except Exception as error:
+        logger.warning('event=cap_hold_handoff outcome=status_deferred exception_type=%s', type(error).__name__)
+        return False
+    if not projected:
+        return False
+    await run_blocking(storage_executor, _erase, uid, snapshot, current)
+    return True
 
 
 async def recover_selected(uid: str, snapshot: Any) -> bool:
@@ -444,9 +523,9 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
         await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
         return True
     if row.get('state') == 'batch_admitted':
-        # Terminal hand-off (lane 8): batch owns this audio. Only finish an interrupted erase; never
-        # claim, re-admit, or settle it (settlement would bill the batch-processed audio twice).
-        await run_blocking(storage_executor, _erase, uid, snapshot, row)
+        # Terminal hand-off (lane 8): batch owns this audio. Only erase once batch has projected it;
+        # never claim, re-admit, or settle it (settlement would bill the batch-processed audio twice).
+        await finish_handoff(uid, snapshot, row)
         return True
     row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
     if row is None:
@@ -454,8 +533,10 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
     try:
         from utils.batch_pipeline import cap_hold_admission
 
-        if await run_blocking(db_executor, cap_hold_admission.enabled_for, row):
+        if await run_blocking(db_executor, cap_hold_admission.enabled_for, row, uid=uid):
             if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
+                return False
+            if not await _handoff_paced(uid, snapshot, row):
                 return False
             admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
             if admitted.outcome == 'covered':
@@ -480,8 +561,14 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
             )
             if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
                 return False
-            await run_blocking(storage_executor, _erase, uid, snapshot, row)
+            # The hold keeps its audio until batch projects it: finish_handoff erases it then.
             return True
+        from utils import backlog_release
+
+        if backlog_release.source.get() is not None:
+            # An automatic release never falls back to legacy STT, outside the idle gate and the
+            # vendor table. Its worker rereads the hold and passes over legacy-started audio.
+            return False
         if not await _recover_row(uid, snapshot, row):
             return False
         if not await _save(uid, snapshot, row, {'state': 'completed'}):

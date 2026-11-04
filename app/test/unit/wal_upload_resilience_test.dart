@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -382,6 +383,57 @@ void main() {
       expect(result?.localUploadFailures, 1, reason: 'the last budgeted attempt is still made');
       expect(sync.testWals.first.isSyncing, false);
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // A network switch under an open upload: iOS fails the socket with
+  // EADDRNOTAVAIL (errno 49), and package:http reports it as a bare
+  // ClientException("Can't assign requested address"). The recording must stay
+  // queued with its retry budget, the failure must not read as a permanent
+  // refusal, and the next pass must upload the same file.
+  // -------------------------------------------------------------------------
+
+  group('network switch mid-upload (EADDRNOTAVAIL)', () {
+    final uri = Uri.parse('https://api.omi.me/v2/sync-local-files?audio_start_seconds=1792927415.0');
+    final failures = <String, Object>{
+      'bare ClientException': http.ClientException("Can't assign requested address", uri),
+      'SocketException errno 49':
+          const SocketException('Write failed', osError: OSError("Can't assign requested address", 49)),
+    };
+
+    for (final MapEntry(key: label, value: failure) in failures.entries) {
+      test('$label keeps the recording queued and the next pass uploads it', () async {
+        const filename = 'handover_audio_8000.bin';
+        final file = File('${tempDir.path}/$filename');
+        await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
+        final wal = _makeWal(timerStart: 8000, filePath: filename);
+        sync.testWals = [wal];
+        uploadFailure = failure;
+
+        final failed = await sync.syncAll();
+
+        expect(failed?.localUploadFailures, 1);
+        expect(failed?.localUploadPermanentFailures, 0, reason: 'a network switch is not a refusal of the audio');
+        expect(failed?.localUploadPermanentError, isNull);
+        expect(wal.status, WalStatus.miss);
+        expect(wal.retryCount, 0);
+        expect(wal.isSyncing, isFalse);
+        expect(isAutoUploadEligible(wal), isTrue, reason: 'the next automatic pass must pick it up');
+        expect(file.existsSync(), isTrue, reason: 'the audio is never dropped');
+
+        uploadResponse = (files) async => UploadFilesResult.queued('job-after-switch');
+        final recovered = await sync.syncAll();
+
+        expect(recovered?.localUploadFailures, 0);
+        expect(uploadAttempts, [
+          [filename],
+          [filename],
+        ]);
+        expect(wal.status, WalStatus.uploaded);
+        expect(wal.jobId, 'job-after-switch');
+        expect(file.existsSync(), isTrue, reason: 'the file is kept until the server confirms the job');
+      });
+    }
   });
 
   // -------------------------------------------------------------------------

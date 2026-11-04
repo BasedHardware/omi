@@ -8,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -82,6 +83,7 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
   @override
   void initState() {
     super.initState();
+    PaywallPacing.markShown();
     WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
   }
 

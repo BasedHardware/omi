@@ -166,6 +166,8 @@ def forget_request_reads(uid):
 # These are correctness limits, not merely tunable defaults.
 _CACHE_TTLS = {
     'deletion_marker_cache': ('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+    'legal_hold_fence_cache': ('FSR_LEGAL_HOLD_NEGATIVE_TTL_SECONDS', 30),
+    'tombstone_negative_cache': ('FSR_TOMBSTONE_NEGATIVE_TTL_SECONDS', 30),
     'subscription_cache': ('FSR_SUBSCRIPTION_TTL_SECONDS', 60),
     'usage_month_cache': ('FSR_USAGE_MONTH_TTL_SECONDS', 60),
     'serving_config_cache': ('FSR_SERVING_CONFIG_TTL_SECONDS', 300),
@@ -263,9 +265,19 @@ def _json_hook(value):
     return value
 
 
-def cached_read(family, uid, variant, fetch, *, seconds=60, cacheable=lambda value: True, validate=lambda value: True):
+def cached_read(
+    family,
+    uid,
+    variant,
+    fetch,
+    *,
+    seconds=60,
+    cacheable=lambda value: True,
+    validate=lambda value: True,
+    shadow=False,
+):
     """CAS publication prevents a read started before a write from repopulating."""
-    if _bypass.get() or family in _fresh_families.get() or not lever_enabled(family, uid):
+    if _bypass.get() or family in _fresh_families.get() or (not shadow and not lever_enabled(family, uid)):
         return fetch()
     env_name, maximum = _CACHE_TTLS[family]
     seconds = min(max(1, seconds), ttl(env_name, maximum))

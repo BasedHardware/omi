@@ -1,12 +1,16 @@
 """Wire models for L5 from-segments ingestion (re-exported by developer.py)."""
 
 from datetime import datetime
-from typing import Any, List, Literal, Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from typing import Any, Callable, List, Literal, Optional
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 from models.calendar_context import DevCalendarMeetingContext
 from models.conversation_enums import ConversationSource
 from models.geolocation import GeolocationInput
 from routers import developer_segments
+
+# Mirror of client_session_id's AliasChoices order, so the flag below sees the
+# same key pydantic resolves the field from.
+_CLIENT_SESSION_ID_ALIAS_KEYS = ('client_session_id', 'client_conversation_id', 'session_id', 'client_id')
 
 
 class DevTranscriptSegment(BaseModel):
@@ -93,6 +97,49 @@ class CreateConversationFromTranscriptRequest(developer_segments.ContinuationFie
     # enum here previously fell out of sync with the desktop client's finalization
     # reasons, causing every upload carrying a newer reason to fail with a 422.
     conversation_finalization_reason: Optional[str] = None
+
+    # A blank id is normalized away above, but whether the client *sent* one is
+    # kept: a sent-blank upload must derive a stable retry identity server-side
+    # instead of falling into the unkeyed create path (BasedHardware/omi#15500;
+    # Luna review of #23886). An id that was never sent stays unkeyed, so the
+    # public API contract for omitted ids is unchanged.
+    _sent_blank_client_session_id: bool = PrivateAttr(default=False)
+
+    @property
+    def sent_blank_client_session_id(self) -> bool:
+        return self._sent_blank_client_session_id
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def _remember_sent_blank_client_session_id(
+        cls, values: Any, handler: Callable[[Any], 'CreateConversationFromTranscriptRequest']
+    ) -> 'CreateConversationFromTranscriptRequest':
+        parsed = handler(values)
+        if isinstance(values, dict):
+            for alias in _CLIENT_SESSION_ID_ALIAS_KEYS:
+                if alias in values:
+                    if isinstance(values[alias], str) and not values[alias].strip():
+                        parsed._sent_blank_client_session_id = True
+                    break
+        return parsed
+
+    @field_validator('client_session_id', mode='before')
+    @classmethod
+    def blank_client_session_id_is_absent(cls, value: Any) -> Any:
+        """Treat a blank client_session_id as if it were not sent.
+
+        This field is optional metadata: the id only exists so retries dedupe,
+        and every caller already handles its absence. Rejecting the request on
+        a blank value strands the only copy of a transcript — clients that
+        persist a blank id retry the identical bytes forever (measured
+        2026-10: ~16k 422s/day against this validator, stuck sessions from
+        builds that stored empty client ids). Running before the length
+        constraints also keeps `min_length=1` in the published schema honest
+        for ids that carry content.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator('client_session_id')
     @classmethod

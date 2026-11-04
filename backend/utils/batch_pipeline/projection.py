@@ -8,14 +8,15 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_
 from config.policy import ProjectionPolicy
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
+from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from google.api_core.exceptions import NotFound
 import threading
 import time
 import math
 import logging
 from typing import TYPE_CHECKING, Callable, NamedTuple, cast
-from uuid import NAMESPACE_URL, uuid5
 
 from config.batch_pipeline import (
     owner_drain_enabled,
@@ -23,6 +24,7 @@ from config.batch_pipeline import (
     projection_pending_page_enabled,
     projection_predecessor_replay_enabled,
     projection_prefetch_depth,
+    projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
@@ -38,14 +40,20 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
+from utils.batch_pipeline import artifact_missing
+from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
+from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
-from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
-from utils.sync.assignment_errors import SyncAssignmentSuperseded
-from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
+from utils.batch_pipeline.projection_segments import projection_segments
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentSuperseded,
+)
+from utils.stt.transcript_admission import filter_admission
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -126,21 +134,6 @@ def error_type(error: BaseException) -> str:
     return type(error).__name__
 
 
-def error_site_field(error: BaseException) -> str:
-    """` site=<file>:<line>` of the innermost backend frame; static code location only."""
-    import os
-    import traceback
-
-    try:
-        frames = traceback.extract_tb(error.__traceback__)
-    except Exception:
-        return ''
-    for frame in reversed(frames):
-        if 'site-packages' not in frame.filename and 'dist-packages' not in frame.filename:
-            return f' site={os.path.basename(frame.filename)}:{frame.lineno}'
-    return ''
-
-
 def fence_reason_field(error: BaseException) -> str:
     """Bounded privacy-fence reason for an error log line; never IDs or text."""
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -160,6 +153,92 @@ def projection_block_reason(error: BaseException) -> str:
     if type(reason) is str and reason in BATCH_PROJECTION_BLOCK_REASONS:
         return reason
     return 'other'
+
+
+# Bounded retry for a failing owner-chain head. Infrastructure contention and
+# fresh awaiting-writer conflicts may keep a head waiting, but not forever:
+# once a head has failed for this long it takes the held disposition so the
+# chain can advance (audio retained; a reviewed redrive owns the unit).
+PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
+
+# Result-row fields stamping a bounded-retry head's first failure. Written
+# once per failure episode; the release redrive clears them with the receipt.
+PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
+PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
+
+
+def projection_exception_transient(error: BaseException) -> bool:
+    """Whether a failing step is infrastructure contention, not content poison.
+
+    Keeps the exception taxonomy's declared retryable kinds waiting (#23946):
+    storage/authorization OSErrors (PermissionError included) wait for the
+    sweep, under this rule's durable bound, never a first-failure hold.
+    """
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from google.api_core import exceptions as api_exceptions
+
+    if isinstance(error, (ConnectionError, TimeoutError, OSError, FirestoreContentionExhausted)):
+        return True
+    if isinstance(
+        error,
+        (
+            api_exceptions.Aborted,
+            api_exceptions.BadGateway,
+            api_exceptions.DeadlineExceeded,
+            api_exceptions.ServiceUnavailable,
+            api_exceptions.TooManyRequests,
+            api_exceptions.ResourceExhausted,
+            api_exceptions.InternalServerError,
+            api_exceptions.GatewayTimeout,
+        ),
+    ):
+        return True
+    # google-cloud-firestore's exhausted commit retry: contention, not content.
+    return type(error) is ValueError and isinstance(error.__cause__, api_exceptions.Aborted)
+
+
+def payload_contract_violation(error: BaseException) -> bool:
+    """Whether retrying the same committed bytes cannot fix this error.
+
+    Every other ValueError on the assignment path is a contract violation of
+    the committed result or manifest (spans, split, word bounding, source
+    decode). A tampered or wrongly-keyed artifact body fails authenticated
+    decryption as ``InvalidTag`` — equally permanent. Firestore commit
+    contention also surfaces as ``ValueError`` and must stay retryable;
+    ``error_type`` names that shape ``FirestoreContentionExhausted``.
+    """
+    if isinstance(error, InvalidTag):
+        return True
+    return isinstance(error, ValueError) and error_type(error) != 'FirestoreContentionExhausted'
+
+
+# The contract catch shape: both classes can carry a permanent payload
+# violation; payload_contract_violation decides which instances disposition.
+PAYLOAD_CONTRACT_ERRORS = (ValueError, InvalidTag)
+
+
+def head_holds_without_retry(error: BaseException, job: dict | None, *, now: float | None = None) -> bool:
+    """The generic poison-head rule: only a writer or infrastructure may keep
+    a chain head waiting. Everything else holds the unit on first failure.
+
+    The assign seams already disposition payload-contract violations and
+    structural conflicts (#23946, #23932); this walk/sweep-level rule is the
+    floor beneath every other escaping kind, and the backstop for a contract
+    ValueError raised outside those seams.
+    """
+    if payload_contract_violation(error):
+        return True
+    if projection_exception_transient(error):
+        return False
+    if isinstance(error, SyncAssignmentConflict) and not quarantines_assignment_conflict(error, job, now=now):
+        # Awaiting-writer on a fresh row: the writer may still land.
+        return False
+    return True
+
+
+def head_retry_bound_exceeded(entry: dict, now: float) -> bool:
+    since = entry.get(PROJECTION_HEAD_BLOCKED_SINCE)
+    return isinstance(since, (int, float)) and now - since > PROJECTION_HEAD_RETRY_SECONDS
 
 
 @contextmanager
@@ -198,62 +277,24 @@ def build_incoming(
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
     from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-    from utils.stt.pre_recorded import postprocess_words
     from utils.sync.capture import chunk_identity
 
-    duration = float(payload['audio_seconds'])
-    if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
-        raise ValueError('result audio duration differs from admitted capture')
-    # Model clocks may exceed EOF by the validator's 10 ms tolerance. Bound
-    # words to real PCM, and keep its precision through the legacy grouper:
-    # rounding to centiseconds can otherwise create a decoded coverage hole.
-    words = bounded_projection_words(payload['words'], duration)
-    # The existing final-pass aligner abstains in diarization gaps; the existing
-    # prerecorded grouper supplies the same sentence/segment shapes as sync.
-    aligned = align_projection_words(words, payload, item.segment_id)
-    authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and payload.get(
-        'recovery_version'
-    ) != 1
-    if authoritative:
-        # The legacy grouper imputes None from adjacent voices. Keep each gap an
-        # explicit anonymous abstention instead of borrowing a speaker/owner.
-        gap = 0
-        in_gap = False
-        prepared = []
-        for word in aligned:
-            if word['speaker'] is None:
-                if not in_gap:
-                    gap += 1
-                in_gap = True
-                word = {**word, 'speaker': f'BATCH_UNASSIGNED_{item.segment_id}_{gap}'}
-            else:
-                in_gap = False
-            prepared.append(word)
-        aligned = prepared
-    segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0, preserve_timestamps=True)
-    if not segments:
-        raise ValueError('successful batch result produced no transcript')
-    # Legacy sync transcribes a VAD-isolated file whose capture timestamp is
-    # already shifted. Batch words cover the full capture; undo the grouper's
-    # first-word normalization to keep absolute speech/playback clocks intact.
-    offset = float(words[0]['timestamp'][0])
-    for index, segment in enumerate(segments):
-        segment.start += offset
-        segment.end += offset
-        segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
-        segment.speaker_id_scope = (
-            f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
-        )
-        segment.stt_provider = payload.get('words_provider')
-        if authoritative:
-            abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
-            segment.is_user, segment.person_id = False, None
-            segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
-            segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
+    segments = projection_segments(item, binding, payload, batch_segment_id=batch_segment_id, policy=policy)
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
+    finished = datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc)
+    # Projected sync must use the same narrow admission rules as legacy sync.
+    # Keep original clocks/accounting; shadow retains the identical segments.
+    segments, admission_receipts = filter_admission(item.owner_id, segments, origin='sync')
+    for reason in sorted({receipt.rule for receipt in admission_receipts}):
+        logger.info(
+            'event=batch_media_admission reason=%s count=%d serving=%s',
+            reason,
+            sum(receipt.rule == reason for receipt in admission_receipts),
+            str(any(receipt.dropped for receipt in admission_receipts)).lower(),
+        )
     create = CreateConversation(
         started_at=started,
-        finished_at=datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc),
+        finished_at=finished,
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
@@ -399,6 +440,8 @@ class Projector:
         # Upload dedupe of the held-partial pass in flight; spans budget stops
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
+        # Resume point of the held-release scan; a short page wraps it.
+        self.release_after: str | None = None
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -432,12 +475,12 @@ class Projector:
             requests, self.drain_requests = self.drain_requests, {}
         self.drains.request(requests)
 
-    def schedule_index_flush(self) -> None:
-        """Converge owed search/people-stats work off the chain. Event-loop thread only."""
+    def schedule_index_flush(self, owner_id: str | None = None) -> None:
+        """Converge owed search work off-chain, optionally for one owner."""
         from utils.executors import db_executor, run_blocking, start_background_task
 
-        if self.index.owed:
-            start_background_task(run_blocking(db_executor, self.index.flush), name='batch_projection_index')
+        if self.index.owed if owner_id is None else self.index.has_owed(owner_id):
+            start_background_task(run_blocking(db_executor, self.index.flush, owner_id), name='batch_projection_index')
 
     def persist(self, segment_id: str) -> None:
         """Only ordered assignment holds the owner claim; receipts are the outbox."""
@@ -457,15 +500,15 @@ class Projector:
                 raise ProjectionBlocked('projection assignment claim busy')
             return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
 
-    async def start_followups(self, priority=()):
+    async def start_followups(self, priority=(), *, discover=True):
         # Imported lazily: the synchronous worker seam remains lightweight.
         from utils.batch_pipeline.projection_followup import ProjectionFollowups
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
         with self.handoff:
-            tail, self.chain_followups = self.chain_followups, []
-        await self.followups.schedule(priority, tail=tail)
+            tail, self.chain_followups = (self.chain_followups, []) if discover else ((), self.chain_followups)
+        await self.followups.schedule(priority, tail=tail, discover=discover)
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
@@ -547,13 +590,19 @@ class Projector:
                 # Without the pre-check this is the replay it would have seen.
             except SyncAssignmentSuperseded:
                 self.supersede(session)
+            except SyncAssignmentConflict as error:
+                if not quarantines_assignment_conflict(error, job, now=self.clock()):
+                    raise
+                receipt = persist_disposition(session, quarantined=True)
+                if receipt.get('state') == 'quarantined':
+                    log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     raise
                 persist_disposition(session, privacy_deleted=True)
         else:
             with projection_phase('assignment', policy):
-                self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint)
+                self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint, job=job)
 
     def _payload(self, item, entry, hint):
         prefetched = hint.prefetched if hint is not None else None
@@ -729,6 +778,30 @@ class Projector:
             if max_pages is not None and pages >= max_pages:
                 return counts
 
+    def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
+        """One bounded page of held units whose record target may be restored."""
+        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_scan_pass
+
+        enabled = projection_hold_recovery_enabled()
+        started = time.monotonic()
+        counts, self.release_after = release_scan_pass(
+            self.store,
+            limit=limit if limit is not None else RELEASE_PAGE if enabled else HELD_PARTIAL_PAGE,
+            after_id=self.release_after,
+            now=self.clock(),
+            deadline=time.monotonic() + RELEASE_TICK_SECONDS if enabled else None,
+        )
+        if counts.get('examined'):
+            logger.info(
+                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d',
+                counts['released'],
+                counts['examined'],
+                counts['waiting'],
+                counts['error'],
+                int((time.monotonic() - started) * 1000),
+            )
+        return counts
+
     def assign_record_silence(self, item, binding, session, *, hint=None):
         incoming = {
             'id': binding.target_conversation_id,
@@ -737,6 +810,7 @@ class Projector:
             'transcript_segments': [],
             'data_protection_level': binding.data_protection_level,
             '_batch_require_live_target': True,
+            '_batch_redrive_target': bool(session.entry.get('projection_redriven_at')),
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
         try:
@@ -758,42 +832,109 @@ class Projector:
     def _mirror_assignment(self, session) -> None:
         mirror_assignment(self.store, session)
 
-    def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None):
+    def _note_head_blocked(self, segment_id: str, error: BaseException) -> None:
+        """Stamp a bounded-retry head's first failure time; one write per episode."""
+
+        def commit(transaction):
+            row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
+            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
+                'pending',
+                'persisted',
+                'ready',
+            ):
+                return False
+            transaction.update(
+                self.store.ref('results', segment_id),
+                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: error_type(error)},
+            )
+            return True
+
+        try:
+            self.store.run(commit)
+        except Exception as note_error:
+            logger.warning(
+                'event=batch_projection action=head_block_note outcome=retry exception_type=%s',
+                error_type(note_error),
+            )
+
+    def _hold_failing_head(self, segment_id: str, job: dict, binding: ProjectionBinding) -> bool:
+        """Hold a poison head: quarantine_held receipt, audio retained, watermark advanced."""
+        try:
+            policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+            session = self.store.session(segment_id, binding, self.clock(), policy=policy)
+            persist_disposition(session, quarantined=True)
+            return True
+        except Exception as error:
+            logger.error(
+                'event=batch_projection action=poison_hold outcome=retry exception_type=%s%s',
+                error_type(error),
+                error_site_field(error),
+            )
+            return False
+
+    def resolve_failing_head(self, segment_id, job, entry, binding, error: BaseException) -> bool:
+        """The generic poison-head rule at a chain head (lead ruling 5d2ae7).
+
+        A non-transient exception nothing can resolve holds this unit and
+        advances the watermark; transient failures and fresh awaiting-writer
+        conflicts retry with a durable bound. ``ProjectionBlocked`` and privacy
+        fences keep their own, more precise dispositions and never pass here.
+        """
+        if head_holds_without_retry(error, job, now=self.clock()) or head_retry_bound_exceeded(entry, self.clock()):
+            return self._hold_failing_head(segment_id, job, binding)
+        self._note_head_blocked(segment_id, error)
+        return False
+
+    def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None):
         policy = policy or self.store.policy(item.segment_id)
         from database.conversations import get_closest_conversation_to_timestamps
         from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
         from utils.batch_pipeline.projection_parts import split_result
 
-        with projection_phase('load_result', policy):
-            payload = self._payload(item, entry, hint)
-        if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
-            raise ProjectionBlocked('recovery result requires recovery handoff')
-        speech = payload.get('speech_seconds')
-        if (
-            not isinstance(speech, (int, float))
-            or isinstance(speech, bool)
-            or not math.isfinite(speech)
-            or not 0 < speech <= float(payload['audio_seconds'])
-        ):
-            raise ProjectionBlocked('validated VAD speech accounting required')
-        if binding.record_origin:
-            projection_speech_spans(payload, item.duration_seconds)
-        parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
-        from utils.capture.batch_coverage import optional_manifest
+        try:
+            with projection_phase('load_result', policy):
+                payload = self._payload(item, entry, hint)
+            if not isinstance(payload, dict):
+                # load_result is json.loads over the committed artifact: a
+                # valid non-object body must take the contract disposition,
+                # not an AttributeError that wedges the chain head.
+                raise ValueError('batch result must be a JSON object')
+            if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
+                raise ProjectionBlocked('recovery result requires recovery handoff')
+            speech = payload.get('speech_seconds')
+            if (
+                not isinstance(speech, (int, float))
+                or isinstance(speech, bool)
+                or not math.isfinite(speech)
+                or not 0 < speech <= float(payload['audio_seconds'])
+            ):
+                raise ProjectionBlocked('validated VAD speech accounting required')
+            if binding.record_origin:
+                projection_speech_spans(payload, item.duration_seconds)
+            parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
+            from utils.capture.batch_coverage import optional_manifest
 
-        manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
-        if item.requires_compute_admission:
-            if self.fetch_audio is None:
-                raise ProjectionBlocked('authenticated intake manifest loader required')
-            from utils.batch_pipeline.audio import read_context
+            manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
+            if item.requires_compute_admission:
+                if self.fetch_audio is None:
+                    raise ProjectionBlocked('authenticated intake manifest loader required')
+                from utils.batch_pipeline.audio import read_context
 
-            with projection_phase('manifest', policy):
-                prefetched = hint.prefetched if hint is not None else None
-                if prefetched is not None and prefetched.manifest is not None:
-                    manifest = prefetched.manifest
-                else:
-                    manifest = read_context(self.fetch_audio(item))
-        require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
+                with projection_phase('manifest', policy):
+                    prefetched = hint.prefetched if hint is not None else None
+                    if prefetched is not None and prefetched.manifest is not None:
+                        manifest = prefetched.manifest
+                    else:
+                        manifest = read_context(self.fetch_audio(item))
+            require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
+        except PAYLOAD_CONTRACT_ERRORS as error:
+            if not payload_contract_violation(error):
+                raise
+            # The committed result/manifest itself violates the contract: no
+            # retry can fix those bytes, and an unhandled raise would wedge
+            # every later capture behind this chain head.
+            self._quarantine_payload_contract(item, binding, policy, error)
+            return
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
@@ -841,14 +982,18 @@ class Projector:
                             batch_segment_id=item.segment_id,
                             policy=policy,
                         )
-                    session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
+                    if incoming['transcript_segments']:
+                        session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
                     if binding.record_origin:
                         incoming['_batch_replace_live'] = {
                             'start': item.capture_at,
                             'end': item.capture_at + item.duration_seconds,
+                            **({'preserve_existing': True} if binding.partial_record else {}),
                         }
                     if (binding.record_origin or policy.require_live_target) and context.target_id:
                         incoming['_batch_require_live_target'] = True
+                    if entry.get('projection_redriven_at'):
+                        incoming['_batch_redrive_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
                     if context.lineage_eligible:
@@ -863,7 +1008,7 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None:
+                    if context.target_id is None and incoming['transcript_segments']:
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
@@ -900,14 +1045,18 @@ class Projector:
                         )
                         receipt = receipt_box[0]
                         record_labels(assigned[2])
-                        if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
-                            log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:
                 receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
+            except SyncAssignmentConflict as error:
+                if not quarantines_assignment_conflict(error, job, now=self.clock()):
+                    raise
+                receipt = persist_disposition(session, quarantined=True)
+                if receipt.get('state') == 'quarantined':
+                    log_conflict_hold(error)
             except BatchPrivacyBlocked as error:
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     if policy.projection_contention:
@@ -918,6 +1067,10 @@ class Projector:
                         )
                     raise
                 receipt = persist_disposition(session, privacy_deleted=True)
+            except PAYLOAD_CONTRACT_ERRORS as error:
+                if not payload_contract_violation(error):
+                    raise
+                receipt = self._quarantine_payload_contract(item, binding, policy, error, session=session)
             except Exception as error:
                 if policy.projection_contention:
                     logger.error(
@@ -928,6 +1081,21 @@ class Projector:
                 raise
             if finish:
                 self.finish_part(item, binding, receipt, index, policy=policy)
+
+    def _quarantine_payload_contract(self, item, binding, policy, error, *, session=None):
+        """Hold a committed payload that can never validate: the walk retries a
+        chain head forever, so an unhandled contract ``ValueError`` wedges every
+        later capture behind it. Same held disposition as a structural
+        assignment conflict: quarantine receipt, watermark advance, recovery
+        owns the unit, audio retained."""
+        session = session or self.store.session(item.segment_id, binding, self.clock(), policy=policy)
+        receipt = persist_disposition(session, quarantined=True)
+        logger.warning(
+            'event=batch_projection action=assignment outcome=payload_contract_quarantined exception_type=%s%s',
+            error_type(error),
+            error_site_field(error),
+        )
+        return receipt
 
     def supersede(self, session):
         return persist_disposition(session)
@@ -1023,7 +1191,10 @@ class Projector:
                 )
         if not survivors:
             return
-        audio = self.fetch_audio(item)
+        try:
+            audio = self.fetch_audio(item)
+        except NotFound:  # Transcript is projected; close like a no-survivor input.
+            return artifact_missing.record('playback')
         audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
         if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
             import io
@@ -1234,6 +1405,7 @@ class Projector:
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
                 continue
+            job = entry = binding = None
             try:
                 prefetched = None
                 if prefetch is not None:
@@ -1272,7 +1444,19 @@ class Projector:
                 break
             except Exception as error:
                 failed(error)
-                break
+                if binding is None or not self.resolve_failing_head(segment_id, job, entry, binding, error):
+                    break
+                # Held (or already terminal): continue iff the chain advanced.
+                try:
+                    watermark = self.store.projection_watermark(key)
+                except Exception as watermark_error:
+                    failed(watermark_error)
+                    break
+                if watermark != segment_id:
+                    break  # the hold did not land; the sweep retries this head
+                previous = segment_id
+                advanced.append(segment_id)
+                continue
             try:
                 watermark = self.store.projection_watermark(key)
             except Exception as error:
@@ -1327,6 +1511,7 @@ class Projector:
             if segment_id in chained:
                 continue
             binding = None
+            job = entry = None
             try:
                 job, entry, binding = self.store.read(segment_id)
                 if drain and (binding.owner_id in self.draining or binding.owner_id in handed):
@@ -1388,6 +1573,12 @@ class Projector:
                     error_type(error),
                     error_site_field(error),
                 )
+                if job is not None and binding is not None:
+                    # Same generic poison-head rule as the walk: a page row
+                    # whose step fails terminally holds instead of re-erroring
+                    # on every pass.
+                    if self.resolve_failing_head(segment_id, job, entry, binding, error):
+                        counts['blocked'] += 1
                 continue
             if chain and entry.get('projection_state') == 'pending':
                 # This row was assignable and passed every fence: keep walking

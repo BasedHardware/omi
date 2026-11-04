@@ -444,7 +444,7 @@ async def _run_coordinator(module, **kwargs):
         parakeet_service=MagicMock(return_value=PARAKEET),
         finalize=MagicMock(),
     )
-    await module._run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
+    await module.run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
     return seen, module._finalize_sync_job_for_run.call_args.args[2]
 
 
@@ -515,7 +515,7 @@ async def test_coordinator_retries_provider_unavailable_instead_of_finalizing(co
     coordinator.process_segment = segment
     coordinator.minimal_redrive = minimal_redrive
     with pytest.raises(TranscriptionFailure) as raised:
-        await coordinator._run_full_pipeline_background_async(
+        await coordinator.run_full_pipeline_background_async(
             'job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', task_mode=True
         )
     assert raised.value.error_code == 'sync_minimal_provider_unavailable'

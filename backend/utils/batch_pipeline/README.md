@@ -45,6 +45,8 @@ the minimal upload/status hooks. GPU runtime/model implementations live under
   flight; lease expiry never proves non-preemptible CUDA idle.
 - Only complete multipart projection advances the owner publication cursor.
   Durable privacy checks apply before reads/writes and object publication.
-- All switches default off; production index/GPU/live acceptance belongs to the
-  lead. Tests use synthetic identities, fakes and explicitly bound loopback
+- Switch defaults and kill switches are recorded in the
+  [feature-flag registry](../../docs/feature-flag-registry.md);
+  production index/GPU/live acceptance belongs to the lead.
+  Tests use synthetic identities, fakes and explicitly bound loopback
   Firestore, through `backend/test.sh`.

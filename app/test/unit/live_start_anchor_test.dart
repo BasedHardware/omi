@@ -15,6 +15,43 @@ Episode _episode(DateTime startedAt, {String id = 'ep1'}) => Episode(
 
 void main() {
   group('LiveStartAnchor', () {
+    test('server timer start replaces yesterday restart and follows same-id corrections', () {
+      final anchor = LiveStartAnchor();
+      final previousEnd = DateTime.utc(2026, 10, 28, 18, 32);
+      final started = DateTime.utc(2026, 10, 29, 5, 46);
+      final now = DateTime.utc(2026, 10, 29, 7, 11);
+      anchor.restart(previousEnd);
+      Episode current(DateTime at) =>
+          Episode(id: 'current', live: true, startedAt: at, timerStartedAt: at, lastActivityAt: now);
+      final start = anchor.resolve(episode: current(started), captureStart: previousEnd, streaming: true, now: now);
+      expect(start, started);
+      expect(now.difference(start!), const Duration(hours: 1, minutes: 25));
+      final corrected = started.subtract(const Duration(minutes: 2));
+      expect(
+          anchor.resolve(episode: current(corrected), captureStart: previousEnd, streaming: true, now: now), corrected);
+    });
+
+    test('late uploaded capture time cannot rewind the current episode or a polling gap', () {
+      final anchor = LiveStartAnchor();
+      final recorded = DateTime.utc(2026, 10, 29, 1, 4);
+      final currentStart = DateTime.utc(2026, 10, 29, 5, 46);
+      final now = DateTime.utc(2026, 10, 29, 7, 11);
+      final current = Episode(
+        id: 'current',
+        live: true,
+        startedAt: currentStart,
+        timerStartedAt: currentStart,
+        lastActivityAt: now,
+      );
+      expect(anchor.resolve(episode: current, captureStart: recorded, streaming: true, now: now), currentStart);
+      // A delayed capture timestamp during a short server polling gap cannot
+      // replace the authoritative floor established by the current episode.
+      expect(anchor.resolve(episode: null, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(anchor.resolve(episode: null, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(anchor.resolve(episode: current, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(now.difference(currentStart), const Duration(hours: 1, minutes: 25));
+    });
+
     test('a pendant lease lapsing for a tick keeps the running start', () {
       final anchor = LiveStartAnchor();
       DateTime? at(int s, DateTime? capture) =>
@@ -32,51 +69,80 @@ void main() {
       expect(anchor.resolve(episode: null, captureStart: later, streaming: true, now: later), _t0);
     });
 
-    test('local capture start wins over the server episode start', () {
+    test('live episode start owns elapsed time while the episode is open', () {
       final anchor = LiveStartAnchor();
       final now = _t0.add(const Duration(minutes: 8));
-      expect(anchor.resolve(episode: _episode(_t0), captureStart: now, streaming: true, now: now), now);
+      expect(anchor.resolve(episode: _episode(_t0), captureStart: now, streaming: true, now: now), _t0);
       final next = now.add(const Duration(minutes: 40));
-      expect(anchor.resolve(episode: null, captureStart: next, streaming: true, now: next), now);
+      expect(anchor.resolve(episode: _episode(_t0), captureStart: next, streaming: true, now: next), _t0);
     });
 
-    test('fresh Home mount uses actual 08:11:57 capture despite 08:20:02 server start', () {
+    test('fresh Home mount uses the live episode start rather than the older capture start', () {
       final capture = DateTime.utc(2026, 10, 27, 8, 11, 57);
       final shifted = _episode(DateTime.utc(2026, 10, 27, 8, 20, 2));
       final now = capture.add(const Duration(minutes: 8, seconds: 24));
       for (final anchor in [LiveStartAnchor(), LiveStartAnchor()]) {
         final start = anchor.resolve(episode: shifted, captureStart: capture, streaming: true, now: now);
-        expect(start, capture);
-        expect(now.difference(start!), const Duration(minutes: 8, seconds: 24));
+        expect(start, shifted.startedAt);
+        expect(now.difference(start!), const Duration(seconds: 19));
       }
     });
 
-    test('server start is the fallback until the capture start becomes available', () {
+    test('capture start does not replace the live episode start', () {
       final anchor = LiveStartAnchor();
       final older = _episode(_t0.subtract(const Duration(minutes: 3)));
       expect(anchor.resolve(episode: older, captureStart: null, streaming: true, now: _t0), older.startedAt);
-      expect(anchor.resolve(episode: older, captureStart: _t0, streaming: true, now: _t0), _t0);
+      expect(anchor.resolve(episode: older, captureStart: _t0, streaming: true, now: _t0), older.startedAt);
     });
 
-    test('an episode rotating mid-capture keeps the session start', () {
-      // The server closed the episode at an idle gap and opened the next at the
-      // following words; the capture never stopped. Home's row and the live page
-      // keep counting this session's duration instead of restarting at every
-      // rotation (the row once read 29s while the session read 8m 24s).
+    test('an episode rotation starts elapsed time from the new live episode', () {
+      // The capture can continue across the server's hard-cap rotation. The live row
+      // follows the new episode so it never reports the previous episode's duration.
       final anchor = LiveStartAnchor();
       final sessionStart = _t0;
       final later = _t0.add(const Duration(minutes: 8, seconds: 24));
       expect(anchor.resolve(episode: _episode(sessionStart), captureStart: sessionStart, streaming: true, now: later),
           sessionStart);
       final rotated = _episode(later, id: 'ep2');
-      expect(anchor.resolve(episode: rotated, captureStart: sessionStart, streaming: true, now: later), sessionStart);
+      expect(anchor.resolve(episode: rotated, captureStart: sessionStart, streaming: true, now: later), later);
       expect(
           anchor.resolve(
               episode: rotated,
               captureStart: sessionStart,
               streaming: true,
               now: later.add(const Duration(minutes: 2))),
-          sessionStart);
+          later);
+    });
+
+    test('polling during a hard-cap rotation gap never rewinds before adopting the successor', () {
+      final anchor = LiveStartAnchor();
+      final oldStart = _t0.add(const Duration(minutes: 8));
+      final oldEpisode = _episode(oldStart);
+      final now = oldStart.add(const Duration(minutes: 12));
+      expect(anchor.resolve(episode: oldEpisode, captureStart: _t0, streaming: true, now: now), oldStart);
+
+      // The old row has closed and the service has not written the successor yet.
+      expect(anchor.resolve(episode: null, captureStart: _t0, streaming: true, now: now), oldStart);
+      expect(
+        anchor.resolve(
+          episode: null,
+          captureStart: _t0,
+          streaming: true,
+          now: now.add(const Duration(seconds: 20)),
+        ),
+        oldStart,
+      );
+
+      final capStart = _t0.add(const Duration(hours: 4));
+      expect(
+        anchor.resolve(
+          episode: _episode(capStart, id: 'ep2'),
+          captureStart: _t0,
+          streaming: true,
+          now: capStart,
+        ),
+        capStart,
+      );
     });
 
     test('an idle close during a lapsed lease keeps the old start instead of 0s', () {
@@ -86,13 +152,13 @@ void main() {
       expect(anchor.resolve(episode: null, captureStart: null, streaming: true, now: now), _t0);
     });
 
-    test('a server clock ahead of the phone never moves the start forward later', () {
+    test('a future server start keeps elapsed time at zero until its start', () {
       final anchor = LiveStartAnchor();
       final ahead = _episode(_t0.add(const Duration(seconds: 20)));
-      expect(anchor.resolve(episode: ahead, captureStart: _t0, streaming: true, now: _t0), _t0);
-      // Once the phone's clock passes the server's start, the same episode keeps the earlier start.
+      expect(anchor.resolve(episode: ahead, captureStart: _t0, streaming: true, now: _t0), ahead.startedAt);
+      // The episode's start remains authoritative as the local clock reaches it.
       final later = _t0.add(const Duration(seconds: 30));
-      expect(anchor.resolve(episode: ahead, captureStart: _t0, streaming: true, now: later), _t0);
+      expect(anchor.resolve(episode: ahead, captureStart: _t0, streaming: true, now: later), ahead.startedAt);
     });
 
     test('nothing streaming means no running start', () {

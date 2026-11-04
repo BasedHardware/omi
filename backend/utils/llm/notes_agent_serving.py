@@ -20,7 +20,7 @@ from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent import langchain_complete, record_decision, record_run, run_notes_agent
 from config.refactor_modes import serving_for
 from utils.llm.notes_packet import select_notes_packet
-from utils.llm.notes_identity import notes_identity
+from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_agent_policy import plan_notes_agent
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
@@ -159,6 +159,7 @@ def agentic_notes_payload(
         )
         identity = notes_identity(prefix, kwargs, packet)
         kwargs['notes_identity'] = identity
+        packet['screen_speaker_bindings'] = screen_speaker_bindings(identity)
         seed = conversation_seed(packet, capture_evidence, explicit_cache=explicit_cache)
         toolbox = NotesToolbox(
             uid=uid,

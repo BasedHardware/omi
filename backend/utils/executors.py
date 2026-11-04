@@ -5,6 +5,8 @@ Provides shared executors with strict separation (bulkhead pattern):
   small session/code cache reads. Must never starve — gates every request.
 - quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- record_barrier_executor: pusher recording custody transactions, isolated from
+  integrations and webhook DB work even during Firestore retries.
 - context_executor: optional context reads and fresh mount fences, four workers,
   zero queue, isolated from setup's Firestore work even after caller cancellation.
 - llm_executor: persona generation, onboarding LLM, slow model-backed work. Bulkhead
@@ -18,6 +20,8 @@ Provides shared executors with strict separation (bulkhead pattern):
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
+- pinecone_shutdown: lazy single-worker mutation settlement, isolated from
+  provider calls and the event loop's default executor during termination.
 - cimd_executor: hosted-MCP OAuth client-metadata (CIMD) lookups — DNS,
   connect, and body reads to arbitrary unauthenticated-supplied hosts, all
   inside one hard monotonic deadline. Bulkheaded so hostile client_id floods
@@ -35,6 +39,7 @@ import atexit
 import contextvars
 import functools
 import logging
+import os
 import queue
 import threading
 from collections import deque
@@ -76,21 +81,19 @@ _TASKS = frozenset(
 )
 
 
-def _gauge(name: str, description: str) -> Gauge:
+def _gauge(name: str, description: str, labelnames: tuple[str, ...] = ('executor', 'task')) -> Gauge:
     try:
-        return Gauge(name, description, ['executor', 'task'])
+        return Gauge(name, description, labelnames)
     except ValueError:
         existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
-        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != (
-            'executor',
-            'task',
-        ):
+        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != labelnames:
             raise ValueError(f'executor metric {name} already has a different shape')
         return cast(Gauge, existing)
 
 
 EXECUTOR_ACTIVE = _gauge('omi_executor_task_active', 'Active worker tasks by bounded task kind.')
 EXECUTOR_QUEUED = _gauge('omi_executor_task_queued', 'Queued worker tasks by bounded task kind.')
+EXECUTOR_MAX_WORKERS = _gauge('omi_executor_max_workers', 'Configured worker capacity.', ('executor',))
 
 
 def _task_label(fn, args=()) -> str:
@@ -114,6 +117,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     ):
         super().__init__(**kwargs)
         self.name = name
+        EXECUTOR_MAX_WORKERS.labels(executor=name).set(self._max_workers)
         self._active_count = 0
         self._active_lock = threading.Lock()
         self.max_queue_size = max_queue_size
@@ -271,11 +275,38 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 critical_executor = MonitoredThreadPoolExecutor(
     name="critical", max_workers=8, max_queue_size=64, thread_name_prefix="critical"
 )
-db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
+# Before the record-barrier rollout the measured DB peak was 20/24 workers.
+# Isolate barrier retries and retain 12 workers of headroom over that peak.
+db_executor = MonitoredThreadPoolExecutor(
+    name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
+)
+record_barrier_executor = MonitoredThreadPoolExecutor(
+    name="record_barrier",
+    max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
+    max_queue_size=64,
+    wait_on_saturation=True,
+    thread_name_prefix="record-barrier",
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
+# Batch policy HTTP leaves only; coordinators stay in async Pump code.
+admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
-postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+# Optional per-window LID must not hold the shared sync coordination pool.
+# Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
+record_language_executor = MonitoredThreadPoolExecutor(
+    name="record_language",
+    max_workers=4,
+    max_queue_size=8,
+    wait_on_saturation=True,
+    thread_name_prefix="record-language",
+)
+postprocess_executor = MonitoredThreadPoolExecutor(
+    name="postprocess",
+    # backend-integration raises this: its enrichment handler holds a thread per LLM-bound request.
+    max_workers=int(os.getenv('POSTPROCESS_EXECUTOR_WORKERS', '24')),
+    thread_name_prefix="postproc",
+)
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
 # Prompt-list verification may outlive its caller while a provider finishes.
@@ -306,9 +337,12 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    record_barrier_executor,
     llm_executor,
     stripe_executor,
+    admission_executor,
     sync_executor,
+    record_language_executor,
     postprocess_executor,
     cleanup_executor,
     storage_executor,
@@ -347,6 +381,22 @@ def lifecycle_executor(uid: str, *, episode: bool = False) -> MonitoredThreadPoo
 
 _context_executor: MonitoredThreadPoolExecutor | None = None
 _context_executor_lock = threading.Lock()
+
+
+_pinecone_shutdown_executor: MonitoredThreadPoolExecutor | None = None
+_pinecone_shutdown_executor_lock = threading.Lock()
+
+
+def get_pinecone_shutdown_executor() -> MonitoredThreadPoolExecutor:
+    """One shutdown worker plus one retry slot; created only when draining."""
+    global _pinecone_shutdown_executor
+    with _pinecone_shutdown_executor_lock:
+        if _pinecone_shutdown_executor is None:
+            _pinecone_shutdown_executor = MonitoredThreadPoolExecutor(
+                name='pinecone_shutdown', max_workers=1, max_queue_size=1, thread_name_prefix='pinecone-shutdown'
+            )
+            _ALL_EXECUTORS.append(_pinecone_shutdown_executor)
+        return _pinecone_shutdown_executor
 
 
 def get_context_executor() -> MonitoredThreadPoolExecutor:

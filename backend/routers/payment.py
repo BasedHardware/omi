@@ -52,7 +52,6 @@ from utils.subscription import (
     desktop_to_consumer_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
-    clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
     price_ids_match_plan_and_interval,
 )
@@ -68,6 +67,7 @@ from database.users import (
     get_user_profile,
 )
 from utils import stripe as stripe_utils
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
@@ -82,12 +82,31 @@ from utils.overage import (
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils import yearly_switch
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _deletion_webhook_blocks_entitlement(uid: str, subscription_id: str | None) -> bool:
+    """Keep late Stripe deliveries from reopening a fenced account."""
+    try:
+        blocked = await run_blocking(db_executor, account_deletion_blocks_user_work, uid)
+    except Exception as error:
+        logger.error('Stripe webhook deletion authority unavailable: %s', type(error).__name__)
+        raise HTTPException(503, 'Account deletion status is temporarily unavailable') from error
+    if not blocked:
+        return False
+    if subscription_id:
+        try:
+            await run_blocking(stripe_executor, stripe_utils.cancel_subscription_for_account_deletion, subscription_id)
+        except Exception as error:
+            logger.error('Stripe webhook could not cancel a deletion-fenced subscription: %s', type(error).__name__)
+            raise HTTPException(503, 'Subscription cancellation must be retried') from error
+    return True
 
 
 def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
@@ -113,6 +132,10 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
+    # Omi Pro monthly to yearly, charged now: only the previewed amount at its proration_date (utils/yearly_switch.py).
+    switch_now: bool = False
+    proration_date: Optional[int] = None
+    expected_amount_due: Optional[int] = None
 
 
 class PaymentMutationResponse(BaseModel):
@@ -407,7 +430,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if recovered_from_stripe:
                     record_fallback(
                         component='other',
@@ -895,6 +917,12 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if change_error:
             raise HTTPException(status_code=400, detail=change_error)
 
+        # The yearly switch offer's rules: no trial (#23298), past_due, scheduled change or discount.
+        refusal = request.switch_now and yearly_switch.upgrade_refusal(stripe_sub, request)
+        if refusal:
+            logger.info(f"Yearly switch refused for user {uid}: {refusal}")
+            raise HTTPException(status_code=409, detail="Switching to yearly is not available for this subscription.")
+
         # Validate and resolve promotion code if provided
         resolved_promo_id = None
         if request.promotion_code:
@@ -908,8 +936,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # re-schedule. Release it first so the user can switch plans again.
         _release_attached_schedules(stripe_sub)
 
-        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
-        if current_plan != target_plan:
+        # Cross-plan change (e.g. Unlimited→Architect), or the yearly switch: immediate swap with proration
+        if current_plan != target_plan or request.switch_now:
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
@@ -918,6 +946,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+            if request.switch_now:
+                modify_params['metadata']['omi_yearly_switch'] = 'in_app'
+                modify_params.update(yearly_switch.charge_params(stripe_sub['id'], request.proration_date))
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
             updated_sub_dict = updated_sub.to_dict()
@@ -935,22 +966,21 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             if new_subscription:
                 users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
                     conversations_db.unlock_all_conversations(uid)
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                     clear_fair_use_on_upgrade(uid)
                     if funded_processing_enabled(uid):
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade
+                        from utils.processing_backlog_worker import plan_changed
 
-                        if allowance_increased(current_subscription, new_subscription):
-                            upgrade(
-                                uid,
-                                f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_start}',
-                                intent_at=time.time(),
-                            )
+                        plan_changed(
+                            uid,
+                            request.price_id,
+                            current_subscription,
+                            new_subscription,
+                            updated_sub_dict.get('status'),
+                        )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -1138,6 +1168,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
 
+            if await _deletion_webhook_blocks_entitlement(uid, session.get('subscription')):
+                return {"status": "success", "message": "Account deletion is in progress."}
+
             current_period_end = None
             if session.get("subscription"):
                 subscription_id = session["subscription"]
@@ -1163,6 +1196,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 # It should not happen, ref id might be missing but never the metadata
                 logger.error(f"[WEBHOOK ERROR] No uid found in checkout session {session.get('id')}")
                 return {"status": "error", "message": "No user identifier found"}
+
+            if await _deletion_webhook_blocks_entitlement(uid, session.get('subscription')):
+                return {"status": "success", "message": "Account deletion is in progress."}
 
             logger.info(
                 f"Processing subscription for user {uid} (from {'client_reference_id' if client_reference_id else 'metadata'})"
@@ -1210,7 +1246,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             # A stored paid label with a missing, zero, or past period is Basic
             # on get_user_valid_subscription. Unlock only an open paid period.
             subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
@@ -1223,11 +1258,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                 if funded_processing_enabled(uid):
-                    from utils.processing_backlog import allowance_increased
-                    from utils.processing_backlog_worker import upgrade_async
+                    from utils.processing_backlog_worker import checkout_completed_async
 
-                    if allowance_increased(existing_subscription, subscription):
-                        await upgrade_async(uid, f'checkout:{session.get("id")}', intent_at=event.get("created"))
+                    await checkout_completed_async(uid, event, session, existing_subscription, subscription)
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
@@ -1294,6 +1327,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 uid = user['uid']
 
         if uid:
+            if await _deletion_webhook_blocks_entitlement(uid, subscription_obj.get('id')):
+                return {"status": "success", "message": "Account deletion is in progress."}
             now = int(time.time())
             new_subscription = _build_subscription_from_stripe_object(
                 subscription_obj, grant_cancel_grace=True, now=now
@@ -1433,17 +1468,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             ),
                         )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                    await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     if funded_processing_enabled(uid) and not adopted_active_paid:
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade_async
+                        from utils.processing_backlog_worker import subscription_changed_async
 
-                        if allowance_increased(current_subscription, new_subscription):
-                            await upgrade_async(
-                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
-                            )
+                        await subscription_changed_async(
+                            uid, event, subscription_obj, current_subscription, new_subscription
+                        )
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(
@@ -1471,6 +1503,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         uid = schedule_obj.get('metadata', {}).get('uid')
 
         if uid:
+            if await _deletion_webhook_blocks_entitlement(uid, schedule_obj.get('subscription')):
+                return {"status": "success", "message": "Account deletion is in progress."}
             if schedule_obj.get('status') == 'completed':
                 try:
                     if schedule_obj.get('subscription'):
@@ -1494,7 +1528,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             if 'clear_fair_use' in decision.effects:
                                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                             logger.info(
@@ -1536,7 +1569,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
                             )
@@ -1564,8 +1596,12 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
                 if app_id and uid:
+                    if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
+                        return {"status": "success", "message": "Account deletion is in progress."}
                     await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {e}")
 

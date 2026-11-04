@@ -1,4 +1,4 @@
-{{- if .Values.ingress.enabled -}}
+{{- if and .Values.ingress.enabled (not .Values.fleetRetired) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

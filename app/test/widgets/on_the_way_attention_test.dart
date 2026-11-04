@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +14,7 @@ import 'package:omi/services/wals/wal.dart';
 /// Option B: failures and refusals recover in the background. Neither On the Way nor its
 /// support details offers Retry or Delete; those stay on the Offline Sync page.
 
-class _FakeSync extends ChangeNotifier implements SyncProvider {
+class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _FakeSync(this.wals);
 
   final List<Wal> wals;

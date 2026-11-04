@@ -403,3 +403,16 @@ def retry_ledger(monkeypatch):
             return fn(client.transaction(), *args, **kwargs)
 
     monkeypatch.setattr(attention, 'run_transactional', run)
+
+
+def test_builtin_default_needs_no_marketplace_install():
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    with patch('database.apps.get_app_by_id_db') as catalog, patch('utils.apps.is_user_app_enabled') as enabled:
+        app = conv_router._validate_reprocess_app_selection('new-user', DEFAULT_SUMMARY_APP_ID)
+    assert app.works_with_memories()
+    assert app.enabled
+    catalog.assert_not_called()
+    enabled.assert_not_called()
+    assert 'requested output language' in app.memory_prompt
+    assert 'Never add external quotations' in app.memory_prompt

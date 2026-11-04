@@ -9,9 +9,15 @@ from jobs.short_term_lifecycle_worker import (
     fetch_expiry_urgent_short_term_memory_items_firestore,
     run_short_term_lifecycle_firestore,
 )
+import jobs.short_term_lifecycle_worker as lifecycle_worker
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_owner(monkeypatch):
+    monkeypatch.setattr(lifecycle_worker, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 class _Snapshot:

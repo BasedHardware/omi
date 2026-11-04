@@ -49,7 +49,7 @@ def _stub_module(name):
 
 def _stub_package(name):
     mod = types.ModuleType(name)
-    mod.__path__ = []
+    mod.__path__ = [str(BACKEND_DIR / 'utils')] if name == 'utils' else []
     sys.modules[name] = mod
     if "." in name:
         parent_name, attr_name = name.rsplit(".", 1)

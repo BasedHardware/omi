@@ -8,6 +8,14 @@
 {{- if lt (int .Values.replicaCount) 1 }}
 {{- fail "queue sampling runs in workers: replicaCount must be >=1" }}
 {{- end }}
+{{- $processes := int .Values.worker.processes }}
+{{- if or (lt $processes 1) (gt $processes 3) }}
+{{- fail "worker.processes must be in [1,3]" }}
+{{- end }}
+{{- $resources := .Values.resources }}
+{{- if gt $processes 1 }}
+{{- $resources = required (printf "processResources.%d must size the pod for %d worker processes" $processes $processes) (index (.Values.processResources | default dict) (toString $processes)) }}
+{{- end }}
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.image.digest) }}
 {{- fail "image.digest must pin a qualified joint GPU image" }}
 {{- end }}
@@ -28,9 +36,25 @@ spec:
   # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
+  {{- if hasKey .instance "fixedReplicas" }}
+  {{- $replicas = .instance.fixedReplicas }}
+  {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
+  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+  {{- if $current }}
+  {{- $replicas = dig "spec" "replicas" $replicas $current }}
   {{- end }}
+  {{- else if .Values.autoscaling.enabled }}
+  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+  {{- if $current }}
+  {{- $replicas = dig "spec" "replicas" $replicas $current }}
+  {{- end }}
+  {{- end }}
+  # Keep the live count in Helm's manifest while HPA controls the scale subresource.
+  # Omitting replicas defaults the Deployment to one before HPA reconciliation;
+  # looking up the live value also prevents later Helm upgrades resetting HPA scale.
+  # New installs and offline renders use replicaCount as their baseline.
+  replicas: {{ $replicas | int }}
   # Never allocate surge GPUs or co-locate a second chain on one device.
   strategy:
     type: Recreate
@@ -45,7 +69,22 @@ spec:
         app.kubernetes.io/instance: {{ .instance.name }}
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
+      {{- if .instance.borrowedPools }}
+      # Borrowed nodes must come back to their owner fast: a preempted borrower
+      # stops within this bound and its leases retry elsewhere.
+      terminationGracePeriodSeconds: {{ .instance.terminationGracePeriodSeconds }}
+      priorityClassName: {{ printf "%s-borrower" .Release.Name }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cloud.google.com/gke-nodepool
+                    operator: In
+                    values: {{ .instance.borrowedPools | toJson }}
+      {{- else }}
       terminationGracePeriodSeconds: 1500
+      {{- end }}
       {{- with .instance.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -61,6 +100,13 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
+            - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
+            - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
+            - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
+            - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
+            - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
+            - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
             - {name: BATCH_PIPELINE_STAGE_PROFILING_ENABLED, value: {{ .Values.worker.stageProfilingEnabled | quote }}}
             {{- end }}
@@ -86,12 +132,21 @@ spec:
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.
             - {name: BATCH_PIPELINE_WORKER_PIPELINE_DEPTH, value: {{ .Values.worker.pipelineDepth | default 2 | quote }}}
+            # Pump processes sharing this pod's GPU; "1" is the single-process kill switch.
+            - {name: BATCH_PIPELINE_WORKER_PROCESSES, value: {{ $processes | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_IO_CONCURRENCY, value: {{ .Values.worker.ioConcurrency | default 5 | quote }}}
+            # Prepare the budgeted flight prefix before the GPU lock; "false" is the kill switch.
+            - {name: BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED, value: {{ .Values.worker.prepareFlightEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR, value: {{ .Values.worker.shadowPaidRecoveryPerHour | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_RECOVERY_API_URL, value: {{ .Values.worker.shadowRecoveryApiUrl | quote }}}
+            # Sampled strict-VAD shadow; 100 restores full, 0 turns the shadow off.
+            # No `default` here: Helm's default treats 0 as empty, which would
+            # silently turn the documented 0-disable into 10.
+            - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
             - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
@@ -101,12 +156,19 @@ spec:
             - {name: OMI_ENV_STAGE, value: {{ .Values.stage | quote }}}
             - {name: BATCH_PIPELINE_NAMESPACE, value: {{ .Values.namespace | quote }}}
             - {name: BUCKET_BATCH_PIPELINE, value: {{ required "dedicated staging bucket required" .Values.bucket | quote }}}
+            # Retained-audio references may name the regional chunk bucket; empty admits only the private bucket.
+            - {name: BUCKET_AUDIO_DERIVED, value: {{ .Values.audioDerivedBucket | default "" | quote }}}
             # Shared by Parakeet windows and pyannote segmentation, embedding and VAD inference.
             - {name: BATCH_PIPELINE_MODEL_BATCH_SIZE, value: {{ .Values.worker.batchSize | quote }}}
             - {name: BATCH_PIPELINE_UNIT_SECONDS, value: {{ .Values.worker.unitSeconds | quote }}}
             - {name: BATCH_PIPELINE_PADDED_SECONDS, value: {{ .Values.worker.paddedSeconds | quote }}}
             - {name: BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED, value: {{ .Values.worker.flightBatchingEnabled | quote }}}
             - {name: BATCH_PIPELINE_FLIGHT_BATCH_SECONDS, value: {{ .Values.worker.flightBatchSeconds | quote }}}
+            - {name: BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED, value: {{ .Values.worker.sharedEmbeddingTrunkEnabled | quote }}}
+            # Full-unit diarization reuses the VAD pass's raw segmentation scores; "false" is the kill switch.
+            - {name: BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED, value: {{ .Values.worker.vadSegmentationReuseEnabled | quote }}}
+            # CUDA-graph TDT decoding, asserted per call; "false" is the kill switch (asserted eager).
+            - {name: BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED, value: {{ .Values.worker.asrCudaGraphsEnabled | quote }}}
             - name: ENCRYPTION_SECRET
               valueFrom:
                 secretKeyRef:
@@ -117,6 +179,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
                   key: HUGGINGFACE_TOKEN
+            - name: SONIOX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: SONIOX_API_KEY
+                  optional: true
           startupProbe:
             httpGet: {path: /ready, port: http}
             periodSeconds: 10
@@ -129,7 +197,7 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml $resources | nindent 12 }}
           volumeMounts:
             - {name: model-cache, mountPath: /cache}
       volumes:

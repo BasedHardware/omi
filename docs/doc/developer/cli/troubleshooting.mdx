@@ -71,7 +71,7 @@ The dev API enforces hourly limits per policy:
 
 The CLI retries automatically up to 4 attempts with backoff before raising. If
 you're seeing the error code from a script, sleep for the `Retry in Ns` value
-and try again — see [For agents](/doc/developer/cli/agents) for a worked
+and try again. See [For agents](/doc/developer/cli/agents) for a worked
 backoff example.
 
 ## "Server error" (exit 3)
@@ -98,7 +98,7 @@ constraint.
 ## Token rolled back after a failed login verification
 
 If `omi auth login` succeeds but the verification round-trip returns 401, the
-CLI clears the just-stored credential — better to be unauthenticated than
+CLI clears the just-stored credential. It is better to be unauthenticated than
 silently broken. The fix: regenerate the key in the Omi web app and try
 again. Network errors don't trigger the rollback (the credential is kept and
 the CLI just warns).
@@ -117,7 +117,7 @@ minutes for the callback. Possible causes:
 - A firewall blocked the loopback redirect. Try `--api-key` instead.
 - You closed the browser tab before the redirect fired.
 
-The CLI cleans up after itself; just rerun `omi auth login --browser`.
+The CLI cleans up after itself. Rerun `omi auth login --browser`.
 
 ## OAuth: "OAuth state mismatch"
 
@@ -126,9 +126,9 @@ The CLI cleans up after itself; just rerun `omi auth login --browser`.
   The browser callback did not match the original session token. Possible CSRF — aborting.
 ```
 
-The CSRF protection caught a mismatch — the `state` token in the callback
+The CSRF protection caught a mismatch: the `state` token in the callback
 URL didn't match what the CLI generated. This shouldn't happen in practice;
-if it does, run `omi auth login --browser` again. Don't paste random URLs.
+if it does, run `omi auth login --browser` again. Don't paste URLs you did not get from the CLI.
 
 ## OAuth: "Firebase refresh failed"
 
@@ -159,7 +159,7 @@ omi config path
 
 Permissions are owner-only (`0600` for the file, `0700` for the parent dir).
 If you ever see permissions other than these, something modified the file
-outside of `omi-cli` — fix with `chmod 600 ~/.omi/config.toml`.
+outside of `omi-cli`. Fix it with `chmod 600 ~/.omi/config.toml`.
 
 To wipe everything:
 

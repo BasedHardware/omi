@@ -105,8 +105,22 @@ includes the entire HPA spec except `minReplicas`, and deployment images. Ordina
 autoscaling replica changes do not restart the clock. Configuration/image changes
 reset the 15-minute clock; scheduled floor writes do not (they also bump the HPA
 generation, which is likewise excluded), or the guard could never arm under a
-time-of-day floor. Readiness shortfall uses HPA desiredReplicas, not the
-floor. ScalingActive must be true, as in the original P77 guard.
+time-of-day floor. ScalingActive must be true, as in the original P77 guard.
+
+Capacity trips (`ready_shortfall`, `FailedScheduling_in_15m`) fire only when
+ready pods are short of **what the live load needs**: `min(desiredReplicas,
+load_need)`, where `load_need` is the HPA's own inputs at their worst minute
+of the 15-minute window - `max(1, ceil(active requests / 2), ceil(ready x GPU
+avg / 35))`. FailedScheduling events are evidence attached to that shortfall,
+never a trip on their own; Pending pods beyond the load are logged as
+`pending_beyond_load`. Before 2026-11-02, a desired count above the pool (12
+pods on a 10-node L4 pool in the stockout) or the guard's own expired
+rollback (desired held near 12 by the 900s scale-down window, its 12th pod's
+FailedScheduling still in the lookback) re-tripped every ~50 minutes: 28 of
+31 rollbacks 10-30..11-02 with latency healthy. A real stockout at peak (ready
+below the load) still trips here, and every latency, refusal and first-text
+gate trips on harm regardless of pod counts. Missing load series blind the
+reading (three blind readings roll back).
 
 ## Time-of-day floor schedule
 
@@ -177,10 +191,19 @@ night hours from becoming a rollback solely because quantiles are undefined. Thr
 trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
+The v2 duration series can be fresh with no completed observations while v1
+is busy. Its NaN p95 remains blind under the existing policy: zero completed
+requests cannot distinguish an idle v2 endpoint from requests stuck in flight.
+No idle exception or v1-for-v2 latency substitution is applied. Three blind
+readings can therefore restore the rollback cap after the arming window.
 
-The only serving write is P77 `step_fast.build(old, 12, rollback=True)`:
-JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, and restores
-the Value=3 latency metric. Metric/cap/downscale drift assertions are retained.
+The serving rollback retains P77's atomic whole-spec test and latency metric:
+JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, restores
+maxReplicas=12 when capped lower, and restores the Value=3 latency metric.
+Integer live caps from 1 through the chart's rollback cap (12) are accepted;
+caps outside that range and all other metric/downscale drift still fail the Job.
+Ordinary floor scheduling preserves the live cap and refuses a target above it;
+only a safety rollback restores the cap to 12.
 Scale-up must match either the legacy +1 pod/60s policy with zero stabilization,
 or P77r's exact zero-stabilization, selectPolicy Max, +4 pods/15s policy.
 Concurrent changes fail the test, with no retry against a newly read
@@ -224,8 +247,21 @@ A fresh `omi_batch_pipeline_oldest_age_seconds > 1800` emits **TRIP**,
 measures from enqueue, skipping durable allowance policy holds
 (`compute_decision` outcome=held reason=allowance_exhausted; 131 such holds
 kept this proxy tripped permanently on 2026-10-25) within a bounded 500-row
-FIFO prefix; a prefix filled entirely by holds fails toward tripping on the
-oldest hold's age rather than a fresh zero. It still includes legitimate deep
+FIFO prefix. Dispositioned queue states (`dead`, `quarantined`, `committed`,
+`privacy_blocked`) are excluded; completed terminal markers on `result_ready`
+still owe a commit. A full exempt prefix with a sentinel reports NaN and
+**BLIND**, rather than inventing a late commitment from a policy hold. A
+separate NaN count for both oldest and retry clocks prevents another finite
+priority from masking blindness. A fresh, finite over-30-minute age in another
+priority remains TRIP with `metrics_blind=true`; only stale evidence suppresses
+that known breach.
+The page-tier Grafana rules in `../monitoring/alerts/batch-queue-safety.json`
+cover a fresh commitment older than two hours and sustained queue blindness
+(120s stale plus 5m pending, matching the observer's freshness bound).
+The single delivery-lateness rule combines both sources with independent
+freshness gates, avoiding a duplicate queue lateness page;
+the lead must import them. See the [runbook](../../docs/runbooks/batch-queue-safety.md).
+It still includes legitimate deep
 queues; it cannot identify new
 jobs or prove a projection wedge. Retry age is
 logged, not another rollback condition. Usable readings without that trip are
@@ -254,11 +290,12 @@ an exporter or new Job network listener.
 An applied rollback does not wait for a human forever: while rolled back, the
 Job keeps evaluating readings, and after **one full 15-minute lookback window
 of consecutive clean readings** (no trips, no blind, no unmeasured, not
-low-sample) it clears itself - restoring workload-only metrics with the floor
+low-sample, and ready covering the live load) it clears itself - restoring workload-only metrics with the floor
 still at 12, after which the arming/usable gates own any scheduled reduction.
 Any unusable reading restarts the clean streak; a real regression keeps
-re-tripping readings, so its rollback never expires. A rollback/expiry loop is
-bounded and visible: each cycle holds the cap for at least the clean window
+re-tripping readings, so its rollback never expires; a real stockout at peak
+holds the rollback until ready covers the load, instead of cycling expiry ->
+lower -> trip. A rollback/expiry loop is bounded and visible: each cycle holds the cap for at least the clean window
 plus a fresh arming window before any lower applies. The explicit operator
 clear remains: patch the HPA to remove the `parakeet_request_latency_p99`
 metric (an approved HPA change); the guard reconciles on the next reading.
@@ -303,10 +340,10 @@ dropped capabilities, and bounded CPU/memory keep the Job small.
 
 ## Cloud Run rollback: approved scoped identity
 
-Production keeps `batch.enabled: false` (see `prod_omi_incluster_guards_values.yaml`)
-until the deployer RBAC for the `-batch` objects is approved (access change,
-David) and g2's trusted producer exists; `batch.cloudRunRollbackEnabled` stays
-true there so re-enabling needs only the `batch.enabled` flip. Development
+Production keeps both `batch.enabled` and `batch.cloudRunRollbackEnabled`
+false (see `prod_omi_incluster_guards_values.yaml`): David removed batch
+auto-rollback on 2026-11-04, so batch step-backs are manual lead decisions.
+Re-enabling needs both flips and David's approval. Development
 leaves the writer off entirely.
 The dedicated KSA/GSA, four service-level `roles/run.developer` bindings,
 runtime-SA actAs if required, and exact-KSA WIF binding are described in

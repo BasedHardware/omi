@@ -6,6 +6,7 @@
     "messaging-maintenance": "backend",
     "diarizer": "diarizer",
     "batch-pipeline-worker": "batch-pipeline-worker",
+    "sync-backfill-worker": "backend-sync-backfill-worker",
     "nllb-translation": "nllb-translation",
     "pusher": "pusher",
     "parakeet": "parakeet",
@@ -19,7 +20,8 @@
     },
     "workers": {
       "images": {
-        "backend-workers": "backend/pylock.runtime.toml"
+        "backend-workers": "backend/pylock.runtime.toml",
+        "backend-sync-backfill-worker": "backend/pylock.runtime.toml"
       }
     },
     "realtime": {
@@ -48,6 +50,14 @@
     }
   },
   "services": {
+    "sync-backfill-worker": {
+      "platform": "gke",
+      "role": "workers",
+      "image": "backend-sync-backfill-worker",
+      "current_image": "backend-sync-backfill-worker",
+      "current_deploy": ["backend/deploy/sync-backfill-worker.yaml"],
+      "image_built_elsewhere": "Prepared pilot chart consumes the digest built and probed by the existing role-image train. No pilot is installed by this declaration."
+    },
     "backend": {
       "platform": "cloud-run",
       "role": "api",
@@ -199,6 +209,25 @@
     }
   },
   "images": [
+    {
+      "name": "backend-sync-backfill-worker",
+      "dockerfile": "backend/Dockerfile.roles",
+      "target": "sync-backfill-worker",
+      "deployment_workflows": [".github/workflows/gcp_backend.yml"],
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": ["utils.sync.worker_runtime", "utils.sync.worker_job"],
+      "smoke_environment": {
+        "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
+      },
+      "image_import_smoke": true,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "Full backend role source retains the SDK's existing built-in fallback."
+      }
+    },
     {
       "name": "backend-api",
       "dockerfile": "backend/Dockerfile.roles",
@@ -543,13 +572,22 @@
       "entrypoint_source_root": "backend",
       "workdir": "/app",
       "entrypoints": [
-        "diarizer.batch_pipeline_runtime"
+        "diarizer.batch_pipeline_runtime",
+        "scripts.record_seal_sweep",
+        "scripts.record_seal_repair_job",
+        "scripts.record_seal_worker"
       ],
       "image_import_smoke": false,
       "smoke_entrypoints": [
-        "diarizer.batch_pipeline_runtime"
+        "diarizer.batch_pipeline_runtime",
+        "scripts.record_seal_sweep",
+        "scripts.record_seal_repair_job",
+        "scripts.record_seal_worker"
       ],
       "dependency_probe_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "models.structured imports the SDK only in a full checkout and uses its built-in fallback in this worker image."
+      },
       "pull_request_smoke": false
     },
     {

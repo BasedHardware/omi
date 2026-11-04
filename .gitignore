@@ -205,6 +205,9 @@ app/lib/env/prod_env.g.dart
 /omi/firmware/v2.9.0/
 /omi/firmware/build/
 
+# PlatformIO refetches omiGlass firmware lib deps from platformio.ini lib_deps
+/omiGlass/firmware/.pio/
+
 
 # Additional Expo/React Native specific ignores
 # `**/` is required: a bare `.expo/*` is anchored to the repo root and silently
@@ -302,3 +305,10 @@ pnpm-workspace.yaml
 
 .github/firestore-workflow
 .github/firestore-source
+
+# Track this admission change's UI proof even with shared agent-artifact excludes.
+!.agent-artifacts/
+.agent-artifacts/*
+!.agent-artifacts/ui-evidence/
+.agent-artifacts/ui-evidence/*
+!.agent-artifacts/ui-evidence/lane-web-batch/

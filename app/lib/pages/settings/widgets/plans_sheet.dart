@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/plan_storefront.dart';
@@ -20,6 +21,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -709,6 +711,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   @override
   void initState() {
+    PaywallPacing.markShown();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAvailablePlans();
       _initializeStorefront();
@@ -876,6 +879,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           textAlign: TextAlign.center,
                           style: secondary,
                         ),
+                        if (!hasScheduledUpgrade) const YearlySwitchPlansRow(),
                       ],
                       const SizedBox(height: OmiSpacing.xl),
                       // Features list - shown to all users

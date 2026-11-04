@@ -217,6 +217,11 @@ def run_brake(
         if not notes_line.strip() or "\n" in notes_line:
             raise BrakeError("stage requires a one-line BRAKE_NOTES_LINE for the en-US What's New")
     (quiescence_check or require_quiesced_writers)()
+    if action in ("halt", "resume") and promote.CHANGES_NOT_SENT_FOR_REVIEW:
+        raise BrakeError(
+            "Play holds changes for review; halt or resume in Play Console "
+            "(Test and release → Production/track → rollout), then verify the live track there"
+        )
     edit_factory = edit_factory or promote.play_edit
     client, edit_id = edit_factory()
     open_edits = [edit_id]

@@ -10,7 +10,7 @@ import pytest
 
 from config.batch_pipeline import worker_validation_disposition_enabled
 from diarizer import batch_pipeline, batch_pipeline_models
-from diarizer.batch_pipeline import BatchValidationError, ValidationReason
+from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
 from diarizer.batch_pipeline_models import PyannoteVAD
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_batch_pipeline_worker import item, setup_worker
@@ -38,6 +38,8 @@ def test_real_strict_vad_checks_the_20ms_partial_window():
 async def test_20ms_frame_beyond_eof_needs_independent_silence_evidence(monkeypatch, speech):
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', raising=False)
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false')
+    # The call count below includes the strict-VAD shadow, which samples by segment hash.
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
     # Exercise the actual Pyannote adapter with a synthetic frame whose start
     # lies beyond this 320-sample buffer. No model/GPU/private audio needed.
     monkeypatch.setattr(
@@ -67,7 +69,7 @@ async def test_20ms_frame_beyond_eof_needs_independent_silence_evidence(monkeypa
     scheduler = Scheduler(store)
     scheduler.enqueue(item('short', 0.02), time.time())
     await Pump(scheduler, worker).run_once()
-    strict.assert_called_once()
+    assert strict.call_count == 2  # record-only shadow plus the independent disposition
     assert provider.calls == [] and not diarized
     job = store.rows['jobs', 'short']
     assert job['attempt'] == 1
@@ -104,7 +106,7 @@ async def test_deterministic_failure_first_attempt_keeps_custody_and_drains_sibl
 
     worker, *_ = setup_worker(vad=broken)
     assert worker.process_batch([before]) == [ValidationFailureWork('poison', 'vad_windows', reason.value)]
-    worker = Mock()
+    worker = Mock(spec=['process_batch'])
     worker.process_batch.return_value = [
         ValidationFailureWork('poison', stage, reason.value),
         WorkResult('after', 'encrypted://after'),
@@ -171,3 +173,51 @@ async def test_unknown_transient_fault_still_retries_with_backoff():
     assert job['state'] == 'retry' and job['attempt'] == 1
     assert job['available_at'] > time.time()
     assert 'worker_failure' not in job
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['silent', 'speech', 'unavailable', 'unsampled', 'shadow', 'enabled'])
+async def test_asr_empty_shadow_label_never_changes_disabled_disposition(monkeypatch, mode):
+    from utils.batch_pipeline import worker_metrics
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', str(mode == 'enabled').lower())
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0' if mode == 'unsampled' else '100')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false')
+    strict = Mock(
+        **(
+            {'side_effect': ValueError('synthetic')}
+            if mode == 'unavailable'
+            else {'return_value': [{'start': 0, 'end': 1}] if mode == 'speech' else []}
+        )
+    )
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', strict)
+    counter = Mock()
+    monkeypatch.setattr(worker_metrics, 'STRICT_VAD', counter)
+    worker, provider, saved, _, diarized, _ = setup_worker(
+        decode=lambda work: np.zeros(round(work.duration_seconds * 16000), dtype=np.float32),
+    )
+    provider.transcribe_batch = Mock(side_effect=lambda samples: [[] for _ in samples])
+    work = replace(item('empty'), shadow=mode == 'shadow')
+    if mode == 'shadow':
+        result = worker.process_batch([work])[0]
+        assert result.reason == 'empty_asr'
+    else:
+        store = MemoryStore()
+        scheduler = Scheduler(store)
+        scheduler.enqueue(work, time.time())
+        await Pump(scheduler, worker).run_once()
+        job = store.rows['jobs', work.segment_id]
+        if mode == 'enabled':
+            assert job['state'] == 'committed' and saved['empty']['outcome'] == 'silence'
+        else:
+            assert job['state'] == 'quarantined' and job['recovery_state'] == 'held'
+            assert job['worker_failure'] == {'stage': 'assemble_words', 'reason': 'empty_asr'}
+            assert not saved and not diarized
+    labels = [call.args[0] for call in counter.labels.call_args_list]
+    assert labels.count('strict_silent_asr_empty') == int(mode == 'silent')
+    assert labels.count('evaluated') == int(mode not in {'unavailable', 'unsampled', 'shadow'})
+    assert labels.count('strict_silent_pyannote_nonempty') == int(mode in {'silent', 'enabled'})
+    assert strict.call_count == (0 if mode in {'unsampled', 'shadow'} else 2)

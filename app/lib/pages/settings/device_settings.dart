@@ -36,6 +36,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
@@ -92,6 +93,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+  bool _syncAlertsEnabled = SharedPreferencesUtil().syncAlertsEnabled;
   bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
   Future<String>? _rayBanMetaCameraStatusFuture;
@@ -552,6 +554,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               SharedPreferencesUtil().autoSyncOfflineRecordings = value;
             },
           ),
+        // Pendant stall alerts (#15501): the kill switch for the watchdog's
+        // out-of-app notification. On by default — silent multi-day loss is
+        // the failure it exists for. While stalled, the subtitle says so.
+        if (paired?.type == DeviceType.omi || paired?.type == DeviceType.friendPendant)
+          OmiSettingsRow.toggle(
+            key: const Key('sync_health_alerts_toggle'),
+            leading: const FaIcon(FontAwesomeIcons.bell),
+            title: l10n.syncHealthAlerts,
+            subtitle: provider.isSyncStalled
+                ? l10n.activityAttentionSyncStalledSubtitle(
+                    provider.syncHealth?.timeSinceLastSync?.inHours ?? SyncHealthWatchdog.stallThreshold.inHours,
+                  )
+                : l10n.syncHealthAlertsDescription,
+            value: _syncAlertsEnabled,
+            onChanged: (value) {
+              setState(() => _syncAlertsEnabled = value);
+              SharedPreferencesUtil().syncAlertsEnabled = value;
+            },
+          ),
         // Native diagnostics persist per device, so a disconnected pendant can still send its
         // disconnect history and BLE log to support, which is when they matter most.
         if (diagnosticsId != null)
@@ -675,8 +696,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       // notify reuses the last snapshot instead of rescanning, and the server
       // flag and status line select on their own.
       final l10n = context.l10n;
-      final local =
-          context.select<SyncProvider?, DeviceCatchUpLocal>((s) => deviceCatchUpLocal(s?.allWals ?? const []));
+      final local = context.select<SyncProvider?, DeviceCatchUpLocal>(
+          (s) => deviceCatchUpLocal(s?.pendingWorkWals ?? const [], alreadyCollapsed: true));
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       // The status line reads sync state only; whether server jobs exist comes
       // from the memoized snapshot, so a progress tick never rescans the inventory.

@@ -117,6 +117,59 @@ def test_original_vad_union_must_agree_with_speech_metering():
         projection_speech_spans(payload, 160)
 
 
+def test_decoded_eof_span_overrunning_admitted_duration_is_clamped():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # The worker's fetch_decode check admits decoded audio up to 0.1s longer
+    # than the admitted capture, and span edges ride the decoded sample clock,
+    # so a sample-rounded EOF span ends past the admitted duration (reentry29
+    # probe, 2026-10-28: admitted 1.00001s, 16001 decoded samples).
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    payload = {'speech_spans': [{'start': 0.0, 'end': decoded_eof}], 'speech_seconds': decoded_eof}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.0, 'end': admitted}]
+    # The worker's own tolerance boundary (exactly 0.1s) still clamps.
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.1}], 'speech_seconds': 4.1}
+    assert projection_speech_spans(payload, 4) == [{'start': 0.0, 'end': 4}]
+
+
+def test_vad_span_overrun_beyond_decode_tolerance_is_still_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.2}], 'speech_seconds': 4.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+    # A span starting at or past the admitted duration degenerates after the
+    # clamp (start >= end), whether or not its own overrun is within tolerance.
+    payload = {'speech_spans': [{'start': 4.05, 'end': 4.1}], 'speech_seconds': 0.05}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_clamped_eof_span_keeps_overlapping_spans_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # Overlap against a span the clamp shortened must still fail: the second
+    # span cannot survive inside the admitted tail the first span now owns.
+    payload = {'speech_spans': [{'start': 3.9, 'end': 4.1}, {'start': 3.95, 'end': 4.05}], 'speech_seconds': 0.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_speech_accounting_tolerates_the_eof_clamp_only_within_one_sample():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # speech_seconds counts the decoded-clock union (the worker sums the same
+    # spans it emits), so the clamp must not break the accounting fence: the
+    # pre-clamp union is compared, and a real disagreement still fails.
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    spans = [{'start': 0.5, 'end': decoded_eof}]
+    payload = {'speech_spans': spans, 'speech_seconds': decoded_eof - 0.5}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.5, 'end': admitted}]
+    payload['speech_seconds'] = decoded_eof - 0.5 + 0.001
+    with pytest.raises(ValueError, match='accounting'):
+        projection_speech_spans(payload, admitted)
+
+
 def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.projection_parts import split_result
@@ -127,6 +180,25 @@ def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
     payload = {'audio_seconds': 200, 'words': [{'word': 'Text.', 'timestamp': [0, 1]}]}
     with pytest.raises(ValueError, match='speech_spans'):
         split_result(item, payload)
+
+
+def test_assignment_held_without_recovery_matrix():
+    """Which quarantined-receipt rows the held-partial scan may treat as held."""
+    from database.batch_pipeline_projection import assignment_held_without_recovery
+
+    quarantined = {'projection': {'state': 'quarantined'}}
+    assert assignment_held_without_recovery({'recovery_state': 'held'}, quarantined)
+    # Not recovery-held, or the receipt can still change: not a partial yet.
+    assert not assignment_held_without_recovery({}, quarantined)
+    assert not assignment_held_without_recovery({'recovery_state': 'held'}, {'projection': {'state': 'persisted'}})
+    assert not assignment_held_without_recovery({'recovery_state': 'held'}, {})
+    # An open operator intent means a reviewed change is already in flight.
+    assert not assignment_held_without_recovery(
+        {'recovery_state': 'held', 'speech_redrive': {'state': 'pending'}}, quarantined
+    )
+    assert assignment_held_without_recovery(
+        {'recovery_state': 'held', 'speech_redrive': {'state': 'completed'}}, quarantined
+    )
 
 
 @pytest.mark.parametrize('bound', [False, True])
@@ -813,45 +885,6 @@ def test_non_privacy_errors_log_no_fence_reason(caplog):
                 raise ValueError('private')
     assert 'exception_type=ValueError' in caplog.text
     assert 'fence_reason' not in caplog.text
-
-
-def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(binding, monkeypatch, caplog):
-    from utils.batch_pipeline.contracts import WorkItem, Priority
-
-    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
-    payload = {
-        'words': [{'word': 'Fixture.', 'timestamp': [0, 1]}],
-        'audio_seconds': 1,
-        'speech_seconds': 1,
-        'diarization': {'turns': []},
-    }
-    projector = projection.Projector(Mock(), Mock(return_value=payload))
-    projector.store = Mock()
-    session = projector.store.session.return_value
-    monkeypatch.setattr(
-        projection,
-        'build_incoming',
-        lambda *a, **k: {
-            'started_at': Mock(timestamp=lambda: 0),
-            'finished_at': Mock(timestamp=lambda: 1),
-            'transcript_segments': [{'speaker_id_scope': 'sync:fixture'}],
-        },
-    )
-    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
-    assigned = {'id': 'synthetic-neighbour', '_sync_lineage_stamp_gap_refused': True}
-
-    def committed(*args, after_assign, **kwargs):
-        planned = (assigned, False, [])
-        after_assign(Mock(), planned)
-        return planned
-
-    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', committed)
-    with caplog.at_level(logging.INFO):
-        projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, finish=False)
-    session.persist.assert_called_once()
-    assert 'event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0' in caplog.text
-    assert 'synthetic-neighbour' not in caplog.text
-    assert '_sync_lineage_stamp_gap_refused' not in assigned
 
 
 def test_split_rollover_enqueues_every_output_before_acknowledging_and_resumes(monkeypatch, binding):

@@ -330,3 +330,5 @@ guidance.
 Changing a rule here is a product decision: update the primitive, migrate its callers in the same PR,
 and add or tighten a rule in `check_mobile_ux_contract.py` (with a failing case in
 `test_check_mobile_ux_contract.py`) so the old pattern cannot come back.
+
+Closed episode headers use `OmiDateFormat.weekdayDate` with `timeRange` and `OmiDuration.compact`; their Home rows reuse `ConversationListItem`.

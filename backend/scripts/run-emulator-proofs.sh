@@ -65,6 +65,8 @@ run_proof "ledger correction, revert, standalone reopen, privacy fence" \
 # and relies on backend/ staying the import root.
 run_proof "writer cutover / rollback / rollforward" \
   "$PYTHON" -m scripts.knowledge_ledger_writer_transition_emulator_test
+run_proof "Dream idle parking keeps every wakeup (park/acquire vs concurrent mark_dirty)" \
+  "$PYTHON" scripts/dream_park_race_emulator_test.py
 run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
   tests/integration/test_summary_task_promotion_emulator.py \
@@ -74,6 +76,12 @@ run_proof "summary task recovery, concurrency and expiry" \
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
 run_proof "job-store conformance (sim + emulator)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py
+
+# Daily parity: real claims/settlement on old Firestore and new Postgres.
+# CI requires sim + emulator; local/staging qualification must require all.
+run_proof "enrichment recovery conformance (PL-342/397/398)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
 if (( ${#failures[@]} )); then
   echo

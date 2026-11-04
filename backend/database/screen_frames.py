@@ -23,7 +23,7 @@ import copy
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from google.cloud import firestore
 from prometheus_client import Counter
@@ -423,7 +423,7 @@ def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_
     return _read_state(_conversation_ref(uid, conversation_id), bucket, 'selection_fingerprint')
 
 
-def get_conversation_screenshot_sharing_enabled(conversation: Dict[str, Any]) -> bool:
+def get_conversation_screenshot_sharing_enabled(conversation: Mapping[str, Any]) -> bool:
     """Default true for a conversation that predates this field (David's
     ruling 2026-08-20)."""
     value = conversation.get('screenshot_sharing_enabled')
