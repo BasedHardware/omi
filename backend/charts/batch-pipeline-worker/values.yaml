@@ -49,6 +49,8 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  # Match the serving hosts; prod overrides this below the 120s guard blind window.
+  servingMetricsMinRefreshSeconds: 30
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
   controlCandidateFanout: 16
   admissionParallelCalls: true
