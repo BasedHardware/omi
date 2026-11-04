@@ -528,6 +528,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_COMPOSE_SETTLE_ENABLED` | Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_LIVE_TIMER_START_ENABLED` | Default on; send the authoritative live episode timer start to current apps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1130,6 +1131,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
 - `EPISODE_COMPOSER` — Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) (fail: open)
+- `EPISODE_COMPOSE_SETTLE_ENABLED` — Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling (fail: open)
 - `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` — Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor (fail: open)
 - `EPISODE_LIVE_TIMER_START_ENABLED` — Default on; send the authoritative live episode timer start to current apps (fail: open)
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)

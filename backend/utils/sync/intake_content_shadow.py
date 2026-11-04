@@ -14,6 +14,9 @@ INTAKE_CONTENT = Counter(
     'Committed plain-sync merges by surviving speech and recorded extent change; shadow only',
     ['speech', 'span'],
 )
+for _speech in SPEECH:
+    for _span in SPANS:
+        INTAKE_CONTENT.labels(speech=_speech, span=_span)
 
 
 def capture(conversation: dict, plans: list[Any]) -> None:

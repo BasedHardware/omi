@@ -151,8 +151,9 @@ This branch includes merged read/write trims #24577 and attach/gate #24582.
 The shared digest normalizes the capture ID at memo verification as well as fact
 append, including raw documents without a stored ID. Cached fence reads, completed
 memo hits, conditional membership writes and invalidation remain intact.
-Batch close #24544 and composer #24579 were still open at integration; land or
-rebase them ahead of this PR on the same train without duplicating append hooks.
+Composer #24579 is also included. Batch close #24544 was still open at
+integration; land or rebase it ahead of this PR on the same train without
+duplicating append hooks.
 The phase shadow already on main remains active.
 
 After the authorized backend train, inspect each traffic-serving revision's
@@ -187,13 +188,16 @@ for a recomposition/double-consumption wave, task dispatch failures, and Home 20
 Cost forecast from the supplied 2026-11-04 aggregate study: the conservative dual-write here budgets roughly
 $5–12/day in extra fact/dirty writes at the current trigger rate, plus the bounded wake/sweep overhead (study allowance $0–2/day).
 Allow another $1–2/day for control-document reads and scan rotation: roughly
-$6–16/day total shadow overhead, to be verified against billed operations.
+$6–16/day in shadow operation overhead, to be verified against billed operations.
+Retained append-log storage and index growth are additional and unmeasured;
+measure encrypted bytes per fact and retained/index bytes before claiming an
+all-in daily total.
 Home rows and conditional requests target $6–10/day of read savings after the
 cohort/app ramp. The design's broader **$30–40/day incremental batch-2 saving**
 includes retiring eager legacy consolidation, which this dual-write PR does not
 claim to have realized. Full redesign target $95–130/day is a forecast for the
 study's cohort, with composer uncertainty and rollout growth. Re-measure reads,
-writes and tasks normalized by admitted sync volume; include vendor composer
+writes, tasks and retained storage normalized by admitted sync volume; include vendor composer
 usage in the total. No new paid work is introduced by the drain.
 
 ## Documented follow-up only

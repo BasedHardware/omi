@@ -117,6 +117,9 @@ def attach(
                     if owner_reuse_enabled()
                     else record_recovered(uid, str(owner['id']), conversation_id, row, c)
                 )
+                if recovered == 'skipped_discarded':
+                    end_discarded(uid, conversation_id, row, SYNC_UPDATE, c)
+                    return recovered
                 if recovered in {'applied', 'skipped_applied'} and not absorbed_from:
                     episode_attach_memo.complete(uid, conversation_id, row, owner, firestore_client=c.firestore_client)
             return outcome

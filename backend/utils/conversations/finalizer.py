@@ -19,6 +19,7 @@ from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
+from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
@@ -149,7 +150,7 @@ async def _episode_after_finalization(
     if not row:
         return
     try:
-        if trigger == ProcessingTrigger.SYNC_UPDATE and episodes_enabled_for(uid):
+        if trigger == ProcessingTrigger.SYNC_UPDATE and episodes_enabled_for(uid) and noop_schedule_enabled():
             try:
                 unchanged = await asyncio.wait_for(
                     run_blocking(

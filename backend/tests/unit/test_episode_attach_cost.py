@@ -181,6 +181,7 @@ def test_duplicate_noop_switch(lane, monkeypatch, enabled):
     monkeypatch.setenv('EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED', str(enabled))
     update = Mock(return_value={})
     monkeypatch.setattr(episodes, 'update_episode', update)
+    monkeypatch.setattr(episodes, 'duplicate_memberships_match', lambda *a, **kw: True)
     owner = {'id': 'e', 'conversation_ids': ['c', 'copy'], 'duplicate_conversation_ids': ['copy']}
     capture_groups.join_duplicates('u', owner, 'c', {'capture_group': {'members': [{'id': 'copy'}]}})
     assert update.call_count == (0 if enabled else 1)

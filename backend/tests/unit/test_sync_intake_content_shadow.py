@@ -11,7 +11,7 @@ from utils.sync import absorption_metrics
 
 
 @pytest.mark.parametrize(
-    'speech,span', [('repeat_only', 'unchanged'), ('repeat_only', 'growth'), ('new_speech', 'growth')]
+    'speech,span', [(speech, span) for speech in sorted(shadow.SPEECH) for span in sorted(shadow.SPANS)]
 )
 def test_plain_merge_is_shadowed_once_after_commit(speech, span):
     start = datetime(2026, 11, 4, tzinfo=timezone.utc)
@@ -19,6 +19,10 @@ def test_plain_merge_is_shadowed_once_after_commit(speech, span):
     new = deepcopy(old)
     if span == 'growth':
         new['recorded_end'] += timedelta(minutes=1)
+    elif span == 'changed':
+        new['recorded_start'] += timedelta(seconds=1)
+    elif span == 'unknown':
+        new.pop('recorded_end')
     payload = deepcopy(new)
     plan = SimpleNamespace(
         created=False,

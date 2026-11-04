@@ -99,4 +99,15 @@ def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
         ):
             transaction.update(ref, {marker: key})
 
-    run_transactional(client, finish, transient=True)
+    try:
+        run_transactional(client, finish, transient=True)
+    except Exception:
+        # The recovery already committed. An absent completion stamp keeps
+        # future calls on the full path without changing this call's outcome.
+        record_fallback(
+            component='episodes',
+            from_mode='attach_memo',
+            to_mode='full_attach',
+            reason='completion_unavailable',
+            outcome='recovered',
+        )
