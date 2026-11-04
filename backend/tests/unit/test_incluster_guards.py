@@ -432,7 +432,7 @@ def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
             '-f',
             str(chart / 'prod_omi_parakeet_values.yaml'),
             '--set',
-            'image.tag=test',
+            'image.tag=test,fleetRetired=false,maintenanceMode=false',
         ],
         text=True,
     )
@@ -909,10 +909,7 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         for obj in render_docs('prod')
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
     )
-    # The production override must survive rendering: the hourly writer would
-    # otherwise restore the inherited 8..12 floor after a floor-only HPA apply.
-    # L4 stockout hold (ruling 1ca4cb); exit restores [4] * 12 + [7] * 12.
-    assert json.loads(prod['data']['floors.json']) == [7] * 24
+    assert 'floors.json' not in prod['data']
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
@@ -920,7 +917,9 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     )
     assert 'floors.json' not in default['data']
     with pytest.raises(subprocess.CalledProcessError):
-        render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
+        render_docs(
+            'prod', '--set', 'parakeetSuspended=false,floorSchedule.enabled=true', '--set', 'floorSchedule.hours={1,2}'
+        )
     kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
     assert not any(name.endswith('-floor') for _, name in kinds)
 
@@ -1049,7 +1048,7 @@ def test_helm_rbac_and_cpu_placement(environment):
             'apiGroups': ['autoscaling'],
             'resources': ['horizontalpodautoscalers'],
             'resourceNames': [f'{environment}-omi-parakeet'],
-            'verbs': ['get', 'patch'],
+            'verbs': ['get'] if environment == 'prod' else ['get', 'patch'],
         },
         {
             'apiGroups': ['apps'],

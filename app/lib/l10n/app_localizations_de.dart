@@ -15077,4 +15077,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.';
+
+  @override
+  String get episodeFinishingUp => 'Wird fertiggestellt…';
 }

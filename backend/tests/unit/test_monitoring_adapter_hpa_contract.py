@@ -63,7 +63,8 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
     if service == 'batch-pipeline-worker':
         values = chart / 'prod_omi_batch-pipeline-worker_values.yaml'
-    templates = ['templates/hpa.yaml']
+    # Retired charts intentionally render no HPA; --show-only errors on empty templates.
+    templates = [] if service == 'parakeet' else ['templates/hpa.yaml']
     command = [
         helm,
         'template',
@@ -86,6 +87,10 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
         command.extend(['--set', 'autoscaling.enabled=true'])
     rendered = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     hpas = [obj for obj in yaml.safe_load_all(rendered) if obj and obj['kind'] == 'HorizontalPodAutoscaler']
+    if service == 'parakeet':
+        assert yaml.safe_load(values.read_text())['fleetRetired'] is True
+        assert hpas == []
+        return
     assert hpas, f'{service}: no prod HPA rendered'
     rules = yaml.safe_load(ADAPTER.read_text())['rules']
     available = {
