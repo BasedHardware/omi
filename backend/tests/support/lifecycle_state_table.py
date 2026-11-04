@@ -331,7 +331,7 @@ STATES = (
             'blocked_byok',
             ('finalization_status', 'status'),
             exit=FINALIZER,
-            metric='listen_finalization_oldest_blocked_byok_age_seconds',
+            metric='omi_finalization_byok_new_oldest_age_seconds',
             alert=Alert('omi-finalization-byok-dwell-page', 'page'),
             note='14-day abandonment is computed from activity, not a deadline stamped at entry; #24533 supplies alerts',
         ),
