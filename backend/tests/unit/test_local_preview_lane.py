@@ -1,6 +1,7 @@
 """Mobile local-preview lane: admission, deferred cloud stream, client events."""
 
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -145,7 +146,7 @@ async def test_server_batch_only_publishes_local_preview_admission(monkeypatch, 
     monkeypatch.setattr(receiver_module, 'attach_live_demand', Mock(side_effect=AssertionError('demand attached')))
     monkeypatch.setattr(receiver_module, 'resolve_ondemand_config', lambda: SimpleNamespace(gate_enabled=False))
     host = make_host(local_preview=declared)
-    host.request.language = language
+    host.request = replace(host.request, language=language)
     host.persistence = SimpleNamespace(call=AsyncMock(side_effect=AssertionError('inventory read')))
     host.asend_event = AsyncMock()
     host.refresh_mobile_batch_admission = lambda: ListenSessionRuntime.refresh_mobile_batch_admission(host)
