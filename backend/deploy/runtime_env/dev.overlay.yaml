@@ -63,12 +63,12 @@ overlay:
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://172.16.48.49/diarizer
+          value: http://diarizer.omiapi.com:80
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: gateway
         HOSTED_TRANSLATION_API_URL:
           category: service_discovery
-          value: http://172.16.48.49/nllb
+          value: http://nllb.omiapi.com
         REFERRAL_PUBLIC_BASE_URL:
           value: https://api.omiapi.com
         OMI_SHAPED_AGENT_MODE:
@@ -122,7 +122,7 @@ overlay:
         SONIOX_WIRE_LEDGER:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://172.16.48.49/diarizer
+          value: http://diarizer.omiapi.com:80
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -357,7 +357,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
@@ -432,7 +432,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           SYNC_LEGACY_FRESH_ENABLED:
             value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
@@ -520,7 +520,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           SYNC_LEGACY_FRESH_ENABLED:
             value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
@@ -601,7 +601,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
