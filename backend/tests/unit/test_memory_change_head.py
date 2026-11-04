@@ -86,6 +86,11 @@ def test_atomic_head_is_in_the_same_commit_as_every_source_change(collection, op
     assert change.update.name == f'{ROOT}/users/u/memory_state/{head.HEAD_DOCUMENT}'
     assert set(change.update_mask.field_paths) == {'token', 'schema'}
     assert change.update.fields['token'].string_value
+    assert change.update.fields['schema'].integer_value == head.HEAD_SCHEMA == 2
+    assert len(change.update_transforms) == 1
+    transform = change.update_transforms[0]
+    assert transform.field_path == 'commit_generation'
+    assert transform.increment.integer_value == 1
 
 
 def test_one_head_per_owner_per_commit_and_no_heads_for_unrelated_data():
