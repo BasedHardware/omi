@@ -105,6 +105,22 @@ run_proof "partial-pull conformance (PL-194, sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_partial_pull_conformance.py
 
+# Daily parity PL-396/105/363. A missing old store must fail this qualification;
+# Postgres is additionally required by the all-backend local invocation.
+run_proof "held-custody conformance (sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_held_custody_conformance.py
+
+run_proof "pull batch parity (PL-321/322/323, sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pull_batch_parity.py
+
+# PL-211: every replacement Store must preserve pending-deletion and restore
+# semantics. Missing mandatory local backends are failures, never silent skips.
+run_proof "pending deletion and restore conformance (sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
