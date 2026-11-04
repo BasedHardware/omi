@@ -19,6 +19,7 @@ from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.stt import local_vad
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from utils.batch_pipeline.recovery_disposition import silence_payload
 
 
 def test_validation_disposition_ships_on_and_has_a_kill_switch(monkeypatch):
@@ -69,7 +70,10 @@ async def test_20ms_frame_beyond_eof_needs_independent_silence_evidence(monkeypa
     scheduler = Scheduler(store)
     scheduler.enqueue(item('short', 0.02), time.time())
     await Pump(scheduler, worker).run_once()
-    assert strict.call_count == 2  # record-only shadow plus the independent disposition
+    # Record-only shadow plus the deciding arm; a sub-frame capture consults
+    # the strict inspector first (the vad_bounds re-check adds one more call
+    # for the speech and unavailable arms, none for strict silence).
+    assert strict.call_count == (2 if speech is False else 3)
     assert provider.calls == [] and not diarized
     job = store.rows['jobs', 'short']
     assert job['attempt'] == 1
@@ -221,3 +225,63 @@ async def test_asr_empty_shadow_label_never_changes_disabled_disposition(monkeyp
     assert labels.count('evaluated') == int(mode not in {'unavailable', 'unsampled', 'shadow'})
     assert labels.count('strict_silent_pyannote_nonempty') == int(mode in {'silent', 'enabled'})
     assert strict.call_count == (0 if mode in {'unsampled', 'shadow'} else 2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('speech', [False, True, 'unavailable'])
+async def test_sub_frame_capture_asks_strict_before_the_model_and_keeps_hold_semantics(monkeypatch, speech):
+    # The 320-sample unit never reaches the model VAD when the strict
+    # inspector establishes silence; speech or unavailable evidence keeps the
+    # exact vad_bounds disposition arms this file pins for framed units.
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    strict = Mock(
+        **(
+            {'side_effect': RuntimeError('synthetic-private-error')}
+            if speech == 'unavailable'
+            else {'return_value': [{'start': 0, 'end': 0.02}] if speech else []}
+        )
+    )
+    monkeypatch.setattr(batch_pipeline, 'inspect_worker_vad', strict)
+    monkeypatch.setattr(
+        batch_pipeline,
+        'inspect_worker_silence',
+        Mock(return_value=None if speech else silence_payload(0.02)),  # None means speech.
+    )
+    vad = Mock(return_value=[] if speech is False else [(0, 0.02)])
+    worker, *_rest = setup_worker(vad=vad)
+    results = worker.process_batch([item('sub', 0.02)])
+    if speech is False:
+        assert results[0].outcome == 'silence' and vad.call_count == 0
+    else:
+        assert vad.call_count == 1
+
+
+async def test_sub_frame_strict_silence_never_enters_the_validation_disposition_arm(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    monkeypatch.setattr(batch_pipeline, 'inspect_worker_silence', Mock(return_value=silence_payload(0.02)))
+    worker, *_rest = setup_worker(vad=Mock(side_effect=AssertionError('model VAD must not run')))
+    results = worker.process_batch([item('sub', 0.02)])
+    assert [r for r in results if isinstance(r, ValidationFailureWork)] == []
+    assert results[0].outcome == 'silence'
+
+
+async def test_framed_vad_bounds_contract_is_unchanged_by_the_sub_frame_arm(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    monkeypatch.setattr(
+        batch_pipeline,
+        'inspect_worker_vad',
+        Mock(return_value=(2.0, [])),
+    )
+    monkeypatch.setattr(batch_pipeline, 'inspect_worker_silence', Mock(return_value=silence_payload(2.0)))
+    vad = Mock(side_effect=BatchValidationError(ValidationReason.VAD_BOUNDS))
+    worker, *_rest = setup_worker(vad=vad)
+    results = worker.process_batch([item('norm', 2.0)])
+    # Framed units keep the disposition arm: strict silence settles vad_bounds
+    # into the silence outcome; the sub-frame arm did not touch this path.
+    assert results[0].outcome == 'silence'
+    assert [r for r in results if isinstance(r, ValidationFailureWork)] == []

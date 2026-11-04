@@ -352,3 +352,47 @@ def test_audio_unit_wav_covers_exactly_the_admitted_frames():
     unit = audio_unit(0.0, pcm(16001))
     assert unit.duration_seconds == pytest.approx(16001 / RATE)
     assert len(unit.wav) > 44  # RIFF header plus the sample-rounded frames
+
+
+def test_sub_frame_predicate_ends_exactly_at_one_silero_frame_of_samples():
+    from config.batch_language_recovery import below_silence_threshold
+
+    # The same sample-exact boundary the recovery lane's below-frame rule
+    # uses: 511 rounded samples are sub-frame, 512 rounded samples are one
+    # complete frame and keep the model-VAD contract.
+    assert below_silence_threshold(511 / RATE)
+    assert not below_silence_threshold(512 / RATE)
+
+
+def test_sub_frame_predicate_uses_the_recovery_lanes_threshold_constant():
+    from config.batch_language_recovery import SILENCE_THRESHOLD_SECONDS, below_silence_threshold
+
+    assert not below_silence_threshold(SILENCE_THRESHOLD_SECONDS)
+    assert below_silence_threshold(SILENCE_THRESHOLD_SECONDS - 1 / RATE)
+
+
+def test_sub_frame_predicate_rounds_partial_samples_before_comparing():
+    from config.batch_language_recovery import below_silence_threshold
+
+    # 511.6 rounds to 512: the capture carries one complete frame.
+    assert not below_silence_threshold(511.6 / RATE)
+    assert below_silence_threshold(511.4 / RATE)
+
+
+def test_strict_silence_adapter_covers_the_whole_sub_frame_band():
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.worker_silence import inspect_worker_silence
+
+    for samples in (1, 160, 320, 511):
+        unit = WorkItem('band', 'owner-band', 100, 'encrypted://band', samples / RATE, Priority.FRESH)
+        payload = inspect_worker_silence(unit, np.zeros(samples, dtype=np.float32))
+        assert payload['outcome'] == 'silence' and payload['speech_spans'] == []
+
+
+def test_strict_silence_adapter_never_fabricates_spans_at_the_frame_edge():
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.worker_silence import inspect_worker_silence
+
+    unit = WorkItem('edge', 'owner-edge', 100, 'encrypted://edge', 512 / RATE, Priority.FRESH)
+    payload = inspect_worker_silence(unit, np.zeros(512, dtype=np.float32))
+    assert payload['outcome'] == 'silence' and payload['speech_spans'] == []

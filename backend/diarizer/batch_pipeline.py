@@ -22,6 +22,7 @@ from utils.batch_pipeline.worker_silence import inspect_worker_silence, inspect_
 from utils.batch_pipeline.recovery_disposition import silence_payload
 from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech, empty_retry_audio
 from config.batch_pipeline_empty_asr import safety_net_enabled
+from config.batch_language_recovery import below_silence_threshold
 from config.batch_pipeline import (
     LONG_SPEECH_HANDOFF_SECONDS,
     long_speech_handoff_enabled,
@@ -885,7 +886,25 @@ class PipelineWorker:
                     silence = None
                     spans = None
                     pyannote_observed = False
-                    if item.segment_id in flight_excluded and worker_validation_disposition_enabled():
+                    language_blocked_unit = (
+                        item.segment_id in flight_excluded and worker_validation_disposition_enabled()
+                    )
+                    if below_silence_threshold(duration) or language_blocked_unit:
+                        # A capture shorter than one complete Silero frame cannot
+                        # contain measurable speech, and the model VAD's padded
+                        # frames can only fabricate spans that start beyond the
+                        # buffer — the deterministic vad_bounds raise whose
+                        # disposition branch re-derives the same answer from this
+                        # same strict inspector, and whose quarantined units then
+                        # burn a fenced recovery sweep that settles them with the
+                        # recovery lane's own below-frame rule. Sub-frame captures
+                        # therefore ask the strict CPU inspector first, exactly
+                        # like the language-blocked path: strict silence disposes
+                        # the unit with no model forward, while strict speech or
+                        # unavailable evidence keeps the existing flow — the
+                        # model call for a non-excluded unit, the language
+                        # barrier raise for an excluded one.
+                        #
                         # Excluded from the packed pass by the frozen language:
                         # the independent strict VAD decides speech vs silence
                         # with no pyannote forward at all. Speech raises at the
@@ -897,9 +916,10 @@ class PipelineWorker:
                         except Exception:
                             silence = None
                             strict_failed = True
-                        if not strict_failed and silence is None:
+                        strict_speech = not strict_failed and silence is None
+                        if strict_speech and language_blocked_unit:
                             raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
-                        if not strict_failed:
+                        if not strict_failed and not strict_speech:
                             spans = []
                     if spans is None:
                         try:
