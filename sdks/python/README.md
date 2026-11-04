@@ -17,12 +17,57 @@ Deepgram transcription requires `websockets` 14.0 or newer. The SDK's dependency
   </Card>
 </CardGroup>
 
+## Installation
 
-## Quick Start
+### Prerequisites
+
+The SDK requires the Opus audio codec library:
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    brew install opus
+    ```
+  </Tab>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    sudo apt-get install libopus0 libopus-dev
+    ```
+  </Tab>
+  <Tab title="CentOS/RHEL">
+    ```bash
+    sudo yum install opus opus-devel
+    ```
+  </Tab>
+  <Tab title="Fedora">
+    ```bash
+    sudo dnf install opus opus-devel
+    ```
+  </Tab>
+</Tabs>
+
+### Install the SDK
+
+<Tabs>
+  <Tab title="From PyPI">
+    ```bash
+    pip install omi-sdk
+    ```
+  </Tab>
+  <Tab title="From Source">
+    ```bash
+    git clone https://github.com/BasedHardware/omi.git
+    cd omi/sdks/python
+    pip install -e .
+    ```
+  </Tab>
+</Tabs>
+
+## Quick start
 
 <Steps>
   <Step title="Set Up Your Environment">
-    Get a free API key from [Deepgram](https://deepgram.com):
+    Get an API key from [Deepgram](https://deepgram.com):
 
     ```bash
     export DEEPGRAM_API_KEY=your_actual_deepgram_key
@@ -89,6 +134,22 @@ Deepgram transcription requires `websockets` 14.0 or newer. The SDK's dependency
   </Step>
 </Steps>
 
+## API Reference
+
+### Core Functions
+
+| Function | Description |
+|----------|-------------|
+| `omi.print_devices()` | Scan for Bluetooth devices |
+| `omi.listen_to_omi(mac, uuid, handler)` | Connect to Omi device and receive audio |
+| `omi.OmiOpusDecoder()` | Decode Opus audio to PCM |
+| `omi.transcribe(queue, api_key)` | Real-time transcription via Deepgram |
+
+### Command Line Tools
+
+| Command | Description |
+|---------|-------------|
+| `omi-scan` | Scan for nearby Bluetooth devices |
 
 ## Deepgram language selection
 
@@ -141,8 +202,37 @@ Run the SDK's hardware-free regression suite with `bash test.sh`. It uses the
 repository's `uv` environment manager to test the minimum supported `websockets`
 version and is also selected by the shared local/CI check manifest.
 
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Opus library error" icon="circle-exclamation">
+    Make sure the Opus audio codec is installed on your system. See the Prerequisites section above for installation commands.
+  </Accordion>
+  <Accordion title="Bluetooth permission errors on macOS" icon="apple">
+    Go to **System Preferences → Privacy & Security → Bluetooth** and grant access to Terminal and Python.
+  </Accordion>
+  <Accordion title="Python version issues" icon="python">
+    The SDK requires Python 3.10 or higher. Check your version with `python --version`.
+  </Accordion>
+  <Accordion title="Device not found" icon="bluetooth">
+    Make sure your Omi device is powered on and nearby. Try running `omi-scan` to verify it's discoverable.
+  </Accordion>
+  <Accordion title="WebSocket issues" icon="plug">
+    The SDK requires `websockets>=14.0`. Try upgrading: `pip install --upgrade "websockets>=14.0"`
+  </Accordion>
+</AccordionGroup>
 
 ## License
 
-MIT License — built by the community.
+MIT License. Built by the community.
 
+## Related
+
+<CardGroup cols={2}>
+  <Card title="SDK Overview" icon="cube" href="/doc/developer/sdk/sdk">
+    Compare all available SDKs
+  </Card>
+  <Card title="GitHub Source" icon="github" href="https://github.com/BasedHardware/omi/tree/main/sdks/python">
+    View source code and contribute
+  </Card>
+</CardGroup>
