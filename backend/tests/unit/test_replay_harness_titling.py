@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,13 @@ from testing.replay_harness.stages.finalization import return_sites
 from testing.replay_harness.seed import restore_dates
 
 FIXTURES = Path(__file__).resolve().parents[2] / 'testing/replay_harness/fixtures'
+
+
+@pytest.fixture(autouse=True)
+def unit_cpu_guard():
+    started = time.process_time()
+    yield
+    assert time.process_time() - started <= 1.00, 'replay titling unit exceeded 1.00s CPU'
 
 
 @pytest.mark.parametrize(
@@ -99,3 +107,85 @@ def test_existing_ci_includes_titling_paths_and_same_proof_invocation():
         'tests/integration/test_replay_harness_firestore.py \\\n  tests/integration/test_replay_harness_titling_firestore.py'
         in runner
     )
+
+
+def test_tier_c_notes_cannot_reach_reports_or_stdout(tmp_path, capsys, monkeypatch):
+    from testing.replay_harness.report import StageResult, table, write_report
+
+    canary = 'CANARY-uid-8849 private conversation text'
+    value = load_case(FIXTURES / 'titling-control').manifest.to_dict()
+    value.update(tier='C', notes=canary)
+    item = item_report(
+        validate_manifest(value), [StageResult('capture_upload', 'pass'), StageResult('titling', 'pass')]
+    )
+    write_report([item], tmp_path)
+    from testing.replay_harness import cli, runner
+
+    async def cases(_directories):
+        return [item]
+
+    monkeypatch.setattr(runner, 'run_cases', cases)
+    assert cli.main(['run', '--case', str(FIXTURES / 'titling-control'), '--output', str(tmp_path)]) == 0
+    assert 'notes' not in item
+    for name in ('report.json', 'report.md', value['id'] + '.json'):
+        assert canary not in (tmp_path / name).read_text()
+    assert canary not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    'status,reason,expected',
+    [
+        ('priority_wait', None, 'priority_wait'),
+        ('locked', None, 'locked'),
+        ('leased', None, 'leased'),
+        ('acked', None, 'already_completed'),
+        *[
+            ('dropped', name, name)
+            for name in (
+                'invalid_payload',
+                'stale_generation',
+                'account_pending_deletion',
+                'identity_mismatch',
+                'fenced',
+                'blocked_byok',
+                'missing',
+                'not_actionable',
+                'completed',
+                'dead_letter',
+            )
+        ],
+        ('skipped', 'account_cutover', 'account_cutover'),
+        ('completion_conflict', None, 'completion_conflict'),
+        ('deferred', None, 'deferred'),
+        ('dead_letter', None, 'dead_letter'),
+        ('retry', 'persistence_fenced', 'persistence_fenced'),
+        ('retry', None, 'worker_retry'),
+        ('invalid_payload', None, 'invalid_payload'),
+        ('invalid_enrichment_task', None, 'invalid_enrichment_task'),
+        ('done', None, None),
+        ('dropped', 'uid-private-canary', 'unknown_dropped'),
+        ('skipped', 'text-private-canary', 'unknown_skipped'),
+        ('private-status', 'private-reason', None),
+    ],
+)
+def test_worker_response_noop_map_is_sanitized(status, reason, expected):
+    from types import SimpleNamespace
+    from testing.replay_harness.stages.worker_response import read_worker_response, worker_precondition
+
+    response = SimpleNamespace(
+        body=json.dumps({'status': status, 'reason': reason, 'content': 'PRIVATE-CANARY'}).encode()
+    )
+    body = read_worker_response(response)
+    assert worker_precondition(body) == expected
+    assert 'PRIVATE-CANARY' not in json.dumps(body)
+    assert 'private' not in json.dumps(body)
+
+
+@pytest.mark.parametrize('body', [b'private-canary', b'[]', b'null', b'{"status": ["private-canary"]}'])
+def test_malformed_worker_body_is_unknown_without_retaining_content(body):
+    from types import SimpleNamespace
+    from testing.replay_harness.stages.worker_response import read_worker_response, worker_precondition
+
+    parsed = read_worker_response(SimpleNamespace(body=body))
+    assert parsed == {'status': 'unknown', 'reason': None, 'job_status': None}
+    assert worker_precondition(parsed) is None

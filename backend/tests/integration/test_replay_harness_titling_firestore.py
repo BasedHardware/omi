@@ -77,43 +77,55 @@ def test_wp2_metadata_only_capture_seeds_without_decryption(monkeypatch):
     asyncio.run(run())
 
 
-def test_late_result_commit_and_projection_enqueue_are_distinct():
+def test_real_late_result_projection_rearms_and_status_only_cannot_pass(monkeypatch, tmp_path):
+    from database.batch_pipeline_projection import ProjectionStore
     from testing.replay_harness.env import replay_environment
     from testing.replay_harness.manifest import load_case
-    from testing.replay_harness.seed import seed_case
-    from testing.replay_harness.stages.finalization import pending_rearm
-    from database.outbox_firestore import FirestoreEnrichmentOutbox
-    from utils.enrichment import outbox
+    from testing.replay_harness.stages.finalization import TitlingDriver
 
-    with replay_environment() as environment:
-        conversation = seed_case(load_case(FIXTURES / 'titling-completed-without-title'), environment)
-        uid, cid = environment.replay_uid, environment.replay_cid
-        target = environment.store.client.collection('sync_reprocess_outbox').document(outbox.key(uid, cid))
-        environment.replay_documents.append(target)
+    async def drive(name):
+        with replay_environment() as environment:
+            return await TitlingDriver().run(load_case(FIXTURES / name), environment)
 
-        # A result document is data, not a wakeup. This exercises persistence
-        # only; a complete worker -> projector arrival remains outside WP4.
-        def commit_result(tx):
-            tx.put('jobs', 'synthetic-late-result', {'owner_id': uid, 'conversation_id': cid})
-            tx.put('results', 'synthetic-late-result', {'result': {'outcome': 'ok'}})
+    # The synthetic completed-without-title seed has no committed result/arrival yet.
+    stopped = asyncio.run(drive('titling-completed-without-title'))
+    assert stopped.reason == 'titling:completed_without_title'
+    real_mark = ProjectionStore.mark_enrichment
 
-        environment.store.run(commit_result)
-        assert not target.get().exists
-        assert conversation.get().to_dict()['finalization_status'] == 'completed'
-        wakes = []
-        producer = FirestoreEnrichmentOutbox(environment.store.client, create_wake=lambda *args: wakes.append(args))
-        # The exact producer called by mark_enrichment, after its projection
-        # receipt decides enrichment_required. Queue transport alone is local.
-        producer.enqueue(
-            outbox.key(uid, cid),
-            uid,
-            {'conversation_id': cid, 'language': 'en'},
-            environment.clock.time(),
-            now=environment.clock.time(),
-            snapshot_summary=True,
-        )
-        assert pending_rearm(target.get().to_dict()) and len(wakes) == 1
-        assert conversation.get().to_dict()['finalization_status'] == 'completed'
+    def status_only(store, segment, binding, now, canonical, language, **kwargs):
+        store.client.collection('users').document(binding.owner_id).collection('conversations').document(
+            canonical
+        ).update({'status': 'completed', 'finalization_status': 'completed'})
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(ProjectionStore, 'mark_enrichment', status_only)
+        broken = asyncio.run(drive('titling-late-result-control'))
+    assert broken.reason == 'titling:completed_without_title'
+    assert broken.details['late_result']['result_committed']
+    assert broken.details['late_result']['result_log_committed']
+    assert not broken.details['has_title'] and broken.details['final_job_status'] == 'completed'
+    assert broken.details['llm_calls'] == 0
+
+    def rearm(store, *args, **kwargs):
+        return real_mark(store, *args, **kwargs)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(ProjectionStore, 'mark_enrichment', rearm)
+        healed = asyncio.run(drive('titling-late-result-control'))
+    assert healed.status == 'pass'
+    assert healed.details['has_title'] and healed.details['final_job_status'] == 'completed'
+    assert healed.details['llm_calls'] == 1
+    assert healed.details['late_result']['projection_state'] == 'ready'
+    assert healed.details['late_result']['enrichment_wakes'] == 1
+    assert healed.details['enrichment_delivery'] == 'processed'
+    assert healed.details['enrichment_settled']
+
+    from dataclasses import asdict
+    import json
+
+    proof = {'no_arrival': asdict(stopped), 'status_only': asdict(broken), 'real_rearm': asdict(healed)}
+    (tmp_path / 'late-result-proof.json').write_text(json.dumps(proof, indent=2) + '\n')
+    print('P1 proof: no arrival=STOP; status-only result path=STOP; real re-arm=PASS')
 
 
 def test_recovery_guard_enabled_reports_its_real_skip_branches():
@@ -166,3 +178,41 @@ def test_completed_projection_cannot_substitute_for_missing_job():
     result = asyncio.run(drive())
     assert result.reason == 'titling:precondition_skipped:finalization_missing'
     assert result.details['initial_job_status'] == 'missing'
+
+
+@pytest.mark.parametrize(
+    'body,label',
+    [
+        ({'status': 'priority_wait'}, 'priority_wait'),
+        ({'status': 'locked'}, 'locked'),
+        ({'status': 'leased'}, 'leased'),
+        ({'status': 'done'}, 'worker_done_without_title'),
+        ({'status': 'dropped', 'reason': 'stale_generation'}, 'stale_generation'),
+        ({'status': 'skipped', 'reason': 'account_cutover'}, 'account_cutover'),
+        ({'status': 'retry', 'reason': 'persistence_fenced'}, 'persistence_fenced'),
+    ],
+)
+def test_driver_uses_sanitized_noop_body(monkeypatch, body, label):
+    from fastapi.responses import JSONResponse
+    from testing.replay_harness.env import replay_environment
+    from testing.replay_harness.manifest import load_case
+    from testing.replay_harness.stages.finalization import TitlingDriver
+
+    async def drive():
+        with replay_environment() as environment:
+            from routers import conversation_finalization as worker
+
+            async def respond(*args, **kwargs):
+                if body.get('reason') == 'account_cutover':
+                    for document in environment.replay_documents:
+                        if document.parent.id == 'conversation_finalization_jobs':
+                            document.update({'status': 'completed'})
+                return JSONResponse(content={**body, 'private': 'CANARY-private-uid-text'})
+
+            with monkeypatch.context() as patcher:
+                patcher.setattr(worker, 'run_listen_finalization_job', respond)
+                return await TitlingDriver().run(load_case(FIXTURES / 'titling-control'), environment)
+
+    result = asyncio.run(drive())
+    assert result.reason == 'titling:precondition_skipped:' + label
+    assert 'CANARY-private-uid-text' not in repr(result)

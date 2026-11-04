@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 from testing.replay_harness.report import StageResult, record_exception
 from testing.replay_harness.seed import seed_case
+from testing.replay_harness.stages.worker_response import read_worker_response, worker_precondition
 
 
 class TitlingCassette:
@@ -143,19 +144,9 @@ class TitlingDriver:
             ),
             'batch_jobs': len(case.corpus.get('jobs', {})),
             'batch_results': len(case.corpus.get('results', {})),
-            'pending_rearm': pending_rearm(case.corpus.get('enrichment_outbox')),
+            'pending_rearm': False,
             'llm_calls': 0,
-            'late_result_rearm': {
-                'result_commit_alone': False,
-                'projection_followup': 'enrichment_outbox_if_enrichment_required',
-                'finalization_job_requeued': False,
-                'evidence': [
-                    'database/batch_pipeline_projection_session.py:350',
-                    'database/batch_pipeline_projection.py:247',
-                    'utils/batch_pipeline/projection_followup.py:346',
-                ],
-                'runtime_arrival_exercised': False,
-            },
+            'runtime_arrival_exercised': False,
         }
 
         details['preconditions'] = {
@@ -171,14 +162,21 @@ class TitlingDriver:
         def stop(name):
             return StageResult('titling', 'stopped', reason='titling:' + name, details=details)
 
-        if status == 'completed':
+        from utils.enrichment import outbox
+
+        outbox_ref = environment.store.client.collection(outbox.COLLECTION).document(
+            outbox.key(environment.replay_uid, environment.replay_cid)
+        )
+        live_outbox = outbox_ref.get().to_dict()
+        details['pending_rearm'] = pending_rearm(live_outbox)
+        arrival = bool(case.corpus.get('titling', {}).get('late_result'))
+        deliverable = bool(live_outbox and live_outbox.get('task_token'))
+        if status == 'completed' and not arrival and not deliverable:
             if title.strip():
                 if job is None:
                     return stop('precondition_skipped:finalization_missing')
                 return StageResult('titling', 'pass', details=details)
-            return stop(
-                'completed_without_title' if not details['pending_rearm'] else 'precondition_skipped:pending_rearm'
-            )
+            return stop('completed_without_title')
         if not job:
             return stop('precondition_skipped:finalization_missing')
         if not case.corpus.get('titling', {}).get('deliver', True):
@@ -200,7 +198,10 @@ class TitlingDriver:
 
         async def observe_finalize(*args, **kwargs):
             try:
-                return await original_finalize(*args, **kwargs)
+                disposition = await original_finalize(*args, **kwargs)
+                token = getattr(disposition, 'value', disposition)
+                details['finalizer_disposition'] = token if token in {'completed', 'fenced', 'deferred'} else 'unknown'
+                return disposition
             except Exception as error:
                 errors.append(record_exception(error, 'titling'))
                 raise
@@ -243,6 +244,28 @@ class TitlingDriver:
                 cassette.calls = 0
                 observer.skips.clear()
             stack.enter_context(patch.object(finalizer, 'process_conversation', observer.process))
+            from utils.enrichment import callback
+            from testing.replay_harness.stages.late_results import commit_late_result, replay_enrichment
+
+            stack.enter_context(patch.object(callback, 'process_conversation', observer.process))
+            if arrival:
+                details['late_result'] = await commit_late_result(case, environment)
+                details['runtime_arrival_exercised'] = True
+            if arrival or deliverable:
+                details['enrichment_delivery'] = await replay_enrichment(environment)
+                row = ref.get().to_dict()
+                job_ref = environment.store.client.collection('conversation_finalization_jobs').document(
+                    row['finalization_job_id']
+                )
+                job = job_ref.get().to_dict()
+                if job_ref not in environment.replay_documents:
+                    environment.replay_documents.append(job_ref)
+                if not job:
+                    return stop('precondition_skipped:finalization_missing')
+                settled = outbox_ref.get().to_dict()
+                details['pending_rearm'] = pending_rearm(settled)
+                details['enrichment_settled'] = settled is None or settled.get('dormant') is True
+
             payload = json.dumps(
                 {'job_id': row['finalization_job_id'], 'dispatch_generation': job.get('dispatch_generation', 1)}
             ).encode()
@@ -253,6 +276,7 @@ class TitlingDriver:
             request = Request({'type': 'http', 'method': 'POST', 'path': '/', 'headers': []}, receive)
             response = await worker.run_listen_finalization_job(request, task_retry_count=0)
             details['worker_http_status'] = response.status_code
+            details['worker_response'] = read_worker_response(response)
         latest = ref.get().to_dict()
         completed = next(
             doc.get().to_dict()
@@ -271,12 +295,33 @@ class TitlingDriver:
         observations = [{'reason': 'titling:precondition_skipped:' + label} for label in dict.fromkeys(observer.skips)]
         if details['has_title'] and completed.get('status') == 'completed':
             return StageResult('titling', 'pass', details=details, observations=observations)
-        if not segments and not case.corpus.get('results'):
+        worker_skip = worker_precondition(details['worker_response'])
+        if details.get('finalizer_disposition') == 'fenced' and not observations:
+            worker_skip = 'finalization_fenced'
+        if worker_skip:
+            observations.append({'reason': 'titling:precondition_skipped:' + worker_skip})
+        if worker_skip and worker_skip != 'already_completed':
+            reason = 'titling:precondition_skipped:' + worker_skip
+        elif completed.get('status') == 'completed' and not details['has_title']:
+            reason = (
+                'titling:completed_without_title'
+                if arrival
+                else (
+                    'titling:precondition_skipped:missing_results_transcript'
+                    if not segments and not case.corpus.get('results')
+                    else observations[0]['reason'] if observations else 'titling:completed_without_title'
+                )
+            )
+        elif worker_skip:
+            reason = 'titling:precondition_skipped:' + worker_skip
+        elif not segments and not case.corpus.get('results'):
             reason = 'titling:precondition_skipped:missing_results_transcript'
         elif observations:
             reason = observations[0]['reason']
         elif errors:
             return StageResult('titling', 'stopped', **errors[0], details=details)
+        elif details['worker_response']['status'] == 'done':
+            reason = 'titling:precondition_skipped:worker_done_without_title'
         else:
             reason = (
                 'titling:precondition_skipped:unclassified' if not cassette.calls else 'titling:finalization_incomplete'

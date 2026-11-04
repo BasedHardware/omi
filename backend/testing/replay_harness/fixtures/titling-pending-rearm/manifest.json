@@ -9,11 +9,11 @@
   ],
   "created": "2026-11-04T00:00:00Z",
   "prod_evidence": {},
-  "notes": "Synthetic mechanism; baseline measured against WP1 product source.",
+  "notes": "Synthetic incomplete outbox metadata is diagnostic only; it cannot stand in for executed re-arm or title delivery.",
   "stages": {
     "titling": {
       "expect_stop_stage": "titling",
-      "expect_reason": "titling:precondition_skipped:pending_rearm"
+      "expect_reason": "titling:completed_without_title"
     }
   }
 }
