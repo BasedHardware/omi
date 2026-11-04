@@ -77,6 +77,12 @@ replay-harness:
 	@test -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: CASES OUTPUT'; exit 2)
 	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))"
 
+# Fixed adapter against immutable product refs; caller owns the emulator session.
+.PHONY: replay-gate
+replay-gate:
+	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CASES OUTPUT'; exit 2)
+	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(K),--repeats "$(K)")
+
 # Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
 # through backend/test.sh; included by scripts/pr-preflight --all for backend
 # changes so CI-only ratchets surface before the push, not after it.
