@@ -900,7 +900,7 @@ def test_stale_durable_finalize_retires_currently_hidden_member(store, monkeypat
     monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'true')
     monkeypatch.setattr(service, 'episodes_enabled_for', lambda _: True)
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda _: True)
-    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c: outcome)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c, *, row=None: outcome)
     monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: client)
     root = client.collection('users').document(uid)
     ref = root.collection('conversations').document('stale-finalize')
