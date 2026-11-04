@@ -3,6 +3,7 @@
 import pytest
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 class Snapshot:
@@ -166,3 +167,30 @@ def test_snapshots_record_every_distinct_conversation():
     snapshots = {}
     assert_batch_write_allowed(Client(rows), None, 'owner', conversation_ids=sources, snapshots=snapshots)
     assert set(snapshots['conversations']) == set(rows)
+
+
+@pytest.mark.parametrize(
+    ('user_settings', 'row_settings', 'allowed'),
+    [
+        ({}, {'private_cloud_sync_enabled': True}, True),
+        ({'private_cloud_sync_enabled': True}, {'private_cloud_sync_enabled': True}, True),
+        ({'private_cloud_sync_enabled': False}, {'private_cloud_sync_enabled': True}, False),
+        ({}, {'private_cloud_sync_enabled': False}, False),
+        ({}, {}, False),
+        ({'private_cloud_sync_enabled': True}, {'private_cloud_sync_enabled': False}, False),
+        ({}, {'private_cloud_sync_enabled': True, 'uses_custom_stt': True}, False),
+    ],
+)
+def test_batch_live_sync_fence_matches_absent_user_default_but_preserves_opt_out(user_settings, row_settings, allowed):
+    client = StrictFirestore()
+    client.rows[('users', 'owner')] = {'data_protection_level': 'standard', **user_settings}
+    path = ('users', 'owner', 'conversations', 'record')
+    client.rows[path] = {'record_lane_owner': 'batch_live_v1', **row_settings}
+    transaction = client.transaction()
+    if allowed:
+        assert assert_batch_write_allowed(client, transaction, 'owner', conversation_ids=['record']) == 0
+    else:
+        with pytest.raises(BatchPrivacyBlocked) as blocked:
+            assert_batch_write_allowed(client, transaction, 'owner', conversation_ids=['record'])
+        assert blocked.value.reason.value == 'recording_privacy_changed'
+    assert not transaction.updates and not transaction.sets and not transaction.creates

@@ -244,19 +244,28 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+# Cloud Run cannot resolve cluster DNS. These are the internal-ALB routes
+# (gateway IP + /diarizer); admission rejects any other literal, including a
+# value that merely agrees across Cloud Run hosts.
+_CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
+    'dev': 'http://172.16.48.49/diarizer',
+    'prod': 'http://172.16.160.20/diarizer',
+}
 
 
 def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require the reachable diarizer ILB on every speaker-ID host.
+    """Require a reachable diarizer route on every speaker-ID host.
 
     Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
     ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
     voice matching there while the others keep working. Cloud Run cannot use
-    in-cluster DNS; the value must match GKE listen's ILB hostname.
+    in-cluster DNS, so each Cloud Run host must use that environment's
+    approved internal-ALB route. GKE hosts share one route (ClusterIP service
+    DNS in prod, the shared internal gateway in dev).
     """
     errors: list[ValidationError] = []
-    seen_values: dict[str, str] = {}
-    listen_value: str | None = None
+    gke_values: dict[str, str] = {}
+    cloud_run_values: dict[str, str] = {}
     for platform, service_name in SPEAKER_EMBEDDING_HOSTS:
         service_config = _service_config(env_config, platform, service_name)
         if service_config is None:
@@ -285,21 +294,26 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
                     f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
                 )
             )
-        seen_values[scope] = value
-        if platform == 'gke' and service_name == 'backend-listen':
-            listen_value = value
-
-    if listen_value:
-        for scope, value in seen_values.items():
-            if '/gke/backend-listen' in scope:
-                continue
-            if value != listen_value:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{SPEAKER_EMBEDDING_ENV} must match gke/backend-listen ({listen_value!r})',
-                    )
+        approved = _CLOUD_RUN_SPEAKER_EMBEDDING_URL.get(env) if platform == 'cloud_run' else None
+        if approved and value != approved:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the approved internal-ALB route {approved!r}',
                 )
+            )
+        (gke_values if platform == 'gke' else cloud_run_values)[scope] = value
+
+    for topology_values in (gke_values, cloud_run_values):
+        distinct = set(topology_values.values())
+        if len(distinct) > 1:
+            rendered = ', '.join(f'{scope}={value!r}' for scope, value in sorted(topology_values.items()))
+            errors.append(
+                ValidationError(
+                    f'{env}/speaker-embedding',
+                    f'{SPEAKER_EMBEDDING_ENV} disagrees across hosts: {rendered}',
+                )
+            )
     return errors
 
 

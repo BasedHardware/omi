@@ -14475,6 +14475,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get episodeMoments => 'Trenuci';
 
   @override
+  String get episodeFollowUps => 'Sljedeći koraci';
+
+  @override
+  String get episodeOpenTranscript => 'Otvori transkript';
+
+  @override
   String get episodeSoFar => 'Do sada';
 
   @override
@@ -14695,12 +14701,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get episodeOnThisPhone => 'Na ovom telefonu';
 
   @override
-  String get episodeOpenTranscript => 'Otvori transkript';
-
-  @override
-  String get liveCardTitle => 'Uživo';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konačni transkript kasni oko $duration';
   }
@@ -14715,7 +14715,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Sigurno snima';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Uživo na ovom telefonu';
+  String get livePreviewOnPhoneDivider => 'Upravo sada, na ovom telefonu';
 
   @override
   String get livePreviewTurnOnLiveText => 'Uključi tekst uživo';
@@ -14905,4 +14905,91 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Prikaži najnovije rezimee na vrhu početne.';
+
+  @override
+  String get yearlySwitchTitle => 'Pređi na godišnje';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Uštedite $amount godišnje';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Uštedite $amount godišnje uz godišnje plaćanje';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Isti plan, plaćanje jednom godišnje';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price godišnje';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Za plaćanje danas';
+
+  @override
+  String get yearlySwitchRenews => 'Obnavlja se';
+
+  @override
+  String get yearlySwitchCreditNote => 'Uključuje kredit za ostatak ovog mjeseca.';
+
+  @override
+  String get yearlySwitchDeclined => 'Plaćanje je odbijeno. I dalje plaćate mjesečno.';
+
+  @override
+  String get yearlySwitchFailed => 'Prelazak nije uspio. I dalje plaćate mjesečno.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Cijena se nije mogla učitati.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Godišnje plaćanje trenutno nije dostupno za vaš plan.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Sada plaćate godišnje';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Danas naplaćeno $amount. Obnavlja se $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošalji poruku u aplikaciji $app. Ovaj ekran će se ažurirati čim je Omi primi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Uzmi novi kod i pošalji ga iz aplikacije $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Pišemo bilješke…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Prvo završavamo transkript. Možete napustiti ovu stranicu.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Pokriva do $time · potpune bilješke po završetku';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkribovano do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Sačuvano $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.';
 }

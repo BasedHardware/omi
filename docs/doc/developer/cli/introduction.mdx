@@ -28,8 +28,6 @@ own personal scripts.
   </Card>
 </CardGroup>
 
----
-
 ## Why a CLI?
 
 Omi already ships:
@@ -38,12 +36,11 @@ Omi already ships:
 - a **Flutter mobile app**, **macOS desktop app**, and
 - an **MCP server** ([`MCP`](/doc/developer/mcp/introduction)) for Claude Desktop and similar tools.
 
-What was missing was a **terminal-native, scriptable, JSON-emitting** interface
-to the data plane — the thing every modern dev tool ships (`gh`, `stripe`,
-`vercel`, `linear`) and the thing AI agents reach for first.
+`omi-cli` adds a **terminal-native, scriptable, JSON-emitting** interface to your data.
+Modern developer tools ship one, such as `gh`, `stripe`, `vercel`, and `linear`, and AI
+agents look for one first.
 
-`omi-cli` fills that gap. The same binary works equally well for a human
-reading their inbox of action items at the terminal and for an LLM agent
+The same binary serves a person checking action items in the terminal and an LLM agent
 piping `--json` output through `jq`.
 
 ## What you can do with it
@@ -66,13 +63,13 @@ omi goal progress g_xyz "$(get_today_progress)"
 
 ## How it relates to MCP
 
-The two are complementary, not competing:
+The two cover different needs:
 
 - **MCP** is the right surface for AI assistants embedded in apps that speak
-  the Model Context Protocol (Claude Desktop, Cursor). It's invisible to you —
-  the LLM calls tools directly.
+  the Model Context Protocol (Claude Desktop, Cursor). You don't see it. The LLM
+  calls tools directly.
 - **CLI** is the right surface when you want a stable command line your
-  scripts, agents, and shell pipelines can drive — anywhere a process can run.
+  scripts, agents, and shell pipelines can drive, anywhere a process can run.
 
 Both hit the same Omi API and respect the same scopes.
 
@@ -80,10 +77,10 @@ Both hit the same Omi API and respect the same scopes.
 
 <CardGroup cols={2}>
   <Card title="Install" icon="download" href="/doc/developer/cli/install">
-    `pipx install omi-cli` and you're done.
+    Install the CLI with `pipx install omi-cli`.
   </Card>
   <Card title="Quickstart" icon="rocket" href="/doc/developer/cli/quickstart">
-    Your first five commands, end to end.
+    Your first commands, end to end.
   </Card>
   <Card title="Command reference" icon="book" href="/doc/developer/cli/commands">
     Every verb, every flag.

@@ -323,6 +323,9 @@ def absorb_conversation(
     expected_survivor_sync_revision: Any = _UNSET,
     expected_donor_sync_revision: Any = _UNSET,
     last_fragment_id: Optional[str] = None,
+    finalization_fence: tuple[str, int, int] | None = None,
+    processing_owner: str | None = None,
+    before_processing: bool = False,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
@@ -357,6 +360,34 @@ def absorb_conversation(
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
             return AbsorbResult('rejected', 'conversation_not_eligible')
+        if finalization_fence is not None:
+            job_id, generation, epoch = finalization_fence
+            job = (
+                client.collection('conversation_finalization_jobs')
+                .document(job_id)
+                .get(transaction=transaction)
+                .to_dict()
+                or {}
+            )
+            until = job.get('lease_expires_at')
+            if (
+                job.get('status') != 'leased'
+                or job.get('uid') != uid
+                or job.get('conversation_id') != donor_id
+                or job.get('dispatch_generation') != generation
+                or job.get('lease_epoch') != epoch
+                or donor_raw.get('finalization_job_id') != job_id
+                or donor_raw.get('finalization_revision') != job.get('finalization_revision')
+                or job.get('fanout_status') == 'completed'
+                or not isinstance(until, datetime)
+                or until <= datetime.now(timezone.utc)
+            ):
+                return AbsorbResult('rejected', 'survivor_changed')
+        if processing_owner is not None and (
+            donor_raw.get('summary_processing_owner') != processing_owner
+            or float(donor_raw.get('summary_processing_lease_until') or 0) <= datetime.now(timezone.utc).timestamp()
+        ):
+            return AbsorbResult('rejected', 'survivor_changed')
         donor_state = donor_raw.get(SMART_MERGE_FIELD) or {}
         if donor_raw.get('deleted'):
             if donor_state.get('role') == 'donor' and donor_state.get('survivor_id') == survivor_id:
@@ -371,7 +402,7 @@ def absorb_conversation(
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
         flatten = smart_merge_flatten_enabled()
-        if flatten:
+        if flatten or before_processing:
             if expected_survivor_sync_revision is not _UNSET and (
                 survivor_raw.get('sync_content_revision') != expected_survivor_sync_revision
             ):
@@ -380,6 +411,7 @@ def absorb_conversation(
                 donor_raw.get('sync_content_revision') != expected_donor_sync_revision
             ):
                 return AbsorbResult('rejected', 'flatten_content_changed')
+        if flatten:
             reason, union_ids = merge_ancestry.ancestry_union(survivor_raw, {donor_id: donor_raw})
             if reason is not None:
                 return AbsorbResult('rejected', reason)
@@ -441,6 +473,9 @@ def absorb_conversation(
             dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
         )
         remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
+        from utils.conversations.recorded_time import write_span
+
+        survivor_update.update(write_span({**survivor, **survivor_update}))
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (

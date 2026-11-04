@@ -14451,6 +14451,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeMoments => 'Hetket';
 
   @override
+  String get episodeFollowUps => 'Jatkotoimet';
+
+  @override
+  String get episodeOpenTranscript => 'Avaa litterointi';
+
+  @override
   String get episodeSoFar => 'Tähän mennessä';
 
   @override
@@ -14671,12 +14677,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeOnThisPhone => 'Tässä puhelimessa';
 
   @override
-  String get episodeOpenTranscript => 'Avaa litterointi';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Lopullinen litterointi noin $duration jäljessä';
   }
@@ -14692,7 +14692,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Tallentaa turvallisesti';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live tässä puhelimessa';
+  String get livePreviewOnPhoneDivider => 'Juuri nyt, tässä puhelimessa';
 
   @override
   String get livePreviewTurnOnLiveText => 'Ota live-teksti käyttöön';
@@ -14881,4 +14881,91 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
+
+  @override
+  String get yearlySwitchTitle => 'Vaihda vuosimaksuun';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Säästä $amount vuodessa';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Säästä $amount vuodessa vuosimaksulla';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Sama tilaus, maksu kerran vuodessa';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Tilaus';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price vuodessa';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Maksettava tänään';
+
+  @override
+  String get yearlySwitchRenews => 'Uusiutuu';
+
+  @override
+  String get yearlySwitchCreditNote => 'Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.';
+
+  @override
+  String get yearlySwitchDeclined => 'Maksu hylättiin. Maksat edelleen kuukausittain.';
+
+  @override
+  String get yearlySwitchFailed => 'Vaihto epäonnistui. Maksat edelleen kuukausittain.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hintaa ei voitu ladata.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Maksat nyt vuosittain';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Tänään veloitettiin $amount. Uusiutuu $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Lähetä viesti $app-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Hae uusi koodi ja lähetä se $app-sovelluksesta.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Kirjoitetaan muistiinpanoja…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Kattaa klo $time asti · täydet muistiinpanot lopuksi';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Litteroitu klo $time asti';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration tallennettu';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
 }

@@ -18,6 +18,7 @@ from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
+from utils.batch_pipeline.shadow_projection import run as run_shadow_projection
 from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
 from utils.observability.reasons import RetryReason
 from utils.workers.retry import retry_response
@@ -36,8 +37,7 @@ ENRICHMENT_RETRIES = Counter(
 EXPECTED_RETRIES = {
     # Keyed by the defining module: utils.sync.reprocess is only an alias of utils.enrichment.outbox (#22431).
     ('utils.enrichment.outbox', 'FirstSummaryCallbackPending'): 'callback_pending',
-    ('utils.enrichment.callback', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
-    ('utils.sync.pipeline', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
+    ('utils.enrichment.admission', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
 }
 
 
@@ -70,7 +70,7 @@ def verify_worker(request: Request) -> int:
     if request.url.path == '/v2/batch-pipeline/recover-quarantine':
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
-    elif request.url.path == '/v2/batch-pipeline/shadow-recover':
+    elif request.url.path in {'/v2/batch-pipeline/shadow-recover', '/v2/batch-pipeline/shadow-project'}:
         # Same CPU role/policy as paid record recovery, with the GPU worker's
         # existing service principal rather than the Cloud Tasks invoker.
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
@@ -187,7 +187,11 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
-    outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    started = time.monotonic()
+    try:
+        outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
+    finally:
+        logger.info('event=batch_recovery_stage stage=recognition duration_seconds=%.3f', time.monotonic() - started)
     if outcome == 'held':
         try:
             await run_blocking(
@@ -202,7 +206,13 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if outcome == 'disabled':
         return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:
-        await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id)
+        started = time.monotonic()
+        try:
+            await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id, owner_only=True)
+        finally:
+            logger.info(
+                'event=batch_recovery_stage stage=post_recovery duration_seconds=%.3f', time.monotonic() - started
+            )
     return {'status': outcome}
 
 
@@ -226,6 +236,16 @@ async def shadow_recover(body: RedriveRequest):
     artifacts = await run_blocking(sync_executor, artifacts_for, store)
     outcome = await recover_async(repository, artifacts, body.segment_id)
     return {'status': outcome}
+
+
+class ShadowProjectionRequest(WorkerRequest):
+    segment_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+    payload: dict
+
+
+@router.post('/shadow-project', include_in_schema=False)
+async def shadow_project(body: ShadowProjectionRequest):
+    return await run_blocking(sync_executor, run_shadow_projection, body.service().store, body.segment_id, body.payload)
 
 
 @router.post('/gpu-idle', include_in_schema=False)
@@ -252,9 +272,12 @@ async def metrics():
 
 
 @router.post('/authorize-compute', include_in_schema=False)
-async def authorize_compute(body: HeartbeatRequest):
-    return await run_blocking(
-        db_executor, authorize, body.service().store, [lease.model_dump() for lease in body.leases]
+async def authorize_compute(body: HeartbeatRequest, request: Request):
+    # Workers advertise their client budget in a header so either side may roll first.
+    return await authorize(
+        body.service().store,
+        [lease.model_dump() for lease in body.leases],
+        budget=request.headers.get('x-omi-admission-seconds'),
     )
 
 
@@ -278,7 +301,9 @@ async def enrichment_response(payload: dict):
             from routers.enrichment import consume
             from utils.workers.consumer import http_response
 
-            return http_response(await run_blocking(postprocess_executor, consume, document_id, token))
+            return http_response(
+                await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
+            )
         # Summaries must not queue behind long transcription jobs. Reuse the
         # conversation-processing bulkhead; the master flag restores the old pool.
         executor = postprocess_executor if summary_deadline_enabled() else sync_executor

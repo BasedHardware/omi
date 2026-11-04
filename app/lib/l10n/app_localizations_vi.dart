@@ -14448,6 +14448,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeMoments => 'Khoảnh khắc';
 
   @override
+  String get episodeFollowUps => 'Việc cần làm tiếp';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
   String get episodeSoFar => 'Cho đến giờ';
 
   @override
@@ -14669,12 +14675,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeOnThisPhone => 'Trên điện thoại này';
 
   @override
-  String get episodeOpenTranscript => 'Mở bản ghi chép';
-
-  @override
-  String get liveCardTitle => 'Trực tiếp';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Bản ghi chép cuối cùng chậm khoảng $duration';
   }
@@ -14689,7 +14689,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Đang ghi âm an toàn';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Trực tiếp trên điện thoại này';
+  String get livePreviewOnPhoneDivider => 'Vừa xong, trên điện thoại này';
 
   @override
   String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
@@ -14879,4 +14879,91 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
+
+  @override
+  String get yearlySwitchTitle => 'Chuyển sang gói năm';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Tiết kiệm $amount mỗi năm';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Tiết kiệm $amount mỗi năm khi trả theo năm';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Cùng gói, thanh toán mỗi năm một lần';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Gói';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mỗi năm';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Thanh toán hôm nay';
+
+  @override
+  String get yearlySwitchRenews => 'Gia hạn';
+
+  @override
+  String get yearlySwitchCreditNote => 'Đã gồm khoản tín dụng cho phần còn lại của tháng này.';
+
+  @override
+  String get yearlySwitchDeclined => 'Thanh toán bị từ chối. Bạn vẫn trả theo tháng.';
+
+  @override
+  String get yearlySwitchFailed => 'Không thể chuyển. Bạn vẫn trả theo tháng.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Không tải được giá của bạn.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Hiện chưa thể trả theo năm cho gói của bạn.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Bạn đã chuyển sang trả theo năm';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Đã thu $amount hôm nay. Gia hạn vào $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Gửi tin nhắn trong $app. Màn hình này sẽ cập nhật ngay khi Omi nhận được.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Lấy mã mới và gửi từ $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Đang viết ghi chú…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Đang hoàn tất bản chép trước. Bạn có thể rời trang này.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Đến $time · ghi chú đầy đủ khi kết thúc';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Đã chép đến $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Đã lưu $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
 }

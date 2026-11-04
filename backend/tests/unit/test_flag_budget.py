@@ -49,21 +49,30 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
+    'LATE_AUDIO_SYNC_INTAKE_ENABLED',
+    'EPISODE_RECORDED_TIME_ENABLED',
+    'EPISODE_LIVE_TIMER_START_ENABLED',
+    'CONVERSATION_MERGE_BEFORE_PROCESSING',
     'EPISODE_CARRY_ON_SESSION_END',
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
+    'HOME_HIDE_BELOW_FLOOR_ROWS',
 }
 
 SCOPE = (
     'utils/batch_pipeline/**/*.py',
     'diarizer/batch_pipeline*.py',
     'config/batch_pipeline*.py',
+    'config/batch_language_recovery.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
+    'parakeet/language_gate.py',
     'config/policy/**/*.py',
     'config/prerecorded_*.py',
     'config/live_stt_*.py',
     'config/transcription_final_pass.py',
+    'utils/pusher_audio_projection.py',
 )
 
 
@@ -176,11 +185,21 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     data = _load()
     names = data['names']
     helper_names = {name for name, entry in names.items() if entry.get('registry')}
-    assert helper_names == HELPER_KILL_SWITCHES
+    assert helper_names == HELPER_KILL_SWITCHES | {'SERVER_BATCH_UNSUPPORTED_LANGUAGES'}
 
-    registry = yaml.safe_load(FEATURE_FLAGS_PATH.read_text(encoding='utf-8'))
+    # Keep this inventory check inside the fast-unit CPU budget; the C safe
+    # loader has the same safe semantics and parses the full registry faster.
+    registry = yaml.load(
+        FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    )
     flags = {flag['key']: flag for flag in registry['flags']}
-    for name in sorted(helper_names):
+    unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
+    assert unsupported['owner'] == 'planscost'
+    assert unsupported['review_by'] == '2026-11-30'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'ops_kill'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['owner'] == 'planscost'
+    assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in set(env_reads((BACKEND_DIR / 'config/server_batch.py').read_text()))
+    for name in sorted(HELPER_KILL_SWITCHES):
         entry = names[name]
         flag = flags[name]
         assert entry['registry'] == 'config/feature-flags.yaml'

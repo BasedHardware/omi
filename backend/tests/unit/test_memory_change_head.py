@@ -22,7 +22,7 @@ async def test_list_and_memory_writers_share_one_commit_and_keep_source_results(
     # batches and GAPIC request preparation, stopping only at the network edge.
     _client._install_memory_change_heads()
     _client._install_list_projection_writer()
-    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     calls = []
 
     def capture(client, request=None, **kwargs):

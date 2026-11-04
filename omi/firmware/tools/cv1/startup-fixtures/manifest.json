@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "records": [
+    {
+      "file": "startup-1.log",
+      "sha256": "f516e7e8c20796fbbcf9045b387126c15d1260fcd2866f5c5390e6e6eda04533",
+      "original_raw_sha256": "b8198217a4c892352ebc095fc4f4031b5f50f0913c73ff93711d6b6e7146928d",
+      "variant": "3.0.21-rttdiag2",
+      "layer": "firmware self-report via bounded read-only RTT",
+      "sanitization": "removed ANSI/CR and replaced BLE address; no audio samples",
+      "maximum_usable_buffer": 4095,
+      "known_limit": "buffer may drop later lines; not continuous stability or independent peripheral health"
+    },
+    {
+      "file": "startup-2.log",
+      "sha256": "8680ae39e2442307b88420fcb71bbae865da280a3e53fe7d96ee2a34f0a28f0c",
+      "original_raw_sha256": "3d1db6f2d0476260729d896c469821b9b05c11681f326532d4d817b8f9baebb4",
+      "variant": "3.0.21-rttdiag2",
+      "layer": "firmware self-report via bounded read-only RTT",
+      "sanitization": "removed ANSI/CR and replaced BLE address; no audio samples",
+      "maximum_usable_buffer": 4095,
+      "known_limit": "buffer may drop later lines; not continuous stability or independent peripheral health"
+    }
+  ]
+}

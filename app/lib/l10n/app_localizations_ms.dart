@@ -14482,6 +14482,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get episodeMoments => 'Detik';
 
   @override
+  String get episodeFollowUps => 'Tindakan susulan';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
   String get episodeSoFar => 'Setakat ini';
 
   @override
@@ -14703,12 +14709,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get episodeOnThisPhone => 'Di telefon ini';
 
   @override
-  String get episodeOpenTranscript => 'Buka transkrip';
-
-  @override
-  String get liveCardTitle => 'Siaran langsung';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transkrip akhir ketinggalan kira-kira $duration';
   }
@@ -14724,7 +14724,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Merakam dengan selamat';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Langsung di telefon ini';
+  String get livePreviewOnPhoneDivider => 'Baru sahaja, pada telefon ini';
 
   @override
   String get livePreviewTurnOnLiveText => 'Hidupkan teks langsung';
@@ -14914,4 +14914,91 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Tunjukkan ringkasan terkini anda di bahagian atas Utama.';
+
+  @override
+  String get yearlySwitchTitle => 'Tukar ke Tahunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Jimat $amount setahun';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Jimat $amount setahun dengan bayaran tahunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Pelan yang sama, dibayar setahun sekali';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pelan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price setahun';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Perlu dibayar hari ini';
+
+  @override
+  String get yearlySwitchRenews => 'Diperbaharui';
+
+  @override
+  String get yearlySwitchCreditNote => 'Termasuk kredit untuk baki bulan ini.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pembayaran ditolak. Anda masih membayar bulanan.';
+
+  @override
+  String get yearlySwitchFailed => 'Tidak dapat menukar. Anda masih membayar bulanan.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Tidak dapat memuatkan harga anda.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Anda kini membayar tahunan';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount dicaj hari ini. Diperbaharui pada $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Hantar mesej dalam $app. Skrin ini dikemas kini sebaik sahaja Omi menerimanya.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Dapatkan kod baharu dan hantar daripada $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Menulis nota…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Meliputi sehingga $time · nota penuh apabila selesai';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Ditranskripsi sehingga $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration disimpan';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
 }

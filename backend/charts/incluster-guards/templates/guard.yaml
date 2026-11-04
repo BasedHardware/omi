@@ -30,7 +30,7 @@ rules:
   - apiGroups: [autoscaling]
     resources: [horizontalpodautoscalers]
     resourceNames: [{{ .Values.hpaName }}]
-    verbs: [get, patch]
+    verbs: [get{{ if not .Values.parakeetSuspended }}, patch{{ end }}]
   - apiGroups: [apps]
     resources: [deployments]
     resourceNames: [{{ .Values.hpaName }}]
@@ -69,7 +69,7 @@ data:
 {{ .Files.Get "files/guard.py" | indent 4 }}
   batch_guard.py: |
 {{ .Files.Get "files/batch_guard.py" | indent 4 }}
-{{- if .Values.floorSchedule.enabled }}
+{{- if and .Values.floorSchedule.enabled (not .Values.parakeetSuspended) }}
 {{- if ne (len .Values.floorSchedule.hours) 24 }}
 {{- fail "floorSchedule.hours must have exactly 24 entries" }}
 {{- end }}
@@ -108,6 +108,7 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Values.namespace }}
 spec:
+  suspend: {{ .Values.parakeetSuspended | default false }}
   schedule: '*/5 * * * *'
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60

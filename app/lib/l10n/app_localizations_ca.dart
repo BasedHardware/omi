@@ -14520,6 +14520,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeMoments => 'Moments';
 
   @override
+  String get episodeFollowUps => 'Seguiments';
+
+  @override
+  String get episodeOpenTranscript => 'Obre la transcripció';
+
+  @override
   String get episodeSoFar => 'Fins ara';
 
   @override
@@ -14741,12 +14747,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeOnThisPhone => 'En aquest telèfon';
 
   @override
-  String get episodeOpenTranscript => 'Obre la transcripció';
-
-  @override
-  String get liveCardTitle => 'En directe';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'La transcripció final va amb uns $duration de retard';
   }
@@ -14761,7 +14761,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
 
   @override
-  String get livePreviewOnPhoneDivider => 'En directe en aquest telèfon';
+  String get livePreviewOnPhoneDivider => 'Ara mateix, en aquest telèfon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Activa el text en directe';
@@ -14952,4 +14952,91 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
+
+  @override
+  String get yearlySwitchTitle => 'Canvia a anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Estalvia $amount l\'any';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Estalvia $amount l\'any amb el pagament anual';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'El mateix pla, un sol pagament l\'any';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pla';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price l\'any';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'A pagar avui';
+
+  @override
+  String get yearlySwitchRenews => 'Es renova';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclou crèdit per a la resta d\'aquest mes.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pagament rebutjat. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchFailed => 'No s\'ha pogut canviar. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'No s\'ha pogut carregar el preu.';
+
+  @override
+  String get yearlySwitchUnavailable => 'El pagament anual no està disponible per al teu pla ara mateix.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Ara pagues anualment';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Avui s\'han cobrat $amount. Es renova el $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Envia el missatge a $app. Aquesta pantalla s\'actualitzarà quan l\'Omi el rebi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obtén un codi nou i envia\'l des de $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'S\'estan escrivint les notes…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Primer acabem la transcripció. Pots sortir d\'aquesta pàgina.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Cobreix fins a les $time · notes completes en acabar';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcrit fins a les $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration desats';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
 }

@@ -43,6 +43,9 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
+from config.recorded_time import recorded_episodes_enabled
+from database import conversations as conversations_db
+from utils.conversations.recorded_time import recorded_span, is_late
 
 from config.episodes import (
     FIRST_MOMENT_MIN_SECONDS,
@@ -77,6 +80,7 @@ class _Buffer:
     carried: list[MomentFragment] = field(default_factory=list)
     words: int = 0
     last_flush_wall: float = 0.0
+    last_arrival_at: float = 0.0
     current_first_wall: Optional[float] = None
     session_ended: bool = False
     session_end_generation: int = 0
@@ -90,11 +94,11 @@ class MomentTracker:
         self._lock = threading.Lock()
 
     def _evict(self, now: float) -> None:
-        stale = [uid for uid, buf in self._buffers.items() if now - buf.last_wall > BUFFER_TTL_SECONDS]
+        stale = [uid for uid, buf in self._buffers.items() if now - buf.last_arrival_at > BUFFER_TTL_SECONDS]
         for uid in stale:
             del self._buffers[uid]
         while len(self._buffers) > MAX_BUFFERS:
-            oldest = min(self._buffers, key=lambda uid: self._buffers[uid].last_wall)
+            oldest = min(self._buffers, key=lambda uid: self._buffers[uid].last_arrival_at)
             del self._buffers[oldest]
 
     @staticmethod
@@ -146,18 +150,19 @@ class MomentTracker:
         conversation_id: Optional[str],
         source: Optional[str],
         *,
-        now: Optional[float] = None,
+        arrival_at: float,
+        recorded_at: float,
     ) -> list[MomentInput]:
         """Returns the moments that ended with this batch (usually none, at most two)."""
         if not conversation_id:
             return []
-        wall = time.time() if now is None else now
+        wall = recorded_at
         fresh = [dict(s) for s in segments if str(s.get('text') or '').strip()]
         if not fresh:
             return []
         ended: list[MomentInput] = []
         with self._lock:
-            self._evict(wall)
+            self._evict(arrival_at)
             buf = self._buffers.get(uid)
             if buf is not None and buf.segments:
                 moved = buf.conversation_id != conversation_id
@@ -166,7 +171,7 @@ class MomentTracker:
                 spaced = wall - buf.last_flush_wall >= MOMENT_MIN_INTERVAL_SECONDS
                 if paused and buf.words >= MOMENT_MIN_WORDS and spaced:
                     ended.append(self._moment(buf, 'pause'))
-                    buf = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                    buf = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall, last_arrival_at=arrival_at)
                     self._buffers[uid] = buf
                 elif moved:
                     buf.carried.append(
@@ -190,7 +195,7 @@ class MomentTracker:
                 else:
                     buf.session_ended = False
             if buf is None:
-                buf = _Buffer(conversation_id, source, wall, wall)
+                buf = _Buffer(conversation_id, source, wall, wall, last_arrival_at=arrival_at)
                 self._buffers[uid] = buf
             elif buf.conversation_id != conversation_id:
                 # A carried-only buffer can move again before the next moment ends.
@@ -205,12 +210,15 @@ class MomentTracker:
                         buf.first_wall = wall
                 buf.segments.extend(fresh)
                 buf.words += sum(len(str(s.get('text') or '').split()) for s in fresh)
-                buf.last_wall = wall
+                buf.last_wall = max(buf.last_wall, wall)
+                buf.last_arrival_at = arrival_at
                 buf.session_ended = False
                 self._trim(buf)
                 if buf.words >= MOMENT_MAX_WORDS:
                     ended.append(self._moment(buf, 'rollover'))
-                    self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                    self._buffers[uid] = _Buffer(
+                        conversation_id, source, wall, wall, last_flush_wall=wall, last_arrival_at=arrival_at
+                    )
                 elif (
                     wall - buf.first_wall >= MOMENT_MAX_SECONDS
                     and buf.words >= MOMENT_MIN_WORDS
@@ -223,7 +231,9 @@ class MomentTracker:
                     >= FIRST_MOMENT_MIN_SECONDS
                 ):
                     ended.append(self._moment(buf, 'interval'))
-                    self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                    self._buffers[uid] = _Buffer(
+                        conversation_id, source, wall, wall, last_flush_wall=wall, last_arrival_at=arrival_at
+                    )
         return ended
 
     def flush(
@@ -307,6 +317,7 @@ class _SessionCounter:
         self._last: dict[str, list[str]] = {}
         self._activity: dict[str, dict[str, float]] = {}
         self._cap = cap
+        self._origins: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
         self._lock = threading.Lock()
 
     def first_moment(self, uid: str, conversation_id: str) -> bool:
@@ -336,17 +347,39 @@ class _SessionCounter:
             times[conversation_id] = now
             return True
 
+    def recorded_origin(self, uid: str, conversation_id: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            cached = self._origins.get((uid, conversation_id))
+            if cached is not None and time.monotonic() - cached[0] < ACTIVITY_INTERVAL_SECONDS:
+                return dict(cached[1])
+            self._origins.pop((uid, conversation_id), None)
+            return None
+
+    def remember_origin(self, uid: str, conversation_id: str, row: Mapping[str, Any]) -> None:
+        with self._lock:
+            self._origins.pop((uid, conversation_id), None)
+            self._origins[(uid, conversation_id)] = (time.monotonic(), dict(row))
+            while len(self._origins) > self._cap:
+                self._origins.pop(next(iter(self._origins)))
+
     def clear(self) -> None:
         with self._lock:
             self._last.clear()
             self._activity.clear()
+            self._origins.clear()
 
 
 sessions = _SessionCounter()
 
 
 async def _attach_if_client_seen(
-    uid: str, conversation_id: str, source: Optional[str], started_at: datetime, *, first: bool = True
+    uid: str,
+    conversation_id: str,
+    source: Optional[str],
+    started_at: datetime,
+    *,
+    first: bool = True,
+    ended_at: Optional[datetime] = None,
 ) -> str:
     """Retained speech: open/join or advance activity, with no model call."""
     seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid)
@@ -357,8 +390,18 @@ async def _attach_if_client_seen(
         return 'skipped_no_client'
     from utils.episodes.service import attach_conversation
 
+    if ended_at is None:
+        return await executors.run_blocking(
+            executors.db_executor, attach_conversation, uid, conversation_id, source, started_at=started_at
+        )
     return await executors.run_blocking(
-        executors.db_executor, attach_conversation, uid, conversation_id, source, started_at=started_at
+        executors.db_executor,
+        attach_conversation,
+        uid,
+        conversation_id,
+        source,
+        started_at=started_at,
+        ended_at=ended_at,
     )
 
 
@@ -392,15 +435,58 @@ async def on_realtime_segments(
     try:
         if not episodes_enabled_for(uid):
             return
+        arrival_at = time.time()
+        recorded = None
+        if recorded_episodes_enabled() and conversation_id:
+            if not await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid):
+                return
+            row = sessions.recorded_origin(uid, conversation_id)
+            if row is None:
+                row = await executors.run_blocking(
+                    executors.db_executor,
+                    conversations_db.get_conversation_raw_snapshot,
+                    uid,
+                    conversation_id,
+                    field_paths=['started_at', 'finished_at', 'last_speech_at', 'source', 'discarded', 'deleted'],
+                )
+                if row:
+                    sessions.remember_origin(uid, conversation_id, row)
+            if not row or row.get('discarded') or row.get('deleted'):
+                return
+            recorded = recorded_span(row.get('started_at'), segments)
+            if recorded is None:
+                return  # An unplaced transcript proves no timeline boundary.
+            if is_late(recorded, datetime.fromtimestamp(arrival_at, timezone.utc)):
+                # Pusher and listen share this guard, so transport cannot turn
+                # a delayed batch into an arrival-timed live occasion.
+                row = dict(row, transcript_segments=list(segments), finished_at=recorded[1])
+                from utils.episodes.finalize import schedule_synced_intake_attach
+
+                schedule_synced_intake_attach(uid, conversation_id, row)
+                return
         spoken = any(str(s.get('text') or '').strip() for s in segments)
         if conversation_id and spoken:
             first = sessions.first_moment(uid, conversation_id)
             if sessions.activity_due(uid, conversation_id):
                 executors.start_background_task(
-                    _attach_if_client_seen(uid, conversation_id, source, datetime.now(timezone.utc), first=first),
+                    _attach_if_client_seen(
+                        uid,
+                        conversation_id,
+                        source,
+                        recorded[0] if recorded else datetime.fromtimestamp(arrival_at, timezone.utc),
+                        first=first,
+                        ended_at=recorded[1] if recorded else None,
+                    ),
                     name='episode_attach',
                 )
-        moments = tracker.observe(uid, segments, conversation_id, source)
+        moments = tracker.observe(
+            uid,
+            segments,
+            conversation_id,
+            source,
+            arrival_at=arrival_at,
+            recorded_at=recorded[1].timestamp() if recorded else arrival_at,
+        )
         if not moments:
             return
         for moment in moments:

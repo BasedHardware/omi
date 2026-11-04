@@ -64,6 +64,9 @@ class _CollectionRef:
 class _Transaction:
     firestore: '_FakeFirestore'
 
+    def create(self, document: _DocumentRef, data: dict[str, Any]) -> None:
+        document.create(data)
+
     def update(self, document: _DocumentRef, updates: dict[str, Any]) -> None:
         document.update(updates)
 

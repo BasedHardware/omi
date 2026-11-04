@@ -8683,6 +8683,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -8753,6 +8765,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -8803,6 +8827,78 @@
           }
         },
         "title": "ClickUpTeamsResponse",
+        "type": "object"
+      },
+      "ClientFlag": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "JSON-encoded payload when enabled",
+            "title": "Payload Json"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Multivariate value when enabled; null for boolean flags",
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "key",
+          "enabled"
+        ],
+        "title": "ClientFlag",
+        "type": "object"
+      },
+      "ClientFlagsResponse": {
+        "properties": {
+          "flags": {
+            "description": "Only keys the Omi store owns. A key not listed keeps the client's previous source.",
+            "items": {
+              "$ref": "#/components/schemas/ClientFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Store version; null when the store is unconfigured or unreadable",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "flags"
+        ],
+        "title": "ClientFlagsResponse",
         "type": "object"
       },
       "ClientProcessing": {
@@ -9125,6 +9221,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -9245,6 +9353,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -9296,6 +9414,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -9498,6 +9627,40 @@
                 "type": "null"
               }
             ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -10456,6 +10619,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -10576,6 +10751,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -10627,6 +10812,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -10837,6 +11033,40 @@
                 "type": "null"
               }
             ]
+          },
+          "record_audio_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordAudioPartial"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -15751,6 +15981,18 @@
             "title": "Conversation Ids",
             "type": "array"
           },
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "follow_ups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Follow Ups",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -15759,6 +16001,18 @@
             "format": "date-time",
             "title": "Last Activity At",
             "type": "string"
+          },
+          "lede": {
+            "default": "",
+            "title": "Lede",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeMember"
+            },
+            "title": "Members",
+            "type": "array"
           },
           "moments": {
             "items": {
@@ -15813,6 +16067,18 @@
             "title": "Status",
             "type": "string"
           },
+          "timer_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timer Started At"
+          },
           "title": {
             "default": "",
             "title": "Title",
@@ -15826,6 +16092,37 @@
           "last_activity_at"
         ],
         "title": "Episode",
+        "type": "object"
+      },
+      "EpisodeListResponse": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/Episode"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "EpisodeListResponse",
         "type": "object"
       },
       "EpisodeLiveResponse": {
@@ -15885,6 +16182,53 @@
         "title": "EpisodeLookupResponse",
         "type": "object"
       },
+      "EpisodeMember": {
+        "description": "Retained member metadata; transcript is hydrated by the existing detail API.",
+        "properties": {
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "default": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "started_at"
+        ],
+        "title": "EpisodeMember",
+        "type": "object"
+      },
       "EpisodeMoment": {
         "properties": {
           "conversation_id": {
@@ -15910,6 +16254,13 @@
             "title": "Id",
             "type": "string"
           },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodePoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
           "start_offset": {
             "default": 0.0,
             "title": "Start Offset",
@@ -15928,6 +16279,27 @@
           "ended_at"
         ],
         "title": "EpisodeMoment",
+        "type": "object"
+      },
+      "EpisodePoint": {
+        "description": "One point of a composed moment, with optional supporting specifics under it.",
+        "properties": {
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "EpisodePoint",
         "type": "object"
       },
       "EpisodeProvisionalItem": {
@@ -27364,6 +27736,41 @@
         "title": "RecommendationSubjectKind",
         "type": "string"
       },
+      "RecordAudioPartial": {
+        "description": "Available transcript is incomplete; this never certifies a complete seal.",
+        "properties": {
+          "applied_generation": {
+            "default": 0,
+            "title": "Applied Generation",
+            "type": "integer"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "tail_lagging",
+              "budget_limit",
+              "tail_lost_or_unproven"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RecordAudioPartial",
+        "type": "object"
+      },
       "RecordLlmUsageBucketRequest": {
         "properties": {
           "account": {
@@ -27417,6 +27824,18 @@
         },
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
+      },
+      "RecordedClock": {
+        "enum": [
+          "device",
+          "estimated_device",
+          "frame",
+          "live_capture",
+          "imported",
+          "legacy"
+        ],
+        "title": "RecordedClock",
+        "type": "string"
       },
       "RedeemCodeRequest": {
         "properties": {
@@ -28993,6 +29412,13 @@
             "title": "Capture Completeness",
             "type": "string"
           },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenDeviceCoverage"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
           "first_observed_at": {
             "anyOf": [
               {
@@ -29242,6 +29668,40 @@
           "last_id"
         ],
         "title": "ScreenActivitySyncResponse",
+        "type": "object"
+      },
+      "ScreenDeviceCoverage": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "title": "First Observed At",
+            "type": "string"
+          },
+          "last_observed_at": {
+            "title": "Last Observed At",
+            "type": "string"
+          },
+          "synced_through": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Through"
+          }
+        },
+        "required": [
+          "device_id",
+          "first_observed_at",
+          "last_observed_at"
+        ],
+        "title": "ScreenDeviceCoverage",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {
@@ -29791,6 +30251,18 @@
             "title": "Content",
             "type": "string"
           },
+          "extracted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -29865,6 +30337,18 @@
               }
             ],
             "title": "Reviewed Source"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
           }
         },
         "required": [
@@ -33822,6 +34306,11 @@
             "title": "Successful Segments",
             "type": "integer"
           },
+          "total_files": {
+            "default": 0,
+            "title": "Total Files",
+            "type": "integer"
+          },
           "total_segments": {
             "default": 0,
             "title": "Total Segments",
@@ -36003,7 +36492,7 @@
         "type": "object"
       },
       "TranscriptionAllowanceSnapshot": {
-        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(desktop trial paywall). ``remaining_seconds`` is null when unlimited.",
+        "description": "The one server answer to which STT mode the client should open (local-models free tier, S16).\n\n``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed\nminutes are spent; the local engine is free on every plan), ``blocked``\n(no transcription access). ``remaining_seconds`` is null when unlimited.",
         "properties": {
           "mode": {
             "title": "Mode",
@@ -37205,6 +37694,17 @@
       },
       "UpgradeSubscriptionRequest": {
         "properties": {
+          "expected_amount_due": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Amount Due"
+          },
           "price_id": {
             "maxLength": 255,
             "minLength": 1,
@@ -37221,6 +37721,22 @@
               }
             ],
             "title": "Promotion Code"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "switch_now": {
+            "default": false,
+            "title": "Switch Now",
+            "type": "boolean"
           }
         },
         "required": [
@@ -38937,6 +39453,134 @@
           "status"
         ],
         "title": "WrappedStatusResponse",
+        "type": "object"
+      },
+      "YearlySwitchResponse": {
+        "properties": {
+          "amount_due_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Due Today"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "first_billing_period": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Billing Period"
+          },
+          "monthly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Amount"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "renews_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renews At"
+          },
+          "savings_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Savings Amount"
+          },
+          "yearly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Amount"
+          }
+        },
+        "required": [
+          "eligible",
+          "reason"
+        ],
+        "title": "YearlySwitchResponse",
         "type": "object"
       },
       "routers__desktop_tts_updates__TtsSynthesizeRequest": {
@@ -56268,6 +56912,149 @@
         ]
       }
     },
+    "/v1/episodes": {
+      "get": {
+        "operationId": "list_episodes_v1_episodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Episodes",
+        "tags": [
+          "episodes"
+        ]
+      }
+    },
     "/v1/episodes/by-conversation/{conversation_id}": {
       "get": {
         "operationId": "get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get",
@@ -56931,6 +57718,95 @@
         "tags": [
           "fair_use"
         ]
+      }
+    },
+    "/v1/flags": {
+      "get": {
+        "operationId": "client_flags_v1_flags_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surface",
+            "required": true,
+            "schema": {
+              "enum": [
+                "macos",
+                "mobile",
+                "web-app",
+                "windows"
+              ],
+              "title": "Surface",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientFlagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Client Flags"
       }
     },
     "/v1/folders": {
@@ -66535,6 +67411,93 @@
         "summary": "Upgrade Subscription Endpoint"
       }
     },
+    "/v1/payments/yearly-switch": {
+      "get": {
+        "description": "Whether this monthly payer can switch to yearly now, and (with preview) exactly what it costs.",
+        "operationId": "get_yearly_switch_endpoint_v1_payments_yearly_switch_get",
+        "parameters": [
+          {
+            "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+            "in": "query",
+            "name": "preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+              "title": "Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearlySwitchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Yearly Switch Endpoint"
+      }
+    },
     "/v1/paypal/payment-details": {
       "get": {
         "description": "Get the PayPal payment details for the user",
@@ -75987,7 +76950,7 @@
     },
     "/v1/users/me/paywall": {
       "get": {
-        "description": "Trial-paywall status for the calling user on the given platform.\n\nUsed by the Rust desktop-backend middleware to decide whether to proxy\npaid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of\n`is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth\naccount >3d old + platform in {macos, desktop}. Mobile platforms always\nreturn `paywalled=false`.\n\nPlatform comes from `X-App-Platform` header (preferred) or `platform`\nquery param (fallback). Unknown / missing platforms are never paywalled.",
+        "description": "Released desktop middleware still reads this permanently disabled gate.",
         "operationId": "get_user_paywall_status_v1_users_me_paywall_get",
         "parameters": [
           {
@@ -76338,7 +77301,7 @@
     },
     "/v1/users/me/trial": {
       "get": {
-        "description": "Structured trial metadata for the calling user.\n\nReturns trial timing info (start, end, remaining seconds, expired flag)\nplus the list of features available during trial and the plan the user\nfalls to after trial expiry. Used by desktop clients to render countdown\nbanners and pre-expiry upgrade nudges.\n\nPaid-plan and BYOK users get `trial_expired=False` with zeroed timing\n(trial is irrelevant to them — they have full access).",
+        "description": "Retain the disabled trial's constant metadata for released desktop decoders.",
         "operationId": "get_user_trial_status_v1_users_me_trial_get",
         "parameters": [
           {
@@ -84408,6 +85371,24 @@
             }
           },
           {
+            "description": "Original batch job for an exact custody repair bundle",
+            "in": "query",
+            "name": "repair_job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Original batch job for an exact custody repair bundle",
+              "title": "Repair Job Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-App-Platform",
             "required": false,
@@ -84623,6 +85604,22 @@
               "default": false,
               "title": "Surface Open",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Custody-Repair-Protocol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Custody-Repair-Protocol"
             }
           },
           {

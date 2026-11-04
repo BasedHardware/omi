@@ -15,6 +15,8 @@ device partition and a user-managed row are.
 from __future__ import annotations
 
 from utils.sync import processing_hold
+from config.merge_before_processing import enabled as merge_before_processing_enabled, already_processed
+from utils.conversations.summary_delivery import present as summary_present
 
 import re
 from copy import deepcopy
@@ -164,7 +166,10 @@ def speech_bounds(row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]])
 
 
 def fragment_of(row: Mapping[str, Any]) -> Optional[Fragment]:
-    started, finished = row.get('started_at'), row.get('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    started, finished = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(started, datetime) or not isinstance(finished, datetime) or not row.get('id'):
         return None
     stored = row.get('structured')
@@ -268,7 +273,7 @@ def stretch_before(a: Fragment, candidates: Iterable[Fragment]) -> list[Fragment
 
 
 def new_conversation_skip(
-    row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]], *, capture_end: bool
+    row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]], *, capture_end: bool, before_processing: bool = False
 ) -> Optional[str]:
     """Why the just-finished conversation cannot join anything, or ``None``."""
     if row.get('source') not in ELIGIBLE_SOURCES:
@@ -278,7 +283,8 @@ def new_conversation_skip(
     # A merge target never becomes a donor: its own donors would outlive it
     # (the deletion purge follows one level of ``sync_merged_from``).
     if (
-        row.get('status') != 'completed'
+        row.get('status') not in ({'processing', 'completed'} if before_processing else {'completed'})
+        or (before_processing and (already_processed(row) or user_ended(row)))
         or row.get('deleted')
         or row.get('discarded')
         or row.get('processing_deferred')
@@ -344,7 +350,7 @@ def check_pair(
     if partition(survivor) != partition(new):
         return PairCheck(SkipReason.NO_PREDECESSOR)
     if refresh_owed(survivor) and not (
-        processing_hold.enabled()
+        processing_hold.enabled_for(survivor)
         and int(smart_merge_state(survivor).get('delegated_revision') or 0) >= revision(survivor)
     ):
         return PairCheck(SkipReason.PREDECESSOR_REFRESH_PENDING)
@@ -367,10 +373,14 @@ def _check_pair_legacy(
 ) -> PairCheck:
     survivor_speech = speech_bounds(survivor, survivor_segments)
     new_speech = speech_bounds(new, new_segments)
-    survivor_end, new_start = survivor.get('finished_at'), new.get('started_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    a = conversation_span(dict(survivor, transcript_segments=list(survivor_segments)))
+    b = conversation_span(dict(new, transcript_segments=list(new_segments)))
+    survivor_end, new_start = a.recorded_end if a else None, b.recorded_start if b else None
     if survivor_speech is None or new_speech is None or not isinstance(survivor_end, datetime):
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
-    if not isinstance(new_start, datetime):
+    if a is None or b is None or not isinstance(new_start, datetime):
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
     gap = (new_start - survivor_end).total_seconds()
     speech_gap = new_speech[0] - survivor_speech[1]
@@ -382,7 +392,7 @@ def _check_pair_legacy(
     a_segments = fragment_segments(survivor, survivor_segments, last) if last else survivor_segments
     if word_count(a_segments) < MIN_WORDS or word_count(new_segments) < MIN_WORDS:
         return PairCheck(SkipReason.TOO_FEW_WORDS, gap, speech_gap)
-    if new_speech[1] - survivor_speech[0] > MAX_MERGED_SPAN_SECONDS:
+    if (max(a.recorded_end, b.recorded_end) - a.recorded_start).total_seconds() > MAX_MERGED_SPAN_SECONDS:
         return PairCheck(SkipReason.SPAN_CAP, gap, speech_gap)
     if len(survivor_segments) + len(new_segments) > MAX_MERGED_SEGMENTS:
         return PairCheck(SkipReason.SEGMENT_CAP, gap, speech_gap)
@@ -392,7 +402,10 @@ def _check_pair_legacy(
 
 
 def _wall_times(row: Mapping[str, Any]) -> Optional[tuple[datetime, datetime]]:
-    created, finished = row.get('created_at'), row.get('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    created, finished = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(created, datetime) or not isinstance(finished, datetime) or finished < created:
         return None
     return created, finished
@@ -569,8 +582,25 @@ def absorb_payloads(
     # live survivors too: a processor started before this absorb must not write
     # its old transcript or summary over the newly joined occasion.
     survivor_update['sync_content_revision'] = int(survivor.get('sync_content_revision') or 0) + 1
-    if processing_hold.enabled() and (processing_hold.sync_sourced(survivor) or processing_hold.sync_sourced(donor)):
-        survivor_update[processing_hold.FIELD] = processing_hold.activity_patch(survivor, merged_at.timestamp())
+    merge_hold = merge_before_processing_enabled() and decision.get('processing_stage') == 'before_notes'
+    if merge_hold or (
+        processing_hold.enabled() and (processing_hold.sync_sourced(survivor) or processing_hold.sync_sourced(donor))
+    ):
+        baseline = dict(survivor)
+        if merge_hold:
+            hold = dict(survivor.get(processing_hold.FIELD) or {})
+            hold['merge_first'] = True
+            # This donor never ran full processing, so even a small append must
+            # refresh the canonical notes and derived effects.
+            hold['unprocessed_donor'] = True
+            # The survivor already owns its first notes. Count only material
+            # late content; never give every absorb a fresh paid-run budget.
+            if not hold.get('full_snapshot') and summary_present(survivor.get('structured')):
+                hold['full_snapshot'] = processing_hold.content_snapshot(
+                    dict(survivor, transcript_segments=survivor_segments)
+                )
+            baseline[processing_hold.FIELD] = hold
+        survivor_update[processing_hold.FIELD] = processing_hold.activity_patch(baseline, merged_at.timestamp())
     donor_update: dict[str, Any] = {
         'deleted': True,
         # Hide the redirect from discarded == False list indexes, exactly like a
@@ -586,4 +616,14 @@ def absorb_payloads(
         },
         DECISION_FIELD: dict(decision),
     }
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        donor_update['relevance_decision'] = {
+            'verdict': 'absorbed',
+            'decided_by': 'policy',
+            'reason': 'smart_merge',
+            'neighbor_id': str(survivor['id']),
+            'trigger': decision.get('trigger', 'capture_end'),
+        }
     return survivor_update, donor_update

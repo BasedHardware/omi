@@ -14437,6 +14437,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get episodeMoments => 'Øjeblikke';
 
   @override
+  String get episodeFollowUps => 'Opfølgning';
+
+  @override
+  String get episodeOpenTranscript => 'Åbn transskription';
+
+  @override
   String get episodeSoFar => 'Indtil videre';
 
   @override
@@ -14658,12 +14664,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get episodeOnThisPhone => 'På denne telefon';
 
   @override
-  String get episodeOpenTranscript => 'Åbn transskription';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Endelig transskription ca. $duration bagefter';
   }
@@ -14678,7 +14678,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Optager sikkert';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live på denne telefon';
+  String get livePreviewOnPhoneDivider => 'Lige nu, på denne telefon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Aktivér live-tekst';
@@ -14869,4 +14869,91 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Vis dine seneste opsummeringer øverst på Hjem.';
+
+  @override
+  String get yearlySwitchTitle => 'Skift til årlig';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Spar $amount om året';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Spar $amount om året med årlig betaling';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Samme abonnement, betalt én gang om året';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Abonnement';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price om året';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Betales i dag';
+
+  @override
+  String get yearlySwitchRenews => 'Fornyes';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inkluderer kredit for resten af denne måned.';
+
+  @override
+  String get yearlySwitchDeclined => 'Betalingen blev afvist. Du betaler stadig månedligt.';
+
+  @override
+  String get yearlySwitchFailed => 'Kunne ikke skifte. Du betaler stadig månedligt.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Kunne ikke indlæse din pris.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Årlig betaling er ikke tilgængelig for dit abonnement lige nu.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Du betaler nu årligt';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount trukket i dag. Fornyes $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Send beskeden i $app. Denne skærm opdateres, så snart Omi modtager den.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Få en ny kode, og send den fra $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Skriver noter…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Vi gør først transskriptionen færdig. Du kan godt forlade siden.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Dækker frem til $time · fulde noter, når det er slut';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transskriberet frem til $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration gemt';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
 }

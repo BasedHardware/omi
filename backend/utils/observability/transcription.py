@@ -31,6 +31,7 @@ from utils.metrics import (
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
+    OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_INTERNAL_FAILURES_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
@@ -52,6 +53,9 @@ _ROUTES = {'voice_chat_sse', 'voice_rest_multipart', 'voice_rest_pcm', 'sync'}
 _PLATFORMS = {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
 _REVISION_PATTERN = re.compile(r'[^a-zA-Z0-9_.-]')
 _SYNC_LANES = {'backfill', 'fresh'}
+# Sync pipeline startup exposes idle lanes without inventing wait observations.
+for _sync_lane in _SYNC_LANES:
+    OMI_SYNC_QUEUE_WAIT_SECONDS.labels(lane=_sync_lane)
 _SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
 _SYNC_INTERNAL_FAILURE_REASONS = frozenset(reason.value for reason in SyncFailureReason) - {
     SyncFailureReason.NONE.value

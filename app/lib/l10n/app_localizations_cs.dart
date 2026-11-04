@@ -14446,6 +14446,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeMoments => 'Okamžiky';
 
   @override
+  String get episodeFollowUps => 'Další kroky';
+
+  @override
+  String get episodeOpenTranscript => 'Otevřít přepis';
+
+  @override
   String get episodeSoFar => 'Zatím';
 
   @override
@@ -14666,12 +14672,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeOnThisPhone => 'V tomto telefonu';
 
   @override
-  String get episodeOpenTranscript => 'Otevřít přepis';
-
-  @override
-  String get liveCardTitle => 'Živě';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konečný přepis má zpoždění přibližně $duration';
   }
@@ -14686,7 +14686,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Bezpečně nahrává';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Živě v tomto telefonu';
+  String get livePreviewOnPhoneDivider => 'Právě teď, na tomto telefonu';
 
   @override
   String get livePreviewTurnOnLiveText => 'Zapnout živý text';
@@ -14875,4 +14875,91 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Zobrazit nejnovější souhrny v horní části domovské obrazovky.';
+
+  @override
+  String get yearlySwitchTitle => 'Přejít na roční';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Ušetřete $amount ročně';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Ušetřete $amount ročně s roční platbou';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Stejný plán, platba jednou ročně';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plán';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price ročně';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'K úhradě dnes';
+
+  @override
+  String get yearlySwitchRenews => 'Obnovení';
+
+  @override
+  String get yearlySwitchCreditNote => 'Zahrnuje kredit za zbytek tohoto měsíce.';
+
+  @override
+  String get yearlySwitchDeclined => 'Platba byla zamítnuta. Dál platíte měsíčně.';
+
+  @override
+  String get yearlySwitchFailed => 'Přechod se nezdařil. Dál platíte měsíčně.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Cenu se nepodařilo načíst.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Roční platba teď pro váš plán není dostupná.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Teď platíte ročně';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Dnes účtováno $amount. Obnovení $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošli zprávu v aplikaci $app. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Získej nový kód a pošli ho z aplikace $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Píšeme poznámky…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Nejprve dokončujeme přepis. Tuto stránku můžete opustit.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Pokrývá do $time · úplné poznámky po dokončení';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Přepsáno do $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return 'Uloženo $duration';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
 }

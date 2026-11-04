@@ -6,7 +6,7 @@ description: "Native iOS/macOS SDK for connecting to Omi devices with local Whis
 
 ## Overview
 
-An easy-to-install Swift package for connecting to Omi devices. Get started in seconds with local Whisper-based transcription - no cloud API required.
+A Swift package for connecting to Omi devices. It transcribes locally with Whisper, so no cloud API is required.
 
 <CardGroup cols={3}>
   <Card title="Swift Package" icon="swift">
@@ -16,11 +16,9 @@ An easy-to-install Swift package for connecting to Omi devices. Get started in s
     Whisper runs on-device
   </Card>
   <Card title="Simple API" icon="code">
-    Connect in minutes
+    Connect with a few calls
   </Card>
 </CardGroup>
-
----
 
 ## Installation
 
@@ -29,7 +27,7 @@ An easy-to-install Swift package for connecting to Omi devices. Get started in s
     Open Xcode → File → New Project → iOS → App
 
     <Note>
-    Make sure to select **Storyboard** as the Interface option.
+    Select **Storyboard** as the Interface option.
     </Note>
 
     <img
@@ -64,11 +62,9 @@ An easy-to-install Swift package for connecting to Omi devices. Get started in s
   </Step>
 </Steps>
 
----
+## Quick start
 
-## Quick Start
-
-Get transcription working in 2 minutes:
+Get live transcription running:
 
 <Steps>
   <Step title="Copy This Code">
@@ -126,10 +122,10 @@ Get transcription working in 2 minutes:
   <Step title="Test It">
     1. Turn on your Omi device
     2. The app should connect automatically
-    3. Speak - you'll see transcription in the Xcode console
+    3. Speak. You'll see transcription in the Xcode console
 
     <Note>
-    There's no UI in this example - transcription appears in the Xcode logs.
+    There's no UI in this example. Transcription appears in the Xcode logs.
     </Note>
 
     <img
@@ -139,8 +135,6 @@ Get transcription working in 2 minutes:
     />
   </Step>
 </Steps>
-
----
 
 ## API Reference
 
@@ -214,8 +208,6 @@ func reconnectIfDisconnects() {
   </Tab>
 </Tabs>
 
----
-
 ## OmiManager Methods
 
 | Method | Description |
@@ -263,13 +255,9 @@ deepgram.appendPcm(pcmData)
 deepgram.stop()
 ```
 
----
-
 ## License
 
-MIT License - Omi's Swift SDK is open source.
-
----
+MIT License. Omi's Swift SDK is open source.
 
 ## Related
 

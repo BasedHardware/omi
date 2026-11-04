@@ -204,7 +204,6 @@ def test_capture_failure_after_response_preserves_entitlement(monkeypatch):
     monkeypatch.setattr(payment.users_db, 'set_stripe_customer_id', lambda *args: None)
     for module, name in [
         (payment, 'set_credits_invalidation_signal'),
-        (payment, 'clear_trial_paywall_cache'),
         (payment, 'clear_fair_use_on_upgrade'),
         (payment.conversations_db, 'unlock_all_conversations'),
         (payment.memories_db, 'unlock_all_memories'),

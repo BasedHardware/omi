@@ -14510,6 +14510,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeMoments => 'Momente';
 
   @override
+  String get episodeFollowUps => 'Pași următori';
+
+  @override
+  String get episodeOpenTranscript => 'Deschide transcrierea';
+
+  @override
   String get episodeSoFar => 'Până acum';
 
   @override
@@ -14730,12 +14736,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeOnThisPhone => 'Pe acest telefon';
 
   @override
-  String get episodeOpenTranscript => 'Deschide transcrierea';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transcrierea finală întârzie cu aproximativ $duration';
   }
@@ -14750,7 +14750,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Se înregistrează în siguranță';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live pe acest telefon';
+  String get livePreviewOnPhoneDivider => 'Chiar acum, pe acest telefon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Activează textul live';
@@ -14940,4 +14940,91 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.';
+
+  @override
+  String get yearlySwitchTitle => 'Treci la anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Economisește $amount pe an';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Economisește $amount pe an cu plata anuală';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Același plan, plătit o dată pe an';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price pe an';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'De plată azi';
+
+  @override
+  String get yearlySwitchRenews => 'Se reînnoiește';
+
+  @override
+  String get yearlySwitchCreditNote => 'Include credit pentru restul acestei luni.';
+
+  @override
+  String get yearlySwitchDeclined => 'Plată refuzată. Rămâi la plata lunară.';
+
+  @override
+  String get yearlySwitchFailed => 'Nu s-a putut schimba. Rămâi la plata lunară.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Prețul nu a putut fi încărcat.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Plata anuală nu este disponibilă acum pentru planul tău.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Acum plătești anual';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Azi s-au încasat $amount. Se reînnoiește pe $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Trimite mesajul din $app. Acest ecran se actualizează de îndată ce Omi îl primește.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obține un cod nou și trimite-l din $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Scriem notițele…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Mai întâi terminăm transcrierea. Poți părăsi această pagină.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Până la $time · notițe complete la final';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcris până la $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration salvate';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
 }

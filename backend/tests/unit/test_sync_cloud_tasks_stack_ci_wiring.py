@@ -34,7 +34,7 @@ def test_concurrent_lease_probe_holds_stt_instead_of_deferred_full_processing():
     namespace = {
         'Any': object,
         'os': SimpleNamespace(getenv=lambda name, default: default),
-        '_wait_for_process_gate': lambda job_id: events.append(('gate', job_id)),
+        '_wait_for_stt_gate': lambda job_id: events.append(('gate', job_id)),
         'write_event': lambda channel, row: events.append((row['event'], row['job_id'])),
     }
     exec(compile(ast.Module(body=[provider], type_ignores=[]), str(source), 'exec'), namespace)
@@ -44,7 +44,7 @@ def test_concurrent_lease_probe_holds_stt_instead_of_deferred_full_processing():
         n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_local_process_conversation'
     )
     assert not any(
-        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_wait_for_process_gate'
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_wait_for_stt_gate'
         for n in ast.walk(processor)
     )
 
@@ -59,7 +59,7 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
         '\n  replay-harness-phase0a-gauntlet:\n', 1
     )[0]
 
-    assert 'timeout-minutes: 20' in job
+    assert 'timeout-minutes: 25' in job
     assert 'needs: scope' in job
     assert "if: needs.scope.outputs.applies == 'true'" in job
     assert 'uses: actions/setup-python@v6' in job

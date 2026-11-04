@@ -14546,6 +14546,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get episodeMoments => 'தருணங்கள்';
 
   @override
+  String get episodeFollowUps => 'அடுத்த படிகள்';
+
+  @override
+  String get episodeOpenTranscript => 'எழுத்துப்பிரதியைத் திற';
+
+  @override
   String get episodeSoFar => 'இதுவரை';
 
   @override
@@ -14768,12 +14774,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get episodeOnThisPhone => 'இந்த ஃபோனில்';
 
   @override
-  String get episodeOpenTranscript => 'எழுத்துப்பிரதியைத் திற';
-
-  @override
-  String get liveCardTitle => 'நேரலை';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'இறுதி எழுத்துப்பிரதி சுமார் $duration பின்தங்கியுள்ளது';
   }
@@ -14789,7 +14789,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'பாதுகாப்பாக பதிவு செய்கிறது';
 
   @override
-  String get livePreviewOnPhoneDivider => 'இந்த ஃபோனில் நேரலை';
+  String get livePreviewOnPhoneDivider => 'இப்போதுதான், இந்த ஃபோனில்';
 
   @override
   String get livePreviewTurnOnLiveText => 'நேரலை உரையை இயக்கு';
@@ -14980,4 +14980,91 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.';
+
+  @override
+  String get yearlySwitchTitle => 'ஆண்டுக்கு மாறவும்';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ஆண்டுக்கு $amount சேமிக்கவும்';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ஆண்டுக் கட்டணத்தில் ஆண்டுக்கு $amount சேமிக்கவும்';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'அதே திட்டம், ஆண்டுக்கு ஒருமுறை கட்டணம்';
+
+  @override
+  String get yearlySwitchPlanLabel => 'திட்டம்';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, ஆண்டுக்கு $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'இன்று செலுத்த வேண்டியது';
+
+  @override
+  String get yearlySwitchRenews => 'புதுப்பிப்பு';
+
+  @override
+  String get yearlySwitchCreditNote => 'இந்த மாதத்தின் மீதி நாட்களுக்கான கிரெடிட் சேர்க்கப்பட்டுள்ளது.';
+
+  @override
+  String get yearlySwitchDeclined => 'கட்டணம் நிராகரிக்கப்பட்டது. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get yearlySwitchFailed => 'மாற்ற முடியவில்லை. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'உங்கள் விலையை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get yearlySwitchUnavailable => 'இப்போது உங்கள் திட்டத்திற்கு ஆண்டுக் கட்டணம் கிடைக்கவில்லை.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'நீங்கள் இப்போது ஆண்டுத் திட்டத்தில் உள்ளீர்கள்';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'இன்று $amount வசூலிக்கப்பட்டது. புதுப்பிப்பு $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return '$app-இல் மெசேஜை அனுப்புங்கள். Omi-க்குக் கிடைத்தவுடன் இந்தத் திரை புதுப்பிக்கப்படும்.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'புதிய குறியீட்டைப் பெற்று $app-இலிருந்து அனுப்புங்கள்.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'குறிப்புகள் எழுதப்படுகின்றன…';
+
+  @override
+  String get episodeWritingNotesDetail => 'முதலில் படியெடுப்பை முடிக்கிறோம். இந்தப் பக்கத்தை விட்டு வெளியேறலாம்.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time வரை · முடிந்ததும் முழு குறிப்புகள்';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return '$time வரை படியெடுக்கப்பட்டது';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration சேமிக்கப்பட்டது';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.';
 }

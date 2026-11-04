@@ -328,6 +328,7 @@ class TestConversationMergeStartedAtCoercion:
             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False),
             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=conversation),
             patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp1'),
+            patch.object(routers_sync.sync_playback, 'conversation_merge_fingerprint', return_value='fp1'),
             patch.object(
                 routers_sync.playback_build, 'build_conversation_playback_artifact', side_effect=build_side_effect
             ),

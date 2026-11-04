@@ -25545,6 +25545,18 @@ abstract class AppLocalizations {
   /// **'Moments'**
   String get episodeMoments;
 
+  /// Section title for the next steps written into a finished episode summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-ups'**
+  String get episodeFollowUps;
+
+  /// Link from the Summary live card to the Transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Open transcript'**
+  String get episodeOpenTranscript;
+
   /// Title of the running notes card on a live episode.
   ///
   /// In en, this message translates to:
@@ -25899,18 +25911,6 @@ abstract class AppLocalizations {
   /// **'On this phone'**
   String get episodeOnThisPhone;
 
-  /// Link from the Summary live card to the Transcript tab.
-  ///
-  /// In en, this message translates to:
-  /// **'Open transcript'**
-  String get episodeOpenTranscript;
-
-  /// Title of the live preview card on the Summary tab.
-  ///
-  /// In en, this message translates to:
-  /// **'Live'**
-  String get liveCardTitle;
-
   /// Quiet line: how far the final transcript lags the live preview.
   ///
   /// In en, this message translates to:
@@ -25938,7 +25938,7 @@ abstract class AppLocalizations {
   /// Divider between the final transcript and the on-device preview lines.
   ///
   /// In en, this message translates to:
-  /// **'Live on this phone'**
+  /// **'Just now, on this phone'**
   String get livePreviewOnPhoneDivider;
 
   /// Link to the speech settings where the platform can deep-link to them.
@@ -26186,6 +26186,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show your latest recaps at the top of Home.'**
   String get dailyRecapsOnHomeDescription;
+
+  /// Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Yearly'**
+  String get yearlySwitchTitle;
+
+  /// Plans & Billing row subtitle for an Omi Pro monthly subscriber: the exact yearly saving with its currency, like US$89.97
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount} a year'**
+  String yearlySwitchRowSavings(String amount);
+
+  /// Home row for an Omi Pro monthly subscriber: yearly billing of the same plan saves this much a year; amount is the exact saving with its currency, like US$89.97
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount} a year with yearly'**
+  String yearlySwitchHomeTitle(String amount);
+
+  /// Second line of the Home row: nothing about the plan changes except billing once a year
+  ///
+  /// In en, this message translates to:
+  /// **'Same plan, billed once a year'**
+  String get yearlySwitchHomeSubtitle;
+
+  /// Label of the row naming the plan in the switch-to-yearly preview
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get yearlySwitchPlanLabel;
+
+  /// Value of the Plan row in the switch-to-yearly preview, e.g. "Unlimited, $269.91 a year"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a year'**
+  String yearlySwitchPlanValue(String plan, String price);
+
+  /// Label of the amount charged today when switching to yearly
+  ///
+  /// In en, this message translates to:
+  /// **'Due today'**
+  String get yearlySwitchDueToday;
+
+  /// Label of the date the yearly plan renews, in the switch-to-yearly preview
+  ///
+  /// In en, this message translates to:
+  /// **'Renews'**
+  String get yearlySwitchRenews;
+
+  /// Under the switch-to-yearly preview: today’s charge is lower because the unused part of the current month is credited
+  ///
+  /// In en, this message translates to:
+  /// **'Includes credit for the rest of this month.'**
+  String get yearlySwitchCreditNote;
+
+  /// Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly
+  ///
+  /// In en, this message translates to:
+  /// **'Payment declined. You\'re still on monthly.'**
+  String get yearlySwitchDeclined;
+
+  /// Shown when switching to yearly fails for another reason; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t switch. You\'re still on monthly.'**
+  String get yearlySwitchFailed;
+
+  /// Shown in the switch-to-yearly sheet when the price preview cannot be loaded; a Try Again button follows
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your price.'**
+  String get yearlySwitchPreviewFailed;
+
+  /// Shown in the switch-to-yearly sheet when the subscription can no longer switch (for example it was cancelled meanwhile)
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly billing isn\'t available for your plan right now.'**
+  String get yearlySwitchUnavailable;
+
+  /// Success title after switching to yearly billing
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on yearly'**
+  String get yearlySwitchDoneTitle;
+
+  /// Success line after switching to yearly: what was charged today and when the yearly plan renews
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} charged today. Renews {date}.'**
+  String yearlySwitchDoneBody(String amount, String date);
+
+  /// Waiting step after opening a chat app with the link code. app is a brand name such as WhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the message in {app}. This screen updates as soon as Omi gets it.'**
+  String chatAppsWaitingMessageIn(String app);
+
+  /// The link code expired. app is a brand name such as WhatsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a new code and send it from {app}.'**
+  String chatAppsCodeExpiredMessageIn(String app);
+
+  /// The processing row and page while an episode's notes are written.
+  ///
+  /// In en, this message translates to:
+  /// **'Writing notes…'**
+  String get episodeWritingNotes;
+
+  /// Under Writing notes on the processing page.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing the transcript first. You can leave this page.'**
+  String get episodeWritingNotesDetail;
+
+  /// How far the running notes reach on a live episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers up to {time} · full notes when it wraps up'**
+  String episodeCoversUpTo(Object time);
+
+  /// Rule where the final transcript ends on a live episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed up to {time}'**
+  String liveTranscribedUpTo(Object time);
+
+  /// Card past the final transcript: audio saved and not yet transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} saved'**
+  String liveAudioSaved(Object duration);
+
+  /// Under the saved-audio card's heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Speakers and the final transcript fill in here as it uploads.'**
+  String get liveAudioSavedDetail;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

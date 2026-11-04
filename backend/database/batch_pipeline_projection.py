@@ -11,6 +11,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from config.batch_pipeline import projection_followup_page_enabled
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
@@ -19,6 +20,7 @@ from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
+from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     batch_projection_ledger_owner_matches,
@@ -351,6 +353,7 @@ class ProjectionStore:
         """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
 
         policy = policy or self.policy(segment_id)
+        group_ready = projection_followup_page_enabled()
 
         @firestore.transactional
         def commit(transaction):
@@ -359,6 +362,7 @@ class ProjectionStore:
             if session.receipt().get('state') != 'ready':
                 return False
             held = False
+            ready = []
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 result = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -374,8 +378,26 @@ class ProjectionStore:
                     ):
                         raise ProjectionBlocked('quarantined sibling binding mismatch')
                     held = True
+                if (
+                    group_ready
+                    and (result.get('projection') or {}).get('state') == 'ready'
+                    and result.get('projection_state') in {'persisted', 'ready'}
+                ):
+                    if (
+                        not job.get('projection_binding')
+                        or normalized_binding(job['projection_binding']) != binding
+                        or job.get('owner_id') != binding.owner_id
+                        or result.get('owner_key') != owner_key(binding.owner_id)
+                        or result.get('segment_id') != sibling
+                    ):
+                        raise ProjectionBlocked('ready sibling binding mismatch')
+                    ready.append(self.ref('results', sibling))
             if held:
-                transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
+                # One page's ready siblings share a completion probe. Settle
+                # their discovery hints together using the read set above;
+                # otherwise they would trickle out one row per later pass.
+                for ref in ready if group_ready else [session.result_ref]:
+                    transaction.update(ref, {'projection_state': 'quarantine_held'})
             return held
 
         held = self.run(commit, policy=policy)
@@ -478,6 +500,8 @@ class ProjectionStore:
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if artifact_missing(job):
+                    return None, False, 0
                 if entry.get('projection_state') == 'erased':
                     if entry.get('owner_key') != owner_key(binding.owner_id) or entry.get('segment_id') != sibling:
                         raise ProjectionBlocked('erased sibling owner mismatch')
@@ -684,7 +708,7 @@ class ProjectionStore:
             ):
                 raise ProjectionBlocked('content ledger owner lost')
             receipts, seconds, held = [], 0.0, 0
-            erased_count = terminal_empty_count = 0
+            erased_count = terminal_empty_count = missing_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -698,6 +722,7 @@ class ProjectionStore:
                     raise ProjectionBlocked('sibling binding mismatch')
                 if not entry and held_without_recovery(job):
                     held += 1
+                    missing_count += artifact_missing(job)
                     continue
                 if entry and assignment_held_without_recovery(job, entry):
                     held += 1
@@ -730,6 +755,9 @@ class ProjectionStore:
                 'errors': [],
                 'outcome': 'partial',
             }
+            if missing_count:
+                # This publishes siblings while keeping the upload unacknowledged.
+                result['reason_code'] = ARTIFACT_MISSING_REASON
             if terminal_empty_count:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)

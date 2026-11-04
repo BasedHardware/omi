@@ -14440,6 +14440,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeMoments => 'Hetked';
 
   @override
+  String get episodeFollowUps => 'Järgmised sammud';
+
+  @override
+  String get episodeOpenTranscript => 'Ava transkriptsioon';
+
+  @override
   String get episodeSoFar => 'Seni';
 
   @override
@@ -14660,12 +14666,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeOnThisPhone => 'Selles telefonis';
 
   @override
-  String get episodeOpenTranscript => 'Ava transkriptsioon';
-
-  @override
-  String get liveCardTitle => 'Otse';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Lõplik transkriptsioon jääb umbes $duration maha';
   }
@@ -14680,7 +14680,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Salvestab turvaliselt';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Otse selles telefonis';
+  String get livePreviewOnPhoneDivider => 'Just praegu, selles telefonis';
 
   @override
   String get livePreviewTurnOnLiveText => 'Lülita reaalajas tekst sisse';
@@ -14870,4 +14870,91 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Näita viimaseid kokkuvõtteid avalehe ülaosas.';
+
+  @override
+  String get yearlySwitchTitle => 'Mine üle aastasele';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Säästa $amount aastas';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Säästa aastamaksega $amount aastas';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Sama pakett, makse kord aastas';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pakett';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price aastas';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Tasuda täna';
+
+  @override
+  String get yearlySwitchRenews => 'Uueneb';
+
+  @override
+  String get yearlySwitchCreditNote => 'Sisaldab krediiti selle kuu ülejäänud aja eest.';
+
+  @override
+  String get yearlySwitchDeclined => 'Makse lükati tagasi. Maksad endiselt igakuiselt.';
+
+  @override
+  String get yearlySwitchFailed => 'Üleminek ebaõnnestus. Maksad endiselt igakuiselt.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hinda ei õnnestunud laadida.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Aastamaks pole sinu paketile praegu saadaval.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Maksad nüüd kord aastas';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Täna võeti $amount. Uueneb $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Saada sõnum rakenduses $app. See ekraan uueneb, kui Omi selle kätte saab.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Hangi uus kood ja saada see rakendusest $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Kirjutame märkmeid…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Katab kuni $time · täielikud märkmed lõpus';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transkribeeritud kuni $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration salvestatud';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
 }

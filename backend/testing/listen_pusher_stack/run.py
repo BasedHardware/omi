@@ -35,6 +35,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
+from testing.listen_pusher_stack.recorded_clock import age_conversation
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -44,6 +45,7 @@ ADMIN_KEY = 'omi-listen-pusher-stack-admin-'
 PROJECT = 'demo-omi-listen-stack'
 LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
 METRICS_SECRET = 'listen-pusher-stack-metrics'
+STARTUP_TIMEOUT_SECONDS = 20.0
 REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_UID',
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
@@ -95,6 +97,8 @@ def _wait_for_port(
     timeout: float = 20.0,
     child: 'Child | None' = None,
 ) -> None:
+    timeout = max(timeout, STARTUP_TIMEOUT_SECONDS)
+
     def child_diagnostics() -> str:
         if child is None:
             return ''
@@ -249,6 +253,7 @@ class Stack:
                 'HOSTED_PUSHER_API_URL': f'http://127.0.0.1:{self.pusher_port}',
                 'HOSTED_PARAKEET_API_URL': f'http://127.0.0.1:{self.parakeet_port}',
                 'STT_SERVICE_MODELS': 'parakeet',
+                'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'true',
                 'CONVERSATION_APPS_OPT_IN_ONLY': 'true',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
                 'RECORDING_SESSION_MODE': self.recording_session_mode,
@@ -634,9 +639,7 @@ class Stack:
         )
 
     def age_conversation(self, uid: str, conversation_id: str) -> None:
-        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
-            {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
-        )
+        age_conversation(self.firestore, uid, conversation_id)
 
     def release_inline_finalization(self) -> None:
         if not self.hold_inline_finalization:
@@ -1171,7 +1174,7 @@ async def _pusher_restart_replay(stack: Stack) -> None:
         for event in stack.pusher_events
         if event.get('direction') == 'in' and event.get('opcode') == 104 and event.get('conversation_id') == session_id
     )
-    stack.restart_pusher()
+    await asyncio.to_thread(stack.restart_pusher)
     job = _wait_for_job(stack, uid, session_id, 'completed', timeout=30.0)
     finalization_requests = [
         event
@@ -1785,10 +1788,17 @@ def _run_stack_scenario(
 
 
 def main() -> int:
+    global STARTUP_TIMEOUT_SECONDS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized process logs and JSONL evidence')
     parser.add_argument('--keep', action='store_true', help='preserve generated evidence after a successful run')
+    parser.add_argument(
+        '--startup-timeout', type=float, default=20.0, help='local process startup floor in seconds (20-300)'
+    )
     args = parser.parse_args()
+    if not 20 <= args.startup_timeout <= 300:
+        parser.error('--startup-timeout must be between 20 and 300 seconds')
+    STARTUP_TIMEOUT_SECONDS = args.startup_timeout
     if not PYTHON.exists():
         raise SystemExit(f'missing backend virtual environment: {PYTHON}; run backend/scripts/sync-python-deps.sh')
     state_dir = args.state_dir or Path(tempfile.mkdtemp(prefix='omi-listen-pusher-stack-'))

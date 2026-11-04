@@ -11,6 +11,7 @@ import config.owner_recognition_diagnostics as owner_diagnostics
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
 
+from models.recorded_span import RecordedClock
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
@@ -451,6 +452,15 @@ class CaptureEvidenceMetadata(BaseModel):
     lifetime: Optional[Dict[str, Any]] = None
 
 
+class RecordAudioPartial(BaseModel):
+    """Available transcript is incomplete; this never certifies a complete seal."""
+
+    version: Literal[1] = 1
+    reason: Literal['tail_lagging', 'budget_limit', 'tail_lost_or_unproven']
+    generation: int = 0
+    applied_generation: int = 0
+
+
 class Conversation(BaseModel):
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
@@ -465,6 +475,11 @@ class Conversation(BaseModel):
     updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    recorded_start: Optional[datetime] = None
+    recorded_end: Optional[datetime] = None
+    arrival_at: Optional[datetime] = None
+    clock: Optional[RecordedClock] = None
+    episode_id: Optional[str] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -476,6 +491,7 @@ class Conversation(BaseModel):
     uses_custom_stt: bool = False
     # Server route arbitration; canonical writers preserve the durable value.
     record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
+    record_audio_partial: Optional[RecordAudioPartial] = None
 
     structured: Structured
 
@@ -610,10 +626,10 @@ class Conversation(BaseModel):
 
     user_corrections: List[Dict] = Field(default_factory=list)
     user_overview: Optional[str] = None
+    user_title: SkipJsonSchema[Any] = Field(default=None, exclude=True)  # Read authority only.
 
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
-    # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
     # Ephemeral server-side context; persistence writes its separate raw field
     # explicitly and it never becomes a Conversation API/model field.

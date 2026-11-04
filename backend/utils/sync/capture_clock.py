@@ -26,7 +26,7 @@ from utils.observability.reasons import SyncCaptureTimeReason
 # max — uncalibrated phone clocks drift minutes, so one outlier phone must keep
 # syncing — while bogus device stamps (2030+) stay ~years outside and accepted
 # times are clamped to now anyway, so the wider bound costs nothing downstream.
-DEFAULT_MAX_FUTURE_SKEW_SECONDS = 600
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS as DEFAULT_MAX_FUTURE_SKEW_SECONDS
 
 EARLIEST_CAPTURE_TIME = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
@@ -39,12 +39,46 @@ def maximum_future_skew_seconds() -> int:
     return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', str(DEFAULT_MAX_FUTURE_SKEW_SECONDS))))
 
 
+def early_capture_clamp_enabled() -> bool:
+    return os.getenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'true').lower() != 'false'
+
+
+def is_early_capture_time(capture_time: float) -> bool:
+    return capture_time < EARLIEST_CAPTURE_TIME.timestamp()
+
+
+def early_capture_clock_offsets(
+    spans: list[tuple[str, float, float]], *, now: float, source_starts: dict[str, float] | None = None
+) -> dict[str, float]:
+    """Place admitted reset-clock audio in raw order, ending at receipt time.
+
+    Invalid clocks prove order, not wall-clock gaps (two resets can be years
+    apart). Pack their durations together; keep raw keys and normal clocks.
+    Already accepted work keeps this policy after admission is switched off.
+    Source stamps order files; derivative stamps order pieces within a file.
+    """
+    # The caller marks source files: a derived segment can cross the 2024
+    # boundary and must still inherit its original file's reset clock.
+    early = sorted(spans, key=lambda span: ((source_starts or {}).get(span[0], span[1]), span[1], span[0]))
+    cursor = now - sum(duration for _, _, duration in early)
+    offsets = {}
+    for key, capture, duration in early:
+        offsets[key] = capture - cursor
+        cursor += duration
+    return offsets
+
+
 def capture_time_rejection(
-    capture_time: datetime, *, now: Optional[datetime] = None, future_skew_seconds: Optional[int] = None
+    capture_time: datetime,
+    *,
+    now: Optional[datetime] = None,
+    future_skew_seconds: Optional[int] = None,
+    allow_early_clamp: bool = True,
 ) -> Optional[SyncCaptureTimeReason]:
     """The closed rejection reason for an implausible capture time, else ``None``.
 
-    ``rejected_early`` covers pre-2024 stamps (bogus SD-card markers); times
+    Pre-2024 stamps are admitted for receipt-clock normalization unless the
+    early-clamp kill switch is off (then ``rejected_early``); times
     further ahead of server now than the shared skew tolerance are
     ``rejected_future``. Within-tolerance future times are admissible skew.
     ``future_skew_seconds`` overrides the shared tolerance for callers that
@@ -53,21 +87,24 @@ def capture_time_rejection(
     """
     effective_now = datetime.now(timezone.utc) if now is None else now
     tolerance = maximum_future_skew_seconds() if future_skew_seconds is None else max(0, int(future_skew_seconds))
-    if capture_time < EARLIEST_CAPTURE_TIME:
+    if capture_time < EARLIEST_CAPTURE_TIME and not (allow_early_clamp and early_capture_clamp_enabled()):
         return SyncCaptureTimeReason.REJECTED_EARLY
     if capture_time > effective_now + timedelta(seconds=tolerance):
         return SyncCaptureTimeReason.REJECTED_FUTURE
     return None
 
 
-def clamp_capture_time(capture_time: float, *, now: Optional[float] = None) -> float:
-    """Clamp a within-tolerance future capture time to server now.
+def clamp_capture_time(capture_time: float, *, now: Optional[float] = None, allow_early_clamp: bool = True) -> float:
+    """Clamp an untrustworthy early or within-tolerance future stored time.
 
-    Only future times move, so retry identities keyed on past capture times
-    stay stable; callers that mint stored/ordered times clamp so a skewed phone
-    clock cannot land them in the future.
+    Identity callers retain raw times. Multi-file callers shift early spans
+    together with ``early_capture_clock_offsets`` to preserve duration/order.
+    Callers that already applied that admission offset can future-bound only
+    with ``allow_early_clamp=False``; unadmitted legacy clock scopes stay intact.
     """
     effective_now = time.time() if now is None else now
+    if allow_early_clamp and is_early_capture_time(capture_time) and early_capture_clamp_enabled():
+        return effective_now
     return min(capture_time, effective_now)
 
 

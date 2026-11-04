@@ -213,6 +213,7 @@ ALLOWED_COMPONENTS = frozenset(
         'conversation_finalization',
         'conversation_notes',
         'daily_summary',
+        'feature_flags',
         'other',
     }
 )

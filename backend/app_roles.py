@@ -55,12 +55,14 @@ from routers import (
     support,
     trends,
     sync,
+    sync_worker,
     batch_pipeline,
     batch_provider_stt,
     enrichment,
     apps,
     payment,
     retention_offer,
+    yearly_switch,
     redeem_code,
     storefront,
     integration,
@@ -113,6 +115,7 @@ from routers import (
     desktop_prompts,
     desktop_proxy,
     desktop_task_gate,
+    omi_flags,
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
@@ -227,6 +230,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(firmware),
     Mount(updates),
     Mount(sync, roles=API_WORKERS),  # uploads (api) and Cloud Tasks /v2/sync-jobs/run (workers)
+    Mount(sync_worker, roles=API_WORKERS),  # OIDC backfill pull-worker control plane
     Mount(batch_pipeline, roles=API_WORKERS),  # GPU worker RPC pull and recovery tasks
     Mount(enrichment, roles=API_WORKERS),  # Cloud Tasks /v2/enrichment/run (lane 9; contract (a) phase 1)
     Mount(batch_provider_stt, roles=API_WORKERS),  # Cloud Tasks /v2/batch-pipeline/provider-stt/run (lane 8)
@@ -238,6 +242,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(auth),
     Mount(payment),
     Mount(retention_offer),
+    Mount(yearly_switch),
     Mount(redeem_code),
     Mount(storefront),
     Mount(api_key_management, attr='mcp_router'),
@@ -277,6 +282,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(desktop_chat),
     Mount(desktop_proxy),
     Mount(desktop_task_gate),
+    Mount(omi_flags),
     Mount(desktop_realtime, roles=API_REALTIME),
     Mount(desktop_screen_crisp),
     Mount(frame_requests),

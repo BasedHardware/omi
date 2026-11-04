@@ -38,6 +38,8 @@ def row(key='capture-a', **extra):
         status='in_progress',
         started_at=datetime.fromtimestamp(1000, timezone.utc),
         finished_at=datetime.fromtimestamp(1100, timezone.utc),
+        recorded_start=datetime.fromtimestamp(1000, timezone.utc),
+        recorded_end=datetime.fromtimestamp(1100, timezone.utc),
         capture_evidence={'capture_root': key, 'channel': 'mono', 'clock_epoch': '0'},
         **extra,
     )

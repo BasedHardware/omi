@@ -14561,6 +14561,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeMoments => 'Mga Sandali';
 
   @override
+  String get episodeFollowUps => 'Mga susunod na hakbang';
+
+  @override
+  String get episodeOpenTranscript => 'Buksan ang transcript';
+
+  @override
   String get episodeSoFar => 'Sa ngayon';
 
   @override
@@ -14783,12 +14789,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeOnThisPhone => 'Sa phone na ito';
 
   @override
-  String get episodeOpenTranscript => 'Buksan ang transcript';
-
-  @override
-  String get liveCardTitle => 'Live';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Naiwan ng mga $duration ang panghuling transcript';
   }
@@ -14804,7 +14804,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Ligtas na nagre-record';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Live sa phone na ito';
+  String get livePreviewOnPhoneDivider => 'Ngayon lang, sa teleponong ito';
 
   @override
   String get livePreviewTurnOnLiveText => 'I-on ang live text';
@@ -14996,4 +14996,91 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Ipakita ang pinakabagong recaps sa itaas ng Home.';
+
+  @override
+  String get yearlySwitchTitle => 'Lumipat sa Taunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Makatipid ng $amount bawat taon';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Makatipid ng $amount bawat taon kapag taunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Parehong plan, isang bayad bawat taon';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price bawat taon';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Babayaran ngayon';
+
+  @override
+  String get yearlySwitchRenews => 'Magre-renew';
+
+  @override
+  String get yearlySwitchCreditNote => 'Kasama ang credit para sa natitirang bahagi ng buwang ito.';
+
+  @override
+  String get yearlySwitchDeclined => 'Tinanggihan ang bayad. Buwanan ka pa rin.';
+
+  @override
+  String get yearlySwitchFailed => 'Hindi nakalipat. Buwanan ka pa rin.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hindi ma-load ang presyo mo.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Hindi pa available ang taunang bayad para sa plan mo ngayon.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Taunan ka na';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount ang siningil ngayon. Magre-renew sa $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Ipadala ang mensahe sa $app. Mag-a-update ang screen na ito pagkatanggap ni Omi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Kumuha ng bagong code at ipadala ito mula sa $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Isinusulat ang mga tala…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Hanggang $time · buong tala kapag natapos';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Na-transcribe hanggang $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration na-save';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
 }

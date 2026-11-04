@@ -6,7 +6,7 @@ enum LocalCapabilityRemoteKill {
   static let key = "free-tier-kill-switch-v1"
 
   static var isDisabled: Bool {
-    resolve(PostHogSDK.shared.getFeatureFlag(key, sendFeatureFlagEvent: false))
+    resolve(OmiFlagStore.shared.value(key) ?? PostHogSDK.shared.getFeatureFlag(key, sendFeatureFlagEvent: false))
   }
 
   static func resolve(_ value: Any?) -> Bool {

@@ -14505,6 +14505,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeMoments => 'Pillanatok';
 
   @override
+  String get episodeFollowUps => 'Következő lépések';
+
+  @override
+  String get episodeOpenTranscript => 'Átirat megnyitása';
+
+  @override
   String get episodeSoFar => 'Eddig';
 
   @override
@@ -14725,12 +14731,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeOnThisPhone => 'Ezen a telefonon';
 
   @override
-  String get episodeOpenTranscript => 'Átirat megnyitása';
-
-  @override
-  String get liveCardTitle => 'Élő';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'A végleges átirat kb. $duration késésben van';
   }
@@ -14745,7 +14745,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get livePreviewNoEngineTitle => 'Biztonságosan rögzít';
 
   @override
-  String get livePreviewOnPhoneDivider => 'Élő ezen a telefonon';
+  String get livePreviewOnPhoneDivider => 'Épp most, ezen a telefonon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Élő szöveg bekapcsolása';
@@ -14936,4 +14936,91 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
+
+  @override
+  String get yearlySwitchTitle => 'Váltás éves fizetésre';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Évi $amount megtakarítás';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Évi $amount megtakarítás éves fizetéssel';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ugyanaz a csomag, évente egyszer fizetve';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Csomag';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, évi $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Ma fizetendő';
+
+  @override
+  String get yearlySwitchRenews => 'Megújul';
+
+  @override
+  String get yearlySwitchCreditNote => 'Tartalmazza a hónap hátralévő részének jóváírását.';
+
+  @override
+  String get yearlySwitchDeclined => 'A fizetést elutasították. Továbbra is havonta fizet.';
+
+  @override
+  String get yearlySwitchFailed => 'A váltás nem sikerült. Továbbra is havonta fizet.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nem sikerült betölteni az árat.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Az éves fizetés jelenleg nem érhető el az Ön csomagjához.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Mostantól évente fizet';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Ma terhelve: $amount. Megújul: $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Küldd el az üzenetet az $app alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Kérj új kódot, és küldd el az $app alkalmazásból.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'Jegyzetek írása…';
+
+  @override
+  String get episodeWritingNotesDetail => 'Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return '$time-ig · teljes jegyzetek a végén';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Átírva eddig: $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration mentve';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
 }
