@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.lifecycle_state_table import CLAUSES, ORDERING_RULES, STATES, ordering_holds
-from tests.support.lifecycle_ast import EntryPath, entry_deadline_sites, function_node
+from tests.support.lifecycle_state_table import CLAUSES, ORDERING_RULES, PATCH_CONTRACTS, STATES, ordering_holds
+from tests.support.lifecycle_ast import EntryPath, definition_fingerprint, entry_deadline_sites, function_node
 from utils.conversations.phase import ConversationPhase, EpisodePhase
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -157,6 +157,56 @@ def assigned_fields(source):
     return fields
 
 
+def discovered_entry_functions(row):
+    """All persisted entries in the machine's discovered field-writer scope.
+
+    This census is independent of DEADLINE_ENTRIES. Builders that return a
+    mapping without persisting it remain explicit inplace entry declarations;
+    the per-entry stamp probe checks those separately.
+    """
+    from tests.support.lifecycle_state_table import writers
+
+    actual = set()
+    fields = {path.field for path in row.deadline_entries}
+    probes = set()
+    for writer in writers(row.machine, *fields):
+        for prototype in row.deadline_entries:
+            bindings = dict(prototype.bindings)
+            if prototype.state is not None:
+                bindings.setdefault(prototype.field, prototype.state)
+            variants = (False, True) if row.machine == 'finalization' else (None,)
+            for byok in variants:
+                variant = dict(bindings)
+                if byok is not None:
+                    variant['requires_byok'] = byok
+                probe = EntryPath(
+                    writer.module, writer.function, prototype.field, prototype.state, tuple(sorted(variant.items()))
+                )
+                if probe in probes:
+                    continue
+                probes.add(probe)
+                if entry_deadline_sites(module_source(writer.module)[0], probe, row.deadline_field):
+                    actual.add((writer.module, writer.function))
+    return actual
+
+
+def assert_patch_contract(entry, deadline):
+    for qualified in entry.patches:
+        assert qualified in PATCH_CONTRACTS, f'unregistered patch contract: {qualified}'
+        contract = PATCH_CONTRACTS[qualified]
+        assert entry.field not in contract.keys and deadline not in contract.keys
+        assert contract.sources
+        writer, _fingerprint = contract.sources[0]
+        assert qualified == writer.module.removesuffix('.py').replace('/', '.') + '.' + writer.function
+        for writer, fingerprint in contract.sources:
+            source = function_source(f'{writer.module}:{writer.function}')
+            assert source, writer
+            node = ast.parse(source).body[0]
+            assert (
+                definition_fingerprint(node) == fingerprint
+            ), f'{qualified}: returned-key proof changed at {writer.module}:{writer.function}; re-audit contract'
+
+
 def assert_clause(row, clause):
     if row.derived:
         # Compatibility reader vocabulary has no state entry side effect.
@@ -179,10 +229,14 @@ def assert_clause(row, clause):
         if not row.terminal:
             assert row.deadline_field and row.deadline_stamped_at_entry, 'deadline is absent or only computed on read'
             assert row.deadline_entries, 'every automatic entry path must be declared'
+            declared = {(path.module, path.function) for path in row.deadline_entries}
+            missing = discovered_entry_functions(row) - declared
+            assert not missing, f'undeclared persisted deadline entry: {sorted(missing)}'
             assert {(path.module, path.function) for path in row.deadline_entries} == {
                 (writer.module, writer.function) for writer in row.entered_by
             }
             for entry in row.deadline_entries:
+                assert_patch_contract(entry, row.deadline_field)
                 sites = entry_deadline_sites(module_source(entry.module)[0], entry, row.deadline_field)
                 assert sites, f'{entry.module}:{entry.function}: no matching entry payload'
                 assert all(
@@ -225,15 +279,8 @@ KNOWN_GAPS = {
     'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:ready', 'entry_deadline'): 'batch:ready: missing deadline stamped at entry; phase contract follow-up; no '
     'fix PR yet; ANX lcinv-lifecycle-invariants',
-    ('batch:record_pending', 'dwell_alert'): 'batch:record_pending: missing committed dwell/stock alert; PR #24587 '
-    'addresses drain contention; available_at is a defer, not an admission '
-    'budget; ANX lcinv-lifecycle-invariants',
-    ('batch:record_pending', 'dwell_metric'): 'batch:record_pending: missing authoritative dwell/stock gauge; PR '
-    '#24587 addresses drain contention; available_at is a defer, not an '
-    'admission budget; ANX lcinv-lifecycle-invariants',
-    ('batch:record_pending', 'entry_deadline'): 'batch:record_pending: missing deadline stamped at entry; PR #24587 '
-    'addresses drain contention; available_at is a defer, not an '
-    'admission budget; ANX lcinv-lifecycle-invariants',
+    ('batch:record_pending', 'entry_deadline'): 'batch:record_pending: total pending-dwell deadline is still '
+    'unstamped after #24587 admission lease; phase contract follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:result_ready', 'entry_deadline'): 'batch:result_ready: missing deadline stamped at entry; phase contract '
     'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:retry', 'entry_deadline'): 'batch:retry: missing deadline stamped at entry; phase contract follow-up; no '
@@ -445,6 +492,9 @@ def test_resolved_plan_gaps_do_not_regress():
     for key, clause in (
         ('fair_use:throttle', 'automatic_exit'),
         ('finalization:blocked_byok', 'dwell_alert'),
+        ('finalization:blocked_byok', 'dwell_metric'),
+        ('batch:record_pending', 'dwell_metric'),
+        ('batch:record_pending', 'dwell_alert'),
         ('finalization:dead_letter', 'dwell_alert'),
         ('batch:leased', 'entry_deadline'),
         ('visibility:bridge_pending', 'entry_deadline'),
@@ -496,6 +546,170 @@ def test_conditional_entry_stamp_needs_a_proven_binding():
     assert all(stamped for _line, stamped in entry_deadline_sites(source, path, 'deadline_at'))
     unproven = EntryPath('synthetic.py', 'enter', 'status', 'queued')
     assert any(not stamped for _line, stamped in entry_deadline_sites(source, unproven, 'deadline_at'))
+
+
+def test_r2_cleared_alias_payload_has_no_entry_deadline():
+    source = (
+        "def enter(tx, ref, queued_payload):\n"
+        "    job = {'status': 'queued', 'deadline_at': now + 10}\n"
+        "    job.clear()\n"
+        "    job.update(queued_payload)\n"
+        "    tx.update(ref, job)\n"
+    )
+    sites = entry_deadline_sites(source, EntryPath('synthetic.py', 'enter', 'status', 'queued'), 'deadline_at')
+    assert sites and all(not stamped for _line, stamped in sites)
+
+
+@pytest.mark.parametrize('patch', ["{'deadline_at': None}", 'opaque_patch'])
+def test_r2_alias_patch_cannot_silently_erase_an_entry_deadline(patch):
+    source = (
+        "def enter(tx, ref, opaque_patch):\n"
+        "    job = {'status': 'queued', 'deadline_at': now + 10}\n"
+        f"    patch = {patch}\n"
+        "    job.update(patch)\n"
+        "    tx.update(ref, job)\n"
+    )
+    sites = entry_deadline_sites(source, EntryPath('synthetic.py', 'enter', 'status', 'queued'), 'deadline_at')
+    assert sites and all(not stamped for _line, stamped in sites)
+
+
+def test_r2_clear_then_alias_rebuild_with_a_fresh_deadline_is_valid():
+    source = (
+        "def enter(tx, ref):\n"
+        "    job = {'status': 'queued', 'deadline_at': now + 10}\n"
+        "    job.clear()\n"
+        "    replacement = {'status': 'queued', 'deadline_at': now + 20}\n"
+        "    job.update(replacement)\n"
+        "    tx.update(ref, job)\n"
+    )
+    sites = entry_deadline_sites(source, EntryPath('synthetic.py', 'enter', 'status', 'queued'), 'deadline_at')
+    assert sites and all(stamped for _line, stamped in sites)
+
+
+def test_r2_source_alias_mutation_cannot_restore_a_stale_deadline():
+    source = (
+        "def enter(tx, ref):\n"
+        "    job = {'status': 'queued', 'deadline_at': now + 10}\n"
+        "    replacement = {'status': 'queued', 'deadline_at': now + 20}\n"
+        "    replacement.clear()\n"
+        "    replacement.update({'status': 'queued'})\n"
+        "    job.clear()\n"
+        "    job.update(replacement)\n"
+        "    tx.update(ref, job)\n"
+    )
+    sites = entry_deadline_sites(source, EntryPath('synthetic.py', 'enter', 'status', 'queued'), 'deadline_at')
+    assert sites and all(not stamped for _line, stamped in sites)
+
+
+def test_r2_shadowed_patch_name_cannot_borrow_a_contract():
+    source = (
+        "from utils.conversations.recorded_time import write_span\n"
+        "def enter(tx, ref):\n"
+        "    job = {'status': 'queued', 'deadline_at': now + 10}\n"
+        "    write_span = lambda row: {'deadline_at': None}\n"
+        "    job.update(write_span(job))\n"
+        "    tx.update(ref, job)\n"
+    )
+    path = EntryPath(
+        'synthetic.py', 'enter', 'status', 'queued', patches=('utils.conversations.recorded_time.write_span',)
+    )
+    sites = entry_deadline_sites(source, path, 'deadline_at')
+    assert sites and all(not stamped for _line, stamped in sites)
+
+
+def test_r2_patch_contract_cannot_write_the_entry_field(monkeypatch):
+    from dataclasses import replace
+
+    row = next(row for row in STATES if row.key == 'visibility:bridge_pending')
+    entry = row.deadline_entries[0]
+    name = entry.patches[0]
+    contract = PATCH_CONTRACTS[name]
+    monkeypatch.setitem(PATCH_CONTRACTS, name, replace(contract, keys=(*contract.keys, entry.field)))
+    with pytest.raises(AssertionError):
+        assert_patch_contract(entry, row.deadline_field)
+
+
+def test_r2_patch_contract_requires_a_new_audit_after_source_change(monkeypatch):
+    row = next(row for row in STATES if row.key == 'visibility:bridge_pending')
+    original_source = function_source
+    monkeypatch.setitem(
+        assert_patch_contract.__globals__,
+        'function_source',
+        lambda cite: (
+            "def write_span(row):\n    return {'sync_bridge_pending': None}\n"
+            if cite == 'utils/conversations/recorded_time.py:write_span'
+            else original_source(cite)
+        ),
+    )
+    with pytest.raises(AssertionError, match='returned-key proof changed'):
+        assert_patch_contract(row.deadline_entries[0], row.deadline_field)
+
+
+def test_r2_definition_fingerprint_is_portable_but_retains_real_generic_parameters():
+    node = ast.parse('def stable():\n    return None\n').body[0]
+    baseline = definition_fingerprint(node)
+    if 'type_params' not in node._fields:
+        node._fields = (*node._fields, 'type_params')
+    node.type_params = []
+    assert definition_fingerprint(node) == baseline
+    node.type_params = [ast.Name(id='T', ctx=ast.Load())]
+    assert definition_fingerprint(node) != baseline
+
+
+def test_r2_clearing_debt_is_an_exit_not_an_unstamped_entry():
+    source = "def complete(tx, ref):\n    tx.update(ref, {'summary_first_pending_at': None, 'summary_due_at': None})\n"
+    path = EntryPath('synthetic.py', 'complete', 'summary_first_pending_at')
+    assert entry_deadline_sites(source, path, 'summary_due_at') == []
+
+
+@pytest.mark.parametrize('row', [row for row in STATES if row.deadline_entries], ids=lambda row: row.key)
+def test_r2_new_persisted_entry_requires_a_declaration_after_inventory_refresh(row, monkeypatch):
+    from tests.support.lifecycle_state_table import FIELD_BUILDERS
+
+    prototype = row.deadline_entries[0]
+    original_source = module_source
+    entered_value = prototype.state if prototype.state is not None else 1
+    source = original_source(prototype.module)[0] + (
+        f"\ndef undeclared_entry(tx, ref):\n    tx.update(ref, {{{prototype.field!r}: {entered_value!r}}})\n"
+    )
+    replacement = (source, ast.parse(source))
+    monkeypatch.setitem(
+        assert_clause.__globals__,
+        'module_source',
+        lambda module: replacement if module == prototype.module else original_source(module),
+    )
+    refreshed = dict(FIELD_BUILDERS[prototype.module])
+    refreshed[prototype.field] = sorted(set(refreshed[prototype.field]) | {'undeclared_entry'})
+    monkeypatch.setitem(FIELD_BUILDERS, prototype.module, refreshed)
+    with pytest.raises(AssertionError, match='undeclared.*entry'):
+        assert_clause(row, 'entry_deadline')
+
+
+def test_r2_declared_and_stamped_new_batch_entry_is_valid(monkeypatch):
+    from dataclasses import replace
+    from tests.support.lifecycle_state_table import FIELD_BUILDERS, Writer
+
+    row = next(row for row in STATES if row.key == 'batch:leased')
+    module = row.deadline_entries[0].module
+    original_source = module_source
+    source = original_source(module)[0] + (
+        f"\ndef declared_entry(tx, ref):\n    tx.update(ref, {{'state': 'leased', {row.deadline_field!r}: now + 60}})\n"
+    )
+    replacement = (source, ast.parse(source))
+    monkeypatch.setitem(
+        assert_clause.__globals__,
+        'module_source',
+        lambda path: replacement if path == module else original_source(path),
+    )
+    refreshed = dict(FIELD_BUILDERS[module])
+    refreshed['state'] = sorted(set(refreshed['state']) | {'declared_entry'})
+    monkeypatch.setitem(FIELD_BUILDERS, module, refreshed)
+    row = replace(
+        row,
+        entered_by=(*row.entered_by, Writer(module, 'declared_entry')),
+        deadline_entries=(*row.deadline_entries, EntryPath(module, 'declared_entry', 'state', 'leased')),
+    )
+    assert_clause(row, 'entry_deadline')
 
 
 def test_each_entry_function_is_checked_independently():

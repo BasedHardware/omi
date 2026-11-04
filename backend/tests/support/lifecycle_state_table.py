@@ -1,4 +1,4 @@
-"""Reviewed legacy lifecycle inventory for WP-B (source base f75e35ed2628).
+"""Reviewed legacy lifecycle inventory for WP-B (source base 563e6c240944).
 
 This is a declaration of existing mechanisms, not a new runtime state machine.
 Phase strings are the compatibility reader's strings. Derived phases do not
@@ -88,8 +88,42 @@ FINALIZATION_MODULE = 'database/conversation_finalization_jobs.py'
 FAIR_USE_MODULE = 'utils/fair_use.py'
 
 
-def entry(module, function, field, state=None, *, inplace=False, **bindings):
-    return EntryPath(module, function, field, state, tuple(sorted(bindings.items())), inplace)
+@dataclass(frozen=True)
+class PatchContract:
+    keys: tuple[str, ...]
+    sources: tuple[tuple[Writer, str], ...]
+
+
+# An opaque patch is rejected unless its complete returned-key boundary has
+# been audited. AST fingerprints ignore comments/formatting, but force a new
+# source audit when this proof's callees or serialization model change.
+PATCH_CONTRACTS = {
+    'utils.conversations.recorded_time.write_span': PatchContract(
+        ('recorded_start', 'recorded_end', 'arrival_at', 'clock'),
+        (
+            (
+                Writer('utils/conversations/recorded_time.py', 'write_span'),
+                '67652bbdd304ef4e0761e2e20594a50369cef1bc6955f3dce41bfa5d58ca553b',
+            ),
+            (
+                Writer('utils/conversations/recorded_time.py', 'span_fields'),
+                '97badd257455e75827f4ed287c1a68fb35eea1e4b3db2d9e132a900af4fed30a',
+            ),
+            (
+                Writer('utils/conversations/recorded_time.py', 'conversation_span'),
+                'd04053702f344798afcdaf665c967d325084a1bf8dd4009b0a0576898350c993',
+            ),
+            (
+                Writer('models/recorded_span.py', 'RecordedSpan'),
+                '26aae72c41aff5b01f58e14d792a14d67c630831cfc4c44710437f1e8bea8001',
+            ),
+        ),
+    ),
+}
+
+
+def entry(module, function, field, state=None, *, inplace=False, patches=(), **bindings):
+    return EntryPath(module, function, field, state, tuple(sorted(bindings.items())), inplace, patches)
 
 
 # Automatic entry paths are distinct from conservative payload builders.
@@ -162,7 +196,13 @@ DEADLINE_ENTRIES = {
         ),
     ),
     'visibility:bridge_pending': (
-        entry('utils/sync/assignment.py', 'assign_in_transaction.plan', 'sync_bridge_pending', inplace=True),
+        entry(
+            'utils/sync/assignment.py',
+            'assign_in_transaction.plan',
+            'sync_bridge_pending',
+            inplace=True,
+            patches=('utils.conversations.recorded_time.write_span',),
+        ),
     ),
 }
 
@@ -333,7 +373,8 @@ STATES = (
             exit=FINALIZER,
             metric='omi_finalization_byok_new_oldest_age_seconds',
             alert=Alert('omi-finalization-byok-dwell-page', 'page'),
-            note='14-day abandonment is computed from activity, not a deadline stamped at entry; #24533 supplies alerts',
+            note='Recent-cohort dwell/page from #24595; historical age is separate. '
+            '14-day abandonment is computed from activity, not a deadline stamped at entry',
         ),
         row(
             'finalization',
@@ -435,14 +476,22 @@ STATES = (
             deadline='lease_until' if name == 'leased' else None,
             stamped=name == 'leased',
             metric=(
-                None
-                if name in ('record_pending', 'committed', 'partial_retired', 'privacy_blocked')
-                else 'omi_batch_timeliness_new_oldest_age_seconds'
+                'omi_batch_record_pending_new_oldest_age_seconds'
+                if name == 'record_pending'
+                else (
+                    None
+                    if name in ('committed', 'partial_retired', 'privacy_blocked')
+                    else 'omi_batch_timeliness_new_oldest_age_seconds'
+                )
             ),
             alert=(
-                None
-                if name in ('record_pending', 'committed', 'partial_retired', 'privacy_blocked')
-                else Alert('omi-batch-unit-unpublished-2h', 'page')
+                Alert('omi-record-pending-dwell', 'page')
+                if name == 'record_pending'
+                else (
+                    None
+                    if name in ('committed', 'partial_retired', 'privacy_blocked')
+                    else Alert('omi-batch-unit-unpublished-2h', 'page')
+                )
             ),
             terminal=name in ('committed', 'partial_retired', 'privacy_blocked'),
             alert_required=name != 'committed',
@@ -452,7 +501,8 @@ STATES = (
                 else None
             ),
             note=(
-                'PR #24587 addresses drain contention; available_at is a defer, not an admission budget'
+                '#24587 adds a per-attempt admission lease; total pending-dwell deadline is still unstamped. '
+                '#24595 supplies recent-cohort age/page'
                 if name == 'record_pending'
                 else ''
             ),

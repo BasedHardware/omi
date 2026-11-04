@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.lifecycle_ast import builders, constant_names, fields_for, payload_sites
+from tests.support.lifecycle_ast import builders, constant_names, fields_for, literal_key, payload_sites
 from tests.support.lifecycle_state_table import FIELD_BUILDERS, FIELD_SITES, STATES
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -159,22 +159,20 @@ def literal_states(source, field, *, nested_fields=()):
             ):
                 continue
             for key, value in zip(node.keys, node.values):
-                if isinstance(key, ast.Constant) and key.value == field:
+                if field in literal_key(key, constants):
                     add(value)
         elif isinstance(node, ast.Assign):
             for target in node.targets:
-                if (
-                    isinstance(target, ast.Subscript)
-                    and isinstance(target.slice, ast.Constant)
-                    and target.slice.value == field
-                ):
+                if isinstance(target, ast.Subscript) and field in literal_key(target.slice, constants):
                     add(node.value)
         elif isinstance(node, ast.Call) and isinstance(node.func, (ast.Attribute, ast.Name)):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
-            if name in {'dict', 'update'}:
+            if name in {'dict', 'update', 'set', 'setdefault'}:
                 for keyword in node.keywords:
                     if keyword.arg == field:
                         add(keyword.value)
+                if name == 'setdefault' and len(node.args) >= 2 and field in literal_key(node.args[0], constants):
+                    add(node.args[1])
     return values
 
 
@@ -215,6 +213,22 @@ def test_state_probe_detects_a_fourth_state_in_the_same_writer():
     assert literal_states("def enter(row):\n    row.update(state='new_unowned_state')\n", 'state') == {
         'new_unowned_state'
     }
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        "def enter(job):\n    job.setdefault('state', 'new_unowned_state')\n",
+        "FIELD = 'state'\ndef enter(job):\n    job.setdefault(FIELD, 'new_unowned_state')\n",
+        "NEW = 'new_unowned_state'\ndef enter(job):\n    job.setdefault('state', NEW)\n",
+    ],
+)
+def test_r2_positional_setdefault_values_require_state_rows(source):
+    assert literal_states(source, 'state') == {'new_unowned_state'}
+
+
+def test_r2_setdefault_on_another_field_does_not_invent_a_state():
+    assert literal_states("def enter(job):\n    job.setdefault('other', 'new_unowned_state')\n", 'state') == set()
 
 
 @pytest.mark.parametrize(

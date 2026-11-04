@@ -6,6 +6,8 @@ response/query maps are intentionally included in the reviewed inventory.
 """
 
 import ast
+import hashlib
+import json
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -13,6 +15,27 @@ from functools import lru_cache
 @lru_cache(maxsize=64)
 def parsed(source):
     return ast.parse(source)
+
+
+def definition_fingerprint(node):
+    """Stable across Python 3.11 and later AST formatting/schema additions."""
+
+    def canonical(value):
+        if isinstance(value, ast.AST):
+            return {
+                'node': type(value).__name__,
+                'fields': {
+                    field: canonical(getattr(value, field))
+                    for field in value._fields
+                    if field != 'type_params' or getattr(value, field)
+                },
+            }
+        if isinstance(value, list):
+            return [canonical(item) for item in value]
+        return value
+
+    encoded = json.dumps(canonical(node), sort_keys=True, separators=(',', ':')).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 FIELDS = frozenset(
@@ -236,6 +259,7 @@ class EntryPath:
     state: str | None = None
     bindings: tuple[tuple[str, object], ...] = ()
     inplace: bool = False
+    patches: tuple[str, ...] = ()
 
 
 @lru_cache(maxsize=512)
@@ -289,7 +313,10 @@ def entry_deadline_sites(source, entry, deadline):
                     previous, site
                 ):
                     return resolved(previous.value, previous, seen | {item.id})
-        return value(item, bindings)
+        evaluated = value(item, bindings)
+        if evaluated is UNKNOWN and isinstance(item, ast.Name) and len(constants.get(item.id, ())) == 1:
+            return next(iter(constants[item.id]))
+        return evaluated
 
     def nonempty_fields(pairs, site):
         return {
@@ -307,12 +334,91 @@ def entry_deadline_sites(source, entry, deadline):
             yield from local_nodes(child)
 
     nodes = list(local_nodes(root))
+    local_mappings = {
+        target.id
+        for node in nodes
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Dict)
+        for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+        if isinstance(target, ast.Name)
+    }
+
+    def mapping_pairs(item, site, seen=frozenset(), use_site=None):
+        use_site = use_site or site
+        if isinstance(item, ast.Dict):
+            return list(zip(item.keys, item.values))
+        if isinstance(item, ast.Name) and item.id not in seen:
+            for previous in sorted(nodes, key=lambda node: getattr(node, 'lineno', 0), reverse=True):
+                if not isinstance(previous, (ast.Assign, ast.AnnAssign)) or previous.lineno >= site.lineno:
+                    continue
+                targets = previous.targets if isinstance(previous, ast.Assign) else [previous.target]
+                if any(isinstance(target, ast.Name) and target.id == item.id for target in targets) and guaranteed(
+                    previous, site
+                ):
+                    # A literal alias is only evidence while it has not been
+                    # mutated. Never resurrect its original keys after clear.
+                    for later in nodes:
+                        if not previous.lineno < getattr(later, 'lineno', 0) < use_site.lineno or not possible(later):
+                            continue
+                        if isinstance(later, ast.Call) and isinstance(later.func, ast.Attribute):
+                            if (
+                                isinstance(later.func.value, ast.Name)
+                                and later.func.value.id == item.id
+                                and later.func.attr in {'clear', 'update', 'pop', 'setdefault'}
+                            ):
+                                return None
+                        targets = later.targets if isinstance(later, (ast.Assign, ast.Delete)) else []
+                        if any(
+                            isinstance(target, ast.Subscript)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id == item.id
+                            for target in targets
+                        ):
+                            return None
+                    return mapping_pairs(previous.value, previous, seen | {item.id}, use_site)
+        return None
+
+    def contracted_patch(item):
+        if not isinstance(item, ast.Call) or not isinstance(item.func, ast.Name):
+            return False
+        for qualified in entry.patches:
+            module, _, name = qualified.rpartition('.')
+            if item.func.id != name:
+                continue
+            imported = False
+            for node in ast.walk(parsed(source)):
+                if isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if (alias.asname or alias.name) == name:
+                            if node.module != module or alias.name != name:
+                                return False
+                            imported = True
+                elif isinstance(node, ast.Import):
+                    if any((alias.asname or alias.name.split('.')[0]) == name for alias in node.names):
+                        return False
+                elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store) and node.id == name:
+                    return False
+                elif isinstance(node, ast.arg) and node.arg == name:
+                    return False
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
+                    return False
+            return imported
+        return False
+
+    def storage_call(node):
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in sinks
+            and not (isinstance(node.func.value, ast.Name) and node.func.value.id in local_mappings)
+        )
 
     def matches(item, site):
         if entry.state is None:
             return True
-        resolved = value(item, bindings)
-        if resolved != entry.state:
+        evaluated = value(item, bindings)
+        if evaluated is UNKNOWN:
+            evaluated = resolved(item, site)
+        if evaluated != entry.state:
             return False
         if isinstance(item, ast.Name):
             for previous in sorted(nodes, key=lambda node: getattr(node, 'lineno', 0), reverse=True):
@@ -323,7 +429,7 @@ def entry_deadline_sites(source, entry, deadline):
                     previous, site
                 ):
                     assigned = value(previous.value, bindings)
-                    return assigned is UNKNOWN or assigned == resolved
+                    return assigned is UNKNOWN or assigned == evaluated
         return True
 
     for node in nodes:
@@ -337,16 +443,26 @@ def entry_deadline_sites(source, entry, deadline):
                 mapping = targets[0].id if len(targets) == 1 and isinstance(targets[0], ast.Name) else None
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             if node.func.attr == 'update':
-                pairs = [(ast.Constant(keyword.arg), keyword.value) for keyword in node.keywords if keyword.arg]
-                if len(node.args) == 1 and isinstance(node.args[0], ast.Dict):
-                    pairs.extend(zip(node.args[0].keys, node.args[0].values))
                 mapping = node.func.value.id if isinstance(node.func.value, ast.Name) else None
+                pairs = [(ast.Constant(keyword.arg), keyword.value) for keyword in node.keywords if keyword.arg]
+                if len(node.args) == 1:
+                    positional = mapping_pairs(node.args[0], node)
+                    if positional is not None:
+                        pairs.extend(positional)
+                    elif mapping and not contracted_patch(node.args[0]):
+                        # An opaque patch may clear this field. It cannot
+                        # prove that the earlier deadline survived.
+                        mutations.append((node, mapping, set(), {deadline}))
             elif node.func.attr == 'setdefault' and len(node.args) >= 2:
                 pairs = [(node.args[0], node.args[1])]
                 mapping = node.func.value.id if isinstance(node.func.value, ast.Name) else None
         if pairs:
             for key, item in pairs:
-                if entry.field in literal_key(key, constants) and matches(item, node):
+                if (
+                    entry.field in literal_key(key, constants)
+                    and matches(item, node)
+                    and not (entry.state is None and resolved(item, node) is None)
+                ):
                     candidates.append((node, mapping, nonempty_fields(pairs, node)))
             if mapping:
                 nonempty = nonempty_fields(pairs, node)
@@ -372,6 +488,8 @@ def entry_deadline_sites(source, entry, deadline):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             if node.func.attr == 'pop' and isinstance(node.func.value, ast.Name) and node.args:
                 mutations.append((node, node.func.value.id, set(), literal_key(node.args[0], constants)))
+            elif node.func.attr == 'clear' and isinstance(node.func.value, ast.Name):
+                mutations.append((node, node.func.value.id, set(), {deadline}))
     result = []
     sinks = {'update', 'set', 'put', 'patch', 'update_fair_use_state', 'update_fair_use_state_if_unchanged'}
     for node, mapping, fields in candidates:
@@ -381,12 +499,10 @@ def entry_deadline_sites(source, entry, deadline):
         handoff = entry.inplace
         if mapping is None:
             parent = parents.get(node)
-            handoff = handoff or (
-                isinstance(parent, ast.Call) and isinstance(parent.func, ast.Attribute) and parent.func.attr in sinks
-            )
+            handoff = handoff or storage_call(parent)
         if mapping:
             for later in nodes:
-                if isinstance(later, ast.Call) and isinstance(later.func, ast.Attribute) and later.func.attr in sinks:
+                if storage_call(later):
                     if later.lineno > node.lineno and any(
                         isinstance(arg, ast.Name) and arg.id == mapping for arg in later.args
                     ):
