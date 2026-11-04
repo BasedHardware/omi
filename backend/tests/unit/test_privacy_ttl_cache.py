@@ -185,38 +185,6 @@ def test_external_fence_inside_a_transaction_always_reads_live(world, monkeypatc
 # --- deletion marker ----------------------------------------------------------
 
 
-def test_deletion_marker_status_is_reused_for_at_most_sixty_seconds(world, monkeypatch):
-    db, reads, _, clock = world
-    enable(monkeypatch, 'privacy_ttl60')
-    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
-    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
-    assert len(reads) == 1
-    db.rows[MARKER] = {'wipe_status': 'pending'}
-    clock.now += 60
-    status = marker.get_user_deletion_wipe_status(UID, firestore_client=db)
-    assert status is not None and marker.account_deletion_blocks_user_work(UID, firestore_client=db)
-    assert len(reads) == 2
-
-
-def test_deletion_marker_read_errors_are_not_cached(world, monkeypatch):
-    db, reads, _, _ = world
-    enable(monkeypatch, 'privacy_ttl60')
-    calls = []
-
-    def boom(*args, **kwargs):
-        calls.append(1)
-        raise RuntimeError('unavailable')
-
-    monkeypatch.setattr(marker, '_s4_read_deletion_status', boom)
-    for _ in range(2):
-        with pytest.raises(RuntimeError):
-            marker.get_user_deletion_wipe_status(UID, firestore_client=db)
-    assert len(calls) == 2
-
-
-# --- shadow comparisons ---------------------------------------------------------
-
-
 def test_shadow_keeps_live_authority_and_labels_within_bound_staleness(world, monkeypatch):
     db, reads, _, clock = world
     enable(monkeypatch, 'privacy_checks_shadow', 'privacy_ttl60')
@@ -239,21 +207,6 @@ def test_compare_counts_a_stale_allow_older_than_the_bound_as_a_real_mismatch():
     before = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')._value.get()
     metrics.compare('external', 'destructive_operation', 'allow', cached_age=60.5)
     assert metrics.DECISION_MISMATCH.labels('external', 'stale_allow')._value.get() == before + 1
-
-
-def test_deletion_marker_shadow_compares_without_changing_the_answer(world, monkeypatch):
-    db, reads, _, clock = world
-    enable(monkeypatch, 'privacy_checks_shadow', 'privacy_ttl60')
-    within = metrics.DECISION_MISMATCH.labels('deletion_marker', 'stale_within_ttl')._value.get()
-    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
-    db.rows[MARKER] = {'wipe_status': 'pending'}
-    clock.now += 10
-    assert marker.account_deletion_blocks_user_work(UID, firestore_client=db)
-    assert len(reads) == 2
-    assert metrics.DECISION_MISMATCH.labels('deletion_marker', 'stale_within_ttl')._value.get() == within + 1
-
-
-# --- batch: token-validated reuse across attempts -----------------------------------
 
 
 def test_batch_generation_is_reused_across_attempts_with_one_token_read(world, monkeypatch):
@@ -364,17 +317,12 @@ def test_unreadable_kill_switch_fails_closed_and_is_polled_at_most_every_interva
     ttl_cache.reset_for_tests()
 
 
-def test_deletion_marker_cache_never_seeds_from_a_stale_redis_negative(world, monkeypatch):
-    """Luna r1 P1 on #24622: a stale Redis absence must not get a fresh 60s on top of its own age."""
-    db, reads, _, clock = world
-    # The Redis negative cache is on and holds an absence; then a marker is written and both
-    # Redis invalidations are lost (the write happens straight in Firestore, no writer fence).
-    enable(monkeypatch, 'deletion_marker_cache')
-    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
-    db.rows[MARKER] = {'wipe_status': 'pending'}
-    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None  # the pre-existing Redis staleness
+def test_privacy_ttl60_leaves_the_deletion_marker_on_its_shared_redis_cache(world, monkeypatch):
+    """Cost regression 2026-11-04 22:13Z: per-process 60s reuse of the marker missed ~30% on Cloud Run
+    and forced direct reads, 10x the shared Redis negative cache's reads. The marker never uses privacy_ttl60."""
+    db, reads, _, _ = world
     enable(monkeypatch, 'deletion_marker_cache', 'privacy_ttl60')
-    # With the 60s cache on, the decision and its seed come from Firestore, not Redis.
-    assert marker.account_deletion_blocks_user_work(UID, firestore_client=db)
-    clock.now += 59
-    assert marker.account_deletion_blocks_user_work(UID, firestore_client=db)
+    for _ in range(5):
+        assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
+    assert len(reads) == 1  # the Redis negative cache answered the repeats
+    assert len(ttl_cache.DECISIONS) == 0
