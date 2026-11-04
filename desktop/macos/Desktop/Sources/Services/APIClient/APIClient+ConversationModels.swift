@@ -537,7 +537,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     // Matches the badge's waiting copy; rows/header that show the badge skip
     // the title text so the pill is not duplicated beside itself. Plain-string
     // callers (Spine tiles, link lists, accessibility) still get honest copy.
-    case .locked: return "Saved and waiting"
+    case .locked: return "Waiting"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
     }

@@ -12546,43 +12546,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reviewChangesSectionOther => 'Citas izmaiņas';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Sarunas: $count',
-      one: '1 saruna',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Vietas: $count',
-      one: '1 vieta',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Rādīt visus ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Atsaukt visu';
 
   @override
-  String get reviewChangeSeeEvidence => 'Skatīt pierādījumus';
-
-  @override
   String get reviewChangeViewConversation => 'Skatīt sarunu';
-
-  @override
-  String get reviewChangeViewTask => 'Skatīt uzdevumu';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12657,10 +12624,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dreamReportTitle => 'Dream ziņojums';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Priekšskatījuma režīms: Dream parāda, ko tas mainītu, taču jūsu kontā pagaidām nekas nemainās.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream šīs izmaiņas piemēro pats. Jebkuru varat atsaukt sadaļā Nesenās izmaiņas.';
 
   @override
@@ -12705,11 +12668,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dreamReportNothingFound => 'Nav ko labot';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Izlasīti $records vienumi · $tokens marķieri';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Labotu';
 
   @override
@@ -12725,27 +12683,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dreamReportLearnedWords => 'Apgūtie vārdi';
 
   @override
-  String get dreamReportFeedback => 'Paziņots Omi komandai';
-
-  @override
   String get dreamReportDeletedItem => 'Izdzēsts vienums';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'Šodien $count no $limit piegājieniem';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count izmaiņas gaida',
-      one: '1 izmaiņa gaida',
-      zero: 'Nav gaidošu izmaiņu',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12773,28 +12711,6 @@ class AppLocalizationsLv extends AppLocalizations {
       one: '1 ieteikums',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vecākas izmaiņas izlaistas',
-      one: '1 vecāka izmaiņa izlaista',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ziņojumi aizturēti privātuma dēļ',
-      one: '1 ziņojums aizturēts privātuma dēļ',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13550,15 +13466,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → tālrunis';
-
-  @override
-  String get syncStepLabelUpload => 'Augšupielāde';
-
-  @override
-  String get syncStepLabelTranscribe => 'Atšifrēšana';
-
-  @override
   String get syncDetailsTitle => 'Sinhronizācijas informācija';
 
   @override
@@ -13578,9 +13485,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Atšifrē Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Atbalstam';
 
   @override
   String get syncDetailsAudioFiles => 'Audio faili';
@@ -14703,13 +14607,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Piezīmes sāksies, kad ieradīsies galīgā transkripcija.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Tapat jūsu tālrunī, kamēr runājat. Pilnās piezīmes ieradīsies kopā ar galīgo transkripciju.';
-
-  @override
-  String get episodeOnThisPhone => 'Šajā tālrunī';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Galīgā transkripcija atpaliek aptuveni $duration';
   }
@@ -14719,9 +14616,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Tavi vārdi šeit parādās vienu līdz divas minūtes pēc to izteikšanas.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Droši ieraksta';
 
   @override
   String get livePreviewOnPhoneDivider => 'Tikko, šajā tālrunī';
@@ -14734,11 +14628,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'kad būsiet tiešsaistē';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration tiek apstrādāts';
-  }
 
   @override
   String get onTheWayUploadsByItself =>
@@ -14763,34 +14652,6 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Ieraksti, kas neizdodas, turpina mēģināt fonā. Viss, ko nevaram transkribēt, mums tiek ziņots automātiski.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Informācija atbalsta komandai';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Paslēpti $count īsi ieraksti',
-      one: 'Paslēpts 1 īss ieraksts',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Rādīt';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Slēpt $count īsus ierakstus',
-      one: 'Slēpt 1 īsu ierakstu',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -15002,6 +14863,148 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
+
+  @override
+  String get searchNoiseFilter => 'Īsi klipi';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sarunas: $count',
+      one: '1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vietas: $count',
+      one: '1 vieta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Rādīt visus ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Skatīt pierādījumus';
+
+  @override
+  String get reviewChangeViewTask => 'Skatīt uzdevumu';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Priekšskatījuma režīms: Dream parāda, ko tas mainītu, taču jūsu kontā pagaidām nekas nemainās.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Izlasīti $records vienumi · $tokens marķieri';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Paziņots Omi komandai';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Šodien $count no $limit piegājieniem';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count izmaiņas gaida',
+      one: '1 izmaiņa gaida',
+      zero: 'Nav gaidošu izmaiņu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vecākas izmaiņas izlaistas',
+      one: '1 vecāka izmaiņa izlaista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ziņojumi aizturēti privātuma dēļ',
+      one: '1 ziņojums aizturēts privātuma dēļ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → tālrunis';
+
+  @override
+  String get syncStepLabelUpload => 'Augšupielāde';
+
+  @override
+  String get syncStepLabelTranscribe => 'Atšifrēšana';
+
+  @override
+  String get syncDetailsForSupport => 'Atbalstam';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Tapat jūsu tālrunī, kamēr runājat. Pilnās piezīmes ieradīsies kopā ar galīgo transkripciju.';
+
+  @override
+  String get episodeOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Droši ieraksta';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration tiek apstrādāts';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Informācija atbalsta komandai';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Paslēpti $count īsi ieraksti',
+      one: 'Paslēpts 1 īss ieraksts',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Rādīt';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slēpt $count īsus ierakstus',
+      one: 'Slēpt 1 īsu ierakstu',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => 'Lietot visam ierakstam';

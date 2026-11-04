@@ -12520,43 +12520,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reviewChangesSectionOther => 'Muut muutokset';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count keskustelua',
-      one: '1 keskustelu',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kohtaa',
-      one: '1 kohta',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Näytä kaikki $count';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Kumoa kaikki';
 
   @override
-  String get reviewChangeSeeEvidence => 'Näytä perusteet';
-
-  @override
   String get reviewChangeViewConversation => 'Näytä keskustelu';
-
-  @override
-  String get reviewChangeViewTask => 'Näytä tehtävä';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12631,10 +12598,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get dreamReportTitle => 'Dream-raportti';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Esikatselutila: Dream näyttää, mitä se muuttaisi, mutta tilissäsi ei muutu vielä mitään.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream tekee nämä muutokset itse. Peru ne kohdassa Viimeisimmät muutokset.';
 
   @override
@@ -12679,11 +12642,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get dreamReportNothingFound => 'Ei korjattavaa';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Luettu $records kohdetta · $tokens tokenia';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Korjaisi';
 
   @override
@@ -12699,27 +12657,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get dreamReportLearnedWords => 'Opitut sanat';
 
   @override
-  String get dreamReportFeedback => 'Ilmoitettu Omi-tiimille';
-
-  @override
   String get dreamReportDeletedItem => 'Poistettu kohde';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count/$limit ajoa tänään';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count muutosta odottaa',
-      one: '1 muutos odottaa',
-      zero: 'Ei odottavia muutoksia',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12747,28 +12685,6 @@ class AppLocalizationsFi extends AppLocalizations {
       one: '1 ehdotus',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vanhempaa muutosta ohitettu',
-      one: '1 vanhempi muutos ohitettu',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ilmoitusta pidätetty yksityisyyden vuoksi',
-      one: '1 ilmoitus pidätetty yksityisyyden vuoksi',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13522,15 +13438,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → puhelin';
-
-  @override
-  String get syncStepLabelUpload => 'Lähetys';
-
-  @override
-  String get syncStepLabelTranscribe => 'Litterointi';
-
-  @override
   String get syncDetailsTitle => 'Synkronoinnin tiedot';
 
   @override
@@ -13550,9 +13457,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Litteroidaan Omissa';
-
-  @override
-  String get syncDetailsForSupport => 'Tukea varten';
 
   @override
   String get syncDetailsAudioFiles => 'Äänitiedostot';
@@ -14674,13 +14578,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Muistiinpanot alkavat, kun lopullinen litterointi saapuu.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Laadittu puhelimessasi puhuessasi. Täydelliset muistiinpanot saapuvat lopullisen litteroinnin mukana.';
-
-  @override
-  String get episodeOnThisPhone => 'Tässä puhelimessa';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Lopullinen litterointi noin $duration jäljessä';
   }
@@ -14693,9 +14590,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Sanasi näkyvät tässä yhdestä kahteen minuuttia sen jälkeen, kun olet sanonut ne.';
 
   @override
-  String get livePreviewNoEngineTitle => 'Tallentaa turvallisesti';
-
-  @override
   String get livePreviewOnPhoneDivider => 'Juuri nyt, tässä puhelimessa';
 
   @override
@@ -14706,11 +14600,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'verkon palattua';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration saadaan kiinni';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Latautuu itsestään. Keskustelut täydentyvät äänien saapuessa.';
@@ -14734,34 +14623,6 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nauhoitukset, jotka epäonnistuvat, yritetään yhä uudelleen taustalla. Kaikki, mitä emme pysty transkriboimaan, ilmoitetaan meille automaattisesti.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Tiedot tukea varten';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lyhyttä leikettä piilotettu',
-      one: '1 lyhyt leike piilotettu',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Näytä';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Piilota $count lyhyttä leikettä',
-      one: 'Piilota 1 lyhyt leike',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14972,6 +14833,148 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
+
+  @override
+  String get searchNoiseFilter => 'Lyhyet klipit';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua',
+      one: '1 keskustelu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohtaa',
+      one: '1 kohta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Näytä kaikki $count';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Näytä perusteet';
+
+  @override
+  String get reviewChangeViewTask => 'Näytä tehtävä';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Esikatselutila: Dream näyttää, mitä se muuttaisi, mutta tilissäsi ei muutu vielä mitään.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Luettu $records kohdetta · $tokens tokenia';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Ilmoitettu Omi-tiimille';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit ajoa tänään';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count muutosta odottaa',
+      one: '1 muutos odottaa',
+      zero: 'Ei odottavia muutoksia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vanhempaa muutosta ohitettu',
+      one: '1 vanhempi muutos ohitettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ilmoitusta pidätetty yksityisyyden vuoksi',
+      one: '1 ilmoitus pidätetty yksityisyyden vuoksi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → puhelin';
+
+  @override
+  String get syncStepLabelUpload => 'Lähetys';
+
+  @override
+  String get syncStepLabelTranscribe => 'Litterointi';
+
+  @override
+  String get syncDetailsForSupport => 'Tukea varten';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Laadittu puhelimessasi puhuessasi. Täydelliset muistiinpanot saapuvat lopullisen litteroinnin mukana.';
+
+  @override
+  String get episodeOnThisPhone => 'Tässä puhelimessa';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Tallentaa turvallisesti';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration saadaan kiinni';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Tiedot tukea varten';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lyhyttä leikettä piilotettu',
+      one: '1 lyhyt leike piilotettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Näytä';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Piilota $count lyhyttä leikettä',
+      one: 'Piilota 1 lyhyt leike',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => 'Käytä koko tallenteessa';

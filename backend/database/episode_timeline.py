@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes, episode_attach_memo
+from database import episodes, episode_attach_memo, episode_batch_pending
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from config.episode_attach import content_gate_enabled, optimizations_enabled
 from utils.conversations.recorded_time import conversation_span
@@ -93,6 +93,7 @@ def _attach_recorded_window(
     transaction: Any = None,
     candidates: Callable | None = None,
     fence_row: Any = None,
+    pending_at: datetime | None = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
@@ -106,6 +107,7 @@ def _attach_recorded_window(
         members = episodes.read_memberships(
             transaction, client, uid, [conversation_id], admit_conversation_id=conversation_id
         )
+        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, conversation_id, pending_at)
         rows = (candidates or recorded_candidates)(
             uid, started, finished, firestore_client=client, transaction=transaction
         )
@@ -211,6 +213,8 @@ def _attach_recorded_window(
         check_window(transaction, client, uid, result, rows=rows, fence_row=revision)
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
         episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
+        if pending_patch:
+            transaction.update(root.collection('conversations').document(conversation_id), pending_patch)
         transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}
@@ -252,6 +256,7 @@ def attach_recorded(
     new_episode: dict[str, Any],
     firestore_client: Any = None,
     attach_row: Any = None,
+    pending_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
@@ -270,7 +275,13 @@ def attach_recorded(
         # only inside this callback: Firestore retries must issue fresh queries.
         fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
         revision = fence.get(transaction=transaction).to_dict() or {}
-        key = content_key(attach_row) if content_gate_enabled() and attach_row and memo_eligible(attach_row) else None
+        # Metadata-only close attachment has not recovered/finalized transcript
+        # evidence. Do not stamp (or reset) its completed sync-attach memo.
+        key = (
+            content_key(attach_row)
+            if pending_at is None and content_gate_enabled() and attach_row and memo_eligible(attach_row)
+            else None
+        )
         span = conversation_span(attach_row) if key else None
         if key and (
             span is None
@@ -311,6 +322,7 @@ def attach_recorded(
             page_limit=PAGE_LIMIT,
             transaction=transaction,
             fence_row=revision,
+            pending_at=pending_at,
         )
         if canonical is not None:
             episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
@@ -327,6 +339,7 @@ def attach_recorded(
             transaction=transaction,
             candidates=reuse_candidates,
             fence_row=revision,
+            pending_at=pending_at,
         )
         result.pop('_window_end')
         episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])

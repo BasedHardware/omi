@@ -12545,43 +12545,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get reviewChangesSectionOther => 'Druge spremembe';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Pogovori: $count',
-      one: '1 pogovor',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Mesta: $count',
-      one: '1 mesto',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Prikaži vse ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Razveljavi vse';
 
   @override
-  String get reviewChangeSeeEvidence => 'Prikaži dokaze';
-
-  @override
   String get reviewChangeViewConversation => 'Prikaži pogovor';
-
-  @override
-  String get reviewChangeViewTask => 'Prikaži opravilo';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12656,10 +12623,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get dreamReportTitle => 'Poročilo Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Način predogleda: Dream prikaže, kaj bi spremenil, vendar se v vašem računu zaenkrat nič ne spremeni.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream te spremembe uporabi sam. Vsako lahko razveljavite v Nedavnih spremembah.';
 
   @override
@@ -12704,11 +12667,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get dreamReportNothingFound => 'Nič za popraviti';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Prebranih elementov: $records · žetonov: $tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Bi popravil';
 
   @override
@@ -12724,27 +12682,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get dreamReportLearnedWords => 'Naučene besede';
 
   @override
-  String get dreamReportFeedback => 'Sporočeno ekipi Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Izbrisan element';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'Danes $count od $limit tekov';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count sprememb čaka',
-      one: '1 sprememba čaka',
-      zero: 'Ni čakajočih sprememb',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12772,28 +12710,6 @@ class AppLocalizationsSl extends AppLocalizations {
       one: '1 predlog',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count starejših sprememb preskočenih',
-      one: '1 starejša sprememba preskočena',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count poročil zadržanih zaradi zasebnosti',
-      one: '1 poročilo zadržano zaradi zasebnosti',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13548,15 +13464,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → telefon';
-
-  @override
-  String get syncStepLabelUpload => 'Nalaganje';
-
-  @override
-  String get syncStepLabelTranscribe => 'Prepis';
-
-  @override
   String get syncDetailsTitle => 'Podrobnosti sinhronizacije';
 
   @override
@@ -13576,9 +13483,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Prepisovanje v Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Za podporo';
 
   @override
   String get syncDetailsAudioFiles => 'Zvočne datoteke';
@@ -14698,13 +14602,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Opombe se začnejo, ko prispe končni prepis.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Nastajajo na tvojem telefonu, medtem ko govoriš. Popolne opombe pridejo s končnim prepisom.';
-
-  @override
-  String get episodeOnThisPhone => 'V tem telefonu';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Končni prepis za približno $duration zadaj';
   }
@@ -14714,9 +14611,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Tvoje besede se tu pokažejo eno do dve minuti po izreku.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Varno snema';
 
   @override
   String get livePreviewOnPhoneDivider => 'Pravkar, na tem telefonu';
@@ -14729,11 +14623,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'ko boste povezani';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration na poti';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Nalaga se samodejno. Pogovori se dopolnjujejo, ko posnetki prihajajo.';
@@ -14757,34 +14646,6 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Posnetki, katerih nalaganje spodleti, se v ozadju poskušajo znova. Vse, česar ne moremo transkribirati, nam bo samodejno sporočeno.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Podrobnosti za podporo';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kratkih posnetkov skritih',
-      one: '1 kratek posnetek skrit',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Prikaži';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skrij $count kratkih posnetkov',
-      one: 'Skrij 1 kratek posnetek',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14996,6 +14857,148 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
+
+  @override
+  String get searchNoiseFilter => 'Kratki posnetki';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pogovori: $count',
+      one: '1 pogovor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mesta: $count',
+      one: '1 mesto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Prikaži vse ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Prikaži dokaze';
+
+  @override
+  String get reviewChangeViewTask => 'Prikaži opravilo';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Način predogleda: Dream prikaže, kaj bi spremenil, vendar se v vašem računu zaenkrat nič ne spremeni.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Prebranih elementov: $records · žetonov: $tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Sporočeno ekipi Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Danes $count od $limit tekov';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sprememb čaka',
+      one: '1 sprememba čaka',
+      zero: 'Ni čakajočih sprememb',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starejših sprememb preskočenih',
+      one: '1 starejša sprememba preskočena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count poročil zadržanih zaradi zasebnosti',
+      one: '1 poročilo zadržano zaradi zasebnosti',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Nalaganje';
+
+  @override
+  String get syncStepLabelTranscribe => 'Prepis';
+
+  @override
+  String get syncDetailsForSupport => 'Za podporo';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Nastajajo na tvojem telefonu, medtem ko govoriš. Popolne opombe pridejo s končnim prepisom.';
+
+  @override
+  String get episodeOnThisPhone => 'V tem telefonu';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Varno snema';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration na poti';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Podrobnosti za podporo';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kratkih posnetkov skritih',
+      one: '1 kratek posnetek skrit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Prikaži';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrij $count kratkih posnetkov',
+      one: 'Skrij 1 kratek posnetek',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => 'Uporabi za celoten posnetek';

@@ -22731,7 +22731,7 @@ export async function upload_video_frames_chat_v2_files_video_post(header: { aut
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_latest_version_v2_firmware_latest_get(query: { device_model: string, firmware_revision: string, hardware_revision: string, manufacturer_name: string }, init?: OmiApiClientInit): Promise<FirmwareVersionResponse> {
+export async function get_latest_version_v2_firmware_latest_get(query: { device_model: string, firmware_revision: string, hardware_revision: string, manufacturer_name: string, device_id?: string | null }, init?: OmiApiClientInit): Promise<FirmwareVersionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/firmware/latest`;
   const _params = query ? Object.entries(query)

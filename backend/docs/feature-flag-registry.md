@@ -524,6 +524,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_ATTACH_OWNER_REUSE_ENABLED` | Default on; reuse the placed owner and omit unused recorded owner reads | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` | Default on; use the supplied row for the attach visibility precheck | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` | Default on; attach retained batch audio to its recorded episode at audio close | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_COMPOSE_SETTLE_ENABLED` | Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -567,6 +568,7 @@ and an explicit empty literal renders as `''`.
 | `LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` | Default on; a granted phone with no speech engine rescinds local preview and uses the existing on-screen Modulate restore cohort after 15 seconds visible | backend | env | open | — | — | — | — | keep | keep | — | two-lane rollout lead |
 | `MEMORY_ENABLED` | Global incident stop for canonical memory intake and reads | backend | env | closed | on | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/x-connector-sync-job, pusher (chart)) | — | keep | keep | — | unowned |
 | `MEMORY_IMPORT_WRITE_BLOCK_MODE` | Block memory import writes during incident | backend | env | inverted | — | — | — | — | keep | keep | — | unowned |
+| `MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED` | Default on; omit five server-derived fields from the generation-only L1 schema. Original parsing and deterministic policy/id derivation remain unchanged; false restores the complete legacy schema. | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_OBSERVATION_INTAKE_ENABLED` | Default on; route ordinary captured observations inline and in maintenance independently of Dream | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_RELEASED_PROJECTION` | Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_REQUIRED_INTAKE_ENABLED` | Default on; one bounded Flex normalization after required capture commits, with retries owned by the existing Dream sweep | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -660,6 +662,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
 | `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
+| `VERTEX_EMBEDDING_DEDUPE_ENABLED` | Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | dazheng |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
@@ -1126,6 +1129,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_ATTACH_OWNER_REUSE_ENABLED` — Default on; reuse the placed owner and omit unused recorded owner reads (fail: open)
 - `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` — Default on; use the supplied row for the attach visibility precheck (fail: open)
 - `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` — Default on; reuse walk owner and visibility with transactional validation (fail: open)
+- `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` — Default on; attach retained batch audio to its recorded episode at audio close (fail: open)
 - `EPISODE_BOUNDARIES_MODE` — Hard meeting evidence for episodes and occasion conversations; off|shadow|serve, default shadow (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
@@ -1193,6 +1197,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED` — Default off; L1 memory extraction serves its system instructions without the owner name or per-account language embedded, moving both to the volatile tail so the prefix is shareable and prefix-cacheable (fail: closed)
+- `MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED` — Default on; omit five server-derived fields from the generation-only L1 schema. Original parsing and deterministic policy/id derivation remain unchanged; false restores the complete legacy schema. (fail: open)
 - `MEMORY_OBSERVATION_INTAKE_ENABLED` — Default on; route ordinary captured observations inline and in maintenance independently of Dream (fail: open)
 - `MEMORY_RELEASED_PROJECTION` — Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage (fail: open)
 - `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation (fail: closed)
@@ -1327,6 +1332,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_RETIRED_HANDLE_ACK_ENABLED` — Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners (fail: closed)
 - `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
+- `VERTEX_EMBEDDING_DEDUPE_ENABLED` — Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. (fail: open)
 
 ## Not feature flags
 

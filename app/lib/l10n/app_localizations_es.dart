@@ -12555,43 +12555,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewChangesSectionOther => 'Otros cambios';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count conversaciones',
-      one: '1 conversación',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lugares',
-      one: '1 lugar',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Ver los $count';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Deshacer todo';
 
   @override
-  String get reviewChangeSeeEvidence => 'Ver evidencia';
-
-  @override
   String get reviewChangeViewConversation => 'Ver conversación';
-
-  @override
-  String get reviewChangeViewTask => 'Ver tarea';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12666,10 +12633,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dreamReportTitle => 'Informe de Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Modo de vista previa: Dream muestra lo que cambiaría, pero por ahora no se modifica nada en tu cuenta.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream aplica estos cambios por sí solo. Deshaz cualquiera en Cambios recientes.';
 
   @override
@@ -12714,11 +12677,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dreamReportNothingFound => 'Nada que corregir';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Se leyeron $records elementos · $tokens tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Corregiría';
 
   @override
@@ -12734,27 +12692,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dreamReportLearnedWords => 'Palabras que aprendió';
 
   @override
-  String get dreamReportFeedback => 'Informado al equipo de Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Elemento eliminado';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count de $limit ejecuciones hoy';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count cambios en espera',
-      one: '1 cambio en espera',
-      zero: 'Sin cambios en espera',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12782,28 +12720,6 @@ class AppLocalizationsEs extends AppLocalizations {
       one: '1 sugerencia',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count cambios anteriores omitidos',
-      one: '1 cambio anterior omitido',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count informes retenidos por privacidad',
-      one: '1 informe retenido por privacidad',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13558,15 +13474,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → teléfono';
-
-  @override
-  String get syncStepLabelUpload => 'Subida';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transcribir';
-
-  @override
   String get syncDetailsTitle => 'Detalles de sincronización';
 
   @override
@@ -13586,9 +13493,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Transcribiendo en Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Para soporte';
 
   @override
   String get syncDetailsAudioFiles => 'Archivos de audio';
@@ -14715,13 +14619,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Las notas comienzan cuando llega la transcripción final.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Se redactan en tu teléfono mientras hablas. Las notas completas llegan con la transcripción final.';
-
-  @override
-  String get episodeOnThisPhone => 'En este teléfono';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Transcripción final con unos $duration de retraso';
   }
@@ -14731,9 +14628,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Tus palabras aparecen aquí uno o dos minutos después de decirlas.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Grabando de forma segura';
 
   @override
   String get livePreviewOnPhoneDivider => 'Ahora mismo, en este teléfono';
@@ -14746,11 +14640,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'cuando haya conexión';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Quedan $duration de audio por procesar';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Se sube solo. Las conversaciones se completan a medida que va llegando.';
@@ -14774,34 +14663,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Las grabaciones que fallan siguen reintentándose en segundo plano. Todo lo que no podemos transcribir se nos notifica automáticamente.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Detalles para soporte';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count clips cortos ocultos',
-      one: '1 clip corto oculto',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Mostrar';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Ocultar $count clips cortos',
-      one: 'Ocultar 1 clip corto',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -15013,6 +14874,148 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Los hablantes y la transcripción final aparecerán aquí a medida que se suba.';
+
+  @override
+  String get searchNoiseFilter => 'Clips cortos';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversaciones',
+      one: '1 conversación',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugares',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Ver los $count';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Ver evidencia';
+
+  @override
+  String get reviewChangeViewTask => 'Ver tarea';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Modo de vista previa: Dream muestra lo que cambiaría, pero por ahora no se modifica nada en tu cuenta.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Se leyeron $records elementos · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Informado al equipo de Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count de $limit ejecuciones hoy';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cambios en espera',
+      one: '1 cambio en espera',
+      zero: 'Sin cambios en espera',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cambios anteriores omitidos',
+      one: '1 cambio anterior omitido',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count informes retenidos por privacidad',
+      one: '1 informe retenido por privacidad',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → teléfono';
+
+  @override
+  String get syncStepLabelUpload => 'Subida';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribir';
+
+  @override
+  String get syncDetailsForSupport => 'Para soporte';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Se redactan en tu teléfono mientras hablas. Las notas completas llegan con la transcripción final.';
+
+  @override
+  String get episodeOnThisPhone => 'En este teléfono';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Grabando de forma segura';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Quedan $duration de audio por procesar';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalles para soporte';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count clips cortos ocultos',
+      one: '1 clip corto oculto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Mostrar';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ocultar $count clips cortos',
+      one: 'Ocultar 1 clip corto',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => 'Aplicar a toda la grabación';

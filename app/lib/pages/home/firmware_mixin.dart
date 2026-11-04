@@ -294,12 +294,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     required String firmwareRevision,
     required String hardwareRevision,
     required String manufacturerName,
+    String? serialNumber,
   }) async {
     latestFirmwareDetails = await getLatestFirmwareVersion(
       deviceModelNumber: deviceModelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
+      serialNumber: serialNumber,
     );
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);

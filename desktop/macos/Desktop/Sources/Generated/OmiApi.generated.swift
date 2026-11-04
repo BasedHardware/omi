@@ -19995,7 +19995,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func getLatestVersionV2FirmwareLatestGet(client: OmiApiClient, deviceModel: String, firmwareRevision: String, hardwareRevision: String, manufacturerName: String) async throws -> OmiAnyCodable {
+  public static func getLatestVersionV2FirmwareLatestGet(client: OmiApiClient, deviceModel: String, firmwareRevision: String, hardwareRevision: String, manufacturerName: String, deviceId: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/firmware/latest"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20005,6 +20005,9 @@ public enum OmiAPI {
     queryItems.append(URLQueryItem(name: "firmware_revision", value: String(firmwareRevision)))
     queryItems.append(URLQueryItem(name: "hardware_revision", value: String(hardwareRevision)))
     queryItems.append(URLQueryItem(name: "manufacturer_name", value: String(manufacturerName)))
+    if let deviceId {
+      queryItems.append(URLQueryItem(name: "device_id", value: String(deviceId)))
+    }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)

@@ -17,8 +17,8 @@ import re
 from typing import Any
 
 SCHEMA_VERSION = 1
-STAGES = ('admission', 'worker', 'projection', 'final_pass', 'titling', 'episodes')
-IMPLEMENTED_STAGES = ('admission',)
+STAGES = ('capture_upload', 'admission', 'worker', 'projection', 'final_pass', 'titling', 'episodes')
+IMPLEMENTED_STAGES = ('capture_upload', 'admission', 'titling')
 _STAGE_SCHEMA = {
     'type': 'object',
     'additionalProperties': False,
@@ -44,6 +44,9 @@ JSON_SCHEMA = {
     'type': 'object',
     'additionalProperties': False,
     'required': ['schema_version', 'id', 'tier', 'scrub', 'seed_blob_sha256', 'created', 'prod_evidence', 'stages'],
+    'allOf': [
+        {'if': {'properties': {'tier': {'const': 'S'}}}, 'then': {'properties': {'stages': {'minProperties': 1}}}}
+    ],
     'properties': {
         'schema_version': {'const': SCHEMA_VERSION},
         'id': {'type': 'string', 'pattern': r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'},
@@ -60,7 +63,7 @@ JSON_SCHEMA = {
         'notes': {'type': 'string', 'minLength': 1},
         'stages': {
             'type': 'object',
-            'minProperties': 1,
+            'minProperties': 0,
             'additionalProperties': False,
             'properties': {
                 stage: {
@@ -128,7 +131,7 @@ def validate_manifest(value: Any) -> Manifest:
     if 'notes' in value and (not isinstance(value['notes'], str) or not value['notes'].strip()):
         raise ValueError('notes must be nonempty text')
     stages = value['stages']
-    if not isinstance(stages, dict) or not stages or stages.keys() - set(STAGES):
+    if not isinstance(stages, dict) or (not stages and value['tier'] != 'C') or stages.keys() - set(STAGES):
         raise ValueError('stages must select known boundaries')
     if stages.keys() - set(IMPLEMENTED_STAGES):
         raise ValueError('expectations on not_implemented stages are forbidden')
@@ -160,6 +163,9 @@ class Case:
 
 def load_case(directory: Path | str) -> Case:
     directory = Path(directory).resolve(strict=True)
+    for name in ('manifest.json', 'corpus.json'):
+        if directory not in (directory / name).resolve().parents:
+            raise ValueError('case document escapes case directory')
     manifest = validate_manifest(json.loads((directory / 'manifest.json').read_text()))
     corpus = json.loads((directory / 'corpus.json').read_text())
     if not isinstance(corpus, dict):
@@ -167,11 +173,12 @@ def load_case(directory: Path | str) -> Case:
     # A declared digest must exist locally; never follow a corpus symlink outside
     # its case directory, and never load a URI or a remote blob as a fallback.
     available = {hashlib.sha256((directory / 'corpus.json').read_bytes()).hexdigest()}
-    for path in (directory / 'blobs').rglob('*'):
-        if directory not in path.resolve().parents:
-            raise ValueError('seed blob escapes case directory')
-        if path.is_file():
-            available.add(hashlib.sha256(path.read_bytes()).hexdigest())
+    for subdirectory in ('blobs', 'cassettes'):
+        for path in (directory / subdirectory).rglob('*'):
+            if directory not in path.resolve().parents:
+                raise ValueError('seed blob escapes case directory')
+            if path.is_file():
+                available.add(hashlib.sha256(path.read_bytes()).hexdigest())
     if set(manifest.seed_blob_sha256) - available:
         raise ValueError('seed blob digest missing or mismatched')
     return Case(directory, manifest, corpus)

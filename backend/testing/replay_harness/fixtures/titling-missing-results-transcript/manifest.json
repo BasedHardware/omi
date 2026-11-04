@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "titling-missing-results-transcript",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "5219566886288ef5d021473faf8cfd5b936c01a37da10f30706150b1549f6b79",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Synthetic mechanism; baseline measured against WP1 product source.",
+  "stages": {
+    "titling": {
+      "expect_stop_stage": "titling",
+      "expect_reason": "titling:precondition_skipped:missing_results_transcript"
+    }
+  }
+}

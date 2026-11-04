@@ -12598,43 +12598,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewChangesSectionOther => 'Άλλες αλλαγές';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count συνομιλίες',
-      one: '1 συνομιλία',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count σημεία',
-      one: '1 σημείο',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Εμφάνιση όλων ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Αναίρεση όλων';
 
   @override
-  String get reviewChangeSeeEvidence => 'Δείτε τα στοιχεία';
-
-  @override
   String get reviewChangeViewConversation => 'Προβολή συνομιλίας';
-
-  @override
-  String get reviewChangeViewTask => 'Προβολή εργασίας';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12709,10 +12676,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dreamReportTitle => 'Αναφορά Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Λειτουργία προεπισκόπησης: το Dream δείχνει τι θα άλλαζε, αλλά τίποτα στον λογαριασμό σου δεν αλλάζει ακόμα.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Το Dream εφαρμόζει αυτές τις αλλαγές μόνο του. Αναίρεσε όποια θέλεις στις Πρόσφατες αλλαγές.';
 
@@ -12758,11 +12721,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dreamReportNothingFound => 'Δεν υπάρχει κάτι για διόρθωση';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Διαβάστηκαν $records στοιχεία · $tokens tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Θα διόρθωνε';
 
   @override
@@ -12778,27 +12736,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dreamReportLearnedWords => 'Λέξεις που έμαθε';
 
   @override
-  String get dreamReportFeedback => 'Αναφέρθηκε στην ομάδα του Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Διαγραμμένο στοιχείο';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count από $limit περάσματα σήμερα';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count αλλαγές σε αναμονή',
-      one: '1 αλλαγή σε αναμονή',
-      zero: 'Καμία αλλαγή σε αναμονή',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12826,28 +12764,6 @@ class AppLocalizationsEl extends AppLocalizations {
       one: '1 πρόταση',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count παλαιότερες αλλαγές παραλείφθηκαν',
-      one: '1 παλαιότερη αλλαγή παραλείφθηκε',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count αναφορές κρατήθηκαν για λόγους απορρήτου',
-      one: '1 αναφορά κρατήθηκε για λόγους απορρήτου',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13603,15 +13519,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → τηλέφωνο';
-
-  @override
-  String get syncStepLabelUpload => 'Μεταφόρτωση';
-
-  @override
-  String get syncStepLabelTranscribe => 'Απομαγνητοφώνηση';
-
-  @override
   String get syncDetailsTitle => 'Λεπτομέρειες συγχρονισμού';
 
   @override
@@ -13631,9 +13538,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Απομαγνητοφώνηση στο Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Για την υποστήριξη';
 
   @override
   String get syncDetailsAudioFiles => 'Αρχεία ήχου';
@@ -14767,13 +14671,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Οι σημειώσεις ξεκινούν όταν φτάσει η τελική απομαγνητοφώνηση.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Συντάσσονται στο τηλέφωνό σας καθώς μιλάτε. Οι πλήρεις σημειώσεις έρχονται με την τελική απομαγνητοφώνηση.';
-
-  @override
-  String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Η τελική απομαγνητοφώνηση υστερεί περίπου $duration';
   }
@@ -14783,9 +14680,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Τα λόγια σας εμφανίζονται εδώ ένα έως δύο λεπτά μετά τα πείτε.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Ασφαλή εγγραφή';
 
   @override
   String get livePreviewOnPhoneDivider => 'Μόλις τώρα, σε αυτό το τηλέφωνο';
@@ -14798,11 +14692,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'μόλις επανέλθει η σύνδεση';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Απομένουν $duration';
-  }
 
   @override
   String get onTheWayUploadsByItself =>
@@ -14827,34 +14716,6 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Οι ηχογραφήσεις που αποτυγχάνουν συνεχίζουν να δοκιμάζουν στο παρασκήνιο. Οτιδήποτε δεν μπορούμε να μεταγράψουμε αναφέρεται αυτόματα σε εμάς.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Λεπτομέρειες για την υποστήριξη';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Κρύφτηκαν $count σύντομα αποσπάσματα',
-      one: 'Κρύφτηκε 1 σύντομο απόσπασμα',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Εμφάνιση';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Απόκρυψη $count σύντομων αποσπασμάτων',
-      one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -15068,6 +14929,148 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get liveAudioSavedDetail =>
       'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
+
+  @override
+  String get searchNoiseFilter => 'Σύντομα κλιπ';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες',
+      one: '1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count σημεία',
+      one: '1 σημείο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Εμφάνιση όλων ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Δείτε τα στοιχεία';
+
+  @override
+  String get reviewChangeViewTask => 'Προβολή εργασίας';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Λειτουργία προεπισκόπησης: το Dream δείχνει τι θα άλλαζε, αλλά τίποτα στον λογαριασμό σου δεν αλλάζει ακόμα.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Διαβάστηκαν $records στοιχεία · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Αναφέρθηκε στην ομάδα του Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count από $limit περάσματα σήμερα';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αλλαγές σε αναμονή',
+      one: '1 αλλαγή σε αναμονή',
+      zero: 'Καμία αλλαγή σε αναμονή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count παλαιότερες αλλαγές παραλείφθηκαν',
+      one: '1 παλαιότερη αλλαγή παραλείφθηκε',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αναφορές κρατήθηκαν για λόγους απορρήτου',
+      one: '1 αναφορά κρατήθηκε για λόγους απορρήτου',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → τηλέφωνο';
+
+  @override
+  String get syncStepLabelUpload => 'Μεταφόρτωση';
+
+  @override
+  String get syncStepLabelTranscribe => 'Απομαγνητοφώνηση';
+
+  @override
+  String get syncDetailsForSupport => 'Για την υποστήριξη';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Συντάσσονται στο τηλέφωνό σας καθώς μιλάτε. Οι πλήρεις σημειώσεις έρχονται με την τελική απομαγνητοφώνηση.';
+
+  @override
+  String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Ασφαλή εγγραφή';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Απομένουν $duration';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Λεπτομέρειες για την υποστήριξη';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Κρύφτηκαν $count σύντομα αποσπάσματα',
+      one: 'Κρύφτηκε 1 σύντομο απόσπασμα',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Εμφάνιση';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Απόκρυψη $count σύντομων αποσπασμάτων',
+      one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => 'Εφαρμογή σε όλη την εγγραφή';

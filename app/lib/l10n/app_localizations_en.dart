@@ -12503,43 +12503,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewChangesSectionOther => 'Other changes';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count conversations',
-      one: '1 conversation',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count places',
-      one: '1 place',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Show all $count';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Undo all';
 
   @override
-  String get reviewChangeSeeEvidence => 'See evidence';
-
-  @override
   String get reviewChangeViewConversation => 'View conversation';
-
-  @override
-  String get reviewChangeViewTask => 'View task';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12614,10 +12581,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dreamReportTitle => 'Dream Report';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Preview mode: Dream shows what it would change, but nothing in your account changes yet.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream applies these changes on its own. Undo any of them in Recent Changes.';
 
   @override
@@ -12662,11 +12625,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dreamReportNothingFound => 'Nothing to fix';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Read $records items · $tokens tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Would fix';
 
   @override
@@ -12682,27 +12640,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dreamReportLearnedWords => 'Words it learned';
 
   @override
-  String get dreamReportFeedback => 'Reported to the Omi team';
-
-  @override
   String get dreamReportDeletedItem => 'Deleted item';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count of $limit passes today';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count changes waiting',
-      one: '1 change waiting',
-      zero: 'No changes waiting',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12730,28 +12668,6 @@ class AppLocalizationsEn extends AppLocalizations {
       one: '1 suggestion',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count older changes skipped',
-      one: '1 older change skipped',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count reports held back for privacy',
-      one: '1 report held back for privacy',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13503,15 +13419,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → phone';
-
-  @override
-  String get syncStepLabelUpload => 'Upload';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transcribe';
-
-  @override
   String get syncDetailsTitle => 'Sync details';
 
   @override
@@ -13531,9 +13438,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Transcribing on Omi';
-
-  @override
-  String get syncDetailsForSupport => 'For support';
 
   @override
   String get syncDetailsAudioFiles => 'Audio files';
@@ -14656,13 +14560,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Notes start when the final transcript arrives.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Drafted on your phone as you talk. The full notes arrive with the final transcript.';
-
-  @override
-  String get episodeOnThisPhone => 'On this phone';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Final transcript about $duration behind';
   }
@@ -14672,9 +14569,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Your words show up here a minute or two after you say them.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Recording safely';
 
   @override
   String get livePreviewOnPhoneDivider => 'Just now, on this phone';
@@ -14687,11 +14581,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'when online';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration catching up';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Uploads by itself. Conversations fill in as it lands.';
@@ -14715,34 +14604,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Recordings that fail keep retrying in the background. Anything we can\'t transcribe is reported to us automatically.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Details for support';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Show';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14953,6 +14814,148 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
+
+  @override
+  String get searchNoiseFilter => 'Short clips';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations',
+      one: '1 conversation',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count places',
+      one: '1 place',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Show all $count';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'See evidence';
+
+  @override
+  String get reviewChangeViewTask => 'View task';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Preview mode: Dream shows what it would change, but nothing in your account changes yet.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Read $records items · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Reported to the Omi team';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count of $limit passes today';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count changes waiting',
+      one: '1 change waiting',
+      zero: 'No changes waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count older changes skipped',
+      one: '1 older change skipped',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reports held back for privacy',
+      one: '1 report held back for privacy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → phone';
+
+  @override
+  String get syncStepLabelUpload => 'Upload';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribe';
+
+  @override
+  String get syncDetailsForSupport => 'For support';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Drafted on your phone as you talk. The full notes arrive with the final transcript.';
+
+  @override
+  String get episodeOnThisPhone => 'On this phone';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Recording safely';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration catching up';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Details for support';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count short clips hidden',
+      one: '1 short clip hidden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Show';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hide $count short clips',
+      one: 'Hide 1 short clip',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => 'Apply to the whole recording';

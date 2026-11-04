@@ -12338,43 +12338,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewChangesSectionOther => '기타 변경 사항';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '대화 $count개',
-      one: '대화 1개',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count곳',
-      one: '1곳',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return '$count개 모두 보기';
-  }
-
-  @override
   String get reviewChangeUndoAll => '모두 실행 취소';
 
   @override
-  String get reviewChangeSeeEvidence => '근거 보기';
-
-  @override
   String get reviewChangeViewConversation => '대화 보기';
-
-  @override
-  String get reviewChangeViewTask => '할 일 보기';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12449,9 +12416,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportTitle => 'Dream 리포트';
 
   @override
-  String get dreamReportShadowBanner => '미리보기 모드: Dream이 변경할 내용을 보여 주지만, 아직 계정에는 아무것도 바뀌지 않습니다.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream이 이 변경 사항을 직접 적용합니다. 최근 변경 사항에서 언제든 되돌릴 수 있어요.';
 
   @override
@@ -12496,11 +12460,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportNothingFound => '수정할 내용 없음';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '항목 $records개 읽음 · 토큰 $tokens개';
-  }
-
-  @override
   String get dreamReportWouldFix => '수정할 예정';
 
   @override
@@ -12516,27 +12475,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportLearnedWords => '배운 단어';
 
   @override
-  String get dreamReportFeedback => 'Omi 팀에 보고됨';
-
-  @override
   String get dreamReportDeletedItem => '삭제된 항목';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '오늘 $count/$limit회 실행';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '변경 $count 건 대기 중',
-      one: '변경 1건 대기 중',
-      zero: '대기 중인 변경 없음',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12564,28 +12503,6 @@ class AppLocalizationsKo extends AppLocalizations {
       one: '제안 1건',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '이전 변경 $count 건 건너뜀',
-      one: '이전 변경 1건 건너뜀',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '개인정보 보호를 위해 리포트 $count 건 보류',
-      one: '개인정보 보호를 위해 리포트 1건 보류',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13333,15 +13250,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → 휴대폰';
-
-  @override
-  String get syncStepLabelUpload => '업로드';
-
-  @override
-  String get syncStepLabelTranscribe => '텍스트 변환';
-
-  @override
   String get syncDetailsTitle => '동기화 상세 정보';
 
   @override
@@ -13361,9 +13269,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
-
-  @override
-  String get syncDetailsForSupport => '지원팀용';
 
   @override
   String get syncDetailsAudioFiles => '오디오 파일';
@@ -14469,12 +14374,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeNotesStartWithTranscript => '최종 스크립트가 도착하면 노트가 시작됩니다.';
 
   @override
-  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
-
-  @override
-  String get episodeOnThisPhone => '이 휴대전화에서';
-
-  @override
   String livePreviewBehind(Object duration) {
     return '최종 스크립트가 약 $duration 뒤처져 있습니다';
   }
@@ -14484,9 +14383,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => '말한 내용은 1~2분 후 이곳에 나타납니다.';
-
-  @override
-  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
 
   @override
   String get livePreviewOnPhoneDivider => '방금, 이 휴대전화에서';
@@ -14499,11 +14395,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => '온라인 시';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration 처리 중';
-  }
 
   @override
   String get onTheWayUploadsByItself => '자동으로 업로드됩니다. 도착하는 대로 대화가 채워집니다.';
@@ -14525,34 +14416,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayFootnote => '실패한 녹음은 백그라운드에서 계속 다시 시도합니다. 전사할 수 없는 내용은 자동으로 저희에게 보고됩니다.';
-
-  @override
-  String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 클립 $count개 숨겨짐',
-      one: '짧은 클립 1개 숨겨짐',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => '표시';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 클립 $count개 숨기기',
-      one: '짧은 클립 1개 숨기기',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14760,6 +14623,146 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
+
+  @override
+  String get searchNoiseFilter => '짧은 클립';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String get dreamReportShadowBanner => '미리보기 모드: Dream이 변경할 내용을 보여 주지만, 아직 계정에는 아무것도 바뀌지 않습니다.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '항목 $records개 읽음 · 토큰 $tokens개';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi 팀에 보고됨';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '오늘 $count/$limit회 실행';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '변경 $count 건 대기 중',
+      one: '변경 1건 대기 중',
+      zero: '대기 중인 변경 없음',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '이전 변경 $count 건 건너뜀',
+      one: '이전 변경 1건 건너뜀',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '개인정보 보호를 위해 리포트 $count 건 보류',
+      one: '개인정보 보호를 위해 리포트 1건 보류',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 휴대폰';
+
+  @override
+  String get syncStepLabelUpload => '업로드';
+
+  @override
+  String get syncStepLabelTranscribe => '텍스트 변환';
+
+  @override
+  String get syncDetailsForSupport => '지원팀용';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
+
+  @override
+  String get episodeOnThisPhone => '이 휴대전화에서';
+
+  @override
+  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration 처리 중';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨겨짐',
+      one: '짧은 클립 1개 숨겨짐',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '표시';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨기기',
+      one: '짧은 클립 1개 숨기기',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get speakerWholeRecording => '녹음 전체에 적용';
