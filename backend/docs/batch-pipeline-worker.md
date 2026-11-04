@@ -314,122 +314,41 @@ qualification window, using a real scale-up during the 25% soak as the
 scheduling proof.
 
 The scaler sizes on the **higher of two signals**: admissible-ready backlog
-(`targetQueuedUnitsPerWorker=40`) and flight wall occupancy
-(`targetChainBusyPerWorker=0.6`). The external metric
-`omi_batch_pipeline_gpu_chain_busy_seconds` sums each pod's 10m
-`worker_flight` rate, deduplicating the two scrape jobs with
-`max by (namespace, pod)`. The chart rule and production adapter rule agree;
-this retune needs no adapter change.
+(`targetQueuedUnitsPerWorker=41`) and fleet `worker_flight` wall seconds per
+second (`targetChainBusyPerWorker=0.56`). The adapter deduplicates the two scrape
+jobs per pod and sums their 10m rates. Ready backlog protects claim-bound work;
+chain occupancy protects healthy drains with little ready backlog. The timer
+includes executor wait and host-side serial work, rather than CUDA/ASR seconds.
+The pump takes its GPU slot before starting the timer, so `pipelineDepth=2` does
+not double-count slot wait. Production must keep stage profiling enabled.
 
-`worker_flight` measures executor wait and the whole serialized flight,
-including host work and CUDA synchronization, rather than GPU kernel seconds
-(`utils/batch_pipeline/pump.py`, `_run_blocking` and `_flight`;
-`utils/batch_pipeline/stage_timings.py`). The pump acquires its exclusive
-`_gpu` slot **before** starting the timer; `pipelineDepth=2` does not count the
-second lane's slot wait twice. The worker also serializes its chain under
-`self._lock` (`diarizer/batch_pipeline.py`, `process_batch_deferred`). Deep-only
-flights use `worker_flight_deep`, excluded from this HPA chain metric. Low GPU
-utilization alone therefore does not establish excess wall-chain capacity.
-Ready backlog retains capacity when claims wedge or the chain metric omits
-work; the smoothed chain signal retains capacity during low-backlog drains.
+The reverted 40/0.6 retune (#24481, reverted by #24493 before cluster apply)
+starved 35 minutes in the existing 24h replay. The replacement preserves every
+existing replay assertion: current 3h fixture mean/max 4.34/5 with zero hot
+minutes, older measured 24h mean/max 6.37/15 with zero starvation and backlog
+dominance. The current-volume step model has worst wait 3.35 minutes and catches
+up in 10 minutes. These are fixture/model results, not production throughput or
+p95 qualification. The [search frontier](batch-pipeline-hpa-frontier.md) records
+the grid, rejected candidates, model limitations, and reproducible command.
 
-The proposed 64/0.8 retune failed existing measured-load safety coverage:
-three minutes exceeded the 0.85 chain s/s per-worker headroom line. Use 40/0.6
-instead: the measured 25% fixture (2026-11-01T23:41Z..2026-11-02T02:41Z)
-replays at mean 4.34 / max 5 replicas, versus 4.88 / max 6 at 32/0.5, with no
-hot minutes. The sustained-step model (1.1 -> 5.8 chain s/s, five-minute pod
-provisioning) keeps worst backlog wait at 3.35 minutes and catches up in 10
-minutes after the step, as at 32/0.5. The replay starting at 12 with empty recommendation history reaches 5 within
-60 minutes. An existing HPA can retain up to 30 minutes of prior high
-recommendations, so allow roughly 90 minutes for the corresponding live shed,
-and longer if new demand holds capacity. These are model results, not new
-production observations.
+The synthetic 3.7x full-volume sensitivity model has mean/max 11.46/16 and six
+hot minutes; peak 5m demand needs 18 workers at the 0.85 hot threshold. Full
+volume is unqualified under the unchanged 16-pod ceiling. Apply only at current
+volume, watch one shed cycle plus 24h, and decide capacity before streaming
+retirement raises batch volume. Keep the 1800s stabilization and one pod per
+600s stockout policy; the older replay does not faithfully enforce that period.
+The chain metric and adapter stay unchanged. Kill switch: restore targets
+32/0.5 with the same min 4/max 16 and downscale policy, or roll back the Helm
+release after checking its saved values/image. No new environment setting.
 
-The **synthetic full-volume model** multiplies all fixture fleet totals by 3.7,
-preserving epochs and missing samples. The `_per_pod` fixture columns already
-sum deduplicated pod rates; they are fleet totals. This models mean 10m demand
-of 4.19 chain s/s. At 40/0.6 it replays at mean 10.99 / max 16 replicas, versus
-11.79 / max 16 at 32/0.5, with seven hot minutes (previously five). It cannot
-qualify full-volume headroom: peak 5m demand is 15.00 s/s, needing 18 workers
-at 0.85 each, above the unchanged 16 ceiling. No target pair can meet the
-original mean <=6 / max <=8 / no-hot acceptance on this scaled fixture.
-A separate sustained-step model (4.05 -> 12 chain s/s) has worst backlog wait
-5.06 minutes and catches up in 22 minutes. This models served work as demand,
-fixed per-pod supply and provisioning; it does not establish production latency,
-throughput or savings. In particular, it does not substantiate ~5 pods, $47/day
-saved or flat 4,514 audio-h/day at full volume. The planscost lead accepts a
-staged apply at today's volume (2026-11-03), watching timeliness and T3/hard-3
-signals for one shed cycle plus 24h and restoring 32/0.5 on regression. The old
-32/0.5 targets need more pods on average in the full-volume replay; both shapes
-reach the same 16-pod ceiling, so that capacity gap is not introduced by this
-retune. The seven hot minutes (versus five before) remain an expansion risk.
-Before streaming retirement doubles batch volume, the lead decides whether to
-raise maxReplicas above 16 as a separately qualified capacity step; the replay
-needs 18 for zero hot minutes. This PR leaves maxReplicas at 16.
-See `tests/unit/test_batch_pipeline_hpa_retune_replay.py`.
-
-The four-worker production floor, 16-worker ceiling, 1800s scale-down window
-and one-pod-per-600s policy stay unchanged. `worker.processes` stays 1: the
-33.8 -> 45.4 audio-h/GPU-h benchmark was a 3-CPU T4, not an 8-vCPU L4.
-A later processes=2 change also selects 24Gi requested / 26Gi limited host
-memory and starts independent pullers (more contention is a risk, not a
-measured doubling). Require a paired g2-standard-8 L4 throughput/memory run
-and a 24h soak of pull backoff and obligation age before changing it.
-
-### Retune apply and rollback (lead)
-
-This is a ship-on values change with no new env names. Roll back the targets
-to `autoscaling.targetQueuedUnitsPerWorker=32` and
-`autoscaling.targetChainBusyPerWorker=0.5`, preserving the current image,
-other runtime bindings and production floor. A reviewed `helm rollback` is an
-alternative if its stored revision preserves those bindings. No adapter
-redeploy is required. Keep `worker.stageProfilingEnabled=true` (already in
-production values). A failed/missing external metric blocks HPA scale-down,
-but filtering only some stale pods can undercount fleet demand; verify sampler
-freshness across the serving fleet rather than assuming all stale data fails
-closed.
-
-1. Privately capture the current Helm release values and manifest. Confirm
-   current min/max and overrides; the plan reported live 6/12, which was not
-   verified in this local-only change. Prepare a render with the existing pinned
-   image, all current bindings and the 1500s drain preserved, targets 40/0.6,
-   min 4 / max 16, one OD deployment and no Spot companion. Reconcile only
-   reviewed drift; do not blindly discard unrelated live overrides.
-2. Before retuning, verify the installed adapter's deduplicated 10m rule and
-   both fresh external metrics. `scripts/diff_prod_adapter.py` compares local
-   renders with separately captured live ConfigMap, Deployment and APIService
-   YAML; it does not fetch or verify live state by itself. This PR changes no
-   adapter resources.
-3. Confirm both timeliness Firestore indexes are READY and all three alarm
-   rules are active, following
-   [the timeliness runbook](../charts/monitoring/batch-projection/README.md).
-   The rules are in `../charts/monitoring/pending/batch-timeliness.json` until
-   installed through the documented inventory/contract/provisioning path.
-   Verify fresh successful samples and handling of the 2h, stale and scan-blind
-   states. Rules default to agent tier with Telegram muted; confirm an operator
-   is watching them. They are alert-only, not an automatic rollback guard.
-4. Apply the reviewed 40/0.6 values in a staged apply at today's volume, per
-   the planscost lead's 2026-11-03 decision. Watch timeliness and T3/hard-3
-   signals through one shed cycle (60 min with fresh replay history; roughly
-   90 min if prior high recommendations persist) plus 24h. Arm any retune
-   guard only after a full lookback of the new state. Check completed audio
-   per pod-hour and total throughput, backlog latency, all timeliness legs,
-   GPU duty, pull backoff and obligation age. Restore 32/0.5 on regression.
-   Before streaming retirement doubles batch volume, the lead must decide
-   whether to raise maxReplicas above 16: the synthetic replay needs 18 for
-   zero hot minutes. That decision and any separately qualified ceiling
-   increase are outside this PR; this apply keeps min 4 / max 16.
-5. Use [ADR-0001](adr/0001-trip-floors-t2-t3-t5.md) as the cited T3 policy:
-   obligation >900s / job >1800s freezes at <=50% and rolls back above 50%;
-   always-rollback backstops are p95 record latency >30 min sustained 30 min,
-   an admitted unit 2h without a terminal state, or >5% wedged for 30 min with
-   at least 20 admitted. Confirm the current observer, passing backtest and
-   rollback authority before apply. These are distinct from
-   `charts/incluster-guards/files/batch_guard.py`, whose current automatic
-   trip inputs are custody/proven speech loss and whose wedge ages are
-   alert-only. Keep those existing custody guards intact; do not claim they
-   implement the T3 backstops. Restore 32/0.5 on retune-related timeliness or
-   throughput regression and follow the confirmed rollback policy on trips.
+For this HPA retune's regression, the lead restores targets 32/0.5 with the HPA
+on, min 4/max 16 and the existing downscale policy. For a separate whole-worker
+qualification failure, the lead restores the privately captured known-good
+image/runtime bindings while preserving the ruling floor of four Ready
+on-demand workers. Capture release values/manifest before either operation;
+keep the image pinned and the 1500s SIGTERM drain intact. Verify the single OD
+deployment/image, HPA budget and count classes. Production has no Spot companion.
+Queue latency, useful throughput, GPU duty and the cost ledger gate expansion.
 
 ## Stage profiling (metrics-only)
 
@@ -521,3 +440,57 @@ silence decision; the GPU worker never infers silence from empty text or from
 words outside its core. Speech gets the once-only legacy recovery attempt.
 See [serving recovery](batch-pipeline-serving.md#dark-empty-asr-disposition) for
 closed diagnostics, historical held-unit disposition and rollback semantics.
+
+### Control-loop read and latency budget
+
+Worker defaults ship on. `worker.controlCandidateFanout` maps to
+`BATCH_CONTROL_CANDIDATE_FANOUT` (16; integer clamp 1–64, malformed → 16).
+Each spread-mode priority pass queries one sorted candidate list, excludes busy
+claims locally, and uses at most one extra query at the previous 64-shard width
+when the full candidate window is busy or a committed control change needs a
+refresh. These paths share one refresh budget: at most two queries per priority
+pass, and the ordinary productive pull still reads only its initial window.
+Eligible deficit rounds keep retrying the head, so fresh work cannot be bypassed.
+Service remains the primary rank and worker affinity breaks ties within the
+bounded query prefix. Set 64 to restore the previous query width; list reuse
+remains active. `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy selection.
+
+`worker.firestoreReadLevers: '{"batch_privacy_memoize":100}'` renders
+`FIRESTORE_READ_LEVERS='{"batch_privacy_memoize":100}'` on worker pods only.
+The existing transaction-local memo enrolls each first read in the conflict set,
+including commit-boundary privacy checks, and is rebuilt on transaction retry.
+Set `worker.firestoreReadLevers: '{}'` in the override values file to disable it. A string avoids Helm's deep-map
+merge retaining the enabled default when an empty map is supplied. Serving-role
+complete lever literals and privacy fences are unchanged.
+
+`worker.admissionParallelCalls` maps to `BATCH_ADMISSION_PARALLEL_CALLS`
+(default true; false restores serial flight calls). First-seen owner groups are
+packed into calls of at most four leases. Up to four owner-disjoint calls run
+on the dedicated admission executor, orchestrated asynchronously. Shared-owner
+calls stay serial within one Pump/process, including across flights and
+synchronous provider re-checks. Locks last until the HTTP leaf returns after an async timeout. The
+server's eight-second clamp, fail-closed receipts, flight size and serial outer
+timeout bound remain unchanged. The synchronous provider dispatch re-check
+remains serial to keep thread-pool coordinators from waiting on child pools.
+Same-owner admission can still overlap across worker pods; the existing
+per-replica funding/fair-use check-then-act overshoot bound is unchanged.
+
+`worker.idlePollMaxSeconds` maps to `BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS`
+(default 10, finite clamp 2–30 seconds; malformed → 10). Empty lane waits follow
+2, 4, 8, 10, 10 seconds; productive work resets the next empty wait to 2 seconds.
+Set 2 to restore fixed polling. Maintenance has an independent one-second task
+for both one- and multi-flight pumps, and production queue gauges keep their
+independent runtime sampler. Shutdown interrupts every idle wait.
+
+Lead apply steps (this change does not deploy): publish the reviewed worker
+image through the normal release workflow, then upgrade the existing worker
+release using the prod values and that immutable image digest. Confirm the
+four rendered env values on every worker variant/process. At flat throughput,
+soak 24 hours watching custody_missing, terminal_speech, failed_held_speech,
+T3 obligation age (900-second trip), the two-hour timeliness alarm, pull backoff,
+and admission timeout/unevaluated shares. Compare completed audio seconds per
+pod-hour and DCGM utilization. Arm rollback automation only after a full new-state
+lookback window. On regression, set fanout 64, parallel false, idle max 2 and
+lever JSON string `'{}'` and roll worker pods through the same Helm release. No index or
+schema change is required. Claimed read/cost/throughput savings are estimates;
+this PR does not establish production acceptance or measured savings.

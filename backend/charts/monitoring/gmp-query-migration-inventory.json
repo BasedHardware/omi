@@ -93,6 +93,112 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "histogram_quantile(0.95, sum by (le) (rate(omi_sync_queue_wait_seconds_bucket{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",lane=\"backfill\"}[30m])))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_queue_wait_seconds_bucket"
+      ],
+      "owner_title": "Sync backfill - p95 dispatched queue wait exceeds 30 minutes",
+      "owner_uid": "omi-sync-backfill-queue-wait-high",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0)) + (count(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0))",
+      "file": "alerts/batch-queue-safety.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_metrics_refreshed_at_seconds",
+        "omi_batch_pipeline_oldest_age_seconds",
+        "omi_batch_pipeline_retry_age_seconds"
+      ],
+      "owner_title": "Batch queue safety measurement incomplete or stale",
+      "owner_uid": "omi-batch-queue-safety-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
+      "file": "alerts/batch-timeliness.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_timeliness_new_oldest_age_seconds"
+      ],
+      "owner_title": "Batch audio unit still unpublished after 2h",
+      "owner_uid": "omi-batch-unit-unpublished-2h",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/batch-timeliness.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_timeliness_observed_at_seconds"
+      ],
+      "owner_title": "Batch audio unit still unpublished after 2h",
+      "owner_uid": "omi-batch-unit-unpublished-2h",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} >= 0) or vector(0)",
+      "file": "alerts/batch-timeliness.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_oldest_age_seconds"
+      ],
+      "owner_title": "Batch audio unit still unpublished after 2h",
+      "owner_uid": "omi-batch-unit-unpublished-2h",
+      "panel": null,
+      "pointer": "/data/2/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) or vector(1e9)",
+      "file": "alerts/batch-timeliness.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_metrics_refreshed_at_seconds"
+      ],
+      "owner_title": "Batch audio unit still unpublished after 2h",
+      "owner_uid": "omi-batch-unit-unpublished-2h",
+      "panel": null,
+      "pointer": "/data/3/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/batch-timeliness.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_timeliness_observed_at_seconds"
+      ],
+      "owner_title": "Batch timeliness sample stale or never taken",
+      "owner_uid": "omi-batch-timeliness-sample-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_timeliness_scan_truncated)",
+      "file": "alerts/batch-timeliness.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_timeliness_scan_truncated"
+      ],
+      "owner_title": "Batch timeliness walk blind for 30 minutes",
+      "owner_uid": "omi-batch-timeliness-scan-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
       "file": "alerts/cloud-run-ingestion.json",
       "issues": [
@@ -3315,7 +3421,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 217
+    "query_consumers": 225
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

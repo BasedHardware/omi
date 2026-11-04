@@ -5,6 +5,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+from scripts.git_test_env import clean_git_env
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "scripts" / "dev-harness" / "generate-app-env.sh"
 
@@ -23,17 +25,19 @@ def test_generate_app_env_is_non_destructive() -> None:
 
 
 def test_generate_app_env_restores_tracked_files_deleted_by_build_runner(tmp_path: Path) -> None:
+    env = clean_git_env()
     repo = tmp_path / "repo"
     app = repo / "app" / "lib" / "env"
     app.mkdir(parents=True)
     tracked = repo / "app" / "lib" / "utils" / "manifest"
     tracked.mkdir(parents=True)
     (tracked / "manifest.g.dart").write_text("// tracked\n", encoding="utf-8")
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "add", "app/lib/utils/manifest/manifest.g.dart"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "init"], cwd=repo, env=env, check=True, capture_output=True)
+    subprocess.run(["git", "add", "app/lib/utils/manifest/manifest.g.dart"], cwd=repo, env=env, check=True, capture_output=True)
     subprocess.run(
         ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "track"],
         cwd=repo,
+        env=env,
         check=True,
         capture_output=True,
     )
@@ -52,7 +56,6 @@ def test_generate_app_env_restores_tracked_files_deleted_by_build_runner(tmp_pat
     )
     flutter.chmod(flutter.stat().st_mode | stat.S_IXUSR)
 
-    env = dict(os.environ)
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     script = SCRIPT.read_text(encoding="utf-8")
     local = repo / "scripts" / "dev-harness"

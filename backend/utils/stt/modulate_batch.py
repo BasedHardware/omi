@@ -29,8 +29,12 @@ MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0
 
 
 def wav_duration_seconds(audio_bytes: bytes) -> float:
-    """Cheap WAV-header duration for burn accounting; unparseable audio is 0 seconds."""
+    """Header duration for WAV or recovery FLAC; unparseable audio is 0 seconds."""
     try:
+        if audio_bytes.startswith(b'fLaC'):
+            import soundfile as sf
+
+            return sf.info(BytesIO(audio_bytes)).duration
         with wave.open(BytesIO(audio_bytes)) as source:
             rate = source.getframerate()
             return source.getnframes() / rate if rate > 0 else 0.0

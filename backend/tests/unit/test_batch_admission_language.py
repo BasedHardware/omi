@@ -23,6 +23,7 @@ from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
+from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.sync import final_pass_rehome
 
 
@@ -284,6 +285,25 @@ async def test_each_speech_unit_keeps_its_own_language_and_a_silent_unit_never_i
     assert response.status_code == 503 and len(staged) == 3 and probe.call_count == 3
     # The silent unit keeps the unknown-language barrier for any speech the worker VAD finds.
     assert [context['stt_language'] for context in contexts] == ['en', 'und', 'es']
+
+
+@pytest.mark.asyncio
+async def test_admission_records_the_frozen_lineage_and_each_units_frozen_language(monkeypatch):
+    # A later missing-input repair replays exactly these; it never re-derives them (lead 6d0246).
+    speaking(monkeypatch, SPEECH, None)
+    answers = iter([decision('en', True), decision('und', False, 0.0)])
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_test'
+    _, staged, _, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=2, decision=lambda *a, **k: next(answers), store=store
+    )
+    record = intake.admit.call_args.kwargs['intake']
+    for context in contexts:  # exactly what admission froze into each staged unit
+        assert recorded_lineage(record['repair_lineage']) == {key: context.get(key) for key in LINEAGE_KEYS}
+    assert record['repair_languages'] == {
+        work.segment_id: {key: context[key] for key in LANGUAGE_KEYS} for work, context in zip(staged, contexts)
+    }
+    assert [proof['stt_language'] for proof in record['repair_languages'].values()] == ['en', 'und']
 
 
 @pytest.mark.asyncio

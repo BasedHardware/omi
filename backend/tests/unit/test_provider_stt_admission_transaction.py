@@ -7,6 +7,8 @@ refuses (staging 11-01: every unsupported-language upload answered 503). StrictF
 the same rule, so these run the real admit(), FirestoreTransaction view and Firestore outbox.
 """
 
+from utils.batch_pipeline import provider_stt_admission
+
 import hashlib
 
 import pytest
@@ -19,7 +21,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import admission  # noqa: F401  # warm its imports outside the call
 from utils.batch_pipeline import provider_stt
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import PENDING, SttRoute
+from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
 
 OWNER = 'synthetic-owner'
 OUTBOX = 'batch_pipeline_prod_provider_stt_outbox'
@@ -72,7 +74,7 @@ def admit(store, outbox, items, content_id, wakes):
         binding,
         100.0,
         namespace=store.namespace,
-        enqueue=provider_stt.provider_enqueue(JA, outbox, wakes),
+        enqueue=provider_stt_admission.provider_enqueue(JA, outbox, wakes),
     )
 
 

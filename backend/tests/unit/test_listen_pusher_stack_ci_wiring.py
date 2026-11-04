@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+import pytest
+
+from testing.listen_pusher_stack import run as stack_runner
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -11,6 +16,15 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # output until the job ceiling. The hermetic gauntlets must keep Acquire
 # retries/timeouts on both update and install, plus a step-level timeout.
 _BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+
+
+@pytest.mark.parametrize('value', ['0', '301', 'nan', 'inf'])
+def test_startup_budget_rejects_unbounded_or_invalid_values(monkeypatch, capsys, value):
+    monkeypatch.setattr(sys, 'argv', ['listen-pusher-stack', '--startup-timeout', value])
+    with pytest.raises(SystemExit) as error:
+        stack_runner.main()
+    assert error.value.code == 2
+    assert '--startup-timeout must be between 20 and 300 seconds' in capsys.readouterr().err
 
 
 def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:

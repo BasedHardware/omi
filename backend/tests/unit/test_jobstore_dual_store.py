@@ -103,6 +103,18 @@ def test_writes_mirror_after_commit_and_reads_match(stores):
     assert count('queues', 'read', 'match') == before[1] + 1
 
 
+def test_repair_lineage_stays_firestore_only_and_reads_still_match(stores):
+    # The mirror does not follow the intake receipt TTL, so the original-capture lineage never enters it.
+    primary, shadow, store = stores
+    before = count('intakes', 'read', 'match')
+    put(store, 'intakes', 'bp_job', {'owner_id': 'synthetic-owner', 'repair_lineage': '{"geolocation":{}}'})
+    assert 'repair_lineage' in primary.rows[('intakes', 'bp_job')]
+    assert shadow.rows[('intakes', 'bp_job')] == {'owner_id': 'synthetic-owner'}
+    store.run(lambda tx: tx.get('intakes', 'bp_job'))
+    assert store.drain(5)
+    assert count('intakes', 'read', 'match') == before + 1
+
+
 def test_result_is_the_primarys_and_customer_documents_never_mirror(stores):
     primary, shadow, store = stores
     assert store.run(lambda tx: (tx.put('content', 'u/c', {'x': 1}), 'ok')[1]) == 'ok'
