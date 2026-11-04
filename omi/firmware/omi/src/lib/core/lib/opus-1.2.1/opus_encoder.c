@@ -1938,11 +1938,13 @@ opus_int32 opus_encode_native(OpusEncoder *st, const opus_val16 *pcm, int frame_
            return 1;
         }
 
-        /* FIXME: How do we allocate the redundancy for CBR? */
         if (st->silk_mode.opusCanSwitch)
         {
-           redundancy_bytes = compute_redundancy_bytes(max_data_bytes, st->bitrate_bps, frame_rate, st->stream_channels);
-           redundancy = (redundancy_bytes != 0);
+           if (st->use_vbr)
+           {
+              redundancy_bytes = compute_redundancy_bytes(max_data_bytes, st->bitrate_bps, frame_rate, st->stream_channels);
+              redundancy = (redundancy_bytes != 0);
+           }
            celt_to_silk = 0;
            st->silk_bw_switch = 1;
         }
