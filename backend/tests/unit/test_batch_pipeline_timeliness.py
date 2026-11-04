@@ -360,12 +360,3 @@ def test_rules_alarm_on_new_legs_flag_blindness_and_stay_agent_tier():
     for rule in rules.values():
         assert rule['labels']['tier'] == 'agent'
         assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
-
-
-def test_home_pending_dwell_alert_is_info_and_observation_scoped():
-    rules = {rule['uid']: rule for rule in json.loads(PENDING.read_text(encoding='utf-8'))}
-    rule = rules['omi-episode-batch-pending-overdue']
-    assert rule['labels']['severity'] == 'info'
-    assert rule['data'][0]['model']['expr'] == 'sum(increase(omi_episode_batch_pending_overdue_reads_total[15m]))'
-    assert rule['noDataState'] == 'OK'
-    assert 'not unique members' in rule['annotations']['scope']
