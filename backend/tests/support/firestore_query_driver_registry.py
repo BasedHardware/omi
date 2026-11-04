@@ -47,6 +47,7 @@ from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRI
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
+from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -142,6 +143,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
     'database.batch_pipeline_projection_release.release_page': '51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
@@ -180,7 +182,8 @@ BODY_DIGEST = {
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'a6c91232a5a2cff334260675817331cb46b5b670cad91acd6bdd9c46ed58ee67',
+    # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9ead08b44085a755f8f1669059d955658b0cc6cf3c2172a12737a056bf562bef',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -1064,7 +1067,10 @@ _add(
             'uid': UID,
             'episode': {'id': 'recorded-1', 'started_at': T0, 'last_activity_at': T1},
         },
-        neutrals={'rows': (None, 'preloaded rows reuse the recorded_candidates query shape')},
+        neutrals={
+            'rows': (None, 'preloaded rows reuse the recorded_candidates query shape'),
+            'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+        },
     )
 )
 _add(
@@ -1077,6 +1083,7 @@ _add(
 _add(
     DriverEntry(
         'database.episode_timeline.attach_recorded',
+        neutrals={'attach_row': (None, 'optional semantic memo; no candidate query effect')},
         base={
             'uid': UID,
             'conversation_id': 'recorded-1',
@@ -1101,7 +1108,12 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
-        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
+        neutrals={
+            'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape'),
+            'transaction': (None, 'reuse the enclosing transaction read phase; same query shape'),
+            'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
+            'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+        },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
 )
@@ -3120,6 +3132,7 @@ _add(
 
 for entry in (
     *batch_pipeline_entries(),
+    *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
@@ -3584,7 +3597,13 @@ _add(
             'client': (None, 'defaults to the shared Firestore client'),
             'wake': (None, 'task creator runs per row after the query'),
         },
-        patchers=(_stub('utils.enrichment.outbox._mutate', None), _stub('utils.enrichment.outbox.owns_runtime', True)),
+        patchers=(
+            _stub('utils.enrichment.outbox._mutate', None),
+            _stub('utils.enrichment.outbox.owns_runtime', True),
+            # The independently driven metrics reader has a process-local
+            # throttle, so it must not change this driver's repeated captures.
+            _stub('utils.enrichment.scan.observe', None),
+        ),
     )
 )
 

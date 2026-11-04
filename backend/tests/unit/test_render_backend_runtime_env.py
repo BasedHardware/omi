@@ -495,7 +495,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
     # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     # 2026-10-24 costcut mirror: backend now pins its OWN live shape (prod-scoped
-    # 8Gi/2 CPU/20/3/100) instead of inheriting it revision-to-revision; --cpu=2
+    # margin-20 4Gi/2 CPU/20/3/100) instead of inheriting it; --cpu=2
     # is legitimate there for the same #21668 pairing, but every
     # integration-specific flag below still must not leak onto it.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
@@ -525,7 +525,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
 

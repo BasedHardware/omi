@@ -72,6 +72,10 @@ def _transient_dependency(error: BaseException) -> bool:
     return False
 
 
+# Public name for the age-gate route's dependency-fault check.
+transient_dependency = _transient_dependency
+
+
 def _cause(error: BaseException) -> str:
     # FirstSummaryCallbackPending carries fixed literals ('redirect target changed'); keep a bounded token.
     return re.sub(r'[^a-z0-9]+', '_', str(error).lower()).strip('_')[:40] or 'unspecified'

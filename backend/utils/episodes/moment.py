@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping, Optional, Sequence
 
@@ -31,3 +31,6 @@ class MomentInput:
     carried: Sequence[MomentFragment] = ()
     current_started_at: Optional[datetime] = None
     current_ended_at: Optional[datetime] = None
+
+    # Internal, call-scoped recovery receipt snapshot; never persisted or serialized.
+    recovery_receipts: Any = field(default=None, repr=False, compare=False)
