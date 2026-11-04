@@ -398,7 +398,7 @@ and an explicit empty literal renders as `''`.
 | `mobile-contextual-upsells` | Mobile 80% budget banner and backend-decided Pro gate entry; default off; legacy access unchanged; requires mobile-plan-storefront | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-12 | dazheng |
 | `mobile-on-device-overflow` | Mobile on-device transcription after live hours run out: at-cap choice sheet, model setup, schedule, conversations queue banner, provenance and settings; default off; existing at-cap plans flow unchanged | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-13 | dazheng |
 | `mobile-plan-storefront` | Mobile backend-driven plans sheet; default off; existing payment rails and App Review hiding unchanged | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-12 | dazheng |
-| `mobile-session-replay` | Mobile PostHog session replay, unmasked (frames show the screen as the user sees it); client-evaluated, default off. Never records with product analytics off, in App Review (subscription UI hidden; sandbox-receipt installs wait for that answer) or in the background | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-25 | nik |
+| `mobile-session-replay` | Mobile PostHog session replay, unmasked (frames show the screen as the user sees it); Omi-store boolean in new clients, proposed 5% plus internal UID list, default off. Never records with product analytics off, in App Review (subscription UI hidden; sandbox-receipt installs wait for that answer) or in the background | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-25 | nik |
 | `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | undecided | 2026-11-05 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | undecided | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | on | 2026-11-06 | dazheng |
@@ -413,6 +413,7 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_GRACE_ENABLED` | Default-on account deletion grace; explicit false restores immediate erasure | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | keep | — | unowned |
+| `ACTION_ITEM_REMINDER_REDESIGN_ENABLED` | Default on; explicit reminder validation and source-clock date precision on the existing staged conversation path; false stops new admission and undelivered owned exports | backend | env | closed | — | — | — | — | keep | keep | — | task integration lane owner |
 | `ACTION_ITEM_SOURCE_LINKS_ENABLED` | Default on; shared app/tool create validates supplied conversation sources within the authenticated account | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `AUDIO_ARCHIVE_LIVE_ENABLED` | Legacy raw admission only when AUDIO_DURABLE_OUTBOX_ENABLED=false; false stops legacy packs, not default-on custody. Existing packs remain readable | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
@@ -806,6 +807,7 @@ and an explicit empty literal renders as `''`.
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
+| `mobile-chat-apps-all-channels` | Omi store only: private chat channel endpoints for David; prevents the public Telegram rule from exposing iMessage/WhatsApp. Default off, explicit allowlist only; backend channel admission remains authoritative | mobile | posthog | closed | — | — | — | absent (enable) | keep | keep | — | dazheng |
 
 ## Rollout ramp plans
 
@@ -948,6 +950,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
 - `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` — Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) (fail: open)
+- `ACTION_ITEM_REMINDER_REDESIGN_ENABLED` — Default on; explicit reminder validation and source-clock date precision on the existing staged conversation path; false stops new admission and undelivered owned exports (fail: closed)
 - `ACTION_ITEM_SOURCE_LINKS_ENABLED` — Default on; shared app/tool create validates supplied conversation sources within the authenticated account (fail: open)
 - `ACTION_ITEM_VALIDITY_MODE` — Context-aware narrow task reference check after V2 selection; default shadow, serving zero percent (fail: closed)
 - `ACTION_ITEM_VALIDITY_MODE_SERVE_PERCENT` — Consistent uid serving percentage for task validity shadow mode; default zero (fail: closed)

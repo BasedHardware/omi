@@ -68,7 +68,9 @@ class GeneratedActionItemResponse {
   final DateTime? completedAt;
   final String? conversationId;
   final DateTime? createdAt;
+  final Map<String, dynamic>? creationReceipt;
   final String description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final double? dueConfidence;
   final DateTime? exportDate;
@@ -83,6 +85,7 @@ class GeneratedActionItemResponse {
   final List<GeneratedEvidenceRef>? provenance;
   final String? recurrenceParentId;
   final String? recurrenceRule;
+  final GeneratedReminderOrigin? reminderOrigin;
   final int sortOrder;
   final String source;
   final String status;
@@ -97,7 +100,9 @@ class GeneratedActionItemResponse {
     this.completedAt,
     this.conversationId,
     this.createdAt,
+    this.creationReceipt,
     required this.description,
+    this.due,
     this.dueAt,
     this.dueConfidence,
     this.exportDate,
@@ -112,6 +117,7 @@ class GeneratedActionItemResponse {
     this.provenance,
     this.recurrenceParentId,
     this.recurrenceRule,
+    this.reminderOrigin,
     this.sortOrder = 0,
     this.source = "legacy",
     this.status = "active",
@@ -128,7 +134,9 @@ class GeneratedActionItemResponse {
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      creationReceipt: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["creation_receipt"]), "creation_receipt", _readMap, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
       exportDate: _readFieldValue<DateTime>(_readField(json, const ["export_date"]), "export_date", _readDateTime, requiredField: false, nullable: true),
@@ -143,6 +151,7 @@ class GeneratedActionItemResponse {
       provenance: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["provenance"]), "provenance", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
       recurrenceParentId: _readFieldValue<String>(_readField(json, const ["recurrence_parent_id"]), "recurrence_parent_id", _readString, requiredField: false, nullable: true),
       recurrenceRule: _readFieldValue<String>(_readField(json, const ["recurrence_rule"]), "recurrence_rule", _readString, requiredField: false, nullable: true),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sortOrder: _required(_readFieldValue<int>(_readField(json, const ["sort_order"]), "sort_order", _readInt, requiredField: false, nullable: false, defaultValue: 0), "sort_order"),
       source: _required(_readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: false, defaultValue: "legacy"), "source"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
@@ -160,7 +169,9 @@ class GeneratedActionItemResponse {
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'conversation_id': conversationId,
       'created_at': createdAt?.toUtc().toIso8601String(),
+      'creation_receipt': creationReceipt,
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,
       'export_date': exportDate?.toUtc().toIso8601String(),
@@ -175,6 +186,7 @@ class GeneratedActionItemResponse {
       'provenance': provenance?.map((value) => value.toJson()).toList(),
       'recurrence_parent_id': recurrenceParentId,
       'recurrence_rule': recurrenceRule,
+      'reminder_origin': reminderOrigin?.toJson(),
       'sort_order': sortOrder,
       'source': source,
       'status': status,
@@ -186,11 +198,96 @@ class GeneratedActionItemResponse {
   }
 }
 
+class GeneratedTaskDue {
+  final String? date;
+  final String? expression;
+  final DateTime? instant;
+  final String kind;
+  final String? reason;
+  final String? timezone;
+  final String? yearBasis;
+
+  const GeneratedTaskDue({
+    this.date,
+    this.expression,
+    this.instant,
+    required this.kind,
+    this.reason,
+    this.timezone,
+    this.yearBasis,
+  });
+
+  factory GeneratedTaskDue.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskDue(
+      date: _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: false, nullable: true),
+      expression: _readFieldValue<String>(_readField(json, const ["expression"]), "expression", _readString, requiredField: false, nullable: true),
+      instant: _readFieldValue<DateTime>(_readField(json, const ["instant"]), "instant", _readDateTime, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
+      timezone: _readFieldValue<String>(_readField(json, const ["timezone"]), "timezone", _readString, requiredField: false, nullable: true),
+      yearBasis: _readFieldValue<String>(_readField(json, const ["year_basis"]), "year_basis", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'expression': expression,
+      'instant': instant?.toUtc().toIso8601String(),
+      'kind': kind,
+      'reason': reason,
+      'timezone': timezone,
+      'year_basis': yearBasis,
+    };
+  }
+}
+
+class GeneratedReminderOrigin {
+  final DateTime extractedAt;
+  final String inputRevision;
+  final String policyRevision;
+  final String? reviewReason;
+  final DateTime? sourceAt;
+  final String speakerEvidenceRevision;
+
+  const GeneratedReminderOrigin({
+    required this.extractedAt,
+    required this.inputRevision,
+    this.policyRevision = "explicit-reminders-v1",
+    this.reviewReason,
+    this.sourceAt,
+    required this.speakerEvidenceRevision,
+  });
+
+  factory GeneratedReminderOrigin.fromJson(Map<String, dynamic> json) {
+    return GeneratedReminderOrigin(
+      extractedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["extracted_at"]), "extracted_at", _readDateTime, requiredField: true, nullable: false), "extracted_at"),
+      inputRevision: _required(_readFieldValue<String>(_readField(json, const ["input_revision"]), "input_revision", _readString, requiredField: true, nullable: false), "input_revision"),
+      policyRevision: _required(_readFieldValue<String>(_readField(json, const ["policy_revision"]), "policy_revision", _readString, requiredField: false, nullable: false, defaultValue: "explicit-reminders-v1"), "policy_revision"),
+      reviewReason: _readFieldValue<String>(_readField(json, const ["review_reason"]), "review_reason", _readString, requiredField: false, nullable: true),
+      sourceAt: _readFieldValue<DateTime>(_readField(json, const ["source_at"]), "source_at", _readDateTime, requiredField: false, nullable: true),
+      speakerEvidenceRevision: _required(_readFieldValue<String>(_readField(json, const ["speaker_evidence_revision"]), "speaker_evidence_revision", _readString, requiredField: true, nullable: false), "speaker_evidence_revision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'extracted_at': extractedAt.toUtc().toIso8601String(),
+      'input_revision': inputRevision,
+      'policy_revision': policyRevision,
+      'review_reason': reviewReason,
+      'source_at': sourceAt?.toUtc().toIso8601String(),
+      'speaker_evidence_revision': speakerEvidenceRevision,
+    };
+  }
+}
+
 class GeneratedActionItemCreateRequest {
   final String? appleReminderId;
   final bool? completed;
   final String? conversationId;
   final String description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final double? dueConfidence;
   final DateTime? exportDate;
@@ -214,6 +311,7 @@ class GeneratedActionItemCreateRequest {
     this.completed,
     this.conversationId,
     required this.description,
+    this.due,
     this.dueAt,
     this.dueConfidence,
     this.exportDate,
@@ -239,6 +337,7 @@ class GeneratedActionItemCreateRequest {
       completed: _readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
       exportDate: _readFieldValue<DateTime>(_readField(json, const ["export_date"]), "export_date", _readDateTime, requiredField: false, nullable: true),
@@ -265,6 +364,7 @@ class GeneratedActionItemCreateRequest {
       'completed': completed,
       'conversation_id': conversationId,
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,
       'export_date': exportDate?.toUtc().toIso8601String(),
@@ -291,6 +391,7 @@ class GeneratedActionItemUpdateRequest {
   final GeneratedPatchField<bool> clearDueAt;
   final GeneratedPatchField<bool> completed;
   final GeneratedPatchField<String> description;
+  final GeneratedPatchField<GeneratedTaskDue> due;
   final GeneratedPatchField<DateTime> dueAt;
   final GeneratedPatchField<double> dueConfidence;
   final GeneratedPatchField<DateTime> exportDate;
@@ -314,6 +415,7 @@ class GeneratedActionItemUpdateRequest {
     this.clearDueAt = const GeneratedPatchField.omitted(),
     this.completed = const GeneratedPatchField.omitted(),
     this.description = const GeneratedPatchField.omitted(),
+    this.due = const GeneratedPatchField.omitted(),
     this.dueAt = const GeneratedPatchField.omitted(),
     this.dueConfidence = const GeneratedPatchField.omitted(),
     this.exportDate = const GeneratedPatchField.omitted(),
@@ -339,6 +441,7 @@ class GeneratedActionItemUpdateRequest {
       clearDueAt: _readPatchField<bool>(json, "clear_due_at", _readBool),
       completed: _readPatchField<bool>(json, "completed", _readBool),
       description: _readPatchField<String>(json, "description", _readString),
+      due: _readPatchField<GeneratedTaskDue>(json, "due", (value) => _readObject(value, GeneratedTaskDue.fromJson)),
       dueAt: _readPatchField<DateTime>(json, "due_at", _readDateTime),
       dueConfidence: _readPatchField<double>(json, "due_confidence", _readDouble),
       exportDate: _readPatchField<DateTime>(json, "export_date", _readDateTime),
@@ -372,6 +475,9 @@ class GeneratedActionItemUpdateRequest {
     }
     if (description.isPresent) {
       json['description'] = description.value;
+    }
+    if (due.isPresent) {
+      json['due'] = due.value?.toJson();
     }
     if (dueAt.isPresent) {
       json['due_at'] = dueAt.value?.toUtc().toIso8601String();

@@ -54,6 +54,20 @@ class AppProvider extends BaseProvider {
   Future<List<App>> Function()? retrievePopularAppsOverride;
 
   List<App> apps = [];
+  List<App>? _cachedApps;
+  int? _cachedAppsRevision;
+
+  // Decode persisted models once per catalog/account revision. Keep this
+  // snapshot separate from the server search/grouped catalog.
+  List<App> get _appsFromCache {
+    final prefs = SharedPreferencesUtil();
+    if (_cachedApps == null || _cachedAppsRevision != prefs.appsListRevision) {
+      _cachedApps = prefs.appsList;
+      _cachedAppsRevision = prefs.appsListRevision;
+    }
+    return _cachedApps!;
+  }
+
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
   List<Map<String, dynamic>> groupedApps = [];
@@ -95,7 +109,7 @@ class AppProvider extends BaseProvider {
 
   Future<App?> getAppFromId(String id) async {
     if (apps.isEmpty) {
-      apps = SharedPreferencesUtil().appsList;
+      apps = List<App>.of(_appsFromCache);
     }
     var app = apps.firstWhereOrNull((app) => app.id == id);
     if (app == null) {
@@ -225,6 +239,9 @@ class AppProvider extends BaseProvider {
 
   void clearUserData() {
     _detailSession++;
+    _cachedApps = null;
+    _cachedAppsRevision = null;
+    _prefsUpdateTimer?.cancel();
     apps = [];
     popularApps = [];
     groupedApps = [];
@@ -688,7 +705,7 @@ class AppProvider extends BaseProvider {
         );
         notifyListeners();
       } else {
-        print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
+        Logger.debug("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
       }
     } else {
       final context = globalNavigatorKey.currentState?.context;
@@ -796,8 +813,9 @@ class AppProvider extends BaseProvider {
   }
 
   void setAppsFromCache() {
-    if (SharedPreferencesUtil().appsList.isNotEmpty) {
-      apps = SharedPreferencesUtil().appsList;
+    final cachedApps = _appsFromCache;
+    if (cachedApps.isNotEmpty) {
+      apps = List<App>.of(cachedApps);
       filterApps();
       notifyListeners();
     }
@@ -821,7 +839,7 @@ class AppProvider extends BaseProvider {
   }
 
   void setApps() {
-    apps = SharedPreferencesUtil().appsList;
+    apps = List<App>.of(_appsFromCache);
     filterApps();
     notifyListeners();
   }
@@ -977,7 +995,7 @@ class AppProvider extends BaseProvider {
         }
       }
     } catch (e) {
-      print('Error toggling app $appId: $e');
+      Logger.debug('Error toggling app $appId: $e');
       success = false;
       final context = globalNavigatorKey.currentState?.context;
       errorMessage = context != null && context.mounted

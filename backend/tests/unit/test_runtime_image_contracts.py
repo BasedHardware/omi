@@ -267,6 +267,7 @@ def test_structured_model_fallback_imports_without_plugin_sdk(tmp_path):
     shutil.copy(BACKEND_DIR / 'models' / '__init__.py', models_root / '__init__.py')
     shutil.copy(BACKEND_DIR / 'models' / 'conversation_enums.py', models_root / 'conversation_enums.py')
     shutil.copy(BACKEND_DIR / 'models' / 'structured.py', models_root / 'structured.py')
+    shutil.copy(BACKEND_DIR / 'models' / 'task_due.py', models_root / 'task_due.py')
 
     probe = '''
 import builtins

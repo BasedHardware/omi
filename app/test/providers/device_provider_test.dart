@@ -11,6 +11,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
@@ -234,6 +236,7 @@ void main() {
 
     setUp(() {
       provider = DeviceProvider();
+      addTearDown(provider.dispose);
       notifyCount = 0;
       provider.addListener(() => notifyCount++);
     });
@@ -244,6 +247,47 @@ void main() {
       expect(result, true);
       expect(notifyCount, 1);
       expect(provider.batteryLevel, 50);
+    });
+
+    test('disconnect clears cached battery and charging before the debounce runs', () {
+      final device = BtDevice(id: 'battery-pendant', name: 'Omi', type: DeviceType.omi, rssi: -50);
+      provider.connectedDevice = device;
+      provider.pairedDevice = device;
+      provider.setIsConnected(true);
+      provider.updateBatteryLevelForTesting(80);
+      provider.isCharging = true;
+
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+
+      expect(provider.batteryLevel, -1);
+      expect(provider.isCharging, isFalse);
+      expect(canStartFirmwareUpdate(batteryLevel: provider.batteryLevel, isCharging: provider.isCharging), isFalse);
+      provider.setIsConnected(true);
+      expect(provider.batteryLevel, -1, reason: 'Reconnect cannot revive the previous link reading');
+      expect(provider.updateBatteryLevelForTesting(80), isTrue, reason: 'A fresh same-level sample must publish');
+    });
+
+    test('disconnect of another device leaves the current battery reading intact', () {
+      provider.connectedDevice = BtDevice(id: 'battery-pendant', name: 'Omi', type: DeviceType.omi, rssi: -50);
+      provider.updateBatteryLevelForTesting(80);
+      provider.onDeviceConnectionStateChanged('other-pendant', DeviceConnectionState.disconnected);
+      expect(provider.batteryLevel, 80);
+    });
+
+    for (final (from, to) in [(29, 30), (30, 29)]) {
+      test('notifies on a one-point firmware threshold crossing $from to $to', () {
+        final now = DateTime(2026, 11, 3);
+        provider.updateBatteryLevelForTesting(from, now: now);
+        expect(provider.updateBatteryLevelForTesting(to, now: now.add(const Duration(seconds: 1))), isTrue);
+        expect(notifyCount, 2);
+      });
+    }
+
+    test('zero to unknown publishes a warning-state change despite a one-point delta', () {
+      final now = DateTime(2026, 11, 3);
+      provider.updateBatteryLevelForTesting(0, now: now);
+      expect(provider.updateBatteryLevelForTesting(-1, now: now.add(const Duration(seconds: 1))), isTrue);
+      expect(notifyCount, 2);
     });
 
     test('does not notify for small changes (<5%) within 15 minutes', () {

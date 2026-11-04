@@ -2281,10 +2281,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get firmwareUsbWarning => 'USB-yhteys päivitysten aikana voi vahingoittaa laitettasi.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Akku yli 15%';
+  String get firmwareBatteryRequirement => 'Akku yli 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Varmista, että laitteessasi on 15% akkua.';
+  String get firmwareEnsureBattery => 'Varmista, että laitteessasi on 30% akkua.';
 
   @override
   String get firmwareStableConnection => 'Vakaa yhteys';
@@ -10586,8 +10586,12 @@ class AppLocalizationsFi extends AppLocalizations {
       'Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Akun varaustaso ei ole vielä saatavilla. Odota hetki ja yhdistä uudelleen, jos tilanne ei muutu.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Akun varaus on $level %. Lataa laite vähintään 15 %:iin ennen päivitystä.';
+    return 'Akun varaus on $level %. Lataa laite vähintään 30 %:iin ennen päivitystä.';
   }
 
   @override
@@ -15011,4 +15015,290 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Viimeistellään…';
+
+  @override
+  String get buildAndShareApp => 'Rakenna ja jaa oma sovelluksesi';
+
+  @override
+  String get membersAndCounting => '8000+ jäsentä ja kasvaa.';
+
+  @override
+  String get privacyIntro =>
+      'Omissa olemme sitoutuneet suojaamaan yksityisyyttäsi. Tämä sivu antaa sinulle mahdollisuuden hallita, miten tietojasi tallennetaan ja käytetään.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Tietosi on oletuksena suojattu vahvalla salauksella. Tarkista asetuksesi ja tulevat yksityisyysvaihtoehdot alla.';
+
+  @override
+  String get transcriptionConfig => 'Määritä STT-palveluntarjoaja';
+
+  @override
+  String get importDataConfig => 'Tuo tietoja muista lähteistä';
+
+  @override
+  String get understandingSubtitle => 'Keskusteluistasi ymmärretyt sanat.';
+
+  @override
+  String get rememberingSubtitle => 'Sinulle muistetut faktat ja yksityiskohdat.';
+
+  @override
+  String get debugLogsDesc => 'Auttaa ongelmien diagnosoinnissa';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Tämä poistaa kaikki johdetut tietograafitiedot (solmut ja yhteydet). Alkuperäiset muistosi pysyvät turvassa. Graafi rakennetaan uudelleen ajan myötä tai seuraavan pyynnön yhteydessä.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Tyhjennä kaikki solmut ja yhteydet';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Kun mallimme paranee, voimme tarjota parempia litterointituloksia nauhoituksillesi.';
+
+  @override
+  String get bestInClassTranscription => 'Paras litterointi ilman asennusta';
+
+  @override
+  String get optimizedForConversation => 'Optimoitu keskusteluille';
+
+  @override
+  String get highAccuracy => 'Korkea tarkkuus';
+
+  @override
+  String get privacyFirst => 'Yksityisyys ensin';
+
+  @override
+  String get keepGoing => 'Jatka, teet loistavasti';
+
+  @override
+  String get personalGrowthJourney => 'Henkilökohtainen kasvumatkasi tekoälyn kanssa, joka kuuntelee jokaista sanaasi.';
+
+  @override
+  String get memoryAllowUse => 'Salli käyttö';
+
+  @override
+  String get memoryDontUse => 'Älä käytä';
+
+  @override
+  String get alwaysInContext => 'Aina kontekstissa';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Akku yli 15%';
+
+  @override
+  String get configureSttProvider => 'Määritä STT-palveluntarjoaja';
+
+  @override
+  String get clearAllNodesAndConnections => 'Tyhjennä kaikki solmut ja yhteydet';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Tervetuloa Omiin! AI-kumppanisi on valmis auttamaan sinua keskusteluissa, tehtävissä ja muussa.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Keskustelut käsitellään automaattisesti';
+
+  @override
+  String get getInsightsInstantly => 'Saat oivalluksia ja yhteenvetoja välittömästi';
+
+  @override
+  String get dailyScoreDescription => 'Pistemäärä, joka auttaa sinua\nkeskittymään paremmin suorittamiseen.';
+
+  @override
+  String get startConversation => 'Aloita keskustelu ja anna taikuuden alkaa';
+
+  @override
+  String get wearableAiCompanion => 'Puettava AI-kumppani';
+
+  @override
+  String get organizeAndControlMemories => 'Järjestä ja hallitse muistojasi';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Aseta kaikki muistot yksityisiksi';
+
+  @override
+  String get setAllMemoriesToPublic => 'Aseta kaikki muistot julkisiksi';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Valitse suosikkikielesi parhaan Omi-kokemuksen saamiseksi';
+
+  @override
+  String get enableFeaturesForBestExperience =>
+      'Ota käyttöön ominaisuudet parhaan Omi-kokemuksen saamiseksi laitteellasi.';
+
+  @override
+  String get deliveryTimeDescription => 'Milloin vastaanottaa päivittäinen yhteenveto';
+
+  @override
+  String get configureSTTProvider => 'Määritä STT-palveluntarjoaja';
+
+  @override
+  String get setConversationEndDescription => 'Aseta, milloin keskustelut päättyvät automaattisesti';
+
+  @override
+  String get clearNodesDescription => 'Tyhjennä kaikki solmut ja yhteydet';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Tämä poistaa kaikki johdetut tietograafitiedot. Alkuperäiset muistosi pysyvät turvassa.';
+
+  @override
+  String get createAndShareYourApp => 'Luo ja jaa sovelluksesi';
+
+  @override
+  String get e2eeDescription =>
+      'Päästä päähän -salaus on yksityisyyden kultastandardi. Kun se on käytössä, tietosi salataan laitteellasi ennen kuin ne lähetetään palvelimillemme. Tämä tarkoittaa, että kukaan, ei edes Omi, pääse käsiksi sisältöösi.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Tietosi salataan sinulle yksilöllisellä avaimella palvelimillamme, jotka ovat Google Cloudissa. Tämä tarkoittaa, että raakatietosi eivät ole kenenkään, mukaan lukien Omin henkilöstön tai Googlen, saatavilla suoraan tietokannasta.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Ota käyttöön maksimaalinen turvallisuus, jossa vain sinä pääset käsiksi tietoihisi. Napauta saadaksesi lisätietoja.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi vapaana. Siirry rajoittamattomaan loputtomien mahdollisuuksien saavuttamiseksi.';
+
+  @override
+  String get privacyIntroText =>
+      'Omissa otamme yksityisyytesi erittäin vakavasti. Haluamme olla läpinäkyviä keräämistämme tiedoista ja niiden käytöstä. Tässä on mitä sinun tulee tietää:';
+
+  @override
+  String get commitmentText =>
+      'Olemme sitoutuneet käyttämään keräämiämme tietoja vain Omin parantamiseen sinulle. Yksityisyytesi ja luottamuksesi ovat meille ensiarvoisen tärkeitä.';
+
+  @override
+  String get thankYouText =>
+      'Kiitos, että olet arvokas Omin käyttäjä. Jos sinulla on kysyttävää tai huolenaiheita, ota rohkeasti yhteyttä osoitteeseen team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Tämä poistaa kaikki johdetut tietograafin tiedot (solmut ja yhteydet). Alkuperäiset muistosi säilyvät turvassa. Graafi rakennetaan uudelleen ajan myötä tai seuraavan pyynnön yhteydessä.';
+
+  @override
+  String get howPeopleWorks =>
+      'Kun henkilö on luotu, voit mennä keskustelun transkriptioon ja määrittää heille vastaavat segmentit, näin Omi voi tunnistaa myös heidän puheensa!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Rakenna ja jaa mukautettu sovelluksesi';
+
+  @override
+  String get onboardingChooseYourPreference => 'Valitse asetuksesi';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Myönnä tarvittava käyttöoikeus';
+
+  @override
+  String get apiEnvironmentDescription => 'Valitse mihin palvelimeen yhdistetään';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Puhelusi pysyvät yksityisinä ja turvallisina';
+
+  @override
+  String get omisStorageDesc =>
+      'Kun Omi ei ole yhdistetty puhelimeesi, se tallentaa äänen paikallisesti sisäiseen muistiinsa. Et koskaan menetä nauhoitusta.';
+
+  @override
+  String get permissionsSetupDescription => 'Ota käyttöön muutama lupa, jotta Omi voi tehdä taikojaan.';
+
+  @override
+  String get architectSubtitle => 'Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get newestFirst => 'Uusimmat ensin';
+
+  @override
+  String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ei tallennettu ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Nopea tarkistus kahden viime päivän äänistä';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Jonossa olevat transkriptiot $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi yhdistää itsestään uudelleen';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Pidä $name listan kärjessä ja odota häntä keskusteluihisi';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi kysyy ennen samankaltaisten äänten yhdistämistä.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Kyllä nostaa henkilön $name varmuutta.';
+  }
+
+  @override
+  String get localCopiesSection => 'Paikalliset kopiot';
+
+  @override
+  String get forYou => 'Sinulle';
+
+  @override
+  String get stopThese => 'Lopeta nämä';
+
+  @override
+  String get meetingActionItemsTitle => 'Toimenpiteet';
+
+  @override
+  String get addToTasks => 'Lisää tehtäviin';
+
+  @override
+  String get showInTranscript => 'Näytä litterointi';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Eräpäivä noin $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Alustava eräpäivä $date';
+  }
+
+  @override
+  String get openTask => 'Avaa tehtävä';
+
+  @override
+  String get completeTask => 'Merkitse tehtävä valmiiksi';
+
+  @override
+  String get reopenTask => 'Avaa tehtävä uudelleen';
+
+  @override
+  String get addingToTasks => 'Lisätään tehtäviin';
+
+  @override
+  String get taskAddedToTasks => 'Tehtävä luotu';
+
+  @override
+  String get completedStatus => 'Valmis';
+
+  @override
+  String get notCompletedStatus => 'Odottaa';
 }

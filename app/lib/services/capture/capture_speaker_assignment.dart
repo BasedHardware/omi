@@ -25,6 +25,11 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
   void speakerLabelsChanged();
   void publishSpeakerAssignment(
       int speakerId, String personId, String personName, List<String> targets, bool applyToSpeaker, int generation);
+
+  /// "Not a person" exclusion path for [assignSpeakerToConversation]. The
+  /// owning controller implements it: it owns the exclusion state, the
+  /// decision epoch and the transport seam.
+  Future<bool> excludeSpeakerFromConversation(int speakerId, List<String> segmentIds);
   List<String> taggingSegmentIds = [];
 
   Future<void> _speakerAssignmentTail = Future.value();
@@ -39,9 +44,11 @@ mixin CaptureSpeakerAssignment on ChangeNotifier {
     String personName,
     List<String> segmentIds, {
     bool applyToSpeaker = false,
+    bool notAPerson = false,
     (String, String)? voice,
     ValueChanged<CaptureSpeakerSaveOutcome>? onSettled,
   }) async {
+    if (notAPerson) return excludeSpeakerFromConversation(speakerId, segmentIds);
     final conversationId = speakerAssignmentConversation?.id;
     final sessionId = activeCaptureSessionId;
     if (segmentIds.isEmpty || conversationId == null || speakerAssignmentClosed) return false;

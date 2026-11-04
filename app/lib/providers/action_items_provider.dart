@@ -41,6 +41,7 @@ typedef CreateActionItemRequest = Future<ActionItemWithMetadata?> Function({
   DateTime? dueAt,
   String? conversationId,
   bool completed,
+  String? idempotencyKey,
 });
 typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String id, {DateTime? dueAt, bool clearDueAt});
 
@@ -659,6 +660,32 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  /// Update a task linked from a conversation, even when it is outside the current task page.
+  Future<bool> updateActionItemStateById(String id, bool newState) async {
+    ActionItemWithMetadata? item;
+    for (final candidate in _actionItems) {
+      if (candidate.id == id) {
+        item = candidate;
+        break;
+      }
+    }
+    if (item == null && _actionItemsApi != null) {
+      final result = await _actionItemsApi!.getById(id);
+      if (result is ApiSuccess<ActionItemWithMetadata>) item = result.data;
+    }
+    return item == null ? false : await updateActionItemState(item, newState);
+  }
+
+  Future<ActionItemWithMetadata?> getActionItemById(String id) async {
+    for (final item in _actionItems) {
+      if (item.id == id) return item;
+    }
+    final apiClient = _actionItemsApi;
+    if (apiClient == null) return null;
+    final result = await apiClient.getById(id);
+    return result is ApiSuccess<ActionItemWithMetadata> ? result.data : null;
+  }
+
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
     final generation = _sessionGeneration;
@@ -941,6 +968,7 @@ class ActionItemsProvider extends ChangeNotifier {
     DateTime? dueAt,
     String? conversationId,
     bool completed = false,
+    String? idempotencyKey,
   }) async {
     final generation = _sessionGeneration;
     final optimisticItem = ActionItemWithMetadata(
@@ -962,6 +990,7 @@ class ActionItemsProvider extends ChangeNotifier {
         dueAt: dueAt,
         conversationId: conversationId,
         completed: completed,
+        idempotencyKey: idempotencyKey,
       );
       if (generation != _sessionGeneration) return null;
 
@@ -1040,6 +1069,7 @@ class ActionItemsProvider extends ChangeNotifier {
           title: item.description,
           notes: 'From Omi',
           dueDate: item.dueAt,
+          completed: item.completed,
         );
 
         if (calendarItemId != null) {

@@ -428,6 +428,11 @@ class ServerConversation {
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
 
+  /// Voices whose whole-voice `not_a_person` decision still wins the server's
+  /// manual speaker receipt. Server-authored receipt authority; null when the
+  /// conversation carries no manual speaker decision.
+  final List<int>? excludedSpeakers;
+
   // local label
   bool isNew = false;
 
@@ -471,6 +476,7 @@ class ServerConversation {
     this.summaryRetryable = false,
     this.processingDeferred = false,
     this.captureCoverage,
+    this.excludedSpeakers,
   });
 
   /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
@@ -624,6 +630,7 @@ class ServerConversation {
       summaryRetryable: generated.summaryRetryable == true,
       processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
       captureCoverage: generated.captureCoverage,
+      excludedSpeakers: generated.excludedSpeakers,
     );
   }
 
@@ -664,6 +671,7 @@ class ServerConversation {
       if (summaryRetryable) 'summary_retryable': true,
       if (processingDeferred) 'processing_deferred': true,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
+      if (excludedSpeakers != null) 'excluded_speakers': excludedSpeakers,
     };
   }
 
@@ -698,6 +706,7 @@ class ServerConversation {
       speakerResolution: speakerResolution?.toGenerated(),
       summaryRetryable: summaryRetryable ? true : null,
       captureCoverage: captureCoverage,
+      excludedSpeakers: excludedSpeakers,
     );
   }
 

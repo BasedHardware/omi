@@ -551,6 +551,16 @@
             "title": "Description",
             "type": "string"
           },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "due_at": {
             "anyOf": [
               {
@@ -604,6 +614,26 @@
               }
             ],
             "title": "Ownership Confidence"
+          },
+          "reminder_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_segment_ids": {
             "items": {
@@ -688,6 +718,16 @@
             "minLength": 1,
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -939,9 +979,31 @@
             ],
             "title": "Created At"
           },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
+          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -1073,6 +1135,16 @@
             ],
             "title": "Recurrence Rule"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sort_order": {
             "default": 0,
             "title": "Sort Order",
@@ -1193,6 +1265,16 @@
               }
             ],
             "title": "Description"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -6751,6 +6833,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -6800,6 +6894,16 @@
           },
           "proposed_action": {
             "$ref": "#/components/schemas/CandidateAction"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resolution_reason": {
             "anyOf": [
@@ -6943,6 +7047,18 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Candidate Id",
             "type": "string"
+          },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
           },
           "newly_resolved": {
             "title": "Newly Resolved",
@@ -9321,6 +9437,18 @@
               }
             ]
           },
+          "capture_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Timezone"
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -9425,6 +9553,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
@@ -10719,6 +10861,18 @@
               }
             ]
           },
+          "capture_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Timezone"
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -10823,6 +10977,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
@@ -24885,6 +25053,18 @@
       },
       "Participant": {
         "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short alias explicitly asserted for this person; never derive it",
+            "title": "Alias"
+          },
           "email": {
             "anyOf": [
               {
@@ -24959,6 +25139,14 @@
             ],
             "title": "Source",
             "type": "string"
+          },
+          "speaker_bindings": {
+            "description": "Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Speaker Bindings",
+            "type": "array"
           }
         },
         "required": [
@@ -28483,6 +28671,100 @@
         "title": "ReleaseChannel",
         "type": "object"
       },
+      "ReminderIntent": {
+        "additionalProperties": false,
+        "description": "Model annotation, validated against exact source turns before admission.",
+        "properties": {
+          "due_expression": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Expression"
+          },
+          "kind": {
+            "enum": [
+              "explicit_reminder",
+              "quoted",
+              "hypothetical",
+              "current_session",
+              "status",
+              "waiting_on"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ReminderIntent",
+        "type": "object"
+      },
+      "ReminderOrigin": {
+        "additionalProperties": false,
+        "properties": {
+          "extracted_at": {
+            "format": "date-time",
+            "title": "Extracted At",
+            "type": "string"
+          },
+          "input_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Input Revision",
+            "type": "string"
+          },
+          "policy_revision": {
+            "const": "explicit-reminders-v1",
+            "default": "explicit-reminders-v1",
+            "title": "Policy Revision",
+            "type": "string"
+          },
+          "review_reason": {
+            "anyOf": [
+              {
+                "const": "owner_unresolved",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Reason"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
+          },
+          "speaker_evidence_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Speaker Evidence Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_revision",
+          "speaker_evidence_revision",
+          "extracted_at"
+        ],
+        "title": "ReminderOrigin",
+        "type": "object"
+      },
       "ReorderFoldersRequest": {
         "description": "Request model for reordering folders.",
         "properties": {
@@ -31245,6 +31527,21 @@
               }
             ],
             "title": "Due At"
+          },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Certainty"
           },
           "owner_name": {
             "anyOf": [
@@ -34128,7 +34425,7 @@
             "type": "string"
           },
           "participants": {
-            "description": "People and AI agents evidenced by the meeting roster or the transcript; never the account owner",
+            "description": "People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner",
             "items": {
               "$ref": "#/components/schemas/Participant"
             },
@@ -35284,6 +35581,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35399,6 +35706,16 @@
               }
             ],
             "title": "Description"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -35552,6 +35869,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35653,6 +35980,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35702,6 +36039,16 @@
             "minLength": 1,
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -35773,6 +36120,101 @@
           "description"
         ],
         "title": "TaskCreatePayload",
+        "type": "object"
+      },
+      "TaskDue": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "instant": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant"
+          },
+          "kind": {
+            "enum": [
+              "none",
+              "date",
+              "instant",
+              "unresolved"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "year_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spoken",
+                  "source_relative",
+                  "next_future_occurrence"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Basis"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "TaskDue",
         "type": "object"
       },
       "TaskGoalLinkImport": {
@@ -36384,6 +36826,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -36484,6 +36936,16 @@
             "default": "update",
             "title": "Proposed Action",
             "type": "string"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_surface": {
             "maxLength": 64,
@@ -39535,6 +39997,16 @@
             "default": "create",
             "title": "Proposed Action",
             "type": "string"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_surface": {
             "maxLength": 64,

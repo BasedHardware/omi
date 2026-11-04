@@ -2257,10 +2257,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get firmwareUsbWarning => 'अपडेट के दौरान USB कनेक्शन आपके डिवाइस को नुकसान पहुंचा सकता है।';
 
   @override
-  String get firmwareBatteryAbove15 => 'बैटरी 15% से अधिक';
+  String get firmwareBatteryRequirement => 'बैटरी 30% से अधिक';
 
   @override
-  String get firmwareEnsureBattery => 'सुनिश्चित करें कि आपके डिवाइस में 15% बैटरी है।';
+  String get firmwareEnsureBattery => 'सुनिश्चित करें कि आपके डिवाइस में 30% बैटरी है।';
 
   @override
   String get firmwareStableConnection => 'स्थिर कनेक्शन';
@@ -10565,8 +10565,12 @@ class AppLocalizationsHi extends AppLocalizations {
       'अपडेट डाउनलोड नहीं हो सका और आपके डिवाइस में कोई बदलाव नहीं हुआ। इंटरनेट कनेक्शन जाँचें, फिर दोबारा कोशिश करें।';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'बैटरी का स्तर अभी उपलब्ध नहीं है। थोड़ा इंतज़ार करें और अगर ऐसा ही रहे तो फिर से कनेक्ट करें।';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'बैटरी $level% है। अपडेट से पहले डिवाइस को कम से कम 15% तक चार्ज करें।';
+    return 'बैटरी $level% है। अपडेट से पहले डिवाइस को कम से कम 30% तक चार्ज करें।';
   }
 
   @override
@@ -14990,4 +14994,289 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'पूरा किया जा रहा है…';
+
+  @override
+  String get buildAndShareApp => 'अपना खुद का ऐप बनाएं और साझा करें';
+
+  @override
+  String get membersAndCounting => '8000+ सदस्य और गिनती जारी है।';
+
+  @override
+  String get privacyIntro =>
+      'Omi में, हम आपकी गोपनीयता की रक्षा के लिए प्रतिबद्ध हैं। यह पृष्ठ आपको यह नियंत्रित करने की अनुमति देता है कि आपका डेटा कैसे सहेजा और उपयोग किया जाता है।';
+
+  @override
+  String get dataProtectionDesc => 'डिफ़ॉल्ट रूप से, आपका डेटा मजबूत एन्क्रिप्शन द्वारा सुरक्षित है।';
+
+  @override
+  String get transcriptionConfig => 'STT प्रदाता कॉन्फ़िगर करें';
+
+  @override
+  String get importDataConfig => 'अन्य स्रोतों से डेटा आयात करें';
+
+  @override
+  String get understandingSubtitle => 'आपकी बातचीत से समझे गए शब्द।';
+
+  @override
+  String get rememberingSubtitle => 'तथ्य और विवरण आपके लिए याद रखे गए।';
+
+  @override
+  String get debugLogsDesc => 'समस्याओं का निदान करने में मदद करता है';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'यह सभी व्युत्पन्न ग्राफ़ डेटा (नोड्स और कनेक्शन) को हटा देगा। आपकी मूल यादें सुरक्षित रहती हैं।';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'सभी नोड्स और कनेक्शन हटा दें';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'जैसे-जैसे हमारा मॉडल सुधरता है, हम आपकी रिकॉर्डिंग के लिए बेहतर ट्रांसक्रिप्ट प्रदान कर सकते हैं।';
+
+  @override
+  String get bestInClassTranscription => 'सर्वोत्तम श्रेणी का प्रतिलेखन';
+
+  @override
+  String get optimizedForConversation => 'बातचीत के लिए अनुकूलित';
+
+  @override
+  String get highAccuracy => 'उच्च सटीकता';
+
+  @override
+  String get privacyFirst => 'गोपनीयता पहले';
+
+  @override
+  String get keepGoing => 'जारी रखें';
+
+  @override
+  String get personalGrowthJourney => 'आपकी व्यक्तिगत विकास यात्रा AI के साथ जो आपके हर शब्द को सुनता है।';
+
+  @override
+  String get memoryAllowUse => 'उपयोग की अनुमति दें';
+
+  @override
+  String get memoryDontUse => 'उपयोग न करें';
+
+  @override
+  String get alwaysInContext => 'हमेशा संदर्भ में';
+
+  @override
+  String get firmwareBatteryAbove15 => 'बैटरी 15% से अधिक';
+
+  @override
+  String get configureSttProvider => 'STT प्रदाता कॉन्फ़िगर करें';
+
+  @override
+  String get clearAllNodesAndConnections => 'सभी नोड्स और कनेक्शन साफ़ करें';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Omi में आपका स्वागत है! आपका AI साथी बातचीत, कार्यों और अधिक में आपकी सहायता के लिए तैयार है।';
+
+  @override
+  String get conversationsProcessedAutomatically => 'बातचीत स्वचालित रूप से प्रोसेस की जाती है';
+
+  @override
+  String get getInsightsInstantly => 'तुरंत जानकारी और सारांश प्राप्त करें';
+
+  @override
+  String get dailyScoreDescription =>
+      'एक स्कोर जो आपको बेहतर तरीके से\nनिष्पादन पर ध्यान केंद्रित करने में मदद करता है।';
+
+  @override
+  String get startConversation => 'बातचीत शुरू करें और जादू शुरू होने दें';
+
+  @override
+  String get wearableAiCompanion => 'पहनने योग्य AI साथी';
+
+  @override
+  String get organizeAndControlMemories => 'अपनी यादों को व्यवस्थित और नियंत्रित करें';
+
+  @override
+  String get setAllMemoriesToPrivate => 'सभी यादों को निजी दृश्यता पर सेट करें';
+
+  @override
+  String get setAllMemoriesToPublic => 'सभी यादों को सार्वजनिक दृश्यता पर सेट करें';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'सर्वोत्तम Omi अनुभव के लिए अपनी पसंदीदा भाषा चुनें';
+
+  @override
+  String get enableFeaturesForBestExperience => 'अपने डिवाइस पर सर्वोत्तम Omi अनुभव के लिए सुविधाएं सक्षम करें।';
+
+  @override
+  String get deliveryTimeDescription => 'अपना दैनिक सारांश कब प्राप्त करें';
+
+  @override
+  String get configureSTTProvider => 'STT प्रदाता कॉन्फ़िगर करें';
+
+  @override
+  String get setConversationEndDescription => 'सेट करें कि बातचीत कब स्वतः समाप्त होती है';
+
+  @override
+  String get clearNodesDescription => 'सभी नोड्स और कनेक्शन साफ़ करें';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'यह सभी व्युत्पन्न ज्ञान ग्राफ डेटा हटा देगा। आपकी मूल यादें सुरक्षित रहती हैं।';
+
+  @override
+  String get createAndShareYourApp => 'अपना ऐप बनाएं और साझा करें';
+
+  @override
+  String get e2eeDescription =>
+      'एंड-टू-एंड एन्क्रिप्शन गोपनीयता का स्वर्ण मानक है। सक्षम होने पर, आपका डेटा हमारे सर्वर पर भेजे जाने से पहले आपके डिवाइस पर एन्क्रिप्ट किया जाता है। इसका मतलब है कि कोई भी, यहां तक कि Omi भी, आपकी सामग्री तक नहीं पहुंच सकता।';
+
+  @override
+  String get secureEncryptionDescription =>
+      'आपका डेटा हमारे सर्वर पर आपके लिए एक अद्वितीय कुंजी के साथ एन्क्रिप्ट किया गया है, जो Google Cloud पर होस्ट किया गया है। इसका मतलब है कि आपकी कच्ची सामग्री किसी के लिए भी अप्राप्य है, जिसमें Omi स्टाफ या Google शामिल हैं, सीधे डेटाबेस से।';
+
+  @override
+  String get e2eeCardDescription =>
+      'अधिकतम सुरक्षा के लिए सक्षम करें जहां केवल आप अपना डेटा एक्सेस कर सकते हैं। अधिक जानने के लिए टैप करें।';
+
+  @override
+  String get yourOmiUnleashed => 'आपका Omi, मुक्त। असीमित संभावनाओं के लिए अनलिमिटेड हो जाएं।';
+
+  @override
+  String get privacyIntroText =>
+      'Omi में, हम आपकी गोपनीयता को बहुत गंभीरता से लेते हैं। हम उन डेटा के बारे में पारदर्शी रहना चाहते हैं जो हम एकत्र करते हैं और उनका उपयोग कैसे करते हैं। यहाँ आपको क्या जानना चाहिए:';
+
+  @override
+  String get commitmentText =>
+      'हम केवल Omi को आपके लिए बेहतर उत्पाद बनाने के लिए एकत्र किए गए डेटा का उपयोग करने के लिए प्रतिबद्ध हैं। आपकी गोपनीयता और विश्वास हमारे लिए सर्वोपरि हैं।';
+
+  @override
+  String get thankYouText =>
+      'Omi के एक मूल्यवान उपयोगकर्ता होने के लिए धन्यवाद। यदि आपके कोई प्रश्न या चिंताएं हैं, तो team@basedhardware.com पर हमसे संपर्क करें।';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'यह सभी व्युत्पन्न नॉलेज ग्राफ डेटा (नोड्स और कनेक्शन) को हटा देगा। आपकी मूल यादें सुरक्षित रहेंगी। ग्राफ समय के साथ या अगले अनुरोध पर पुनर्निर्मित होगा।';
+
+  @override
+  String get howPeopleWorks =>
+      'एक बार व्यक्ति बन जाने के बाद, आप बातचीत के ट्रांसक्रिप्ट में जा सकते हैं और उन्हें उनके संबंधित सेगमेंट असाइन कर सकते हैं, इस तरह Omi उनकी आवाज़ को भी पहचान पाएगा!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'अपना कस्टम ऐप बनाएं और साझा करें';
+
+  @override
+  String get onboardingChooseYourPreference => 'अपनी पसंद चुनें';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'आवश्यक पहुँच प्रदान करें';
+
+  @override
+  String get apiEnvironmentDescription => 'कनेक्ट करने के लिए सर्वर चुनें';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'आपकी कॉल निजी और सुरक्षित रहती हैं';
+
+  @override
+  String get omisStorageDesc =>
+      'जब आपका Omi फ़ोन से कनेक्ट नहीं होता, तो यह ऑडियो को अपनी बिल्ट-इन मेमोरी में स्टोर करता है। आप कभी कोई रिकॉर्डिंग नहीं खोएंगे।';
+
+  @override
+  String get permissionsSetupDescription => 'कुछ अनुमतियाँ सक्षम करें ताकि Omi अपना जादू दिखा सके।';
+
+  @override
+  String get architectSubtitle => 'पावर-यूजर AI — हज़ारों चैट + एजेंटिक ऑटोमेशन';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total में से $current';
+  }
+
+  @override
+  String get newestFirst => 'सबसे नई पहले';
+
+  @override
+  String get backgroundModeNote => 'फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'रिकॉर्ड नहीं हुआ ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'पिछले दो दिनों की आवाज़ों की एक झटपट जाँच';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'लंबित ट्रांसक्रिप्शन $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi ऑडियो नहीं भेज रहा है — फिर से कनेक्ट करने के लिए टैप करें';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi अपने आप फिर से कनेक्ट हो जाएगा';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name को रखें, और अपनी बातचीत में उनके होने की उम्मीद रखें';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'मिलती-जुलती आवाज़ों का मिलान करने से पहले Omi पूछता है।';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '\"हाँ\" से $name पर भरोसा बढ़ता है।';
+  }
+
+  @override
+  String get localCopiesSection => 'लोकल कॉपियाँ';
+
+  @override
+  String get forYou => 'आपके लिए';
+
+  @override
+  String get stopThese => 'इन्हें रोकें';
+
+  @override
+  String get meetingActionItemsTitle => 'कार्रवाई के आइटम';
+
+  @override
+  String get addToTasks => 'टास्क में जोड़ें';
+
+  @override
+  String get showInTranscript => 'ट्रांसक्रिप्ट में दिखाएँ';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'संभावित समय-सीमा $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'अनुमानित समय-सीमा $date';
+  }
+
+  @override
+  String get openTask => 'टास्क खोलें';
+
+  @override
+  String get completeTask => 'टास्क पूरा करें';
+
+  @override
+  String get reopenTask => 'टास्क फिर खोलें';
+
+  @override
+  String get addingToTasks => 'टास्क में जोड़ा जा रहा है';
+
+  @override
+  String get taskAddedToTasks => 'कार्य बनाया गया';
+
+  @override
+  String get completedStatus => 'पूर्ण';
+
+  @override
+  String get notCompletedStatus => 'लंबित';
 }
