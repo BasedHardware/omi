@@ -19,7 +19,7 @@ void main() {
   test('separate allowlist key selects all-channels payload', () async {
     final keys = <String>[];
     final config = await ChatAppsGate.read(
-        readFlag: (_) async => true,
+        readFlag: (key) async => key == ChatAppsGate.enabledFlag || key == ChatAppsGate.allChannelsFlag,
         readPayload: (key) async {
           keys.add(key);
           return payload;
@@ -31,5 +31,18 @@ void main() {
   test('absent or failed store remains off', () async {
     expect((await ChatAppsGate.read(readFlag: (_) async => false)).enabled, isFalse);
     expect((await ChatAppsGate.read(readFlag: (_) async => throw StateError('offline'))).enabled, isFalse);
+  });
+
+  test('public switch disables private channels too', () async {
+    var payloadRead = false;
+    final config = await ChatAppsGate.read(
+      readFlag: (key) async => key == ChatAppsGate.allChannelsFlag,
+      readPayload: (_) async {
+        payloadRead = true;
+        return payload;
+      },
+    );
+    expect(config.enabled, isFalse);
+    expect(payloadRead, isFalse);
   });
 }

@@ -106,9 +106,9 @@ abstract final class ChatAppsGate {
     try {
       final flag = readFlag ?? AnalyticsManager().isFeatureEnabled;
       final payload = readPayload ?? AnalyticsManager().getFeatureFlagPayload;
+      if (!await flag(enabledFlag)) return ChatAppsConfig.off;
       final allChannels = await flag(allChannelsFlag);
       final key = allChannels ? allChannelsFlag : enabledFlag;
-      if (!allChannels && !await flag(enabledFlag)) return ChatAppsConfig.off;
       final config = ChatAppsConfig.fromPayload(enabled: true, payload: await payload(key));
       // The public key can never expose private channels, even with a bad payload.
       return allChannels

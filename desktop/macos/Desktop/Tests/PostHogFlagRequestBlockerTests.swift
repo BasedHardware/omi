@@ -1,6 +1,7 @@
 import Foundation
 import PostHog
 import XCTest
+import zlib
 
 @testable import Omi_Computer
 
@@ -22,7 +23,7 @@ final class PostHogFlagRequestBlockerTests: XCTestCase {
   }
 
   func testSDKIdentifyResetAndReloadCannotReachFlagNetworkButCaptureDoes() async {
-    let capture = expectation(description: "SDK sends analytics batch")
+    let capture = expectation(description: "SDK sends the requested capture in an analytics batch")
     let recorder = FlagTrafficRecorder(capture: capture)
     SDKNetworkProbe.recorder = recorder
     defer { SDKNetworkProbe.recorder = nil }
@@ -59,12 +60,52 @@ private final class FlagTrafficRecorder: @unchecked Sendable {
   private let capture: XCTestExpectation
   init(capture: XCTestExpectation) { self.capture = capture }
   var paths: [String] { lock.withLock { seen } }
-  func record(_ path: String) {
+  func record(_ request: URLRequest) {
+    let path = request.url?.path ?? ""
+    let batch =
+      decodedBody(request)
+      .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["batch"] as? [[String: Any]]
+    let hasCapture = batch?.contains { $0["event"] as? String == "flags-cut-capture" } == true
     lock.withLock {
       seen.append(path)
-      if path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "batch", !captured {
+      if hasCapture, !captured {
         captured = true
         capture.fulfill()
+      }
+    }
+  }
+
+  private func decodedBody(_ request: URLRequest) -> Data? {
+    var body = request.httpBody
+    if body == nil, let input = request.httpBodyStream {
+      input.open()
+      defer { input.close() }
+      var data = Data()
+      var buffer = [UInt8](repeating: 0, count: 4096)
+      while input.hasBytesAvailable {
+        let count = input.read(&buffer, maxLength: buffer.count)
+        guard count > 0 else { break }
+        data.append(buffer, count: count)
+      }
+      body = data
+    }
+    guard let body else { return nil }
+    guard request.value(forHTTPHeaderField: "Content-Encoding") == "gzip" else { return body }
+    var stream = z_stream()
+    guard inflateInit2_(&stream, MAX_WBITS + 32, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
+      return nil
+    }
+    defer { inflateEnd(&stream) }
+    // This hermetic batch has only a handful of events; refuse oversized output.
+    var output = Data(count: 256 * 1024)
+    return body.withUnsafeBytes { input in
+      output.withUnsafeMutableBytes { destination in
+        stream.next_in = UnsafeMutablePointer(mutating: input.bindMemory(to: Bytef.self).baseAddress)
+        stream.avail_in = uInt(input.count)
+        stream.next_out = destination.bindMemory(to: Bytef.self).baseAddress
+        stream.avail_out = uInt(destination.count)
+        guard inflate(&stream, Z_FINISH) == Z_STREAM_END else { return nil }
+        return Data(destination.prefix(Int(stream.total_out)))
       }
     }
   }
@@ -78,7 +119,7 @@ private final class SDKNetworkProbe: URLProtocol {
     guard let url = request.url,
       let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
     else { return }
-    Self.recorder?.record(url.path)
+    Self.recorder?.record(request)
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data("{}".utf8))
     client?.urlProtocolDidFinishLoading(self)
