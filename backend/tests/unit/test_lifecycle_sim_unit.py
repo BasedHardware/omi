@@ -17,7 +17,7 @@ import pytest
 from google.api_core.exceptions import PreconditionFailed
 
 from testing.lifecycle_sim.clock import age_job_row, aged_job_fields
-from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
+from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault, validate_fault_selector
 from testing.lifecycle_sim.preflight import HermeticRefusal, preflight
 from testing.lifecycle_sim import listener_faults
 from testing.lifecycle_sim import run as simulator_runner
@@ -271,6 +271,22 @@ def test_boundary_selector_refuses_to_silently_widen_a_session_scope():
         listener_faults.install_boundary_fault(
             {'phase': 'seal', 'uid': 'synthetic', 'conversation_id': 'capture', 'recording_session_id': 'session'}
         )
+
+
+@pytest.mark.parametrize(
+    'phase', ['seal', 'register', 'admit', 'in_progress', 'processing', 'completed', 'failed', 'discarded']
+)
+def test_selector_preserves_conversation_and_legacy_session_identity(phase):
+    selector = {'uid': 'synthetic', 'conversation_id': 'capture', 'phase': phase}
+    if phase not in {'seal', 'register', 'admit'}:
+        selector['recording_session_id'] = 'session'
+    validate_fault_selector(selector)
+    if 'recording_session_id' in selector:
+        selector.pop('recording_session_id')
+    else:
+        selector['recording_session_id'] = 'session'
+    with pytest.raises(ValueError, match='exactly'):
+        validate_fault_selector(selector)
 
 
 @pytest.mark.asyncio

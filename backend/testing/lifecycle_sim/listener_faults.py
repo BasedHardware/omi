@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from database import record_audio
-from testing.lifecycle_sim.faults import BOUNDARY_SELECTOR_KEYS, BoundaryFault, InjectedLifecycleFault
+from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault, validate_fault_selector
 from utils.batch_pipeline import live
 from utils.conversations import finalizer
 
@@ -12,10 +12,7 @@ from utils.conversations import finalizer
 def install_boundary_fault(selector: dict[str, str], *, state_dir: Path | None = None) -> BoundaryFault:
     # These operations own a conversation, not a recording-session write.
     # Reject a session selector rather than silently widening its scope.
-    if set(selector) != BOUNDARY_SELECTOR_KEYS or not all(
-        isinstance(value, str) and value for value in selector.values()
-    ):
-        raise ValueError('boundary selector requires exactly uid, conversation_id and phase')
+    validate_fault_selector(selector)
     fault = BoundaryFault(selector['phase'], selector['uid'], selector['conversation_id'])
     seal, register, admit = record_audio.seal_record_audio, live.register_recording, live.admit_recording
 

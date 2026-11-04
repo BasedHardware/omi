@@ -6,6 +6,17 @@ from threading import Lock
 
 BOUNDARY_PHASES = frozenset({'seal', 'register', 'admit'})
 BOUNDARY_SELECTOR_KEYS = frozenset({'uid', 'conversation_id', 'phase'})
+SESSION_SELECTOR_KEYS = BOUNDARY_SELECTOR_KEYS | {'recording_session_id'}
+
+
+def validate_fault_selector(selector):
+    if not isinstance(selector, dict):
+        raise ValueError('recording lifecycle fault must be a selector object')
+    if not all(isinstance(value, str) and value for value in selector.values()):
+        raise ValueError('recording lifecycle fault values must be non-empty strings')
+    keys = BOUNDARY_SELECTOR_KEYS if selector.get('phase') in BOUNDARY_PHASES else SESSION_SELECTOR_KEYS
+    if set(selector) != keys:
+        raise ValueError(f'recording lifecycle fault must contain exactly {sorted(keys)}')
 
 
 class InjectedLifecycleFault(RuntimeError):
