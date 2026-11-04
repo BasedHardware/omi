@@ -9,6 +9,7 @@ import {
   act,
   fireEvent,
   screen,
+  waitFor,
   configure,
   getConfig
 } from '@testing-library/react'
@@ -16,14 +17,11 @@ import { NotificationsTab } from './NotificationsTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
 
-// The tab renders nothing until assistantsGetSettings() (an async mock) resolves
-// and React commits, so every test opens on `findByText('Frequency')`. That
-// findBy defaults to a 1000ms wall-clock ceiling — fine in isolation, but under
-// full-suite parallel load the CPU-starved worker can miss it before the commit
-// lands, flaking a test that is actually correct. Raise the async-utils ceiling
-// (the MutationObserver still resolves the instant the DOM updates, so passing
-// tests aren't slowed) and restore it after the file so it can't bleed into
-// suites sharing the worker.
+// Labels render before the asynchronous settings load completes. Wait for the
+// master switch's loaded value before interacting with dependent controls;
+// finding static text alone can click a still-disabled switch under suite load.
+// Keep the bounded async-utils ceiling for CPU-starved parallel workers and
+// restore it after this file so it cannot bleed into another suite.
 // The test timeout is captured when `it()` registers, i.e. during collection of this
 // module, so it must be raised here at module scope — inside beforeAll it is a no-op
 // and each test keeps the 5000ms default, which fires before the asyncUtilTimeout
@@ -83,10 +81,15 @@ const renderTab = (): void => {
 const sw = (name: string): HTMLButtonElement =>
   screen.getByRole('switch', { name }) as HTMLButtonElement
 
+const waitForSettings = async (): Promise<void> => {
+  await waitFor(() => expect(sw('Notifications').getAttribute('aria-checked')).toBe('true'))
+}
+
 describe('NotificationsTab', () => {
   it('renders every row after loading settings', async () => {
     renderTab()
-    expect(await screen.findByText('Frequency')).toBeTruthy()
+    await waitForSettings()
+    expect(screen.getByText('Frequency')).toBeTruthy()
     expect(screen.getByText('Notifications')).toBeTruthy()
     expect(screen.getByText('Focus notifications')).toBeTruthy()
     expect(screen.getByText('Extract memories from your screen')).toBeTruthy()
@@ -96,13 +99,14 @@ describe('NotificationsTab', () => {
 
   it('shows the "off" hint and the level caption at frequency 0', async () => {
     renderTab()
-    expect(await screen.findByText(/Proactive notifications are off/i)).toBeTruthy()
+    await waitForSettings()
+    expect(screen.getByText(/Proactive notifications are off/i)).toBeTruthy()
     expect(screen.getByText('No proactive notifications')).toBeTruthy() // level caption
   })
 
   it('greys the per-assistant rows when the master toggle is off', async () => {
     renderTab()
-    await screen.findByText('Frequency')
+    await waitForSettings()
     // Default: master on → per-assistant rows enabled.
     expect(sw('Focus notifications').disabled).toBe(false)
     act(() => {
@@ -116,7 +120,7 @@ describe('NotificationsTab', () => {
 
   it('writes the frequency through assistantsSetSettings when the slider changes', async () => {
     renderTab()
-    await screen.findByText('Frequency')
+    await waitForSettings()
     const thumb = screen.getByRole('slider', { name: 'Notification frequency' })
     act(() => {
       fireEvent.keyDown(thumb, { key: 'ArrowRight' })
@@ -125,17 +129,30 @@ describe('NotificationsTab', () => {
   })
 
   it('toggling a per-assistant row writes just that flag', async () => {
+    let finishLoad: ((value: AssistantSettingsView) => void) | null = null
+    const loading = new Promise<AssistantSettingsView>((resolve) => {
+      finishLoad = resolve
+    })
+    vi.mocked(window.omi.assistantsGetSettings).mockReturnValueOnce(loading)
     renderTab()
-    await screen.findByText('Frequency')
-    act(() => {
+    expect(sw('Extract memories from your screen').disabled).toBe(true)
+    fireEvent.click(sw('Extract memories from your screen'))
+    expect(setSettings).not.toHaveBeenCalled()
+    await act(async () => {
+      if (!finishLoad) throw new Error('settings load was not requested')
+      finishLoad(store)
+    })
+    await waitForSettings()
+    await act(async () => {
       fireEvent.click(sw('Extract memories from your screen'))
     })
+    expect(setSettings).toHaveBeenCalledTimes(1)
     expect(setSettings).toHaveBeenCalledWith({ memoryEnabled: true })
   })
 
   it('updates rendered state from a broadcast (another window wrote the flag)', async () => {
     renderTab()
-    await screen.findByText('Frequency')
+    await waitForSettings()
     expect(screen.getByText('No proactive notifications')).toBeTruthy()
     act(() => {
       changeCb?.({ ...DEFAULTS, notificationFrequency: 5 })
