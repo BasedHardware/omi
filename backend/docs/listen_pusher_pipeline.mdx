@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Fair-use decay switch
+
+`FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
+restrict-only decay. Enabled state reads persist throttle → warning after
+`throttle_until`, then warning → none after the written seven-day
+`warning_until` quiet period. Restrict gates remain unchanged. See the
+[decay change note](listen_pusher_pipeline/changes/2026-11-04-fair-use-throttle-decay.md)
+for legacy recovery and telemetry semantics.
+
 ## Cohort-scoped legacy sync retirement
 
 Upload admission, record-owner selection, final-pass claims, cap-hold handoff
@@ -243,11 +252,35 @@ can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
 Admission requires cloud-storage consent, durable outbox and pusher availability,
-a named Parakeet-supported language matching the request, server STT, and
+a named Parakeet-supported language (or an admitted unsupported language below) matching the request, server STT, and
 single-channel capture outside onboarding/phone calls. Storage-disabled,
-multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
-sessions retain their live behavior. The session's language profile must agree with that named primary and contain
-only supported expected languages; missing or mixed unsupported profiles stay live.
+unselected multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
+sessions retain their live behavior. The session's language profile must agree
+with that named primary; missing profiles or a primary mismatch stay live. For
+supported declarations, expected languages must all be Parakeet-supported.
+`SERVER_BATCH_UNSUPPORTED_LANGUAGES` defaults empty (the previous admission policy).
+It accepts comma-separated codes normalized by the STT language normalizer, limited
+to Modulate-listed languages outside Parakeet support; unknown/supported codes and
+Japanese (`ja`, including regional forms) are ignored. Dev/prod listen ships with
+an empty allowlist; the lead enables it only after `backend-sync-backfill` serves
+the native-record provider routing. For an admitted unsupported declaration, the profile primary
+must still agree with that declaration under the existing spoken-language profile
+equivalence (for example `bs` profiles as `sr`); expected codes must be supported
+or allowlisted, including those profile equivalents. Supported declarations and auto/multi retain their existing
+profile gates. Clearing the env restores live STT for new unsupported-language
+sessions. Previously reserved audio still finishes through batch custody.
+
+Complete and partial native-record units with a named unsupported language take
+C8 Modulate batch via the transactional provider outbox, outside the GPU ring;
+recorded payer policy, privacy fences, source references, speaker diarization,
+and projection bindings remain unchanged. Auto/multi still require whole-unit
+independent audio proof and retain the existing recovery route.
+`omi_listen_server_batch_suppression_total{decision,reason,client_platform,language}`
+counts decisions at STT initialization/reinitialization (not distinct sessions).
+`language` is one of the 36 fixed Modulate-listed unsupported codes, including `ja`
+for refusals, or `other` for supported/unknown/auto inputs; it never takes raw env
+or request values. Compare `decision=suppressed` against `decision=live` by language.
+
 A fresh admitted conversation reserves
 `record_lane_owner=batch_live_v1` and the server-owned
 `external_data.server_batch_only` marker before STT initialization. Reconnects
@@ -2936,8 +2969,16 @@ the same transaction it decodes the snapshot's transcript with the read path's
 own uid-keyed decode (strict: a blob that fails authentication is no
 transcript), and replaces an empty generated title with
 `deterministic_minimum_title` (the first sentence, else `Recording · 3:14 PM`
-in the user's zone). A real or user title is never touched. The legacy
-1 MiB orphan terminal is the one exception: its write must only shrink the
+in the user's zone). A real or user title is never touched. Home read neutralization also preserves
+these dead-letter titles, including when a blank `user_title` is present.
+`HOME_NEUTRAL_MINIMUM_TITLES` defaults on and affects only floor/short server
+minimums and loaded eight-word lazy placeholders; off preserves stored titles.
+It performs no transcript refetch. `HOME_HIDE_EPISODE_MEMBERS=off` restores
+member visibility, list-version checks and caching. `HOME_HIDE_BELOW_FLOOR_ROWS`
+(default on) controls floor/minimum visibility. `EPISODE_OUTPUT_LANGUAGE_PIN=off`
+restores preference-then-capture resolution for conversation notes and episodes;
+valid capture tags also survive when no transcript segments were supplied.
+The legacy 1 MiB orphan terminal is the one exception: its write must only shrink the
 document. Only the dead-letter sets `summary_retryable=true`, and only after
 a transient failure (`final_attempt_failed` / `processing_failed`) on a row
 whose summarizer input is usable (decoded transcript text, or a photo with a
@@ -4317,6 +4358,22 @@ refuse with `untrusted_clock`; nothing is ever synthesized from arrival
 timestamps. This deliberately leaves some real mixed recordings unavailable.
 Sync scopes keep their `sync` reason and the v2 marker still wins wherever it
 exists, so span-bearing mixed live+sync conversations resolve.
+
+Within the per-window speaker cohort, `SPEAKER_SYNC_STORE_ENABLED` and
+`SPEAKER_BATCH_STORE_ENABLED` default on. For overlapping-store `untrusted_clock`
+refusals, `sync:` unit windows use only sync objects. A `final:batch:` unit scope
+alone cannot identify a clock: record-origin WAL uploads also use that prefix.
+CPU admission records optional `WorkItem.timing_store` (`sync` for built-in WAL
+decoding, `batch` for homogeneous `.batch.enc` / `.batch.bin` custody references).
+Projection copies it into storage-only `provider_speaker.timing_store`, alongside
+the original unit scope/id/provider. Both survive conversation re-scoping.
+Stamped batch windows use only the named store; unknown sources and unstamped
+history stay refused. Generic staged `audio_uri` values do not prove a store,
+so no historical reads or backfill are added. Public JSON excludes the marker.
+Each switch accepts false/0/off/no: the sync switch controls native `sync:`
+windows, and the batch switch controls `final:batch:` windows on either store.
+Proof, decoded coverage and embedding clip assembly all use the selected store;
+an uncovered window never borrows the other store's audio.
 
 A span overlap is not union coverage. When two separate `chunk_spans` entries
 intersect — nested, identical, or chained across more than two — their
@@ -6027,18 +6084,65 @@ journals every pendant frame, visible or not, through the mobile Standard batch
 route above (lossless WAL, `/v2/sync-local-files`, batch record), so the batch
 lane owns the transcript.
 
-Listen defers the cloud stream rather than dropping it. A listen conversation is
-kept alive, finalized and registered for batch only by live segments, so audio
-received with no stream would be deleted as an empty conversation. No provider
-socket opens at session start (no vendor, no Parakeet window leg); the first
-audio that reaches the socket (the journal refused it, e.g. low disk or a journal
-failure) opens today's stream and counts in
-`omi_listen_deferred_stream_opened_total{deferred_by}`. At teardown,
-`omi_listen_deferred_stream_open_seconds{deferred_by,provider}` observes how long
-that stream stayed open: an upper bound on its provider connection time, which
-separates a stop-time flush (seconds) from a session that streamed throughout.
-`CLOUD_LIVE_STT_MODE=off` uses the same deferral. Setting the kill switch off revokes at the next
-renewal; the client streams again and the stream opens on its first audio.
+Listen opens no cloud provider socket at session start. With
+`LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED` (default on), the first decoded audio that
+leaks through this socket claims durable server-batch ownership before original
+archive append. The transaction preserves metadata and sets
+`external_data.server_batch_only=true`,
+`external_data.listen_preview_batch_custody=true`, `record_lane_owner=batch_live_v1`
+and capture language (`multi` for auto/undeclared). Consent, lifecycle and owner
+checks must pass, and the archive must be durable. The STT buffer is cleared;
+the first-frame claim/archive handoff is joined through cancellation before
+decoded-buffer teardown; originals commit exact sample bounds and teardown registers the batch obligation
+without live transcript segments. A failed claim falls back to the previous live
+open once per recording, counted by
+`omi_listen_preview_batch_custody_total{outcome="live_fallback"}`; successful claims
+use outcome `promoted`. Durable claims survive rollback and reconnect, subject to
+privacy and request compatibility checks.
+
+Setting `LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED=false` restores deferred live opens
+for unclaimed recordings. `CLOUD_LIVE_STT_MODE=off` sessions without local-preview
+admission retain their previous deferred-open behavior. Live fallback opens count
+in `omi_listen_deferred_stream_opened_total{deferred_by}`; teardown records their
+connection lifetime in
+`omi_listen_deferred_stream_open_seconds{deferred_by,provider}`.
+
+Plain `parakeet` is excluded from streaming defaults and explicit model selection;
+`STT_STREAMING_PARAKEET_SLOT_ENABLED` defaults off and restores the default and
+connection-fallback slots when true, including an already-pinned two-vendor model
+list; no `STT_SERVICE_MODELS` literal change is needed. This does not change
+`parakeet-window`, PTT or prerecorded routing, and cannot override `STT_GPU_FLEET_OFF`.
+With the plain slot off, stale streaming lists containing `parakeet` also admit
+the canonical vendor defaults after their configured models. Managed sessions
+therefore fall through to Modulate/Soniox instead of refusing supported English.
+
+Setting `LOCAL_PREVIEW_BATCH_ENABLED` off revokes at the next renewal; the
+local-preview declaration is cleared and the session stays revoked. Owned captures
+attach visible restore; unowned captures resume their ordinary non-preview path.
+The custody promotion above applies only while the local-preview grant is active.
+
+A granted Flutter client whose engine settles unavailable (or exhausts its one
+runtime retry) sends `{"type":"local_preview_engine_unavailable","reason":"locale_asset_missing"}`
+before flushing held binary audio through the ordinary socket-refusal path. The
+reason is a closed engine-failure value; unknown/malformed reasons count as
+`other`. The app sends it once per socket and latches per capture so later
+sockets do not declare local preview. No engine-available message can un-rescind.
+
+`LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` defaults on; false/0/off/no counts and ignores
+the event. Otherwise listen clears the grant and replaces the immutable request
+with its declaration cleared. Renewal never re-grants. The counter is
+`omi_listen_local_preview_engine_unavailable_total{client_platform,reason}` (bounded
+labels, once per granted socket). Renewal revocations use the same sticky state
+transition and restore attachment, independently of the engine-event kill switch.
+Rescinded or revoked audio with durable batch custody routes through
+`VisibleRestore.flush`, never a full cloud deferred open. Paid restore requires durable
+`owned(batch_record_capture)` and the existing mobile visible-restore cohort, with
+15 seconds stable transcript visibility before opening Modulate and immediate
+close when hidden. Without durable ownership, the session instead retains or opens
+its normal non-preview cloud stream with its existing demand policy. Its audio is
+not cleared by the batch-only flush path. This restores baseline cloud cost; it
+does not expand paid visible restore. Deploy server first,
+then the Dart app build; unknown control kinds remain no-ops for older servers.
 
 ### Forward canonical audio archive (default off)
 
@@ -6225,7 +6329,7 @@ stable. Retained private-cloud chunks persist their skew-normalized playback
 start beside the raw capture-clock chunk key (`v2_playback_start` blob metadata
 → `audio_files[].playback_start`, present only when every chunk in the part
 carries one), and conversation playback `wall_offset` values are computed from
-that normalized basis. Beyond the window, before 2024-01-01, or malformed
+that normalized basis. Beyond the future window or malformed
 timestamps are refused with 400 plus a typed `code: 'invalid_capture_time'`
 body on V2 (released clients see the same status and `detail` text and ignore
 the body). Mixed historical batches and lookback rejection keep their existing
@@ -6233,11 +6337,24 @@ semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
 future stamp stays the legacy 400 — because its inline pipeline runs at
 capture-time offset 0; V2 owns skew admission.
 
+V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
+is unset or not `false` (default on). Such uploads retain untrusted backfill
+pacing, without treating the invalid year as a lookback age. Valid historical
+siblings still obey lookback. The server records upload receipt time and
+packs early-clock audio in original timestamp/name order so the newest audio
+ends at receipt. Bogus wall-clock gaps are discarded; canonical audio duration
+is preserved and early/normal clocks never share a packed unit. Early-clock
+client session-time bounds are omitted from temporal lookup;
+raw filename timestamps, source order, content IDs and chunk identity stay
+unchanged. Batch jobs freeze that stored clock with their audio; legacy queued
+jobs carry receipt time in their durable payload. Setting the switch to `false`
+restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
+
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
 `legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
 `legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
-capture-time admission dispositions (accepted, `accepted_future_skew`,
+capture-time admission dispositions (accepted, `accepted_future_skew`, `accepted_early_clamped`,
 `rejected_future`, `rejected_early`, `rejected_malformed`) are counted in
 `omi_sync_capture_time_total{outcome}` with an `event=sync_capture_time` log for
 every non-plain-accepted outcome. No account
@@ -7317,11 +7434,21 @@ cannot bypass independent recovery through the legacy no-provider tools.
 The 32 ms boundary is a conservative Silero frame-resolution
 proposal supported by synthetic tests, not labeled evidence about held audio.
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults off in code;
-`false` stops new Soniox calls without substituting another Modulate attempt.
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults on in code;
+explicit deployment overrides still apply. Unsupported-language provider attempts
+that exhaust candidates with `empty_validated` enter quarantine `held` for bounded
+recovery. Either `worker_failure.reason` or `stt_route.provider_reason` equal to
+`unsupported_language` identifies a guarded job. `false` restores immediate
+worker `failed_held` and stops new Soniox calls without substituting another
+Modulate attempt.
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to 60 and can only
 lower that hard per-unit cap. Company-funded allowance, privacy, original
-ledger and single paid-intent fences apply. No paid POST is retried. The result
+ledger and single paid-intent fences apply. Recovery HTTP requests have at most
+three attempts with 1s/2s backoff within the existing 120s deadline. A paid
+transcription POST retries only an explicit 429 refusal; a transport error or
+5xx on that POST is uncertain and remains held. Uploads and reads may retry
+transient 429/5xx/transport errors; polls keep the same transcription id.
+Credit/authentication refusals and malformed responses do not retry. The result
 may register its artifact only under the running epoch-3 Soniox intent
 for the language-guarded Modulate recovery route. Legacy multilingual redrive
 retains its epoch-2 contract. Both paths require the current privacy generation,
@@ -8871,3 +8998,18 @@ through the unchanged pack index each flush, including raw-only uploads. Every
 successful flush still persists fresh `audio_files` and triggers speaker retries;
 custody receipts and replay reconciliation are independent and unchanged.
 [Design and validation](listen_pusher_pipeline/changes/2026-11-02-pusher-audio-projection.md).
+
+`BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED` defaults to `true`: successful
+quarantine-recovery requests drain only their owner's fenced merge and projection
+chain and schedule targeted follow-ups. `false` restores full reconciliation in
+the request. Global maintenance and discovery retain the independent serving
+supervisor (20-second wait after each pass, 60-second maintenance lease TTL).
+Pending jobs and result receipts remain the durable retry owner across process
+loss. [Details and verification](listen_pusher_pipeline/changes/2026-11-03-recovery-owner-only.md).
+
+### Lifecycle phase shadow
+
+`PHASE_SHADOW_ENABLED` defaults to `true`; `false`, `0`, `off` or `no` disables
+all read-side phase derivation and observation. This telemetry switch never selects
+reader behavior or performs storage IO. Existing verdicts remain authoritative,
+including when shadow computation fails. [Projection rules and measurement limits](listen_pusher_pipeline/changes/2026-11-03-phase-shadow.md).

@@ -1,0 +1,30 @@
+/* App only: the shared board DTS and MCUboot's DTS remain unchanged. */
+/ {
+    reserved-memory {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        safe_mode_ram: memory@2006ff00 {
+            compatible = "zephyr,retained-ram";
+            reg = <0x2006ff00 0x40>;
+        };
+    };
+};
+
+/* Application only. Recovery never invokes these devices' init functions. */
+&pdm0 { zephyr,deferred-init; };
+&i2s0 { zephyr,deferred-init; };
+&adc { zephyr,deferred-init; };
+&i2c2 { zephyr,deferred-init; };
+&lsm6ds3tr_c { zephyr,deferred-init; };
+&sdhc0 {
+    zephyr,deferred-init;
+    mmc { zephyr,deferred-init; };
+};
+
+/ {
+    safe_mode_fault: safe-mode-fault {
+        compatible = "omi,safe-mode-fault";
+        zephyr,deferred-init;
+    };
+};

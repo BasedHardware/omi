@@ -14,6 +14,20 @@ from omi_logging import configure_logging
 configure_logging(service='sync-backfill-worker')
 logger = logging.getLogger(__name__)
 
+_KEY_CREDENTIAL_ENV = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_AUTH_CREDENTIALS_PATH')
+
+
+def drop_blank_credential_env() -> None:
+    # The chart blanks these so a runtime secret cannot supply a key file. google-auth
+    # reads a set-but-empty GOOGLE_APPLICATION_CREDENTIALS as a file path and fails, so
+    # unset them before any client is built and let ADC use Workload Identity.
+    for key in _KEY_CREDENTIAL_ENV:
+        if key in os.environ and not os.environ[key].strip():
+            del os.environ[key]
+
+
+drop_blank_credential_env()
+
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from utils.sync.worker_client import ControlClient
 
@@ -25,10 +39,8 @@ def bootstrap() -> None:
     assert_staging_isolation(force=True)
     if os.environ.get('OMI_ENV_STAGE') != 'prod' or not customer_data_project():
         raise RuntimeError('worker needs explicit stage and customer data project')
-    if any(
-        os.getenv(key)
-        for key in ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_AUTH_CREDENTIALS_PATH')
-    ):
+    drop_blank_credential_env()
+    if any(os.getenv(key) for key in _KEY_CREDENTIAL_ENV):
         raise RuntimeError('worker requires attached Workload Identity, not key credentials')
     import firebase_admin
     from utils.env_loader import firebase_admin_options
@@ -209,7 +221,8 @@ async def execute(lease: dict, client: ControlClient) -> bool:
                 audio_end_seconds=payload.get('audio_end_seconds'),
                 raw_capture_paths=payload.get('raw_capture_paths'),
                 capture_evidence_claims=payload.get('capture_evidence_claims'),
-                **({'redrive_mode': redrive_mode} if redrive_mode else {}),
+                capture_received_at=payload.get('capture_received_at'),
+                redrive_mode=redrive_mode or None,
             )
         job = await run_blocking(db_executor, sync_jobs.get_sync_job, job_id)
         if not job or job['status'] not in sync_jobs.TERMINAL_STATUSES:

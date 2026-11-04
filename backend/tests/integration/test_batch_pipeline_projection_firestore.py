@@ -1356,6 +1356,10 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
         {'owner_id': 'synthetic-first', 'state': 'committed', 'recovery_state': 'held'}
     )
     recovery = QuarantineRecovery(lane.store, Mock())
+    # These deliberately sparse records model discovery only. Real policy
+    # loading correctly refuses them before dispatch; isolate that separate
+    # authority boundary instead of accidentally relying on its held fallback.
+    monkeypatch.setattr(module, 'load_stage_policy', lambda *a, **kw: ({}, None))
     recovery.recover = Mock(return_value='held')
     original = module.recovery_candidates
     query = Mock(wraps=original)
@@ -1365,9 +1369,10 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     assert query.call_count == 2
     assert query.call_args.kwargs['after_id'] == 'held-09'
     assert recovery.recover.call_args.args == ('held-11', 'synthetic-other')
-    assert recovery.sweep() == {}  # Empty tail resets cursor, without an extra query.
-    assert query.call_count == 3
+    # A short second page already proves end-of-scan. The next scan must
+    # restart immediately, rather than spending an empty-tail query first.
     assert recovery.sweep() == {'held': 10}
+    assert query.call_count == 3
     assert query.call_args.kwargs['after_id'] is None
 
 

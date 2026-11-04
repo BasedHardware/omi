@@ -1,6 +1,8 @@
 """Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
 
 import logging
+import math
+import threading
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
@@ -20,6 +22,14 @@ AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
 
 
+def age_seconds(started: float | None, now: float) -> float:
+    # Preserve an explicitly incomplete bounded scan as NaN. max(0, NaN)
+    # would silently turn unknown debt into a healthy zero.
+    if started is None:
+        return 0
+    return max(0.0, now - started) if math.isfinite(started) else float('nan')
+
+
 class QueueMetrics:
     def __init__(
         self,
@@ -28,8 +38,13 @@ class QueueMetrics:
         worker_release: str = 'unscoped',
         namespace: str = 'unscoped',
         capacity_sampling: bool = False,
+        min_refresh_seconds: float = 0.0,
     ):
         self.scope = (worker_release, namespace)
+        # Serving instances share one global queue; workers keep 0 for the HPA.
+        self.min_refresh_seconds = min_refresh_seconds
+        self._refresh_due = 0.0
+        self._refresh_lock = threading.Lock()
         self.capacity_sampling = capacity_sampling
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
@@ -179,6 +194,27 @@ class QueueMetrics:
             raise ValueError('static head scheduling event required')
 
     def refresh(self, store: Store, now: float) -> None:
+        if self.min_refresh_seconds <= 0:
+            self._refresh(store, now)
+            return
+        # The serving loop and the /metrics handler share this object across
+        # executors: reserve the interval before reading so concurrent callers
+        # skip. A skipped call reads nothing and changes nothing; a failed
+        # refresh releases its reservation so the next call reads again.
+        due = now + self.min_refresh_seconds
+        with self._refresh_lock:
+            if now < self._refresh_due:
+                return
+            previous, self._refresh_due = self._refresh_due, due
+        try:
+            self._refresh(store, now)
+        except BaseException:
+            with self._refresh_lock:
+                if self._refresh_due == due:
+                    self._refresh_due = previous
+            raise
+
+    def _refresh(self, store: Store, now: float) -> None:
         # Collect every query before changing gauges. Failed refresh retains last
         # values and does not advance freshness; adapters must reject stale data.
         samples = []
@@ -206,11 +242,9 @@ class QueueMetrics:
                     'event=batch_capacity_sample outcome=unavailable exception_type=%s', type(error).__name__
                 )
         for priority, pending, ready, retry in samples:
-            self.oldest_age.labels(LABELS[priority], *self.scope).set(
-                max(0.0, now - pending) if pending is not None else 0
-            )
+            self.oldest_age.labels(LABELS[priority], *self.scope).set(age_seconds(pending, now))
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
-            self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
+            self.retry_age.labels(LABELS[priority], *self.scope).set(age_seconds(retry, now))
         self.refreshed_at.labels(*self.scope).set(now)
         if capacity:
             for priority, count in capacity:

@@ -351,13 +351,20 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
                 status = 'qualification_failed'
             # These exceptions carry only fixed messages written in our own code,
             # never provider text, so the reason is safe to keep for diagnosis.
-            failure = {'error_type': type(error).__name__, 'reason': str(error)[:200]}
+            failure = {
+                'error_type': type(error).__name__,
+                'reason': str(error)[:200],
+                # A write can apply and still fail here (e.g. no LSN header): keep its id for reconciliation.
+                'last_write_request_id': transport.last_write_request_id,
+            }
             atomic_json(journal_path, {**journal, 'status': status, **failure, 'attempt': attempt})
             return {**result, 'status': status, **failure}
         except Exception as error:
-            atomic_json(
-                journal_path, {**journal, 'status': 'stopped', 'error_type': type(error).__name__, 'attempt': attempt}
-            )
+            stopped = {'status': 'stopped', 'error_type': type(error).__name__, 'attempt': attempt}
+            if not isinstance(error, BudgetExceeded):
+                # Correlates a possibly uncertain mutation with the request we sent.
+                stopped['last_write_request_id'] = transport.last_write_request_id
+            atomic_json(journal_path, {**journal, **stopped})
             if isinstance(error, BudgetExceeded):
                 raise
             return {**result, 'status': 'stopped', 'error_type': type(error).__name__}
@@ -418,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
                 'write_units': transport.write_units,
                 'upload_bytes': transport.upload_bytes,
             }
-            transport.client.close()
+            transport.close()
         report['completed_at'] = datetime.now(timezone.utc).isoformat()
         atomic_json(run_path, report)
     print(json.dumps({'status': report['status'], 'processed': len(report['results']), 'receipt': str(run_path)}))

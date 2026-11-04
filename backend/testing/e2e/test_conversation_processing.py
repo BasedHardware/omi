@@ -32,7 +32,6 @@ def _patch_process_conversation_boundaries(monkeypatch):
 
         return DoneFuture()
 
-    monkeypatch.setattr(process_module, "is_trial_paywalled", lambda *args, **kwargs: False)
     monkeypatch.setattr(process_module, "should_defer_desktop_processing", lambda uid: False)
     monkeypatch.setattr(process_module, "get_user_name", lambda uid, use_default=True: "David")
     monkeypatch.setattr(process_module.notification_db, "get_user_time_zone", lambda uid: "UTC")
@@ -97,6 +96,11 @@ async def _async_noop(*args, **kwargs):
 
 async def _async_none(*args, **kwargs):
     return None
+
+
+def test_processing_boundaries_do_not_require_retired_trial_gate(monkeypatch):
+    assert not hasattr(process_module, 'is_trial_paywalled')
+    _patch_process_conversation_boundaries(monkeypatch)
 
 
 def test_conversation_create_process_finalize_lifecycle(client, auth_headers, monkeypatch):

@@ -2,10 +2,12 @@
 
 from dataclasses import replace
 import os
-from threading import Barrier
+from threading import Barrier, Event
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 from uuid import uuid4
+
+from google.api_core.exceptions import Aborted, DeadlineExceeded, Unauthenticated, ServiceUnavailable
 
 import pytest
 
@@ -15,7 +17,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 
 @pytest.fixture
 def db(monkeypatch):
-    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(grace_seconds=0))
     client = StrictFirestore()
 
     # Narrow delete extension, proved by the real-emulator completion test below.
@@ -43,6 +45,97 @@ def db(monkeypatch):
 @pytest.fixture
 def key():
     return state.PartitionKey('test-index', 'ns2', 'test-owner')
+
+
+def test_acknowledged_call_finishes_during_shutdown_grace(db, key, monkeypatch):
+    registry = state.MutationRegistry(grace_seconds=1)
+    monkeypatch.setattr(state, '_mutations', registry)
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    draining = Event()
+    wait = registry._lock.wait
+
+    def entered_grace(timeout):
+        draining.set()
+        return wait(timeout)
+
+    monkeypatch.setattr(registry._lock, 'wait', entered_grace)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        drain = executor.submit(state.drain_mutations)
+        assert draining.wait(2)
+        with pytest.raises(state.PartitionBusy, match='draining'):
+            state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+        assert drain.result(timeout=2) == 0
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+
+
+def test_provider_call_past_grace_stays_uncertain_even_after_late_ack(db, key, monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(grace_seconds=0.01))
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    assert state.drain_mutations() == 1
+    route = state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 1, 0)
+    with pytest.raises(state.PartitionBusy):
+        state.begin_migration(key, 'migration', firestore_client=db)
+
+
+@pytest.mark.parametrize('error_type', [Unauthenticated, ServiceUnavailable, DeadlineExceeded, Aborted])
+@pytest.mark.parametrize('committed', [False, True])
+def test_transient_finish_retries_idempotently_without_uncertainty(db, key, monkeypatch, error_type, committed):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    finish = state._finish_mutation
+    calls = []
+
+    def transient(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            if committed:
+                finish(*args)
+            raise error_type('synthetic transient')
+        return finish(*args)
+
+    monkeypatch.setattr(state, '_finish_mutation', transient)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    route = state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert len(calls) == 2
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+    assert state.drain_mutations() == 0
+
+
+def test_persistent_transient_finish_falls_back_after_three_attempts(db, key, monkeypatch):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    calls = []
+
+    def unavailable(*args):
+        calls.append(args)
+        raise ServiceUnavailable('synthetic unavailable')
+
+    monkeypatch.setattr(state, '_finish_mutation', unavailable)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(ServiceUnavailable):
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert len(calls) == 3
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 1, 0)
+
+
+def test_failed_finish_and_uncertain_fallback_remain_visible_to_drain(db, key, monkeypatch):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    mark = state._mark_mutation_uncertain
+
+    def unavailable(*args):
+        raise ServiceUnavailable('synthetic unavailable')
+
+    monkeypatch.setattr(state, '_finish_mutation', unavailable)
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', unavailable)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(ServiceUnavailable):
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', mark)
+    assert state.drain_mutations() == 1
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
 
 
 def test_admission_racing_shutdown_settles_before_provider_can_receive_ticket(db, key, monkeypatch):

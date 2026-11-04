@@ -91,6 +91,8 @@ def test_get_finalization_job_summary_naive_and_malformed():
     mock_query.stream.return_value = [mock_snapshot]
     mock_query.order_by.return_value = mock_query
     mock_query.limit.return_value = mock_query
+    mock_query.where.return_value = mock_query
+    mock_query.count.return_value.get.return_value = [[MagicMock(value=0)]]
     mock_jobs_col.where.return_value = mock_query
 
     summary = cfj.get_finalization_job_summary(firestore_client=mock_client)

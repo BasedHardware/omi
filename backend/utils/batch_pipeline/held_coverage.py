@@ -1,6 +1,7 @@
 """Held WAV admission keeps exact source coordinates through canonical packing."""
 
 from pathlib import Path
+from dataclasses import replace
 from tempfile import TemporaryDirectory
 import wave
 
@@ -19,6 +20,12 @@ class HeldDecoder:
         self.all_covered = False
 
     def __call__(self, max_seconds):
+        offset = self.meta.get('early_capture_offset', 0.0)
+        for unit in self._units(max_seconds):
+            # Storage follows the admitted clock; capture identity stays raw.
+            yield replace(unit, stored_capture_at=unit.capture_at - offset) if offset else unit
+
+    def _units(self, max_seconds):
         if not refactor_modes.shadow_or_serve(coverage.FLAG):
             yield from self.legacy(self.path, self.capture_at, max_seconds)
             return

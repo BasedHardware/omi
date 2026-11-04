@@ -678,14 +678,17 @@ async def test_fleet_snapshot_runs_beside_the_sweep_not_ahead_of_its_work(monkey
     sweep = asyncio.create_task(cap_hold_redrive.sweep())
     # Discovery proceeds while the aggregation still runs: the gauge is no
     # longer awaited work sitting ahead of the drain.
-    for _ in range(400):
-        if 'staging' in seen:
-            break
-        await asyncio.sleep(0.005)
-    assert 'staging' in seen and 'snapshot-start' in seen
-    assert not sweep.done()
-    release.set()
-    assert await sweep == {'sealed': 0, 'visited': 0}
+    try:
+        for _ in range(400):
+            if 'staging' in seen and 'snapshot-start' in seen:
+                break
+            await asyncio.sleep(0.005)
+        assert 'staging' in seen and 'snapshot-start' in seen
+        assert not sweep.done()
+    finally:
+        release.set()
+        result = await sweep
+    assert result == {'sealed': 0, 'visited': 0}
     assert held_metrics.PENDING_COUNT._value.get() == 7
 
 
