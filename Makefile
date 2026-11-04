@@ -85,6 +85,12 @@ replay-privacy-full:
 	cd backend && .venv/bin/python -m testing.replay_harness.gen_privacy_timeline --transitions 1000 --output "$(abspath $(OUTPUT))/privacy-transitions-full"
 	$(MAKE) replay-harness CASES="$(abspath $(OUTPUT))/privacy-transitions-full" OUTPUT="$(abspath $(OUTPUT))/report"
 
+# Fixed adapter against immutable product refs; caller owns the emulator session.
+.PHONY: replay-gate
+replay-gate:
+	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CASES OUTPUT'; exit 2)
+	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(K),--repeats "$(K)") $(if $(filter 1,$(REGRESSION_ONLY)),--regression-only) $(if $(WORKER_TIMEOUT),--worker-timeout "$(WORKER_TIMEOUT)")
+
 # Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
 # through backend/test.sh; included by scripts/pr-preflight --all for backend
 # changes so CI-only ratchets surface before the push, not after it.
