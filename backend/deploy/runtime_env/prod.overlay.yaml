@@ -1709,6 +1709,10 @@ overlay:
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED:
             value: 'true'
             category: rollout
+          # Half the gauge walks; still below the guard's 120-second blind window.
+          BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS:
+            value: '60'
+            category: reliability
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout

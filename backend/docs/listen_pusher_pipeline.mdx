@@ -2449,7 +2449,7 @@ No series carries uid, session or conversation labels.
 
 `LISTEN_LOOP_METRICS_ENABLED` is the kill switch. It is on by default; `false`, `0`, `off` or `no` disables it. It is read when the probe starts, once per session for frame timing and once per VAD gate, so a change takes effect at the next process start.
 
-The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive.
+The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive. `run_listen_session` starts it on each session (idempotent per loop). All four series are on the default registry that listen `/metrics` serves. The label-less lag histogram and VAD counters export zero-valued series from import, so every listen pod running #22397 or later shows `omi_listen_event_loop_lag_seconds_count` before any session. `omi_listen_frame_processing_seconds` has a `codec` label: its child appears, at zero, when a session enters its receive loop, so an idle pod without it is healthy and a zero `_count` does not mean a frame was timed. If `job="backend-listen-metrics"` has no `omi_listen_event_loop_lag_seconds_count`, check the listen deployment's image tag before you suspect the code: Cloud Run `backend` series can appear while listen still runs an older image.
 
 D0b watch: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h after the retune rolls, and before the HPA floor is lowered.
 
@@ -4932,14 +4932,40 @@ Inference updates may change identity fields, but the current manual receipt win
 The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
 only committed IDs drive live updates and `SegmentsDeletedEvent`.
 
+Recording renames join only the exact `(speaker_id_scope, canonical stream_speaker)`
+voice accepted by the existing carry collector. `PATCH /v1/episodes/{episode_id}/assign-speaker`
+fans out to episode members in either direction; `PATCH /v1/conversations/{id}/recording-speakers`
+is available outside episode admission and discovers same-scope conversations within the UID
+when there is no episode, using a bounded `recording_speaker_scopes` array query rather
+than a UID-wide transcript scan; bounded origin/session queries supplement legacy discovery.
+Transcript writes stamp the index before encryption. Complete coverage also requires every
+member's `recording_speaker_scopes_at_creation: true` proof; only absent-document creation
+sets it. Later repairs cannot certify unseen generations. Excluded members or failed saves
+make coverage partial; mobile then names only the available conversations. Budgets of 64
+members, 10,000 lines and 30 scopes fail with 413 before writes; transactions recheck visibility.
+Each member commits its own receipt after whole-request prevalidation and a transactional
+voice fence. The response reports successes and failures per member, so mobile rolls back
+only failed members after a late conflict. Identical recording retries are read-only and
+create no receipt generation or learning job. The default-on
+`RECORDING_SPEAKER_RENAME_ENABLED` switch reports disabled when off; new mobile falls back
+to the old explicit-ID single-conversation assignment routes on disabled or 404. Off also restores
+previous-member rollover carry. `manual_speaker_assignments.voices` stores
+scoped voice defaults with `decided_at`; selected-line decisions remain segment receipts.
+Unscoped rows retain conversation-local behavior, including deterministic legacy segment IDs.
+An encrypted UID-owned scope decision map supplies the latest voice decision at rollover,
+including when that voice is absent from the preceding member. An unavailable or malformed
+map emits fallback telemetry and uses the preceding member's incumbent carry receipt.
+
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
 The processor also reads and applies that receipt to its in-memory transcript
 before building the summary prompt, including when audio-based speaker resolution
-is unavailable. The mobile detail page regenerates an existing summary after
-four seconds without a newly acknowledged speaker edit, or when the detail page
-closes. Saves still in flight keep their conversation ID and regenerate once
+is unavailable. During a mobile labeling pass, Done or detail-page exit schedules
+one summary regeneration after pending saves. The four-second debounce remains
+for callers outside an explicit pass. A new edit supersedes an in-flight summary
+response and leaves one trailing regeneration. The transcript remains visible and
+editable behind a quiet progress indicator. Saves still in flight keep their conversation ID and regenerate once
 after the final successful acknowledgement, even if the detail page was disposed.
 The reprocess response carries `X-Omi-Speaker-Receipt-Summary: 1` only after
 the processor successfully reads and applies the manual receipt (including a
@@ -7603,6 +7629,26 @@ for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
 
 
+### Recovery and admission migration conformance
+
+`tests/integration/test_recovery_admission_conformance.py` runs PL-057/072/086
+through the production scheduler and recovery coordinator on the simulator,
+Firestore emulator and Postgres. Vendor credit/uncertain replies retain the
+original speech and spent intent; a lost result acknowledgment reconciles its
+existing object without another paid call. Refusal waits survive restart,
+preserve explicit policy delays and provider attempts, and allow same-owner
+siblings to progress. Deletion must cancel before paid work or result upload.
+
+The existing emulator-proof runner includes this suite. Local qualification
+requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. The
+simulator/Postgres deletion-cancellation cases are strict expected failures
+linked to [#23761](https://github.com/BasedHardware/omi/issues/23761): the current
+cancellation writer directly uses a Firestore client instead of the Store
+surface. They assert no provider/result-upload calls even on that failure and
+do not satisfy migration acceptance. Physical erasure and the serving privacy
+bridge remain separate gates. All content and external IO in this suite are
+synthetic; it does not qualify real ASR accuracy or vendor transport retries.
+
 ### Paid quarantine recovery request lifetime
 
 Each serving sweep attempts up to `BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE`
@@ -8705,6 +8751,15 @@ Worker handoffs also carry a separate `worker_vad_receipt` with `version: 1`,
 The lease CAS validates its input, duration and agreement with measured seconds
 before storing it. `worker_empty_evidence` retains its existing exact shape.
 
+Migration qualification for these custody/evidence rules is shared across the
+Firestore emulator, Postgres and simulator in
+`tests/integration/test_recovery_custody_conformance.py` (PL-049/050). Run with
+`OMI_REQUIRE_STORE_BACKENDS=all`; a skipped store does not establish parity.
+The suite exercises the real scheduler and recovery coordinator with synthetic
+provider/audio/artifact boundaries. Postgres customer documents use the existing
+harness-only tables; this does not qualify the serving cross-database A4 bridge
+or real ASR quality. The emulator proof runner includes these tests.
+
 ### Manual merge completion observation
 
 Manual merge admission now returns the preallocated, optional
@@ -9041,3 +9096,16 @@ loss. [Details and verification](listen_pusher_pipeline/changes/2026-11-03-recov
 all read-side phase derivation and observation. This telemetry switch never selects
 reader behavior or performs storage IO. Existing verdicts remain authoritative,
 including when shadow computation fails. [Projection rules and measurement limits](listen_pusher_pipeline/changes/2026-11-03-phase-shadow.md).
+
+
+### Closed episode compose cost control
+
+`EPISODE_COMPOSE_SETTLE_ENABLED` defaults on (unset or blank). `off` restores
+full-fingerprint triggering and immediate retries. When enabled, background
+composes wait for 10 quiet minutes, with a 25-minute cap from the first pending
+arrival. Foreground read-side schedules and forced composes bypass this window.
+Only changed retained membership, speech text or resolved person names trigger a
+paid recompose; discard, visible notes drift and explicit regeneration remain
+repair triggers. Summaries and speaker labels remain prompt inputs, and the full
+fingerprint still owns leases and composed-state validation. See the
+[change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).

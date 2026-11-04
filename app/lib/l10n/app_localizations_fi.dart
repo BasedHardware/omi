@@ -14970,5 +14970,42 @@ class AppLocalizationsFi extends AppLocalizations {
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
 
   @override
+  String get speakerWholeRecording => 'Käytä koko tallenteessa';
+
+  @override
+  String get speakerSelectionChanged => 'Puhuja muuttui. Valitse rivit uudelleen.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Tallenne on liian suuri. Valitse vähemmän rivejä yhdestä keskustelusta.',
+        'partial': 'Osa riveistä tallennettiin. Valitse loput ja yritä uudelleen.',
+        'other': 'Osa riveistä tallennettiin. Valitse loput ja yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimetty $count riviä vain saatavilla olevissa keskusteluissa.',
+      one: 'Nimetty 1 riviä vain saatavilla olevissa keskusteluissa.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Tämän äänen muut rivit (tallenteen kattavuus vahvistamatta)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Viimeistellään…';
 }

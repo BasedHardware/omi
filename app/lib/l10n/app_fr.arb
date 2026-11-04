@@ -4558,5 +4558,9 @@
     "liveTranscribedUpTo": "Transcrit jusqu'à {time}",
     "liveAudioSaved": "{duration} enregistrés",
     "liveAudioSavedDetail": "Les intervenants et la transcription finale apparaîtront ici au fil de l'envoi.",
+    "speakerWholeRecording": "Appliquer à tout l’enregistrement",
+    "speakerSelectionChanged": "Le locuteur a changé. Sélectionnez à nouveau les lignes.",
+    "speakerRenameIssue": "{reason, select, limit{L’enregistrement est trop volumineux. Sélectionnez moins de lignes dans une conversation.} partial{Certaines lignes ont été enregistrées. Sélectionnez les autres et réessayez.} other{Certaines lignes ont été enregistrées. Sélectionnez les autres et réessayez.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Autres lignes de cette voix (couverture de l’enregistrement non confirmée)} other{{count, plural, =1{1 lignes renommées dans les conversations disponibles uniquement.} other{{count} lignes renommées dans les conversations disponibles uniquement.}}}}",
     "episodeFinishingUp": "Finalisation…"
 }

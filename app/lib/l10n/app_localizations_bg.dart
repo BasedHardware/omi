@@ -15017,5 +15017,42 @@ class AppLocalizationsBg extends AppLocalizations {
   String get liveAudioSavedDetail => 'Говорителите и окончателната транскрипция ще се появят тук при качването.';
 
   @override
+  String get speakerWholeRecording => 'Прилагане към целия запис';
+
+  @override
+  String get speakerSelectionChanged => 'Говорителят се промени. Изберете редовете отново.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Записът е твърде голям. Изберете по-малко редове в един разговор.',
+        'partial': 'Някои редове са запазени. Изберете останалите и опитайте отново.',
+        'other': 'Някои редове са запазени. Изберете останалите и опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Преименувани са $count реда само в наличните разговори.',
+      one: 'Преименувани са 1 реда само в наличните разговори.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Други редове с този глас (обхватът на записа не е потвърден)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Завършване…';
 }
