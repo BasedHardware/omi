@@ -18,6 +18,7 @@ import { DEV_LOCAL_BRAIN } from '@/devFlags';
 import { useCaptureStore } from '@/state/captureStore';
 import { makeTonePcm, playPcm16Mono8k } from '@/services/omiSpeaker';
 import { tts } from '@/services/tts';
+import { useVoiceAgentStore } from '@/services/voiceAgent';
 import {
   omiBle,
   OMI,
@@ -50,6 +51,7 @@ export default function DevOmiDeviceScreen() {
   const [audioBytes, setAudioBytes] = useState(0);
   const [listening, setListening] = useState(false);
   const capture = useCaptureStore();
+  const agent = useVoiceAgentStore();
 
   const say = useCallback((line: string) => {
     setLog((p) => [line, ...p].slice(0, 14));
@@ -325,6 +327,26 @@ export default function DevOmiDeviceScreen() {
               bg="#2563eb"
               disabled={speakerBusy || !identity}
             />
+          </View>
+
+          <Text style={[styles.label, { color: theme.textSecondary }]}>VOICE AGENT</Text>
+          <Text style={[styles.dim, { color: theme.textSecondary }]}>
+            Double-tap the device button to start talking; double-tap again to send.
+            Reply is spoken on the device when the backend serves ulaw_8000, on the
+            phone otherwise. Long press is power-off - avoid it while testing.
+          </Text>
+          <Text style={[styles.line, { color: theme.text }]}>
+            {agent.status}
+            {agent.lastReply ? ` - last: "${agent.lastReply}"` : ''}
+          </Text>
+          <View style={styles.row}>
+            <Btn
+              label={agent.attached ? 'Listener on' : 'Attach button'}
+              onPress={() => void agent.attach()}
+              bg="#16a34a"
+              disabled={agent.attached || !identity}
+            />
+            <Btn label="Detach" onPress={() => agent.detach()} bg="#444" disabled={!agent.attached} />
           </View>
 
           <Text style={[styles.label, { color: theme.textSecondary }]}>LOG</Text>

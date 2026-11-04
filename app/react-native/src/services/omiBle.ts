@@ -71,6 +71,9 @@ export const OMI = {
   // with response in, pump notify out. CV1 does not expose this characteristic.
   audioSpeaker: '19b10003-e8f2-537e-4f6c-d104768a1214',
 
+  buttonService: '23ba7924-0000-1000-7450-346eac492e92',
+  buttonTrigger: '23ba7925-0000-1000-7450-346eac492e92',
+
   timeSyncService: '19b10030-e8f2-537e-4f6c-d104768a1214',
   timeSyncWrite: '19b10031-e8f2-537e-4f6c-d104768a1214',
 
@@ -131,6 +134,30 @@ export function sttChannels(codec: OmiCodec): 1 | 2 {
   return codec === 'opus' || codec === 'opusFS320' ? 2 : 1;
 }
 
+/**
+ * Tap codes written by button.c's FSM into the first int32 of the notify
+ * payload (the array is int[2]; index 1 is a leftover always 0).
+ * NOTE: 3 = LONG_TAP is wired to power-off on the device - never treat it.
+ */
+export const BUTTON_EVENT = {
+  singleTap: 1,
+  doubleTap: 2,
+  longTap: 3,
+  press: 4,
+  release: 5,
+} as const;
+
+/**
+ * Decode a button-service notify: 8 bytes, int32 LE event code first.
+ * Null for anything shorter - firmware sends the int[2] array in full, so a
+ * truncated read is an ATT glitch, not a real event.
+ */
+export function decodeButtonEvent(bytes: Uint8Array): number | null {
+  if (bytes.length < 4) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return view.getInt32(0, true);
+}
+
 export interface OmiScanResult {
   id: string;
   name: string | null;
@@ -158,6 +185,7 @@ export class OmiBle {
   private batterySub: Subscription | null = null;
   private audioSub: Subscription | null = null;
   private speakerSub: Subscription | null = null;
+  private buttonSub: Subscription | null = null;
 
   /** Lazily constructed: constructing BleManager eagerly at import time reads
    *  native state that is not ready while the module is still autolinking. */
@@ -242,6 +270,7 @@ export class OmiBle {
     await this.stopAudio();
     this.stopBattery();
     this.stopSpeakerNotify();
+    this.stopButton();
     if (this.device) {
       const d = this.device;
       this.device = null;
@@ -451,6 +480,33 @@ export class OmiBle {
   stopSpeakerNotify(): void {
     this.speakerSub?.remove();
     this.speakerSub = null;
+  }
+
+  /**
+   * Subscribes to physical button events (single/double tap -> codes 1/2).
+   * The library writes the CCCD itself, exactly as with audio: the earlier
+   * "manual descriptor write" detour in this file's history applies here too.
+   */
+  onButton(onEvent: (code: number) => void, onError?: (e: unknown) => void): void {
+    const d = this.requireDevice();
+    this.buttonSub = d.monitorCharacteristicForService(
+      OMI.buttonService,
+      OMI.buttonTrigger,
+      (error, chunk) => {
+        if (error) {
+          onError?.(error);
+          return;
+        }
+        if (!chunk || !chunk.value) return;
+        const code = decodeButtonEvent(fromBase64(chunk.value));
+        if (code !== null) onEvent(code);
+      }
+    );
+  }
+
+  stopButton(): void {
+    this.buttonSub?.remove();
+    this.buttonSub = null;
   }
 
   get connectedDeviceId(): string | null {
