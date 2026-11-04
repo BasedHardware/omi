@@ -88,7 +88,8 @@ After the current resolver and speaker-evidence projection, before summary gener
 `BATCH_FINAL_PASS_PERCENT` defaults to 100 and uses the existing transcription-final-pass
 UID hash bucket. This knob is independent of the retiring shadow/legacy-sync flags.
 Persisted `final:batch:` authority reaches it during normal enrichment with either
-sync setting; bounded identity-only retries do not run it. No enrollment is published.
+sync setting; bounded identity-only retries do not run it. Only the retained,
+private recurring profiles described below may be learned after revalidation.
 
 The adapter reads each unit's encrypted, generation-pinned staged audio and result,
 placing that PCM and its words by the job's `capture_at`. It reconstructs exactly the
@@ -103,8 +104,9 @@ label changes. Missing, expired, privacy-fenced or unplaceable units, conflictin
 overlapping capture clocks, and exhausted read budgets leave **all** resolver labels
 unchanged. Mixed-speaker segments and diarizer gap words individually abstain after
 a complete input assembly. Artifact privacy generation and deletion fences apply
-before/after reads; references and expiry are rechecked after inference. No artifact
-is written and no cleanup deadline is extended.
+before/after reads; references and expiry are rechecked after inference. Staged
+audio/results retain their cleanup deadlines; the separate recurring-profile
+write follows successful revalidation as described below.
 
 Ordinary staged audio and results are scheduled for cleanup **24h after successful
 projection**, for both sync settings (`retention.expire_completed_segment`). This is
@@ -144,3 +146,62 @@ GPU-hours/day. This is compute time, excluding any pool floor/idle allocation.
 Rollback with `BATCH_FINAL_PASS_ENABLED=false` (or percent zero); already-published
 labels persist. The lead owns deployment and expansion; this PR changes no runtime
 configuration or capacity.
+
+## Recurring voices (ADR-0008)
+
+After successful whole-pass revalidation, retained Omi-v2 clusters may publish
+private sealed profiles. Unconfirmed profiles identify recurring speech only
+with `recurring_voice_id`; they do not name anyone. Two distinct conversations
+are required. Manual assignment binds to a confirmed person only after current
+print consistency passes .35. No past conversations are rewritten for binding.
+Follow-up: bounded identity-only retro-refresh of contributor conversations after confirmation.
+
+Recurring IDs are revocable pointers: readers drop them when consent or an active
+profile is missing, or after rejection. Opt-out additionally scrubs stored IDs
+in pages of 100, with one transcript per transaction. If cleanup fails, repeat
+the opt-out to retry the idempotent sweep; read-time revocation remains active.
+Processing saves validate consent and active profiles in the transcript write
+transaction, preventing late processing results from undoing the scrub. Profile
+removal deletes the document atomically with its authority-index update.
+Expiry and eviction leave only inert stored pointers until transcript deletion.
+
+Controls: `SPEAKER_RECURRING_VOICES_ENABLED=false` stops new learning, matching
+and recurring suggestions. `SPEAKER_RECURRING_PERCENT` defaults to 100 and uses
+the final-pass UID hash, nested under `BATCH_FINAL_PASS_ENABLED`. Deletion,
+retraction and opt-out cleanup remain active when killed. Rollback: set the kill
+switch false; existing manual assignments remain user authority.
+
+Before release the lead must enable the reviewed TTL policy for
+`speaker_recurring_voices.expires_at` using `backend/scripts/batch_pipeline_ttl.py`
+with `--policy backend/deploy/recurring-voices-retention.json`. Its default plan
+mode is offline; apply requires separate operator authorization. Candidate
+expiry is 30 days and maximum evidence age 90 days. Age checks immediately
+refuse expired evidence; TTL removes sealed documents asynchronously. Profile
+counts are capped at 25 per user, with at most three new candidates per pass.
+
+The rollout lead owns any temporary cohort hold, expansion and before/after
+read. Use stable UID-hash on/off cohorts on the same release and full observation
+windows; export aggregate counters/events with cohort attribution at collection
+time (never put user or voice IDs in Prometheus labels). Read together:
+
+- `omi_final_pass_identity_speech_seconds_total{identity="owner|person|recurring|unnamed"}`:
+  compare each identity's fraction of word-time speech, alongside total exposure.
+- `Speaker Identity Confirmed`: corrected / (accepted + corrected), by cohort;
+  a rising corrected share blocks expansion even if named speech improves.
+- Recurring-origin `omi_speaker_tag_prompts_served_total` and
+  `omi_speaker_tag_prompt_answers_total`: answer/served and accept/reject/skip
+  shares over the same window. Existing identify copy and paid eligibility apply.
+- `omi_conversation_speaker_resolution_voices{stage="resolved"}` and final-pass
+  speaker count: compare distributions per conversation and speech duration.
+- Profile lifecycle events and match outcomes, owner parity delta, final-pass
+  failures and enrichment p95 remain guardrails. More recurring speech alone
+  does not establish precision; a user answer is the confirmation signal.
+
+Current counters contain no cohort dimension. `Batch Speaker Identity Mix`
+records the four word-time totals, speaker count and `recurring_cohort=on|off`
+without transcript text, vectors or voice IDs. Join product events by the
+existing user identity and the same stable UID hash for card/confirmation
+cohorts. Compare equal observation windows; fleet-wide counter totals alone
+cannot prove a cohort effect.
+The lead expands only after these precision checks and retention verification,
+with review by 2026-11-17. No production read, deploy or ramp is part of this PR.

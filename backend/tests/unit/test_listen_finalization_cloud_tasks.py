@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -36,6 +37,9 @@ import services.conversation_finalization as finalization_service
 def test_prod_listen_has_replay_binding_without_enabling_live_admission(monkeypatch):
     backend_root = Path(__file__).resolve().parents[2]
     renderer = runpy.run_path(str(backend_root / 'scripts/render_backend_runtime_env.py'))
+    # Preserve the safe schema and renderer normalization while avoiding Python
+    # YAML tokenization of the large manifest inside the fast-unit CPU budget.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
     manifest = renderer['_load_yaml'](renderer['DEFAULT_MANIFEST'])
     entries = manifest['environments']['prod']['gke']['backend-listen']['env']
     monkeypatch.delenv('LISTEN_FINALIZATION_DISPATCH_MODE', raising=False)

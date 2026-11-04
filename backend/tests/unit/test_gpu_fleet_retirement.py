@@ -150,7 +150,7 @@ def resources(chart, *extra):
     return [item for item in yaml.load_all(result, Loader=yaml.CSafeLoader) if item]
 
 
-@pytest.mark.parametrize('chart', ['parakeet', 'vad', 'diarizer'])
+@pytest.mark.parametrize('chart', ['vad', 'diarizer'])
 def test_maintenance_zero_preserves_every_object_and_model(chart):
     baseline = resources(chart)
     stopped = resources(chart, '--set', 'maintenanceMode=true')
@@ -165,9 +165,9 @@ def test_maintenance_zero_preserves_every_object_and_model(chart):
     assert hpa['spec']['minReplicas'] > 0
 
 
-def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replicas():
+def test_parakeet_guard_is_retired_and_batch_keeps_own_replicas():
     baseline = resources('incluster-guards')
-    assert next(o for o in baseline if o['kind'] == 'CronJob')['spec']['suspend'] is False
+    assert next(o for o in baseline if o['kind'] == 'CronJob')['spec']['suspend'] is True
     guards = resources('incluster-guards', '--set', 'parakeetSuspended=true')
     cron = next(o for o in guards if o['kind'] == 'CronJob' and o['metadata']['name'] == 'prod-omi-incluster-guards')
     assert cron['spec']['suspend'] is True
@@ -191,6 +191,67 @@ def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replica
     batch = [o for o in yaml.load_all(result, Loader=yaml.CSafeLoader) if o]
     assert 'replicas' not in next(o for o in batch if o['kind'] == 'Deployment')['spec']
     assert next(o for o in batch if o['kind'] == 'HorizontalPodAutoscaler')['spec']['minReplicas'] == 1
+
+
+@pytest.mark.parametrize(
+    'extra', [(), ('--set', 'autoscaling.enabled=true,maintenanceMode=false,replicaCount=12,ja.enabled=true')]
+)
+@pytest.mark.parametrize('chart', ['parakeet'])
+def test_prod_streaming_retirement_wins_over_warm_replica_and_autoscaler_settings(extra, chart):
+    objects = resources(chart, *extra)
+    deployments = [o for o in objects if o['kind'] == 'Deployment']
+    assert deployments and all(o['spec']['replicas'] == 0 for o in deployments)
+    assert not any(o['kind'] == 'HorizontalPodAutoscaler' for o in objects)
+    assert not any(o['kind'] == 'Ingress' for o in objects)
+
+
+def test_retired_guard_cannot_write_hpa_or_render_a_floor_even_with_stale_schedule():
+    objects = resources('incluster-guards', '--set', 'floorSchedule.enabled=true')
+    role = next(o for o in objects if o['kind'] == 'Role')
+    hpa_rule = next(r for r in role['rules'] if r['resources'] == ['horizontalpodautoscalers'])
+    assert hpa_rule['verbs'] == ['get']
+    script = next(o for o in objects if o['kind'] == 'ConfigMap' and o['metadata']['name'].endswith('-script'))
+    assert 'floors.json' not in script['data']
+
+
+@pytest.mark.parametrize('chart', ['parakeet'])
+def test_bare_chart_defaults_cannot_restore_gpu_capacity(chart):
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-' + chart,
+            str(ROOT / 'backend/charts' / chart),
+            '--set',
+            'image.tag=test,autoscaling.enabled=true,replicaCount=12,ingress.enabled=true,ja.enabled=true',
+        ],
+        text=True,
+    )
+    objects = [o for o in yaml.safe_load_all(output) if o]
+    assert all(o['spec']['replicas'] == 0 for o in objects if o['kind'] == 'Deployment')
+    assert not any(o['kind'] in ('HorizontalPodAutoscaler', 'Ingress') for o in objects)
+
+
+def test_cpu_language_id_release_remains_independent_and_scalable():
+    path = ROOT / 'backend/charts/parakeet'
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-parakeet-lid',
+            str(path),
+            '-f',
+            str(path / 'prod_omi_parakeet_lid_values.yaml'),
+            '--set-string',
+            'image.tag=test',
+        ],
+        text=True,
+    )
+    objects = [o for o in yaml.safe_load_all(output) if o]
+    deployment = next(o for o in objects if o['kind'] == 'Deployment')
+    assert 'replicas' not in deployment['spec']
+    assert 'nvidia.com/gpu' not in deployment['spec']['template']['spec']['containers'][0]['resources']['requests']
+    assert next(o for o in objects if o['kind'] == 'HorizontalPodAutoscaler')['spec']['minReplicas'] == 4
 
 
 def test_retirement_is_declared_on_every_prod_routing_runtime_only():

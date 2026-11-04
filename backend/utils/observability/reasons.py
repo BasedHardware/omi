@@ -72,6 +72,7 @@ class ReasonFamily(StrEnum):
     VENDOR_ROUTE = 'vendor_route'
     DELIVERY = 'delivery'
     BATCH_FINAL_PASS = 'batch_final_pass'
+    RECURRING_VOICE = 'recurring_voice'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -725,3 +726,32 @@ def reason_label(family: ReasonFamily, value: object, enum: type[StrEnum]) -> st
     except Exception:
         pass
     return result
+
+
+class RecurringProfileOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    CREATED = 'created'
+    PROMOTED = 'promoted'
+    REFRESHED = 'refreshed'
+    BOUND = 'bound'
+    REJECTED = 'rejected'
+    EXPIRED = 'expired'
+    EVICTED_CAP = 'evicted_cap'
+
+
+class RecurringMatchOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    MATCHED = 'matched'
+    NEW_CANDIDATE = 'new_candidate'
+    ABSTAINED_MARGIN = 'abstained_margin'
+    OWNER_EXCLUDED = 'owner_excluded'
+    NO_OWNER_PRINT = 'no_owner_print'
+    CAP = 'cap'
+
+
+class IdentitySpeechOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OWNER = 'owner'
+    PERSON = 'person'
+    RECURRING = 'recurring'
+    UNNAMED = 'unnamed'

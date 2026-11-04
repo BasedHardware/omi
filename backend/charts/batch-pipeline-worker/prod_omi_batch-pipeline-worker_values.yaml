@@ -45,6 +45,8 @@ tolerations:
 # untouched. All three pools are on-demand g2-standard-8 + L4 with only the
 # nvidia.com/gpu taint. Kill switch: enabled false (removes -borrow and its HPA).
 borrowedNodePools:
+  # Streaming fleet retired (2026-11-04): enabling these pools now requires
+  # a new lead/principal ruling; never resume old streaming GPU spend.
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:

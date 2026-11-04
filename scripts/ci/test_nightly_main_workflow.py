@@ -44,8 +44,16 @@ INTENTIONAL_BUDGET_CHANGES = {
     # 25m holds 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
     # 198s for cache save and post-actions (test_nightly_main_native_audio.py).
     # The test regression gate and warm-path walls stay unchanged, so
-    # budget_p50 stays 8.
+    # The eight-shard rebalance keeps 720s and scales the p50 forecast to 6.
     ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
+    # 2026-11-03 checkout stalls (run 41672443108): a trickling depth-one
+    # fetch exceeded 300s without tripping Git's low-speed retry. Increase the
+    # four test jobs' checkout caps 5->10 minutes and preserve test headroom
+    # with exactly five extra job minutes; unit shard hang caps stay at 25.
+    ("backend-hermetic-e2e.yml", "hermetic-e2e", "timeout-minutes"): "20",
+    ("backend-hermetic-e2e.yml", "listen-pusher-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "sync-cloud-tasks-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "replay-harness-phase0a-gauntlet", "timeout-minutes"): "25",
 }
 
 

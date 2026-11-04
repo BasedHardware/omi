@@ -1,6 +1,8 @@
 # Independent release: prod-omi-parakeet-lid. Use chart defaults + this file only,
 # never the streaming prod values or prod_omi_parakeet_off_values.yaml.
 fullnameOverride: prod-omi-parakeet-lid
+# CPU-only language ID is independent of the retired streaming GPU release.
+fleetRetired: false
 image:
   repository: gcr.io/based-hardware/parakeet
   tag: "" # Rollout lead supplies the image built from this change.
