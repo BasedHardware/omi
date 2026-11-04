@@ -21,6 +21,7 @@ install_loopback_tasks_client()
 from database import recording_sessions  # noqa: E402
 from main import app  # noqa: E402
 from routers.listen.conversations import LiveConversationController  # noqa: E402
+from testing.lifecycle_sim.listener_faults import install_boundary_fault  # noqa: E402
 
 RECORDING_LIFECYCLE_FAULT_ENV = 'OMI_STACK_RECORDING_LIFECYCLE_FAULT'
 _RECORDING_LIFECYCLE_FAULT_KEYS = frozenset({'uid', 'recording_session_id', 'conversation_id', 'phase'})
@@ -41,6 +42,9 @@ def _install_recording_lifecycle_fault() -> None:
         )
     if not all(isinstance(selector[key], str) and selector[key] for key in _RECORDING_LIFECYCLE_FAULT_KEYS):
         raise RuntimeError(f'{RECORDING_LIFECYCLE_FAULT_ENV} values must be non-empty strings')
+    if selector['phase'] in {'seal', 'register', 'admit'}:
+        install_boundary_fault(selector)
+        return
     if selector['phase'] not in {'in_progress', 'processing', 'completed', 'failed', 'discarded'}:
         raise RuntimeError(f'{RECORDING_LIFECYCLE_FAULT_ENV} phase is unsupported')
 
