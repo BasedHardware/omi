@@ -85,6 +85,12 @@ run_proof "enrichment recovery conformance (PL-342/397/398)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
+# Daily architecture parity: require both local CI backends rather than letting
+# a missing emulator look green. Local/staging runs require all three stores.
+run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_recovery_admission_conformance.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
