@@ -4535,5 +4535,13 @@
     "referralClaim": "Võta preemia",
     "referralClaimed": "{months} Pro-kuud võetud",
     "referralRewardPending": "Preemia säilib tasulise tellimuse lõpuni.",
-    "referralCampaignTitle": "Soovita Omit. Saa Pro tasuta."
+    "referralCampaignTitle": "Soovita Omit. Saa Pro tasuta.",
+    "referralCampaignSubtitle": "Neile 10% allahindlust Omile. Sulle kuni 5 kuud Pro.",
+    "referralShareInvite": "Jaga kutset",
+    "referralYourRewards": "Sinu preemiad",
+    "referralRewardFirstTitle": "2 kuud Pro",
+    "referralRewardFirstDetail": "Kui 2 sõpra ostavad Omi",
+    "referralRewardSecondTitle": "Veel 3 kuud",
+    "referralRewardSecondDetail": "Kui veel 3 sõpra ostavad",
+    "referralClaimShort": "Lunasta"
 }

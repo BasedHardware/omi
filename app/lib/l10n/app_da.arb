@@ -4577,5 +4577,13 @@
     "referralClaim": "Hent belønning",
     "referralClaimed": "{months} Pro-måneder hentet",
     "referralRewardPending": "Din belønning gemmes til dit betalte abonnement slutter.",
-    "referralCampaignTitle": "Anbefal Omi. Få gratis Pro."
+    "referralCampaignTitle": "Anbefal Omi. Få gratis Pro.",
+    "referralCampaignSubtitle": "10% rabat på Omi til dem. Op til 5 måneders Pro til dig.",
+    "referralShareInvite": "Del invitation",
+    "referralYourRewards": "Dine belønninger",
+    "referralRewardFirstTitle": "2 måneders Pro",
+    "referralRewardFirstDetail": "Når 2 venner køber Omi",
+    "referralRewardSecondTitle": "3 måneder mere",
+    "referralRewardSecondDetail": "Når 3 venner mere køber",
+    "referralClaimShort": "Indløs"
 }

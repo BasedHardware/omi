@@ -4535,5 +4535,13 @@
     "referralClaim": "Вземи наградата",
     "referralClaimed": "Получени {months} месеца Pro",
     "referralRewardPending": "Наградата се запазва до края на платения абонамент.",
-    "referralCampaignTitle": "Препоръчайте Omi. Получете Pro безплатно."
+    "referralCampaignTitle": "Препоръчайте Omi. Получете Pro безплатно.",
+    "referralCampaignSubtitle": "10% отстъпка от Omi за тях. До 5 месеца Pro за теб.",
+    "referralShareInvite": "Сподели покана",
+    "referralYourRewards": "Твоите награди",
+    "referralRewardFirstTitle": "2 месеца Pro",
+    "referralRewardFirstDetail": "Когато 2 приятели купят Omi",
+    "referralRewardSecondTitle": "Още 3 месеца",
+    "referralRewardSecondDetail": "Когато още 3 приятели купят",
+    "referralClaimShort": "Вземи"
 }

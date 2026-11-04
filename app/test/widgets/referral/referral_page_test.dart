@@ -14,7 +14,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 const legacyLink = 'https://omi.me/r/ref1.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const link = 'https://omi.me/r/ref2.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const otherLink = 'https://omi.me/r/ref2.b3RoZXI.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const otherLink = 'https://omi.me/r/ref2.b3RoZXI.BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 ReferralCampaign campaign({int purchases = 0, int claimed = 0, int claimable = 0, String url = link}) =>
     ReferralCampaign.fromJson({
       'campaign_id': 'omi_pocket_match_v1',
@@ -175,10 +175,11 @@ void main() {
         accountChanges: const Stream.empty(),
         createSession: () => ReferralLinkSession(isCurrent: () => true, load: () async => snapshot))));
     await tester.pumpAndSettle();
-    expect(find.text('3 months of Pro · 5/5 purchases'), findsOneWidget);
+    expect(find.byKey(const Key('referral-reward-5-earned')), findsOneWidget);
+    expect(find.text('3/3'), findsNothing);
     expect(find.byKey(const Key('referral-claim')), findsOneWidget);
     expect(snapshot.qualifiedPurchases, 4);
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('claim uses server result, duplicates do not add months, reentry persists', (tester) async {
     var stored = campaign(purchases: 2, claimable: 2);
@@ -199,15 +200,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(claims, 1);
     expect(find.byKey(const Key('referral-claim')), findsNothing);
-    expect(find.text('2 Pro months claimed'), findsOneWidget);
+    expect(find.text('2/2'), findsOneWidget);
     for (var i = 0; i < 3; i++) {
       await tester.pumpWidget(host(const SizedBox()));
       await tester.pumpWidget(host(page()));
       await tester.pumpAndSettle();
-      expect(find.text('2 Pro months claimed'), findsOneWidget);
+      expect(find.byKey(const Key('referral-reward-2-earned')), findsOneWidget);
+      expect(find.byKey(const Key('referral-claim')), findsNothing);
       expect(claims, 1);
     }
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('claim failure retains progress and retry accepts only server totals', (tester) async {
     var attempts = 0;
@@ -227,14 +229,14 @@ void main() {
       await tester.tap(find.byKey(const Key('referral-claim')));
       await tester.pumpAndSettle();
       if (i == 0) {
-        expect(find.text('2 Pro months claimed'), findsOneWidget);
+        expect(find.byKey(const Key('referral-claim')), findsOneWidget);
         await tester.pump(const Duration(seconds: 9));
       }
     }
-    expect(find.text('5 Pro months claimed'), findsOneWidget);
+    expect(find.byKey(const Key('referral-reward-5-earned')), findsOneWidget);
     expect(find.byKey(const Key('referral-claim')), findsNothing);
     expect(attempts, 2);
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('late claim cannot expose prior account rewards', (tester) async {
     final changes = StreamController<void>.broadcast(sync: true);
@@ -258,11 +260,11 @@ void main() {
     await tester.pump();
     pending.complete(campaign(purchases: 2, claimed: 2));
     await tester.pumpAndSettle();
-    expect(find.text('2 Pro months claimed'), findsNothing);
-    expect(find.text('2 months of Pro · 0/2 purchases'), findsOneWidget);
+    expect(find.byKey(const Key('referral-reward-2-earned')), findsNothing);
+    expect(find.text('0/2'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await changes.close();
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('async disabled campaign keeps browser fallback across three resumes', (tester) async {
     var launches = 0;
@@ -309,7 +311,45 @@ void main() {
     await tester.tap(find.byKey(const Key('referral-open-browser')));
     await tester.pumpAndSettle();
     expect(launches, 2);
-  }, skip: !mobileReferralCampaignEnabled);
+  });
+
+  testWidgets('old backend 404 or error shows the affiliate page and resumes never reopen it', (tester) async {
+    var launches = 0;
+    const browserChannel = MethodChannel('plugins.flutter.io/url_launcher');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(browserChannel, (call) async {
+      expect((call.arguments as Map)['url'], 'https://affiliate.omi.me/');
+      launches++;
+      return true;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(browserChannel, null));
+    var loads = 0;
+    await tester.pumpWidget(host(ReferralPage(
+        accountChanges: const Stream.empty(),
+        createSession: () => ReferralLinkSession(
+            isCurrent: () => true,
+            load: () async {
+              loads++;
+              throw StateError('Referral campaign unavailable'); // getReferralCampaign on HTTP 404
+            }))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('referral-open-browser')), findsOneWidget);
+    expect(launches, 1);
+    for (var i = 0; i < 3; i++) {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(loads, 1);
+      expect(launches, 1);
+      for (final key in ['referral-share', 'referral-copy', 'referral-claim']) {
+        expect(find.byKey(Key(key)), findsNothing);
+      }
+    }
+  });
+
+  test('short link shows host and path without the signed token', () {
+    expect(referralShortLink(link), 'omi.me/r/…AAAAAA');
+    expect(referralShortLink(link).length, lessThan(20));
+  });
 
   testWidgets('default gate never creates a referral session', (tester) async {
     var calls = 0;
@@ -347,10 +387,17 @@ void main() {
             shares++;
           },
         );
+    const browserChannel = MethodChannel('plugins.flutter.io/url_launcher');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(browserChannel, (call) async => true);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(browserChannel, null));
     await tester.pumpWidget(host(page()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Try Again'));
+    expect(find.byKey(const Key('referral-open-browser')), findsOneWidget);
+    await tester.pumpWidget(host(const SizedBox()));
+    await tester.pumpWidget(host(page()));
     await tester.pumpAndSettle();
+    expect(find.text(referralShortLink(link)), findsOneWidget);
+    expect(find.text(link), findsNothing);
     for (var i = 0; i < 3; i++) {
       await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-copy'))), alignment: 0.5);
       await tester.pumpAndSettle();
@@ -367,10 +414,10 @@ void main() {
       await tester.pumpWidget(host(const SizedBox()));
       await tester.pumpWidget(host(page()));
       await tester.pumpAndSettle();
-      expect(find.text(link), findsOneWidget);
+      expect(find.text(referralShortLink(link)), findsOneWidget);
     }
     expect(loads, 5);
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('share failure recovers and large text remains scrollable', (tester) async {
     var attempts = 0;
@@ -403,7 +450,7 @@ void main() {
     expect(attempts, 2);
     await tester.scrollUntilVisible(find.byKey(const Key('referral-affiliate')), 200);
     expect(tester.takeException(), isNull);
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('real synchronous auth broadcast invalidates before settled gateway reload', (tester) async {
     final gateway = _ReferralGateway();
@@ -426,13 +473,13 @@ void main() {
     auth.handleAuthUserChanged(null);
     gateway.user = null;
     await tester.pumpAndSettle();
-    expect(find.text(link), findsNothing);
+    expect(find.text(referralShortLink(link)), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     auth.markAuthenticatedUser('user-b');
     await tester.pump();
     expect(tester.takeException(), isNull);
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 
   testWidgets('late account A result cannot replace account B link', (tester) async {
     final changes = StreamController<void>.broadcast(sync: true);
@@ -452,11 +499,11 @@ void main() {
     await tester.pumpAndSettle();
     old.complete(campaign());
     await tester.pumpAndSettle();
-    expect(find.text(link), findsNothing);
-    expect(find.text(otherLink), findsOneWidget);
+    expect(find.text(referralShortLink(link)), findsNothing);
+    expect(find.text(referralShortLink(otherLink)), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await changes.close();
-  }, skip: !mobileReferralCampaignEnabled);
+  });
 }
 
 final class _ReferralGateway implements AuthTokenGateway {

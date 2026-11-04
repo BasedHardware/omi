@@ -4535,5 +4535,13 @@
     "referralClaim": "Riscatta premio",
     "referralClaimed": "{months} mesi di Pro riscattati",
     "referralRewardPending": "Il premio è conservato fino alla fine del tuo abbonamento a pagamento.",
-    "referralCampaignTitle": "Consiglia Omi. Ottieni Pro gratis."
+    "referralCampaignTitle": "Consiglia Omi. Ottieni Pro gratis.",
+    "referralCampaignSubtitle": "Il 10% di sconto su Omi per loro. Fino a 5 mesi di Pro per te.",
+    "referralShareInvite": "Condividi invito",
+    "referralYourRewards": "I tuoi premi",
+    "referralRewardFirstTitle": "2 mesi di Pro",
+    "referralRewardFirstDetail": "Quando 2 amici acquistano Omi",
+    "referralRewardSecondTitle": "Altri 3 mesi",
+    "referralRewardSecondDetail": "Quando altri 3 amici acquistano",
+    "referralClaimShort": "Riscatta"
 }

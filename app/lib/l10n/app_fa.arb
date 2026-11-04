@@ -11961,5 +11961,13 @@
     "referralClaim": "دریافت پاداش",
     "referralClaimed": "{months} ماه Pro دریافت شد",
     "referralRewardPending": "پاداش تا پایان اشتراک پولی شما ذخیره می‌شود.",
-    "referralCampaignTitle": "Omi را معرفی کنید. Pro رایگان بگیرید."
+    "referralCampaignTitle": "Omi را معرفی کنید. Pro رایگان بگیرید.",
+    "referralCampaignSubtitle": "۱۰٪ تخفیف Omi برای آن‌ها. تا ۵ ماه Pro برای شما.",
+    "referralShareInvite": "اشتراک‌گذاری دعوت",
+    "referralYourRewards": "پاداش‌های شما",
+    "referralRewardFirstTitle": "۲ ماه Pro",
+    "referralRewardFirstDetail": "وقتی ۲ دوست Omi بخرند",
+    "referralRewardSecondTitle": "۳ ماه دیگر",
+    "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
+    "referralClaimShort": "دریافت"
 }

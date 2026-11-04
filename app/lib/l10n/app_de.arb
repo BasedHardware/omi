@@ -4535,5 +4535,13 @@
     "referralClaim": "Prämie einlösen",
     "referralClaimed": "{months} Pro-Monate eingelöst",
     "referralRewardPending": "Deine Prämie bleibt bis zum Ende deines bezahlten Abos gespeichert.",
-    "referralCampaignTitle": "Empfiehl Omi. Erhalte Pro kostenlos."
+    "referralCampaignTitle": "Empfiehl Omi. Erhalte Pro kostenlos.",
+    "referralCampaignSubtitle": "10 % Rabatt auf Omi für sie. Bis zu 5 Monate Pro für dich.",
+    "referralShareInvite": "Einladung teilen",
+    "referralYourRewards": "Deine Prämien",
+    "referralRewardFirstTitle": "2 Monate Pro",
+    "referralRewardFirstDetail": "Wenn 2 Freunde Omi kaufen",
+    "referralRewardSecondTitle": "3 weitere Monate",
+    "referralRewardSecondDetail": "Wenn 3 weitere Freunde kaufen",
+    "referralClaimShort": "Einlösen"
 }

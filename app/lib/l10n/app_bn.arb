@@ -11961,5 +11961,13 @@
     "referralClaim": "পুরস্কার নিন",
     "referralClaimed": "{months} মাস Pro নেওয়া হয়েছে",
     "referralRewardPending": "পেইড সাবস্ক্রিপশন শেষ হওয়া পর্যন্ত পুরস্কার সংরক্ষিত থাকবে।",
-    "referralCampaignTitle": "Omi সুপারিশ করুন। বিনামূল্যে Pro পান।"
+    "referralCampaignTitle": "Omi সুপারিশ করুন। বিনামূল্যে Pro পান।",
+    "referralCampaignSubtitle": "তাদের জন্য Omi-তে 10% ছাড়। আপনার জন্য 5 মাস পর্যন্ত Pro।",
+    "referralShareInvite": "আমন্ত্রণ শেয়ার করুন",
+    "referralYourRewards": "আপনার পুরস্কার",
+    "referralRewardFirstTitle": "2 মাসের Pro",
+    "referralRewardFirstDetail": "যখন 2 জন বন্ধু Omi কিনবে",
+    "referralRewardSecondTitle": "আরও 3 মাস",
+    "referralRewardSecondDetail": "যখন আরও 3 জন বন্ধু কিনবে",
+    "referralClaimShort": "নিন"
 }

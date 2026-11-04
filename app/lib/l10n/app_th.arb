@@ -4535,5 +4535,13 @@
     "referralClaim": "รับรางวัล",
     "referralClaimed": "รับ Pro แล้ว {months} เดือน",
     "referralRewardPending": "รางวัลจะเก็บไว้จนกว่าการสมัครแบบชำระเงินจะสิ้นสุด",
-    "referralCampaignTitle": "แนะนำ Omi รับ Pro ฟรี"
+    "referralCampaignTitle": "แนะนำ Omi รับ Pro ฟรี",
+    "referralCampaignSubtitle": "เพื่อนได้ส่วนลด Omi 10% คุณได้ Pro สูงสุด 5 เดือน",
+    "referralShareInvite": "แชร์คำเชิญ",
+    "referralYourRewards": "รางวัลของคุณ",
+    "referralRewardFirstTitle": "Pro 2 เดือน",
+    "referralRewardFirstDetail": "เมื่อเพื่อน 2 คนซื้อ Omi",
+    "referralRewardSecondTitle": "อีก 3 เดือน",
+    "referralRewardSecondDetail": "เมื่อเพื่อนอีก 3 คนซื้อ",
+    "referralClaimShort": "รับ"
 }

@@ -4535,5 +4535,13 @@
     "referralClaim": "Nhận thưởng",
     "referralClaimed": "Đã nhận {months} tháng Pro",
     "referralRewardPending": "Phần thưởng được giữ đến khi gói trả phí kết thúc.",
-    "referralCampaignTitle": "Giới thiệu Omi. Nhận Pro miễn phí."
+    "referralCampaignTitle": "Giới thiệu Omi. Nhận Pro miễn phí.",
+    "referralCampaignSubtitle": "Họ được giảm 10% khi mua Omi. Bạn nhận tối đa 5 tháng Pro.",
+    "referralShareInvite": "Chia sẻ lời mời",
+    "referralYourRewards": "Phần thưởng của bạn",
+    "referralRewardFirstTitle": "2 tháng Pro",
+    "referralRewardFirstDetail": "Khi 2 bạn bè mua Omi",
+    "referralRewardSecondTitle": "Thêm 3 tháng",
+    "referralRewardSecondDetail": "Khi thêm 3 bạn bè mua",
+    "referralClaimShort": "Nhận"
 }

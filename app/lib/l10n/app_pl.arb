@@ -4570,5 +4570,13 @@
     "referralClaim": "Odbierz nagrodę",
     "referralClaimed": "Odebrano {months} mies. Pro",
     "referralRewardPending": "Nagroda jest zachowana do końca płatnej subskrypcji.",
-    "referralCampaignTitle": "Poleć Omi. Otrzymaj Pro za darmo."
+    "referralCampaignTitle": "Poleć Omi. Otrzymaj Pro za darmo.",
+    "referralCampaignSubtitle": "Dla nich 10% zniżki na Omi. Dla ciebie do 5 miesięcy Pro.",
+    "referralShareInvite": "Udostępnij zaproszenie",
+    "referralYourRewards": "Twoje nagrody",
+    "referralRewardFirstTitle": "2 miesiące Pro",
+    "referralRewardFirstDetail": "Gdy 2 znajomych kupi Omi",
+    "referralRewardSecondTitle": "Kolejne 3 miesiące",
+    "referralRewardSecondDetail": "Gdy kupi 3 kolejnych znajomych",
+    "referralClaimShort": "Odbierz"
 }

@@ -4535,5 +4535,13 @@
     "referralClaim": "Vyzdvihnúť odmenu",
     "referralClaimed": "Vyzdvihnutých {months} mesiacov Pro",
     "referralRewardPending": "Odmena sa uchová do konca plateného predplatného.",
-    "referralCampaignTitle": "Odporučte Omi. Získajte Pro zadarmo."
+    "referralCampaignTitle": "Odporučte Omi. Získajte Pro zadarmo.",
+    "referralCampaignSubtitle": "Pre nich 10% zľava na Omi. Pre teba až 5 mesiacov Pro.",
+    "referralShareInvite": "Zdieľať pozvánku",
+    "referralYourRewards": "Tvoje odmeny",
+    "referralRewardFirstTitle": "2 mesiace Pro",
+    "referralRewardFirstDetail": "Keď si 2 priatelia kúpia Omi",
+    "referralRewardSecondTitle": "Ďalšie 3 mesiace",
+    "referralRewardSecondDetail": "Keď si kúpia ďalší 3 priatelia",
+    "referralClaimShort": "Získať"
 }

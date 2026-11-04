@@ -11961,5 +11961,13 @@
     "referralClaim": "קבלת פרס",
     "referralClaimed": "התקבלו {months} חודשי Pro",
     "referralRewardPending": "הפרס נשמר עד לסיום המנוי בתשלום.",
-    "referralCampaignTitle": "המליצו על Omi. קבלו Pro בחינם."
+    "referralCampaignTitle": "המליצו על Omi. קבלו Pro בחינם.",
+    "referralCampaignSubtitle": "10% הנחה על Omi בשבילם. עד 5 חודשי Pro בשבילך.",
+    "referralShareInvite": "שיתוף הזמנה",
+    "referralYourRewards": "התגמולים שלך",
+    "referralRewardFirstTitle": "חודשיים של Pro",
+    "referralRewardFirstDetail": "כש-2 חברים קונים Omi",
+    "referralRewardSecondTitle": "עוד 3 חודשים",
+    "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
+    "referralClaimShort": "קבלה"
 }

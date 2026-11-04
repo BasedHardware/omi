@@ -4535,5 +4535,13 @@
     "referralClaim": "Saņemt balvu",
     "referralClaimed": "Saņemti {months} Pro mēneši",
     "referralRewardPending": "Balva tiek glabāta līdz maksas abonementa beigām.",
-    "referralCampaignTitle": "Iesakiet Omi. Saņemiet Pro bez maksas."
+    "referralCampaignTitle": "Iesakiet Omi. Saņemiet Pro bez maksas.",
+    "referralCampaignSubtitle": "Viņiem 10% atlaide Omi. Tev līdz 5 mēnešiem Pro.",
+    "referralShareInvite": "Kopīgot ielūgumu",
+    "referralYourRewards": "Tavas balvas",
+    "referralRewardFirstTitle": "2 mēneši Pro",
+    "referralRewardFirstDetail": "Kad 2 draugi nopērk Omi",
+    "referralRewardSecondTitle": "Vēl 3 mēneši",
+    "referralRewardSecondDetail": "Kad vēl 3 draugi nopērk",
+    "referralClaimShort": "Saņemt"
 }

@@ -36,6 +36,13 @@ ReferralLinkSession _authenticatedSession() {
   );
 }
 
+/// Host + path with the signed token shortened; copy and share always use the full link.
+String referralShortLink(String url) {
+  final uri = Uri.parse(url);
+  final code = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+  return code.length <= 8 ? '${uri.host}${uri.path}' : '${uri.host}/r/…${code.substring(code.length - 6)}';
+}
+
 class ReferralPage extends StatefulWidget {
   const ReferralPage({super.key, this.createSession, this.accountChanges, this.shareLink});
   final ReferralLinkSession Function()? createSession;
@@ -52,6 +59,8 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
   ReferralCampaign? _campaign;
   String? get _link => _campaign?.referralUrl;
   bool _loading = true;
+  // An unreachable or old backend keeps the affiliate page; resumes must not reopen its browser.
+  bool _fallback = false;
   bool _busy = false;
   int _request = 0;
 
@@ -72,6 +81,7 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     setState(() {
       _session = null;
       _busy = false;
+      _fallback = false;
       _campaign = null;
       _loading = true;
     });
@@ -86,6 +96,7 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed &&
         !_busy &&
+        !_fallback &&
         (_campaign?.enabled != false || _session?.isCurrent() != true)) {
       unawaited(_load());
     }
@@ -105,7 +116,8 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
       if (!session.isCurrent()) throw StateError('Account changed');
       setState(() => _campaign = link);
     } catch (_) {
-      // Errors stay on this page with an explicit retry. Never reuse a stale link.
+      // Errors and old backends (404) fall back to the affiliate page. Never reuse a stale link.
+      if (mounted && request == _request) _fallback = true;
     } finally {
       if (mounted && request == _request) setState(() => _loading = false);
     }
@@ -168,18 +180,51 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     }
   }
 
-  Widget _milestone(int target, int months) {
-    final count = _campaign!.milestoneProgress.clamp(0, target);
+  Widget _rewardRow({required int start, required int need, required String title, required String detail}) {
+    final campaign = _campaign!;
+    final count = (campaign.milestoneProgress - start).clamp(0, need);
+    final cumulative = start == 0 ? 2 : 5;
+    final earned = count >= need || campaign.claimedMonths >= cumulative;
+    // One claim takes every claimable month, so the pill sits on the first unclaimed earned row.
+    final claimable = campaign.enabled &&
+        campaign.claimableMonths > 0 &&
+        earned &&
+        campaign.claimedMonths < cumulative &&
+        (start == 0 || campaign.claimedMonths >= 2);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(context.l10n.referralMilestone(months, count, target), style: OmiType.callout),
-        const SizedBox(height: OmiSpacing.sm),
-        LinearProgressIndicator(
-            value: count / target,
-            color: OmiColors.accent,
-            backgroundColor: OmiColors.surface3,
-            semanticsLabel: context.l10n.referralMilestone(months, count, target)),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      child: Row(children: [
+        Container(
+          key: Key('referral-reward-${start + need}${earned ? '-earned' : ''}'),
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: earned ? OmiColors.accent : null,
+            border: Border.all(color: earned ? OmiColors.accent : OmiColors.surface3, width: 2),
+          ),
+          child: earned ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
+        ),
+        const SizedBox(width: OmiSpacing.sm),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(detail, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+          ]),
+        ),
+        const SizedBox(width: OmiSpacing.xs),
+        if (claimable)
+          OmiButton(
+              key: const Key('referral-claim'),
+              label: context.l10n.referralClaimShort,
+              size: OmiButtonSize.compact,
+              isLoading: _busy,
+              onPressed: _busy ? null : _claim)
+        else
+          Text('$count/$need',
+              style: OmiType.subhead
+                  .copyWith(color: OmiColors.textTertiary, fontFeatures: const [FontFeature.tabularFigures()])),
       ]),
     );
   }
@@ -201,72 +246,96 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    if (!mobileReferralCampaignEnabled || _campaign?.enabled == false) return _affiliate(context);
     final l10n = context.l10n;
+    if (!mobileReferralCampaignEnabled || (!_loading && _campaign?.enabled != true)) return _affiliate(context);
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.referralProgram)),
+        body: const Center(child: OmiSpinner()),
+      );
+    }
+    final campaign = _campaign!;
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.referralProgram)),
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+          leading: const OmiBackButton(), title: Text(l10n.referralProgram), backgroundColor: OmiColors.surface0),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xl),
           children: [
-            const SizedBox(height: 16),
-            const Icon(Icons.card_giftcard, size: 44),
-            const SizedBox(height: 20),
-            Text(l10n.referralCampaignTitle, textAlign: TextAlign.center, style: OmiType.title1),
-            const SizedBox(height: 24),
-            Text(l10n.referralCampaignTerms,
-                style: OmiType.callout.copyWith(height: 1.6, color: OmiColors.textSecondary)),
-            const SizedBox(height: 24),
-            if (_loading)
-              const Center(child: OmiSpinner())
-            else if (_campaign == null)
-              OmiErrorState(message: l10n.somethingWentWrong, onRetry: _load)
-            else ...[
-              _milestone(2, 2),
-              _milestone(5, 3),
-              if (_campaign!.claimableMonths > 0)
-                OmiButton(
-                    key: const Key('referral-claim'),
-                    label: l10n.referralClaim,
-                    isLoading: _busy,
-                    onPressed: _busy ? null : _claim,
-                    expand: true),
-              if (_campaign!.claimedMonths > 0)
-                Text(l10n.referralClaimed(_campaign!.claimedMonths),
-                    key: const Key('referral-claimed'), style: OmiType.callout),
-              if (_campaign!.rewardStatus == 'pending_paid_subscription')
-                Text(l10n.referralRewardPending, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-              const SizedBox(height: OmiSpacing.md),
-              Text(_link!,
-                  key: const Key('referral-link'),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: OmiColors.textSecondary)),
-              const SizedBox(height: 16),
-              Builder(
-                  builder: (anchor) => OmiButton(
-                        key: const Key('referral-share'),
-                        label: l10n.share,
-                        icon: Icons.ios_share,
-                        onPressed: _busy ? null : () => _useLink(share: true, anchor: anchor),
-                        expand: true,
-                      )),
-              Builder(
-                  builder: (anchor) => OmiButton.tertiary(
-                        key: const Key('referral-copy'),
-                        label: l10n.copyLink,
-                        onPressed: _busy ? null : () => _useLink(share: false, anchor: anchor),
-                        expand: true,
-                      )),
+            Center(
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+                child: Icon(Icons.card_giftcard_outlined, size: 52, color: OmiColors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: OmiSpacing.lg),
+            Text(l10n.referralCampaignTitle.replaceFirst('. ', '.\n'),
+                textAlign: TextAlign.center, style: OmiType.title1.copyWith(height: 1.15)),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(l10n.referralCampaignSubtitle.replaceFirst('. ', '.\n'),
+                textAlign: TextAlign.center,
+                style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+            const SizedBox(height: OmiSpacing.xl),
+            Container(
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.xxs, OmiSpacing.xxs),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              child: Row(children: [
+                Expanded(
+                  child: Text(referralShortLink(_link!),
+                      key: const Key('referral-link'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                ),
+                Builder(
+                    builder: (anchor) => OmiButton.secondary(
+                          key: const Key('referral-copy'),
+                          label: l10n.copy,
+                          size: OmiButtonSize.compact,
+                          onPressed: _busy ? null : () => _useLink(share: false, anchor: anchor),
+                        )),
+              ]),
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+            Builder(
+                builder: (anchor) => OmiButton(
+                      key: const Key('referral-share'),
+                      label: l10n.referralShareInvite,
+                      onPressed: _busy ? null : () => _useLink(share: true, anchor: anchor),
+                      expand: true,
+                    )),
+            const SizedBox(height: OmiSpacing.xl),
+            Padding(
+              padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.xs),
+              child: Text(l10n.referralYourRewards.toUpperCase(),
+                  style: OmiType.footnote
+                      .copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
+            ),
+            Container(
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              child: Column(children: [
+                _rewardRow(
+                    start: 0, need: 2, title: l10n.referralRewardFirstTitle, detail: l10n.referralRewardFirstDetail),
+                Divider(height: 1, thickness: 1, color: OmiColors.border),
+                _rewardRow(
+                    start: 2, need: 3, title: l10n.referralRewardSecondTitle, detail: l10n.referralRewardSecondDetail),
+              ]),
+            ),
+            if (campaign.rewardStatus == 'pending_paid_subscription') ...[
+              const SizedBox(height: OmiSpacing.xs),
+              Text(l10n.referralRewardPending, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
-            const SizedBox(height: 24),
-            const Divider(),
-            OmiButton.tertiary(
-              key: const Key('referral-affiliate'),
-              label: l10n.referralAffiliate,
-              icon: Icons.open_in_new,
-              onPressed: () => routeToPage(context, _affiliate(context)),
-              expand: true,
+            const SizedBox(height: OmiSpacing.xxl),
+            Center(
+              child: TextButton(
+                key: const Key('referral-affiliate'),
+                onPressed: () => routeToPage(context, _affiliate(context)),
+                child: Text('${l10n.referralAffiliate} ›',
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              ),
             ),
           ],
         ),

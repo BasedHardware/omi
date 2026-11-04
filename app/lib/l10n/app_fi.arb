@@ -4535,5 +4535,13 @@
     "referralClaim": "Lunasta palkinto",
     "referralClaimed": "{months} Pro-kuukautta lunastettu",
     "referralRewardPending": "Palkinto säilyy maksullisen tilauksesi päättymiseen asti.",
-    "referralCampaignTitle": "Suosittele Omia. Saat Pron ilmaiseksi."
+    "referralCampaignTitle": "Suosittele Omia. Saat Pron ilmaiseksi.",
+    "referralCampaignSubtitle": "Heille 10 % alennus Omista. Sinulle jopa 5 kuukautta Prota.",
+    "referralShareInvite": "Jaa kutsu",
+    "referralYourRewards": "Palkintosi",
+    "referralRewardFirstTitle": "2 kuukautta Prota",
+    "referralRewardFirstDetail": "Kun 2 ystävää ostaa Omin",
+    "referralRewardSecondTitle": "3 kuukautta lisää",
+    "referralRewardSecondDetail": "Kun 3 ystävää lisää ostaa",
+    "referralClaimShort": "Lunasta"
 }

@@ -11961,5 +11961,13 @@
     "referralClaim": "انعام لیں",
     "referralClaimed": "{months} ماہ Pro لیے گئے",
     "referralRewardPending": "آپ کی ادا شدہ رکنیت ختم ہونے تک انعام محفوظ ہے۔",
-    "referralCampaignTitle": "Omi کی سفارش کریں۔ مفت Pro پائیں۔"
+    "referralCampaignTitle": "Omi کی سفارش کریں۔ مفت Pro پائیں۔",
+    "referralCampaignSubtitle": "ان کے لیے Omi پر 10% رعایت۔ آپ کے لیے 5 ماہ تک Pro۔",
+    "referralShareInvite": "دعوت شیئر کریں",
+    "referralYourRewards": "آپ کے انعامات",
+    "referralRewardFirstTitle": "2 ماہ کا Pro",
+    "referralRewardFirstDetail": "جب 2 دوست Omi خریدیں",
+    "referralRewardSecondTitle": "مزید 3 ماہ",
+    "referralRewardSecondDetail": "جب مزید 3 دوست خریدیں",
+    "referralClaimShort": "حاصل کریں"
 }

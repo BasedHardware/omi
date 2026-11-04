@@ -4535,5 +4535,13 @@
     "referralClaim": "استلام المكافأة",
     "referralClaimed": "تم استلام {months} أشهر Pro",
     "referralRewardPending": "تُحفظ مكافأتك حتى انتهاء اشتراكك المدفوع.",
-    "referralCampaignTitle": "أحِل أصدقاءك إلى Omi. واحصل على Pro مجانًا."
+    "referralCampaignTitle": "أحِل أصدقاءك إلى Omi. واحصل على Pro مجانًا.",
+    "referralCampaignSubtitle": "خصم 10% على Omi لهم. حتى 5 أشهر من Pro لك.",
+    "referralShareInvite": "شارك الدعوة",
+    "referralYourRewards": "مكافآتك",
+    "referralRewardFirstTitle": "شهران من Pro",
+    "referralRewardFirstDetail": "عندما يشتري صديقان Omi",
+    "referralRewardSecondTitle": "3 أشهر إضافية",
+    "referralRewardSecondDetail": "عندما يشتري 3 أصدقاء آخرين",
+    "referralClaimShort": "استلام"
 }

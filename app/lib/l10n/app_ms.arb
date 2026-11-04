@@ -4535,5 +4535,13 @@
     "referralClaim": "Tuntut ganjaran",
     "referralClaimed": "{months} bulan Pro dituntut",
     "referralRewardPending": "Ganjaran disimpan sehingga langganan berbayar anda tamat.",
-    "referralCampaignTitle": "Syorkan Omi. Dapatkan Pro percuma."
+    "referralCampaignTitle": "Syorkan Omi. Dapatkan Pro percuma.",
+    "referralCampaignSubtitle": "Diskaun 10% Omi untuk mereka. Sehingga 5 bulan Pro untuk anda.",
+    "referralShareInvite": "Kongsi jemputan",
+    "referralYourRewards": "Ganjaran anda",
+    "referralRewardFirstTitle": "2 bulan Pro",
+    "referralRewardFirstDetail": "Apabila 2 rakan membeli Omi",
+    "referralRewardSecondTitle": "3 bulan lagi",
+    "referralRewardSecondDetail": "Apabila 3 lagi rakan membeli",
+    "referralClaimShort": "Tuntut"
 }

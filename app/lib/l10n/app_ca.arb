@@ -4535,5 +4535,13 @@
     "referralClaim": "Reclama la recompensa",
     "referralClaimed": "{months} mesos de Pro reclamats",
     "referralRewardPending": "La recompensa es desa fins que acabi la subscripció de pagament.",
-    "referralCampaignTitle": "Recomana Omi. Aconsegueix Pro gratis."
+    "referralCampaignTitle": "Recomana Omi. Aconsegueix Pro gratis.",
+    "referralCampaignSubtitle": "Un 10% de descompte en Omi per a ells. Fins a 5 mesos de Pro per a tu.",
+    "referralShareInvite": "Comparteix la invitació",
+    "referralYourRewards": "Les teves recompenses",
+    "referralRewardFirstTitle": "2 mesos de Pro",
+    "referralRewardFirstDetail": "Quan 2 amics comprin Omi",
+    "referralRewardSecondTitle": "3 mesos més",
+    "referralRewardSecondDetail": "Quan 3 amics més comprin",
+    "referralClaimShort": "Reclama"
 }

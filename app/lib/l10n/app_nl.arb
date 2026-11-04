@@ -4535,5 +4535,13 @@
     "referralClaim": "Beloning claimen",
     "referralClaimed": "{months} Pro-maanden geclaimd",
     "referralRewardPending": "Je beloning blijft bewaard tot je betaalde abonnement eindigt.",
-    "referralCampaignTitle": "Beveel Omi aan. Krijg gratis Pro."
+    "referralCampaignTitle": "Beveel Omi aan. Krijg gratis Pro.",
+    "referralCampaignSubtitle": "10% korting op Omi voor hen. Tot 5 maanden Pro voor jou.",
+    "referralShareInvite": "Uitnodiging delen",
+    "referralYourRewards": "Jouw beloningen",
+    "referralRewardFirstTitle": "2 maanden Pro",
+    "referralRewardFirstDetail": "Als 2 vrienden Omi kopen",
+    "referralRewardSecondTitle": "Nog 3 maanden",
+    "referralRewardSecondDetail": "Als nog 3 vrienden kopen",
+    "referralClaimShort": "Claimen"
 }

@@ -4535,5 +4535,13 @@
     "referralClaim": "Revendică recompensa",
     "referralClaimed": "{months} luni Pro revendicate",
     "referralRewardPending": "Recompensa se păstrează până se încheie abonamentul plătit.",
-    "referralCampaignTitle": "Recomandă Omi. Primește Pro gratuit."
+    "referralCampaignTitle": "Recomandă Omi. Primește Pro gratuit.",
+    "referralCampaignSubtitle": "10% reducere la Omi pentru ei. Până la 5 luni de Pro pentru tine.",
+    "referralShareInvite": "Distribuie invitația",
+    "referralYourRewards": "Recompensele tale",
+    "referralRewardFirstTitle": "2 luni de Pro",
+    "referralRewardFirstDetail": "Când 2 prieteni cumpără Omi",
+    "referralRewardSecondTitle": "Încă 3 luni",
+    "referralRewardSecondDetail": "Când încă 3 prieteni cumpără",
+    "referralClaimShort": "Revendică"
 }

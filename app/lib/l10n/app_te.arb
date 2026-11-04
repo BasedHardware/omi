@@ -11961,5 +11961,13 @@
     "referralClaim": "బహుమతి పొందండి",
     "referralClaimed": "{months} నెలల Pro పొందారు",
     "referralRewardPending": "చెల్లింపు సభ్యత్వం ముగిసే వరకు బహుమతి నిల్వ ఉంటుంది.",
-    "referralCampaignTitle": "Omiని సూచించండి. ఉచిత Pro పొందండి."
+    "referralCampaignTitle": "Omiని సూచించండి. ఉచిత Pro పొందండి.",
+    "referralCampaignSubtitle": "వారికి Omi పై 10% తగ్గింపు. మీకు 5 నెలల వరకు Pro.",
+    "referralShareInvite": "ఆహ్వానాన్ని షేర్ చేయండి",
+    "referralYourRewards": "మీ రివార్డులు",
+    "referralRewardFirstTitle": "2 నెలల Pro",
+    "referralRewardFirstDetail": "2 స్నేహితులు Omi కొన్నప్పుడు",
+    "referralRewardSecondTitle": "మరో 3 నెలలు",
+    "referralRewardSecondDetail": "మరో 3 స్నేహితులు కొన్నప్పుడు",
+    "referralClaimShort": "పొందండి"
 }

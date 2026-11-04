@@ -18354,5 +18354,37 @@
         }
     },
     "referralRewardPending": "Your reward is saved until your paid subscription ends.",
-    "referralCampaignTitle": "Refer Omi. Get free Pro."
+    "referralCampaignTitle": "Refer Omi. Get free Pro.",
+    "referralCampaignSubtitle": "10% off Omi for them. Up to 5 months of Pro for you.",
+    "@referralCampaignSubtitle": {
+        "description": "Referral page subtitle under the title"
+    },
+    "referralShareInvite": "Share invite",
+    "@referralShareInvite": {
+        "description": "Primary button that opens the share sheet with the referral link"
+    },
+    "referralYourRewards": "Your rewards",
+    "@referralYourRewards": {
+        "description": "Section header above the referral reward rows"
+    },
+    "referralRewardFirstTitle": "2 months of Pro",
+    "@referralRewardFirstTitle": {
+        "description": "First referral reward row title"
+    },
+    "referralRewardFirstDetail": "When 2 friends buy Omi",
+    "@referralRewardFirstDetail": {
+        "description": "First referral reward row condition"
+    },
+    "referralRewardSecondTitle": "3 more months",
+    "@referralRewardSecondTitle": {
+        "description": "Second referral reward row title, months of Pro"
+    },
+    "referralRewardSecondDetail": "When 3 more friends buy",
+    "@referralRewardSecondDetail": {
+        "description": "Second referral reward row condition"
+    },
+    "referralClaimShort": "Claim",
+    "@referralClaimShort": {
+        "description": "Short pill button to claim an earned referral reward"
+    }
 }

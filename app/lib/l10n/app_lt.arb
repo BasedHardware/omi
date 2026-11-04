@@ -4535,5 +4535,13 @@
     "referralClaim": "Atsiimti atlygį",
     "referralClaimed": "Atsiimta {months} mėn. Pro",
     "referralRewardPending": "Atlygis saugomas iki mokamos prenumeratos pabaigos.",
-    "referralCampaignTitle": "Rekomenduokite Omi. Gaukite Pro nemokamai."
+    "referralCampaignTitle": "Rekomenduokite Omi. Gaukite Pro nemokamai.",
+    "referralCampaignSubtitle": "Jiems 10% nuolaida Omi. Tau iki 5 mėnesių Pro.",
+    "referralShareInvite": "Bendrinti kvietimą",
+    "referralYourRewards": "Tavo apdovanojimai",
+    "referralRewardFirstTitle": "2 mėnesiai Pro",
+    "referralRewardFirstDetail": "Kai 2 draugai nusipirks Omi",
+    "referralRewardSecondTitle": "Dar 3 mėnesiai",
+    "referralRewardSecondDetail": "Kai nusipirks dar 3 draugai",
+    "referralClaimShort": "Atsiimti"
 }

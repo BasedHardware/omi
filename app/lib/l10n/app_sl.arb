@@ -11961,5 +11961,13 @@
     "referralClaim": "Prevzemi nagrado",
     "referralClaimed": "Prevzetih {months} mesecev Pro",
     "referralRewardPending": "Nagrada je shranjena do konca plačane naročnine.",
-    "referralCampaignTitle": "Priporočite Omi. Pridobite Pro brezplačno."
+    "referralCampaignTitle": "Priporočite Omi. Pridobite Pro brezplačno.",
+    "referralCampaignSubtitle": "Zanje 10 % popusta na Omi. Zate do 5 mesecev Pro.",
+    "referralShareInvite": "Deli povabilo",
+    "referralYourRewards": "Tvoje nagrade",
+    "referralRewardFirstTitle": "2 meseca Pro",
+    "referralRewardFirstDetail": "Ko 2 prijatelja kupita Omi",
+    "referralRewardSecondTitle": "Še 3 mesece",
+    "referralRewardSecondDetail": "Ko kupijo še 3 prijatelji",
+    "referralClaimShort": "Prevzemi"
 }

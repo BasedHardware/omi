@@ -11961,5 +11961,13 @@
     "referralClaim": "Kunin ang gantimpala",
     "referralClaimed": "Nakuha ang {months} buwang Pro",
     "referralRewardPending": "Nakatabi ang gantimpala hanggang matapos ang bayad mong subscription.",
-    "referralCampaignTitle": "Irekomenda ang Omi. Kumuha ng libreng Pro."
+    "referralCampaignTitle": "Irekomenda ang Omi. Kumuha ng libreng Pro.",
+    "referralCampaignSubtitle": "10% off sa Omi para sa kanila. Hanggang 5 buwan ng Pro para sa iyo.",
+    "referralShareInvite": "Ibahagi ang imbitasyon",
+    "referralYourRewards": "Iyong mga reward",
+    "referralRewardFirstTitle": "2 buwan ng Pro",
+    "referralRewardFirstDetail": "Kapag bumili ng Omi ang 2 kaibigan",
+    "referralRewardSecondTitle": "3 pang buwan",
+    "referralRewardSecondDetail": "Kapag bumili ang 3 pang kaibigan",
+    "referralClaimShort": "Kunin"
 }

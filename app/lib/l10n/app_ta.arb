@@ -11961,5 +11961,13 @@
     "referralClaim": "வெகுமதியைப் பெறவும்",
     "referralClaimed": "{months} மாத Pro பெறப்பட்டது",
     "referralRewardPending": "கட்டணச் சந்தா முடியும் வரை வெகுமதி சேமிக்கப்படும்.",
-    "referralCampaignTitle": "Omi-ஐ பரிந்துரையுங்கள். இலவச Pro பெறுங்கள்."
+    "referralCampaignTitle": "Omi-ஐ பரிந்துரையுங்கள். இலவச Pro பெறுங்கள்.",
+    "referralCampaignSubtitle": "அவர்களுக்கு Omi இல் 10% தள்ளுபடி. உங்களுக்கு 5 மாதங்கள் வரை Pro.",
+    "referralShareInvite": "அழைப்பைப் பகிரவும்",
+    "referralYourRewards": "உங்கள் வெகுமதிகள்",
+    "referralRewardFirstTitle": "2 மாத Pro",
+    "referralRewardFirstDetail": "2 நண்பர்கள் Omi வாங்கும்போது",
+    "referralRewardSecondTitle": "மேலும் 3 மாதங்கள்",
+    "referralRewardSecondDetail": "மேலும் 3 நண்பர்கள் வாங்கும்போது",
+    "referralClaimShort": "பெறுக"
 }

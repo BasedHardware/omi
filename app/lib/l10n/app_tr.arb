@@ -4570,5 +4570,13 @@
     "referralClaim": "Ödülü al",
     "referralClaimed": "{months} ay Pro alındı",
     "referralRewardPending": "Ödülünüz ücretli aboneliğiniz bitene kadar saklanır.",
-    "referralCampaignTitle": "Omi'yi öner. Ücretsiz Pro kazan."
+    "referralCampaignTitle": "Omi'yi öner. Ücretsiz Pro kazan.",
+    "referralCampaignSubtitle": "Onlara Omi'de %10 indirim. Sana 5 aya kadar Pro.",
+    "referralShareInvite": "Daveti paylaş",
+    "referralYourRewards": "Ödüllerin",
+    "referralRewardFirstTitle": "2 ay Pro",
+    "referralRewardFirstDetail": "2 arkadaşın Omi aldığında",
+    "referralRewardSecondTitle": "3 ay daha",
+    "referralRewardSecondDetail": "3 arkadaşın daha aldığında",
+    "referralClaimShort": "Al"
 }

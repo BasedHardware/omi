@@ -11961,5 +11961,13 @@
     "referralClaim": "बक्षीस घ्या",
     "referralClaimed": "{months} महिने Pro घेतले",
     "referralRewardPending": "सशुल्क सदस्यत्व संपेपर्यंत बक्षीस जतन केले जाते.",
-    "referralCampaignTitle": "Omi ची शिफारस करा. मोफत Pro मिळवा."
+    "referralCampaignTitle": "Omi ची शिफारस करा. मोफत Pro मिळवा.",
+    "referralCampaignSubtitle": "त्यांच्यासाठी Omi वर 10% सूट. तुमच्यासाठी 5 महिन्यांपर्यंत Pro.",
+    "referralShareInvite": "आमंत्रण शेअर करा",
+    "referralYourRewards": "तुमची बक्षिसे",
+    "referralRewardFirstTitle": "2 महिने Pro",
+    "referralRewardFirstDetail": "2 मित्रांनी Omi घेतल्यावर",
+    "referralRewardSecondTitle": "आणखी 3 महिने",
+    "referralRewardSecondDetail": "आणखी 3 मित्रांनी घेतल्यावर",
+    "referralClaimShort": "मिळवा"
 }

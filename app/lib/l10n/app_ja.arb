@@ -4535,5 +4535,13 @@
     "referralClaim": "特典を受け取る",
     "referralClaimed": "Pro {months}か月を受取済み",
     "referralRewardPending": "有料サブスクリプション終了まで特典は保存されます。",
-    "referralCampaignTitle": "Omiを紹介して、Proを無料で。"
+    "referralCampaignTitle": "Omiを紹介して、Proを無料で。",
+    "referralCampaignSubtitle": "友達はOmiが10%オフ。あなたは最大5か月のPro。",
+    "referralShareInvite": "招待を共有",
+    "referralYourRewards": "あなたの特典",
+    "referralRewardFirstTitle": "Pro 2か月",
+    "referralRewardFirstDetail": "友達2人がOmiを購入したら",
+    "referralRewardSecondTitle": "さらに3か月",
+    "referralRewardSecondDetail": "さらに友達3人が購入したら",
+    "referralClaimShort": "受け取る"
 }

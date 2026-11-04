@@ -6,7 +6,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/backend/schema/gen/referrals_wire.g.dart' as wire;
 
-const mobileReferralCampaignEnabled = bool.fromEnvironment('OMI_MOBILE_REFERRAL_CAMPAIGN', defaultValue: false);
+const mobileReferralCampaignEnabled = bool.fromEnvironment('OMI_MOBILE_REFERRAL_CAMPAIGN', defaultValue: true);
 
 Future<String> getReferralLink({required AuthSessionSnapshot session}) async {
   if (!mobileReferralCampaignEnabled) throw StateError('Referral campaign is disabled');

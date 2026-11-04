@@ -4535,5 +4535,13 @@
     "referralClaim": "领取奖励",
     "referralClaimed": "已领取 {months} 个月 Pro",
     "referralRewardPending": "奖励将保留至你的付费订阅结束。",
-    "referralCampaignTitle": "推荐 Omi，免费享用 Pro。"
+    "referralCampaignTitle": "推荐 Omi，免费享用 Pro。",
+    "referralCampaignSubtitle": "好友购买 Omi 享 9 折。你最多可得 5 个月 Pro。",
+    "referralShareInvite": "分享邀请",
+    "referralYourRewards": "你的奖励",
+    "referralRewardFirstTitle": "2 个月 Pro",
+    "referralRewardFirstDetail": "2 位好友购买 Omi 后",
+    "referralRewardSecondTitle": "再得 3 个月",
+    "referralRewardSecondDetail": "再有 3 位好友购买后",
+    "referralClaimShort": "领取"
 }

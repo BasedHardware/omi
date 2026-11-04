@@ -4535,5 +4535,13 @@
     "referralClaim": "Λήψη ανταμοιβής",
     "referralClaimed": "Λήφθηκαν {months} μήνες Pro",
     "referralRewardPending": "Η ανταμοιβή αποθηκεύεται μέχρι να λήξει η συνδρομή επί πληρωμή.",
-    "referralCampaignTitle": "Προτείνετε το Omi. Αποκτήστε Pro δωρεάν."
+    "referralCampaignTitle": "Προτείνετε το Omi. Αποκτήστε Pro δωρεάν.",
+    "referralCampaignSubtitle": "10% έκπτωση στο Omi για αυτούς. Έως 5 μήνες Pro για εσένα.",
+    "referralShareInvite": "Κοινοποίηση πρόσκλησης",
+    "referralYourRewards": "Οι ανταμοιβές σου",
+    "referralRewardFirstTitle": "2 μήνες Pro",
+    "referralRewardFirstDetail": "Όταν 2 φίλοι αγοράσουν Omi",
+    "referralRewardSecondTitle": "3 ακόμη μήνες",
+    "referralRewardSecondDetail": "Όταν αγοράσουν 3 ακόμη φίλοι",
+    "referralClaimShort": "Λήψη"
 }

@@ -4631,5 +4631,13 @@
     "referralClaim": "Jutalom igénylése",
     "referralClaimed": "{months} Pro-hónap igényelve",
     "referralRewardPending": "A jutalom a fizetős előfizetés végéig megmarad.",
-    "referralCampaignTitle": "Ajánld az Omit. Szerezz ingyen Pro-t."
+    "referralCampaignTitle": "Ajánld az Omit. Szerezz ingyen Pro-t.",
+    "referralCampaignSubtitle": "Nekik 10% kedvezmény az Omiból. Neked akár 5 hónap Pro.",
+    "referralShareInvite": "Meghívó megosztása",
+    "referralYourRewards": "Jutalmaid",
+    "referralRewardFirstTitle": "2 hónap Pro",
+    "referralRewardFirstDetail": "Ha 2 barátod megveszi az Omit",
+    "referralRewardSecondTitle": "Még 3 hónap",
+    "referralRewardSecondDetail": "Ha még 3 barátod vásárol",
+    "referralClaimShort": "Beváltás"
 }

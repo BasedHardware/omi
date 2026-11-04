@@ -4535,5 +4535,13 @@
     "referralClaim": "इनाम लें",
     "referralClaimed": "{months} महीने Pro लिए गए",
     "referralRewardPending": "आपकी सशुल्क सदस्यता समाप्त होने तक इनाम सुरक्षित है।",
-    "referralCampaignTitle": "Omi की सिफारिश करें। मुफ़्त Pro पाएं।"
+    "referralCampaignTitle": "Omi की सिफारिश करें। मुफ़्त Pro पाएं।",
+    "referralCampaignSubtitle": "उनके लिए Omi पर 10% छूट। आपके लिए 5 महीने तक Pro।",
+    "referralShareInvite": "आमंत्रण शेयर करें",
+    "referralYourRewards": "आपके इनाम",
+    "referralRewardFirstTitle": "2 महीने का Pro",
+    "referralRewardFirstDetail": "जब 2 दोस्त Omi खरीदें",
+    "referralRewardSecondTitle": "3 और महीने",
+    "referralRewardSecondDetail": "जब 3 और दोस्त खरीदें",
+    "referralClaimShort": "पाएं"
 }

@@ -4535,5 +4535,13 @@
     "referralClaim": "Отримати винагороду",
     "referralClaimed": "Отримано місяців Pro: {months}",
     "referralRewardPending": "Винагороду збережено до завершення платної підписки.",
-    "referralCampaignTitle": "Запрошуйте в Omi. Отримуйте Pro безкоштовно."
+    "referralCampaignTitle": "Запрошуйте в Omi. Отримуйте Pro безкоштовно.",
+    "referralCampaignSubtitle": "Їм знижка 10% на Omi. Вам до 5 місяців Pro.",
+    "referralShareInvite": "Поділитися запрошенням",
+    "referralYourRewards": "Ваші винагороди",
+    "referralRewardFirstTitle": "2 місяці Pro",
+    "referralRewardFirstDetail": "Коли 2 друзі куплять Omi",
+    "referralRewardSecondTitle": "Ще 3 місяці",
+    "referralRewardSecondDetail": "Коли ще 3 друзі куплять",
+    "referralClaimShort": "Отримати"
 }
