@@ -15,7 +15,7 @@ from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
-from database.lifecycle_metrics_queries import INDEX_REQUIREMENTS as LIFECYCLE_METRICS_INDEX_REQUIREMENTS
+from database.lifecycle_metrics_indexes import INDEX_REQUIREMENTS as LIFECYCLE_METRICS_INDEX_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,

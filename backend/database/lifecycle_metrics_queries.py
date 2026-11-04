@@ -2,24 +2,7 @@
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from database.firestore_query_types import FirestoreIndexField, FirestoreIndexRequirement
 from utils.lifecycle_metrics import PAGE_LIMIT, COHORT_SECONDS, COHORT_START, cohort_age
-
-
-def _index(name, collection, *fields):
-    return FirestoreIndexRequirement(
-        name,
-        collection,
-        'COLLECTION',
-        tuple(FirestoreIndexField(field, order='ASCENDING') for field in (*fields, '__name__')),
-    )
-
-
-INDEX_REQUIREMENTS = (
-    _index('enrichment_active_cohort', 'sync_reprocess_outbox', 'dormant', 'first_pending_at'),
-    _index('enrichment_lane_stock', 'sync_reprocess_outbox', 'summary_lane', 'due_at'),
-    _index('finalization_byok_entry_cohort', 'conversation_finalization_jobs', 'status', 'blocked_byok_at'),
-)
 
 
 def _where(query, field, op, value):
