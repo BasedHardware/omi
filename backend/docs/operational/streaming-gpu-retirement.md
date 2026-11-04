@@ -1,16 +1,18 @@
 # Streaming GPU retirement
 
-Retire the shared streaming Parakeet and hosted VAD GPU services after the
+Retire the shared streaming Parakeet GPU service after the
 fleet-off caller train. `STT_GPU_FLEET_OFF=true` selects Modulate then Soniox
 for residual live sessions, Modulate for prerecorded/PTT, and local ONNX for
 file VAD. Dedicated batch workers load their own models and keep running.
-Preserve both diarizers, CPU-only LID, reservations, all audio/PVCs, the shared
-Gateway and every dev load balancer.
+Preserve hosted VAD, both diarizers, LID, reservations, all audio/PVCs, the
+shared Gateway and every dev load balancer. Lead ruling 17ce24 (2026-11-04):
+LID stays this pass; VAD and its pools stay untouched while its actual endpoint
+dependency remains unproven. Do not pass `--lid-dependency-cleared`.
 
 ## Lead order and gates
 
 Only the rollout lead applies charts or runs teardown. Source declarations and
-tests do not prove serving state. The ordinary production Parakeet/VAD chart
+tests do not prove serving state. The ordinary production Parakeet chart
 now forces zero replicas and removes its HPA and dedicated ingress, so applying
 it before callers drain is unsafe.
 
@@ -26,23 +28,25 @@ it before callers drain is unsafe.
    serving image digests in the lead's operator record too.
 
 2. Finish the fleet-off caller train. Inspect `status.traffic` and each serving
-   Cloud Run revision's release SHA and fleet-off flag, plus all ready GKE
+   Cloud Run revision's image digest/source identity and fleet-off flag, plus all ready GKE
    listen/pusher pods and canaries. Soniox/Modulate key bindings, vendor credits
    and concurrency, and the batch hard-3 gates must be healthy. Disable stale
    boot-probe/redrive jobs before rerunning an old image. No production account
    data or secret payload is needed for these checks.
 
 3. Measure 15 minutes after the last old caller drains. Require zero shared
-   Parakeet HTTP/LID/stream and hosted-VAD requests through gateway and direct
+   Parakeet HTTP/LID/stream requests through gateway and direct
    routes. Missing metrics mean unknown. Remove host/session scale-up wakes,
    including the lead's scheduled `parakeet-minmax.sh 6` wake, before zero.
 
-4. Resolve LID dependency before retiring capacity. Batch admission calls
+4. Preserve LID and VAD capacity. Batch admission calls
    `record_language.classify_probe` and `batch_language.resolve_language`, which
    can call `language_gate.self_detect`. An explicitly configured
    `HOSTED_LID_API_URL` is used even during fleet-off. The production Cloud Run
    binding is secret-backed, so its actual endpoint is not established by a
-   read-only revision inspection. The lead must prove it is empty or belongs
+   read-only revision inspection. The lead's approved Parakeet-only pool list
+   below excludes VAD/LID capacity; stop if an LID pod occupies a target pool.
+   Before any later VAD/LID retirement, prove that binding is empty or belongs
    to an independent retained LID service; preserve any GPU it needs. The
    dedicated worker has no hosted VAD/LID binding and its strict VAD is local;
    legacy file VAD bypasses hosted VAD while fleet-off is true. Those facts
@@ -55,18 +59,18 @@ it before callers drain is unsafe.
    guard Job (deadline 240 seconds). Never raise a cap to satisfy the guard.
    Independent batch monitoring/state remain intact. Keep the guard state.
 
-6. Apply reviewed Parakeet/VAD charts and their off overlays, preserving the
-   serving image tags. Both prod and bare chart defaults set `fleetRetired=true`:
+6. Apply the reviewed Parakeet chart and its off overlay, preserving the
+   serving image tag. Both prod and bare chart defaults set `fleetRetired=true`:
    deployments stay at zero, HPAs and dedicated ingresses are omitted even with
    stale positive replica/HPA/ingress overrides, and optional Japanese streaming
-   stays at zero. Dev and the CPU LID release explicitly opt out. Apply VAD
-   retirement only after the dependency gate above is clear.
+   stays at zero. Dev and the CPU LID release explicitly opt out. Do not apply
+   the VAD chart or its off overlay in this pass.
 
 7. Review the offline plan, then execute under the approved `prod-operator` tier:
 
    ```bash
    python3 backend/scripts/retire_streaming_gpu.py
-   python3 backend/scripts/retire_streaming_gpu.py --apply --caller-drain-approved --host-writers-retired --borrowed-pools-reviewed --lid-dependency-cleared --backup-dir /Volumes/Ephemeral/scratch/teardown-1104/rollback
+   python3 backend/scripts/retire_streaming_gpu.py --apply --caller-drain-approved --host-writers-retired --borrowed-pools-reviewed --backup-dir /Volumes/Ephemeral/scratch/teardown-1104/rollback
    ```
 
    The default executes no commands. Apply requires explicit lead gates,
@@ -76,8 +80,8 @@ it before callers drain is unsafe.
    volume, or repurposed pool label stops the operation. Every non-DaemonSet pod
    must leave target pools before capacity is changed.
 
-   The pool allowlist is `parakeet-pool`, `parakeet-pool-b`, `parakeet-pool-v2`,
-   `vad-pool`, `vad-pool-v2`. Lead ruling 2026-11-04 04:14Z: retain pool objects,
+   The pool allowlist is only `parakeet-pool`, `parakeet-pool-b`, `parakeet-pool-v2`.
+   Lead ruling 2026-11-04 04:14Z: retain pool objects,
    set autoscaling min=max=0, resize to zero, and verify zero registered nodes.
    Preserve total-vs-per-zone autoscaling scope. If GKE refuses 0/0, stop and
    report it; never substitute a positive maximum or delete a pool. A deletion

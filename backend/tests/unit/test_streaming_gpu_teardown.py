@@ -76,6 +76,8 @@ def test_pending_batch_targeting_a_borrowed_pool_also_blocks_deletion():
         'diarizer-pool',
         'diarizer-batch-pool',
         'diarizer-batch-pool-v2',
+        'vad-pool',
+        'vad-pool-v2',
     ],
 )
 def test_batch_and_diarizer_capacity_is_outside_deletion_allowlist(pool):
@@ -195,7 +197,6 @@ def test_apply_refuses_default_human_and_other_tiers_before_cloud(monkeypatch, t
             '--caller-drain-approved',
             '--host-writers-retired',
             '--borrowed-pools-reviewed',
-            '--lid-dependency-cleared',
         ],
         capture_output=True,
         text=True,

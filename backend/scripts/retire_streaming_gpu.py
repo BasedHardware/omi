@@ -2,8 +2,9 @@
 """Lead-only streaming GPU teardown. Default is an offline, non-mutating plan.
 
 Run only after the caller train, a measured 15-minute no-request drain, and
-retirement of host scale-up writers. Removes only the two retired production
-Ingresses; never removes storage, reservations, shared Gateway or dev LBs.
+retirement of host scale-up writers. Removes only the retired production
+Parakeet ingress and separately gated legacy Deepgram resources; never removes
+storage, reservations, shared Gateway or dev LBs. VAD and LID stay untouched.
 Node pools are retained at min=max=size zero only after ALL non-DaemonSet pods
 have left them. Original autoscaling bounds are saved; batch/diarizer pools are
 absent from the allowlist. Re-run after a partial failure with the same backup.
@@ -24,8 +25,8 @@ NAMESPACE = 'prod-omi-backend'
 PROJECT = 'based-hardware'
 REGION = 'us-central1'
 CLUSTER = 'prod-omi-gke'
-POOLS = ('parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2', 'vad-pool', 'vad-pool-v2')
-DEPLOYMENTS = ('prod-omi-parakeet', 'prod-omi-vad')
+POOLS = ('parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2')
+DEPLOYMENTS = ('prod-omi-parakeet',)
 GUARD = 'prod-omi-incluster-guards'
 
 
@@ -506,7 +507,7 @@ def apply(backup):
         )
     retire_legacy_deepgram(backup)
     print(
-        'DONE: zero streaming GPU nodes; retained pools min=max=0; dedicated Parakeet/VAD ingresses absent; legacy ingress outcome above; data, batch, diarizer, reservations, shared Gateway and dev LBs untouched'
+        'DONE: zero streaming GPU nodes; retained pools min=max=0; dedicated Parakeet ingress absent; legacy ingress outcome above; data, batch, diarizer, reservations, shared Gateway and dev LBs untouched'
     )
 
 
@@ -519,11 +520,6 @@ def main():
     parser.add_argument('--caller-drain-approved', action='store_true')
     parser.add_argument('--host-writers-retired', action='store_true')
     parser.add_argument('--borrowed-pools-reviewed', action='store_true')
-    parser.add_argument(
-        '--lid-dependency-cleared',
-        action='store_true',
-        help='lead verified secret-bound LID is empty or independent of retired GPUs',
-    )
     parser.add_argument(
         '--check-legacy-traffic', action='store_true', help='read-only 24h legacy LB request-metric check'
     )
@@ -542,23 +538,18 @@ def main():
         return
     if not args.apply:
         print(
-            'PLAN ONLY: verify caller train+drain and guard suspension/RBAC; scale Parakeet/VAD to 0; remove HPAs and floors; drain pods; retain exclusive pools at min=max=size 0: '
+            'PLAN ONLY: verify caller train+drain and guard suspension/RBAC; scale Parakeet to 0; remove HPAs and floors; drain pods; retain exclusive pools at min=max=size 0: '
             + ', '.join(POOLS)
-            + '; remove only their two production dedicated ingresses'
+            + '; remove only their production Parakeet dedicated ingress'
             + '; remove dormant Deepgram HPAs; remove Deepgram ingress only with complete 24h zero-request proof'
         )
         print(
             'ROLLBACK: saved HPA/replica/floor/autoscaling bounds; restore capacity before routing. No commands executed.'
         )
         return
-    if (
-        not args.caller_drain_approved
-        or not args.host_writers_retired
-        or not args.borrowed_pools_reviewed
-        or not args.lid_dependency_cleared
-    ):
+    if not args.caller_drain_approved or not args.host_writers_retired or not args.borrowed_pools_reviewed:
         parser.error(
-            '--apply requires --caller-drain-approved, --host-writers-retired, --borrowed-pools-reviewed and --lid-dependency-cleared from lead'
+            '--apply requires --caller-drain-approved, --host-writers-retired, --borrowed-pools-reviewed from lead'
         )
     if os.getenv('GCP_AGENT_TIER') != 'prod-operator':
         parser.error(

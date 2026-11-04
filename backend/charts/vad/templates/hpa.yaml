@@ -1,4 +1,4 @@
-{{- if and .Values.autoscaling.enabled (not .Values.fleetRetired) }}
+{{- if .Values.autoscaling.enabled }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

@@ -150,7 +150,7 @@ def resources(chart, *extra):
     return [item for item in yaml.load_all(result, Loader=yaml.CSafeLoader) if item]
 
 
-@pytest.mark.parametrize('chart', ['diarizer'])
+@pytest.mark.parametrize('chart', ['vad', 'diarizer'])
 def test_maintenance_zero_preserves_every_object_and_model(chart):
     baseline = resources(chart)
     stopped = resources(chart, '--set', 'maintenanceMode=true')
@@ -196,7 +196,7 @@ def test_parakeet_guard_is_retired_and_batch_keeps_own_replicas():
 @pytest.mark.parametrize(
     'extra', [(), ('--set', 'autoscaling.enabled=true,maintenanceMode=false,replicaCount=12,ja.enabled=true')]
 )
-@pytest.mark.parametrize('chart', ['parakeet', 'vad'])
+@pytest.mark.parametrize('chart', ['parakeet'])
 def test_prod_streaming_retirement_wins_over_warm_replica_and_autoscaler_settings(extra, chart):
     objects = resources(chart, *extra)
     deployments = [o for o in objects if o['kind'] == 'Deployment']
@@ -214,7 +214,7 @@ def test_retired_guard_cannot_write_hpa_or_render_a_floor_even_with_stale_schedu
     assert 'floors.json' not in script['data']
 
 
-@pytest.mark.parametrize('chart', ['parakeet', 'vad'])
+@pytest.mark.parametrize('chart', ['parakeet'])
 def test_bare_chart_defaults_cannot_restore_gpu_capacity(chart):
     output = subprocess.check_output(
         [

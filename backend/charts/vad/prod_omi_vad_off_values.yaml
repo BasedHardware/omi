@@ -1,7 +1,5 @@
 # Apply only AFTER every caller serves STT_GPU_FLEET_OFF=true and traffic drains.
-# Retains routes and model configuration, removes the hosted VAD autoscaler.
-fleetRetired: true
-replicaCount: 0
+# Keeps all chart objects, routes and autoscaler; no pool or storage changes.
 maintenanceMode: true
-ingress:
-  enabled: false
+autoscaling:
+  minReplicas: 1
