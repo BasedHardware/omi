@@ -6,6 +6,7 @@ same payload and row, so both drain.
 """
 
 import json
+import logging
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -76,6 +77,58 @@ def test_callback_pending_is_a_409_retry_that_keeps_the_wake(rows, client, monke
 
 def _pending(*_):
     raise reprocess.FirstSummaryCallbackPending('synthetic')
+
+
+def test_every_retry_logs_its_cause_and_timing_without_ids(rows, client, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(
+        consumer_module.EnrichmentConsumer,
+        '_callback',
+        lambda self: Mock(side_effect=reprocess.FirstSummaryCallbackPending('Redirect target changed')),
+    )
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    lines = [r.getMessage() for r in caplog.records]
+    assert 'event=enrichment_consumer outcome=retry reason=callback_pending cause=redirect_target_changed' in lines
+    delivery = [line for line in lines if line.startswith('event=enrichment_delivery ')]
+    assert len(delivery) == 1
+    assert delivery[0].startswith('event=enrichment_delivery outcome=retry reason=callback_pending wait_s=')
+    assert ' run_s=' in delivery[0] and KEY not in delivery[0] and token not in delivery[0]
+
+
+def test_only_slow_deliveries_log_their_end(rows, client, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(return_value=None))
+    token = rows[0][KEY]['task_token']
+    assert (
+        client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token}).status_code
+        == 200
+    )
+    assert not [r for r in caplog.records if r.getMessage().startswith('event=enrichment_delivery ')]
+
+    reprocess.mark('u', 'c', 'en', now=0)
+    monkeypatch.setattr(route, 'SLOW_DELIVERY_SECONDS', 0.0)
+    token = rows[0][KEY]['task_token']
+    assert (
+        client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token}).status_code
+        == 200
+    )
+    ends = [r.getMessage() for r in caplog.records if r.getMessage().startswith('event=enrichment_delivery ')]
+    assert len(ends) == 1 and ends[0].startswith('event=enrichment_delivery outcome=done reason=processed ')
+
+
+def test_a_slow_unexpected_error_still_logs_its_end(rows, client, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(route, 'SLOW_DELIVERY_SECONDS', 0.0)
+    monkeypatch.setattr(
+        consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=RuntimeError('synthetic'))
+    )
+    token = rows[0][KEY]['task_token']
+    with pytest.raises(RuntimeError):
+        client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    ends = [r.getMessage() for r in caplog.records if r.getMessage().startswith('event=enrichment_delivery ')]
+    assert len(ends) == 1 and ends[0].startswith('event=enrichment_delivery outcome=error reason=unexpected ')
 
 
 def test_lifecycle_fence_settles_as_superseded(rows):
@@ -192,6 +245,21 @@ async def test_legacy_sync_handler_delegates_to_the_consumer_when_routed(rows, m
     response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
     assert response.status_code == 409
     assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
+
+
+@pytest.mark.asyncio
+async def test_legacy_bound_slow_delivery_logs_its_end_too(rows, monkeypatch, caplog):
+    from routers import batch_pipeline
+
+    caplog.set_level(logging.INFO)
+    monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
+    monkeypatch.setattr(route, 'SLOW_DELIVERY_SECONDS', 0.0)
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(return_value=None))
+    token = rows[0][KEY]['task_token']
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    ends = [r.getMessage() for r in caplog.records if r.getMessage().startswith('event=enrichment_delivery ')]
+    assert len(ends) == 1 and ends[0].startswith('event=enrichment_delivery outcome=done reason=processed wait_s=')
 
 
 @pytest.mark.asyncio
