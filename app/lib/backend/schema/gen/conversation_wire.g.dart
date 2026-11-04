@@ -1975,6 +1975,7 @@ class GeneratedSyncJobStatusResponse {
   final int? retryAfter;
   final String status;
   final int successfulSegments;
+  final int totalFiles;
   final int totalSegments;
 
   const GeneratedSyncJobStatusResponse({
@@ -1990,6 +1991,7 @@ class GeneratedSyncJobStatusResponse {
     this.retryAfter,
     required this.status,
     this.successfulSegments = 0,
+    this.totalFiles = 0,
     this.totalSegments = 0,
   });
 
@@ -2007,6 +2009,7 @@ class GeneratedSyncJobStatusResponse {
       retryAfter: _readFieldValue<int>(_readField(json, const ["retry_after"]), "retry_after", _readInt, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       successfulSegments: _required(_readFieldValue<int>(_readField(json, const ["successful_segments"]), "successful_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "successful_segments"),
+      totalFiles: _required(_readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_files"),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
     );
   }
@@ -2025,6 +2028,7 @@ class GeneratedSyncJobStatusResponse {
       'retry_after': retryAfter,
       'status': status,
       'successful_segments': successfulSegments,
+      'total_files': totalFiles,
       'total_segments': totalSegments,
     };
   }

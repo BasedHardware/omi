@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkriberat fram till {time}",
     "liveAudioSaved": "{duration} sparat",
     "liveAudioSavedDetail": "Talare och den slutliga transkriptionen visas här under uppladdningen.",
+    "episodeFinishingUp": "Slutför…",
     "paymentDeclinedTitle": "Ditt kort nekades",
     "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}"
 }

@@ -394,6 +394,7 @@ class TestListAudioChunksBatchAware:
             mock_blob = MagicMock()
             mock_blob.name = name
             mock_blob.size = 1000
+            mock_blob.metadata = None
             mock_blobs.append(mock_blob)
         mock_bucket.list_blobs.return_value = mock_blobs
         storage_mod.storage_client.bucket.return_value = mock_bucket
@@ -584,6 +585,7 @@ class TestDownloadAudioChunksMergeBatchAware:
             mb = MagicMock()
             mb.name = name
             mb.size = size
+            mb.metadata = None
             list_blobs.append(mb)
         mock_bucket.list_blobs.return_value = list_blobs
 

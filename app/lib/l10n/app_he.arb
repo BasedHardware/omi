@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
     "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
+    "episodeFinishingUp": "מסיימים…",
     "paymentDeclinedTitle": "הכרטיס שלך נדחה",
     "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}"
 }

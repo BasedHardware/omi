@@ -228,8 +228,8 @@ class LivePreviewController extends ChangeNotifier {
     _stopEngine();
     if (_failedEngines.length > 1) {
       _phase = LivePreviewPhase.unavailable;
-      telemetry.engineSelected(const LivePreviewStart.none(LivePreviewReason.engineError),
-          platform: platform, osMajor: osMajor);
+      _start = const LivePreviewStart.none(LivePreviewReason.engineError);
+      telemetry.engineSelected(_start!, platform: platform, osMajor: osMajor);
       notifyListeners();
       return;
     }

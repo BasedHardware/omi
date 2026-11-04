@@ -14964,6 +14964,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
 
   @override
+  String get episodeFinishingUp => 'Dokončování…';
+
+  @override
   String get paymentDeclinedTitle => 'Vaše karta byla zamítnuta';
 
   @override

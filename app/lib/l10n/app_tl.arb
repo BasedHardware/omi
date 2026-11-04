@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
     "liveAudioSaved": "{duration} na-save",
     "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.",
+    "episodeFinishingUp": "Tinatapos…",
     "paymentDeclinedTitle": "Tinanggihan ang iyong card",
     "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}"
 }

@@ -15014,6 +15014,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
 
   @override
+  String get episodeFinishingUp => 'Завершение…';
+
+  @override
   String get paymentDeclinedTitle => 'Ваша карта отклонена';
 
   @override

@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
     "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
+    "episodeFinishingUp": "Afronden…",
     "paymentDeclinedTitle": "Uw kaart is geweigerd",
     "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen"
 }

@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Transkribirano do {time}",
     "liveAudioSaved": "Spremljeno {duration}",
     "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.",
+    "episodeFinishingUp": "Dovršavanje…",
     "paymentDeclinedTitle": "Vaša kartica je odbijena",
     "paymentDeclinedMessage": "Ažurirajte karticu kako biste vratili {plan}"
 }

@@ -15,6 +15,8 @@ from config.server_batch import capture_compatible as server_batch_capture_compa
 from config.server_batch import has_audio as server_batch_has_audio
 from database.server_batch_audio import close_server_batch_audio
 from config.server_batch import request_eligible as server_batch_request_eligible
+from config.server_batch import capture_language as server_batch_capture_language
+from config.server_batch import continuation_language as server_batch_continuation_language
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from database.stale_conversation_recovery import get_stale_recovery_page
@@ -147,7 +149,7 @@ class LiveConversationController:
             now=self.clock(),
             timeout=self.host.conversation_creation_timeout,
             proposed=proposed,
-            **({'language': self.host.language} if isinstance(getattr(self.host, 'language', None), str) else {}),
+            language=server_batch_continuation_language(self.host),
             allow_server_batch=server_batch_request_eligible(self.host, existing_capture=True),
         )
 
@@ -178,7 +180,7 @@ class LiveConversationController:
             device_id=self.host.client_device_context.client_device_id,
             arrival_at=self.clock(),
             timeout=self.host.conversation_creation_timeout,
-            language=getattr(self.host, 'language', None),
+            language=server_batch_continuation_language(self.host, existing),
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
@@ -647,13 +649,14 @@ class LiveConversationController:
             # Finalization parses the stamp as CalendarMeetingContext even when
             # its window means continuity hydration has nothing left to fetch.
             external_data['calendar_meeting_context']['title'] = meeting.get('title') or ''
+        server_batch_requested = server_batch_request_eligible(self.host)
         conversation = Conversation(
             id=conversation_id,
             created_at=self.clock(),
             started_at=self.clock(),
             finished_at=self.clock(),
             structured=Structured(),
-            language=self.host.language,
+            language=server_batch_capture_language(self.host) if server_batch_requested else self.host.language,
             transcript_segments=[],
             photos=[],
             status=ConversationStatus.in_progress,
@@ -710,7 +713,7 @@ class LiveConversationController:
                         and server_batch_owned(getattr(self.host, 'batch_record_capture', None) or {})
                     ),
                 }
-                if server_batch_request_eligible(self.host)
+                if server_batch_requested
                 else {}
             ),
         )

@@ -14951,6 +14951,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
 
   @override
+  String get episodeFinishingUp => 'Finishing up…';
+
+  @override
   String get paymentDeclinedTitle => 'Your card was declined';
 
   @override

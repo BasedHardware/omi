@@ -28,6 +28,9 @@ REPOSITORY = "gcr.io/based-hardware-dev/pusher"
 LIVE_WINDOW_TRANSCRIPT = "the wizard who had vanished"
 
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
+
 def writer_live_segment_window(
     transcript: str = LIVE_WINDOW_TRANSCRIPT,
     *,

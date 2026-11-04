@@ -24,6 +24,7 @@ from database.batch_pipeline_projection import assignment_held_without_recovery
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
 from config.batch_pipeline import projection_hold_recovery_enabled
+from utils.conversations.fragment_visibility import is_automatic_discard
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,8 @@ class ProjectionReleaseStore:
                 not binding.record_origin or conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
             )
             and not conversation.get('deleted')
-            and not conversation.get('discarded')
+            # A record's batch text supersedes the pipeline's own discard (replace_record).
+            and (not conversation.get('discarded') or (binding.record_origin and is_automatic_discard(conversation)))
             and conversation.get('status') == 'completed'
             and not conversation.get('uses_custom_stt')
             and conversation.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
@@ -157,6 +159,40 @@ def held_page_ids(client: Any, namespace: str, limit: int, after_id: str | None)
     return [document.id for document in query.stream()]
 
 
+# Instances restart far more often than one scan wraps. Persist the cursor so a
+# new instance resumes where the last pass stopped instead of at page one. The
+# doc carries no scheduler field, so control-shard queries never select it.
+RELEASE_CURSOR_KEY = 'projection_release_cursor'
+
+
+def load_release_cursor(store) -> str | None:
+    try:
+        row = store.ref('control', RELEASE_CURSOR_KEY).get().to_dict() or {}
+    except Exception as error:
+        logger.warning(
+            'event=batch_projection action=release_held action=cursor_load outcome=retry exception_type=%s',
+            type(error).__name__,
+        )
+        return None
+    after = row.get('after_id')
+    return after if isinstance(after, str) and after else None
+
+
+def save_release_cursor(store, after_id: str | None, now: float) -> None:
+    @firestore.transactional
+    def put(transaction):
+        transaction.set(store.ref('control', RELEASE_CURSOR_KEY), {'after_id': after_id, 'updated_at': now})
+
+    try:
+        store.run(put)
+    except Exception as error:
+        # Advisory: a lost write only repeats rows the next instance re-checks.
+        logger.warning(
+            'event=batch_projection action=release_held action=cursor_save outcome=retry exception_type=%s',
+            type(error).__name__,
+        )
+
+
 def release_page(store, *, limit: int, after_id: str | None, now: float | None = None, deadline: float | None = None):
     """One bounded page of held rows; returns (counts, next_after)."""
     moment = now if now is not None else time.time()
@@ -185,4 +221,13 @@ def release_page(store, *, limit: int, after_id: str | None, now: float | None =
             break
     processed = counts['examined']
     next_after = page[processed - 1] if processed and (processed < len(page) or len(page) >= limit) else None
+    return counts, next_after
+
+
+def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None):
+    """``release_page`` that resumes from, and records, the durable cursor."""
+    start = after_id if after_id is not None else load_release_cursor(store)
+    counts, next_after = release_page(store, limit=limit, after_id=start, now=now, deadline=deadline)
+    if counts['examined'] or next_after != start:
+        save_release_cursor(store, next_after, now)
     return counts, next_after

@@ -4,7 +4,7 @@
     "pr_linux_minutes_per_day": 14380,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380. 2026-11-03 ciflake: backend unit fanout 6->8 with proportional p50 forecast 8->6 minutes/runner leaves aggregate forecast (48 runner-minutes/run) and all caps unchanged; measured full-suite walls motivate capacity, not a relaxed 720s test gate.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -246,8 +246,8 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-unit-tests.yml/backend-unit-shard": {
-      "budget_p50_minutes": 8,
-      "display_name": "Backend unit shard ${{ matrix.shard }}/6",
+      "budget_p50_minutes": 6,
+      "display_name": "Backend unit shard ${{ matrix.shard }}/8",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 120,
@@ -259,17 +259,19 @@
           "3",
           "4",
           "5",
-          "6"
+          "6",
+          "7",
+          "8"
         ]
       },
-      "matrix_size": 6,
+      "matrix_size": 8,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
+      "rationale": "2026-11-03 ciflake: run 41672443401 selected about 2540 files (+47% since six-shard sizing); all tests passed but shard wall reached 729s against the unchanged 720s regression gate. Eight shards restore capacity headroom: projected max test wall 740 * 6/8 = 555s, while the existing 8-minute p50 forecast scales to 6 minutes per runner. Aggregate forecast remains 48 Linux runner-minutes/run (8 * 6 instead of 6 * 8), with the same 119 PR runs/day and 49-minute conservative signal cap. No measured p50 is claimed; re-seed from completed runs after merge.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 6
+        "linux": 8
       },
       "runs_on": "ubuntu-latest"
     },
@@ -1116,7 +1118,7 @@
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1206,7 +1208,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-11-01 keyless index check: the gate now mints an OIDC token through the dev deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1632,7 +1634,7 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 2,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
@@ -3032,11 +3034,11 @@
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 2,
       "if": "inputs.nightly_main_sha == '' && github.event_name == 'workflow_dispatch'",
-      "matrix": "${{ fromJSON(needs.source-closure.outputs.matrix) }}",
+      "matrix": {},
       "matrix_size": 1,
-      "needs": "source-closure",
+      "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-11-01 secret-exposure PR: the authenticated GCP_CREDENTIALS branch was dead (that credential exists only in the development environment, which this job never bound, so the path never ran); needs/matrix dropped and the job reduced to a dispatch-only retirement notice that keeps the nightly job-set contract. Runner, trigger, and budget unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5104,7 +5106,7 @@
     "gcp_nllb_translation.yml": {
       "name": "Deploy NLLB Translation to GKE",
       "owner": "CI maintainers",
-      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger",
+      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger. Prod NLLB retired 2026-11-02 (translation on Luna): development only",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5117,8 +5119,7 @@
               "default": "development",
               "description": "Select the environment to deploy to",
               "options": [
-                "development",
-                "prod"
+                "development"
               ],
               "required": "true",
               "type": "choice"

@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "رونویسی تا {time}",
     "liveAudioSaved": "{duration} ذخیره شد",
     "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "episodeFinishingUp": "در حال اتمام…",
     "paymentDeclinedTitle": "کارت شما رد شد",
     "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید"
 }

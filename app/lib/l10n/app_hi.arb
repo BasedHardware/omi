@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",
     "liveAudioSaved": "{duration} सहेजा गया",
     "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।",
+    "episodeFinishingUp": "पूरा किया जा रहा है…",
     "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
     "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें"
 }

@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkribert frem til {time}",
     "liveAudioSaved": "{duration} lagret",
     "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting.",
+    "episodeFinishingUp": "Fullfører…",
     "paymentDeclinedTitle": "Kortet ditt ble avvist",
     "paymentDeclinedMessage": "Oppdater kortet for å få {plan} tilbake"
 }

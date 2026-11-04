@@ -9,6 +9,8 @@ from typing import Any
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from utils.conversations import phase_shadow
+
 from database._client import db, run_transactional
 
 LIMIT = 100
@@ -318,12 +320,14 @@ def pending_conversations(uid: str) -> list[dict[str, Any]]:
     result = []
     for snapshot in rows:
         row = snapshot.to_dict() or {}
-        if (
+        excluded = (
             row.get('deleted')
             or row.get('is_deleted')
             or row.get('discarded')
             or row.get('finalization_status') in {'dead_letter', 'completed'}
-        ):
+        )
+        phase_shadow.observe('processing_attention', row, not excluded)
+        if excluded:
             continue
         result.append(
             {

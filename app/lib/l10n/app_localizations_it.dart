@@ -15043,6 +15043,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.';
 
   @override
+  String get episodeFinishingUp => 'Completamento…';
+
+  @override
   String get paymentDeclinedTitle => 'La tua carta è stata rifiutata';
 
   @override

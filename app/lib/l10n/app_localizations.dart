@@ -26325,6 +26325,12 @@ abstract class AppLocalizations {
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
 
+  /// Neutral Home row title while an episode summary is being completed.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing up…'**
+  String get episodeFinishingUp;
+
   /// Home row title when the renewal charge for the user's plan failed
   ///
   /// In en, this message translates to:

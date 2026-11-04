@@ -14959,6 +14959,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
 
   @override
+  String get episodeFinishingUp => 'Lõpetamine…';
+
+  @override
   String get paymentDeclinedTitle => 'Sinu kaart lükati tagasi';
 
   @override

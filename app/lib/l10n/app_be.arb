@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
     "liveAudioSaved": "Захавана {duration}",
     "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі.",
+    "episodeFinishingUp": "Завяршаем…",
     "paymentDeclinedTitle": "Вашу картку адхілілі",
     "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}"
 }

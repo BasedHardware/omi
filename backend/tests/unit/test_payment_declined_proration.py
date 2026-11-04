@@ -120,7 +120,6 @@ def _install_stub_modules() -> None:
     sub_mod.filter_plans_for_user = _shared_mock()
     sub_mod.should_show_new_plans = _shared_mock()
     sub_mod.adapt_plans_for_legacy_client = _shared_mock()
-    sub_mod.clear_trial_paywall_cache = _shared_mock()
     sub_mod.find_active_paid_subscription_for_user = _shared_mock()
     sub_mod.price_ids_match_plan_and_interval = _shared_mock(return_value=False)
     sub_mod.desktop_to_consumer_plan_change_error = _shared_mock(return_value=None)

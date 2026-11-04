@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
     "liveAudioSaved": "{duration}を保存済み",
     "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。",
+    "episodeFinishingUp": "仕上げ中…",
     "paymentDeclinedTitle": "カードが拒否されました",
     "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください"
 }

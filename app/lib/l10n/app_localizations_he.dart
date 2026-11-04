@@ -14856,6 +14856,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
 
   @override
+  String get episodeFinishingUp => 'מסיימים…';
+
+  @override
   String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
 
   @override

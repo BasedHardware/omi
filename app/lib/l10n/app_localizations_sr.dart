@@ -14973,6 +14973,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get liveAudioSavedDetail => 'Говорници и коначни транскрипт појавиће се овде током отпремања.';
 
   @override
+  String get episodeFinishingUp => 'Завршавање…';
+
+  @override
   String get paymentDeclinedTitle => 'Ваша картица је одбијена';
 
   @override

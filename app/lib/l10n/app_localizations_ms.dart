@@ -15003,6 +15003,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
 
   @override
+  String get episodeFinishingUp => 'Sedang menyiapkan…';
+
+  @override
   String get paymentDeclinedTitle => 'Kad anda ditolak';
 
   @override

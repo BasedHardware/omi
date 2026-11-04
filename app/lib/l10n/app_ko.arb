@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "{time}까지 변환됨",
     "liveAudioSaved": "{duration} 저장됨",
     "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.",
+    "episodeFinishingUp": "마무리 중…",
     "paymentDeclinedTitle": "카드가 거절되었습니다",
     "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요"
 }

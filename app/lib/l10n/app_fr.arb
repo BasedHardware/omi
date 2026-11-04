@@ -4558,6 +4558,7 @@
     "liveTranscribedUpTo": "Transcrit jusqu'à {time}",
     "liveAudioSaved": "{duration} enregistrés",
     "liveAudioSavedDetail": "Les intervenants et la transcription finale apparaîtront ici au fil de l'envoi.",
+    "episodeFinishingUp": "Finalisation…",
     "paymentDeclinedTitle": "Votre carte a été refusée",
     "paymentDeclinedMessage": "Mettez-la à jour pour retrouver {plan}"
 }

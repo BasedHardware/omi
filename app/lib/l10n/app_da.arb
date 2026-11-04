@@ -4565,6 +4565,7 @@
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
     "liveAudioSaved": "{duration} gemt",
     "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload.",
+    "episodeFinishingUp": "Afslutter…",
     "paymentDeclinedTitle": "Dit kort blev afvist",
     "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage"
 }

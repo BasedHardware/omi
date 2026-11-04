@@ -14734,6 +14734,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
 
   @override
+  String get episodeFinishingUp => '即将完成…';
+
+  @override
   String get paymentDeclinedTitle => '您的银行卡被拒绝';
 
   @override

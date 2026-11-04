@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Транскрибирано до {time}",
     "liveAudioSaved": "Зачувани {duration}",
     "liveAudioSavedDetail": "Говорниците и конечната транскрипција ќе се појават тука при прикачувањето.",
+    "episodeFinishingUp": "Се завршува…",
     "paymentDeclinedTitle": "Вашата картичка е одбиена",
     "paymentDeclinedMessage": "Ажурирајте ја картичката за да го вратите {plan}"
 }

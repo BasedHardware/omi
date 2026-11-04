@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
     "liveAudioSaved": "Saglabāts {duration}",
     "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.",
+    "episodeFinishingUp": "Pabeidzam…",
     "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
     "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}"
 }

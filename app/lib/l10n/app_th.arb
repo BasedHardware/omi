@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "ถอดความถึง {time}",
     "liveAudioSaved": "บันทึกแล้ว {duration}",
     "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด",
+    "episodeFinishingUp": "กำลังดำเนินการให้เสร็จ…",
     "paymentDeclinedTitle": "บัตรของคุณถูกปฏิเสธ",
     "paymentDeclinedMessage": "อัปเดตบัตรเพื่อกลับมาใช้ {plan}"
 }

@@ -85,8 +85,17 @@ def _top_level_outcome_tiles():
 def test_first_screen_keeps_outcome_thresholds_and_a_trend_under_each_tile():
     panels = _top_level_outcome_tiles()
     stats = {p['id']: p for p in panels if p['type'] == 'stat'}
-    # The null base step is what "no traffic" takes, so absence never reads as a red outcome.
-    bands = {'default': [None, 0, 95, 99], 73: [None, 0, 90, 98]}
+    # 99/95 only where the denominator is a user result. Other tiles stay
+    # uncolored so a non-outcome rate cannot read as a failed 99% bar.
+    # Recaps keep their own 98/90 generation scale.
+    bands = {
+        'default': [None, 0, 95, 99],
+        73: [None, 0, 90, 98],
+        63: [None],
+        2: [None],
+        20: [None],
+        36: [None],
+    }
     for stat_id, spark_id in zip((63, 3, 2, 73, 4, 20, 36, 70), range(80, 88)):
         stat = stats[stat_id]
         steps = [s['value'] for s in stat['fieldConfig']['defaults']['thresholds']['steps']]
@@ -136,6 +145,19 @@ def test_first_screen_is_exactly_the_agreed_panels():
     assert {p['id'] for p in panels} == {63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88)}
 
 
+def test_home_rows_tile_is_an_average_not_a_success_rate():
+    dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
+    panel = next(p for p in dashboard['panels'] if p.get('title') == 'Home rows / user / day')
+    expr = panel['targets'][0]['expr']
+    assert 'omi_home_rows_user_day_sum_total' in expr
+    assert 'omi_home_rows_user_day_count_total' in expr
+    assert panel['fieldConfig']['defaults']['noValue'] == 'not reporting'
+    assert panel['fieldConfig']['defaults']['thresholds']['steps'] == [{'color': 'text', 'value': None}]
+    # Stays off the locked first screen (panels between the feature-health row and "Is anything stuck?").
+    stuck = next(i for i, p in enumerate(dashboard['panels']) if p['id'] == 27)
+    assert dashboard['panels'].index(panel) > stuck
+
+
 def test_no_panels_overlap_on_the_first_screen_or_inside_any_row():
     dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
     groups = [[p for p in dashboard['panels']]] + [p['panels'] for p in dashboard['panels'] if p.get('panels')]
@@ -147,3 +169,23 @@ def test_no_panels_overlap_on_the_first_screen_or_inside_any_row():
             assert not cells & occupied, panel['title']
             assert g['x'] + g['w'] <= 24, panel['title']
             occupied |= cells
+
+
+def test_headline_tiles_name_the_user_result_they_actually_count():
+    panels = _panels()
+    assert 'not a user outcome' in panels[63]['description'].lower()
+    live = panels[3]['targets'][0]['expr']
+    assert 'frames_seen="audio"' in live
+    assert 'queue_wait_timeout' in live
+    assert 'application_error' in live
+    assert 'replay' in panels[3]['description'].lower()
+    assert 'visible' in panels[2]['description'].lower()
+    assert 'dead-letter' in panels[2]['description'].lower()
+    assert 'chat_response' in panels[4]['targets'][0]['expr']
+    assert '4xx' in panels[4]['description'].lower() or 'upstream_rejected' in panels[4]['description'].lower()
+    gateway = panels[20]['targets'][0]['expr']
+    assert 'job="llm-gateway-metrics"' in gateway
+    assert panels[20]['fieldConfig']['defaults']['noValue'] == 'not measured'
+    assert 'on-device' in panels[36]['description'].lower()
+    assert 'last 3 hours' in panels[73]['description'].lower() or 'last 3h' in panels[73]['title'].lower()
+    assert 'not what the user received' in panels[73]['description'].lower()

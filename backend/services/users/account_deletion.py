@@ -189,6 +189,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
+        vector_db.delete_all_user_vector_copies(uid)
+    except Exception as e:
+        record_failure('required_failures', 'all_vector_copies', e)
+        logger.error(f'delete_account purge all vector copies failed for {uid}: {sanitize(str(e))}')
+
+    try:
         result['recordings_deleted'] = delete_all_conversation_recordings(uid) or 0
     except Exception as e:
         record_failure('required_failures', 'conversation_recordings', e)

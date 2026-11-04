@@ -52,7 +52,6 @@ from utils.subscription import (
     desktop_to_consumer_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
-    clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
     price_ids_match_plan_and_interval,
 )
@@ -431,7 +430,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if recovered_from_stripe:
                     record_fallback(
                         component='other',
@@ -968,22 +966,21 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             if new_subscription:
                 users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
                     conversations_db.unlock_all_conversations(uid)
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                     clear_fair_use_on_upgrade(uid)
                     if funded_processing_enabled(uid):
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade
+                        from utils.processing_backlog_worker import plan_changed
 
-                        if allowance_increased(current_subscription, new_subscription):
-                            upgrade(
-                                uid,
-                                f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_start}',
-                                intent_at=time.time(),
-                            )
+                        plan_changed(
+                            uid,
+                            request.price_id,
+                            current_subscription,
+                            new_subscription,
+                            updated_sub_dict.get('status'),
+                        )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -1249,7 +1246,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             # A stored paid label with a missing, zero, or past period is Basic
             # on get_user_valid_subscription. Unlock only an open paid period.
             subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
@@ -1262,11 +1258,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                 if funded_processing_enabled(uid):
-                    from utils.processing_backlog import allowance_increased
-                    from utils.processing_backlog_worker import upgrade_async
+                    from utils.processing_backlog_worker import checkout_completed_async
 
-                    if allowance_increased(existing_subscription, subscription):
-                        await upgrade_async(uid, f'checkout:{session.get("id")}', intent_at=event.get("created"))
+                    await checkout_completed_async(uid, event, session, existing_subscription, subscription)
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
@@ -1474,17 +1468,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             ),
                         )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                    await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     if funded_processing_enabled(uid) and not adopted_active_paid:
-                        from utils.processing_backlog import allowance_increased
-                        from utils.processing_backlog_worker import upgrade_async
+                        from utils.processing_backlog_worker import subscription_changed_async
 
-                        if allowance_increased(current_subscription, new_subscription):
-                            await upgrade_async(
-                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
-                            )
+                        await subscription_changed_async(
+                            uid, event, subscription_obj, current_subscription, new_subscription
+                        )
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(
@@ -1537,7 +1528,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             if 'clear_fair_use' in decision.effects:
                                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                             logger.info(
@@ -1579,7 +1569,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
                             )

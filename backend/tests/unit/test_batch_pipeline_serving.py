@@ -171,10 +171,14 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=SimpleNamespace(allowed=True)))
     calls = []
+    budgets = []
+    deadline = admission.deadline_seconds
+    monkeypatch.setattr(admission, 'deadline_seconds', lambda value: budgets.append(value) or deadline(value))
 
     def send(request, timeout):
         calls.append(request.full_url)
-        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data))
+        headers = {'X-Omi-Admission-Seconds': request.get_header('X-omi-admission-seconds')}
+        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data), headers=headers)
         assert response.status_code == 200
         return io.BytesIO(response.content)
 
@@ -192,6 +196,8 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     pump = pump_module.Pump(Scheduler(store), worker, capacity=lambda: PoolCapacity(time.time(), 1))
     assert await pump.run_once() == 1
     assert worker.calls == 1 and len(calls) == 1
+    # The worker's advertised deadline reaches the server's clamp.
+    assert budgets == ['8.0'] and deadline(budgets[0]) == 8.0
     assert store.rows['jobs', 'synthetic']['state'] == 'committed'
     assert store.rows['jobs', 'synthetic']['compute_admission_token'] == store.rows['jobs', 'synthetic']['token']
 
@@ -492,42 +498,42 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch):
-    import asyncio
+async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch, caplog):
     from routers import batch_pipeline as routes
 
     _, store = api
+    caplog.set_level(logging.INFO, logger=routes.__name__)
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
-    entered, release = asyncio.Event(), asyncio.Event()
+    events = []
 
     async def recover(segment, owner):
-        entered.set()
-        await release.wait()
+        events.append('recognition')
         return 'recovered'
+
+    async def reconcile(**kwargs):
+        events.append(('owner_reconcile', kwargs['owner_only']))
 
     service.recovery = Mock()
     from unittest.mock import AsyncMock
 
     service.recovery.recover_async = AsyncMock(side_effect=recover)
-    service.reconcile_async = AsyncMock()
-    task = asyncio.create_task(
-        routes.recover_quarantine(
-            routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
-        )
+    service.reconcile_async = AsyncMock(side_effect=reconcile)
+    result = await routes.recover_quarantine(
+        routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
     )
-    try:
-        await asyncio.wait_for(entered.wait(), 2)
-        assert not task.done()  # The request stays active during the provider call.
-        service.reconcile_async.assert_not_awaited()
-    finally:
-        release.set()
-    assert await task == {'status': 'recovered'}
+    assert result == {'status': 'recovered'}
+    assert events == ['recognition', ('owner_reconcile', True)]
     service.reconcile_async.assert_awaited_once_with(
-        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
+        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic', owner_only=True
     )
     assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
     service.recovery.recover.assert_not_called()
+    stages = [record.getMessage() for record in caplog.records if 'event=batch_recovery_stage ' in record.getMessage()]
+    assert len(stages) == 2
+    assert stages[0].startswith('event=batch_recovery_stage stage=recognition duration_seconds=')
+    assert stages[1].startswith('event=batch_recovery_stage stage=post_recovery duration_seconds=')
+    assert all('synthetic' not in line and store.rows['jobs', 'synthetic']['owner_id'] not in line for line in stages)
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
@@ -713,7 +719,7 @@ async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monke
 
     service = SimpleNamespace(store=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
 
-    async def drain_recordings(store):
+    async def drain_recordings(store, **kwargs):
         return None
 
     monkeypatch.setattr(serving, 'current_stage', lambda: 'prod')
@@ -775,7 +781,8 @@ async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, bl
     async def reconcile_async(**kwargs):
         await tick('reconcile')
 
-    async def drain_recordings(store):
+    async def drain_recordings(store, **kwargs):
+        assert callable(kwargs['provider_outbox_factory'])
         assert store is service.store
         await tick('drain')
 
@@ -807,3 +814,57 @@ async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, bl
 
 async def _inline_serving_call(executor, fn, *args, **kwargs):
     return fn(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first_full', [True, False])
+async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatch, first_full):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    calls, waits, yields = [], [], []
+    second = asyncio.Event()
+    original_wait_for, original_sleep = asyncio.wait_for, asyncio.sleep
+    drain_task = None
+
+    async def admission(store, **kwargs):
+        nonlocal drain_task
+        drain_task = asyncio.current_task()
+        calls.append(1)
+        if len(calls) == 2:
+            second.set()
+        return first_full if len(calls) == 1 else False
+
+    async def wait_for(awaitable, timeout):
+        if asyncio.current_task() is drain_task:
+            waits.append(len(calls))
+            assert timeout == 20
+            if len(calls) == 1:
+                awaitable.close()
+                raise asyncio.TimeoutError
+        return await original_wait_for(awaitable, timeout)
+
+    async def sleep(delay):
+        if asyncio.current_task() is drain_task:
+            yields.append((len(calls), delay))
+        await original_sleep(delay)
+
+    async def reconcile_async(**kwargs):
+        return None
+
+    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async)
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'drain_recordings', admission)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', wait_for)
+    monkeypatch.setattr(serving.asyncio, 'sleep', sleep)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(second.wait(), timeout=2)
+    finally:
+        await serving.stop_serving(runtime)
+    assert calls == [1, 1]
+    assert waits == ([2] if first_full else [1, 2])
+    assert yields == ([(1, 0)] if first_full else [])

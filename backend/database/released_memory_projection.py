@@ -159,7 +159,7 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
         parent = list(query._parent._path)
         conversations = len(parent) == 3 and parent[2] == 'conversations' and surface == 'mcp_cards'
         card_coverage = bool(os.environ.get('OMI_LIST_VERSION_EPOCH', '').strip()) and os.environ.get(
-            'OMI_LIST_PROJECTION_WRITER_ENABLED', 'true'
+            'OMI_LIST_PROJECTION_WRITER_ENABLED', 'false'
         ).strip().lower() not in {'0', 'false', 'off'}
         eligible = (
             len(parent) == 3

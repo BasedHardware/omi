@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Đã chép đến {time}",
     "liveAudioSaved": "Đã lưu {duration}",
     "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.",
+    "episodeFinishingUp": "Đang hoàn tất…",
     "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
     "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}"
 }

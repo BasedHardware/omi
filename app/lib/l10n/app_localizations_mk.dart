@@ -15030,6 +15030,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get liveAudioSavedDetail => 'Говорниците и конечната транскрипција ќе се појават тука при прикачувањето.';
 
   @override
+  String get episodeFinishingUp => 'Се завршува…';
+
+  @override
   String get paymentDeclinedTitle => 'Вашата картичка е одбиена';
 
   @override

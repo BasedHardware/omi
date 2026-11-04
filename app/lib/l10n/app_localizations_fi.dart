@@ -14970,6 +14970,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
 
   @override
+  String get episodeFinishingUp => 'Viimeistellään…';
+
+  @override
   String get paymentDeclinedTitle => 'Korttisi hylättiin';
 
   @override

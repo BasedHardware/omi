@@ -15025,6 +15025,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
 
   @override
+  String get episodeFinishingUp => 'Befejezés…';
+
+  @override
   String get paymentDeclinedTitle => 'A kártyáját elutasították';
 
   @override

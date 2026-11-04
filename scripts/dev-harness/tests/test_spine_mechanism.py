@@ -1,13 +1,24 @@
 """Active tests for the pending mechanism, not builder acceptance."""
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import sys
+
+import pytest
+
+from scripts.git_test_env import clean_git_env
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('spine_check', ROOT / 'scripts/check_spine_contracts.py')
 checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
+
+
+@pytest.fixture(autouse=True)
+def isolated_git_env(monkeypatch):
+    for name in set(os.environ) - clean_git_env().keys():
+        monkeypatch.delenv(name)
 
 
 def test_marker_removal_is_the_only_permitted_diff():

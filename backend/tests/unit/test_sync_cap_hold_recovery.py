@@ -88,6 +88,15 @@ async def test_reset_or_upgrade_reuses_sync_and_settles_stable_usage_key(state):
     assert recovery.process_segment.call_args.args[8] == {'known': 'embedding'}
 
 
+async def test_early_clock_survives_held_piece_recovery_after_admission_is_disabled(state, monkeypatch):
+    offset = 788918420.0 - 1800000000.0
+    monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
+    recovery.cap_hold.metadata.return_value = {'timestamp': 788918400, 'source': 'omi', 'early_capture_offset': offset}
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_args.kwargs['early_capture_offset'] == offset
+    assert state.row['finalized']
+
+
 async def test_execution_denial_keeps_checkpoint_and_audio_without_stt(state, monkeypatch):
     recovery.sync_allowed.return_value = False
     assert not await recovery._recover_row('synthetic', state.snapshot, state.row)

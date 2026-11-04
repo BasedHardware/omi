@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Přepsáno do {time}",
     "liveAudioSaved": "Uloženo {duration}",
     "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání.",
+    "episodeFinishingUp": "Dokončování…",
     "paymentDeclinedTitle": "Vaše karta byla zamítnuta",
     "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}"
 }

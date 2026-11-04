@@ -359,6 +359,7 @@ async def run_session(
             'arm': arm,
             'would_serve': would_serve,
             'status': summary.get('status'),
+            'failure': summary.get('failure', 'none'),
             **{
                 key: summary.get(key, 0)
                 for key in (
@@ -373,6 +374,8 @@ async def run_session(
                     'merge_people_proposed',
                     'capped',
                     'merge_evidence_rejected',
+                    'plan_dropped',
+                    'plan_overflow',
                     'loop_applied',
                     'recall_keys',
                     'recall_refs',
@@ -1147,6 +1150,7 @@ async def run_session(
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',
+                notes_voice_free=True,
                 summary=session.finish.summary if session.finish else '',
             )
     except Exception as exc:

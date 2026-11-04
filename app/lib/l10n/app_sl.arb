@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Prepisano do {time}",
     "liveAudioSaved": "Shranjeno {duration}",
     "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.",
+    "episodeFinishingUp": "Zaključevanje…",
     "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
     "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}"
 }

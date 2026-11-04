@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "{time} வரை படியெடுக்கப்பட்டது",
     "liveAudioSaved": "{duration} சேமிக்கப்பட்டது",
     "liveAudioSavedDetail": "பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.",
+    "episodeFinishingUp": "முடிக்கப்படுகிறது…",
     "paymentDeclinedTitle": "உங்கள் கார்டு நிராகரிக்கப்பட்டது",
     "paymentDeclinedMessage": "{plan} மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்"
 }

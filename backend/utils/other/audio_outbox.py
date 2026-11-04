@@ -14,6 +14,7 @@ from typing import Any
 from utils.other import storage
 from utils.other.raw_audio import CapturePack, decode_capture
 from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, record_failure
+from utils.other.audio_frame_table import FRAME_SCHEMA, MAX_MANIFEST_BYTES, validate_frames
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class AudioProjection:
     start: float
     offset_samples: int
     samples: int
+    frames: tuple[dict, ...] = ()
 
     def __post_init__(self):
         if self.offset_samples < 0 or self.samples <= 0 or self.offset_samples + self.samples > self.receipt.samples:
@@ -77,6 +79,12 @@ def commit_capture(
     try:
         metadata = {**metadata, 'custody_schema': 'audio_custody_v1'}
         protection = data_protection_level or storage.users_db.get_data_protection_level(uid)
+        framed = metadata.get('frame_schema') == FRAME_SCHEMA
+        identity = hashlib.sha256(raw).hexdigest() if framed else None
+        if framed:
+            validate_frames(frames, int(metadata['sample_rate']))
+            suffix = '.enc' if protection == 'enhanced' else ''
+            metadata['custody_manifest_path'] = f'audio-outbox/{uid}/{name}/{identity}.bin{suffix}'
         path = storage.archive_capture_bytes(uid, raw, 'raw-live', name, metadata, data_protection_level=protection)
         bucket = storage.get_private_cloud_sync_bucket()
         blob = bucket.blob(path)
@@ -94,6 +102,8 @@ def commit_capture(
             'capture_end_checkpoint': frames[-1] if frames else None,
         }
         payload = json.dumps(manifest, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+        if framed and len(payload) > MAX_MANIFEST_BYTES:
+            raise ValueError('frame manifest exceeds reader bound; producer remains unacknowledged')
         manifest_path = storage.archive_capture_bytes(
             uid,
             payload,
@@ -105,9 +115,14 @@ def commit_capture(
                 'conversation_id': metadata.get('conversation_id'),
             },
             data_protection_level=protection,
+            **({'manifest_identity': identity} if framed else {}),
         )
         manifest_blob = bucket.blob(manifest_path)
         manifest_generation = _generation(manifest_blob)
+        # The reader bounds stored bytes before decrypting. Check the actual
+        # immutable object's size too, including any encryption envelope.
+        if framed and (manifest_blob.size is None or manifest_blob.size > MAX_MANIFEST_BYTES):
+            raise ValueError('frame manifest exceeds reader bound; producer remains unacknowledged')
         manifest_digest = hashlib.sha256(payload).hexdigest()
         if (manifest_blob.metadata or {}).get('sha256') != manifest_digest:
             raise ValueError('audio custody manifest digest mismatch')
@@ -126,6 +141,8 @@ def commit_capture(
             sample_rate=int(metadata['sample_rate']),
         )
         CUSTODY_COMMITS.inc()
+        if framed and metadata.get('conversation_id'):
+            storage.invalidate_pack_index(bucket, uid, str(metadata['conversation_id']))
         return receipt
     except Exception:
         record_failure('commit')
@@ -181,6 +198,7 @@ def commit_pcm_window(
     *,
     data_protection_level: str | None = None,
     clock_source: str = 'server_projected',
+    framed: bool = False,
 ) -> AudioReceipt:
     """Commit one immutable media+manifest pair for a window of PCM frames.
 
@@ -191,8 +209,22 @@ def commit_pcm_window(
     if not pcm or len(pcm) % 2:
         raise ValueError('audio outbox requires sample-aligned PCM16')
     pack = CapturePack('pcm16', sample_rate)
-    pack.append(pcm, conversation_id, start, len(pcm) // 2)
+    if framed:
+        if validate_frames(frames, sample_rate) * 2 != len(pcm):
+            raise ValueError('frame sample count differs from captured PCM')
+        offset = 0
+        for frame in frames:
+            count = frame['samples'] * 2
+            payload = pcm[offset : offset + count]
+            if frame.get('byte_offset', offset) != offset or hashlib.sha256(payload).hexdigest() != frame['sha256']:
+                raise ValueError('frame bytes differ from captured PCM')
+            pack.append(payload, conversation_id, frame['start'], frame['samples'])
+            offset += count
+    else:
+        pack.append(pcm, conversation_id, start, len(pcm) // 2)
     raw, metadata = pack.encoded(preserve_pcm=True)
+    if framed:
+        metadata.update(frame_schema=FRAME_SCHEMA, gap_count=sum(frame['gap_before'] for frame in frames))
     metadata.update(
         capture_session_id=source_root,
         channel_index=0,

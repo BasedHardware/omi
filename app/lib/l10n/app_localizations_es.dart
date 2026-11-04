@@ -15011,6 +15011,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Los hablantes y la transcripción final aparecerán aquí a medida que se suba.';
 
   @override
+  String get episodeFinishingUp => 'Terminando…';
+
+  @override
   String get paymentDeclinedTitle => 'Tu tarjeta fue rechazada';
 
   @override

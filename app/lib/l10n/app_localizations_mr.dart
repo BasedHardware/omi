@@ -14974,6 +14974,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get liveAudioSavedDetail => 'अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.';
 
   @override
+  String get episodeFinishingUp => 'पूर्ण करत आहे…';
+
+  @override
   String get paymentDeclinedTitle => 'तुमचे कार्ड नाकारले गेले';
 
   @override

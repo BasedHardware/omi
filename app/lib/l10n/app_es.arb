@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transcrito hasta las {time}",
     "liveAudioSaved": "{duration} guardados",
     "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba.",
+    "episodeFinishingUp": "Terminando…",
     "paymentDeclinedTitle": "Tu tarjeta fue rechazada",
     "paymentDeclinedMessage": "Actualízala para recuperar {plan}"
 }
