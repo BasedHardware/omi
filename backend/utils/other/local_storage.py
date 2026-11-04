@@ -266,8 +266,13 @@ def _size_http_pool(client):
         import requests.adapters
 
         size = gcs_http_pool_maxsize()
-        adapter = requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=size)
-        client._http.mount('https://', adapter)  # AuthorizedSession; same credentials and retries
+        session = client._http  # AuthorizedSession, created once per client
+        current = session.get_adapter('https://storage.googleapis.com/')
+        # Only replace the plain default adapter; a subclass (google-auth's mTLS
+        # adapter) carries client-certificate state that must be kept.
+        if type(current) is not requests.adapters.HTTPAdapter:
+            return client
+        session.mount('https://', requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=size))
     except Exception as error:  # an unsized pool is the previous behaviour, never a startup failure
         logging.getLogger(__name__).warning(
             'event=gcs_http_pool outcome=default exception_type=%s', type(error).__name__

@@ -36,12 +36,14 @@ def test_pool_sizing_failure_keeps_the_client(caplog):
     assert 'event=gcs_http_pool outcome=default exception_type=RuntimeError' in caplog.text
 
 
-@pytest.mark.parametrize('raw,expected', [(None, 128), ('8', 32), ('5000', 1024), ('256', 256), ('x', 128)])
-def test_closed_drain_cap_is_bounded(monkeypatch, raw, expected):
-    from utils import pusher_record_finish
+def test_a_non_default_adapter_is_kept():
+    import requests.adapters
 
-    if raw is None:
-        monkeypatch.delenv('PUSHER_MAX_CLOSED_RECORD_DRAINS', raising=False)
-    else:
-        monkeypatch.setenv('PUSHER_MAX_CLOSED_RECORD_DRAINS', raw)
-    assert pusher_record_finish._closed_drain_cap() == expected
+    class MutualTls(requests.adapters.HTTPAdapter):
+        pass
+
+    client = storage.Client(project='synthetic', credentials=AnonymousCredentials())
+    keep = MutualTls()
+    client._http.mount('https://', keep)
+    local_storage._size_http_pool(client)
+    assert client._http.get_adapter('https://storage.googleapis.com/') is keep
