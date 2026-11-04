@@ -255,11 +255,16 @@ def timeline_store(monkeypatch):
 
 
 @pytest.mark.parametrize('optimizations', ['true', 'false'])
-def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(timeline_store, monkeypatch, optimizations):
+@pytest.mark.parametrize('fraction', [0, 0.1234567])
+def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(
+    timeline_store, monkeypatch, optimizations, fraction
+):
     monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
     store = timeline_store
     path = ('users', 'owner', 'conversations', 'capture')
-    store.rows[path] = capture(finished_at=None)
+    store.rows[path] = capture(
+        finished_at=None, server_batch_audio_start=1000 + fraction, server_batch_audio_end=1120 + fraction
+    )
     entered = datetime.now(timezone.utc)
     c = service.Collaborators(firestore_client=store, now=lambda: entered)
     assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
@@ -275,7 +280,7 @@ def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(timeli
     wire = home_read.project_episode('owner', episode, members={'capture': member})
     assert wire['members'][0]['title'] == 'Transcribing…'
     assert wire['members'][0]['status'] == 'processing'
-    assert wire['members'][0]['finished_at'].timestamp() == 1120
+    assert wire['members'][0]['finished_at'] == datetime.fromtimestamp(1120 + fraction, timezone.utc)
 
 
 @pytest.mark.parametrize('outcome', ['dead_letter', 'failed', 'upload_failed', 'deadline', 'projected'])

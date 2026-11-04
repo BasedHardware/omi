@@ -197,12 +197,7 @@ def attach(
                 # Before transcription, committed archive bounds are the only
                 # audio clock. Legacy started_at/finished_at can be arrival time.
                 same_span = (
-                    bool(member)
-                    and member.get('server_batch_audio_closed') is True
-                    and type(member.get('server_batch_audio_start')) in (int, float)
-                    and type(member.get('server_batch_audio_end')) in (int, float)
-                    and member['server_batch_audio_start'] == start.timestamp()
-                    and member['server_batch_audio_end'] == end.timestamp()
+                    episode_batch_pending.matches_closed_audio(member, start, end)
                     if pending_at is not None
                     else span is not None and span.recorded_start == start and span.recorded_end == end
                 )

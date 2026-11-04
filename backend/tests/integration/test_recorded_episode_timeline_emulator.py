@@ -56,7 +56,8 @@ def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
 
 
 @pytest.mark.parametrize('optimizations', ['true', 'false'])
-def test_batch_close_deadline_and_partition_replay_share_one_transaction(store, monkeypatch, optimizations):
+@pytest.mark.parametrize('fraction', [0, 0.0000007])
+def test_batch_close_deadline_and_partition_replay_share_one_transaction(store, monkeypatch, optimizations, fraction):
     client, uid = store
     monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
     root = client.collection('users').document(uid)
@@ -64,8 +65,8 @@ def test_batch_close_deadline_and_partition_replay_share_one_transaction(store, 
     row = {
         'source': 'desktop',
         'record_lane_owner': 'batch_live_v1',
-        'server_batch_audio_start': T0.timestamp(),
-        'server_batch_audio_end': (T0 + timedelta(minutes=2)).timestamp(),
+        'server_batch_audio_start': T0.timestamp() + fraction,
+        'server_batch_audio_end': (T0 + timedelta(minutes=2)).timestamp() + fraction,
         'server_batch_audio_closed': True,
         'transcript_segments': [],
         'status': 'completed',
@@ -77,8 +78,8 @@ def test_batch_close_deadline_and_partition_replay_share_one_transaction(store, 
             uid,
             'batch-close',
             'desktop',
-            T0,
-            T0 + timedelta(minutes=2),
+            datetime.fromtimestamp(row['server_batch_audio_start'], timezone.utc),
+            datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc),
             choose=choose_recorded_episode,
             new_episode={},
             firestore_client=client,
