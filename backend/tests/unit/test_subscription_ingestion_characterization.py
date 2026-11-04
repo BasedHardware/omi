@@ -77,7 +77,6 @@ def lane(monkeypatch):
     monkeypatch.setattr(payment.users_db, 'set_stripe_customer_id', effect('customer'))
     monkeypatch.setattr(payment, 'find_active_paid_subscription_for_user', lambda uid: state.replacement)
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', effect('credits'))
-    monkeypatch.setattr(payment, 'clear_trial_paywall_cache', effect('trial_cache'))
     monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', effect('fair_use'))
     for module, method, name in (
         (payment.conversations_db, 'unlock_all_conversations', 'conversations'),
@@ -149,9 +148,9 @@ def test_every_lifecycle_status_and_paid_plan_preserves_bytes_and_effect_order(l
     # Includes every model field and default, especially current_price_id=None.
     assert wire(lane.current.model_dump()) == wire(expected.model_dump())
     assert [name for name, _ in lane.calls] == (
-        ['customer', 'conversations', 'memories', 'actions', 'write', 'telemetry', 'credits', 'trial_cache', 'fair_use']
+        ['customer', 'conversations', 'memories', 'actions', 'write', 'telemetry', 'credits', 'fair_use']
         if keeps_paid
-        else ['write', 'telemetry', 'credits', 'trial_cache']
+        else ['write', 'telemetry', 'credits']
     )
 
 
@@ -182,7 +181,6 @@ def test_adoption_preserves_replacement_bytes_and_does_not_copy_stale_customer(l
         'actions',
         'write',
         'credits',
-        'trial_cache',
         'fair_use',
     ]
 
@@ -304,7 +302,7 @@ def test_schedule_event_status_matrix(lane, kind, status, schedule_status):
         if schedule_status == 'canceled'
         else lane.current.cancel_at_period_end == (status in ('active', 'trialing'))
     )
-    assert [name for name, _ in lane.calls] == ['write', 'credits', 'trial_cache'] + (
+    assert [name for name, _ in lane.calls] == ['write', 'credits'] + (
         ['fair_use'] if schedule_status == 'completed' and status in ('active', 'trialing') else []
     )
 
@@ -352,7 +350,6 @@ def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan
             'customer',
             'write',
             'credits',
-            'trial_cache',
             'conversations',
             'memories',
             'actions',
@@ -402,7 +399,6 @@ def test_checkout_session_completed_normal_path_unchanged(lane):
         'customer',
         'write',
         'credits',
-        'trial_cache',
         'conversations',
         'memories',
         'actions',
@@ -506,7 +502,6 @@ def test_upgrade_subscription_normal_path_unchanged(lane, monkeypatch):
         'modify',
         'write',
         'credits',
-        'trial_cache',
         'conversations',
         'memories',
         'actions',
@@ -744,7 +739,7 @@ def test_unresolved_checkout_preserves_cache_and_valid_stored_plan_effects(
     monkeypatch.setattr(payment, '_update_subscription_from_session', lambda uid, session: False)
     monkeypatch.setattr(payment, 'webhook_ledger_enabled', lambda: ledger_enabled)
     result = asyncio.run(payment._handle_stripe_event(lane.event))
-    expected = ['credits', 'trial_cache']
+    expected = ['credits']
     if stored_plan == PlanType.plus:
         expected += ['conversations', 'memories', 'actions', 'fair_use']
     assert _call_names(lane)[: len(expected)] == expected

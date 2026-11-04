@@ -82,6 +82,12 @@ fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
 use `scripts/failure-class prepare` or `explain` for the exact field and
 relevant context.
 
+Temporary Git fixtures must clear the variables reported by
+`git rev-parse --local-env-vars`, plus `GIT_NAMESPACE`, before running Git or
+checks that invoke Git. `scripts/pr-preflight` resolves and enters the selected
+worktree before clearing this environment for its child checks; standalone
+Python script fixtures can use `scripts/git_test_env.py`.
+
 **Prefer primitives to guards.** Before adding a check or ratchet, answer in
 the PR body: "Why isn't this a shared primitive instead?" A new guard must
 cite the real merged PR or incident it would have caught; no real instance

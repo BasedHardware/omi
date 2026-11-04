@@ -460,7 +460,6 @@ def test_flagged_chat_admission_precedes_byok_and_old_quota(monkeypatch, plan):
     from fastapi import HTTPException
 
     sub_mod = _reload_subscription_module()
-    monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: False)
     snapshot = {'budget_percent': 100, 'plan_id': plan, 'reset_at': 1793491200}
     monkeypatch.setattr(sub_mod.ladder_v1, 'budget_snapshot', lambda *a, **k: snapshot)
     monkeypatch.setattr(sub_mod, 'get_chat_quota_snapshot', lambda *a, **k: pytest.fail('legacy quota consulted'))
@@ -473,7 +472,6 @@ def test_flagged_chat_admission_precedes_byok_and_old_quota(monkeypatch, plan):
 def test_flagged_free_snapshot_and_admission_share_budget_not_trial(monkeypatch, percent, allowed):
     sub_mod = _reload_subscription_module()
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: True)
     monkeypatch.setattr(
         sub_mod.users_db, 'get_user_valid_subscription', lambda *a, **k: _make_subscription(PlanType.basic)
     )

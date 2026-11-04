@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
@@ -78,7 +77,7 @@ def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: An
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     ref = client.document(path)
     try:
-        ref.update({"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
+        ref.update({"kg_extracted": True})
         return True
     except FirestoreNotFound:
         logger.warning(

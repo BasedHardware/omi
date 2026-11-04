@@ -1,6 +1,7 @@
 """Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
 
 import logging
+import math
 import threading
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
@@ -19,6 +20,14 @@ from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reaso
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
+
+
+def age_seconds(started: float | None, now: float) -> float:
+    # Preserve an explicitly incomplete bounded scan as NaN. max(0, NaN)
+    # would silently turn unknown debt into a healthy zero.
+    if started is None:
+        return 0
+    return max(0.0, now - started) if math.isfinite(started) else float('nan')
 
 
 class QueueMetrics:
@@ -233,11 +242,9 @@ class QueueMetrics:
                     'event=batch_capacity_sample outcome=unavailable exception_type=%s', type(error).__name__
                 )
         for priority, pending, ready, retry in samples:
-            self.oldest_age.labels(LABELS[priority], *self.scope).set(
-                max(0.0, now - pending) if pending is not None else 0
-            )
+            self.oldest_age.labels(LABELS[priority], *self.scope).set(age_seconds(pending, now))
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
-            self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
+            self.retry_age.labels(LABELS[priority], *self.scope).set(age_seconds(retry, now))
         self.refreshed_at.labels(*self.scope).set(now)
         if capacity:
             for priority, count in capacity:

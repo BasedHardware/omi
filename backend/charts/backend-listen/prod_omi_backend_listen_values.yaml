@@ -100,9 +100,11 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
+    value: "true"
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
-    value: "false"
+    value: "true"
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
@@ -121,8 +123,16 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: BATCH_CONTROL_CANDIDATE_FANOUT
+    value: "16"
+  - name: BATCH_ADMISSION_PARALLEL_CALLS
+    value: "true"
+  - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
+    value: "10"
   - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
-    value: ""
+    value: "af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh"
+  - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
+    value: "100"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
@@ -565,6 +575,8 @@ env:
         key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
@@ -608,7 +620,7 @@ env:
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "100"
+    value: "0"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS

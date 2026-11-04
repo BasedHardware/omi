@@ -16,6 +16,8 @@ import os
 import random
 import time
 
+from utils.conversations import phase_shadow
+
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
@@ -37,7 +39,7 @@ from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
@@ -252,7 +254,12 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         )
 
     current = await run_blocking(db_executor, read_current)
-    record_barrier = require_record_audio_barrier(current)
+    try:
+        record_barrier = require_record_audio_barrier(current)
+    except ValueError:
+        phase_shadow.observe('batch_admission', current, False, now=now)
+        raise
+    phase_shadow.observe('batch_admission', current, True, now=now)
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
@@ -288,7 +295,9 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
     units = []
     try:
-        while unit := await run_blocking(sync_executor, next, iterator, None):
+        # Advancing the generator downloads retained objects. Keep that leaf
+        # I/O off the smaller sync pool used by serving and sync coordinators.
+        while unit := await run_blocking(storage_executor, next, iterator, None):
             units.append(unit)
             if len(units) > 128:
                 raise ValueError('retained capture unit budget exceeded')
@@ -395,12 +404,26 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     concurrency = record_drain_concurrency()
     segments, partial_count = [], 0
     privacy_blocked = False
+    # Every admission rewrites the owner's scheduler row, so two local workers
+    # admitting one owner only exhaust each other's contention retries. Leave
+    # the busy owner's other rows due for the next pass instead.
+    busy_owners = set()
 
     async def drain_one(segment):
-        nonlocal partial_count, privacy_blocked
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
             return
+        owner = pending.get('owner_id')
+        if owner in busy_owners:
+            return
+        busy_owners.add(owner)
+        try:
+            await admit_and_defer(segment, pending)
+        finally:
+            busy_owners.discard(owner)
+
+    async def admit_and_defer(segment, pending):
+        nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
         failed = False
         try:

@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from git_test_env import clean_git_env
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +42,7 @@ GIT_ISOLATION = [
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     if command and command[0] == "git":
         command = [command[0], *GIT_ISOLATION, *command[1:]]
-    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment = clean_git_env()
     return subprocess.run(command, cwd=cwd, check=False, text=True, capture_output=True, env=environment)
 
 

@@ -246,6 +246,7 @@ def iter_audio_chunk_pcm(
     max_downloads: Optional[int] = None,
     session: Optional[AudioChunkReadSession] = None,
     window_start: Optional[float] = None,
+    chunk_filter: Optional[Callable[[Dict[str, Any]], bool]] = None,
 ) -> Iterator[Tuple[float, bytes]]:
     """Yield individual decoded blobs; an optional session shares listing/cache/budget.
 
@@ -253,7 +254,7 @@ def iter_audio_chunk_pcm(
     """
     bucket = storage.get_private_cloud_sync_bucket()
     chunks = session.chunks if session is not None else storage.list_audio_chunks(uid, conversation_id)
-    chunks = sorted(chunks, key=chunk_start)
+    chunks = sorted((c for c in chunks if chunk_filter is None or chunk_filter(c)), key=chunk_start)
     indexes = range(len(chunks) - 1, -1, -1) if newest_first else range(len(chunks))
     downloads = 0
     cached_path, cached_pcm = None, None
