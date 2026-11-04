@@ -117,11 +117,20 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
     store.rows['jobs', 'bad'] = {'owner_id': 'synthetic-bad', 'state': 'record_pending', 'available_at': 0}
     store.rows['jobs', 'slow'] = {'owner_id': 'synthetic-slow', 'state': 'record_pending', 'available_at': 0}
     original_run = store.run
-    slow, release = asyncio.Event(), asyncio.Event()
+    slow, release, failed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    slow_workers = []
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        # Resolve fake DB calls without yielding to executor scheduling. The real
+        # drain workers still run concurrently and admission blocks on release.
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(live, 'run_blocking', run_blocking)
 
     def run(body):
         result = original_run(body)
         if isinstance(result, dict) and result.get('broken'):
+            failed.set()
             raise RuntimeError('synthetic store failure')
         return result
 
@@ -129,6 +138,7 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
     monkeypatch.setattr(store, 'run', run)
 
     async def admit(store, pending):
+        slow_workers.append(asyncio.current_task())
         slow.set()
         await release.wait()
 
@@ -136,11 +146,15 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
     task = asyncio.create_task(live.drain_recordings(store))
     try:
         await asyncio.wait_for(slow.wait(), timeout=1)
+        assert failed.is_set()
         assert not task.done()
     finally:
         release.set()
         with pytest.raises(RuntimeError, match='synthetic store failure'):
-            await task
+            await asyncio.wait_for(task, timeout=1)
+    assert len(slow_workers) == 1
+    assert slow_workers[0].done() and not slow_workers[0].cancelled()
+    assert store.rows['jobs', 'slow']['available_at'] > 0
 
 
 @pytest.mark.asyncio
