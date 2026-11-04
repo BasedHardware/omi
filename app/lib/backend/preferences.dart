@@ -1619,12 +1619,11 @@ class SharedPreferencesUtil {
   }
 
   Future<bool> saveString(String key, String value) async {
+    if (key == 'uid') _appsListRevision++;
     final changed = key == 'btDevice' && _preferences?.getString(key) != value;
     final write = _preferences?.setString(key, value);
     if (changed) _deviceChanges.add(null);
     return await write ?? false;
-    if (key == 'uid') _appsListRevision++;
-    return await _preferences?.setString(key, value) ?? false;
   }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;

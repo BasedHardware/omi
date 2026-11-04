@@ -256,12 +256,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         ConversationTab.summary => _summaryTabIndex,
       };
 
-  void _openTranscriptTab() {
-    _hasExplicitTabSelection = true;
-    setState(() => selectedTab = ConversationTab.transcript);
-    _controller?.animateTo(_transcriptTabIndex);
-  }
-
   /// Brings the Summary tab forward. A reprocess started elsewhere (the ⋯ menu on Transcript,
   /// a failed-transcript retry) shows its progress and, with the v2 gate, its failure card there.
   void _openSummaryTab() {

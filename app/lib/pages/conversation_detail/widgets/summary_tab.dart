@@ -28,7 +28,6 @@ import 'conversation_action_items_section.dart';
 import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
-import 'summary_task_recovery.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
