@@ -57,7 +57,7 @@ def record_exception(error: BaseException, stage: str, *, operation=None, transa
     return result
 
 
-def item_report(manifest, stages: list[StageResult]) -> dict:
+def item_report(manifest, stages: list[StageResult], *, decryption='off') -> dict:
     stopped = next((s for s in stages if s.status != 'pass'), None)
     expectation_met = not any(s.status == 'not_implemented' for s in stages)
     observed = {s.stage: s for s in stages}
@@ -78,6 +78,7 @@ def item_report(manifest, stages: list[StageResult]) -> dict:
             )
     result = {
         'item': manifest.id,
+        'decryption': decryption,
         'tier': manifest.tier,
         'scrub': manifest.scrub,
         'stages': [asdict(s) for s in stages],
@@ -94,12 +95,15 @@ def item_report(manifest, stages: list[StageResult]) -> dict:
 
 
 def table(items: list[dict]) -> str:
-    rows = ['| item | furthest stage | stop reason | duration | verdict | expectation |', '|---|---|---|---:|---|---|']
+    rows = [
+        '| item | furthest stage | stop reason | duration | verdict | expectation | decryption |',
+        '|---|---|---|---:|---|---|---|',
+    ]
     for item in items:
         reason = (item['stop_reason'] or '—').replace('|', '\\|').replace('\n', ' ')
         rows.append(
             f"| {item['item']} | {item['furthest_stage']} | {reason} | "
-            f"{item['duration_ms'] / 1000:.3f}s | {item['verdict']} | {item['expectation_verdict']} |"
+            f"{item['duration_ms'] / 1000:.3f}s | {item['verdict']} | {item['expectation_verdict']} | decryption: {item.get('decryption', 'off')} |"
         )
     return '\n'.join(rows)
 

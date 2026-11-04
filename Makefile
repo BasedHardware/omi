@@ -74,10 +74,12 @@ batch-replay:
 # Local stage replay; expected incident stops are successful reproductions.
 CASES ?= backend/testing/replay_harness/fixtures/privacy-transitions-smoke
 
+REPLAY_DECRYPT_ARGS = $(if $(SECRET_FILE),--secret-file "$(abspath $(SECRET_FILE))") $(if $(UID_FILE),--uid-file "$(abspath $(UID_FILE))") $(if $(CONSENT_FILE),--consent-file "$(abspath $(CONSENT_FILE))")
+
 .PHONY: replay-harness replay-privacy-full
 replay-harness:
 	@test -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: CASES OUTPUT'; exit 2)
-	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(PRIVACY_TTL_OVERRIDE_S),--privacy-ttl-override-s $(PRIVACY_TTL_OVERRIDE_S))
+	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(REPLAY_DECRYPT_ARGS) $(if $(PRIVACY_TTL_OVERRIDE_S),--privacy-ttl-override-s $(PRIVACY_TTL_OVERRIDE_S))
 
 # Large synthetic privacy qualification stays on the caller's heavy lane.
 replay-privacy-full:
@@ -89,7 +91,7 @@ replay-privacy-full:
 .PHONY: replay-gate
 replay-gate:
 	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CASES OUTPUT'; exit 2)
-	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(K),--repeats "$(K)") $(if $(filter 1,$(REGRESSION_ONLY)),--regression-only) $(if $(WORKER_TIMEOUT),--worker-timeout "$(WORKER_TIMEOUT)")
+	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(REPLAY_DECRYPT_ARGS) $(if $(K),--repeats "$(K)") $(if $(filter 1,$(REGRESSION_ONLY)),--regression-only) $(if $(WORKER_TIMEOUT),--worker-timeout "$(WORKER_TIMEOUT)")
 
 # Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
 # through backend/test.sh; included by scripts/pr-preflight --all for backend

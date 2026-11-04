@@ -70,6 +70,53 @@ Corpora live under `/Volumes/Ephemeral/scratch/replay-corpus/` (mode `0700`), ne
 when the program that needed them ends. Output is printed as counts, statuses and exception types only.
 Capture at detection time: a fix that lands first erases the failing input.
 
+## Decrypting captured cases
+
+Decryption is opt-in. With no private files, captured transcript fields stay opaque,
+`titling:precondition_skipped:recovery_undecoded` remains an explicit stop, and the
+reports say `decryption: off`. To enable it, supply **all three** files:
+
+- `--secret-file`: the UTF-8 product master secret (at least 32 bytes, optional trailing newline).
+- `--uid-file`: the consenting owner's UID.
+- `--consent-file`: the capture consent pins, one lowercase SHA-256 UID hash per line.
+
+Each file must be an owned, nonsymlink regular file with mode exactly `0600`.
+Replay reuses `guard.py`'s private-file and consent checks, then requires
+`sha256(uid)` to equal the case's `corpus.owner_sha256`. New captures include this
+pin. Older captures may use their retained result `owner_key` or immutable
+artifact URI owner hash; every retained pin must agree. A case without an owner
+pin must be recaptured; the salted owner token alone cannot prove ownership.
+Inputs are validated before infrastructure starts. Never put these files under
+OUTPUT or Git. Replay does not obtain credentials or read production.
+
+```bash
+unset GOOGLE_APPLICATION_CREDENTIALS CLOUDSDK_CONFIG CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- \
+  node_modules/.bin/firebase emulators:exec --only firestore --project demo-omi-isolated-tests \
+  'make replay-harness CASES="/absolute/private/owner-case" OUTPUT=/Volumes/Ephemeral/scratch/replay-decrypted SECRET_FILE=/absolute/private/master-secret UID_FILE=/absolute/private/owner-uid CONSENT_FILE=/absolute/private/consent-pins'
+```
+
+The direct `run` command accepts `--secret-file`, `--uid-file` and `--consent-file`.
+`make replay-gate` accepts the same `SECRET_FILE`, `UID_FILE` and `CONSENT_FILE`
+variables alongside `REF`, `BASE`, `CASES` and `OUTPUT`. Both sides and any retry
+receive the existing file paths; the gate never copies the files or their values.
+The report and each worker outcome record `decryption: on` when enabled.
+
+Decrypted Tier C replay supports `capture_upload` and `titling`. Product key
+derivation, transcript decryption/decompression and artifact authentication run
+unchanged. The real owner identity is used only in memory for derivation and
+artifact AAD; emulator document names remain synthetic. Product string/byte
+field values are replaced at the Firestore SDK boundary with random opaque
+identity tokens backed by a per-run memory table, so even generated titles stay
+in memory. Equality queries and transactions remain real; this adapter does not
+support ordering queries over string fields. Artifact ciphertext is read in
+place and plaintext is returned only in memory. Product stdout/stderr and logs
+are discarded during decrypted execution. No plaintext, UID or secret is written
+to temporary files, reports or logs. This is process-local instrumentation: do
+not run concurrent replay coroutines in the same Python process. Separate gate
+workers remain isolated. Reports retain only the existing sanitized observations.
+
 ## Privacy cache replay
 
 `privacy_cache` qualifies **cache staleness only**. It is a schema-v1 boundary that compares real cached readers with
