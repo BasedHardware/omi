@@ -1116,6 +1116,7 @@ _add(
             'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape'),
             'transaction': (None, 'reuse the enclosing transaction read phase; same query shape'),
             'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
+            'log_capture': (None, 'preloaded owner/capture state; document reads only, no query shape effect'),
             'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
         },
