@@ -303,14 +303,15 @@ Modulate overflow is a supported failover path for GPU stockouts and outages
 (David 065da8, 2026-11-04), not an emergency step.
 
 Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
-`en-overflow-1104` (lead2 863cd6; David 49b7e4: English-only overflow).
-- `selection: ordered`, rows `en: [gpu, modulate]`, `gpu_supported: [gpu]`,
-  `gpu_unsupported: [modulate]`, `*: [gpu]`. Fresh English overflows to
+`en-overflow-1104b` (lead2 863cd6/fb423f; David 49b7e4: English-only overflow).
+- `selection: ordered`, rows `en: [gpu, modulate, soniox]`, `gpu_supported: [gpu]`,
+  `gpu_unsupported: [modulate, soniox]`, `*: [gpu]`. Fresh English overflows to
   Modulate once the ring is saturated. Other GPU-capable languages stay on
   GPU. Languages Parakeet cannot serve start on Modulate (unchanged).
-- No Soniox: it is not admitted on prerecorded today, so `route_capable` never
-  selects it. A Modulate outage holds unsupported languages with their audio
-  until Modulate returns. Revisit when slice D lands.
+- Soniox stays `failover_only` (cap 1,000 audio-h/day), exactly as in the earlier
+  prod-gpu-first-v1 table: a Modulate outage fails English and unsupported
+  languages over to Soniox, else holds them with their audio. Overflow never
+  starts on Soniox.
 - Modulate carries a runaway-only `daily_audio_hours_cap` of 3,000 (lead2,
   Luna P1 on #24637). gpu_unsupported needs about 900 audio-h/day, which
   leaves about 2,100 audio-h/day of overflow before anything holds (about
@@ -363,11 +364,9 @@ Each update is checked explicitly (not with `set -e`, which a `||` or `if`
 around it would suspend). The loop stops at the first failure and says where,
 so the services never stay split between two tables without notice.
 
-Once served, the stage reads the served table even at routing percent 0. The
-standing table has no Soniox route, so a Modulate outage holds vendor-routed
-units with their audio (`vendor_held`) until Modulate returns; no Soniox
-failover happens until a table adds it back. The outage rows above describe
-the earlier Soniox-failover table. Overflow needs the cohort too. Arm it through the runtime ramp `batch-vendor-routing` (`ramp_set`, lead2
+Once served, Soniox failover is live for vendor-routed units even at routing
+percent 0, because the stage reads the served table. Overflow needs the cohort
+too. Arm it through the runtime ramp `batch-vendor-routing` (`ramp_set`, lead2
 2026-11-04: 0, then 25, then 100); `BATCH_VENDOR_ROUTING_PERCENT` env is only the
 fallback when no ramp row exists (clamped to the batch percent). Rollback: `--remove-env-vars
 BATCH_VENDOR_ROUTE_TABLE` serves the builtin table (today's routing); the

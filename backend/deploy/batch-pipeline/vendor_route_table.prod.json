@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "table_version": "en-overflow-1104",
+  "table_version": "en-overflow-1104b",
   "selection": "ordered",
   "gpu_floor_percent": 0.0,
   "routes": {
@@ -17,6 +17,13 @@
       "monthly_budget_usd": null,
       "failover_only": false,
       "speaker_turns": "discard"
+    },
+    "soniox": {
+      "price_usd_per_audio_hour": null,
+      "daily_audio_hours_cap": 1000.0,
+      "monthly_budget_usd": null,
+      "failover_only": true,
+      "speaker_turns": "discard"
     }
   },
   "rows": [
@@ -32,6 +39,11 @@
           "route": "modulate",
           "quality_tier": "accepted",
           "quality_source": "legacy_parity"
+        },
+        {
+          "route": "soniox",
+          "quality_tier": "accepted",
+          "quality_source": "staging_drill"
         }
       ]
     },
@@ -52,6 +64,11 @@
           "route": "modulate",
           "quality_tier": "accepted",
           "quality_source": "legacy_parity"
+        },
+        {
+          "route": "soniox",
+          "quality_tier": "accepted",
+          "quality_source": "staging_drill"
         }
       ]
     },

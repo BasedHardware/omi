@@ -1,9 +1,9 @@
-"""The checked-in prod route table en-overflow-1104 (lead2 863cd6, David 49b7e4: English-only overflow).
+"""The checked-in prod route table en-overflow-1104b (lead2 863cd6/fb423f, David 49b7e4: English-only overflow).
 
 GPU first everywhere Parakeet serves; fresh English overflows to Modulate past the GPU SLO; other
 GPU-capable languages stay on GPU; languages Parakeet cannot serve start on Modulate. Modulate carries a
-runaway-only daily cap (3000 audio-h) and its $0.06 list price; no Soniox (not admitted on prerecorded
-today, so route_capable never selects it). Runs the real parser and the real
+runaway-only daily cap (3000 audio-h) and its $0.06 list price; Soniox stays failover-only (cap 1000) for
+English and for languages Parakeet cannot serve, exactly as prod-gpu-first-v1 had it. Runs the real parser and the real
 selection over the file the runtime overlay serves as BATCH_VENDOR_ROUTE_TABLE. Hermetic.
 """
 
@@ -58,12 +58,13 @@ def _decide(table, language, *, down=(), saturated=False):
 
 
 def test_the_file_is_the_standing_english_overflow_table(table):
-    assert table.table_version == 'en-overflow-1104'
+    assert table.table_version == 'en-overflow-1104b'
     assert table.selection == 'ordered'
     assert table.gpu_floor_percent == 0.0
-    assert set(table.routes) == {'gpu', 'modulate'}  # Soniox is not admitted on prerecorded today
-    assert [option.route for option in table.row_for('en').options] == ['gpu', 'modulate']
+    assert table.routes['soniox'].failover_only and not table.routes['modulate'].failover_only
+    assert [option.route for option in table.row_for('en').options] == ['gpu', 'modulate', 'soniox']
     assert [option.route for option in table.row_for(OTHER_SUPPORTED).options] == ['gpu']
+    assert [option.route for option in table.row_for(UNSUPPORTED).options] == ['modulate', 'soniox']
 
 
 def test_modulate_spend_is_bounded_per_day_and_priced_at_list(table):
@@ -76,6 +77,8 @@ def test_modulate_spend_is_bounded_per_day_and_priced_at_list(table):
     assert modulate.price_usd_per_audio_hour == 0.06
     assert modulate.monthly_budget_usd is None
     assert table.routes['gpu'].daily_audio_hours_cap is None
+    # Soniox is failover-only at its prior cap: it covers a Modulate outage day of unsupported-language STT.
+    assert table.routes['soniox'].daily_audio_hours_cap == 1000.0
 
 
 @pytest.mark.parametrize('language', LANGUAGES)
@@ -119,9 +122,27 @@ def test_languages_parakeet_cannot_serve_start_on_modulate(table, language):
     assert decision.reason in {Reason.SOLE_CAPABLE, Reason.ORDERED}
 
 
-def test_modulate_down_holds_unsupported_languages_on_modulate(table):
-    # No second vendor in the table: the stage holds the audio until Modulate returns.
+def _soniox_admitted(monkeypatch, admitted=True):
+    real = c.provider_is_enabled
+    monkeypatch.setattr(c, 'provider_is_enabled', lambda p, s: admitted if p == 'soniox' else real(p, s))
+
+
+def test_modulate_down_fails_unsupported_languages_over_to_soniox(table, monkeypatch):
+    _soniox_admitted(monkeypatch)
     decision = _decide(table, UNSUPPORTED, down={'modulate'})
+    assert (decision.selected, decision.reason) == ('soniox', Reason.FAILOVER)
+
+
+def test_overflow_never_starts_on_soniox(table, monkeypatch):
+    # Soniox is failover-only: with Modulate down, saturated English waits on the GPU ring.
+    _soniox_admitted(monkeypatch)
+    decision = _decide(table, SUPPORTED, down={'modulate'}, saturated=True)
+    assert (decision.selected, decision.reason) == ('gpu', Reason.ORDERED)
+
+
+def test_all_vendors_down_starts_on_modulate_so_the_stage_holds_the_audio(table, monkeypatch):
+    _soniox_admitted(monkeypatch)
+    decision = _decide(table, UNSUPPORTED, down={'modulate', 'soniox'})
     assert (decision.selected, decision.reason) == ('modulate', Reason.NO_HEALTHY_ROUTE)
 
 
