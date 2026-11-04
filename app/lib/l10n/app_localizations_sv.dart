@@ -14973,4 +14973,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talare och den slutliga transkriptionen visas här under uppladdningen.';
+
+  @override
+  String get episodeFinishingUp => 'Slutför…';
 }

@@ -251,11 +251,24 @@ nested in the existing batch cohort, so selecting 50% while batch admits 25%
 can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
+Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
+cohort keyed on authenticated `client_platform=web`; persisted source may be
+`unknown`. It uses the existing server-side pusher custody path, with no client
+WAL or new endpoint. Auto/multi/undeclared web capture additionally requires
+`SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT` (default 0) and a learned profile
+whose expected languages are all supported. A declared unsupported language
+stays live. Expand web 5 → 25 → 100 only after the web deploy is live; the Infra
+Rollout Coordinator completes expansion within 3 days, with clean web suppression
+reasons and batch timeliness. Setting the web percentage to 0 restores live
+admission for new captures; already owned captures retain custody until done.
+
 Admission requires cloud-storage consent, durable outbox and pusher availability,
 a named Parakeet-supported language (or an admitted unsupported language below) matching the request, server STT, and
 single-channel capture outside onboarding/phone calls. Storage-disabled,
 unselected multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
-sessions retain their live behavior. The session's language profile must agree
+sessions retain their live behavior. Auto/multi/undeclared mobile and web sessions
+require the separate AUTO-language cohort and learned supported-only profile. The
+session's language profile must agree
 with that named primary; missing profiles or a primary mismatch stay live. For
 supported declarations, expected languages must all be Parakeet-supported.
 `SERVER_BATCH_UNSUPPORTED_LANGUAGES` defaults empty (the previous admission policy).
@@ -4722,7 +4735,7 @@ committed speech into a fresh conversation.
 
 | Event | Fields | When |
 |-------|--------|------|
-| `service_status` | `{type, status: "ready", provider?, reason?}` | After WS connect, services initialized. `provider` names the STT provider actually serving (absent for custom-STT sessions); `reason` is `fallback_from_<selected>` only when the fallback chain moved the session off the selected provider |
+| `service_status` | `{type, status: "ready", provider?, reason?, server_batch_only?}` | After WS connect, services initialized. `server_batch_only=true` explicitly identifies server batch custody when live STT is suppressed; absent means ordinary live/deferred behavior. Web shows “Recording — transcript processes after you stop.” `provider` names the STT provider actually serving (absent for custom-STT sessions); `reason` is `fallback_from_<selected>` only when the fallback chain moved the session off the selected provider |
 | `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
 | `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
 | `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |
@@ -6405,6 +6418,21 @@ Valid backfill bindings remain on their original worker and queue. Unbound hosts
 skip invalid rows and increment `sync_reprocess_unbound_total{action="repair"}`
 instead of emitting a per-row repair error.
 
+### Fresh enrichment queue capacity
+
+When `ENRICHMENT_FRESH_TASKS_QUEUE` is configured, new/reopened user-facing
+bindings and idle-row promotion qualify by conversation `finished_at`, falling
+back to `created_at` only when absent. `ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN`
+defaults to30 minutes;0 disables new priority admission. Unknown/future clocks
+or a failed two-second metadata lookup keep work on the established queue.
+Older backlog retains its drain capacity. Active leases, custom identities,
+background backfill and lazy effects are preserved. Queue/token changes share
+the existing CAS fence. Production ops reconciles fresh capacity at5 concurrent
+deliveries/2 per second; staging mirrors this as `staging-enrichment-fresh`,
+provisioned by its queue bootstrap helper before deployment.
+Existing valid bindings survive rollback; leave both queues running to drain.
+See [the rollout note](listen_pusher_pipeline/changes/2026-11-04-fresh-title-priority.md).
+
 ### First-summary deadline and repair (dark)
 
 `FIRST_SUMMARY_DEADLINE_ENABLED` (default false) caps the existing outbox's first
@@ -7443,7 +7471,12 @@ worker `failed_held` and stops new Soniox calls without substituting another
 Modulate attempt.
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to 60 and can only
 lower that hard per-unit cap. Company-funded allowance, privacy, original
-ledger and single paid-intent fences apply. No paid POST is retried. The result
+ledger and single paid-intent fences apply. Recovery HTTP requests have at most
+three attempts with 1s/2s backoff within the existing 120s deadline. A paid
+transcription POST retries only an explicit 429 refusal; a transport error or
+5xx on that POST is uncertain and remains held. Uploads and reads may retry
+transient 429/5xx/transport errors; polls keep the same transcription id.
+Credit/authentication refusals and malformed responses do not retry. The result
 may register its artifact only under the running epoch-3 Soniox intent
 for the language-guarded Modulate recovery route. Legacy multilingual redrive
 retains its epoch-2 contract. Both paths require the current privacy generation,
