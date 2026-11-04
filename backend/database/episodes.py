@@ -322,7 +322,9 @@ def _bounded_activity(episode, at):
 def _record_activity(
     transaction: Any, client: Any, uid: str, episode_id: str, conversation_id: str, at: datetime
 ) -> Optional[datetime]:
-    if recorded_episodes_enabled():
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
         timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     raw = ref.get(transaction=transaction).to_dict() or {}
@@ -505,7 +507,7 @@ def _commit(
     links = _member_links(None if new_episode is not None else current_raw, target, link_conversation_ids)
     _check_membership(transaction, client, uid, target['id'], [*links, *(target.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if recorded_episodes_enabled():
+    if timeline_enabled:
         episode_timeline.check_window(transaction, client, uid, target, fence_row=timeline_row)
     if new_episode is not None:
         if current_ref is not None and current_raw and current_raw.get('status') == 'live':
@@ -578,7 +580,9 @@ def _reopen(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
 ) -> Optional[dict[str, Any]]:
-    if recorded_episodes_enabled():
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
         timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
@@ -608,7 +612,7 @@ def _reopen(
     links = _member_links(raw, merged, link_conversation_ids)
     _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if recorded_episodes_enabled():
+    if timeline_enabled:
         fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
@@ -660,7 +664,9 @@ def _close(
     extra: Mapping[str, Any],
     expected_activity_at: Optional[datetime],
 ) -> Optional[dict[str, Any]]:
-    if recorded_episodes_enabled():
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
         timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
@@ -696,7 +702,7 @@ def _close(
             ends.append(end)
     end = max(ends, default=raw.get('last_activity_at') or raw['started_at'])
     end = max(raw['started_at'], _bounded_activity(raw, end))
-    if recorded_episodes_enabled():
+    if timeline_enabled:
         rows = episode_timeline.recorded_candidates(
             uid, raw['started_at'], end, firestore_client=client, transaction=transaction
         )
@@ -764,7 +770,9 @@ def _update(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
-    if recorded_episodes_enabled():
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
         timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
@@ -782,7 +790,7 @@ def _update(
     if moves:
         _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if moves and recorded_episodes_enabled():
+    if moves and timeline_enabled:
         fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})

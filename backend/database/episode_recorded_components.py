@@ -198,7 +198,8 @@ def attach(
                     and not any(member.get(k) for k in ('deleted', 'sync_merged_into'))
                 ):
                     full = episodes.unseal(uid, owner)
-                    return {**full, '_recorded_windows': [full]}
+                    if full is not None:
+                        return {**full, '_recorded_windows': [full]}
 
         facts = {cid: {'start': start, 'end': end, 'source': source}}
         previous = {}
