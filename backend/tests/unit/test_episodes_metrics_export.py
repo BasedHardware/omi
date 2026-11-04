@@ -11,3 +11,15 @@ def test_shared_metrics_export_includes_episode_moment_families():
     assert '# HELP omi_episode_moment_cost_usd_total ' in exported
     assert '# HELP omi_episode_moment_update_latency_seconds ' in exported
     assert 'uid=' not in exported
+
+
+def test_pending_batch_dwell_counter_is_exported_without_identity_labels():
+    from utils.episodes.metrics import record_batch_pending_overdue
+
+    record_batch_pending_overdue()
+    exported = metrics_response().body.decode()
+    assert '# HELP omi_episode_batch_pending_overdue_reads_total ' in exported
+    line = next(
+        line for line in exported.splitlines() if line.startswith('omi_episode_batch_pending_overdue_reads_total ')
+    )
+    assert '{' not in line
